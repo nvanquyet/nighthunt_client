@@ -1,0 +1,33 @@
+[Unit]
+Description=NightHunt Headless Server Instance %i
+After=network.target
+
+[Service]
+Type=simple
+User=nighthunt
+Group=nighthunt
+WorkingDirectory=/opt/nighthunt/current
+ExecStart=/opt/nighthunt/current/HeadlessServer.x86_64 \
+    -batchmode \
+    -nographics \
+    -logFile /opt/nighthunt/logs/server-%i.log \
+    -serverPort 7777 \
+    -serverInstance %i
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+
+# Resource limits
+MemoryLimit=2G
+CPUQuota=200%
+
+# Environment
+Environment="UNITY_SERVER_INSTANCE=%i"
+Environment="UNITY_SERVER_PORT=7777"
+
+[Install]
+WantedBy=multi-user.target
+

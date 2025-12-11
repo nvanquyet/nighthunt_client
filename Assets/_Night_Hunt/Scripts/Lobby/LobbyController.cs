@@ -1,0 +1,176 @@
+using System.Threading.Tasks;
+using NightHunt.Data.DTOs;
+using NightHunt.Netcode;
+using NightHunt.Services.Room;
+using NightHunt.State;
+using UnityEngine;
+
+namespace NightHunt.Lobby
+{
+    public class LobbyController : MonoBehaviour
+    {
+        [SerializeField] private RoomService roomService;
+        [SerializeField] private NetworkBootstrap networkBootstrap;
+
+        private RoomState roomState;
+
+        private void Awake()
+        {
+            if (roomService == null)
+            {
+#if UNITY_2023_1_OR_NEWER
+                roomService = FindFirstObjectByType<RoomService>();
+#else
+                roomService = FindObjectOfType<RoomService>();
+#endif
+            }
+            if (networkBootstrap == null)
+            {
+#if UNITY_2023_1_OR_NEWER
+                networkBootstrap = FindFirstObjectByType<NetworkBootstrap>();
+#else
+                networkBootstrap = FindObjectOfType<NetworkBootstrap>();
+#endif
+            }
+            roomState = RoomState.Instance;
+        }
+
+        public async Task<bool> CreateRoom(string mode, bool isPublic = true, bool isLocked = false)
+        {
+            var result = await roomService.CreateRoom(mode, isPublic, isLocked);
+            
+            if (result.Success && result.Data != null)
+            {
+                // Headless disabled: no network connect, UI proceeds to waiting
+                return true;
+            }
+            
+            return false;
+        }
+
+        public async Task<bool> JoinRoom(string roomCode)
+        {
+            var result = await roomService.JoinByCode(roomCode);
+            
+            if (result.Success && result.Data != null)
+            {
+                // Headless disabled: no network connect, UI proceeds to waiting
+                return true;
+            }
+            
+            return false;
+        }
+
+        public async Task<bool> QuickPlay(string mode)
+        {
+            var result = await roomService.QuickPlay(mode);
+            
+            if (result.Success && result.Data != null)
+            {
+                // Headless disabled: no network connect, UI proceeds to waiting
+                return true;
+            }
+            
+            return false;
+        }
+
+        public async Task<bool> SetReady(bool isReady)
+        {
+            if (roomState == null || !roomState.IsInRoom)
+            {
+                return false;
+            }
+
+            var result = await roomService.SetReady(roomState.CurrentRoom.roomId, isReady);
+            return result.Success;
+        }
+
+        public async Task<bool> ChangeTeam(int team, int slot)
+        {
+            if (roomState == null || !roomState.IsInRoom)
+            {
+                return false;
+            }
+
+            var result = await roomService.ChangeTeam(roomState.CurrentRoom.roomId, team, slot);
+            return result.Success;
+        }
+
+        public async Task<bool> LeaveRoom()
+        {
+            if (roomState == null || !roomState.IsInRoom)
+            {
+                return false;
+            }
+
+            // Disconnect from headless server first
+            networkBootstrap.Disconnect();
+
+            var result = await roomService.LeaveRoom(roomState.CurrentRoom.roomId);
+            return result.Success;
+        }
+
+        public async Task<bool> StartGame()
+        {
+            if (roomState == null || !roomState.IsInRoom)
+            {
+                return false;
+            }
+
+            var result = await roomService.StartGame(roomState.CurrentRoom.roomId);
+            return result.Success;
+        }
+
+        public async Task<bool> KickPlayer(long playerId)
+        {
+            if (roomState == null || !roomState.IsInRoom)
+            {
+                return false;
+            }
+
+            var result = await roomService.KickPlayer(roomState.CurrentRoom.roomId, playerId);
+            return result.Success;
+        }
+
+        public async Task<bool> DisbandRoom()
+        {
+            if (roomState == null || !roomState.IsInRoom)
+            {
+                return false;
+            }
+
+            // Disconnect from headless server first
+            networkBootstrap.Disconnect();
+
+            var result = await roomService.DisbandRoom(roomState.CurrentRoom.roomId);
+            return result.Success;
+        }
+
+        public RoomResponse GetCurrentRoom()
+        {
+            return roomState?.CurrentRoom;
+        }
+
+        public async Task<bool> TransferOwner(long targetUserId)
+        {
+            if (roomState == null || !roomState.IsInRoom || roomService == null)
+            {
+                return false;
+            }
+
+            var result = await roomService.TransferOwner(roomState.CurrentRoom.roomId, targetUserId);
+            return result.Success;
+        }
+
+        public bool IsOwner()
+        {
+            if (roomState == null || !roomState.IsInRoom || SessionState.Instance == null)
+            {
+                return false;
+            }
+
+            return roomState.CurrentRoom.ownerId == SessionState.Instance.UserId;
+        }
+    }
+}
+

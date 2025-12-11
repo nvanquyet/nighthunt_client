@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: BuildConfig
+  m_EditorClassIdentifier: Assembly-CSharp-Editor:NightHunt.Editor:BuildConfig
+  buildName: NightHuntClient
+  developmentBuild: 0
+  allowDebugging: 0
+  scriptDebugging: 0
+  gameManagerScene: Assets/_Night_Hunt/Scenes/GameManager.unity
+  loginScene: Assets/_Night_Hunt/Scenes/Login.unity
+  lobbyScene: Assets/_Night_Hunt/Scenes/Lobby.unity
+  headlessServerScene: Assets/_Night_Hunt/Scenes/HeadlessServer.unity
