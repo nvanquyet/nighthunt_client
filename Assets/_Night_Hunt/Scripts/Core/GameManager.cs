@@ -1,5 +1,5 @@
+using _Night_Hunt.Core.Bootstrap;
 using NightHunt.Lobby;
-using NightHunt.Netcode;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;
 using NightHunt.Services.Room;

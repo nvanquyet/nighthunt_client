@@ -1,5 +1,5 @@
 using NightHunt.Core;
-using NightHunt.Netcode;
+using NightHunt.Lobby;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
