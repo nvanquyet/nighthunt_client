@@ -360,6 +360,41 @@ namespace NightHunt.Services.Backend
         {
             Debug.Log($"[BackendHttpClient] HandleAuthError called - statusCode: {statusCode}, errorCode: {errorCode}, message: {message}");
             
+            // Check for ban errors first
+            if (string.Equals(errorCode, "AUTH_010") || string.Equals(errorCode, "AUTH_ACCOUNT_BANNED") ||
+                string.Equals(errorCode, "AUTH_011") || string.Equals(errorCode, "AUTH_IP_BANNED") ||
+                string.Equals(errorCode, "AUTH_012") || string.Equals(errorCode, "AUTH_DEVICE_BANNED"))
+            {
+                // Account/IP/Device banned - force logout
+                Debug.LogError($"[BackendHttpClient] Account/IP/Device Banned: {message}");
+                
+                // Clear session
+                if (SessionState.Instance != null)
+                {
+                    SessionState.Instance.ClearSession();
+                }
+                ClearAuthToken();
+                
+                // Stop session monitoring
+                if (GameManager.Instance != null && GameManager.Instance.SessionMonitor != null)
+                {
+                    GameManager.Instance.SessionMonitor.StopPolling();
+                }
+                
+                // Show ban notification (can be enhanced with UI popup)
+                ShowLoginBlockedNotice(message ?? "Tài khoản hoặc thiết bị đã bị khóa.");
+                return;
+            }
+            
+            // Check for rate limit errors
+            if (statusCode == 429 || string.Equals(errorCode, "RATE_001") || string.Equals(errorCode, "RATE_LIMIT_EXCEEDED"))
+            {
+                Debug.LogWarning($"[BackendHttpClient] Rate Limit Exceeded: {message}");
+                // Rate limit exceeded - don't logout, just show warning
+                // UI can handle this separately
+                return;
+            }
+            
             if (statusCode == 401)
             {
                 // Backend returns errorCode as "AUTH_008" for AUTH_FORCE_LOGOUT and "AUTH_007" for AUTH_SESSION_EXPIRED
@@ -395,10 +430,26 @@ namespace NightHunt.Services.Backend
                     }
                     else
                     {
-                        // User B: Trying to login/auto-login, show login blocked notice
-                        // This is LOGIN BLOCKED because account is already logged in elsewhere
-                        Debug.Log("[BackendHttpClient] Showing login blocked notice (AUTH_FORCE_LOGOUT during login attempt)");
-                        ShowLoginBlockedNotice(message ?? "Tài khoản này đã được đăng nhập ở nơi khác. Vui lòng thử lại sau.");
+                        // User B: Trying to login/auto-login
+                        // Check if this is an auto-login attempt (has saved session) vs new login
+                        bool isAutoLoginAttempt = SessionState.Instance != null && 
+                                                SessionState.Instance.IsAuthenticated &&
+                                                !string.IsNullOrEmpty(SessionState.Instance.SessionId);
+                        
+                        if (isAutoLoginAttempt)
+                        {
+                            // This is auto-login - session might be stale (user closed app and reopened)
+                            // Don't show "login blocked" - just silently fail auto-login and let user login manually
+                            Debug.Log("[BackendHttpClient] AUTH_FORCE_LOGOUT during auto-login - session might be stale, allowing manual login");
+                            // Don't show login blocked notice for auto-login failures
+                            // The auto-login will fail and user can login manually
+                        }
+                        else
+                        {
+                            // This is a new login attempt - show login blocked notice
+                            Debug.Log("[BackendHttpClient] Showing login blocked notice (AUTH_FORCE_LOGOUT during new login attempt)");
+                            ShowLoginBlockedNotice(message ?? "Tài khoản này đã được đăng nhập ở nơi khác. Vui lòng thử lại sau.");
+                        }
                     }
                 }
                 else if (string.Equals(errorCode, "AUTH_007") || string.Equals(errorCode, "AUTH_SESSION_EXPIRED"))

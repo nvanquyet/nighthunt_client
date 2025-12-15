@@ -89,6 +89,7 @@ namespace NightHunt.Data.DTOs
         public string requesterUsername;
         public int requesterTeam;
         public int requesterSlot;
+        public long targetUserId;
         public int targetTeam;
         public int targetSlot;
         public string status;

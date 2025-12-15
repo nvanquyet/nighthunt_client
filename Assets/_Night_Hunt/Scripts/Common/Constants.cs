@@ -23,6 +23,7 @@ namespace NightHunt.Common
         public const string API_ROOMS_SWAP_REQUEST = "/rooms/{0}/swap-request";
         public const string API_ROOMS_SWAP_ACCEPT = "/rooms/{0}/swap-accept/{1}";
         public const string API_ROOMS_SWAP_REJECT = "/rooms/{0}/swap-reject/{1}";
+        public const string API_ROOMS_SWAP_CANCEL = "/rooms/{0}/swap-cancel/{1}";
         public const string API_ROOMS_SWAP_REQUESTS = "/rooms/{0}/swap-requests";
         public const string API_ROOMS_UPDATE_SETTINGS = "/rooms/{0}/update-settings";
         public const string API_ROOMS_TRANSFER_OWNER = "/rooms/{0}/transfer-owner";

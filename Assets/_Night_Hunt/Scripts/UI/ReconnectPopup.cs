@@ -1,6 +1,6 @@
 using System;
 using NightHunt.Core;
-using NightHunt.Netcode;
+using NightHunt.Networking;
 using NightHunt.Services.Room;
 using NightHunt.Services.Auth;
 using NightHunt.State;
@@ -46,7 +46,7 @@ namespace NightHunt.UI
         [SerializeField] private Button reconnectButton;
         [SerializeField] private Button leaveButton;
 
-        private NetworkBootstrap networkBootstrap;
+        // Note: NetworkBootstrap đã bị xóa, không cần thiết cho reconnect
         private RoomService roomService;
         private AuthService authService;
         private Action onReconnect;
@@ -95,14 +95,11 @@ namespace NightHunt.UI
             // Try to get from GameManager first
             if (GameManager.Instance != null)
             {
-                networkBootstrap = GameManager.Instance.NetworkBootstrap;
                 roomService = GameManager.Instance.RoomService;
                 authService = GameManager.Instance.AuthService;
             }
 
             // Fallback: Find in scene
-            if (networkBootstrap == null)
-                networkBootstrap = FindFirstObjectByType<NetworkBootstrap>();
             if (roomService == null)
                 roomService = FindFirstObjectByType<RoomService>();
             if (authService == null)

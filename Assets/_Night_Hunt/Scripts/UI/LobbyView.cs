@@ -5,6 +5,7 @@ using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Lobby;
+using NightHunt.Services.Game;
 using NightHunt.Services.Room;
 using NightHunt.State;
 using TMPro;
@@ -34,11 +35,16 @@ namespace NightHunt.UI
         [SerializeField] private TextMeshProUGUI errorText;
         [SerializeField] private GameObject playerSlotPrefab;
 
-        [Header("Swap Request")]
+        [Header("Swap Request - Target (Received)")]
         [SerializeField] private GameObject swapRequestPanel;
         [SerializeField] private TextMeshProUGUI swapRequestText;
         [SerializeField] private Button acceptSwapButton;
         [SerializeField] private Button rejectSwapButton;
+        
+        [Header("Swap Request - Requester (Sent)")]
+        [SerializeField] private GameObject swapRequestCancelPanel;
+        [SerializeField] private TextMeshProUGUI swapRequestCancelText;
+        [SerializeField] private Button cancelSwapButton;
 
         [Header("Room Settings (Owner Only)")]
         [SerializeField] private GameObject roomSettingsPanel;
@@ -59,11 +65,11 @@ namespace NightHunt.UI
         private Dictionary<string, PlayerSlotView> slotViews = new Dictionary<string, PlayerSlotView>(); // Key: "team_slot"
         private int maxSlotsPerTeam = 2; // Default 2v2, will be updated based on mode
         
-        // Auto-refresh polling
-        [Header("Auto-Refresh")]
-        [SerializeField] private float refreshInterval = 1f; // Refresh every 1 second
-        private float lastRefreshTime = 0f;
-        private bool isPolling = false;
+        // Swap request tracking
+        private long? pendingSwapRequestId = null; // Track our own pending swap request
+        private Coroutine swapRequestTimeoutCoroutine = null;
+        private long? receivedSwapRequestId = null; // Track received swap request (for target)
+        private Coroutine receivedSwapRequestTimeoutCoroutine = null; // Timeout for received request
         
         // Track owner ID to detect changes
         private long? lastOwnerId = null;
@@ -71,6 +77,11 @@ namespace NightHunt.UI
         // Track room status to detect game start
         private string lastStatus = null;
         private bool gameStartLogged = false; // Flag to ensure log only once
+        
+        // Throttle RefreshLobby to prevent too many calls
+        private float lastRefreshTime = 0f;
+        private const float REFRESH_THROTTLE_INTERVAL = 0.1f; // Max 10 refreshes per second
+        private bool refreshPending = false;
 
         private void Awake()
         {
@@ -98,8 +109,14 @@ namespace NightHunt.UI
             if (rejectSwapButton != null)
                 rejectSwapButton.onClick.AddListener(OnRejectSwapRequest);
 
+            if (cancelSwapButton != null)
+                cancelSwapButton.onClick.AddListener(OnCancelSwapRequest);
+
             if (swapRequestPanel != null)
                 swapRequestPanel.SetActive(false);
+            
+            if (swapRequestCancelPanel != null)
+                swapRequestCancelPanel.SetActive(false);
 
             // Room Settings
             if (settingsButton != null)
@@ -118,13 +135,60 @@ namespace NightHunt.UI
             // Reset tracking flags
             lastStatus = null;
             gameStartLogged = false;
+            
+            // Subscribe to GameWebSocketService events (unified WebSocket for all events)
+            if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
+            {
+                var ws = GameManager.Instance.GameWebSocket;
+                // Room Events
+                ws.OnRoomUpdated += HandleRoomUpdated;
+                ws.OnPlayerJoined += HandlePlayerJoined;
+                ws.OnPlayerLeft += HandlePlayerLeft;
+                ws.OnPlayerReady += HandlePlayerReady;
+                ws.OnTeamChanged += HandleTeamChanged;
+                ws.OnRoomStatusChanged += HandleRoomStatusChanged;
+                ws.OnSwapRequest += HandleSwapRequest;
+                ws.OnSwapRequestStatus += HandleSwapRequestStatus;
+                // Session Events
+                ws.OnForceLogout += HandleForceLogout;
+                ws.OnSessionExpired += HandleSessionExpired;
+            }
+            
             RefreshLobby();
-            StartPolling();
         }
 
         private void OnDisable()
         {
-            StopPolling();
+            // Unsubscribe from GameWebSocketService events
+            if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
+            {
+                var ws = GameManager.Instance.GameWebSocket;
+                // Room Events
+                ws.OnRoomUpdated -= HandleRoomUpdated;
+                ws.OnPlayerJoined -= HandlePlayerJoined;
+                ws.OnPlayerLeft -= HandlePlayerLeft;
+                ws.OnPlayerReady -= HandlePlayerReady;
+                ws.OnTeamChanged -= HandleTeamChanged;
+                ws.OnRoomStatusChanged -= HandleRoomStatusChanged;
+                ws.OnSwapRequest -= HandleSwapRequest;
+                ws.OnSwapRequestStatus -= HandleSwapRequestStatus;
+                // Session Events
+                ws.OnForceLogout -= HandleForceLogout;
+                ws.OnSessionExpired -= HandleSessionExpired;
+            }
+            
+            // Cancel timeout coroutines
+            if (swapRequestTimeoutCoroutine != null)
+            {
+                StopCoroutine(swapRequestTimeoutCoroutine);
+                swapRequestTimeoutCoroutine = null;
+            }
+            
+            if (receivedSwapRequestTimeoutCoroutine != null)
+            {
+                StopCoroutine(receivedSwapRequestTimeoutCoroutine);
+                receivedSwapRequestTimeoutCoroutine = null;
+            }
         }
 
         /// <summary>
@@ -134,7 +198,6 @@ namespace NightHunt.UI
         {
             gameObject.SetActive(true);
             RefreshLobby();
-            StartPolling();
         }
 
         /// <summary>
@@ -143,32 +206,40 @@ namespace NightHunt.UI
         public void Hide()
         {
             gameObject.SetActive(false);
-            StopPolling();
-        }
-
-        private void StartPolling()
-        {
-            isPolling = true;
-            lastRefreshTime = Time.time;
-        }
-
-        private void StopPolling()
-        {
-            isPolling = false;
-        }
-
-        private void Update()
-        {
-            // Auto-refresh lobby periodically
-            if (isPolling && Time.time - lastRefreshTime >= refreshInterval)
-            {
-                RefreshLobby();
-                CheckPendingSwapRequests();
-                lastRefreshTime = Time.time;
-            }
         }
 
         public void RefreshLobby()
+        {
+            if (roomState == null || !roomState.IsInRoom)
+                return;
+
+            // Throttle refresh calls to prevent too many updates
+            float currentTime = Time.time;
+            if (currentTime - lastRefreshTime < REFRESH_THROTTLE_INTERVAL)
+            {
+                // Too soon, schedule a delayed refresh
+                if (!refreshPending)
+                {
+                    refreshPending = true;
+                    StartCoroutine(DelayedRefreshLobby());
+                }
+                return;
+            }
+
+            refreshPending = false;
+            lastRefreshTime = currentTime;
+            RefreshLobbyImmediate();
+        }
+
+        private System.Collections.IEnumerator DelayedRefreshLobby()
+        {
+            yield return new WaitForSeconds(REFRESH_THROTTLE_INTERVAL);
+            refreshPending = false;
+            lastRefreshTime = Time.time;
+            RefreshLobbyImmediate();
+        }
+
+        private void RefreshLobbyImmediate()
         {
             if (roomState == null || !roomState.IsInRoom)
                 return;
@@ -282,6 +353,146 @@ namespace NightHunt.UI
         }
 
         /// <summary>
+        /// Add a player slot (when player joins)
+        /// </summary>
+        private void AddPlayerSlot(RoomPlayerResponse player)
+        {
+            if (player == null) return;
+            
+            string key = $"{player.team}_{player.slot}";
+            
+            // If slot already exists, update it
+            if (slotViews.ContainsKey(key))
+            {
+                var slotView = slotViews[key];
+                if (slotView != null)
+                {
+                    bool isOwner = lobbyController != null && lobbyController.IsOwner();
+                    slotView.SetSlot(player.team, player.slot, player, isOwner, OnSlotClicked, OnTransferOwnerClicked);
+                }
+            }
+            else
+            {
+                // Create new slot
+                CreateSlot(player.team, player.slot, new List<RoomPlayerResponse> { player });
+            }
+        }
+
+        /// <summary>
+        /// Remove a player slot (when player leaves)
+        /// </summary>
+        private void RemovePlayerSlot(long userId)
+        {
+            // Find slot containing this player
+            string keyToRemove = null;
+            foreach (var kvp in slotViews)
+            {
+                if (kvp.Value != null && kvp.Value.Player != null && kvp.Value.Player.userId == userId)
+                {
+                    keyToRemove = kvp.Key;
+                    break;
+                }
+            }
+            
+            if (keyToRemove != null)
+            {
+                var slotView = slotViews[keyToRemove];
+                if (slotView != null)
+                {
+                    // Clear slot (make it empty)
+                    bool isOwner = lobbyController != null && lobbyController.IsOwner();
+                    slotView.SetSlot(slotView.Team, slotView.Slot, null, isOwner, OnSlotClicked, OnTransferOwnerClicked);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Update ready status for a specific player
+        /// </summary>
+        private void UpdatePlayerReadyStatus(long userId, bool isReady)
+        {
+            foreach (var kvp in slotViews)
+            {
+                if (kvp.Value != null && kvp.Value.Player != null && kvp.Value.Player.userId == userId)
+                {
+                    // Update ready status in slot view
+                    kvp.Value.UpdateReadyStatus(isReady);
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Move player to new team/slot
+        /// </summary>
+        private void MovePlayerSlot(long userId, int newTeam, int newSlot)
+        {
+            // Find old slot
+            string oldKey = null;
+            RoomPlayerResponse player = null;
+            
+            foreach (var kvp in slotViews)
+            {
+                if (kvp.Value != null && kvp.Value.Player != null && kvp.Value.Player.userId == userId)
+                {
+                    oldKey = kvp.Key;
+                    player = kvp.Value.Player;
+                    break;
+                }
+            }
+            
+            if (player == null) return;
+            
+            // Update player's team/slot
+            player.team = newTeam;
+            player.slot = newSlot;
+            
+            // Clear old slot
+            if (oldKey != null && slotViews.ContainsKey(oldKey))
+            {
+                var oldSlotView = slotViews[oldKey];
+                if (oldSlotView != null)
+                {
+                    bool isOwner = lobbyController != null && lobbyController.IsOwner();
+                    oldSlotView.SetSlot(oldSlotView.Team, oldSlotView.Slot, null, isOwner, OnSlotClicked, OnTransferOwnerClicked);
+                }
+            }
+            
+            // Add/Update new slot
+            string newKey = $"{newTeam}_{newSlot}";
+            if (slotViews.ContainsKey(newKey))
+            {
+                var newSlotView = slotViews[newKey];
+                if (newSlotView != null)
+                {
+                    bool isOwner = lobbyController != null && lobbyController.IsOwner();
+                    newSlotView.SetSlot(newTeam, newSlot, player, isOwner, OnSlotClicked, OnTransferOwnerClicked);
+                }
+            }
+            else
+            {
+                // Create new slot if doesn't exist
+                CreateSlot(newTeam, newSlot, new List<RoomPlayerResponse> { player });
+            }
+        }
+
+        /// <summary>
+        /// Update button states based on room status and ownership
+        /// </summary>
+        private void UpdateButtonStates(RoomResponse room)
+        {
+            if (room == null) return;
+            
+            bool isOwner = lobbyController != null && lobbyController.IsOwner();
+            
+            if (startButton != null)
+                startButton.gameObject.SetActive(isOwner && room.status == "WAITING");
+            
+            if (settingsButton != null)
+                settingsButton.gameObject.SetActive(isOwner && room.status == "WAITING");
+        }
+
+        /// <summary>
         /// Called when user clicks on a slot
         /// Logic:
         /// 1. Slot empty -> Move to this slot
@@ -361,9 +572,31 @@ namespace NightHunt.UI
             // Always refresh after action to get latest state
             RefreshLobby();
             
-            if (result.Success)
+            if (result.Success && result.Data != null)
             {
-                ShowError("Swap request sent. Waiting for response...");
+                // Track our pending swap request
+                pendingSwapRequestId = result.Data.requestId;
+                
+                // Get target username from room players
+                string targetUsername = "Player";
+                if (roomState != null && roomState.IsInRoom)
+                {
+                    var targetPlayer = roomState.CurrentRoom.players?.FirstOrDefault(p => p.userId == result.Data.targetUserId);
+                    if (targetPlayer != null)
+                    {
+                        targetUsername = targetPlayer.username;
+                    }
+                }
+                
+                // Show cancel popup for requester
+                ShowSwapRequestCancel(targetUsername);
+                
+                // Start 5s timeout
+                if (swapRequestTimeoutCoroutine != null)
+                {
+                    StopCoroutine(swapRequestTimeoutCoroutine);
+                }
+                swapRequestTimeoutCoroutine = StartCoroutine(SwapRequestTimeoutCoroutine(result.Data.requestId));
             }
             else
             {
@@ -376,36 +609,277 @@ namespace NightHunt.UI
             if (lobbyController == null || roomState == null)
                 return;
             
-            // Confirm with user
-            // For now, just transfer directly (can add confirmation popup later)
-            bool result = await lobbyController.TransferOwner(targetUserId);
-            
-            // Always refresh after action to get latest state
-            RefreshLobby();
-            
-            if (result)
+            try
             {
-                ShowError("Ownership transferred successfully");
+                // Confirm with user
+                // For now, just transfer directly (can add confirmation popup later)
+                var result = await lobbyController.TransferOwner(targetUserId);
+                
+                // Don't refresh immediately - wait for WebSocket event to update
+                // WebSocket will broadcast room_updated event when ownership is transferred
+                
+                if (result.Success)
+                {
+                    // Success - WebSocket event will update UI
+                    // Just show success message briefly
+                    Debug.Log("[LobbyView] Ownership transferred successfully - waiting for WebSocket update");
+                }
+                else
+                {
+                    // Show error via notice popup
+                    ShowErrorViaNotice(result.Message ?? "Không thể chuyển quyền chủ phòng", result.ErrorCode);
+                }
             }
-            else
+            catch (System.Exception ex)
             {
-                ShowError("Failed to transfer ownership");
+                Debug.LogError($"[LobbyView] Error in OnTransferOwnerClicked: {ex.Message}");
+                ShowErrorViaNotice($"Lỗi khi chuyển quyền chủ phòng: {ex.Message}", null);
             }
         }
 
-        private async void CheckPendingSwapRequests()
+        // WebSocket event handlers - Update UI based on specific events
+        private void HandleRoomUpdated(RoomResponse room)
         {
-            if (roomService == null || roomState == null || sessionState == null)
-                return;
-
-            var result = await roomService.GetPendingSwapRequests(roomState.RoomId);
-            
-            if (result.Success && result.Data != null && result.Data.Count > 0)
+            // Room updated - might be settings change, owner change, etc.
+            // Update room state first, then refresh UI
+            if (roomState != null)
             {
-                // Show swap request popup for the first pending request
-                var request = result.Data[0];
-                ShowSwapRequest(request.requesterUsername);
+                roomState.SetRoom(room);
             }
+            
+            // Update room info (code, mode)
+            if (room != null)
+            {
+                if (roomCodeText != null)
+                    roomCodeText.text = $"Room Code: {room.roomCode}";
+                if (modeText != null)
+                    modeText.text = $"Mode: {room.mode}";
+                
+                // Check owner change
+                bool ownerChanged = lastOwnerId.HasValue && lastOwnerId.Value != room.ownerId;
+                if (ownerChanged)
+                {
+                    Debug.Log($"[LobbyView] Owner changed from {lastOwnerId.Value} to {room.ownerId}");
+                    UpdateButtonStates(room);
+                }
+                lastOwnerId = room.ownerId;
+            }
+            
+            // Full refresh only if needed (e.g., settings changed)
+            RefreshLobby();
+        }
+        
+        private void HandleForceLogout()
+        {
+            Debug.LogWarning("[LobbyView] Force logout received from WebSocket");
+            
+            // Show notice popup
+            ShowErrorViaNotice("Tài khoản đã đăng nhập ở nơi khác. Vui lòng đăng nhập lại.", "AUTH_FORCE_LOGOUT");
+            
+            // Navigate to login scene
+            UnityEngine.SceneManagement.SceneManager.LoadScene("02_Login");
+        }
+        
+        private void HandleSessionExpired()
+        {
+            Debug.LogWarning("[LobbyView] Session expired received from WebSocket");
+            
+            // Show notice popup
+            ShowErrorViaNotice("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", "AUTH_SESSION_EXPIRED");
+            
+            // Navigate to login scene
+            UnityEngine.SceneManagement.SceneManager.LoadScene("02_Login");
+        }
+
+        private void HandlePlayerJoined(GameWebSocketService.PlayerJoinedEvent evt)
+        {
+            // Update room state
+            if (evt.room != null && roomState != null)
+            {
+                roomState.SetRoom(evt.room);
+            }
+            
+            // Add player to UI
+            if (evt.room?.players != null)
+            {
+                var newPlayer = evt.room.players.FirstOrDefault(p => p.userId == evt.userId);
+                if (newPlayer != null)
+                {
+                    AddPlayerSlot(newPlayer);
+                }
+            }
+        }
+
+        private void HandlePlayerLeft(GameWebSocketService.PlayerLeftEvent evt)
+        {
+            // Update room state
+            if (evt.room != null && roomState != null)
+            {
+                roomState.SetRoom(evt.room);
+            }
+            
+            // Remove player from UI
+            RemovePlayerSlot(evt.userId);
+        }
+
+        private void HandlePlayerReady(GameWebSocketService.PlayerReadyEvent evt)
+        {
+            // Update room state
+            if (evt.room != null && roomState != null)
+            {
+                roomState.SetRoom(evt.room);
+            }
+            
+            // Update ready status for specific player
+            UpdatePlayerReadyStatus(evt.userId, evt.isReady);
+        }
+
+        private void HandleTeamChanged(GameWebSocketService.TeamChangedEvent evt)
+        {
+            // Update room state
+            if (evt.room != null && roomState != null)
+            {
+                roomState.SetRoom(evt.room);
+            }
+            
+            // Move player to new team/slot
+            MovePlayerSlot(evt.userId, evt.team, evt.slot);
+        }
+
+        private void HandleRoomStatusChanged(GameWebSocketService.RoomStatusChangedEvent evt)
+        {
+            // Update room state
+            if (evt.room != null && roomState != null)
+            {
+                roomState.SetRoom(evt.room);
+            }
+            
+            // Check if game started
+            if (!string.IsNullOrEmpty(lastStatus) && 
+                lastStatus == Constants.ROOM_STATUS_WAITING && 
+                evt.status == Constants.ROOM_STATUS_IN_GAME)
+            {
+                if (!gameStartLogged)
+                {
+                    Debug.Log($"[LobbyView] Game started! Room {evt.room?.roomCode} (ID: {evt.room?.roomId}, MatchID: {evt.room?.matchId})");
+                    gameStartLogged = true;
+                    // TODO: Trigger game start event
+                }
+            }
+            lastStatus = evt.status;
+            
+            // Update button states based on new status
+            if (evt.room != null)
+            {
+                UpdateButtonStates(evt.room);
+            }
+        }
+
+        private void HandleSwapRequest(GameWebSocketService.SwapRequestEvent evt)
+        {
+            // Check if we are the target
+            if (sessionState != null && evt.targetUserId == sessionState.UserId)
+            {
+                receivedSwapRequestId = evt.requestId;
+                ShowSwapRequest(evt.fromUsername ?? "Unknown");
+                
+                // Start 5s timeout to auto-reject
+                if (receivedSwapRequestTimeoutCoroutine != null)
+                {
+                    StopCoroutine(receivedSwapRequestTimeoutCoroutine);
+                }
+                receivedSwapRequestTimeoutCoroutine = StartCoroutine(SwapRequestTargetTimeoutCoroutine(evt.requestId));
+            }
+        }
+
+        private void HandleSwapRequestStatus(GameWebSocketService.SwapRequestStatusEvent evt)
+        {
+            // If our request was accepted/rejected/cancelled, hide cancel popup
+            if (pendingSwapRequestId.HasValue && evt.requestId == pendingSwapRequestId.Value)
+            {
+                HideSwapRequestCancel();
+                pendingSwapRequestId = null;
+                
+                if (swapRequestTimeoutCoroutine != null)
+                {
+                    StopCoroutine(swapRequestTimeoutCoroutine);
+                    swapRequestTimeoutCoroutine = null;
+                }
+            }
+            
+            // If we received a request and it was accepted/rejected/cancelled, hide popup
+            if (receivedSwapRequestId.HasValue && evt.requestId == receivedSwapRequestId.Value)
+            {
+                HideSwapRequest();
+                receivedSwapRequestId = null;
+                
+                if (receivedSwapRequestTimeoutCoroutine != null)
+                {
+                    StopCoroutine(receivedSwapRequestTimeoutCoroutine);
+                    receivedSwapRequestTimeoutCoroutine = null;
+                }
+            }
+            
+            RefreshLobby();
+        }
+        
+        private System.Collections.IEnumerator SwapRequestTimeoutCoroutine(long requestId)
+        {
+            yield return new WaitForSeconds(5f);
+            
+            // Auto-cancel after 5s
+            if (pendingSwapRequestId.HasValue && pendingSwapRequestId.Value == requestId)
+            {
+                CancelSwapRequestAsync(requestId);
+            }
+        }
+        
+        private async void CancelSwapRequestAsync(long requestId)
+        {
+            await CancelSwapRequest(requestId);
+        }
+        
+        private System.Collections.IEnumerator SwapRequestTargetTimeoutCoroutine(long requestId)
+        {
+            yield return new WaitForSeconds(5f);
+            
+            // Auto-reject swap request after 5s if not responded
+            if (receivedSwapRequestId.HasValue && receivedSwapRequestId.Value == requestId)
+            {
+                // Auto-reject the request
+                AutoRejectSwapRequestAsync(requestId);
+            }
+        }
+        
+        private async void AutoRejectSwapRequestAsync(long requestId)
+        {
+            if (roomService == null || roomState == null)
+                return;
+            
+            // Reject the swap request
+            await roomService.RejectSwapRequest(roomState.RoomId, requestId);
+            
+            // Hide popup and clear tracking
+            HideSwapRequest();
+            receivedSwapRequestId = null;
+            
+            RefreshLobby();
+        }
+        
+        private async System.Threading.Tasks.Task CancelSwapRequest(long requestId)
+        {
+            if (roomService == null || roomState == null)
+                return;
+            
+            var result = await roomService.CancelSwapRequest(roomState.RoomId, requestId);
+            
+            if (result.Success)
+            {
+                HideSwapRequestCancel();
+                pendingSwapRequestId = null;
+            }
+            
+            RefreshLobby();
         }
 
         private async void OnAcceptSwapRequest()
@@ -413,22 +887,39 @@ namespace NightHunt.UI
             if (roomService == null || roomState == null)
                 return;
 
-            // Get pending swap request
-            var requestsResult = await roomService.GetPendingSwapRequests(roomState.RoomId);
-            
-            if (!requestsResult.Success || requestsResult.Data == null || requestsResult.Data.Count == 0)
+            // Use received swap request ID if available, otherwise fetch from server
+            long requestIdToAccept;
+            if (receivedSwapRequestId.HasValue)
             {
-                HideSwapRequest();
-                return;
+                requestIdToAccept = receivedSwapRequestId.Value;
             }
+            else
+            {
+                // Fallback: Get pending swap request from server
+                var requestsResult = await roomService.GetPendingSwapRequests(roomState.RoomId);
+                
+                if (!requestsResult.Success || requestsResult.Data == null || requestsResult.Data.Count == 0)
+                {
+                    HideSwapRequest();
+                    return;
+                }
 
-            var request = requestsResult.Data[0]; // Get first pending request
+                requestIdToAccept = requestsResult.Data[0].requestId;
+            }
             
-            var result = await roomService.AcceptSwapRequest(roomState.RoomId, request.requestId);
+            // Stop timeout coroutine
+            if (receivedSwapRequestTimeoutCoroutine != null)
+            {
+                StopCoroutine(receivedSwapRequestTimeoutCoroutine);
+                receivedSwapRequestTimeoutCoroutine = null;
+            }
+            
+            var result = await roomService.AcceptSwapRequest(roomState.RoomId, requestIdToAccept);
             
             if (result.Success)
             {
                 HideSwapRequest();
+                receivedSwapRequestId = null;
                 RefreshLobby();
             }
             else
@@ -442,19 +933,36 @@ namespace NightHunt.UI
             if (roomService == null || roomState == null)
                 return;
 
-            // Get pending swap request
-            var requestsResult = await roomService.GetPendingSwapRequests(roomState.RoomId);
-            
-            if (!requestsResult.Success || requestsResult.Data == null || requestsResult.Data.Count == 0)
+            // Use received swap request ID if available, otherwise fetch from server
+            long requestIdToReject;
+            if (receivedSwapRequestId.HasValue)
             {
-                HideSwapRequest();
-                return;
+                requestIdToReject = receivedSwapRequestId.Value;
             }
+            else
+            {
+                // Fallback: Get pending swap request from server
+                var requestsResult = await roomService.GetPendingSwapRequests(roomState.RoomId);
+                
+                if (!requestsResult.Success || requestsResult.Data == null || requestsResult.Data.Count == 0)
+                {
+                    HideSwapRequest();
+                    return;
+                }
 
-            var request = requestsResult.Data[0]; // Get first pending request
+                requestIdToReject = requestsResult.Data[0].requestId;
+            }
             
-            await roomService.RejectSwapRequest(roomState.RoomId, request.requestId);
+            // Stop timeout coroutine
+            if (receivedSwapRequestTimeoutCoroutine != null)
+            {
+                StopCoroutine(receivedSwapRequestTimeoutCoroutine);
+                receivedSwapRequestTimeoutCoroutine = null;
+            }
+            
+            await roomService.RejectSwapRequest(roomState.RoomId, requestIdToReject);
             HideSwapRequest();
+            receivedSwapRequestId = null;
             
             // Always refresh after action to get latest state
             RefreshLobby();
@@ -474,6 +982,30 @@ namespace NightHunt.UI
         {
             if (swapRequestPanel != null)
                 swapRequestPanel.SetActive(false);
+        }
+        
+        private void ShowSwapRequestCancel(string targetUsername)
+        {
+            if (swapRequestCancelPanel != null)
+            {
+                swapRequestCancelPanel.SetActive(true);
+                if (swapRequestCancelText != null)
+                    swapRequestCancelText.text = $"Waiting for {targetUsername} to accept swap request...";
+            }
+        }
+        
+        private void HideSwapRequestCancel()
+        {
+            if (swapRequestCancelPanel != null)
+                swapRequestCancelPanel.SetActive(false);
+        }
+        
+        private async void OnCancelSwapRequest()
+        {
+            if (pendingSwapRequestId.HasValue)
+            {
+                await CancelSwapRequest(pendingSwapRequestId.Value);
+            }
         }
 
         private async void OnReadyClicked()
@@ -543,6 +1075,29 @@ namespace NightHunt.UI
             }
             Debug.LogError($"[LobbyView] {message}");
         }
+        
+        private void ShowErrorViaNotice(string message, string errorCode = null)
+        {
+            // Show error via notice popup
+            var noticePopup = PersistentUICanvas.Instance != null ? PersistentUICanvas.Instance.NoticePopup : null;
+            if (noticePopup != null)
+            {
+                noticePopup.Show(
+                    title: "Lỗi",
+                    message: message,
+                    onConfirm: () =>
+                    {
+                        // Just close the popup
+                    },
+                    autoDismissSeconds: 4f // Auto dismiss after 4 seconds
+                );
+            }
+            else
+            {
+                // Fallback: use error text if notice popup not available
+                ShowError(message);
+            }
+        }
 
         // Room Settings Methods (Owner Only)
         private void OnSettingsClicked()
@@ -610,7 +1165,8 @@ namespace NightHunt.UI
             }
             else
             {
-                ShowError($"Failed to update settings: {result.Message}");
+                // Show error via notice popup for better UX
+                ShowErrorViaNotice(result.Message ?? "Không thể cập nhật cài đặt phòng", result.ErrorCode);
             }
         }
 

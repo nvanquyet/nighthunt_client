@@ -282,7 +282,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e24838a6b4c92b4b89b2bf5ef235e2e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  roomService: {fileID: 1823424517}
 --- !u!4 &70451229
 Transform:
   m_ObjectHideFlags: 0
@@ -1166,7 +1165,6 @@ MonoBehaviour:
   backendHttpClient: {fileID: 190463136}
   authService: {fileID: 829442989}
   roomService: {fileID: 1823424517}
-  networkBootstrap: {fileID: 70451228}
   lobbyController: {fileID: 1306875977}
   sessionMonitor: {fileID: 1728027963}
   sessionState: {fileID: 614230716}
@@ -2294,7 +2292,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   roomService: {fileID: 1823424517}
-  networkBootstrap: {fileID: 70451228}
 --- !u!1 &1328323340
 GameObject:
   m_ObjectHideFlags: 0
@@ -2966,6 +2963,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1823424516}
   - component: {fileID: 1823424517}
+  - component: {fileID: 1823424518}
   m_Layer: 0
   m_Name: RoomService
   m_TagString: Untagged
@@ -3001,6 +2999,22 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   roomState: {fileID: 614230715}
+  webSocketService: {fileID: 1823424518}
+--- !u!114 &1823424518
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1823424515}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2124b94680ae0343b931d4151df5848, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  wsBaseUrl: ws://localhost:8080
+  reconnectInterval: 5
+  maxReconnectAttempts: 5
 --- !u!1 &1869050770
 GameObject:
   m_ObjectHideFlags: 0

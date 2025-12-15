@@ -16,6 +16,7 @@ namespace NightHunt.Data.DTOs
     {
         public string identifier; // username or email
         public string password;
+        public string deviceFingerprint; // Optional: device fingerprint for ban tracking
     }
 
     [Serializable]
@@ -23,6 +24,7 @@ namespace NightHunt.Data.DTOs
     {
         public string accessToken;
         public string sessionId;
+        public string deviceFingerprint; // Optional: device fingerprint for ban tracking
     }
 
     [Serializable]

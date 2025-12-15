@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using NightHunt.Common;
 using NightHunt.Data.DTOs;
 using NightHunt.Services.Backend;
+using NightHunt.Services.Game;
 using NightHunt.State;
 using NightHunt.Core;
 using UnityEngine;
@@ -13,6 +14,9 @@ namespace NightHunt.Services.Room
     {
         [SerializeField] private IBackendClient backendClient;
         [SerializeField] private RoomState roomState;
+        
+        // GameWebSocketService is accessed via GameManager (unified WebSocket for all events)
+        private GameWebSocketService gameWebSocket => GameManager.Instance?.GameWebSocket;
 
         private void Awake()
         {
@@ -30,6 +34,87 @@ namespace NightHunt.Services.Room
             {
                 roomState = RoomState.Instance;
             }
+            
+            // Subscribe to GameWebSocketService events (unified WebSocket for all events)
+            if (gameWebSocket != null)
+            {
+                gameWebSocket.OnRoomUpdated += HandleRoomUpdated;
+                gameWebSocket.OnPlayerJoined += HandlePlayerJoined;
+                gameWebSocket.OnPlayerLeft += HandlePlayerLeft;
+                gameWebSocket.OnPlayerReady += HandlePlayerReady;
+                gameWebSocket.OnTeamChanged += HandleTeamChanged;
+                gameWebSocket.OnRoomStatusChanged += HandleRoomStatusChanged;
+                gameWebSocket.OnSwapRequest += HandleSwapRequest;
+                gameWebSocket.OnSwapRequestStatus += HandleSwapRequestStatus;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            // Unsubscribe from GameWebSocketService events
+            if (gameWebSocket != null)
+            {
+                gameWebSocket.OnRoomUpdated -= HandleRoomUpdated;
+                gameWebSocket.OnPlayerJoined -= HandlePlayerJoined;
+                gameWebSocket.OnPlayerLeft -= HandlePlayerLeft;
+                gameWebSocket.OnPlayerReady -= HandlePlayerReady;
+                gameWebSocket.OnTeamChanged -= HandleTeamChanged;
+                gameWebSocket.OnRoomStatusChanged -= HandleRoomStatusChanged;
+                gameWebSocket.OnSwapRequest -= HandleSwapRequest;
+                gameWebSocket.OnSwapRequestStatus -= HandleSwapRequestStatus;
+            }
+        }
+
+        // WebSocket event handlers
+        private void HandleRoomUpdated(RoomResponse room)
+        {
+            roomState?.SetRoom(room);
+        }
+
+        private void HandlePlayerJoined(GameWebSocketService.PlayerJoinedEvent evt)
+        {
+            roomState?.SetRoom(evt.room);
+        }
+
+        private void HandlePlayerLeft(GameWebSocketService.PlayerLeftEvent evt)
+        {
+            roomState?.SetRoom(evt.room);
+        }
+
+        private void HandlePlayerReady(GameWebSocketService.PlayerReadyEvent evt)
+        {
+            roomState?.SetRoom(evt.room);
+        }
+
+        private void HandleTeamChanged(GameWebSocketService.TeamChangedEvent evt)
+        {
+            roomState?.SetRoom(evt.room);
+        }
+
+        private void HandleRoomStatusChanged(GameWebSocketService.RoomStatusChangedEvent evt)
+        {
+            roomState?.SetRoom(evt.room);
+        }
+
+        private void HandleSwapRequest(GameWebSocketService.SwapRequestEvent evt)
+        {
+            // Handle swap request notification
+            // UI có thể show notification cho target user
+            Debug.Log($"[RoomService] Swap request received: {evt.requestId} from {evt.fromUsername ?? "Unknown"}");
+        }
+        
+        private void HandleSwapRequestStatus(GameWebSocketService.SwapRequestStatusEvent evt)
+        {
+            // Handle swap request status change (accepted/rejected)
+            // Update UI và refresh room state
+            Debug.Log($"[RoomService] Swap request {evt.requestId} status: {evt.status}");
+            
+            // Refresh room state if accepted (team changed)
+            if (evt.status == "ACCEPTED" && roomState != null && roomState.IsInRoom)
+            {
+                // Room state sẽ được update qua team_changed event
+                // Hoặc có thể gọi GetRoom() để refresh
+            }
         }
 
         // Overload with DTO
@@ -40,6 +125,7 @@ namespace NightHunt.Services.Room
             if (result.Success && result.Data != null)
             {
                 roomState.SetRoom(result.Data);
+                // GameWebSocketService is already connected after login - no need to connect again
             }
 
             return result;
@@ -81,7 +167,9 @@ namespace NightHunt.Services.Room
                 password = password
             };
 
-            return await JoinRoomByCode(request);
+            var result = await JoinRoomByCode(request);
+            // GameWebSocketService is already connected after login - no need to connect again
+            return result;
         }
 
         // Overload with DTO
@@ -92,6 +180,7 @@ namespace NightHunt.Services.Room
             if (result.Success && result.Data != null)
             {
                 roomState.SetRoom(result.Data);
+                // GameWebSocketService is already connected after login - no need to connect again
             }
 
             return result;
@@ -161,6 +250,7 @@ namespace NightHunt.Services.Room
 
         public async Task<ApiResult> LeaveRoom(long roomId)
         {
+            // Note: GameWebSocketService stays connected (it's session-wide, not room-specific)
             string endpoint = string.Format(Constants.API_ROOMS_LEAVE, roomId);
             var result = await backendClient.PostAsync<object>(endpoint);
             
@@ -181,6 +271,7 @@ namespace NightHunt.Services.Room
 
         public async Task<ApiResult> DisbandRoom(long roomId)
         {
+            // Note: GameWebSocketService stays connected (it's session-wide, not room-specific)
             string endpoint = string.Format(Constants.API_ROOMS_DISBAND, roomId);
             var result = await backendClient.PostAsync<object>(endpoint);
             
@@ -277,6 +368,13 @@ namespace NightHunt.Services.Room
             return result.Success ? ApiResult.Ok() : ApiResult.Error(result.Message);
         }
 
+        public async Task<ApiResult> CancelSwapRequest(long roomId, long requestId)
+        {
+            string endpoint = string.Format(Constants.API_ROOMS_SWAP_CANCEL, roomId, requestId);
+            var result = await backendClient.PostAsync<object>(endpoint);
+            return result.Success ? ApiResult.Ok() : ApiResult.Error(result.Message);
+        }
+
         public async Task<ApiResult<System.Collections.Generic.List<SwapRequestDTO>>> GetPendingSwapRequests(long roomId)
         {
             string endpoint = string.Format(Constants.API_ROOMS_SWAP_REQUESTS, roomId);
@@ -345,6 +443,9 @@ namespace NightHunt.Services.Room
 
             return result;
         }
+
+        // Note: GameWebSocketService is connected after login/auto-login and stays connected throughout the session
+        // No need for room-specific WebSocket connections anymore
     }
 }
 
