@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using NativeWebSocket;
 using NightHunt.Common;
 using NightHunt.Core;
+using NightHunt.Services.Backend;
 using NightHunt.Data.DTOs;
 using NightHunt.State;
 using UnityEngine;
@@ -21,13 +22,22 @@ namespace NightHunt.Services.Game
         private static GameWebSocketService _instance;
         public static GameWebSocketService Instance => _instance;
 
-        [Header("WebSocket Settings")]
-        [SerializeField] private string wsBaseUrl = "ws://localhost:8080"; // Base URL for WebSocket
+        [Header("WebSocket Settings (from BackendConfig)")]
+        [Tooltip("Optional local override of wsPath; leave empty to use BackendConfig.wsPath.")]
+        [SerializeField] private string wsPathOverride = "";
 
         private WebSocket webSocket;
         private bool isConnected = false;
         private bool isConnecting = false;
         private string accessToken;
+        private string connectionToken = null; // track current connect attempt
+        private bool allowAutoReconnect = true;
+        private bool isShuttingDown = false;
+        private int reconnectAttempts = 0;
+        private const int MAX_RECONNECT_ATTEMPTS = 5;
+
+        public bool IsWsConnected => isConnected;
+        public bool IsConnecting => isConnecting;
 
         // Session Events
         public event Action OnForceLogout;
@@ -60,24 +70,6 @@ namespace NightHunt.Services.Game
                 return;
             }
 
-            // Try to get base URL from BackendHttpClient if available
-            if (GameManager.Instance != null && GameManager.Instance.BackendClient != null)
-            {
-                string httpBaseUrl = GameManager.Instance.BackendClient.GetBaseUrl();
-                if (!string.IsNullOrEmpty(httpBaseUrl))
-                {
-                    // Convert HTTP URL to WebSocket URL
-                    wsBaseUrl = httpBaseUrl.Replace("http://", "ws://").Replace("https://", "wss://");
-                    Debug.Log($"[GameWebSocketService] Using WebSocket URL from BackendClient: {wsBaseUrl}");
-                }
-            }
-            
-            // If still not set, use default
-            if (string.IsNullOrEmpty(wsBaseUrl))
-            {
-                wsBaseUrl = "ws://localhost:8080";
-                Debug.Log($"[GameWebSocketService] Using default WebSocket URL: {wsBaseUrl}");
-            }
         }
 
         private void Update()
@@ -115,18 +107,23 @@ namespace NightHunt.Services.Game
 
             accessToken = SessionState.Instance.AccessToken;
             isConnecting = true;
+            connectionToken = Guid.NewGuid().ToString();
+            string thisToken = connectionToken;
 
             try
             {
-                string wsUrl = $"{wsBaseUrl}/ws/game?token={Uri.EscapeDataString(accessToken)}";
+                string wsUrl = BuildWebSocketUrl();
+                string wsPath = ResolveWsPath();
+                wsUrl = $"{wsUrl}{(wsUrl.EndsWith(wsPath) ? "" : wsPath)}?token={Uri.EscapeDataString(accessToken)}";
                 Debug.Log($"[GameWebSocketService] Connecting to Game WebSocket...");
                 Debug.Log($"[GameWebSocketService] WebSocket URL: {wsUrl}");
 
-                await ConnectWebSocket(wsUrl);
+                await ConnectWebSocket(wsUrl, thisToken);
                 
-                if (isConnected)
+                if (isConnected && thisToken == connectionToken)
                 {
                     Debug.Log("[GameWebSocketService] Game WebSocket connected successfully");
+                    reconnectAttempts = 0; // reset on success
                     return true;
                 }
                 else
@@ -143,7 +140,7 @@ namespace NightHunt.Services.Game
             }
         }
 
-        private async Task ConnectWebSocket(string url)
+        private async Task ConnectWebSocket(string url, string token)
         {
             try
             {
@@ -166,6 +163,7 @@ namespace NightHunt.Services.Game
                 // Set up event handlers
                 webSocket.OnOpen += () =>
                 {
+                    if (token != connectionToken) return;
                     Debug.Log("[GameWebSocketService] WebSocket opened");
                     isConnected = true;
                     isConnecting = false;
@@ -173,12 +171,14 @@ namespace NightHunt.Services.Game
 
                 webSocket.OnMessage += (bytes) =>
                 {
+                    if (token != connectionToken) return;
                     string message = Encoding.UTF8.GetString(bytes);
                     HandleMessage(message);
                 };
 
                 webSocket.OnError += (error) =>
                 {
+                    if (token != connectionToken) return;
                     Debug.LogError($"[GameWebSocketService] WebSocket error: {error}");
                     isConnected = false;
                     isConnecting = false;
@@ -187,15 +187,22 @@ namespace NightHunt.Services.Game
 
                 webSocket.OnClose += (code) =>
                 {
+                    if (token != connectionToken) return;
                     Debug.Log($"[GameWebSocketService] WebSocket closed: {code}");
                     isConnected = false;
                     isConnecting = false;
                     OnDisconnected?.Invoke();
                     
                     // Try to reconnect if session is still valid
-                    if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
+                    if (allowAutoReconnect && SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
                     {
-                        Debug.Log("[GameWebSocketService] Attempting to reconnect...");
+                        reconnectAttempts++;
+                        if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS)
+                        {
+                            Debug.LogError($"[GameWebSocketService] Reconnect attempts exceeded limit ({MAX_RECONNECT_ATTEMPTS}). Stopping auto-reconnect.");
+                            return;
+                        }
+                        Debug.Log($"[GameWebSocketService] Attempting to reconnect... (attempt {reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS})");
                         _ = Connect(); // Fire and forget
                     }
                 };
@@ -203,7 +210,7 @@ namespace NightHunt.Services.Game
                 // Connect with timeout
                 var connectTask = Task.Run(async () => await webSocket.Connect());
                 var startTime = DateTime.Now;
-                var timeout = TimeSpan.FromSeconds(5);
+                var timeout = TimeSpan.FromSeconds(8); // give more time to establish
 
                 _ = connectTask; // Fire and forget - we'll check isConnected instead
 
@@ -229,7 +236,7 @@ namespace NightHunt.Services.Game
             }
             catch (TimeoutException)
             {
-                Debug.LogError("[GameWebSocketService] WebSocket connection timeout");
+                Debug.LogWarning("[GameWebSocketService] WebSocket connection timeout");
                 isConnected = false;
                 isConnecting = false;
                 throw;
@@ -241,6 +248,60 @@ namespace NightHunt.Services.Game
                 isConnecting = false;
                 throw;
             }
+        }
+
+        private string BuildWebSocketUrl()
+        {
+            // Priority: override -> BackendConfig -> fallback
+            string baseUrl = null;
+
+            if (GameManager.Instance != null && GameManager.Instance.BackendClient is BackendHttpClient bhc && bhc.Config != null)
+            {
+                var cfg = bhc.Config;
+                if (!string.IsNullOrEmpty(cfg.overrideWsBaseUrl))
+                {
+                    baseUrl = cfg.overrideWsBaseUrl.TrimEnd('/');
+                }
+                else
+                {
+                    bool useHttps = cfg.useHttps;
+                    string host = cfg.apiHost.TrimEnd('/');
+
+                    bool isLocal = host.Contains("localhost") || host.Contains("127.0.0.1") || host.Contains("0.0.0.0");
+                    bool secure = (cfg.respectBackendHttps && useHttps) || (cfg.forceSecure && !(isLocal && cfg.allowInsecureFallback));
+
+                    string scheme = secure ? "wss://" : "ws://";
+                    baseUrl = scheme + host;
+                }
+            }
+
+            if (string.IsNullOrEmpty(baseUrl))
+            {
+                // Fallback for dev
+                baseUrl = "ws://localhost:8080";
+            }
+
+            baseUrl = baseUrl.TrimEnd('/');
+            return baseUrl;
+        }
+
+        private string ResolveWsPath()
+        {
+            if (!string.IsNullOrEmpty(wsPathOverride))
+            {
+                return wsPathOverride;
+            }
+
+            if (GameManager.Instance != null && GameManager.Instance.BackendClient is BackendHttpClient bhc && bhc.Config != null)
+            {
+                var cfg = bhc.Config;
+                if (!string.IsNullOrEmpty(cfg.wsPath))
+                {
+                    return cfg.wsPath;
+                }
+            }
+
+            return "/ws/game";
         }
 
         private void HandleMessage(string message)
@@ -366,7 +427,7 @@ namespace NightHunt.Services.Game
             }
             
             // Disconnect WebSocket
-            Disconnect();
+            Disconnect(disableReconnect: true);
             
             // Trigger event
             OnForceLogout?.Invoke();
@@ -383,7 +444,7 @@ namespace NightHunt.Services.Game
             }
             
             // Disconnect WebSocket
-            Disconnect();
+            Disconnect(disableReconnect: true);
             
             // Trigger event
             OnSessionExpired?.Invoke();
@@ -392,8 +453,17 @@ namespace NightHunt.Services.Game
         /// <summary>
         /// Disconnect WebSocket
         /// </summary>
-        public async void Disconnect()
+        public async void Disconnect(bool disableReconnect = false)
         {
+            if (disableReconnect)
+            {
+                allowAutoReconnect = false;
+            }
+            else
+            {
+                allowAutoReconnect = true;
+            }
+
             isConnecting = false;
             
             if (webSocket != null)
@@ -415,8 +485,6 @@ namespace NightHunt.Services.Game
 
             isConnected = false;
         }
-
-        public bool IsConnected => isConnected;
 
         // ==================== Event Data Classes ====================
         

@@ -550,6 +550,51 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 454423156}
   m_CullTransparentMesh: 1
+--- !u!1 &490791446
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 490791448}
+  - component: {fileID: 490791447}
+  m_Layer: 0
+  m_Name: Socket
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &490791447
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 490791446}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 156df93aa8c02554484e537f6ca00451, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  wsPathOverride: 
+--- !u!4 &490791448
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 490791446}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 614230714}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &522072718
 GameObject:
   m_ObjectHideFlags: 0
@@ -1166,7 +1211,8 @@ MonoBehaviour:
   authService: {fileID: 829442989}
   roomService: {fileID: 1823424517}
   lobbyController: {fileID: 1306875977}
-  sessionMonitor: {fileID: 1728027963}
+  gameWebSocketService: {fileID: 490791447}
+  instanceConfig: {fileID: 11400000, guid: 0f5f819c031caaf48a42a6c061541fb5, type: 2}
   sessionState: {fileID: 614230716}
   roomState: {fileID: 614230715}
 --- !u!4 &614230714
@@ -1188,7 +1234,7 @@ Transform:
   - {fileID: 1869050771}
   - {fileID: 70451229}
   - {fileID: 1306875976}
-  - {fileID: 1728027962}
+  - {fileID: 490791448}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &614230715
@@ -2786,52 +2832,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1728027961
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1728027962}
-  - component: {fileID: 1728027963}
-  m_Layer: 0
-  m_Name: SessionMonitor
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1728027962
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1728027961}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 614230714}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1728027963
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1728027961}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b819209569718f046aac576ec4b16f3c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  checkInterval: 5
-  enablePolling: 1
 --- !u!1 &1816754770
 GameObject:
   m_ObjectHideFlags: 0
@@ -2963,7 +2963,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1823424516}
   - component: {fileID: 1823424517}
-  - component: {fileID: 1823424518}
   m_Layer: 0
   m_Name: RoomService
   m_TagString: Untagged
@@ -2999,22 +2998,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   roomState: {fileID: 614230715}
-  webSocketService: {fileID: 1823424518}
---- !u!114 &1823424518
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1823424515}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d2124b94680ae0343b931d4151df5848, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  wsBaseUrl: ws://localhost:8080
-  reconnectInterval: 5
-  maxReconnectAttempts: 5
 --- !u!1 &1869050770
 GameObject:
   m_ObjectHideFlags: 0

@@ -19,6 +19,18 @@ namespace NightHunt.Data
         [Header("Timeout Settings")]
         public int requestTimeoutSeconds = 30;
 
+        [Header("WebSocket Settings")]
+        [Tooltip("WS path on server")]
+        public string wsPath = "/ws/game";
+        [Tooltip("Override full WS base URL (e.g., wss://api.example.com). Leave empty to auto-build from apiHost/useHttps.")]
+        public string overrideWsBaseUrl = "";
+        [Tooltip("If true, use useHttps to decide wss/ws. If false, rely on forceSecure/allowInsecureFallback rules.")]
+        public bool respectBackendHttps = true;
+        [Tooltip("Force secure WebSocket (wss) even if useHttps = false (except localhost when allowInsecureFallback = true).")]
+        public bool forceSecure = false;
+        [Tooltip("Allow ws:// on localhost/dev even if forceSecure is true.")]
+        public bool allowInsecureFallback = true;
+
         /// <summary>
         /// Get the full API base URL with protocol
         /// </summary>

@@ -176,7 +176,7 @@ User fills form and clicks "Create"
       └─→ RoomService.CreateRoom(mode, isPublic, isLocked, password)
           ├─→ Success
           │   ├─→ RoomState.SetRoom(...)
-          │   ├─→ RoomWebSocketService.ConnectToRoom(...)
+          │   ├─→ GameWebSocketService (already connected after login)
           │   └─→ SceneLoader.LoadWaiting()
           └─→ Failed
               └─→ NoticePopup.Show("Lỗi tạo phòng")
@@ -190,7 +190,7 @@ User enters room code and clicks "Join"
       └─→ RoomService.JoinRoomByCode(roomCode, password)
           ├─→ Success
           │   ├─→ RoomState.SetRoom(...)
-          │   ├─→ RoomWebSocketService.ConnectToRoom(...)
+          │   ├─→ GameWebSocketService (already connected after login)
           │   └─→ SceneLoader.LoadWaiting()
           └─→ Failed
               └─→ NoticePopup.Show("Lỗi tham gia phòng")
@@ -205,7 +205,7 @@ User clicks "Quick Play"
 **File liên quan:**
 - `Assets/_Night_Hunt/Scripts/UI/HomeView.cs`
 - `Assets/_Night_Hunt/Scripts/Services/Room/RoomService.cs`
-- `Assets/_Night_Hunt/Scripts/Services/Room/RoomWebSocketService.cs`
+- `Assets/_Night_Hunt/Scripts/Services/Game/GameWebSocketService.cs` (unified WebSocket for all events)
 - `Assets/_Night_Hunt/Scripts/State/RoomState.cs`
 
 ---
@@ -237,7 +237,7 @@ WaitingView.Start()
   └─→ Find LobbyView in children
       └─→ LobbyView.Awake()
           ├─→ Setup buttons, slots
-          └─→ Subscribe to RoomWebSocketService events
+          └─→ Subscribe to GameWebSocketService events
 
 LobbyView.OnEnable()
   └─→ Subscribe to WebSocket events:
@@ -278,7 +278,7 @@ Owner clicks "Start"
 - `Assets/_Night_Hunt/Scripts/UI/LobbyView.cs`
 - `Assets/_Night_Hunt/Scripts/Lobby/LobbyController.cs`
 - `Assets/_Night_Hunt/Scripts/Services/Room/RoomService.cs`
-- `Assets/_Night_Hunt/Scripts/Services/Room/RoomWebSocketService.cs`
+- `Assets/_Night_Hunt/Scripts/Services/Game/GameWebSocketService.cs` (unified WebSocket for all events)
 
 ---
 
@@ -315,15 +315,15 @@ Owner clicks "Start"
 - Ngắt kết nối khi leave/disband room
 - **KHÔNG CÒN POLLING** - Tất cả updates đều real-time
 
-**File:** `Assets/_Night_Hunt/Scripts/Services/Room/RoomWebSocketService.cs`
+**File:** `Assets/_Night_Hunt/Scripts/Services/Game/GameWebSocketService.cs`
 
-### ⚠️ SessionMonitor (Vẫn dùng Polling)
+### ✅ GameWebSocketService (Unified WebSocket)
 **Session status check vẫn dùng polling:**
 - Check session validity mỗi 30s (configurable)
 - Khác với room updates
 - Chỉ check khi user đã đăng nhập
 
-**File:** `Assets/_Night_Hunt/Scripts/Services/Auth/SessionMonitor.cs`
+**File:** `Assets/_Night_Hunt/Scripts/Services/Game/GameWebSocketService.cs` (replaces SessionMonitor)
 
 ---
 
@@ -360,7 +360,7 @@ Owner clicks "Start"
   - `RoomService`
   - `SessionState`
   - `RoomState`
-  - `SessionMonitor`
+  - `GameWebSocketService` (replaces SessionMonitor)
 - GameObject `PersistentUICanvas` (hoặc GameManager sẽ tự tạo) với:
   - `PersistentUICanvas`
   - `LoadingManager` (child)
@@ -474,7 +474,7 @@ Owner clicks "Start"
 **Nguyên nhân:** WebSocket connection chưa được thiết lập, hoặc backend chưa broadcast events.
 
 **Giải pháp:**
-1. Kiểm tra `RoomWebSocketService` đã connect chưa (xem logs: "Connected to room WebSocket")
+1. Kiểm tra `GameWebSocketService` đã connect chưa (xem logs: "Game WebSocket connected successfully")
 2. Kiểm tra backend WebSocket handler đang chạy
 3. Kiểm tra `LobbyView` đã subscribe WebSocket events chưa (trong `OnEnable()`)
 4. Xem logs trong Unity Console và backend logs
@@ -503,7 +503,7 @@ Owner clicks "Start"
   - Kết nối khi join/create room
   - Ngắt kết nối khi leave/disband room
   - Tự động reconnect nếu mất kết nối
-- **SessionMonitor:** Vẫn dùng polling để check session status (khác với room updates)
+- **GameWebSocketService:** Unified WebSocket cho tất cả events (session + room updates)
 - **SceneLoader:** Quản lý scene transitions, tự động load FirstLoading nếu GameManager chưa init
 
 ---
@@ -519,7 +519,7 @@ Owner clicks "Start"
 - `Assets/_Night_Hunt/Scripts/UI/LobbyView.cs` - Lobby UI
 - `Assets/_Night_Hunt/Scripts/Services/Auth/AuthService.cs` - Authentication
 - `Assets/_Night_Hunt/Scripts/Services/Room/RoomService.cs` - Room management
-- `Assets/_Night_Hunt/Scripts/Services/Room/RoomWebSocketService.cs` - WebSocket for real-time updates
+- `Assets/_Night_Hunt/Scripts/Services/Game/GameWebSocketService.cs` (unified WebSocket for all events) - WebSocket for real-time updates
 
 ---
 

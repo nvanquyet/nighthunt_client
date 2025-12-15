@@ -206,7 +206,7 @@ namespace NightHunt.Services.Auth
             // Disconnect Game WebSocket on logout
             if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
             {
-                GameManager.Instance.GameWebSocket.Disconnect();
+                GameManager.Instance.GameWebSocket.Disconnect(disableReconnect: true);
             }
             
             return ApiResult.Ok();
