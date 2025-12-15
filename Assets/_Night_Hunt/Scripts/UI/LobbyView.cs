@@ -136,22 +136,24 @@ namespace NightHunt.UI
             lastStatus = null;
             gameStartLogged = false;
             
-            // Subscribe to GameWebSocketService events (unified WebSocket for all events)
-            if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
+            // Subscribe to GameEventBus (centralized event system)
+            if (GameEventBus.Instance != null)
             {
-                var ws = GameManager.Instance.GameWebSocket;
                 // Room Events
-                ws.OnRoomUpdated += HandleRoomUpdated;
-                ws.OnPlayerJoined += HandlePlayerJoined;
-                ws.OnPlayerLeft += HandlePlayerLeft;
-                ws.OnPlayerReady += HandlePlayerReady;
-                ws.OnTeamChanged += HandleTeamChanged;
-                ws.OnRoomStatusChanged += HandleRoomStatusChanged;
-                ws.OnSwapRequest += HandleSwapRequest;
-                ws.OnSwapRequestStatus += HandleSwapRequestStatus;
+                GameEventBus.Instance.OnRoomUpdated += HandleRoomUpdated;
+                GameEventBus.Instance.OnPlayerJoined += HandlePlayerJoined;
+                GameEventBus.Instance.OnPlayerLeft += HandlePlayerLeft;
+                GameEventBus.Instance.OnPlayerReady += HandlePlayerReady;
+                GameEventBus.Instance.OnTeamChanged += HandleTeamChanged;
+                GameEventBus.Instance.OnRoomStatusChanged += HandleRoomStatusChanged;
+                GameEventBus.Instance.OnSwapRequest += HandleSwapRequest;
+                GameEventBus.Instance.OnSwapRequestStatus += HandleSwapRequestStatus;
                 // Session Events
-                ws.OnForceLogout += HandleForceLogout;
-                ws.OnSessionExpired += HandleSessionExpired;
+                GameEventBus.Instance.OnForceLogout += HandleForceLogout;
+                GameEventBus.Instance.OnSessionExpired += HandleSessionExpired;
+                // Lifecycle Events
+                GameEventBus.Instance.OnAppFocusGained += HandleAppFocusGained;
+                GameEventBus.Instance.OnAppResumed += HandleAppResumed;
             }
             
             RefreshLobby();
@@ -159,22 +161,24 @@ namespace NightHunt.UI
 
         private void OnDisable()
         {
-            // Unsubscribe from GameWebSocketService events
-            if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
+            // Unsubscribe from GameEventBus events
+            if (GameEventBus.Instance != null)
             {
-                var ws = GameManager.Instance.GameWebSocket;
                 // Room Events
-                ws.OnRoomUpdated -= HandleRoomUpdated;
-                ws.OnPlayerJoined -= HandlePlayerJoined;
-                ws.OnPlayerLeft -= HandlePlayerLeft;
-                ws.OnPlayerReady -= HandlePlayerReady;
-                ws.OnTeamChanged -= HandleTeamChanged;
-                ws.OnRoomStatusChanged -= HandleRoomStatusChanged;
-                ws.OnSwapRequest -= HandleSwapRequest;
-                ws.OnSwapRequestStatus -= HandleSwapRequestStatus;
+                GameEventBus.Instance.OnRoomUpdated -= HandleRoomUpdated;
+                GameEventBus.Instance.OnPlayerJoined -= HandlePlayerJoined;
+                GameEventBus.Instance.OnPlayerLeft -= HandlePlayerLeft;
+                GameEventBus.Instance.OnPlayerReady -= HandlePlayerReady;
+                GameEventBus.Instance.OnTeamChanged -= HandleTeamChanged;
+                GameEventBus.Instance.OnRoomStatusChanged -= HandleRoomStatusChanged;
+                GameEventBus.Instance.OnSwapRequest -= HandleSwapRequest;
+                GameEventBus.Instance.OnSwapRequestStatus -= HandleSwapRequestStatus;
                 // Session Events
-                ws.OnForceLogout -= HandleForceLogout;
-                ws.OnSessionExpired -= HandleSessionExpired;
+                GameEventBus.Instance.OnForceLogout -= HandleForceLogout;
+                GameEventBus.Instance.OnSessionExpired -= HandleSessionExpired;
+                // Lifecycle Events
+                GameEventBus.Instance.OnAppFocusGained -= HandleAppFocusGained;
+                GameEventBus.Instance.OnAppResumed -= HandleAppResumed;
             }
             
             // Cancel timeout coroutines
@@ -287,14 +291,8 @@ namespace NightHunt.UI
             // Update player slots
             UpdatePlayerSlots(room.players);
 
-            // Update button states
-            bool isOwner = lobbyController != null && lobbyController.IsOwner();
-            if (startButton != null)
-                startButton.gameObject.SetActive(isOwner && room.status == "WAITING");
-            
-            // Show settings button only for owner
-            if (settingsButton != null)
-                settingsButton.gameObject.SetActive(isOwner && room.status == "WAITING");
+            // Update button states (ready/start/settings)
+            UpdateButtonStates(room);
         }
 
         private int GetMaxSlotsPerTeam(string mode)
@@ -484,12 +482,27 @@ namespace NightHunt.UI
             if (room == null) return;
             
             bool isOwner = lobbyController != null && lobbyController.IsOwner();
+            bool isWaiting = room.status == Constants.ROOM_STATUS_WAITING;
+            bool roomFull = IsRoomFull(room);
+            bool allReady = AreAllPlayersReady(room);
             
+            // Host: show Start, hide Ready
             if (startButton != null)
-                startButton.gameObject.SetActive(isOwner && room.status == "WAITING");
+            {
+                startButton.gameObject.SetActive(isOwner && isWaiting);
+                startButton.interactable = isOwner && isWaiting && roomFull && allReady;
+            }
             
+            // Non-host: show Ready, hide Start
+            if (readyButton != null)
+            {
+                readyButton.gameObject.SetActive(!isOwner && isWaiting);
+                UpdateReadyButtonLabel(); // update label when visibility may change
+            }
+            
+            // Settings only for host while waiting
             if (settingsButton != null)
-                settingsButton.gameObject.SetActive(isOwner && room.status == "WAITING");
+                settingsButton.gameObject.SetActive(isOwner && isWaiting);
         }
 
         /// <summary>
@@ -538,6 +551,21 @@ namespace NightHunt.UI
             int totalSlots = maxSlotsPerTeam * 2; // 2 teams
             int occupiedSlots = players?.Count ?? 0;
             return occupiedSlots >= totalSlots;
+        }
+
+        private bool IsRoomFull(RoomResponse room)
+        {
+            if (room == null) return false;
+            int slotsPerTeam = GetMaxSlotsPerTeam(room.mode);
+            int totalSlots = slotsPerTeam * 2;
+            int occupied = room.players?.Count ?? 0;
+            return occupied >= totalSlots;
+        }
+
+        private bool AreAllPlayersReady(RoomResponse room)
+        {
+            if (room?.players == null || room.players.Count == 0) return false;
+            return room.players.All(p => p.isReady);
         }
 
         private async Task MoveToSlot(int targetTeam, int targetSlot)
@@ -590,13 +618,6 @@ namespace NightHunt.UI
                 
                 // Show cancel popup for requester
                 ShowSwapRequestCancel(targetUsername);
-                
-                // Start 5s timeout
-                if (swapRequestTimeoutCoroutine != null)
-                {
-                    StopCoroutine(swapRequestTimeoutCoroutine);
-                }
-                swapRequestTimeoutCoroutine = StartCoroutine(SwapRequestTimeoutCoroutine(result.Data.requestId));
             }
             else
             {
@@ -647,6 +668,25 @@ namespace NightHunt.UI
                 roomState.SetRoom(room);
             }
             
+            // Safety: clear swap popups if positions may have changed
+            if (pendingSwapRequestId.HasValue || receivedSwapRequestId.HasValue)
+            {
+                HideSwapRequest();
+                HideSwapRequestCancel();
+                pendingSwapRequestId = null;
+                receivedSwapRequestId = null;
+                if (swapRequestTimeoutCoroutine != null)
+                {
+                    StopCoroutine(swapRequestTimeoutCoroutine);
+                    swapRequestTimeoutCoroutine = null;
+                }
+                if (receivedSwapRequestTimeoutCoroutine != null)
+                {
+                    StopCoroutine(receivedSwapRequestTimeoutCoroutine);
+                    receivedSwapRequestTimeoutCoroutine = null;
+                }
+            }
+            
             // Update room info (code, mode)
             if (room != null)
             {
@@ -655,18 +695,21 @@ namespace NightHunt.UI
                 if (modeText != null)
                     modeText.text = $"Mode: {room.mode}";
                 
-                // Check owner change
-                bool ownerChanged = lastOwnerId.HasValue && lastOwnerId.Value != room.ownerId;
-                if (ownerChanged)
-                {
-                    Debug.Log($"[LobbyView] Owner changed from {lastOwnerId.Value} to {room.ownerId}");
-                    UpdateButtonStates(room);
-                }
-                lastOwnerId = room.ownerId;
+                    // Check owner change
+                    bool ownerChanged = lastOwnerId.HasValue && lastOwnerId.Value != room.ownerId;
+                    if (ownerChanged)
+                    {
+                        Debug.Log($"[LobbyView] Owner changed from {lastOwnerId.Value} to {room.ownerId}");
+                    }
+                    lastOwnerId = room.ownerId;
             }
             
             // Full refresh only if needed (e.g., settings changed)
             RefreshLobby();
+
+            // Update ready button label based on current user ready state
+            UpdateReadyButtonLabel();
+                UpdateButtonStates(room);
         }
         
         private void HandleForceLogout()
@@ -691,6 +734,18 @@ namespace NightHunt.UI
             UnityEngine.SceneManagement.SceneManager.LoadScene("02_Login");
         }
 
+        private void HandleAppFocusGained()
+        {
+            Debug.Log("[LobbyView] App regained focus - refreshing lobby");
+            RefreshLobby();
+        }
+
+        private void HandleAppResumed()
+        {
+            Debug.Log("[LobbyView] App resumed - refreshing lobby");
+            RefreshLobby();
+        }
+
         private void HandlePlayerJoined(GameWebSocketService.PlayerJoinedEvent evt)
         {
             // Update room state
@@ -708,6 +763,10 @@ namespace NightHunt.UI
                     AddPlayerSlot(newPlayer);
                 }
             }
+
+            // Buttons may change when player count changes (start enable/disable)
+            if (evt.room != null)
+                UpdateButtonStates(evt.room);
         }
 
         private void HandlePlayerLeft(GameWebSocketService.PlayerLeftEvent evt)
@@ -720,6 +779,9 @@ namespace NightHunt.UI
             
             // Remove player from UI
             RemovePlayerSlot(evt.userId);
+
+            if (evt.room != null)
+                UpdateButtonStates(evt.room);
         }
 
         private void HandlePlayerReady(GameWebSocketService.PlayerReadyEvent evt)
@@ -732,6 +794,9 @@ namespace NightHunt.UI
             
             // Update ready status for specific player
             UpdatePlayerReadyStatus(evt.userId, evt.isReady);
+
+            if (evt.room != null)
+                UpdateButtonStates(evt.room);
         }
 
         private void HandleTeamChanged(GameWebSocketService.TeamChangedEvent evt)
@@ -744,6 +809,9 @@ namespace NightHunt.UI
             
             // Move player to new team/slot
             MovePlayerSlot(evt.userId, evt.team, evt.slot);
+
+            if (evt.room != null)
+                UpdateButtonStates(evt.room);
         }
 
         private void HandleRoomStatusChanged(GameWebSocketService.RoomStatusChangedEvent evt)
@@ -757,7 +825,7 @@ namespace NightHunt.UI
             // Check if game started
             if (!string.IsNullOrEmpty(lastStatus) && 
                 lastStatus == Constants.ROOM_STATUS_WAITING && 
-                evt.status == Constants.ROOM_STATUS_IN_GAME)
+                evt.newStatus == Constants.ROOM_STATUS_IN_GAME)
             {
                 if (!gameStartLogged)
                 {
@@ -766,7 +834,7 @@ namespace NightHunt.UI
                     // TODO: Trigger game start event
                 }
             }
-            lastStatus = evt.status;
+            lastStatus = evt.newStatus;
             
             // Update button states based on new status
             if (evt.room != null)
@@ -819,25 +887,30 @@ namespace NightHunt.UI
                     receivedSwapRequestTimeoutCoroutine = null;
                 }
             }
+
+            // Safety: if status is not PENDING, clear any visible popups to avoid stale UI
+            if (!string.IsNullOrEmpty(evt.status) && evt.status != "PENDING")
+            {
+                HideSwapRequest();
+                HideSwapRequestCancel();
+                pendingSwapRequestId = null;
+                receivedSwapRequestId = null;
+                if (swapRequestTimeoutCoroutine != null)
+                {
+                    StopCoroutine(swapRequestTimeoutCoroutine);
+                    swapRequestTimeoutCoroutine = null;
+                }
+                if (receivedSwapRequestTimeoutCoroutine != null)
+                {
+                    StopCoroutine(receivedSwapRequestTimeoutCoroutine);
+                    receivedSwapRequestTimeoutCoroutine = null;
+                }
+            }
             
             RefreshLobby();
         }
         
-        private System.Collections.IEnumerator SwapRequestTimeoutCoroutine(long requestId)
-        {
-            yield return new WaitForSeconds(5f);
-            
-            // Auto-cancel after 5s
-            if (pendingSwapRequestId.HasValue && pendingSwapRequestId.Value == requestId)
-            {
-                CancelSwapRequestAsync(requestId);
-            }
-        }
-        
-        private async void CancelSwapRequestAsync(long requestId)
-        {
-            await CancelSwapRequest(requestId);
-        }
+        // Requester no longer auto-cancels; cancel only by user or server status
         
         private System.Collections.IEnumerator SwapRequestTargetTimeoutCoroutine(long requestId)
         {
@@ -924,7 +997,8 @@ namespace NightHunt.UI
             }
             else
             {
-                ShowError($"Failed to accept swap: {result.Message}");
+                ShowErrorViaNotice($"Không thể chấp nhận đổi chỗ: {result.Message}", "SWAP_ACCEPT_FAILED");
+                RefreshLobby();
             }
         }
 
@@ -960,9 +1034,16 @@ namespace NightHunt.UI
                 receivedSwapRequestTimeoutCoroutine = null;
             }
             
-            await roomService.RejectSwapRequest(roomState.RoomId, requestIdToReject);
-            HideSwapRequest();
-            receivedSwapRequestId = null;
+            var result = await roomService.RejectSwapRequest(roomState.RoomId, requestIdToReject);
+            if (result.Success)
+            {
+                HideSwapRequest();
+                receivedSwapRequestId = null;
+            }
+            else
+            {
+                ShowErrorViaNotice($"Không thể từ chối đổi chỗ: {result.Message}", "SWAP_REJECT_FAILED");
+            }
             
             // Always refresh after action to get latest state
             RefreshLobby();
@@ -1017,6 +1098,9 @@ namespace NightHunt.UI
             
             // Always refresh after action to get latest state
             RefreshLobby();
+
+            // Update button label immediately based on requested state
+            UpdateReadyButtonLabel(!currentReady);
             
             if (!result)
             {
@@ -1064,6 +1148,22 @@ namespace NightHunt.UI
 
             var player = players.FirstOrDefault(p => p.userId == sessionState.UserId);
             return player?.isReady ?? false;
+        }
+
+        /// <summary>
+        /// Update ready button label to reflect current player's ready state
+        /// </summary>
+        private void UpdateReadyButtonLabel(bool? overrideState = null)
+        {
+            if (readyButton == null) return;
+
+            bool isReady = overrideState ?? GetCurrentPlayerReady();
+
+            var label = readyButton.GetComponentInChildren<TextMeshProUGUI>();
+            if (label != null)
+            {
+                label.text = isReady ? "Unready" : "Ready";
+            }
         }
 
         private void ShowError(string message)

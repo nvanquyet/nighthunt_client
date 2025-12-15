@@ -114,6 +114,13 @@ namespace NightHunt.Lobby
                 return false;
             }
 
+            // Only host can start; safety check
+            if (!IsOwner())
+            {
+                Debug.LogWarning("[LobbyController] StartGame called by non-owner");
+                return false;
+            }
+
             var result = await roomService.StartGame(roomState.CurrentRoom.roomId);
             return result.Success;
         }

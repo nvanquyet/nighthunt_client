@@ -1,5 +1,4 @@
 using NightHunt.Core;
-using NightHunt.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,7 +21,6 @@ namespace NightHunt.UI
         [SerializeField] private GameObject playerPrefab;
         [SerializeField] private Transform spawnPoint;
 
-        private LobbyPlayer localPlayer;
         private bool isLobbyVisible = false;
 
         private void Awake()
@@ -57,12 +55,7 @@ namespace NightHunt.UI
             if (playerPrefab != null && spawnPoint != null)
             {
                 GameObject playerObj = Instantiate(playerPrefab, spawnPoint.position, spawnPoint.rotation);
-                localPlayer = playerObj.GetComponent<LobbyPlayer>();
-                
-                if (localPlayer == null)
-                {
-                    Debug.LogWarning("LobbyPlayer component not found on player prefab");
-                }
+                // Player movement is handled by the prefab's own components
             }
         }
 
@@ -97,8 +90,8 @@ namespace NightHunt.UI
 
         private void Update()
         {
-            // Demo: WASD movement is handled by LobbyPlayer component
             // This view just manages UI and lobby view toggle
+            // Player movement is handled by the prefab's own components
         }
 
 #if UNITY_EDITOR

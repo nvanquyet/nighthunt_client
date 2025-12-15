@@ -15,9 +15,6 @@ namespace NightHunt.Services.Room
         [SerializeField] private IBackendClient backendClient;
         [SerializeField] private RoomState roomState;
         
-        // GameWebSocketService is accessed via GameManager (unified WebSocket for all events)
-        private GameWebSocketService gameWebSocket => GameManager.Instance?.GameWebSocket;
-
         private void Awake()
         {
             // Always use the shared BackendClient from GameManager to keep auth token
@@ -34,38 +31,53 @@ namespace NightHunt.Services.Room
             {
                 roomState = RoomState.Instance;
             }
-            
-            // Subscribe to GameWebSocketService events (unified WebSocket for all events)
-            if (gameWebSocket != null)
-            {
-                gameWebSocket.OnRoomUpdated += HandleRoomUpdated;
-                gameWebSocket.OnPlayerJoined += HandlePlayerJoined;
-                gameWebSocket.OnPlayerLeft += HandlePlayerLeft;
-                gameWebSocket.OnPlayerReady += HandlePlayerReady;
-                gameWebSocket.OnTeamChanged += HandleTeamChanged;
-                gameWebSocket.OnRoomStatusChanged += HandleRoomStatusChanged;
-                gameWebSocket.OnSwapRequest += HandleSwapRequest;
-                gameWebSocket.OnSwapRequestStatus += HandleSwapRequestStatus;
-            }
         }
 
-        private void OnDestroy()
+        private void OnEnable()
         {
-            // Unsubscribe from GameWebSocketService events
-            if (gameWebSocket != null)
-            {
-                gameWebSocket.OnRoomUpdated -= HandleRoomUpdated;
-                gameWebSocket.OnPlayerJoined -= HandlePlayerJoined;
-                gameWebSocket.OnPlayerLeft -= HandlePlayerLeft;
-                gameWebSocket.OnPlayerReady -= HandlePlayerReady;
-                gameWebSocket.OnTeamChanged -= HandleTeamChanged;
-                gameWebSocket.OnRoomStatusChanged -= HandleRoomStatusChanged;
-                gameWebSocket.OnSwapRequest -= HandleSwapRequest;
-                gameWebSocket.OnSwapRequestStatus -= HandleSwapRequestStatus;
-            }
+            SubscribeEvents();
         }
 
-        // WebSocket event handlers
+        private void OnDisable()
+        {
+            UnsubscribeEvents();
+        }
+
+        private void SubscribeEvents()
+        {
+            if (GameEventBus.Instance == null)
+            {
+                return;
+            }
+
+            GameEventBus.Instance.OnRoomUpdated += HandleRoomUpdated;
+            GameEventBus.Instance.OnPlayerJoined += HandlePlayerJoined;
+            GameEventBus.Instance.OnPlayerLeft += HandlePlayerLeft;
+            GameEventBus.Instance.OnPlayerReady += HandlePlayerReady;
+            GameEventBus.Instance.OnTeamChanged += HandleTeamChanged;
+            GameEventBus.Instance.OnRoomStatusChanged += HandleRoomStatusChanged;
+            GameEventBus.Instance.OnSwapRequest += HandleSwapRequest;
+            GameEventBus.Instance.OnSwapRequestStatus += HandleSwapRequestStatus;
+        }
+
+        private void UnsubscribeEvents()
+        {
+            if (GameEventBus.Instance == null)
+            {
+                return;
+            }
+
+            GameEventBus.Instance.OnRoomUpdated -= HandleRoomUpdated;
+            GameEventBus.Instance.OnPlayerJoined -= HandlePlayerJoined;
+            GameEventBus.Instance.OnPlayerLeft -= HandlePlayerLeft;
+            GameEventBus.Instance.OnPlayerReady -= HandlePlayerReady;
+            GameEventBus.Instance.OnTeamChanged -= HandleTeamChanged;
+            GameEventBus.Instance.OnRoomStatusChanged -= HandleRoomStatusChanged;
+            GameEventBus.Instance.OnSwapRequest -= HandleSwapRequest;
+            GameEventBus.Instance.OnSwapRequestStatus -= HandleSwapRequestStatus;
+        }
+
+        // Event handlers (from GameEventBus)
         private void HandleRoomUpdated(RoomResponse room)
         {
             roomState?.SetRoom(room);

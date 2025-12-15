@@ -1,3 +1,4 @@
+using System;
 using NightHunt.Lobby;
 using NightHunt.Networking;
 using NightHunt.Services.Auth;
@@ -24,8 +25,10 @@ namespace NightHunt.Core
         [SerializeField] private RoomService roomService;
         // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager thay thế
         [SerializeField] private LobbyController lobbyController;
-        [SerializeField] private SessionMonitor sessionMonitor; // Deprecated - will be removed, using WebSocket instead
         [SerializeField] private GameWebSocketService gameWebSocketService;
+        
+        [Header("Config")]
+        [SerializeField] private Config.InstanceConfig instanceConfig;
 
         [Header("State")]
         [SerializeField] private SessionState sessionState;
@@ -37,10 +40,16 @@ namespace NightHunt.Core
         public RoomService RoomService => roomService;
         // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager.Instance thay thế
         public LobbyController LobbyController => lobbyController;
-        public SessionMonitor SessionMonitor => sessionMonitor; // Deprecated - using WebSocket instead
         public GameWebSocketService GameWebSocket => gameWebSocketService;
         public SessionState SessionState => sessionState;
         public RoomState RoomState => roomState;
+        public Config.InstanceConfig InstanceConfig => instanceConfig;
+
+        // App lifecycle events - observers can subscribe/unsubscribe
+        public event Action OnAppFocusLost;
+        public event Action OnAppFocusGained;
+        public event Action OnAppPaused;
+        public event Action OnAppResumed;
 
         private void Awake()
         {
@@ -50,6 +59,9 @@ namespace NightHunt.Core
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
                 InitializeServices();
+                
+                // Configure run in background based on config
+                ConfigureRunInBackground();
                 
                 // Đảm bảo PersistentUICanvas được tạo
                 EnsurePersistentUICanvas();
@@ -62,6 +74,26 @@ namespace NightHunt.Core
                 // If another GameManager exists, destroy this one
                 Destroy(gameObject);
             }
+        }
+
+        /// <summary>
+        /// Configure whether app runs in background when losing focus
+        /// </summary>
+        private void ConfigureRunInBackground()
+        {
+            bool shouldRunInBackground = false;
+            if (instanceConfig != null)
+            {
+                shouldRunInBackground = instanceConfig.ShouldRunInBackground();
+            }
+            else
+            {
+                // Fallback: Auto-detect (Editor = true, Build = false)
+                shouldRunInBackground = Application.isEditor;
+            }
+            
+            Application.runInBackground = shouldRunInBackground;
+            Debug.Log($"[GameManager] Application.runInBackground set to: {shouldRunInBackground} (Editor: {Application.isEditor})");
         }
 
         /// <summary>
@@ -135,16 +167,7 @@ namespace NightHunt.Core
                 }
             }
 
-            if (sessionMonitor == null)
-            {
-                sessionMonitor = GetComponent<SessionMonitor>();
-                if (sessionMonitor == null)
-                {
-                    sessionMonitor = gameObject.AddComponent<SessionMonitor>();
-                }
-            }
-
-            // Initialize GameWebSocketService (replaces SessionMonitor polling and RoomWebSocketService)
+            // Initialize GameWebSocketService (unified WebSocket for all game events)
             if (gameWebSocketService == null)
             {
                 gameWebSocketService = GetComponent<GameWebSocketService>();
@@ -152,6 +175,14 @@ namespace NightHunt.Core
                 {
                     gameWebSocketService = gameObject.AddComponent<GameWebSocketService>();
                 }
+            }
+
+            // Initialize GameEventBus (centralized event system)
+            if (GameEventBus.Instance == null)
+            {
+                GameObject eventBusObj = new GameObject("GameEventBus");
+                eventBusObj.AddComponent<GameEventBus>();
+                DontDestroyOnLoad(eventBusObj);
             }
 
             Debug.Log("GameManager initialized with all services");
@@ -173,6 +204,19 @@ namespace NightHunt.Core
         {
             Debug.Log("[GameManager] Application quitting - cleaning up...");
             await CleanupOnExit();
+            
+            // Ensure WebSocket is fully disconnected without auto-reconnect
+            if (gameWebSocketService != null)
+            {
+                try
+                {
+                    gameWebSocketService.Disconnect(disableReconnect: true);
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on quit: {ex.Message}");
+                }
+            }
         }
 
         /// <summary>
@@ -196,6 +240,15 @@ namespace NightHunt.Core
                         Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on pause: {ex.Message}");
                     }
                 }
+
+                OnAppPaused?.Invoke();
+            }
+            else
+            {
+                // App resumed from background
+                Debug.Log("[GameManager] Application resumed from background");
+                HandleApplicationResumed();
+                OnAppResumed?.Invoke();
             }
         }
 
@@ -221,6 +274,115 @@ namespace NightHunt.Core
                         Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on focus loss: {ex.Message}");
                     }
                 }
+
+                OnAppFocusLost?.Invoke();
+            }
+            else
+            {
+                // App regained focus
+                Debug.Log("[GameManager] Application regained focus");
+                HandleApplicationResumed();
+                OnAppFocusGained?.Invoke();
+            }
+        }
+
+        /// <summary>
+        /// Handle application resumed (from pause or focus return)
+        /// Reconnect WebSocket and refresh current scene data
+        /// </summary>
+        private async void HandleApplicationResumed()
+        {
+            bool shouldRefresh = instanceConfig != null ? instanceConfig.ShouldRefreshOnFocusReturn() : true;
+            if (!shouldRefresh)
+            {
+                Debug.Log("[GameManager] Refresh on focus return is disabled, skipping refresh");
+                return;
+            }
+
+            // Wait a bit for app to fully resume
+            await System.Threading.Tasks.Task.Delay(500);
+
+            // Reconnect WebSocket if user is authenticated
+            if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
+            {
+                if (gameWebSocketService != null && !gameWebSocketService.IsWsConnected)
+                {
+                    Debug.Log("[GameManager] Reconnecting GameWebSocket after resume...");
+                    _ = gameWebSocketService.Connect(); // Fire and forget
+                }
+            }
+
+            // Refresh current scene data based on active scene
+            RefreshCurrentSceneData();
+        }
+
+        /// <summary>
+        /// Refresh data for current active scene
+        /// </summary>
+        private async void RefreshCurrentSceneData()
+        {
+            string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            Debug.Log($"[GameManager] Refreshing data for scene: {currentScene}");
+
+            try
+            {
+                // Check if user is authenticated
+                if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated)
+                {
+                    Debug.Log("[GameManager] User not authenticated, skipping refresh");
+                    return;
+                }
+
+                // Refresh based on scene
+                switch (currentScene)
+                {
+                    case "03_Waiting":
+                    case "04_Waiting":
+                    case "Waiting":
+                        // Refresh lobby/room data
+                        if (roomState != null && roomState.IsInRoom && roomService != null)
+                        {
+                            Debug.Log($"[GameManager] Refreshing room data for room {roomState.RoomId}");
+                            var result = await roomService.GetRoom(roomState.RoomId);
+                            if (result.Success && result.Data != null)
+                            {
+                                Debug.Log("[GameManager] Room data refreshed successfully");
+                                
+                                // Trigger LobbyView refresh if it exists
+                                var lobbyView = FindFirstObjectByType<UI.LobbyView>();
+                                if (lobbyView != null)
+                                {
+                                    lobbyView.RefreshLobby();
+                                    Debug.Log("[GameManager] LobbyView refresh triggered");
+                                }
+                            }
+                            else
+                            {
+                                Debug.LogWarning($"[GameManager] Failed to refresh room data: {result.Message}");
+                            }
+                        }
+                        break;
+
+                    case "02_Home":
+                    case "Home":
+                        // Home scene - no specific refresh needed
+                        Debug.Log("[GameManager] Home scene - no refresh needed");
+                        break;
+
+                    case "01_Login":
+                    case "Login":
+                        // Login scene - no refresh needed
+                        Debug.Log("[GameManager] Login scene - no refresh needed");
+                        break;
+
+                    default:
+                        Debug.Log($"[GameManager] Unknown scene '{currentScene}' - no refresh logic defined");
+                        break;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[GameManager] Error refreshing scene data: {ex.Message}\n{ex.StackTrace}");
             }
         }
 
@@ -258,12 +420,6 @@ namespace NightHunt.Core
                     {
                         Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on exit: {ex.Message}");
                     }
-                }
-
-                // 3. Stop session monitoring (deprecated - kept for compatibility)
-                if (sessionMonitor != null)
-                {
-                    sessionMonitor.StopPolling();
                 }
 
                 Debug.Log("[GameManager] Cleanup completed");

@@ -17,6 +17,7 @@ namespace NightHunt.Services.Backend
     public class BackendHttpClient : MonoBehaviour, IBackendClient
     {
         [SerializeField] private BackendConfig config;
+        public BackendConfig Config => config;
         
         private string authToken;
         private bool sslCertificateInitialized = false;
@@ -375,10 +376,10 @@ namespace NightHunt.Services.Backend
                 }
                 ClearAuthToken();
                 
-                // Stop session monitoring
-                if (GameManager.Instance != null && GameManager.Instance.SessionMonitor != null)
+                // Disconnect GameWebSocket on ban
+                if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
                 {
-                    GameManager.Instance.SessionMonitor.StopPolling();
+                    GameManager.Instance.GameWebSocket.Disconnect();
                 }
                 
                 // Show ban notification (can be enhanced with UI popup)
@@ -401,15 +402,15 @@ namespace NightHunt.Services.Backend
                 if (string.Equals(errorCode, "AUTH_008") || string.Equals(errorCode, "AUTH_FORCE_LOGOUT"))
                 {
                     // Check if this is an active session (user A) or a login attempt (user B)
-                    // Active session = SessionMonitor is polling (user is already logged in and active)
-                    // Login attempt = SessionMonitor is NOT polling (user is trying to login/auto-login)
+                    // Active session = GameWebSocket is connected (user is already logged in and active)
+                    // Login attempt = GameWebSocket is NOT connected (user is trying to login/auto-login)
                     bool isActiveSession = SessionState.Instance != null && 
                                           SessionState.Instance.IsAuthenticated &&
                                           GameManager.Instance != null && 
-                                          GameManager.Instance.SessionMonitor != null && 
-                                          GameManager.Instance.SessionMonitor.IsPolling;
+                                          GameManager.Instance.GameWebSocket != null && 
+                                          GameManager.Instance.GameWebSocket.IsWsConnected;
                     
-                    Debug.Log($"[BackendHttpClient] AUTH_FORCE_LOGOUT (AUTH_008) - isActiveSession: {isActiveSession}, IsAuthenticated: {SessionState.Instance?.IsAuthenticated}, IsPolling: {GameManager.Instance?.SessionMonitor?.IsPolling}");
+                    Debug.Log($"[BackendHttpClient] AUTH_FORCE_LOGOUT (AUTH_008) - isActiveSession: {isActiveSession}, IsAuthenticated: {SessionState.Instance?.IsAuthenticated}, IsWebSocketConnected: {GameManager.Instance?.GameWebSocket?.IsWsConnected}");
                     
                     if (isActiveSession)
                     {
