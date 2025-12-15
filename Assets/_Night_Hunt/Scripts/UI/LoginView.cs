@@ -146,7 +146,19 @@ namespace NightHunt.UI
 
             if (result.Success)
             {
-                OnLoginSuccess();
+                // Show success message and ask user to login
+                ShowSuccessViaNotice("Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.", () =>
+                {
+                    // Clear password fields after successful registration
+                    if (passwordInput != null) passwordInput.text = "";
+                    if (confirmPasswordInput != null) confirmPasswordInput.text = "";
+                    
+                    // Focus on username/email field for login
+                    if (usernameInput != null)
+                    {
+                        usernameInput.Select();
+                    }
+                });
             }
             else
             {
@@ -183,6 +195,26 @@ namespace NightHunt.UI
                     {
                         // Just close the popup
                     },
+                    autoDismissSeconds: 3f // Auto dismiss after 3 seconds
+                );
+            }
+            else
+            {
+                // Fallback: use error text if notice popup not available
+                ShowError(message);
+            }
+        }
+        
+        private void ShowSuccessViaNotice(string message, System.Action onConfirm = null)
+        {
+            // Show success via notice popup
+            var noticePopup = PersistentUICanvas.Instance != null ? PersistentUICanvas.Instance.NoticePopup : null;
+            if (noticePopup != null)
+            {
+                noticePopup.Show(
+                    title: "Thành công",
+                    message: message,
+                    onConfirm: onConfirm ?? (() => { }),
                     autoDismissSeconds: 3f // Auto dismiss after 3 seconds
                 );
             }

@@ -116,6 +116,22 @@ namespace NightHunt.UI
             return 0;
         }
 
+        /// <summary>
+        /// Update ready status without full refresh
+        /// </summary>
+        public void UpdateReadyStatus(bool isReady)
+        {
+            if (player != null)
+            {
+                player.isReady = isReady;
+                
+                if (readyIndicator != null)
+                {
+                    readyIndicator.color = isReady ? Color.green : Color.red;
+                }
+            }
+        }
+
         public bool IsEmpty => player == null;
         public RoomPlayerResponse Player => player;
         public int Team => team;

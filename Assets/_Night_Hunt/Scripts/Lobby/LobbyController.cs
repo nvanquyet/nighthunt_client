@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
+using NightHunt.Common;
 using NightHunt.Data.DTOs;
-using NightHunt.Netcode;
+using NightHunt.Networking;
 using NightHunt.Services.Room;
 using NightHunt.State;
 using UnityEngine;
@@ -10,7 +11,7 @@ namespace NightHunt.Lobby
     public class LobbyController : MonoBehaviour
     {
         [SerializeField] private RoomService roomService;
-        [SerializeField] private NetworkBootstrap networkBootstrap;
+        // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager thay thế nếu cần disconnect
 
         private RoomState roomState;
 
@@ -22,14 +23,6 @@ namespace NightHunt.Lobby
                 roomService = FindFirstObjectByType<RoomService>();
 #else
                 roomService = FindObjectOfType<RoomService>();
-#endif
-            }
-            if (networkBootstrap == null)
-            {
-#if UNITY_2023_1_OR_NEWER
-                networkBootstrap = FindFirstObjectByType<NetworkBootstrap>();
-#else
-                networkBootstrap = FindObjectOfType<NetworkBootstrap>();
 #endif
             }
             roomState = RoomState.Instance;
@@ -103,8 +96,12 @@ namespace NightHunt.Lobby
                 return false;
             }
 
-            // Disconnect from headless server first
-            networkBootstrap.Disconnect();
+            // Disconnect from network if connected
+            var networkGameManager = FindFirstObjectByType<NetworkGameManager>();
+            if (networkGameManager != null)
+            {
+                networkGameManager.Disconnect();
+            }
 
             var result = await roomService.LeaveRoom(roomState.CurrentRoom.roomId);
             return result.Success;
@@ -139,8 +136,12 @@ namespace NightHunt.Lobby
                 return false;
             }
 
-            // Disconnect from headless server first
-            networkBootstrap.Disconnect();
+            // Disconnect from network if connected
+            var networkGameManager = FindFirstObjectByType<NetworkGameManager>();
+            if (networkGameManager != null)
+            {
+                networkGameManager.Disconnect();
+            }
 
             var result = await roomService.DisbandRoom(roomState.CurrentRoom.roomId);
             return result.Success;
@@ -151,15 +152,30 @@ namespace NightHunt.Lobby
             return roomState?.CurrentRoom;
         }
 
-        public async Task<bool> TransferOwner(long targetUserId)
+        public async Task<ApiResult<RoomResponse>> TransferOwner(long targetUserId)
         {
             if (roomState == null || !roomState.IsInRoom || roomService == null)
             {
-                return false;
+                return ApiResult<RoomResponse>.Error("Not in room or room service not available");
             }
 
-            var result = await roomService.TransferOwner(roomState.CurrentRoom.roomId, targetUserId);
-            return result.Success;
+            try
+            {
+                var result = await roomService.TransferOwner(roomState.CurrentRoom.roomId, targetUserId);
+                
+                if (result.Success && result.Data != null)
+                {
+                    // Update room state with new owner
+                    roomState.SetRoom(result.Data);
+                }
+                
+                return result;
+            }
+            catch (System.Exception ex)
+            {
+                UnityEngine.Debug.LogError($"[LobbyController] Error transferring ownership: {ex.Message}");
+                return ApiResult<RoomResponse>.Error($"Error transferring ownership: {ex.Message}");
+            }
         }
 
         public bool IsOwner()

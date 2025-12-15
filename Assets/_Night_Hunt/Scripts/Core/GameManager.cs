@@ -1,7 +1,8 @@
 using NightHunt.Lobby;
-using NightHunt.Netcode;
+using NightHunt.Networking;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;
+using NightHunt.Services.Game;
 using NightHunt.Services.Room;
 using NightHunt.State;
 using NightHunt.Core;
@@ -21,9 +22,10 @@ namespace NightHunt.Core
         [SerializeField] private BackendHttpClient backendHttpClient;
         [SerializeField] private AuthService authService;
         [SerializeField] private RoomService roomService;
-        [SerializeField] private NetworkBootstrap networkBootstrap;
+        // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager thay thế
         [SerializeField] private LobbyController lobbyController;
-        [SerializeField] private SessionMonitor sessionMonitor;
+        [SerializeField] private SessionMonitor sessionMonitor; // Deprecated - will be removed, using WebSocket instead
+        [SerializeField] private GameWebSocketService gameWebSocketService;
 
         [Header("State")]
         [SerializeField] private SessionState sessionState;
@@ -33,9 +35,10 @@ namespace NightHunt.Core
         public BackendHttpClient BackendClient => backendHttpClient;
         public AuthService AuthService => authService;
         public RoomService RoomService => roomService;
-        public NetworkBootstrap NetworkBootstrap => networkBootstrap;
+        // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager.Instance thay thế
         public LobbyController LobbyController => lobbyController;
-        public SessionMonitor SessionMonitor => sessionMonitor;
+        public SessionMonitor SessionMonitor => sessionMonitor; // Deprecated - using WebSocket instead
+        public GameWebSocketService GameWebSocket => gameWebSocketService;
         public SessionState SessionState => sessionState;
         public RoomState RoomState => roomState;
 
@@ -102,14 +105,8 @@ namespace NightHunt.Core
                 }
             }
 
-            if (networkBootstrap == null)
-            {
-                networkBootstrap = GetComponent<NetworkBootstrap>();
-                if (networkBootstrap == null)
-                {
-                    networkBootstrap = gameObject.AddComponent<NetworkBootstrap>();
-                }
-            }
+            // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager thay thế
+            // NetworkGameManager là singleton và tự quản lý
 
             if (lobbyController == null)
             {
@@ -147,6 +144,16 @@ namespace NightHunt.Core
                 }
             }
 
+            // Initialize GameWebSocketService (replaces SessionMonitor polling and RoomWebSocketService)
+            if (gameWebSocketService == null)
+            {
+                gameWebSocketService = GetComponent<GameWebSocketService>();
+                if (gameWebSocketService == null)
+                {
+                    gameWebSocketService = gameObject.AddComponent<GameWebSocketService>();
+                }
+            }
+
             Debug.Log("GameManager initialized with all services");
         }
 
@@ -157,6 +164,114 @@ namespace NightHunt.Core
         {
             // Direct property access is preferred, but this method provides fallback
             return GetComponent<T>();
+        }
+
+        /// <summary>
+        /// Cleanup when application quits (PC/Desktop)
+        /// </summary>
+        private async void OnApplicationQuit()
+        {
+            Debug.Log("[GameManager] Application quitting - cleaning up...");
+            await CleanupOnExit();
+        }
+
+        /// <summary>
+        /// Cleanup when application pauses (Mobile - when app goes to background)
+        /// </summary>
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus)
+            {
+                Debug.Log("[GameManager] Application paused (going to background) - disconnecting WebSocket only (keeping room)...");
+                // Only disconnect WebSocket, DON'T leave room
+                // User might switch apps but still want to be in room when they come back
+                if (gameWebSocketService != null)
+                {
+                    try
+                    {
+                        gameWebSocketService.Disconnect();
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on pause: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Cleanup when application loses focus (PC - when window loses focus, but app still running)
+        /// Note: On mobile, this is called when app goes to background
+        /// </summary>
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (!hasFocus)
+            {
+                Debug.Log("[GameManager] Application lost focus - disconnecting WebSocket only (keeping room)...");
+                // Only disconnect WebSocket, DON'T leave room
+                // User might switch windows but still want to be in room
+                if (gameWebSocketService != null)
+                {
+                    try
+                    {
+                        gameWebSocketService.Disconnect();
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on focus loss: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Cleanup resources when app exits (ONLY called on actual quit, not focus/pause)
+        /// </summary>
+        private async System.Threading.Tasks.Task CleanupOnExit()
+        {
+            try
+            {
+                Debug.Log("[GameManager] Starting cleanup on app exit...");
+                
+                // 1. Leave room if in room (only on actual quit)
+                if (roomState != null && roomState.IsInRoom && roomService != null)
+                {
+                    try
+                    {
+                        Debug.Log($"[GameManager] Leaving room {roomState.RoomId} on app exit...");
+                        await roomService.LeaveRoom(roomState.RoomId);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"[GameManager] Error leaving room on exit: {ex.Message}");
+                    }
+                }
+
+                // 2. Disconnect GameWebSocket
+                if (gameWebSocketService != null)
+                {
+                    try
+                    {
+                        gameWebSocketService.Disconnect();
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on exit: {ex.Message}");
+                    }
+                }
+
+                // 3. Stop session monitoring (deprecated - kept for compatibility)
+                if (sessionMonitor != null)
+                {
+                    sessionMonitor.StopPolling();
+                }
+
+                Debug.Log("[GameManager] Cleanup completed");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[GameManager] Error during cleanup: {ex.Message}");
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ using NightHunt.Data.DTOs;
 using NightHunt.Services.Backend;
 using NightHunt.State;
 using NightHunt.Core;
+using NightHunt.Utils;
 using UnityEngine;
 
 namespace NightHunt.Services.Auth
@@ -47,24 +48,10 @@ namespace NightHunt.Services.Auth
 
             var result = await backendClient.PostAsync<AuthResponse>(Constants.API_AUTH_REGISTER, request);
             
-            if (result.Success && result.Data != null)
-            {
-                sessionState.SetSession(
-                    result.Data.accessToken,
-                    result.Data.sessionId,
-                    result.Data.userId,
-                    result.Data.username,
-                    result.Data.email
-                );
-                backendClient.SetAuthToken(result.Data.accessToken);
-                
-                // Start session monitoring after successful registration
-                if (GameManager.Instance != null && GameManager.Instance.SessionMonitor != null)
-                {
-                    GameManager.Instance.SessionMonitor.StartPolling();
-                }
-            }
-
+            // Note: After successful registration, we do NOT auto-login
+            // User must manually login after seeing success message
+            // This is intentional for security and user experience
+            
             return result;
         }
 
@@ -73,7 +60,8 @@ namespace NightHunt.Services.Auth
             var request = new LoginRequest
             {
                 identifier = identifier,
-                password = password
+                password = password,
+                deviceFingerprint = DeviceFingerprint.GetFingerprint()
             };
 
             var result = await backendClient.PostAsync<AuthResponse>(Constants.API_AUTH_LOGIN, request);
@@ -89,11 +77,16 @@ namespace NightHunt.Services.Auth
                 );
                 backendClient.SetAuthToken(result.Data.accessToken);
                 
-                // Start session monitoring after successful login
-                if (GameManager.Instance != null && GameManager.Instance.SessionMonitor != null)
+                // Connect to Game WebSocket (replaces polling)
+                if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
                 {
-                    GameManager.Instance.SessionMonitor.StartPolling();
+                    _ = GameManager.Instance.GameWebSocket.Connect(); // Fire and forget
                 }
+            }
+            else
+            {
+                // Handle ban errors - force logout and show message
+                HandleBanError(result);
             }
 
             return result;
@@ -109,7 +102,8 @@ namespace NightHunt.Services.Auth
             var request = new AutoLoginRequest
             {
                 accessToken = sessionState.AccessToken,
-                sessionId = sessionState.SessionId
+                sessionId = sessionState.SessionId,
+                deviceFingerprint = DeviceFingerprint.GetFingerprint()
             };
 
             var result = await backendClient.PostAsync<AuthResponse>(Constants.API_AUTH_AUTO_LOGIN, request);
@@ -125,24 +119,41 @@ namespace NightHunt.Services.Auth
                 );
                 backendClient.SetAuthToken(result.Data.accessToken);
                 
-                // Start session monitoring after successful auto-login
-                if (GameManager.Instance != null && GameManager.Instance.SessionMonitor != null)
+                // Connect to Game WebSocket (replaces polling)
+                if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
                 {
-                    GameManager.Instance.SessionMonitor.StartPolling();
+                    _ = GameManager.Instance.GameWebSocket.Connect(); // Fire and forget
                 }
             }
             else
             {
+                // Handle ban errors - force logout and show message
+                HandleBanError(result);
+                
+                // Check if auto-login failed due to AUTH_FORCE_LOGOUT (stale session)
+                // This happens when user closes app and reopens - old session still exists in backend
+                bool isForceLogout = result.ErrorCode == "AUTH_008" || result.ErrorCode == "AUTH_FORCE_LOGOUT";
+                
+                if (isForceLogout)
+                {
+                    // This is likely a stale session (user closed app and reopened)
+                    // Silently clear session and allow user to login manually
+                    Debug.Log("[AuthService] Auto-login failed due to AUTH_FORCE_LOGOUT - likely stale session, clearing and allowing manual login");
+                }
+                else
+                {
+                    // Other errors (ban, session expired, etc.) - log for debugging
+                    Debug.LogWarning($"[AuthService] Auto-login failed: {result.ErrorCode} - {result.Message}");
+                }
+                
                 // Auto-login failed, clear session immediately
-                // This ensures HandleAuthError can correctly identify this as a login attempt (not an active session)
-                // Note: HandleAuthError is called BEFORE this, but clearing here ensures state is correct for any retry
                 sessionState.ClearSession();
                 backendClient.ClearAuthToken();
                 
-                // Stop session monitoring
-                if (GameManager.Instance != null && GameManager.Instance.SessionMonitor != null)
+                // Disconnect Game WebSocket
+                if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
                 {
-                    GameManager.Instance.SessionMonitor.StopPolling();
+                    GameManager.Instance.GameWebSocket.Disconnect();
                 }
             }
 
@@ -192,13 +203,58 @@ namespace NightHunt.Services.Auth
             sessionState.ClearSession();
             backendClient.ClearAuthToken();
             
-            // Stop session monitoring on logout
-            if (GameManager.Instance != null && GameManager.Instance.SessionMonitor != null)
+            // Disconnect Game WebSocket on logout
+            if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
             {
-                GameManager.Instance.SessionMonitor.StopPolling();
+                GameManager.Instance.GameWebSocket.Disconnect();
             }
             
             return ApiResult.Ok();
+        }
+        
+        /// <summary>
+        /// Handle ban errors - force logout and show notification
+        /// </summary>
+        private void HandleBanError(ApiResult<AuthResponse> result)
+        {
+            if (result == null || string.IsNullOrEmpty(result.ErrorCode))
+            {
+                return;
+            }
+            
+            // Check if it's a ban error
+            bool isBanError = result.ErrorCode == "AUTH_010" || // AUTH_ACCOUNT_BANNED
+                             result.ErrorCode == "AUTH_011" || // AUTH_IP_BANNED
+                             result.ErrorCode == "AUTH_012";   // AUTH_DEVICE_BANNED
+            
+            if (isBanError)
+            {
+                // Force logout
+                sessionState.ClearSession();
+                backendClient.ClearAuthToken();
+                
+                // Disconnect Game WebSocket
+                if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
+                {
+                    GameManager.Instance.GameWebSocket.Disconnect();
+                }
+                
+                // Show ban notification
+                ShowBanNotification(result.Message ?? "Tài khoản hoặc thiết bị đã bị khóa.");
+            }
+        }
+        
+        /// <summary>
+        /// Show ban notification to user
+        /// </summary>
+        private void ShowBanNotification(string message)
+        {
+            // TODO: Show UI notification/popup
+            // For now, just log
+            Debug.LogError($"[AuthService] Account/Device Banned: {message}");
+            
+            // Can integrate with UI system to show popup
+            // Example: NotificationManager.ShowError(message);
         }
     }
 }

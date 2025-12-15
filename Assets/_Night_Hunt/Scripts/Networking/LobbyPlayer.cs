@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace NightHunt.Netcode
+namespace NightHunt.Networking
 {
     /// <summary>
     /// LobbyPlayer - DISABLED

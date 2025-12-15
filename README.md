@@ -23,6 +23,8 @@ Unity client for NightHunt multiplayer game.
    - Open scene: `Assets/_Night_Hunt/Scenes/FirstLoading.unity`
    - Press Play
 
+> 📖 **Xem [SETUP.md](SETUP.md) để biết chi tiết về luồng Login → Home → Lobby**
+
 ## 📋 Features
 
 ### Authentication
@@ -45,7 +47,7 @@ Unity client for NightHunt multiplayer game.
 - ✅ Change Team/Slot
 - ✅ Set Ready/Unready
 - ✅ Swap Request (Request, Accept, Reject)
-- ✅ Real-time Updates (Polling every 1 second)
+- ✅ Real-time Updates (WebSocket - no polling)
 - ✅ Owner Transfer (Manual via button)
 - ✅ Kick Player (Owner only)
 - ✅ Disband Room (Owner only)
@@ -93,10 +95,12 @@ FirstLoading (Initialize services, Check session)
         ↓
       Home (Create/Join/Quick Play)
         ↓
-      Waiting (Lobby with real-time updates)
+      Waiting (Lobby with WebSocket real-time updates)
         ↓
       Game (When owner starts game)
 ```
+
+> 📖 **Xem [SETUP.md](SETUP.md) để biết chi tiết từng scene và luồng hoạt động**
 
 ## 🔧 Configuration
 
@@ -153,7 +157,7 @@ FirstLoading (Initialize services, Check session)
 
 ### LobbyView
 - Main lobby UI
-- Auto-refresh every 1 second
+- Real-time updates via WebSocket
 - Detects game start automatically
 
 ## 🔨 Build
@@ -179,8 +183,8 @@ FirstLoading (Initialize services, Check session)
 - Check logs in Unity Console
 
 ### Lobby Not Updating
-- Check polling is enabled (should refresh every 1s)
-- Verify backend is returning correct room data
+- Check WebSocket connection is established
+- Verify backend WebSocket handler is running
 - Check Unity Console for errors
 
 ### Game Start Not Detected
@@ -190,10 +194,15 @@ FirstLoading (Initialize services, Check session)
 
 ## 📝 Notes
 
-- **Polling Interval**: 1 second (configurable in `LobbyView`)
+- **Real-time Updates**: WebSocket connection for lobby updates (no polling)
 - **Session Timeout**: Handled automatically by backend
 - **Multi-device**: Force logout when another device logs in
 - **Reconnect**: Automatic popup when reconnecting to existing room
+
+## 📚 Documentation
+
+- **[SETUP.md](SETUP.md)** - Chi tiết setup và luồng Login → Home → Lobby
+- **[README.md](README.md)** - Tổng quan về project (file này)
 
 ## 📝 License
 
@@ -201,4 +210,4 @@ Proprietary - All rights reserved
 
 ---
 
-*Last Updated: 2025-12-12*
+*Last Updated: 2025-12-14*
