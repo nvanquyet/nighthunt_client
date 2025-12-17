@@ -5,6 +5,7 @@ using UnityEngine;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Character;
 using FishNet;
+using Unity.Cinemachine;
 
 namespace NightHunt.Networking
 {
@@ -19,7 +20,7 @@ namespace NightHunt.Networking
         [SerializeField] private PlayerInputHandler inputHandler;
         [SerializeField] private CharacterMovement movement;
         [SerializeField] private CharacterCombat combat;
-        [SerializeField] private Camera playerCamera; // Each player has their own camera
+        [SerializeField] private CinemachineCamera playerCamera; // Each player has their own camera
 
         [Header("Network Settings")]
         [SerializeField] private float sendRate = 20f; // Updates per second
@@ -35,7 +36,7 @@ namespace NightHunt.Networking
         public string PlayerName => playerName.Value;
         public int TeamId => teamId.Value;
          public bool IsLocalPlayer => IsOwner;
-        public Camera PlayerCamera => playerCamera;
+        public CinemachineCamera PlayerCamera => playerCamera;
 
         public override void OnStartNetwork()
         {
@@ -68,18 +69,12 @@ namespace NightHunt.Networking
             if (playerCamera == null)
             {
                 // Try to find camera in children
-                playerCamera = GetComponentInChildren<Camera>();
+                playerCamera = GetComponentInChildren<CinemachineCamera>();
                 
                 // If still null, create a camera
                 if (playerCamera == null)
                 {
-                    GameObject camObj = new GameObject("PlayerCamera");
-                    camObj.transform.SetParent(transform);
-                    camObj.transform.localPosition = new Vector3(0, 20, 0);
-                    camObj.transform.localRotation = Quaternion.Euler(90, 0, 0);
-                    playerCamera = camObj.AddComponent<Camera>();
-                    playerCamera.orthographic = true;
-                    playerCamera.orthographicSize = 15f;
+                    Debug.LogError($"[NetworkPlayer] No CinemachineCamera found for player: {playerName.Value}");
                 }
             }
 
