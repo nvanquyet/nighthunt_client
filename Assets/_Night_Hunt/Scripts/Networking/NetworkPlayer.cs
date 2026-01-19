@@ -10,13 +10,17 @@ namespace NightHunt.Networking
 {
     /// <summary>
     /// Network Player Object - Handles ONLY networking concerns
-    /// Game logic is handled by ServerGameManager and other systems
     /// 
-    /// Responsibilities:
-    /// - Sync player data (name, team)
-    /// - Handle input transmission (client → server)
-    /// - Setup camera for owner
-    /// - Client-side prediction
+    /// FLOW WITH NETWORKTRANSFORM (Server Auth, Send To Owner OFF):
+    /// 1. Client Owner: Predict movement → Send input to server
+    /// 2. Server: Execute movement (authoritative) → NetworkTransform syncs to ALL clients
+    /// 3. Client Owner: Reconcile with server state from NetworkTransform
+    /// 4. Remote Clients: Apply server state from NetworkTransform
+    /// 
+    /// NetworkTransform Config:
+    /// - Synchronize: To Observers
+    /// - Server Authoritative: ON
+    /// - Send To Owner: OFF (important for prediction!)
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
@@ -28,15 +32,11 @@ namespace NightHunt.Networking
         [SerializeField] private CinemachineCamera playerCamera;
 
         [Header("Network Settings")]
-        [SerializeField] private float sendRate = 20f;
+        [SerializeField] private float sendRate = 20f; // 20 inputs per second
 
         // Synchronized variables
         private readonly SyncVar<string> playerName = new SyncVar<string>();
         private readonly SyncVar<int> teamId = new SyncVar<int>();
-
-        // Client prediction state
-        private Vector3 lastServerPosition;
-        private float reconciliationThreshold = 0.1f;
 
         // Public accessors
         public string PlayerName => playerName.Value;
@@ -186,7 +186,6 @@ namespace NightHunt.Networking
 
         /// <summary>
         /// Server: Set player name
-        /// Called by ServerGameManager or other server-side systems
         /// </summary>
         [Server]
         public void SetPlayerName(string name)
@@ -196,7 +195,6 @@ namespace NightHunt.Networking
 
         /// <summary>
         /// Server: Set team ID
-        /// Called by TeamSystem on server
         /// </summary>
         [Server]
         public void SetTeamId(int team)
@@ -213,15 +211,14 @@ namespace NightHunt.Networking
         {
             if (!IsSpawned) return;
 
-            // Client owner: Send input to server periodically
-            if (IsOwner)
+            // ✅ CHỈ CLIENT OWNER gửi input đến server
+            if (IsOwner && !IsServerInitialized)
             {
+                // Send input at fixed rate (20Hz)
                 if (Time.frameCount % Mathf.RoundToInt(60f / sendRate) == 0)
                 {
                     SendInputToServer();
                 }
-                
-                ReconcilePosition();
             }
         }
 
@@ -234,29 +231,36 @@ namespace NightHunt.Networking
             bool isSprinting = inputHandler.IsSprinting();
             bool isCrouching = inputHandler.IsCrouching();
             
-            SendMovementInput(moveInput, isSprinting, isCrouching);
+            // ✅ Gửi input lên server (RunLocally = false)
+            ServerReceiveMovementInput(moveInput, isSprinting, isCrouching);
             
             if (combat != null)
             {
                 Vector3 aimDirection = inputHandler.GetAimDirection();
                 bool isAttacking = inputHandler.IsAttacking();
                 bool isReloading = inputHandler.IsReloading();
-                SendCombatInput(aimDirection, isAttacking, isReloading);
+                ServerReceiveCombatInput(aimDirection, isAttacking, isReloading);
             }
         }
 
-        [ServerRpc(RequireOwnership = true, RunLocally = true)]
-        private void SendMovementInput(Vector2 moveInput, bool isSprinting, bool isCrouching)
+        /// <summary>
+        /// ✅ SERVER: Nhận input từ client
+        /// RunLocally = false → CHỈ chạy trên server
+        /// Server sẽ execute movement trong CharacterMovement.Update()
+        /// </summary>
+        [ServerRpc(RequireOwnership = true, RunLocally = false)]
+        private void ServerReceiveMovementInput(Vector2 moveInput, bool isSprinting, bool isCrouching)
         {
             if (!IsSpawned || movement == null) return;
             
+            // ✅ Chỉ SET input, movement logic sẽ execute trong Update()
             movement.SetMoveInput(moveInput);
             movement.SetSprinting(isSprinting);
             movement.SetCrouching(isCrouching);
         }
 
-        [ServerRpc(RequireOwnership = true, RunLocally = true)]
-        private void SendCombatInput(Vector3 aimDirection, bool isAttacking, bool isReloading)
+        [ServerRpc(RequireOwnership = true, RunLocally = false)]
+        private void ServerReceiveCombatInput(Vector3 aimDirection, bool isAttacking, bool isReloading)
         {
             if (!IsSpawned || combat == null) return;
             
@@ -267,51 +271,15 @@ namespace NightHunt.Networking
 
         #endregion
 
-        #region Client-Side Prediction
-
-        private void ReconcilePosition()
-        {
-            if (movement == null) return;
-            
-            Vector3 serverPosition = transform.position;
-            float distance = Vector3.Distance(lastServerPosition, serverPosition);
-            
-            if (distance > reconciliationThreshold)
-            {
-                lastServerPosition = serverPosition;
-            }
-            else
-            {
-                lastServerPosition = serverPosition;
-            }
-        }
-
-        #endregion
-
-        #region Callbacks (for logging/debugging)
-
-        private void OnPlayerNameChanged(string oldName, string newName, bool asServer)
-        {
-            Debug.Log($"[NetworkPlayer] Name changed: {oldName} → {newName}");
-        }
-
-        private void OnPlayerTeamChanged(int oldTeam, int newTeam, bool asServer)
-        {
-            Debug.Log($"[NetworkPlayer] Team changed: {oldTeam} → {newTeam}");
-        }
-
-        #endregion
-
-        #region Game Events (called by other systems)
+        #region Game Events
 
         /// <summary>
-        /// Called when player dies (by health system or combat system)
+        /// Called when player dies
         /// </summary>
         public void OnDeath()
         {
             Debug.Log($"[NetworkPlayer] Player {playerName.Value} died");
             
-            // Notify ServerGameManager to handle respawn
             if (IsServerInitialized)
             {
                 var serverGameManager = FindFirstObjectByType<ServerGameManager>();
@@ -333,5 +301,15 @@ namespace NightHunt.Networking
         }
 
         #endregion
+
+        private void OnPlayerNameChanged(string oldName, string newName, bool asServer)
+        {
+            Debug.Log($"[NetworkPlayer] Name changed: {oldName} → {newName}");
+        }
+
+        private void OnPlayerTeamChanged(int oldTeam, int newTeam, bool asServer)
+        {
+            Debug.Log($"[NetworkPlayer] Team changed: {oldTeam} → {newTeam}");
+        }
     }
 }
