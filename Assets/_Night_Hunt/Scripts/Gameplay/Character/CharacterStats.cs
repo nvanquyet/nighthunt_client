@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.Data;
 using System;
+using NightHunt.Gameplay.Core.Prediction;
+using NightHunt.Gameplay.Character.Stats;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -9,8 +11,9 @@ namespace NightHunt.Gameplay.Character
     /// Manages character stats (HP, Stamina, Speed, Vision, etc.)
     /// Applies modifiers from equipment, status effects, zones, etc.
     /// Formula: FinalStat = BaseStat × Multipliers + Additions
+    /// Implements IPredictable for client-side prediction
     /// </summary>
-    public class CharacterStats : MonoBehaviour
+    public class CharacterStats : MonoBehaviour, IPredictable<CharacterStatsState>
     {
         [Header("Base Stats")]
         [SerializeField] private int baseHP = 100;
@@ -32,10 +35,23 @@ namespace NightHunt.Gameplay.Character
         // Status effects
         private List<ActiveStatusEffect> activeStatusEffects = new List<ActiveStatusEffect>();
 
+        // Prediction
+        private PredictionManager<CharacterStatsState> predictionManager;
+        private CharacterStatsSync statsSync;
+
+        // Modifier stack
+        private StatModifierStack modifierStack = new StatModifierStack();
+
         private void Awake()
         {
             LoadBaseStats();
             InitializeStats();
+            
+            // Initialize prediction
+            predictionManager = new PredictionManager<CharacterStatsState>(this);
+            
+            // Get network sync component
+            statsSync = GetComponent<CharacterStatsSync>();
         }
 
         private void Start()
@@ -240,6 +256,63 @@ namespace NightHunt.Gameplay.Character
         /// Get weight percentage (0-1)
         /// </summary>
         public float GetWeightPercentage() => baseWeightCapacity > 0 ? currentWeight / baseWeightCapacity : 0f;
+
+        #region IPredictable Implementation
+
+        /// <summary>
+        /// Get current state for prediction
+        /// </summary>
+        public CharacterStatsState GetCurrentState()
+        {
+            return new CharacterStatsState
+            {
+                HP = currentHP,
+                Stamina = currentStamina,
+                CurrentWeight = currentWeight,
+                MoveSpeedMultiplier = GetSpeedMultiplier(),
+                VisionRadius = GetVisionRadius(),
+                NoiseLevel = GetNoiseLevel()
+            };
+        }
+
+        /// <summary>
+        /// Apply predicted state
+        /// </summary>
+        public void ApplyPredictedState(CharacterStatsState state)
+        {
+            currentHP = state.HP;
+            currentStamina = state.Stamina;
+            currentWeight = state.CurrentWeight;
+            // Note: Multipliers are calculated, not directly set
+        }
+
+        /// <summary>
+        /// Reconcile with server state
+        /// </summary>
+        public void Reconcile(CharacterStatsState serverState, float threshold = 0.1f)
+        {
+            // Apply server state
+            ApplyPredictedState(serverState);
+        }
+
+        /// <summary>
+        /// Set state (IPredictable implementation)
+        /// </summary>
+        public void SetState(CharacterStatsState state)
+        {
+            ApplyPredictedState(state);
+        }
+
+        /// <summary>
+        /// Check if state differs from server state
+        /// </summary>
+        public bool IsStateDifferent(CharacterStatsState serverState, float threshold = 0.1f)
+        {
+            var currentState = GetCurrentState();
+            return currentState.IsStateDifferent(serverState, threshold);
+        }
+
+        #endregion
     }
 
     /// <summary>

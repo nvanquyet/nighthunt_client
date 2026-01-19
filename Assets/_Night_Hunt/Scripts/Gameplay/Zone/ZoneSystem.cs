@@ -76,6 +76,66 @@ namespace NightHunt.Gameplay.Zone
             // Return first zone (can add priority system later)
             return zones[0];
         }
+
+        /// <summary>
+        /// Get zone center (for sync)
+        /// </summary>
+        public Vector3 GetZoneCenter()
+        {
+            // Return center of first active zone, or Vector3.zero
+            if (activeZones.Count > 0 && activeZones[0] != null)
+            {
+                return activeZones[0].transform.position;
+            }
+            return Vector3.zero;
+        }
+
+        /// <summary>
+        /// Get zone radius (for sync)
+        /// </summary>
+        public float GetZoneRadius()
+        {
+            if (activeZones.Count > 0 && activeZones[0] != null)
+            {
+                return activeZones[0].GetRadius();
+            }
+            return 0f;
+        }
+
+        /// <summary>
+        /// Check if zone system is active
+        /// </summary>
+        public bool IsActive()
+        {
+            return activeZones.Count > 0;
+        }
+
+        /// <summary>
+        /// Set zone center (for sync)
+        /// </summary>
+        public void SetZoneCenter(Vector3 center)
+        {
+            // This would be used for syncing zone positions
+            // Implementation depends on specific zone type
+        }
+
+        /// <summary>
+        /// Set zone radius (for sync)
+        /// </summary>
+        public void SetZoneRadius(float radius)
+        {
+            // This would be used for syncing zone sizes
+            // Implementation depends on specific zone type
+        }
+
+        /// <summary>
+        /// Set active state
+        /// </summary>
+        public void SetActive(bool active)
+        {
+            // Enable/disable zone system
+            enabled = active;
+        }
     }
 
     /// <summary>

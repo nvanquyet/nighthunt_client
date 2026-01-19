@@ -8,6 +8,7 @@ namespace NightHunt.Gameplay.Input
     /// Handles player input using Unity's new Input System
     /// Supports multiple players without input conflicts
     /// Uses PlayerInput component for multi-player support
+    /// Integrated with InputLayerManager for proper enable/disable management
     /// </summary>
     [RequireComponent(typeof(PlayerInput))]
     public class PlayerInputHandler : MonoBehaviour
@@ -20,6 +21,8 @@ namespace NightHunt.Gameplay.Input
         private InputActionAsset inputActions; // Lấy từ PlayerInput.actions
         private InputActionMap playerActionMap;
         private InputActionMap uiActionMap;
+        private InputLayerManager inputLayerManager;
+        private InputPrediction inputPrediction;
 
         // Input actions
         private InputAction moveAction;
@@ -50,6 +53,8 @@ namespace NightHunt.Gameplay.Input
         private void Awake()
         {
             playerInput = GetComponent<PlayerInput>();
+            inputLayerManager = InputLayerManager.Instance;
+            inputPrediction = new InputPrediction();
 
             // Lấy InputActionAsset từ PlayerInput component
             // PlayerInput component đã có field "Actions" để assign InputActionAsset
@@ -127,8 +132,14 @@ namespace NightHunt.Gameplay.Input
 
             inputEnabled = true;
 
-            if (playerActionMap != null)
+            // Use InputLayerManager to enable Player action map
+            if (inputLayerManager != null)
             {
+                inputLayerManager.TransitionToState(InputState.PlayerAlive);
+            }
+            else if (playerActionMap != null)
+            {
+                // Fallback if InputLayerManager not available
                 playerActionMap.Enable();
             }
 
@@ -171,8 +182,14 @@ namespace NightHunt.Gameplay.Input
 
             inputEnabled = false;
 
-            if (playerActionMap != null)
+            // Use InputLayerManager to disable Player action map
+            if (inputLayerManager != null)
             {
+                inputLayerManager.TransitionToState(InputState.PlayerDead);
+            }
+            else if (playerActionMap != null)
+            {
+                // Fallback if InputLayerManager not available
                 playerActionMap.Disable();
             }
 
@@ -228,6 +245,12 @@ namespace NightHunt.Gameplay.Input
 
             // Update aim direction based on mouse position (for top-down)
             UpdateAimDirection();
+
+            // Store input for prediction
+            if (inputPrediction != null)
+            {
+                inputPrediction.AddCommand(moveInput, isSprinting, isCrouching, isAttacking, aimDirection);
+            }
         }
 
         private void UpdateAimDirection()
@@ -313,6 +336,29 @@ namespace NightHunt.Gameplay.Input
         public Vector3 GetAimDirection() => aimDirection;
 
         public void SetReloading(bool reloading) => isReloading = reloading;
+
+        /// <summary>
+        /// Get input prediction instance
+        /// </summary>
+        public InputPrediction GetInputPrediction() => inputPrediction;
+
+        /// <summary>
+        /// Set scout mode (disables attack input)
+        /// </summary>
+        public void SetScoutMode(bool active)
+        {
+            if (inputLayerManager != null)
+            {
+                if (active)
+                {
+                    inputLayerManager.TransitionToState(InputState.ScoutMode);
+                }
+                else
+                {
+                    inputLayerManager.TransitionToState(InputState.PlayerAlive);
+                }
+            }
+        }
     }
 }
 

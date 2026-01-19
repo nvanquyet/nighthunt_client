@@ -6,8 +6,8 @@ using System.Collections.Generic;
 namespace NightHunt.Gameplay.Spawn
 {
     /// <summary>
-    /// Manages player spawning
-    /// Handles spawn points, team assignment, spawn protection
+    /// Manages player spawning mechanics
+    /// Handles spawn points, safe positioning, spawn protection
     /// </summary>
     public class PlayerSpawnSystem : NetworkBehaviour
     {
@@ -49,41 +49,58 @@ namespace NightHunt.Gameplay.Spawn
                 }
                 teamSpawnPoints[teamId].Add(spawnPoint);
             }
+
+            Debug.Log($"[PlayerSpawnSystem] Organized {spawnPoints.Count} spawn points for {teamSpawnPoints.Count} teams");
         }
 
         /// <summary>
         /// Server: Spawn player at appropriate spawn point
-        /// Tránh spawn overlap bằng cách check distance và tìm vị trí an toàn
+        /// Avoids spawn overlap by checking distance and finding safe position
         /// </summary>
         [Server]
         public Vector3 SpawnPlayer(NetworkPlayer player, int teamId)
         {
+            // Validate player
+            if (player == null)
+            {
+                Debug.LogError("[PlayerSpawnSystem] Player is null!");
+                return Vector3.zero;
+            }
+
+            if (!player.IsSpawned)
+            {
+                Debug.LogError($"[PlayerSpawnSystem] Player {player.PlayerName} is not spawned yet! Cannot set position/team.");
+                return Vector3.zero;
+            }
+
+            // Get spawn point for team
             SpawnPoint spawnPoint = GetSpawnPointForTeam(teamId);
             
             if (spawnPoint == null)
             {
-                // Fallback to random spawn
                 if (spawnPoints.Count > 0)
                 {
                     spawnPoint = spawnPoints[Random.Range(0, spawnPoints.Count)];
                 }
                 else
                 {
-                    // Default spawn at origin
                     Debug.LogWarning("[PlayerSpawnSystem] No spawn points available, spawning at origin");
                     return Vector3.zero;
                 }
             }
 
-            // Tìm vị trí spawn an toàn (không overlap với players khác)
+            // Find safe spawn position (no overlap with other players)
             Vector3 spawnPosition = FindSafeSpawnPosition(spawnPoint);
             
-            // Set player position
+            // Set player position and rotation
             player.transform.position = spawnPosition;
             player.transform.rotation = spawnPoint.transform.rotation;
 
-            // Set team
-            player.SetTeamId(teamId);
+            // Set team (if not already set)
+            if (player.TeamId != teamId)
+            {
+                player.SetTeamId(teamId);
+            }
 
             // Apply spawn protection
             ApplySpawnProtection((uint)player.ObjectId, spawnProtectionDuration);
@@ -91,25 +108,25 @@ namespace NightHunt.Gameplay.Spawn
             // Visual effect
             RpcPlaySpawnEffect(spawnPosition);
 
-            Debug.Log($"[PlayerSpawnSystem] Spawned player {player.PlayerName} at position {spawnPosition}");
+            Debug.Log($"[PlayerSpawnSystem] Spawned player {player.PlayerName} at position {spawnPosition} on team {teamId}");
             return spawnPosition;
         }
 
         /// <summary>
-        /// Tìm vị trí spawn an toàn (không overlap với players khác)
+        /// Find safe spawn position (no overlap with other players)
         /// </summary>
         [Server]
         private Vector3 FindSafeSpawnPosition(SpawnPoint spawnPoint)
         {
             Vector3 basePosition = spawnPoint.GetSpawnPosition();
             
-            // Check nếu vị trí base đã an toàn
+            // Check if base position is safe
             if (IsSpawnPositionSafe(basePosition))
             {
                 return basePosition;
             }
 
-            // Nếu không an toàn, thử tìm vị trí khác trong spawn radius
+            // If not safe, try to find alternative position within spawn radius
             int maxAttempts = 10;
             for (int i = 0; i < maxAttempts; i++)
             {
@@ -121,7 +138,7 @@ namespace NightHunt.Gameplay.Spawn
                 }
             }
 
-            // Nếu vẫn không tìm được, thử offset theo các hướng
+            // Try offset positions in cardinal directions
             Vector3[] offsets = new Vector3[]
             {
                 new Vector3(minSpawnDistance, 0, 0),
@@ -142,32 +159,32 @@ namespace NightHunt.Gameplay.Spawn
                 }
             }
 
-            // Fallback: Dùng base position (có thể overlap nhưng ít nhất không crash)
+            // Fallback: Use base position (may overlap but won't crash)
             Debug.LogWarning($"[PlayerSpawnSystem] Could not find safe spawn position, using base position (may overlap)");
             return basePosition;
         }
 
         /// <summary>
-        /// Check nếu vị trí spawn an toàn (không có players khác gần đó)
+        /// Check if spawn position is safe (no other players nearby)
         /// </summary>
         [Server]
         private bool IsSpawnPositionSafe(Vector3 position)
         {
-            // Check overlap với CharacterController của players khác
+            // Check overlap with CharacterController of other players
             Collider[] overlappingColliders = Physics.OverlapSphere(position, minSpawnDistance, playerLayerMask);
             
             foreach (var collider in overlappingColliders)
             {
-                // Check nếu là CharacterController của player khác
+                // Check if it's a CharacterController of another player
                 var characterController = collider.GetComponent<CharacterController>();
                 if (characterController != null)
                 {
-                    // Có player khác gần đó → không an toàn
+                    // Another player is nearby → not safe
                     return false;
                 }
             }
 
-            // Không có players gần đó → an toàn
+            // No players nearby → safe
             return true;
         }
 
@@ -210,6 +227,8 @@ namespace NightHunt.Gameplay.Spawn
         {
             spawnProtectionTimes[playerId] = Time.time + duration;
             RpcApplySpawnProtection(playerId, duration);
+            
+            Debug.Log($"[PlayerSpawnSystem] Applied spawn protection for player {playerId} ({duration}s)");
         }
 
         /// <summary>
@@ -221,8 +240,9 @@ namespace NightHunt.Gameplay.Spawn
             NetworkPlayer player = GetPlayerById(playerId);
             if (player != null)
             {
-                // Apply visual effect
-                // Would need to integrate with character visual system
+                // Apply visual effect (shield, glow, etc.)
+                // This would integrate with your character visual system
+                Debug.Log($"[Client] Spawn protection applied to player {player.PlayerName}");
             }
         }
 
@@ -246,6 +266,7 @@ namespace NightHunt.Gameplay.Spawn
             if (spawnProtectionTimes.ContainsKey(playerId))
             {
                 spawnProtectionTimes.Remove(playerId);
+                Debug.Log($"[PlayerSpawnSystem] Removed spawn protection for player {playerId}");
             }
         }
 
@@ -256,6 +277,10 @@ namespace NightHunt.Gameplay.Spawn
         private void RpcPlaySpawnEffect(Vector3 position)
         {
             // Play spawn particle effect, sound, etc.
+            if (spawnProtectionEffect != null)
+            {
+                Instantiate(spawnProtectionEffect, position, Quaternion.identity);
+            }
         }
 
         /// <summary>
@@ -279,7 +304,7 @@ namespace NightHunt.Gameplay.Spawn
         }
 
         /// <summary>
-        /// Add spawn point
+        /// Add spawn point dynamically
         /// </summary>
         public void AddSpawnPoint(SpawnPoint point)
         {
@@ -287,38 +312,21 @@ namespace NightHunt.Gameplay.Spawn
             {
                 spawnPoints.Add(point);
                 OrganizeSpawnPoints();
+                Debug.Log($"[PlayerSpawnSystem] Added spawn point: {point.name}");
+            }
+        }
+
+        /// <summary>
+        /// Remove spawn point
+        /// </summary>
+        public void RemoveSpawnPoint(SpawnPoint point)
+        {
+            if (spawnPoints.Contains(point))
+            {
+                spawnPoints.Remove(point);
+                OrganizeSpawnPoints();
+                Debug.Log($"[PlayerSpawnSystem] Removed spawn point: {point.name}");
             }
         }
     }
-
-    /// <summary>
-    /// Spawn point component
-    /// </summary>
-    public class SpawnPoint : MonoBehaviour
-    {
-        [Header("Spawn Settings")]
-        [SerializeField] private int teamId = 0; // -1 for any team
-        [SerializeField] private float spawnRadius = 2f;
-        [SerializeField] private bool isActive = true;
-
-        public int TeamId => teamId;
-        public bool IsActive => isActive;
-
-        /// <summary>
-        /// Get spawn position (with random offset)
-        /// </summary>
-        public Vector3 GetSpawnPosition()
-        {
-            Vector2 randomCircle = Random.insideUnitCircle * spawnRadius;
-            return transform.position + new Vector3(randomCircle.x, 0f, randomCircle.y);
-        }
-
-        private void OnDrawGizmosSelected()
-        {
-            Gizmos.color = teamId == 0 ? Color.blue : (teamId == 1 ? Color.red : Color.green);
-            Gizmos.DrawWireSphere(transform.position, spawnRadius);
-            Gizmos.DrawLine(transform.position, transform.position + transform.forward * 2f);
-        }
-    }
 }
-

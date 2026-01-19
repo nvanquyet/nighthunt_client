@@ -2,14 +2,16 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Character;
+using NightHunt.Gameplay.Input;
 using System.Collections.Generic;
 using System.Linq;
 using Camera = UnityEngine.Camera;
+using NightHunt.Gameplay.Camera.Spectator;
 
 namespace NightHunt.Gameplay.Camera
 {
     /// <summary>
-    /// Spectator Camera System
+    /// Spectator Camera System (Refactored with Cinemachine)
     /// Allows players to spectate other players when dead or waiting for revive
     /// View-only mode, no controls
     /// </summary>
@@ -35,18 +37,28 @@ namespace NightHunt.Gameplay.Camera
         private float lastSwitchTime = 0f;
         private bool isSpectating = false;
 
-        // Spectator camera (temporary camera for spectating)
-        private UnityEngine.Camera spectatorCamera;
-        private Transform spectatorCameraTransform;
+        // Spectator camera controller
+        private SpectatorCameraController spectatorCameraController;
+        private SpectatorInputHandler spectatorInputHandler;
+        private InputLayerManager inputLayerManager;
 
         private void Awake()
         {
-            // Create spectator camera
-            GameObject camObj = new GameObject("SpectatorCamera");
-            camObj.transform.SetParent(transform);
-            spectatorCamera = camObj.AddComponent<UnityEngine.Camera>();
-            spectatorCamera.enabled = false;
-            spectatorCameraTransform = camObj.transform;
+            // Get or create spectator camera controller
+            spectatorCameraController = GetComponent<SpectatorCameraController>();
+            if (spectatorCameraController == null)
+            {
+                spectatorCameraController = gameObject.AddComponent<SpectatorCameraController>();
+            }
+
+            // Get or create spectator input handler
+            spectatorInputHandler = GetComponent<SpectatorInputHandler>();
+            if (spectatorInputHandler == null)
+            {
+                spectatorInputHandler = gameObject.AddComponent<SpectatorInputHandler>();
+            }
+
+            inputLayerManager = InputLayerManager.Instance;
         }
 
         private void Start()
@@ -72,9 +84,9 @@ namespace NightHunt.Gameplay.Camera
             }
 
             // Handle spectator input (switch players)
+            // Input is handled by SpectatorInputHandler component
             if (isSpectating)
             {
-                HandleSpectatorInput();
                 UpdateSpectatorCamera();
             }
         }
@@ -153,16 +165,30 @@ namespace NightHunt.Gameplay.Camera
             }
 
             // Enable spectator camera
-            if (spectatorCamera != null)
+            if (spectatorCameraController != null)
             {
-                spectatorCamera.enabled = true;
+                // Start spectating first available player
+                if (availablePlayers.Count > 0)
+                {
+                    currentSpectatedIndex = 0;
+                    currentSpectatedPlayer = availablePlayers[0];
+                    spectatorCameraController.StartSpectating(currentSpectatedPlayer);
+                }
             }
 
-            // Start spectating first available player
-            if (availablePlayers.Count > 0)
+            // Update input state
+            if (inputLayerManager != null)
             {
-                currentSpectatedIndex = 0;
-                currentSpectatedPlayer = availablePlayers[0];
+                inputLayerManager.TransitionToState(InputState.Spectating);
+            }
+
+            // Enable spectator input
+            if (spectatorInputHandler != null)
+            {
+                spectatorInputHandler.OnNextPlayer += OnNextPlayer;
+                spectatorInputHandler.OnPreviousPlayer += OnPreviousPlayer;
+                spectatorInputHandler.OnExitSpectator += ExitSpectatorMode;
+                spectatorInputHandler.EnableSpectatorInput();
             }
 
             Debug.Log("[SpectatorCameraSystem] Entered spectator mode");
@@ -175,16 +201,33 @@ namespace NightHunt.Gameplay.Camera
         {
             isSpectating = false;
 
+            // Disable spectator camera
+            if (spectatorCameraController != null)
+            {
+                spectatorCameraController.StopSpectating();
+            }
+
             // Enable local player camera
             if (localPlayer != null && localPlayer.PlayerCamera != null)
             {
                 localPlayer.PlayerCamera.enabled = true;
             }
 
-            // Disable spectator camera
-            if (spectatorCamera != null)
+            // Update input state
+            if (inputLayerManager != null)
             {
-                spectatorCamera.enabled = false;
+                // Determine appropriate state based on player status
+                // TODO: Check if player is alive or dead
+                inputLayerManager.TransitionToState(InputState.PlayerAlive);
+            }
+
+            // Disable spectator input
+            if (spectatorInputHandler != null)
+            {
+                spectatorInputHandler.OnNextPlayer -= OnNextPlayer;
+                spectatorInputHandler.OnPreviousPlayer -= OnPreviousPlayer;
+                spectatorInputHandler.OnExitSpectator -= ExitSpectatorMode;
+                spectatorInputHandler.DisableSpectatorInput();
             }
 
             currentSpectatedPlayer = null;
@@ -194,50 +237,35 @@ namespace NightHunt.Gameplay.Camera
         }
 
         /// <summary>
-        /// Handle spectator input (switch between players)
+        /// Handle next player input
         /// </summary>
-        private void HandleSpectatorInput()
+        private void OnNextPlayer()
         {
-            if (Time.time - lastSwitchTime < switchCooldown) return;
-
-            bool switchNext = false;
-            bool switchPrevious = false;
-
-            // Check keyboard input
-            if (Keyboard.current != null)
+            if (spectatorCameraController != null)
             {
-                if (Keyboard.current[nextPlayerKey].wasPressedThisFrame)
-                    switchNext = true;
-                
-                if (Keyboard.current[previousPlayerKey].wasPressedThisFrame)
-                    switchPrevious = true;
-            }
-
-            // Switch to next player
-            if (switchNext && availablePlayers.Count > 0)
-            {
-                currentSpectatedIndex = (currentSpectatedIndex + 1) % availablePlayers.Count;
-                currentSpectatedPlayer = availablePlayers[currentSpectatedIndex];
-                lastSwitchTime = Time.time;
-                Debug.Log($"[SpectatorCameraSystem] Spectating: {currentSpectatedPlayer.PlayerName}");
-            }
-
-            // Switch to previous player
-            if (switchPrevious && availablePlayers.Count > 0)
-            {
-                currentSpectatedIndex = (currentSpectatedIndex - 1 + availablePlayers.Count) % availablePlayers.Count;
-                currentSpectatedPlayer = availablePlayers[currentSpectatedIndex];
-                lastSwitchTime = Time.time;
-                Debug.Log($"[SpectatorCameraSystem] Spectating: {currentSpectatedPlayer.PlayerName}");
+                spectatorCameraController.SwitchToNextPlayer();
+                currentSpectatedPlayer = spectatorCameraController.CurrentSpectatedPlayer;
             }
         }
 
         /// <summary>
-        /// Update spectator camera position and rotation
+        /// Handle previous player input
+        /// </summary>
+        private void OnPreviousPlayer()
+        {
+            if (spectatorCameraController != null)
+            {
+                spectatorCameraController.SwitchToPreviousPlayer();
+                currentSpectatedPlayer = spectatorCameraController.CurrentSpectatedPlayer;
+            }
+        }
+
+        /// <summary>
+        /// Update spectator camera (handled by Cinemachine)
         /// </summary>
         private void UpdateSpectatorCamera()
         {
-            if (currentSpectatedPlayer == null || spectatorCameraTransform == null)
+            if (currentSpectatedPlayer == null)
             {
                 RefreshPlayerList();
                 if (availablePlayers.Count == 0)
@@ -250,32 +278,20 @@ namespace NightHunt.Gameplay.Camera
                 if (currentSpectatedIndex >= 0 && currentSpectatedIndex < availablePlayers.Count)
                 {
                     currentSpectatedPlayer = availablePlayers[currentSpectatedIndex];
+                    if (spectatorCameraController != null)
+                    {
+                        spectatorCameraController.StartSpectating(currentSpectatedPlayer);
+                    }
                 }
                 else
                 {
                     currentSpectatedIndex = 0;
                     currentSpectatedPlayer = availablePlayers[0];
+                    if (spectatorCameraController != null)
+                    {
+                        spectatorCameraController.StartSpectating(currentSpectatedPlayer);
+                    }
                 }
-            }
-
-            // Follow spectated player with top-down view
-            Vector3 targetPosition = currentSpectatedPlayer.transform.position + spectatorOffset;
-            spectatorCameraTransform.position = Vector3.Lerp(
-                spectatorCameraTransform.position,
-                targetPosition,
-                Time.deltaTime * followSpeed
-            );
-
-            // Look at player (top-down)
-            Vector3 lookDirection = currentSpectatedPlayer.transform.position - spectatorCameraTransform.position;
-            if (lookDirection != Vector3.zero)
-            {
-                Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-                spectatorCameraTransform.rotation = Quaternion.Slerp(
-                    spectatorCameraTransform.rotation,
-                    targetRotation,
-                    Time.deltaTime * rotationSpeed
-                );
             }
         }
 
@@ -286,23 +302,35 @@ namespace NightHunt.Gameplay.Camera
         {
             availablePlayers.Clear();
             
-            // Find all NetworkPlayers in scene
-            NetworkPlayer[] allPlayers = FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None);
-            
-            foreach (var player in allPlayers)
+            // Use TeamSpectatorFilter to get teammates
+            if (localPlayer != null)
             {
-                // Only add players that are not the local player and are alive
-                if (player != localPlayer && player != null && player.gameObject.activeInHierarchy)
+                availablePlayers = TeamSpectatorFilter.GetTeammates(localPlayer);
+            }
+            else
+            {
+                // Fallback: get all players
+                var allPlayers = FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None);
+                foreach (var player in allPlayers)
                 {
-                    // Check if player is alive (not dead)
-                    CharacterDeathSystem deathSystem = player.GetComponent<CharacterDeathSystem>();
-                    bool isAlive = deathSystem == null || deathSystem.IsAlive;
-                    
-                    if (isAlive)
+                    if (player != null && player.gameObject.activeInHierarchy)
                     {
-                        availablePlayers.Add(player);
+                        // Check if player is alive (not dead)
+                        CharacterDeathSystem deathSystem = player.GetComponent<CharacterDeathSystem>();
+                        bool isAlive = deathSystem == null || deathSystem.IsAlive;
+                        
+                        if (isAlive)
+                        {
+                            availablePlayers.Add(player);
+                        }
                     }
                 }
+            }
+
+            // Update spectator camera controller
+            if (spectatorCameraController != null)
+            {
+                spectatorCameraController.RefreshPlayerList();
             }
 
             // Remove current spectated player if it's no longer available

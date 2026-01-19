@@ -155,18 +155,24 @@ namespace NightHunt.UI
             itemSlots.Clear();
 
             // Create slots for items
-            var items = inventorySystem.GetItems();
-            foreach (var item in items)
+            var slots = inventorySystem.GetItems();
+            foreach (var slot in slots)
             {
+                if (slot == null || slot.IsEmpty) continue;
+                
                 if (itemSlotPrefab != null)
                 {
                     GameObject slotObj = Instantiate(itemSlotPrefab, itemGridParent);
                     ItemSlotUI slotUI = slotObj.GetComponent<ItemSlotUI>();
-                    if (slotUI != null)
+                    if (slotUI == null)
                     {
-                        slotUI.Initialize(item, this);
-                        itemSlots.Add(slotUI);
+                        slotUI = slotObj.AddComponent<ItemSlotUI>();
                     }
+
+                    // Create InventoryItem wrapper
+                    InventoryItem item = new InventoryItem(slot);
+                    slotUI.Initialize(item, this);
+                    itemSlots.Add(slotUI);
                 }
             }
         }

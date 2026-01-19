@@ -2,21 +2,20 @@ using UnityEngine;
 using NightHunt.Data;
 using FishNet.Object;
 using NightHunt.Networking;
+using NightHunt.Gameplay.Character.Movement;
+using NightHunt.Gameplay.Core.Prediction;
+using NightHunt.Gameplay.Input;
+using NightHunt.Gameplay.Core.Utils;
 
 namespace NightHunt.Gameplay.Character
 {
     /// <summary>
     /// Handles character movement for top-down 3D game
     /// Supports sprint, crouch, weight penalties, and stamina
-    /// 
-    /// SERVER AUTHORITY với CLIENT-SIDE PREDICTION:
-    /// - Server: Xử lý movement (authority, check lại input)
-    /// - Client Owner: Chạy prediction để responsive (smooth movement)
-    /// - Client Non-Owner: KHÔNG chạy movement (chỉ nhận từ NetworkTransform)
-    /// - NetworkTransform sync position từ server → client reconcile nếu sai lệch
+    /// Implements IPredictable for client-side prediction
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
-    public class CharacterMovement : MonoBehaviour
+    public class CharacterMovement : MonoBehaviour, IPredictable<MovementState>
     {
         [Header("Movement Settings")]
         [SerializeField] private float baseMoveSpeed = 5f;
@@ -44,12 +43,27 @@ namespace NightHunt.Gameplay.Character
         private float weightPenalty = 0f;
         private float staminaDrainMultiplier = 1f;
 
+        // Prediction
+        private MovementPrediction movementPrediction;
+        private MovementSync movementSync;
+        private PredictionManager<MovementState> predictionManager;
+
         private void Awake()
         {
             characterController = GetComponent<CharacterController>();
             characterStats = GetComponent<CharacterStats>();
             networkPlayer = GetComponent<NetworkPlayer>();
             currentStamina = maxStamina;
+
+            // Initialize prediction
+            predictionManager = new PredictionManager<MovementState>(this);
+            
+            // Get movement sync
+            movementSync = GetComponent<MovementSync>();
+            if (movementSync == null)
+            {
+                movementSync = gameObject.AddComponent<MovementSync>();
+            }
         }
 
         private void Start()
@@ -66,6 +80,18 @@ namespace NightHunt.Gameplay.Character
             }
 
             currentStamina = maxStamina;
+
+            // Initialize movement prediction
+            var inputHandler = GetComponent<PlayerInputHandler>();
+            if (inputHandler != null)
+            {
+                var inputPrediction = inputHandler.GetInputPrediction();
+                movementPrediction = new MovementPrediction(this, inputPrediction);
+                if (movementSync != null)
+                {
+                    movementSync.SetMovementPrediction(movementPrediction);
+                }
+            }
         }
 
         private void Update()
@@ -92,6 +118,12 @@ namespace NightHunt.Gameplay.Character
             UpdateStamina();
             UpdateMovement();
             ApplyMovement();
+
+            // Client prediction
+            if (isClientOwner && predictionManager != null)
+            {
+                predictionManager.Predict();
+            }
         }
 
         /// <summary>
@@ -225,6 +257,23 @@ namespace NightHunt.Gameplay.Character
         /// Get current stamina
         /// </summary>
         public float GetStamina() => currentStamina;
+        
+        /// <summary>
+        /// Get current stamina (alias for MovementSync)
+        /// </summary>
+        public float GetCurrentStamina() => currentStamina;
+        
+        /// <summary>
+        /// Set stamina (for network sync)
+        /// </summary>
+        public void SetStamina(float stamina)
+        {
+            currentStamina = Mathf.Clamp(stamina, 0f, maxStamina);
+            if (characterStats != null)
+            {
+                characterStats.SetStamina(currentStamina);
+            }
+        }
 
         /// <summary>
         /// Get current move speed
@@ -235,6 +284,45 @@ namespace NightHunt.Gameplay.Character
         /// Check if can sprint
         /// </summary>
         public bool CanSprint() => currentStamina >= minStaminaToSprint && !isCrouching;
+
+        #region IPredictable Implementation
+
+        /// <summary>
+        /// Get current state for prediction
+        /// </summary>
+        public MovementState GetCurrentState()
+        {
+            return new MovementState
+            {
+                Position = transform.position,
+                Rotation = transform.rotation,
+                Velocity = velocity,
+                IsSprinting = isSprinting,
+                IsCrouching = isCrouching,
+                Stamina = currentStamina
+            };
+        }
+
+        /// <summary>
+        /// Set state (for reconciliation)
+        /// </summary>
+        public void SetState(MovementState state)
+        {
+            transform.position = state.Position;
+            transform.rotation = state.Rotation;
+            velocity = state.Velocity;
+            isSprinting = state.IsSprinting;
+            isCrouching = state.IsCrouching;
+            currentStamina = state.Stamina;
+
+            // Update character stats
+            if (characterStats != null)
+            {
+                characterStats.SetStamina(currentStamina);
+            }
+        }
+
+        #endregion
     }
 }
 

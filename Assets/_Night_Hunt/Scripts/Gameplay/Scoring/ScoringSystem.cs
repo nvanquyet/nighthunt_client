@@ -46,15 +46,19 @@ namespace NightHunt.Gameplay.Scoring
                 playerScores[playerId] = new PlayerScore { PlayerId = playerId };
             }
 
-            // Get phase multiplier
+            // Get phase multiplier using ScoreMultiplier utility
             float phaseMultiplier = 1f;
             if (phaseManager != null)
             {
-                phaseMultiplier = phaseManager.GetScoreMultiplier();
+                phaseMultiplier = ScoreMultiplier.GetPhaseMultiplier(phaseManager.CurrentPhase);
             }
 
             // Calculate final score
             int finalScore = Mathf.RoundToInt(baseScore * multiplier * phaseMultiplier);
+            
+            // Publish score event
+            var scoreEvent = new ScoreEvent(GetTeamId(playerId), finalScore, action);
+            NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance?.Publish(scoreEvent);
             playerScores[playerId].TotalScore += finalScore;
 
             // Update team score
@@ -161,6 +165,15 @@ namespace NightHunt.Gameplay.Scoring
         {
             if (scoreConfigs == null) return null;
             return scoreConfigs.Find(s => s.Action == action);
+        }
+
+        /// <summary>
+        /// Get team ID for player
+        /// </summary>
+        private int GetTeamId(uint playerId)
+        {
+            var player = GetPlayerById(playerId);
+            return player != null ? player.TeamId : -1;
         }
 
         /// <summary>

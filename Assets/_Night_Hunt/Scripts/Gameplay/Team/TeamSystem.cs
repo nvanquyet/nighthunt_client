@@ -3,7 +3,6 @@ using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Networking;
 using System.Collections.Generic;
-using FishNet;
 
 namespace NightHunt.Gameplay.Team
 {
@@ -17,12 +16,16 @@ namespace NightHunt.Gameplay.Team
         [SerializeField] private int playersPerTeam = 5;
 
         [Header("Team Colors")]
-        [SerializeField] private Color[] teamColors = new Color[] { Color.blue, Color.red, Color.green, Color.yellow };
+        [SerializeField] private Color[] teamColors = new Color[] 
+        { 
+            Color.blue, 
+            Color.red, 
+            Color.green, 
+            Color.yellow 
+        };
 
-        // Synchronized team data
-        // Note: Dictionary cannot be directly synced, will use manual sync or SyncList
+        // Team data storage
         private Dictionary<int, TeamData> teams = new Dictionary<int, TeamData>();
-
         private Dictionary<uint, int> playerTeams = new Dictionary<uint, int>();
 
         public override void OnStartServer()
@@ -47,14 +50,23 @@ namespace NightHunt.Gameplay.Team
                     PlayerCount = 0
                 };
             }
+
+            Debug.Log($"[TeamSystem] Initialized {maxTeams} teams");
         }
 
         /// <summary>
         /// Server: Assign player to team
+        /// Auto-balances teams by assigning to team with least players
         /// </summary>
         [Server]
         public int AssignPlayerToTeam(NetworkPlayer player)
         {
+            if (player == null || !player.IsSpawned)
+            {
+                Debug.LogError("[TeamSystem] Cannot assign invalid player to team!");
+                return 0;
+            }
+
             // Find team with least players
             int teamId = 0;
             int minPlayers = int.MaxValue;
@@ -70,14 +82,54 @@ namespace NightHunt.Gameplay.Team
 
             // Assign player
             uint playerId = (uint)player.ObjectId;
+            
+            // Remove from old team if already assigned
+            if (playerTeams.ContainsKey(playerId))
+            {
+                int oldTeam = playerTeams[playerId];
+                if (teams.ContainsKey(oldTeam))
+                {
+                    teams[oldTeam].PlayerCount--;
+                    teams[oldTeam].PlayerIds.Remove(playerId);
+                }
+            }
+
+            // Add to new team
             playerTeams[playerId] = teamId;
             teams[teamId].PlayerCount++;
             teams[teamId].PlayerIds.Add(playerId);
 
-            // Set team on player
+            // Set team on player (this syncs to all clients)
             player.SetTeamId(teamId);
 
+            Debug.Log($"[TeamSystem] Assigned player {player.PlayerName} to team {teamId} ({teams[teamId].PlayerCount}/{playersPerTeam} players)");
+
             return teamId;
+        }
+
+        /// <summary>
+        /// Server: Remove player from team
+        /// </summary>
+        [Server]
+        public void RemovePlayerFromTeam(NetworkPlayer player)
+        {
+            if (player == null) return;
+
+            uint playerId = (uint)player.ObjectId;
+            
+            if (playerTeams.ContainsKey(playerId))
+            {
+                int teamId = playerTeams[playerId];
+                
+                if (teams.ContainsKey(teamId))
+                {
+                    teams[teamId].PlayerCount--;
+                    teams[teamId].PlayerIds.Remove(playerId);
+                    Debug.Log($"[TeamSystem] Removed player {player.PlayerName} from team {teamId}");
+                }
+                
+                playerTeams.Remove(playerId);
+            }
         }
 
         /// <summary>
@@ -115,6 +167,15 @@ namespace NightHunt.Gameplay.Team
         }
 
         /// <summary>
+        /// Check if players are on same team (NetworkPlayer overload)
+        /// </summary>
+        public bool AreSameTeam(NetworkPlayer player1, NetworkPlayer player2)
+        {
+            if (player1 == null || player2 == null) return false;
+            return player1.TeamId == player2.TeamId;
+        }
+
+        /// <summary>
         /// Get team data
         /// </summary>
         public TeamData GetTeamData(int teamId)
@@ -124,6 +185,72 @@ namespace NightHunt.Gameplay.Team
                 return teams[teamId];
             }
             return null;
+        }
+
+        /// <summary>
+        /// Server: Add score to team
+        /// </summary>
+        [Server]
+        public void AddTeamScore(int teamId, int score)
+        {
+            if (teams.ContainsKey(teamId))
+            {
+                teams[teamId].Score += score;
+                Debug.Log($"[TeamSystem] Team {teamId} scored {score} points. Total: {teams[teamId].Score}");
+                
+                // Broadcast score update to all clients
+                RpcUpdateTeamScore(teamId, teams[teamId].Score);
+            }
+        }
+
+        /// <summary>
+        /// Client: Update team score display
+        /// </summary>
+        [ObserversRpc]
+        private void RpcUpdateTeamScore(int teamId, int newScore)
+        {
+            // Update UI, scoreboard, etc.
+            Debug.Log($"[Client] Team {teamId} score updated: {newScore}");
+        }
+
+        /// <summary>
+        /// Get all teams
+        /// </summary>
+        public Dictionary<int, TeamData> GetAllTeams()
+        {
+            return teams;
+        }
+
+        /// <summary>
+        /// Get team player count
+        /// </summary>
+        public int GetTeamPlayerCount(int teamId)
+        {
+            if (teams.ContainsKey(teamId))
+            {
+                return teams[teamId].PlayerCount;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Get winning team
+        /// </summary>
+        public int GetWinningTeam()
+        {
+            int winningTeam = -1;
+            int highestScore = int.MinValue;
+
+            foreach (var kvp in teams)
+            {
+                if (kvp.Value.Score > highestScore)
+                {
+                    highestScore = kvp.Value.Score;
+                    winningTeam = kvp.Key;
+                }
+            }
+
+            return winningTeam;
         }
     }
 
@@ -140,4 +267,3 @@ namespace NightHunt.Gameplay.Team
         public int Score = 0;
     }
 }
-
