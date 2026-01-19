@@ -28,7 +28,7 @@ namespace NightHunt.Gameplay.Camera.Cinemachine
         private bool isInitialized = false;
 
         // Cinemachine 3.x components
-        private CinemachineFollow followComponent;
+        private CinemachineOrbitalFollow followComponent;
         private CinemachineRotationComposer rotationComposer;
 
         private void Awake()
@@ -79,13 +79,13 @@ namespace NightHunt.Gameplay.Camera.Cinemachine
             }
 
             // Get Cinemachine 3.x components
-            followComponent = playerCamera.GetComponent<CinemachineFollow>();
+            followComponent = playerCamera.GetComponent<CinemachineOrbitalFollow>();
             rotationComposer = playerCamera.GetComponent<CinemachineRotationComposer>();
 
             // Add components if missing
             if (followComponent == null)
             {
-                followComponent = playerCamera.gameObject.AddComponent<CinemachineFollow>();
+                followComponent = playerCamera.gameObject.AddComponent<CinemachineOrbitalFollow>();
             }
 
             if (rotationComposer == null)
@@ -123,7 +123,7 @@ namespace NightHunt.Gameplay.Camera.Cinemachine
             if (playerCamera == null || followComponent == null) return;
 
             // Set camera offset for 45 degree angle
-            followComponent.FollowOffset = new Vector3(0, defaultHeight, -defaultDistance);
+            //followComponent.FollowOffset = new Vector3(0, defaultHeight, -defaultDistance);
 
             // Set rotation composer
             if (rotationComposer != null)
@@ -142,18 +142,19 @@ namespace NightHunt.Gameplay.Camera.Cinemachine
         public void RotateCamera(float direction)
         {
             if (playerCamera == null || followComponent == null) return;
+            Debug.Log($"[CinemachineCameraController] RotateCamera called with delta: {direction}");
 
             // Rotate around Y axis
-            Vector3 offset = followComponent.FollowOffset;
-            float angle = Mathf.Atan2(offset.x, offset.z) * Mathf.Rad2Deg;
-            angle += direction * rotationSpeed * Time.deltaTime;
+            //Vector3 offset = followComponent.FollowOffset;
+            // float angle = Mathf.Atan2(offset.x, offset.z) * Mathf.Rad2Deg;
+            // angle += direction * rotationSpeed * Time.deltaTime;
+            //
+            // float distance = new Vector3(offset.x, 0, offset.z).magnitude;
+            // offset.x = Mathf.Sin(angle * Mathf.Deg2Rad) * distance;
+            // offset.z = Mathf.Cos(angle * Mathf.Deg2Rad) * distance;
+            // offset.y = defaultHeight; // Keep height constant
             
-            float distance = new Vector3(offset.x, 0, offset.z).magnitude;
-            offset.x = Mathf.Sin(angle * Mathf.Deg2Rad) * distance;
-            offset.z = Mathf.Cos(angle * Mathf.Deg2Rad) * distance;
-            offset.y = defaultHeight; // Keep height constant
-            
-            followComponent.FollowOffset = offset;
+            //followComponent.FollowOffset = offset;
         }
 
         /// <summary>
@@ -162,17 +163,19 @@ namespace NightHunt.Gameplay.Camera.Cinemachine
         public void ZoomCamera(float zoomDelta)
         {
             if (playerCamera == null || followComponent == null) return;
-
-            Vector3 offset = followComponent.FollowOffset;
-            float currentDistance = new Vector3(offset.x, 0, offset.z).magnitude;
-            float newDistance = Mathf.Clamp(currentDistance - zoomDelta * zoomSpeed, minZoom, maxZoom);
-            
-            // Maintain 45 degree angle
-            float angle = Mathf.Atan2(offset.x, offset.z);
-            offset.x = Mathf.Sin(angle) * newDistance;
-            offset.z = Mathf.Cos(angle) * newDistance;
-            
-            followComponent.FollowOffset = offset;
+            Debug.Log($"[CinemachineCameraController] ZoomCamera called with delta: {zoomDelta}");
+            // if (playerCamera == null || followComponent == null) return;
+            //
+            // Vector3 offset = followComponent.FollowOffset;
+            // float currentDistance = new Vector3(offset.x, 0, offset.z).magnitude;
+            // float newDistance = Mathf.Clamp(currentDistance - zoomDelta * zoomSpeed, minZoom, maxZoom);
+            //
+            // // Maintain 45 degree angle
+            // float angle = Mathf.Atan2(offset.x, offset.z);
+            // offset.x = Mathf.Sin(angle) * newDistance;
+            // offset.z = Mathf.Cos(angle) * newDistance;
+            //
+            // followComponent.FollowOffset = offset;
         }
 
         /// <summary>
