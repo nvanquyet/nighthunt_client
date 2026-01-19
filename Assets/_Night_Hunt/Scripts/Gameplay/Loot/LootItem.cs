@@ -30,6 +30,15 @@ namespace NightHunt.Gameplay.Loot
         public string ItemId => itemId;
         public string Rarity => rarity;
         public bool IsPickedUp { get; private set; }
+        public bool IsLooted => IsPickedUp;
+
+        /// <summary>
+        /// Set looted state (called by LootSync)
+        /// </summary>
+        public void SetLooted(bool looted)
+        {
+            IsPickedUp = looted;
+        }
 
         public override void OnStartNetwork()
         {
@@ -117,6 +126,9 @@ namespace NightHunt.Gameplay.Loot
         private void PickupItem(GameObject player)
         {
             IsPickedUp = true;
+            
+            // Notify listeners
+            OnLooted?.Invoke();
 
             // Visual effect
             RpcPlayPickupEffect();
@@ -124,6 +136,11 @@ namespace NightHunt.Gameplay.Loot
             // Despawn after delay
             Invoke(nameof(DespawnItem), 0.5f);
         }
+
+        /// <summary>
+        /// Event fired when loot is picked up
+        /// </summary>
+        public System.Action OnLooted;
 
         /// <summary>
         /// Server: Despawn item

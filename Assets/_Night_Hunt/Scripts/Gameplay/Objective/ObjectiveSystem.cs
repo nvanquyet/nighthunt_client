@@ -10,20 +10,50 @@ namespace NightHunt.Gameplay.Objective
 {
     /// <summary>
     /// Manages game objectives: Capture zones, Boss spawns, etc.
+    /// Refactored to use IObjective interface
     /// </summary>
     public class ObjectiveSystem : NetworkBehaviour
     {
         [Header("Objectives")]
-        [SerializeField] private List<CaptureZone> captureZones = new List<CaptureZone>();
-        [SerializeField] private List<BossSpawnPoint> bossSpawnPoints = new List<BossSpawnPoint>();
+        [SerializeField] private List<IObjective> activeObjectives = new List<IObjective>();
+        [SerializeField] private List<BossObjective> bossObjectives = new List<BossObjective>();
+        [SerializeField] private List<CaptureZoneObjective> captureZoneObjectives = new List<CaptureZoneObjective>();
+        [SerializeField] private List<CrateDropObjective> crateObjectives = new List<CrateDropObjective>();
+        [SerializeField] private List<RadarStationObjective> radarObjectives = new List<RadarStationObjective>();
+        [SerializeField] private List<EMPNodeObjective> empObjectives = new List<EMPNodeObjective>();
 
         // Synchronized state
-        private readonly SyncVar<int> activeObjectiveCount = new SyncVar<int>();
+        private readonly SyncVar<int> networkActiveObjectiveCount = new SyncVar<int>();
 
         public override void OnStartServer()
         {
             base.OnStartServer();
             InitializeObjectives();
+        }
+
+        private void Update()
+        {
+            if (!IsServer) return;
+
+            // Update all active objectives
+            foreach (var objective in activeObjectives)
+            {
+                if (objective != null && !objective.IsCompleted)
+                {
+                    objective.OnUpdate();
+                }
+            }
+
+            // Update network sync
+            int completedCount = 0;
+            foreach (var objective in activeObjectives)
+            {
+                if (objective != null && objective.IsCompleted)
+                {
+                    completedCount++;
+                }
+            }
+            networkActiveObjectiveCount.Value = activeObjectives.Count - completedCount;
         }
 
         /// <summary>
@@ -32,15 +62,16 @@ namespace NightHunt.Gameplay.Objective
         [Server]
         private void InitializeObjectives()
         {
-            // Capture zones activate in Phase 2
-            foreach (var zone in captureZones)
-            {
-                if (zone != null)
-                {
-                    zone.Initialize();
-                }
-            }
+            activeObjectives.Clear();
+            
+            // Collect all objectives
+            activeObjectives.AddRange(bossObjectives);
+            activeObjectives.AddRange(captureZoneObjectives);
+            activeObjectives.AddRange(crateObjectives);
+            activeObjectives.AddRange(radarObjectives);
+            activeObjectives.AddRange(empObjectives);
         }
+
         /// <summary>
         /// Server: Activate objectives for phase
         /// </summary>
@@ -49,47 +80,88 @@ namespace NightHunt.Gameplay.Objective
         {
             switch (phaseName)
             {
+                case "Phase2_Hunt":
                 case "Phase2_HuntObjectives":
-                    ActivateCaptureZones();
-                    SpawnBoss();
+                    ActivatePhase2Objectives();
                     break;
+                case "Phase3_Lockdown":
                 case "Phase3_FinalLockdown":
-                    // All objectives active
+                    ActivatePhase3Objectives();
                     break;
             }
         }
 
         /// <summary>
-        /// Server: Activate capture zones
+        /// Server: Activate Phase 2 objectives
         /// </summary>
         [Server]
-        private void ActivateCaptureZones()
+        private void ActivatePhase2Objectives()
         {
-            foreach (var zone in captureZones)
+            // Activate capture zones
+            foreach (var objective in captureZoneObjectives)
             {
-                if (zone != null)
+                if (objective != null)
                 {
-                    zone.Activate();
+                    objective.OnStart();
+                }
+            }
+
+            // Activate boss objectives
+            foreach (var objective in bossObjectives)
+            {
+                if (objective != null)
+                {
+                    objective.OnStart();
+                }
+            }
+
+            // Activate crate drops
+            foreach (var objective in crateObjectives)
+            {
+                if (objective != null)
+                {
+                    objective.OnStart();
                 }
             }
         }
 
         /// <summary>
-        /// Server: Spawn boss
+        /// Server: Activate Phase 3 objectives
         /// </summary>
         [Server]
-        private void SpawnBoss()
+        private void ActivatePhase3Objectives()
         {
-            if (bossSpawnPoints.Count == 0) return;
+            // All objectives active in Phase 3
+            ActivatePhase2Objectives();
 
-            BossSpawnPoint spawnPoint = bossSpawnPoints[Random.Range(0, bossSpawnPoints.Count)];
-            spawnPoint.SpawnBoss();
+            // Activate radar stations
+            foreach (var objective in radarObjectives)
+            {
+                if (objective != null)
+                {
+                    objective.OnStart();
+                }
+            }
+
+            // Activate EMP nodes
+            foreach (var objective in empObjectives)
+            {
+                if (objective != null)
+                {
+                    objective.OnStart();
+                }
+            }
         }
 
         /// <summary>
         /// Get active objective count
         /// </summary>
-        public int GetActiveObjectiveCount() => activeObjectiveCount.Value;
+        public int GetActiveObjectiveCount() => networkActiveObjectiveCount.Value;
+
+        /// <summary>
+        /// Get all active objectives
+        /// </summary>
+        public List<IObjective> GetActiveObjectives() => new List<IObjective>(activeObjectives);
     }
 
     /// <summary>

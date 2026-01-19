@@ -4,14 +4,19 @@ using FishNet.Connection;
 using UnityEngine;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Character;
-using FishNet;
 using Unity.Cinemachine;
 
 namespace NightHunt.Networking
 {
     /// <summary>
-    /// Network Player Object with client-side prediction
-    /// Handles player ownership, input, and synchronization
+    /// Network Player Object - Handles ONLY networking concerns
+    /// Game logic is handled by ServerGameManager and other systems
+    /// 
+    /// Responsibilities:
+    /// - Sync player data (name, team)
+    /// - Handle input transmission (client → server)
+    /// - Setup camera for owner
+    /// - Client-side prediction
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
@@ -20,23 +25,26 @@ namespace NightHunt.Networking
         [SerializeField] private PlayerInputHandler inputHandler;
         [SerializeField] private CharacterMovement movement;
         [SerializeField] private CharacterCombat combat;
-        [SerializeField] private CinemachineCamera playerCamera; // Each player has their own camera
+        [SerializeField] private CinemachineCamera playerCamera;
 
         [Header("Network Settings")]
-        [SerializeField] private float sendRate = 20f; // Updates per second
+        [SerializeField] private float sendRate = 20f;
 
         // Synchronized variables
         private readonly SyncVar<string> playerName = new SyncVar<string>();
         private readonly SyncVar<int> teamId = new SyncVar<int>();
 
-        // Client prediction state (for reconciliation)
+        // Client prediction state
         private Vector3 lastServerPosition;
-        private float reconciliationThreshold = 0.1f; // Threshold for position reconciliation
+        private float reconciliationThreshold = 0.1f;
 
+        // Public accessors
         public string PlayerName => playerName.Value;
         public int TeamId => teamId.Value;
-         public bool IsLocalPlayer => IsOwner;
+        public bool IsLocalPlayer => IsOwner;
         public CinemachineCamera PlayerCamera => playerCamera;
+
+        #region Initialization
 
         public override void OnStartNetwork()
         {
@@ -60,131 +68,38 @@ namespace NightHunt.Networking
             teamId.OnChange += OnPlayerTeamChanged;
         }
 
-
         public override void OnStartClient()
         {
             base.OnStartClient();
 
-            // Initialize camera if not assigned
+            // Initialize camera
             if (playerCamera == null)
             {
-                // Try to find camera in children
                 playerCamera = GetComponentInChildren<CinemachineCamera>();
                 
-                // If still null, create a camera
                 if (playerCamera == null)
                 {
                     Debug.LogError($"[NetworkPlayer] No CinemachineCamera found for player: {playerName.Value}");
                 }
             }
 
-            // Setup camera based on ownership
+            // Setup camera and input based on ownership
             SetupCameraForOwnership();
-            
-            // Setup input based on ownership
-            if (IsOwner)
-            {
-                Debug.Log($"[NetworkPlayer] Local player started: {playerName.Value}");
-                
-                // Enable local player controls
-                if (inputHandler != null)
-                {
-                    inputHandler.Initialize(this);
-                    inputHandler.EnableInput();
-                }
-            }
-            else
-            {
-                Debug.Log($"[NetworkPlayer] Remote player started: {playerName.Value}");
-                
-                // Disable input for remote players
-                if (inputHandler != null)
-                    inputHandler.DisableInput();
-            }
-        }
-
-        public override void OnOwnershipClient(NetworkConnection prevOwner)
-        {
-            base.OnOwnershipClient(prevOwner);
-            
-            // Update camera and input when ownership changes
-            SetupCameraForOwnership();
-            
-            // Update input handler based on new ownership
-            if (inputHandler != null)
-            {
-                if (IsOwner)
-                {
-                    inputHandler.EnableInput();
-                    Debug.Log($"[NetworkPlayer] Input enabled for new owner: {playerName.Value}");
-                }
-                else
-                {
-                    inputHandler.DisableInput();
-                    Debug.Log($"[NetworkPlayer] Input disabled: {playerName.Value} is no longer owner");
-                }
-            }
-        }
-
-        /// <summary>
-        /// Setup camera based on ownership
-        /// - Owner: Enable camera
-        /// - Server (non-owner): Disable camera
-        /// - Remote client: Disable camera
-        /// </summary>
-        private void SetupCameraForOwnership()
-        {
-            if (playerCamera == null) return;
-
-            // Chỉ enable camera khi là owner (client owner)
-            // Server instance hoặc remote client đều disable camera
-            if (IsOwner && !IsServerInitialized)
-            {
-                // Client owner: Enable camera
-                if (playerCamera.gameObject != null)
-                {
-                    playerCamera.gameObject.SetActive(true);
-                    playerCamera.enabled = true;
-                    // Set as main camera if no other main camera exists
-                    if (Camera.main == null || Camera.main == playerCamera)
-                    {
-                        playerCamera.tag = "MainCamera";
-                    }
-                    Debug.Log($"[NetworkPlayer] Camera enabled for owner: {playerName.Value}");
-                }
-            }
-            else
-            {
-                // Server instance hoặc remote client: Disable camera
-                if (playerCamera.gameObject != null)
-                {
-                    playerCamera.gameObject.SetActive(false);
-                    playerCamera.enabled = false;
-                    string reason = IsServerInitialized ? "server instance" : "remote client";
-                    Debug.Log($"[NetworkPlayer] Camera disabled for {reason}: {playerName.Value}");
-                }
-            }
+            SetupInputForOwnership();
         }
 
         public override void OnStartServer()
         {
             base.OnStartServer();
-            Debug.Log($"[NetworkPlayer] Player spawned on server: {playerName.Value}");
             
-            // Disable camera on server instance
+            // Server instance: Disable camera (only client owner uses camera)
             if (playerCamera != null && playerCamera.gameObject != null)
             {
                 playerCamera.gameObject.SetActive(false);
                 playerCamera.enabled = false;
-                Debug.Log($"[NetworkPlayer] Camera disabled on server instance: {playerName.Value}");
             }
-            
-            // Notify server game manager
-            var serverGameManager = FindFirstObjectByType<ServerGameManager>();
-            if (serverGameManager != null)
-            {
-                serverGameManager.OnPlayerConnected(this);
-            }
+
+            Debug.Log($"[NetworkPlayer] Player spawned on server: {playerName.Value}");
         }
 
         public override void OnStopNetwork()
@@ -196,22 +111,84 @@ namespace NightHunt.Networking
                 playerName.OnChange -= OnPlayerNameChanged;
             if (teamId != null)
                 teamId.OnChange -= OnPlayerTeamChanged;
+        }
+
+        public override void OnOwnershipClient(NetworkConnection prevOwner)
+        {
+            base.OnOwnershipClient(prevOwner);
             
-            // Notify server game manager on disconnect
-            if (IsServerInitialized)
+            // Update camera and input when ownership changes
+            SetupCameraForOwnership();
+            SetupInputForOwnership();
+        }
+
+        #endregion
+
+        #region Camera Setup
+
+        private void SetupCameraForOwnership()
+        {
+            if (playerCamera == null) return;
+
+            // Only enable camera for client owner (not server instance)
+            if (IsOwner && !IsServerInitialized)
             {
-                var serverGameManager = FindFirstObjectByType<ServerGameManager>();
-                if (serverGameManager != null)
+                if (playerCamera.gameObject != null)
                 {
-                    serverGameManager.OnPlayerDisconnected(this);
+                    playerCamera.gameObject.SetActive(true);
+                    playerCamera.enabled = true;
+                    
+                    if (Camera.main == null || Camera.main == playerCamera)
+                    {
+                        playerCamera.tag = "MainCamera";
+                    }
+                    
+                    Debug.Log($"[NetworkPlayer] Camera enabled for owner: {playerName.Value}");
+                }
+            }
+            else
+            {
+                if (playerCamera.gameObject != null)
+                {
+                    playerCamera.gameObject.SetActive(false);
+                    playerCamera.enabled = false;
+                    
+                    string reason = IsServerInitialized ? "server instance" : "remote client";
+                    Debug.Log($"[NetworkPlayer] Camera disabled for {reason}: {playerName.Value}");
                 }
             }
         }
 
+        #endregion
+
+        #region Input Setup
+
+        private void SetupInputForOwnership()
+        {
+            if (inputHandler == null) return;
+
+            if (IsOwner)
+            {
+                inputHandler.Initialize(this);
+                inputHandler.EnableInput();
+                Debug.Log($"[NetworkPlayer] Input enabled for owner: {playerName.Value}");
+            }
+            else
+            {
+                inputHandler.DisableInput();
+                Debug.Log($"[NetworkPlayer] Input disabled for non-owner: {playerName.Value}");
+            }
+        }
+
+        #endregion
+
+        #region Data Sync (Server-side setters)
+
         /// <summary>
         /// Server: Set player name
+        /// Called by ServerGameManager or other server-side systems
         /// </summary>
-        [ServerRpc(RequireOwnership = true)]
+        [Server]
         public void SetPlayerName(string name)
         {
             playerName.Value = name;
@@ -219,176 +196,142 @@ namespace NightHunt.Networking
 
         /// <summary>
         /// Server: Set team ID
+        /// Called by TeamSystem on server
         /// </summary>
-        [ServerRpc(RequireOwnership = false)]
+        [Server]
         public void SetTeamId(int team)
         {
             teamId.Value = team;
+            Debug.Log($"[NetworkPlayer] Team set: {playerName.Value} → Team {team}");
         }
 
-        /// <summary>
-        /// Client: Send movement input to server
-        /// RunLocally = true means host also processes movement on server
-        /// </summary>
-        [ServerRpc(RequireOwnership = true, RunLocally = true)]
-        private void SendMovementInput(Vector2 moveInput, bool isSprinting, bool isCrouching)
-        {
-            // Check if NetworkObject is valid
-            if (!IsSpawned) return;
-            
-            // Server processes movement (including host)
-            // RunLocally = true ensures host's movement is processed on server too
-            // IMPORTANT: This runs on SERVER side (including host's server instance)
-            if (movement != null)
-            {
-                movement.SetMoveInput(moveInput);
-                movement.SetSprinting(isSprinting);
-                movement.SetCrouching(isCrouching);
-                
-                // Debug log to verify server is processing movement
-                Debug.Log($"[NetworkPlayer] ServerRpc SendMovementInput - IsServer: {IsServerInitialized}, Player: {playerName.Value}, Input: {moveInput}");
-            }
-            else
-            {
-                Debug.LogWarning($"[NetworkPlayer] Movement component is null! Cannot process movement for {playerName.Value}");
-            }
-        }
+        #endregion
 
-        /// <summary>
-        /// Client: Send combat input to server
-        /// </summary>
-        [ServerRpc(RequireOwnership = true, RunLocally = true)]
-        private void SendCombatInput(Vector3 aimDirection, bool isAttacking, bool isReloading)
-        {
-            // Check if NetworkObject is valid
-            if (!IsSpawned) return;
-            
-            // Server processes combat
-            if (combat != null)
-            {
-                combat.SetAimDirection(aimDirection);
-                combat.SetAttacking(isAttacking);
-                combat.SetReloading(isReloading);
-            }
-        }
+        #region Input Transmission (Client → Server)
 
         private void Update()
         {
             if (!IsSpawned) return;
 
-            // SERVER AUTHORITY với CLIENT-SIDE PREDICTION
-            // Client owner: Chạy prediction + gửi input lên server
-            // Server: Check lại và sync position qua NetworkTransform
-            // Client reconcile nếu có sai lệch
+            // Client owner: Send input to server periodically
             if (IsOwner)
             {
-                // Client owner: Gửi input lên server định kỳ
-                // CharacterMovement sẽ chạy prediction trên client owner
-                // Server sẽ check lại và sync qua NetworkTransform
                 if (Time.frameCount % Mathf.RoundToInt(60f / sendRate) == 0)
                 {
                     SendInputToServer();
                 }
                 
-                // Reconciliation: Check nếu server position khác nhiều với predicted position
                 ReconcilePosition();
-            }
-            // Note: Position sync is handled by NetworkTransform component
-            // NetworkTransform tự động sync position từ server → tất cả clients
-        }
-        
-        /// <summary>
-        /// Reconcile client prediction với server position
-        /// Nếu sai lệch lớn, snap về server position
-        /// </summary>
-        private void ReconcilePosition()
-        {
-            if (movement == null) return;
-            
-            // Lấy server position từ NetworkTransform (transform.position đã được sync)
-            Vector3 serverPosition = transform.position;
-            
-            // Nếu sai lệch lớn, snap về server position
-            // (CharacterMovement prediction đã chạy, nhưng server position là authority)
-            // NetworkTransform sẽ tự động sync, chỉ cần check threshold
-            float distance = Vector3.Distance(lastServerPosition, serverPosition);
-            
-            if (distance > reconciliationThreshold)
-            {
-                // Server position khác nhiều → có thể cần reconcile
-                // NetworkTransform đã sync position, chỉ cần update lastServerPosition
-                lastServerPosition = serverPosition;
-            }
-            else
-            {
-                // Update lastServerPosition để track
-                lastServerPosition = serverPosition;
             }
         }
 
         private void SendInputToServer()
         {
-            if (inputHandler == null) return;
-            
-            // Check if NetworkObject is spawned and valid before sending RPCs
-            if (!IsSpawned || !IsOwner)
-            {
+            if (inputHandler == null || !IsSpawned || !IsOwner)
                 return;
-            }
 
             Vector2 moveInput = inputHandler.GetMoveInput();
             bool isSprinting = inputHandler.IsSprinting();
             bool isCrouching = inputHandler.IsCrouching();
             
-            // Only send RPCs if NetworkObject is valid
-            if (IsSpawned && IsOwner)
+            SendMovementInput(moveInput, isSprinting, isCrouching);
+            
+            if (combat != null)
             {
-                SendMovementInput(moveInput, isSprinting, isCrouching);
-                
-                // Combat input (optional - only if combat component exists)
-                if (combat != null)
-                {
-                    Vector3 aimDirection = inputHandler.GetAimDirection();
-                    bool isAttacking = inputHandler.IsAttacking();
-                    bool isReloading = inputHandler.IsReloading();
-                    SendCombatInput(aimDirection, isAttacking, isReloading);
-                }
+                Vector3 aimDirection = inputHandler.GetAimDirection();
+                bool isAttacking = inputHandler.IsAttacking();
+                bool isReloading = inputHandler.IsReloading();
+                SendCombatInput(aimDirection, isAttacking, isReloading);
             }
         }
 
-        // Note: Position sync is handled by NetworkTransform component
-        // NetworkTransform automatically syncs transform.position and transform.rotation
-        // No need for manual FixedUpdate sync - NetworkTransform handles it
+        [ServerRpc(RequireOwnership = true, RunLocally = true)]
+        private void SendMovementInput(Vector2 moveInput, bool isSprinting, bool isCrouching)
+        {
+            if (!IsSpawned || movement == null) return;
+            
+            movement.SetMoveInput(moveInput);
+            movement.SetSprinting(isSprinting);
+            movement.SetCrouching(isCrouching);
+        }
+
+        [ServerRpc(RequireOwnership = true, RunLocally = true)]
+        private void SendCombatInput(Vector3 aimDirection, bool isAttacking, bool isReloading)
+        {
+            if (!IsSpawned || combat == null) return;
+            
+            combat.SetAimDirection(aimDirection);
+            combat.SetAttacking(isAttacking);
+            combat.SetReloading(isReloading);
+        }
+
+        #endregion
+
+        #region Client-Side Prediction
+
+        private void ReconcilePosition()
+        {
+            if (movement == null) return;
+            
+            Vector3 serverPosition = transform.position;
+            float distance = Vector3.Distance(lastServerPosition, serverPosition);
+            
+            if (distance > reconciliationThreshold)
+            {
+                lastServerPosition = serverPosition;
+            }
+            else
+            {
+                lastServerPosition = serverPosition;
+            }
+        }
+
+        #endregion
+
+        #region Callbacks (for logging/debugging)
 
         private void OnPlayerNameChanged(string oldName, string newName, bool asServer)
         {
-            Debug.Log($"[NetworkPlayer] Player name changed: {oldName} -> {newName}");
+            Debug.Log($"[NetworkPlayer] Name changed: {oldName} → {newName}");
         }
 
         private void OnPlayerTeamChanged(int oldTeam, int newTeam, bool asServer)
         {
-            Debug.Log($"[NetworkPlayer] Player team changed: {oldTeam} -> {newTeam}");
+            Debug.Log($"[NetworkPlayer] Team changed: {oldTeam} → {newTeam}");
         }
 
+        #endregion
+
+        #region Game Events (called by other systems)
+
         /// <summary>
-        /// Server: Handle player death
+        /// Called when player dies (by health system or combat system)
         /// </summary>
-        [ServerRpc(RequireOwnership = false)]
-        public void OnPlayerDeath()
+        public void OnDeath()
         {
-            // Handle death logic on server
             Debug.Log($"[NetworkPlayer] Player {playerName.Value} died");
+            
+            // Notify ServerGameManager to handle respawn
+            if (IsServerInitialized)
+            {
+                var serverGameManager = FindFirstObjectByType<ServerGameManager>();
+                if (serverGameManager != null)
+                {
+                    serverGameManager.RespawnPlayer(this, delay: 3f);
+                }
+            }
         }
 
         /// <summary>
-        /// Server: Handle player respawn
+        /// Server: Respawn player at position
         /// </summary>
-        [ServerRpc(RequireOwnership = false)]
-        public void RespawnPlayer(Vector3 spawnPosition)
+        [Server]
+        public void RespawnAtPosition(Vector3 spawnPosition)
         {
             transform.position = spawnPosition;
-            // Reset health, etc.
+            Debug.Log($"[NetworkPlayer] Player {playerName.Value} respawned at {spawnPosition}");
         }
+
+        #endregion
     }
 }
-

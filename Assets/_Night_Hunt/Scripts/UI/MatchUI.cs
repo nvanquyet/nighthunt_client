@@ -66,7 +66,7 @@ namespace NightHunt.UI
         {
             if (phaseManager == null) return;
 
-            string currentPhase = phaseManager.CurrentPhase;
+            string currentPhase = phaseManager.CurrentPhaseName;
             var phaseConfig = phaseManager.GetCurrentPhaseConfig();
 
             if (phaseText != null)

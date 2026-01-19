@@ -1,49 +1,143 @@
+using System;
 using System.Collections;
 using UnityEngine;
 using NightHunt.Data;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet;
-using NightHunt.Networking;
+using NightHunt.Gameplay.Core.State;
 
 namespace NightHunt.Gameplay.Match
 {
     /// <summary>
     /// Manages match phases (Phase 1: Preparation, Phase 2: Hunt, Phase 3: Lockdown)
-    /// Server-authoritative phase management
+    /// Server-authoritative phase management with state machine
+    /// Uses events to decouple from ServerGameManager
     /// </summary>
     public class MatchPhaseManager : NetworkBehaviour
     {
         [Header("Phase Settings")]
-        [SerializeField] private string currentPhase = "Phase1_Preparation";
+        [SerializeField] private MatchPhaseState initialState = MatchPhaseState.Preparation;
         [SerializeField] private float phaseStartTime;
         [SerializeField] private float phaseDuration;
 
+        // ✅ Event system - decoupled communication
+        public event Action<MatchPhaseState, string> OnPhaseStarted; // (newPhase, phaseName)
+        public event Action<MatchPhaseState, MatchPhaseState> OnPhaseTransitioned; // (oldPhase, newPhase)
+
+        // State machine
+        private StateMachine<MatchPhaseState> phaseStateMachine;
+
         // Synchronized phase state
-        private readonly SyncVar<string> networkPhase = new SyncVar<string>();
+        private readonly SyncVar<int> networkPhase = new SyncVar<int>();
         private readonly SyncVar<float> networkPhaseStartTime = new SyncVar<float>();
         private readonly SyncVar<float> networkPhaseDuration = new SyncVar<float>();
 
         private MatchPhaseConfigData currentPhaseConfig;
+        private bool isInitialized = false;
+        private bool hasStartedFirstPhase = false;
 
-        public string CurrentPhase => networkPhase.Value;
+        public MatchPhaseState CurrentPhase => phaseStateMachine?.CurrentState ?? initialState;
+        public string CurrentPhaseName => GetPhaseName(CurrentPhase);
         public float PhaseElapsedTime => Time.time - networkPhaseStartTime.Value;
         public float PhaseRemainingTime => networkPhaseDuration.Value - PhaseElapsedTime;
+
+        private void Awake()
+        {
+            InitializeStateMachine();
+        }
+
+        /// <summary>
+        /// Initialize state machine
+        /// </summary>
+        private void InitializeStateMachine()
+        {
+            phaseStateMachine = new StateMachine<MatchPhaseState>(initialState);
+
+            // Define allowed transitions
+            phaseStateMachine.AddTransition(MatchPhaseState.Preparation, MatchPhaseState.Hunt);
+            phaseStateMachine.AddTransition(MatchPhaseState.Hunt, MatchPhaseState.Lockdown);
+
+            phaseStateMachine.OnStateChanged += OnPhaseStateChanged;
+        }
 
         public override void OnStartServer()
         {
             base.OnStartServer();
+            Debug.Log("[MatchPhaseManager] Server started");
+        }
+
+        public override void OnStartNetwork()
+        {
+            base.OnStartNetwork();
             
-            // Notify server game manager of phase transitions
-            StartPhase("Phase1_Preparation");
+            if (!isInitialized)
+            {
+                networkPhase.OnChange += OnNetworkPhaseChanged;
+                isInitialized = true;
+            }
+            
+            // Sync initial phase state for clients
+            if (!IsServer && networkPhase.Value != 0)
+            {
+                MatchPhaseState currentPhase = (MatchPhaseState)networkPhase.Value;
+                if (phaseStateMachine != null)
+                {
+                    phaseStateMachine.ForceTransition(currentPhase);
+                }
+            }
+        }
+
+        public override void OnStopNetwork()
+        {
+            base.OnStopNetwork();
+            if (networkPhase != null)
+                networkPhase.OnChange -= OnNetworkPhaseChanged;
+            if (phaseStateMachine != null)
+                phaseStateMachine.OnStateChanged -= OnPhaseStateChanged;
+        }
+
+        /// <summary>
+        /// Handle phase state changes
+        /// </summary>
+        private void OnPhaseStateChanged(MatchPhaseState previousState, MatchPhaseState newState)
+        {
+            Debug.Log($"[MatchPhaseManager] Phase state changed: {previousState} -> {newState}");
+            
+            // ✅ Trigger event cho subscribers (ServerGameManager, Bootstrap, etc.)
+            OnPhaseTransitioned?.Invoke(previousState, newState);
+        }
+
+        /// <summary>
+        /// Handle network phase changes
+        /// </summary>
+        private void OnNetworkPhaseChanged(int oldPhase, int newPhase, bool asServer)
+        {
+            if (!asServer)
+            {
+                // Client: Sync phase state
+                MatchPhaseState newPhaseState = (MatchPhaseState)newPhase;
+                if (phaseStateMachine != null && phaseStateMachine.CurrentState != newPhaseState)
+                {
+                    phaseStateMachine.ForceTransition(newPhaseState);
+                }
+            }
         }
 
         /// <summary>
         /// Server: Start a specific phase (Server-authoritative)
         /// </summary>
         [Server]
-        public void StartPhase(string phaseName)
+        public void StartPhase(MatchPhaseState phase)
         {
+            // Validate server state
+            if (!IsServerStarted || !IsSpawned)
+            {
+                Debug.LogWarning($"[MatchPhaseManager] Cannot start phase {phase} - server not ready (IsServerStarted: {IsServerStarted}, IsSpawned: {IsSpawned})");
+                return;
+            }
+
+            string phaseName = GetPhaseName(phase);
             var config = GameConfigLoader.Instance?.GetMatchPhaseConfig(phaseName);
             if (config == null)
             {
@@ -52,28 +146,61 @@ namespace NightHunt.Gameplay.Match
             }
 
             currentPhaseConfig = config;
-            networkPhase.Value = phaseName;
+            
+            Debug.Log($"[MatchPhaseManager] Starting phase: {phaseName}");
+
+            // Store old phase for event
+            MatchPhaseState oldPhase = CurrentPhase;
+
+            // Update state machine BEFORE setting SyncVar
+            if (phaseStateMachine != null && phaseStateMachine.CurrentState != phase)
+            {
+                phaseStateMachine.TransitionTo(phase);
+            }
+
+            // Sync to network
+            networkPhase.Value = (int)phase;
             networkPhaseStartTime.Value = Time.time;
             
             // Random duration within min/max
-            networkPhaseDuration.Value = Random.Range(config.DurationMin, config.DurationMax) * 60f; // Convert to seconds
+            networkPhaseDuration.Value = UnityEngine.Random.Range(config.DurationMin, config.DurationMax) * 60f;
 
             Debug.Log($"[MatchPhaseManager] Started phase: {phaseName} (Duration: {networkPhaseDuration.Value}s)");
 
             // Apply phase-specific logic
-            ApplyPhaseLogic(phaseName);
+            ApplyPhaseLogic(phase);
+            
+            // Mark first phase as started
+            hasStartedFirstPhase = true;
 
-            // Notify server game manager
-            var serverGameManager = FindFirstObjectByType<ServerGameManager>();
-            if (serverGameManager != null)
+            // ✅ Trigger event - ServerGameManager sẽ subscribe và handle
+            OnPhaseStarted?.Invoke(phase, phaseName);
+        }
+
+        /// <summary>
+        /// Get phase name from state
+        /// </summary>
+        private string GetPhaseName(MatchPhaseState phase)
+        {
+            switch (phase)
             {
-                serverGameManager.OnPhaseTransition(phaseName);
+                case MatchPhaseState.Preparation:
+                    return "Phase1_Preparation";
+                case MatchPhaseState.Hunt:
+                    return "Phase2_HuntObjectives";
+                case MatchPhaseState.Lockdown:
+                    return "Phase3_FinalLockdown";
+                default:
+                    return "Phase1_Preparation";
             }
         }
 
         private void Update()
         {
-            if (!IsServer) return;
+            if (!IsServerStarted) return;
+            
+            // Only check transition if first phase has started
+            if (!hasStartedFirstPhase) return;
 
             // Check if phase should transition
             if (PhaseElapsedTime >= networkPhaseDuration.Value)
@@ -88,55 +215,51 @@ namespace NightHunt.Gameplay.Match
         [Server]
         private void TransitionToNextPhase()
         {
-            string nextPhase = GetNextPhase(networkPhase.Value);
+            MatchPhaseState nextPhase = GetNextPhase(CurrentPhase);
+            
+            // Avoid transition when already in final phase
+            if (CurrentPhase == MatchPhaseState.Lockdown)
+            {
+                Debug.Log("[MatchPhaseManager] Already in final phase (Lockdown)");
+                return;
+            }
+            
+            Debug.Log($"[MatchPhaseManager] Auto-transitioning from {CurrentPhase} to {nextPhase}");
             StartPhase(nextPhase);
         }
 
         /// <summary>
         /// Get next phase based on current phase
         /// </summary>
-        private string GetNextPhase(string current)
+        private MatchPhaseState GetNextPhase(MatchPhaseState current)
         {
             switch (current)
             {
-                case "Phase1_Preparation":
-                    return "Phase2_HuntObjectives";
-                case "Phase2_HuntObjectives":
-                    return "Phase3_FinalLockdown";
-                case "Phase3_FinalLockdown":
-                    return "Phase3_FinalLockdown"; // Stay in Phase 3 until match ends
+                case MatchPhaseState.Preparation:
+                    return MatchPhaseState.Hunt;
+                case MatchPhaseState.Hunt:
+                    return MatchPhaseState.Lockdown;
+                case MatchPhaseState.Lockdown:
+                    return MatchPhaseState.Lockdown; // Final phase
                 default:
-                    return "Phase1_Preparation";
+                    return MatchPhaseState.Preparation;
             }
-        }
-
-        public override void OnStartNetwork()
-        {
-            base.OnStartNetwork();
-            networkPhase.OnChange += OnPhaseChanged;
-        }
-
-        public override void OnStopNetwork()
-        {
-            base.OnStopNetwork();
-            if (networkPhase != null)
-                networkPhase.OnChange -= OnPhaseChanged;
         }
 
         /// <summary>
         /// Apply phase-specific logic
         /// </summary>
-        private void ApplyPhaseLogic(string phaseName)
+        private void ApplyPhaseLogic(MatchPhaseState phase)
         {
-            switch (phaseName)
+            switch (phase)
             {
-                case "Phase1_Preparation":
+                case MatchPhaseState.Preparation:
                     OnPhase1Start();
                     break;
-                case "Phase2_HuntObjectives":
+                case MatchPhaseState.Hunt:
                     OnPhase2Start();
                     break;
-                case "Phase3_FinalLockdown":
+                case MatchPhaseState.Lockdown:
                     OnPhase3Start();
                     break;
             }
@@ -197,31 +320,13 @@ namespace NightHunt.Gameplay.Match
             return currentPhaseConfig?.SurvivalMultiplier ?? 1f;
         }
 
-        private void OnPhaseChanged(string oldPhase, string newPhase, bool asServer)
-        {
-            Debug.Log($"[MatchPhaseManager] Phase changed: {oldPhase} -> {newPhase}");
-            
-            // Notify clients of phase change
-            if (!asServer)
-            {
-                // Client-side phase change handling
-                OnClientPhaseChanged(newPhase);
-            }
-        }
-
-        private void OnClientPhaseChanged(string phase)
-        {
-            // Update UI, play sounds, etc.
-            Debug.Log($"[MatchPhaseManager] Client: Phase changed to {phase}");
-        }
-
         /// <summary>
         /// Get phase config (client-safe)
         /// </summary>
         public MatchPhaseConfigData GetCurrentPhaseConfig()
         {
-            return GameConfigLoader.Instance?.GetMatchPhaseConfig(networkPhase.Value);
+            string phaseName = GetPhaseName((MatchPhaseState)networkPhase.Value);
+            return GameConfigLoader.Instance?.GetMatchPhaseConfig(phaseName);
         }
     }
 }
-

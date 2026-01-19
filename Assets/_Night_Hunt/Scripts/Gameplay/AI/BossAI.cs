@@ -76,6 +76,11 @@ namespace NightHunt.Gameplay.AI
             currentState = AIState.Patrol;
         }
 
+        /// <summary>
+        /// Event fired when boss is defeated
+        /// </summary>
+        public System.Action OnBossDefeated;
+
         private void Update()
         {
             if (!IsServer) return;
@@ -271,6 +276,9 @@ namespace NightHunt.Gameplay.AI
         /// </summary>
         private void OnDeath()
         {
+            // Fire event
+            OnBossDefeated?.Invoke();
+
             // Award score to killer
             // This would be handled by scoring system
 

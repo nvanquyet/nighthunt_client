@@ -40,8 +40,20 @@ namespace NightHunt.Gameplay.Items
                 return false;
 
             // Check if item exists in inventory
-            if (inventorySystem == null || !inventorySystem.GetItems().Exists(i => i.ItemId == itemId))
+            if (inventorySystem == null)
                 return false;
+            
+            var items = inventorySystem.GetItems();
+            bool itemExists = false;
+            foreach (var slot in items)
+            {
+                if (slot != null && !slot.IsEmpty && slot.Item != null && slot.Item.ItemId == itemId)
+                {
+                    itemExists = true;
+                    break;
+                }
+            }
+            if (!itemExists) return false;
 
             // Use based on item type
             bool used = false;

@@ -25,12 +25,32 @@ namespace NightHunt.Gameplay.PredatorPrey
         private Dictionary<int, bool> teamRoles = new Dictionary<int, bool>(); // TeamId -> IsPredator
 
         private ScoringSystem scoringSystem;
+        private ScoreTracker scoreTracker;
+        private RevealSystem revealSystem;
+        private RadarPingSystem radarPingSystem;
         private float lastUpdateTime;
 
         public override void OnStartServer()
         {
             base.OnStartServer();
             scoringSystem = FindObjectOfType<ScoringSystem>();
+            if (scoringSystem != null)
+            {
+                scoreTracker = new ScoreTracker(scoringSystem);
+            }
+
+            // Initialize reveal and radar systems
+            revealSystem = GetComponent<RevealSystem>();
+            if (revealSystem == null)
+            {
+                revealSystem = gameObject.AddComponent<RevealSystem>();
+            }
+
+            radarPingSystem = GetComponent<RadarPingSystem>();
+            if (radarPingSystem == null)
+            {
+                radarPingSystem = gameObject.AddComponent<RadarPingSystem>();
+            }
         }
 
         private void Update()
@@ -53,8 +73,16 @@ namespace NightHunt.Gameplay.PredatorPrey
         {
             if (scoringSystem == null) return;
 
-            // Get leading team
-            int newLeadingTeam = scoringSystem.GetLeadingTeam();
+            // Get leading team using ScoreTracker
+            int newLeadingTeam = -1;
+            if (scoreTracker != null)
+            {
+                newLeadingTeam = scoreTracker.GetLeadingTeam();
+            }
+            else if (scoringSystem != null)
+            {
+                newLeadingTeam = scoringSystem.GetLeadingTeam();
+            }
             
             if (newLeadingTeam != leadingTeamId.Value)
             {
@@ -95,13 +123,15 @@ namespace NightHunt.Gameplay.PredatorPrey
             // Remove old role effects
             RemoveRoleEffects(characterStats, characterMovement, visionSystem);
 
-            // Apply new role effects
+            // Apply new role effects using RoleBuffSystem
             if (isPredator)
             {
+                RoleBuffSystem.ApplyPredatorBuffs(characterStats);
                 ApplyPredatorEffects(characterStats, characterMovement, visionSystem);
             }
             else
             {
+                RoleBuffSystem.ApplyPreyBuffs(characterStats);
                 ApplyPreyEffects(characterStats, characterMovement, visionSystem);
             }
         }
@@ -167,6 +197,11 @@ namespace NightHunt.Gameplay.PredatorPrey
         /// </summary>
         private void RemoveRoleEffects(CharacterStats stats, CharacterMovement movement, Vision.VisionSystem vision)
         {
+            if (stats != null)
+            {
+                RoleBuffSystem.RemoveRoleBuffs(stats);
+            }
+
             if (movement != null)
             {
                 movement.SetStaminaDrainMultiplier(1f); // Reset
