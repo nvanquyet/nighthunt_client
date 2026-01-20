@@ -16,14 +16,14 @@ namespace NightHunt.Gameplay.AI
         [SerializeField] protected float moveSpeed = 3f;
 
         protected CharacterStats characterStats;
-        protected CharacterMovement characterMovement;
+        protected CharacterPredictedMovement CharacterPredictedMovement;
         protected CharacterCombat characterCombat;
         protected List<NetworkPlayer> detectedPlayers = new List<NetworkPlayer>();
 
         protected virtual void Awake()
         {
             characterStats = GetComponent<CharacterStats>();
-            characterMovement = GetComponent<CharacterMovement>();
+            CharacterPredictedMovement = GetComponent<CharacterPredictedMovement>();
             characterCombat = GetComponent<CharacterCombat>();
         }
 
@@ -61,10 +61,10 @@ namespace NightHunt.Gameplay.AI
         /// </summary>
         protected virtual void MoveTowards(Vector3 target)
         {
-            if (characterMovement == null) return;
+            if (CharacterPredictedMovement == null) return;
 
             Vector3 direction = (target - transform.position).normalized;
-            characterMovement.SetMoveInput(new Vector2(direction.x, direction.z));
+            CharacterPredictedMovement.SetMoveInput(new Vector2(direction.x, direction.z));
         }
 
         /// <summary>

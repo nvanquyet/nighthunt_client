@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Networking;
+using NightHunt.Gameplay.Character;
 
 namespace NightHunt.Gameplay.Input
 {
@@ -48,6 +49,7 @@ namespace NightHunt.Gameplay.Input
         private UnityEngine.Camera playerCamera;
 
         private NetworkPlayer networkPlayer;
+        private CharacterPredictedMovement _predictedMovement;
         private bool inputEnabled = false;
 
         private void Awake()
@@ -246,10 +248,45 @@ namespace NightHunt.Gameplay.Input
             // Update aim direction based on mouse position (for top-down)
             UpdateAimDirection();
 
-            // Store input for prediction
+            // Store input for prediction (legacy system)
             if (inputPrediction != null)
             {
                 inputPrediction.AddCommand(moveInput, isSprinting, isCrouching, isAttacking, aimDirection);
+            }
+
+            // Submit input to CharacterMovementPredicted (which uses PredictedMovement package)
+            if (_predictedMovement == null && networkPlayer != null)
+            {
+                _predictedMovement = networkPlayer.GetComponent<CharacterPredictedMovement>();
+                if (_predictedMovement == null)
+                {
+                    Debug.LogWarning($"[PlayerInputHandler] CharacterMovementPredicted component not found on NetworkPlayer!");
+                }
+            }
+
+            if (_predictedMovement != null)
+            {
+                // Debug log để verify movement component và state
+                if (moveInput.sqrMagnitude > 0.0001f)
+                {
+                    Debug.Log($"[PlayerInputHandler] Input: move={moveInput} sprint={isSprinting} crouch={isCrouching} IsSpawned={_predictedMovement.IsSpawned} IsOwner={_predictedMovement.IsOwner}");
+                }
+                
+                if (_predictedMovement.IsSpawned && _predictedMovement.IsOwner)
+                {
+                    // Use SetMoveInput/SetSprinting/SetCrouching API (CharacterMovement will handle SubmitInput internally)
+                    _predictedMovement.SetMoveInput(moveInput);
+                    _predictedMovement.SetSprinting(isSprinting);
+                    _predictedMovement.SetCrouching(isCrouching);
+                }
+                else
+                {
+                    // Debug log nếu không thể submit
+                    if (moveInput.sqrMagnitude > 0.0001f)
+                    {
+                        Debug.LogWarning($"[PlayerInputHandler] Cannot submit input: IsSpawned={_predictedMovement.IsSpawned} IsOwner={_predictedMovement.IsOwner}");
+                    }
+                }
             }
         }
 

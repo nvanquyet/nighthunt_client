@@ -29,7 +29,7 @@ namespace NightHunt.Gameplay.Character
         private readonly SyncVar<float> stateStartTime = new SyncVar<float>();
 
         private CharacterStats characterStats;
-        private CharacterMovement characterMovement;
+        private CharacterPredictedMovement _characterPredictedMovement;
         private CharacterCombat characterCombat;
         private NetworkPlayer networkPlayer;
         private NetworkPlayer revivingPlayer;
@@ -52,7 +52,7 @@ namespace NightHunt.Gameplay.Character
         {
             base.OnStartNetwork();
             characterStats = GetComponent<CharacterStats>();
-            characterMovement = GetComponent<CharacterMovement>();
+            _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
             characterCombat = GetComponent<CharacterCombat>();
             networkPlayer = GetComponent<NetworkPlayer>();
             
@@ -135,9 +135,9 @@ namespace NightHunt.Gameplay.Character
         private void OnDowned()
         {
             // Disable movement and combat
-            if (characterMovement != null)
+            if (_characterPredictedMovement != null)
             {
-                characterMovement.SetMoveInput(Vector2.zero);
+                _characterPredictedMovement.SetMoveInput(Vector2.zero);
             }
 
             if (characterCombat != null)
@@ -269,7 +269,7 @@ namespace NightHunt.Gameplay.Character
         /// Server: Respawn at position
         /// </summary>
         [Server]
-        public void RespawnAtPosition(Vector3 position)
+        private void RespawnAtPosition(Vector3 position)
         {
             transform.position = position;
             

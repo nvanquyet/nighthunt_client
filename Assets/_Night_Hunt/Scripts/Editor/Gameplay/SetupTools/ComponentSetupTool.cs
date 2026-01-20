@@ -58,9 +58,9 @@ namespace NightHunt.Editor.Gameplay.SetupTools
                 obj.AddComponent<CharacterStats>();
             }
 
-            if (obj.GetComponent<CharacterMovement>() == null)
+            if (obj.GetComponent<CharacterPredictedMovement>() == null)
             {
-                obj.AddComponent<CharacterMovement>();
+                obj.AddComponent<CharacterPredictedMovement>();
             }
 
             if (obj.GetComponent<CharacterCombat>() == null)

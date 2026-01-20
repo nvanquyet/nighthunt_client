@@ -5,34 +5,26 @@ using UnityEngine;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Character;
 using Unity.Cinemachine;
+using UnityEngine.Serialization;
 
 namespace NightHunt.Networking
 {
     /// <summary>
-    /// Network Player Object - Handles ONLY networking concerns
+    /// Network Player Object - Simplified for FishNet Prediction
     /// 
-    /// FLOW WITH NETWORKTRANSFORM (Server Auth, Send To Owner OFF):
-    /// 1. Client Owner: Predict movement → Send input to server
-    /// 2. Server: Execute movement (authoritative) → NetworkTransform syncs to ALL clients
-    /// 3. Client Owner: Reconcile with server state from NetworkTransform
-    /// 4. Remote Clients: Apply server state from NetworkTransform
-    /// 
-    /// NetworkTransform Config:
-    /// - Synchronize: To Observers
-    /// - Server Authoritative: ON
-    /// - Send To Owner: OFF (important for prediction!)
+    /// With PredictedObject + NetworkTransform:
+    /// - NO manual ServerRpc for movement input
+    /// - PredictedObject handles Replicate/Reconcile automatically
+    /// - NetworkTransform syncs to remote clients
+    /// - We only handle camera, input enabling, and game events
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
         [Header("Player References")]
-        [SerializeField] private CharacterController characterController;
         [SerializeField] private PlayerInputHandler inputHandler;
-        [SerializeField] private CharacterMovement movement;
+        [FormerlySerializedAs("movement")] [SerializeField] private CharacterPredictedMovement predictedMovement;
         [SerializeField] private CharacterCombat combat;
         [SerializeField] private CinemachineCamera playerCamera;
-
-        [Header("Network Settings")]
-        [SerializeField] private float sendRate = 20f; // 20 inputs per second
 
         // Synchronized variables
         private readonly SyncVar<string> playerName = new SyncVar<string>();
@@ -51,11 +43,8 @@ namespace NightHunt.Networking
             base.OnStartNetwork();
 
             // Initialize components
-            if (characterController == null)
-                characterController = GetComponent<CharacterController>();
-
-            if (movement == null)
-                movement = GetComponent<CharacterMovement>();
+            if (predictedMovement == null)
+                predictedMovement = GetComponent<CharacterPredictedMovement>();
 
             if (combat == null)
                 combat = GetComponent<CharacterCombat>();
@@ -92,7 +81,7 @@ namespace NightHunt.Networking
         {
             base.OnStartServer();
             
-            // Server instance: Disable camera (only client owner uses camera)
+            // Server instance: Disable camera
             if (playerCamera != null && playerCamera.gameObject != null)
             {
                 playerCamera.gameObject.SetActive(false);
@@ -106,7 +95,7 @@ namespace NightHunt.Networking
         {
             base.OnStopNetwork();
             
-            // Unsubscribe from sync vars
+            // Unsubscribe
             if (playerName != null)
                 playerName.OnChange -= OnPlayerNameChanged;
             if (teamId != null)
@@ -117,7 +106,6 @@ namespace NightHunt.Networking
         {
             base.OnOwnershipClient(prevOwner);
             
-            // Update camera and input when ownership changes
             SetupCameraForOwnership();
             SetupInputForOwnership();
         }
@@ -130,7 +118,7 @@ namespace NightHunt.Networking
         {
             if (playerCamera == null) return;
 
-            // Only enable camera for client owner (not server instance)
+            // Only enable camera for client owner
             if (IsOwner && !IsServerInitialized)
             {
                 if (playerCamera.gameObject != null)
@@ -152,9 +140,6 @@ namespace NightHunt.Networking
                 {
                     playerCamera.gameObject.SetActive(false);
                     playerCamera.enabled = false;
-                    
-                    string reason = IsServerInitialized ? "server instance" : "remote client";
-                    Debug.Log($"[NetworkPlayer] Camera disabled for {reason}: {playerName.Value}");
                 }
             }
         }
@@ -176,26 +161,19 @@ namespace NightHunt.Networking
             else
             {
                 inputHandler.DisableInput();
-                Debug.Log($"[NetworkPlayer] Input disabled for non-owner: {playerName.Value}");
             }
         }
 
         #endregion
 
-        #region Data Sync (Server-side setters)
+        #region Data Sync
 
-        /// <summary>
-        /// Server: Set player name
-        /// </summary>
         [Server]
         public void SetPlayerName(string name)
         {
             playerName.Value = name;
         }
 
-        /// <summary>
-        /// Server: Set team ID
-        /// </summary>
         [Server]
         public void SetTeamId(int team)
         {
@@ -205,58 +183,26 @@ namespace NightHunt.Networking
 
         #endregion
 
-        #region Input Transmission (Client → Server)
+        #region Combat Input (still needs ServerRpc if not using PredictedObject)
 
+        // ✅ If combat also uses prediction, remove this
+        // ❌ If combat is separate, keep ServerRpc
         private void Update()
         {
-            if (!IsSpawned) return;
+            if (!IsSpawned || !IsOwner || IsServerInitialized) return;
 
-            // ✅ CHỈ CLIENT OWNER gửi input đến server
-            if (IsOwner && !IsServerInitialized)
-            {
-                // Send input at fixed rate (20Hz)
-                if (Time.frameCount % Mathf.RoundToInt(60f / sendRate) == 0)
-                {
-                    SendInputToServer();
-                }
-            }
-        }
-
-        private void SendInputToServer()
-        {
-            if (inputHandler == null || !IsSpawned || !IsOwner)
-                return;
-
-            Vector2 moveInput = inputHandler.GetMoveInput();
-            bool isSprinting = inputHandler.IsSprinting();
-            bool isCrouching = inputHandler.IsCrouching();
-            
-            // ✅ Gửi input lên server (RunLocally = false)
-            ServerReceiveMovementInput(moveInput, isSprinting, isCrouching);
-            
-            if (combat != null)
+            // Send combat input to server
+            if (combat != null && inputHandler != null)
             {
                 Vector3 aimDirection = inputHandler.GetAimDirection();
                 bool isAttacking = inputHandler.IsAttacking();
                 bool isReloading = inputHandler.IsReloading();
-                ServerReceiveCombatInput(aimDirection, isAttacking, isReloading);
+                
+                if (isAttacking || isReloading || aimDirection != Vector3.zero)
+                {
+                    ServerReceiveCombatInput(aimDirection, isAttacking, isReloading);
+                }
             }
-        }
-
-        /// <summary>
-        /// ✅ SERVER: Nhận input từ client
-        /// RunLocally = false → CHỈ chạy trên server
-        /// Server sẽ execute movement trong CharacterMovement.Update()
-        /// </summary>
-        [ServerRpc(RequireOwnership = true, RunLocally = false)]
-        private void ServerReceiveMovementInput(Vector2 moveInput, bool isSprinting, bool isCrouching)
-        {
-            if (!IsSpawned || movement == null) return;
-            
-            // ✅ Chỉ SET input, movement logic sẽ execute trong Update()
-            movement.SetMoveInput(moveInput);
-            movement.SetSprinting(isSprinting);
-            movement.SetCrouching(isCrouching);
         }
 
         [ServerRpc(RequireOwnership = true, RunLocally = false)]
@@ -273,9 +219,6 @@ namespace NightHunt.Networking
 
         #region Game Events
 
-        /// <summary>
-        /// Called when player dies
-        /// </summary>
         public void OnDeath()
         {
             Debug.Log($"[NetworkPlayer] Player {playerName.Value} died");
@@ -290,9 +233,6 @@ namespace NightHunt.Networking
             }
         }
 
-        /// <summary>
-        /// Server: Respawn player at position
-        /// </summary>
         [Server]
         public void RespawnAtPosition(Vector3 spawnPosition)
         {
