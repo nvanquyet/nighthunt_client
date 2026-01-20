@@ -48,7 +48,7 @@ namespace NightHunt.UI
         private NetworkPlayer localPlayer;
         private CharacterStats characterStats;
         private CharacterCombat characterCombat;
-        private CharacterMovement characterMovement;
+        private CharacterPredictedMovement _characterPredictedMovement;
         private Gameplay.Inventory.InventorySystem inventorySystem;
 
         private void Start()
@@ -85,7 +85,7 @@ namespace NightHunt.UI
                     localPlayer = player;
                     characterStats = player.GetComponent<CharacterStats>();
                     characterCombat = player.GetComponent<CharacterCombat>();
-                    characterMovement = player.GetComponent<CharacterMovement>();
+                    _characterPredictedMovement = player.GetComponent<CharacterPredictedMovement>();
                     inventorySystem = player.GetComponent<Gameplay.Inventory.InventorySystem>();
                     break;
                 }

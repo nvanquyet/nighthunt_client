@@ -21,7 +21,7 @@ namespace NightHunt.Gameplay.Character
 
         private WeaponConfigData currentWeapon;
         private CharacterStats characterStats;
-        private CharacterMovement characterMovement;
+        private CharacterPredictedMovement _characterPredictedMovement;
 
         // Weapon state
         private int currentAmmo;
@@ -37,7 +37,7 @@ namespace NightHunt.Gameplay.Character
         private void Awake()
         {
             characterStats = GetComponent<CharacterStats>();
-            characterMovement = GetComponent<CharacterMovement>();
+            _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
 
             if (firePoint == null)
             {
@@ -144,7 +144,7 @@ namespace NightHunt.Gameplay.Character
 
             // Calculate spread
             float spread = currentSpread;
-            if (characterMovement != null && characterMovement.GetCurrentMoveSpeed() > 0.1f)
+            if (_characterPredictedMovement != null && _characterPredictedMovement.GetCurrentMoveSpeed() > 0.1f)
             {
                 spread *= currentWeapon.SpreadMoveMul;
             }

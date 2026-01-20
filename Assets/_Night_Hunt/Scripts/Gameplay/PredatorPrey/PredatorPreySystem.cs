@@ -115,7 +115,7 @@ namespace NightHunt.Gameplay.PredatorPrey
         private void ApplyRoleToPlayer(NetworkPlayer player, bool isPredator)
         {
             var characterStats = player.GetComponent<CharacterStats>();
-            var characterMovement = player.GetComponent<CharacterMovement>();
+            var characterMovement = player.GetComponent<CharacterPredictedMovement>();
             var visionSystem = player.GetComponent<Vision.VisionSystem>();
 
             if (characterStats == null) return;
@@ -142,12 +142,12 @@ namespace NightHunt.Gameplay.PredatorPrey
         /// - Slower stamina regen
         /// - Louder footsteps
         /// </summary>
-        private void ApplyPredatorEffects(CharacterStats stats, CharacterMovement movement, Vision.VisionSystem vision)
+        private void ApplyPredatorEffects(CharacterStats stats, CharacterPredictedMovement predictedMovement, Vision.VisionSystem vision)
         {
             // Slower stamina regen
-            if (movement != null)
+            if (predictedMovement != null)
             {
-                movement.SetStaminaDrainMultiplier(1.2f); // 20% slower regen
+                predictedMovement.SetStaminaDrainMultiplier(1.2f); // 20% slower regen
             }
 
             // Louder footsteps (increase noise)
@@ -170,12 +170,12 @@ namespace NightHunt.Gameplay.PredatorPrey
         /// - Faster stamina regen
         /// - Quieter movement
         /// </summary>
-        private void ApplyPreyEffects(CharacterStats stats, CharacterMovement movement, Vision.VisionSystem vision)
+        private void ApplyPreyEffects(CharacterStats stats, CharacterPredictedMovement predictedMovement, Vision.VisionSystem vision)
         {
             // Faster stamina regen
-            if (movement != null)
+            if (predictedMovement != null)
             {
-                movement.SetStaminaDrainMultiplier(0.8f); // 20% faster regen
+                predictedMovement.SetStaminaDrainMultiplier(0.8f); // 20% faster regen
             }
 
             // Quieter movement (reduce noise)
@@ -195,16 +195,16 @@ namespace NightHunt.Gameplay.PredatorPrey
         /// <summary>
         /// Remove role effects
         /// </summary>
-        private void RemoveRoleEffects(CharacterStats stats, CharacterMovement movement, Vision.VisionSystem vision)
+        private void RemoveRoleEffects(CharacterStats stats, CharacterPredictedMovement predictedMovement, Vision.VisionSystem vision)
         {
             if (stats != null)
             {
                 RoleBuffSystem.RemoveRoleBuffs(stats);
             }
 
-            if (movement != null)
+            if (predictedMovement != null)
             {
-                movement.SetStaminaDrainMultiplier(1f); // Reset
+                predictedMovement.SetStaminaDrainMultiplier(1f); // Reset
             }
 
             if (stats != null)

@@ -16,14 +16,14 @@ namespace NightHunt.Gameplay.Items
         [SerializeField] private float useCooldown = 0.5f;
 
         private CharacterStats characterStats;
-        private CharacterMovement characterMovement;
+        private CharacterPredictedMovement _characterPredictedMovement;
         private InventorySystem inventorySystem;
         private float lastUseTime;
 
         private void Awake()
         {
             characterStats = GetComponent<CharacterStats>();
-            characterMovement = GetComponent<CharacterMovement>();
+            _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
             inventorySystem = GetComponent<InventorySystem>();
         }
 
@@ -97,7 +97,7 @@ namespace NightHunt.Gameplay.Items
                     break;
 
                 case "HealStamina":
-                    if (characterMovement != null)
+                    if (_characterPredictedMovement != null)
                     {
                         // Would need to add heal stamina method
                         return true;
@@ -180,7 +180,7 @@ namespace NightHunt.Gameplay.Items
         private bool ShouldInterruptChannel()
         {
             // Interrupt if moving
-            if (characterMovement != null && characterMovement.GetCurrentMoveSpeed() > 0.1f)
+            if (_characterPredictedMovement != null && _characterPredictedMovement.GetCurrentMoveSpeed() > 0.1f)
             {
                 return true;
             }
