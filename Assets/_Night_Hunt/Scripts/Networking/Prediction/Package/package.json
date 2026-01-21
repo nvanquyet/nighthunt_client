@@ -1,0 +1,20 @@
+{
+  "name": "com.nighthunt.prediction",
+  "displayName": "NightHunt Prediction",
+  "version": "0.1.0",
+  "unity": "2021.3",
+  "description": "Client-side prediction helpers for FishNet (movement, attack, interaction) with SOLID-oriented architecture.",
+  "keywords": [
+    "fishnet",
+    "prediction",
+    "networking"
+  ],
+  "author": {
+    "name": "NightHunt",
+    "email": "dev@nighthunt.local"
+  },
+  "dependencies": {
+    "com.firstgeargames.fishnet": "4.0.0"
+  }
+}
+
