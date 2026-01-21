@@ -11,67 +11,29 @@ using MovementState = NightHunt.Gameplay.Character.Movement.MovementState;
 namespace NightHunt.Gameplay.Character
 {
     /// <summary>
-    /// Game-specific character movement với FishNet CSP (Client-Side Prediction).
-    /// 
-    /// ARCHITECTURE:
-    /// - Kế thừa từ FishNetPredictedBehaviour<MovementReplicateData, MovementReconcileData>
-    /// - Implement đầy đủ CSP pattern: Replicate → Reconcile → Replay
-    /// - CharacterController-based movement
-    /// - INPUT BUFFERING: Giải quyết timing issue giữa Unity Update và FishNet Tick
-    /// 
-    /// RESPONSIBILITIES:
-    /// 1. Input handling: SetMoveInput/SetSprinting/SetCrouching (buffered)
-    /// 2. Movement simulation: Speed calculation, stamina, weight penalty
-    /// 3. Network prediction: Client-side prediction + server reconciliation
-    /// 4. Future prediction: Smooth movement cho spectators
-    /// 5. Integration: CharacterStats, MovementSettings, NetworkPlayer
-    /// 
-    /// CSP FLOW:
-    /// 1. Owner: Input (Update) → Buffer → BuildMoveData (Tick) → PerformReplicate → SimulateMovement
-    /// 2. Server: Receive replicate → SimulateMovement → CreateReconcile → Send to client
-    /// 3. Client: Receive reconcile → Check mismatch → Replay if needed
-    /// 4. Spectator: Predict future ticks using last known input
+    /// ✅ FIXED: Smooth movement giống FishNet example
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class CharacterPredictedMovement : FishNetPredictedBehaviour<MovementReplicateData, MovementReconcileData>
     {
-        [Header("Settings")] [SerializeField] private MovementSettings movementSettings;
+        [Header("Settings")] 
+        [SerializeField] private MovementSettings movementSettings;
 
-        [Header("Debug")] [SerializeField] private bool enableDebugLogs = false;
+        [Header("Debug")] 
+        [SerializeField] private bool enableDebugLogs = false;
         
-        private uint _lastMovedTick;
-        
-        // References
         private CharacterController _characterController;
         private CharacterStats _characterStats;
         private NetworkPlayer _networkPlayer;
         private CinemachineCamera _playerCamera;
 
-        // ========== INPUT BUFFERING SYSTEM ==========
-        /// <summary>
-        /// Input buffer để giải quyết timing issue giữa Unity Update và FishNet Tick.
-        /// 
-        /// PROBLEM:
-        /// - PlayerInputHandler.Update() chạy mỗi frame (~60 FPS)
-        /// - TimeManager_OnTick() chạy mỗi tick (~30 Hz)
-        /// - Nếu Update chạy SAU Tick trong cùng 1 frame → Input bị delay!
-        /// 
-        /// SOLUTION:
-        /// - Update() ghi input vào _nextInputBuffer
-        /// - Tick() swap buffer: _currentInputBuffer = _nextInputBuffer
-        /// - BuildMoveData() đọc từ _currentInputBuffer
-        /// 
-        /// BENEFITS:
-        /// - Đảm bảo input luôn sync với tick
-        /// - Tránh input bị skip hoặc delay
-        /// - Thread-safe (Unity single-threaded nên không cần lock)
-        /// </summary>
+        // INPUT BUFFERING
         private struct InputBuffer
         {
             public Vector2 MoveInput;
             public bool SprintHeld;
             public bool CrouchHeld;
-            public uint LastUpdateFrame; // Track frame number để detect updates
+            public uint LastUpdateFrame;
 
             public void Reset()
             {
@@ -82,10 +44,10 @@ namespace NightHunt.Gameplay.Character
             }
         }
 
-        private InputBuffer _currentInputBuffer; // Input được dùng trong tick hiện tại
-        private InputBuffer _nextInputBuffer; // Input mới nhất từ Update()
+        private InputBuffer _currentInputBuffer;
+        private InputBuffer _nextInputBuffer;
 
-        // State tracking
+        // State
         private float _currentStamina;
         private float _currentMoveSpeed;
         private Vector3 _velocity;
@@ -93,10 +55,8 @@ namespace NightHunt.Gameplay.Character
         private float _weightPenalty;
         private float _staminaDrainMultiplier = 1f;
 
-        // Client-side prediction cache
+        // ✅ CLIENT PREDICTION cache
         private MovementReplicateData _lastTickedReplicateData;
-
-        // ========== UNITY LIFECYCLE ==========
 
         private void Awake()
         {
@@ -110,8 +70,7 @@ namespace NightHunt.Gameplay.Character
         {
             if (movementSettings == null)
             {
-                Debug.LogError($"[CharacterPredictedMovement] MovementSettings is NULL! Please assign in Inspector.",
-                    this);
+                Debug.LogError($"[CharacterPredictedMovement] MovementSettings is NULL!", this);
                 movementSettings = CreateFallbackSettings();
             }
 
@@ -122,74 +81,53 @@ namespace NightHunt.Gameplay.Character
         {
             base.OnStartNetwork();
 
-            // Init state
             _currentStamina = movementSettings.maxStamina;
             _verticalVelocity = 0f;
-
-            // Reset input buffers
             _currentInputBuffer.Reset();
             _nextInputBuffer.Reset();
 
+            float tickRate = 1f / (float)TimeManager.TickDelta;
             if (enableDebugLogs)
             {
-                Debug.Log(
-                    $"[CharacterPredictedMovement] OnStartNetwork: IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}, " +
-                    $"OwnerId={OwnerId}, Position={transform.position}");
+                Debug.Log($"[Movement] OnStartNetwork: IsOwner={base.Owner.IsLocalClient}, " +
+                         $"IsServer={IsServerStarted}, TickRate={tickRate:F1} Hz");
             }
         }
 
         private void LateUpdate()
         {
-            // Sync stamina to CharacterStats (chỉ owner)
             if (_characterStats != null && IsOwner)
             {
                 _characterStats.SetStamina(_currentStamina);
             }
         }
 
-        // ========== FISHNET CSP IMPLEMENTATION ==========
+        // ========== FISHNET CSP ==========
 
         protected override void TimeManager_OnTick()
         {
-            // ✅ SWAP INPUT BUFFER
-            // Dùng input từ frame trước để tránh timing issue
+            // Update input buffer
             if (_nextInputBuffer.LastUpdateFrame > _currentInputBuffer.LastUpdateFrame)
             {
                 _currentInputBuffer = _nextInputBuffer;
-
-                if (enableDebugLogs && _currentInputBuffer.MoveInput.sqrMagnitude > 0.0001f)
-                {
-                    Debug.Log($"[Tick] Swapped input buffer: Frame={Time.frameCount}, Tick={TimeManager.LocalTick}, " +
-                              $"Input={_currentInputBuffer.MoveInput}, Sprint={_currentInputBuffer.SprintHeld}");
-                }
             }
 
-            // ✅ BUILD & SEND REPLICATE DATA
             MovementReplicateData replicateData = BuildMoveData();
             PerformReplicate(replicateData, ReplicateState.Invalid, Channel.Unreliable);
-
-            // ✅ CREATE & SEND RECONCILE DATA
             CreateReconcile();
         }
 
-        /// <summary>
-        /// Build replicate data từ buffered input.
-        /// Chỉ owner build, non-owner return default (sẽ nhận qua network).
-        /// </summary>
         private MovementReplicateData BuildMoveData()
         {
-            // Non-owner return default (server sẽ gửi data qua network)
             if (!IsOwner)
                 return default;
 
-            // Get camera rotation
             float cameraYaw = transform.eulerAngles.y;
             if (_playerCamera != null)
             {
                 cameraYaw = _playerCamera.transform.eulerAngles.y;
             }
 
-            // ✅ USE BUFFERED INPUT
             return new MovementReplicateData(
                 _currentInputBuffer.MoveInput,
                 Quaternion.Euler(0f, cameraYaw, 0f),
@@ -199,50 +137,44 @@ namespace NightHunt.Gameplay.Character
         }
 
         [Replicate]
-        private void PerformReplicate(MovementReplicateData data, ReplicateState state,
-            Channel channel = Channel.Unreliable)
+        private void PerformReplicate(MovementReplicateData data, ReplicateState state, Channel channel = Channel.Unreliable)
         {
-            bool asServer = IsServerStarted;
-            bool replaying = IsReplaying(state);
+            float delta = TickDelta;
+            bool useDefaultForces = false;
 
-            if (enableDebugLogs)
-            {
-                string role = asServer
-                    ? (IsOwner ? "Server+Owner" : "Server")
-                    : (IsOwner ? "Client(Owner)" : "Client(Spectator)");
-                Debug.Log($"[Replicate] Role={role}, State={state}, Tick={data.GetTick()}, " +
-                          $"Input={data.MoveInput}, Sprint={data.IsSprinting}, Pos={transform.position}");
-            }
-
-            // ✅ CLIENT-SIDE PREDICTION (cho spectators xem người khác di chuyển)
+            // ✅ CLIENT-SIDE PREDICTION (spectators watching other players)
             if (!IsServerStarted && !IsOwner)
             {
                 if (IsTicked(state) && IsCreated(state))
                 {
-                    // Cache replicate data nhận từ server
+                    // Real data from server, cache it
+                    _lastTickedReplicateData.Dispose();
                     _lastTickedReplicateData = data;
                 }
-                else if (!IsCreated(state))
+                else if (!IsCreated(state)) // Future prediction
                 {
-                    // Predict future tick using last known input
                     uint currentTick = data.GetTick();
                     uint lastKnownTick = _lastTickedReplicateData.GetTick();
 
+                    // ✅ Predict up to 2 ticks ahead
                     if (currentTick > lastKnownTick && currentTick - lastKnownTick <= 2)
                     {
-                        // Use last known input (predict max 2 ticks)
+                        data.Dispose();
                         data = _lastTickedReplicateData;
+                        
+                        // Don't predict one-time actions (jump, etc.)
+                        // data.IsSprinting = false; // Optional: don't predict sprint
                     }
                     else
                     {
-                        // Too far or no cache, use default (no movement)
-                        data = default;
+                        // Too far in future, use minimal forces
+                        useDefaultForces = true;
                     }
                 }
             }
 
-            // ✅ SIMULATE MOVEMENT
-            SimulateMovement(data, asServer, replaying);
+            // ✅ Simulate movement
+            SimulateMovement(data, useDefaultForces, delta);
         }
 
         [Reconcile]
@@ -250,65 +182,32 @@ namespace NightHunt.Gameplay.Character
         {
             if (!IsOwner) return;
 
-            float positionError = Vector3.Distance(transform.position, data.Position);
-            float rotationError = Quaternion.Angle(transform.rotation, data.Rotation);
+            // ✅ SIMPLE DIRECT SET - NO DISABLE NEEDED
+            transform.position = data.Position;
+            transform.rotation = data.Rotation;
+
+            _velocity = new Vector3(data.Velocity.x, 0f, data.Velocity.z);
+            _verticalVelocity = data.Velocity.y;
+            _currentStamina = data.Stamina;
 
             if (enableDebugLogs)
             {
-                Debug.Log(
-                    $"[Reconcile] Tick={data.GetTick()}, PosError={positionError:F3}m, RotError={rotationError:F1}°, " +
-                    $"ServerPos={data.Position}, ClientPos={transform.position}");
+                float posError = Vector3.Distance(transform.position, data.Position);
+                if (posError > 0.01f)
+                {
+                    Debug.LogWarning($"[RECONCILE] Tick={data.GetTick()}, PosError={posError:F3}m");
+                }
             }
-
-            // ✅ FIX: ALWAYS reconcile nếu có error (không dùng threshold cao)
-            if (positionError > 0.001f)
-            {
-                if (enableDebugLogs)
-                {
-                    Debug.LogWarning($"[Reconcile] APPLYING CORRECTION: Error={positionError:F3}m");
-                }
-
-                // ✅ FIX: Disable CharacterController để teleport
-                if (_characterController != null)
-                {
-                    _characterController.enabled = false;
-                    transform.position = data.Position;
-                    transform.rotation = data.Rotation;
-                    _characterController.enabled = true;
-                }
-                else
-                {
-                    transform.position = data.Position;
-                    transform.rotation = data.Rotation;
-                }
-
-                _velocity = new Vector3(data.Velocity.x, 0f, data.Velocity.z);
-                _verticalVelocity = data.Velocity.y;
-
-                // ✅ RESET last moved tick để force re-simulate
-                _lastMovedTick = 0;
-            }
-
-            // ✅ Always sync stamina
-            _currentStamina = data.Stamina;
         }
 
         public override void CreateReconcile()
         {
             MovementReconcileData data = CreateReconcileData();
-
-            if (enableDebugLogs && IsServerStarted)
-            {
-                Debug.Log($"[CreateReconcile] Server sending: Tick={TimeManager.LocalTick}, Pos={data.Position}, " +
-                          $"Vel={data.Velocity}, Stamina={data.Stamina:F1}");
-            }
-
             PerformReconcile(data, Channel.Unreliable);
         }
 
         protected override MovementReconcileData CreateReconcileData()
         {
-            // Combine horizontal velocity + vertical velocity
             Vector3 fullVelocity = new Vector3(_velocity.x, _verticalVelocity, _velocity.z);
 
             return new MovementReconcileData(
@@ -321,51 +220,41 @@ namespace NightHunt.Gameplay.Character
 
         // ========== MOVEMENT SIMULATION ==========
 
-        private void SimulateMovement(MovementReplicateData data, bool asServer, bool replaying)
+        /// <summary>
+        /// ✅ FIXED: Handle both normal and default forces
+        /// </summary>
+        private void SimulateMovement(MovementReplicateData data, bool useDefaultForces, float delta)
         {
-            float delta = TickDelta;
-            uint currentTick = data.GetTick();
-
-            // ✅ FIX 1: PREVENT DUPLICATE MOVES
-            // Nếu tick này đã được simulate rồi (do replay), SKIP!
-            // EXCEPT: Server luôn simulate (authoritative)
-            if (!asServer && currentTick == _lastMovedTick)
+            if (useDefaultForces)
             {
-                if (enableDebugLogs)
+                // ✅ Apply minimal gravity to prevent CharacterController clipping
+                // (Same as FishNet example)
+                Vector3 minimalForces = new Vector3(0f, -1f, 0f);
+                
+                if (_characterController != null)
                 {
-                    Debug.Log(
-                        $"[Simulate] SKIP duplicate: Tick={currentTick} already processed, Pos={transform.position}");
+                    _characterController.Move(minimalForces * delta);
                 }
 
+                _velocity = Vector3.zero;
+                _currentMoveSpeed = 0f;
                 return;
             }
 
-            // ✅ Mark tick as processed
-            if (!asServer)
-            {
-                _lastMovedTick = currentTick;
-            }
+            // ✅ NORMAL MOVEMENT (same as before but cleaner)
 
-            // ✅ HANDLE DEFAULT DATA
-            if (data.Equals(default(MovementReplicateData)))
-            {
-                ApplyGravityOnly(delta);
-                return;
-            }
-
-            // ✅ STAMINA REGEN
+            // Stamina regen
             _currentStamina = Mathf.Min(
                 _currentStamina + movementSettings.staminaRegenRate * delta,
                 movementSettings.maxStamina
             );
 
-            // ✅ CALCULATE SPEED (FRESH mỗi tick - KHÔNG tích lũy)
+            // Calculate speed
             float finalSpeed = movementSettings.baseSpeed;
 
             if (data.IsSprinting && CanSprint())
             {
                 finalSpeed *= movementSettings.sprintMultiplier;
-
                 float drainRate = movementSettings.staminaDrainRate * _staminaDrainMultiplier;
                 _currentStamina = Mathf.Max(0f, _currentStamina - drainRate * delta);
             }
@@ -376,27 +265,25 @@ namespace NightHunt.Gameplay.Character
 
             finalSpeed *= (1f - _weightPenalty);
 
-            // ✅ HORIZONTAL MOVEMENT
+            // Horizontal movement
             Vector3 moveDir = new Vector3(data.MoveInput.x, 0f, data.MoveInput.y);
             if (moveDir.sqrMagnitude > 1f) moveDir.Normalize();
 
             moveDir = data.Rotation * moveDir;
             Vector3 horizontalVelocity = moveDir * finalSpeed;
 
-            // ✅ VERTICAL MOVEMENT
+            // Vertical movement (gravity)
             _verticalVelocity += Physics.gravity.y * delta * 3f;
             _verticalVelocity = Mathf.Max(_verticalVelocity, -40f);
 
-            // ✅ COMBINE
+            // Combine
             Vector3 totalMovement = new Vector3(
                 horizontalVelocity.x,
                 _verticalVelocity,
                 horizontalVelocity.z
             );
 
-            // ✅ APPLY MOVEMENT (CHỈ 1 LẦN PER TICK)
-            Vector3 positionBefore = transform.position;
-
+            // Apply movement
             if (_characterController != null)
             {
                 _characterController.Move(totalMovement * delta);
@@ -406,45 +293,16 @@ namespace NightHunt.Gameplay.Character
                 transform.position += totalMovement * delta;
             }
 
-            Vector3 positionAfter = transform.position;
-            Vector3 actualMovement = positionAfter - positionBefore;
-
-            // ✅ UPDATE ROTATION
+            // Update rotation
             if (moveDir.sqrMagnitude > 0.0001f)
             {
                 transform.rotation = data.Rotation;
             }
 
-            // ✅ TRACK STATE
+            // Track state
             _velocity = horizontalVelocity;
             _currentMoveSpeed = horizontalVelocity.magnitude;
-
-            if (enableDebugLogs && data.MoveInput.sqrMagnitude > 0.0001f)
-            {
-                string role = asServer ? "Server" : (IsOwner ? "Client(Owner)" : "Client(Spectator)");
-                Debug.Log($"[Simulate] Role={role}, Tick={currentTick}, Speed={finalSpeed:F2}, " +
-                          $"FinalVel={horizontalVelocity.magnitude:F2}, Pos={transform.position}, " +
-                          $"ActualMove={actualMovement.magnitude:F3}, Input={data.MoveInput}, Replaying={replaying}");
-            }
         }
-
-
-        private void ApplyGravityOnly(float delta)
-        {
-            _verticalVelocity += Physics.gravity.y * delta * 3f;
-            _verticalVelocity = Mathf.Max(_verticalVelocity, -40f);
-
-            Vector3 gravityMovement = new Vector3(0f, _verticalVelocity, 0f);
-
-            if (_characterController != null)
-            {
-                _characterController.Move(gravityMovement * delta);
-            }
-
-            _velocity = Vector3.zero;
-            _currentMoveSpeed = 0f;
-        }
-
 
         private bool CanSprint()
         {
@@ -462,12 +320,6 @@ namespace NightHunt.Gameplay.Character
             {
                 movementSettings.baseSpeed = config.BaseMoveSpeed;
                 movementSettings.maxStamina = config.BaseStamina;
-
-                if (enableDebugLogs)
-                {
-                    Debug.Log(
-                        $"[CharacterPredictedMovement] Loaded config: Speed={config.BaseMoveSpeed}, Stamina={config.BaseStamina}");
-                }
             }
         }
 
@@ -481,48 +333,28 @@ namespace NightHunt.Gameplay.Character
             settings.staminaDrainRate = 20f;
             settings.staminaRegenRate = 15f;
             settings.minStaminaToSprint = 10f;
-
-            Debug.LogWarning("[CharacterPredictedMovement] Created fallback MovementSettings");
             return settings;
         }
 
-        // ========== PUBLIC API (CALLED FROM PlayerInputHandler.Update) ==========
+        // ========== PUBLIC API ==========
 
-        /// <summary>
-        /// Set move input (buffered).
-        /// Gọi từ PlayerInputHandler.Update() mỗi frame.
-        /// Input sẽ được buffer và dùng trong tick tiếp theo.
-        /// </summary>
         public void SetMoveInput(Vector2 input)
         {
             _nextInputBuffer.MoveInput = input;
             _nextInputBuffer.LastUpdateFrame = (uint)Time.frameCount;
-
-            if (enableDebugLogs && input.sqrMagnitude > 0.0001f)
-            {
-                Debug.Log($"[SetMoveInput] Frame={Time.frameCount}, Input={input}, BufferedForNextTick");
-            }
         }
 
-        /// <summary>
-        /// Set sprinting state (buffered).
-        /// </summary>
         public void SetSprinting(bool sprinting)
         {
             _nextInputBuffer.SprintHeld = sprinting;
             _nextInputBuffer.LastUpdateFrame = (uint)Time.frameCount;
         }
 
-        /// <summary>
-        /// Set crouching state (buffered).
-        /// </summary>
         public void SetCrouching(bool crouching)
         {
             _nextInputBuffer.CrouchHeld = crouching;
             _nextInputBuffer.LastUpdateFrame = (uint)Time.frameCount;
         }
-
-        // ========== PUBLIC GETTERS ==========
 
         public float GetCurrentMoveSpeed() => _currentMoveSpeed;
         public float GetStamina() => _currentStamina;

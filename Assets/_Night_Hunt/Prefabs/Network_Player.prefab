@@ -28,8 +28,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 199605058667652849}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.08742661, y: 0.9124957, z: -0.27628148, w: -0.28875047}
-  m_LocalPosition: {x: 8.629135, y: 10, z: 12.269393}
+  m_LocalRotation: {x: 0.117129035, y: 0.8754265, z: -0.2650578, w: 0.38685095}
+  m_LocalPosition: {x: -11.091166, y: 10, z: 10.098812}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -141,7 +141,7 @@ MonoBehaviour:
     SplineCurvature: 0.5
   RecenteringTarget: 2
   HorizontalAxis:
-    Value: -144.88106
+    Value: 132.31873
     Center: 0
     Range: {x: -180, y: 180}
     Wrap: 1
@@ -780,7 +780,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8057181819084617967}
-  - component: {fileID: 5085707883098774937}
   m_Layer: 0
   m_Name: Model
   m_TagString: Untagged
@@ -804,36 +803,3 @@ Transform:
   - {fileID: 8816983707468822803}
   m_Father: {fileID: 365407037612304046}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &5085707883098774937
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9056632762471085929}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 453481867b26f7c43b5bf38802a5f50e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 255
-  _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 0}
-  _initializationSettings:
-    TargetTransform: {fileID: 365407037612304046}
-    DetachOnStart: 0
-    AttachOnStop: 0
-  _controllerMovementSettings:
-    EnableTeleport: 0
-    TeleportThreshold: 0
-    AdaptiveInterpolationValue: 4
-    InterpolationValue: 2
-    SmoothedProperties: 4294967295
-    SnapNonSmoothedProperties: 0
-  _spectatorMovementSettings:
-    EnableTeleport: 0
-    TeleportThreshold: 0
-    AdaptiveInterpolationValue: 4
-    InterpolationValue: 2
-    SmoothedProperties: 4294967295
-    SnapNonSmoothedProperties: 0
