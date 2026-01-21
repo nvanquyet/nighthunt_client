@@ -8,8 +8,10 @@ namespace NightHunt.Gameplay.Inventory
     /// <summary>
     /// Manages player inventory: items, weapons, weight system
     /// Grid-based inventory with weight capacity
+    /// Follows Single Responsibility Principle
+    /// Implements IInventoryProvider for dependency injection
     /// </summary>
-    public class InventorySystem : MonoBehaviour
+    public class InventorySystem : MonoBehaviour, IInventoryProvider
     {
         [Header("Inventory Settings")]
         [SerializeField] private int backpackSlots = 12;
@@ -134,7 +136,7 @@ namespace NightHunt.Gameplay.Inventory
         /// <summary>
         /// Find slot containing item
         /// </summary>
-        private InventorySlot FindSlotWithItem(string itemId)
+        public InventorySlot FindSlotWithItem(string itemId)
         {
             // Check grid
             for (int x = 0; x < inventoryGrid.Width; x++)
@@ -194,11 +196,48 @@ namespace NightHunt.Gameplay.Inventory
 
         /// <summary>
         /// Apply inventory data from network
+        /// Rebuilds grid/quickslots and recomputes weight
         /// </summary>
         public void ApplyInventoryData(List<InventorySlot> slots)
         {
-            // TODO: Apply inventory data from network sync
-            // This would restore inventory state after network sync
+            if (slots == null) return;
+
+            // Clear current inventory
+            inventoryGrid.Clear();
+            for (int i = 0; i < quickSlots.Length; i++)
+            {
+                quickSlots[i].Clear();
+            }
+
+            // Reset weight
+            currentWeight = 0f;
+
+            // Apply slots to grid (simple sequential placement)
+            int slotIndex = 0;
+            foreach (var slot in slots)
+            {
+                if (slot == null || slot.IsEmpty) continue;
+
+                // Try to place in grid
+                if (inventoryGrid.FindEmptySlot(out int x, out int y))
+                {
+                    inventoryGrid.PlaceItem(x, y, slot);
+                    currentWeight += slot.Item.Weight * slot.Quantity;
+                }
+                else
+                {
+                    // Grid full, try quick slots
+                    if (slotIndex < quickSlots.Length)
+                    {
+                        quickSlots[slotIndex].SetItem(slot.Item, slot.Quantity);
+                        currentWeight += slot.Item.Weight * slot.Quantity;
+                        slotIndex++;
+                    }
+                }
+            }
+
+            // Update weight in character stats
+            UpdateWeight();
         }
 
         /// <summary>

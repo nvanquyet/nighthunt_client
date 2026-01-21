@@ -3,6 +3,8 @@ using FishNet.Object.Synchronizing;
 using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.Data;
+using NightHunt.Gameplay.Loot;
+using FishNet;
 
 namespace NightHunt.Gameplay.Inventory
 {
@@ -53,6 +55,97 @@ namespace NightHunt.Gameplay.Inventory
                 // Deserialize and apply inventory
                 var slots = DeserializeInventory(newData);
                 inventorySystem.ApplyInventoryData(slots);
+            }
+        }
+
+        /// <summary>
+        /// Server: Request drop item
+        /// </summary>
+        [ServerRpc(RequireOwnership = true)]
+        public void ServerRpc_RequestDrop(string itemId, int dropQty, Vector3 dropPosition)
+        {
+            if (inventorySystem == null) return;
+
+            // Validate quantity
+            var slot = inventorySystem.FindSlotWithItem(itemId);
+            if (slot == null || slot.IsEmpty || slot.Quantity < dropQty)
+            {
+                Debug.LogWarning($"[InventorySync] Cannot drop: item not found or insufficient quantity");
+                return;
+            }
+
+            // Remove from inventory
+            if (inventorySystem.RemoveItem(itemId, dropQty))
+            {
+                // Spawn world loot
+                SpawnWorldLoot(itemId, dropQty, dropPosition);
+                
+                // Sync inventory
+                var slots = inventorySystem.GetItems();
+                SyncInventory(slots);
+            }
+        }
+
+        /// <summary>
+        /// Server: Spawn world loot item
+        /// </summary>
+        [Server]
+        private void SpawnWorldLoot(string itemId, int quantity, Vector3 position)
+        {
+            // Get item config to find prefab
+            var itemConfig = GameConfigLoader.Instance?.GetItemConfigBase(itemId);
+            if (itemConfig == null)
+            {
+                Debug.LogWarning($"[InventorySync] Item config not found: {itemId}");
+                return;
+            }
+
+            // Get world prefab ID (from new BaseItemConfig or legacy)
+            string prefabId = itemConfig.WorldPrefabId;
+
+            if (string.IsNullOrEmpty(prefabId))
+            {
+                // Fallback: try to load default loot prefab
+                prefabId = "DefaultLootPrefab";
+            }
+
+            // Load prefab (simplified - would use Resources/Addressables in production)
+            GameObject lootPrefab = Resources.Load<GameObject>($"Prefabs/Loot/{prefabId}");
+            if (lootPrefab == null)
+            {
+                // Create basic prefab if not found
+                lootPrefab = new GameObject("LootItem");
+                lootPrefab.AddComponent<NetworkLootItem>();
+                var collider = lootPrefab.AddComponent<SphereCollider>();
+                collider.isTrigger = true;
+                collider.radius = 0.5f;
+            }
+
+            // Spawn loot
+            GameObject lootObj = Instantiate(lootPrefab, position, Quaternion.identity);
+            NetworkLootItem lootItem = lootObj.GetComponent<NetworkLootItem>();
+            if (lootItem != null)
+            {
+                lootItem.Initialize(itemId, quantity);
+            }
+
+            // Spawn on network
+            if (lootObj.GetComponent<NetworkObject>() != null)
+            {
+                // Already has NetworkObject, just spawn it
+                var netObj = lootObj.GetComponent<NetworkObject>();
+                if (!netObj.IsSpawned)
+                {
+                    var nm = InstanceFinder.NetworkManager;
+                    if (nm != null && nm.ServerManager != null)
+                    {
+                        nm.ServerManager.Spawn(netObj);
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[InventorySync] Loot prefab does not have NetworkObject component");
             }
         }
 

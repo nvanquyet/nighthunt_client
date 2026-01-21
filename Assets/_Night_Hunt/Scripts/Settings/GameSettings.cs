@@ -60,7 +60,10 @@ namespace NightHunt.Settings
 
                 // Controls
                 MouseSensitivity = PlayerPrefs.GetFloat("MouseSensitivity", 1f),
-                InvertY = PlayerPrefs.GetInt("InvertY", 0) == 1
+                InvertY = PlayerPrefs.GetInt("InvertY", 0) == 1,
+                
+                // Gameplay
+                AutoLoot = PlayerPrefs.GetInt("AutoLoot", 0) == 1
             };
 
             ApplySettings();
@@ -87,6 +90,9 @@ namespace NightHunt.Settings
             // Controls
             PlayerPrefs.SetFloat("MouseSensitivity", currentSettings.MouseSensitivity);
             PlayerPrefs.SetInt("InvertY", currentSettings.InvertY ? 1 : 0);
+
+            // Gameplay
+            PlayerPrefs.SetInt("AutoLoot", currentSettings.AutoLoot ? 1 : 0);
 
             PlayerPrefs.Save();
         }
@@ -168,6 +174,12 @@ namespace NightHunt.Settings
             set { if (currentSettings != null) currentSettings.InvertY = value; }
         }
 
+        public bool AutoLoot
+        {
+            get => currentSettings?.AutoLoot ?? false;
+            set { if (currentSettings != null) currentSettings.AutoLoot = value; }
+        }
+
         /// <summary>
         /// Reset to default settings
         /// </summary>
@@ -183,7 +195,8 @@ namespace NightHunt.Settings
                 Fullscreen = true,
                 ResolutionIndex = 0,
                 MouseSensitivity = 1f,
-                InvertY = false
+                InvertY = false,
+                AutoLoot = false
             };
 
             ApplySettings();
@@ -206,6 +219,7 @@ namespace NightHunt.Settings
         public int ResolutionIndex = 0;
         public float MouseSensitivity = 1f;
         public bool InvertY = false;
+        public bool AutoLoot = false;
     }
 }
 

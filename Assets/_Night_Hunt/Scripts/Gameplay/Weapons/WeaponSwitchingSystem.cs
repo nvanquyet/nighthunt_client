@@ -2,6 +2,8 @@ using UnityEngine;
 using NightHunt.Data;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Inventory;
+using NightHunt.Gameplay.Input;
+using UnityEngine.InputSystem;
 
 namespace NightHunt.Gameplay.Weapons
 {
@@ -21,38 +23,67 @@ namespace NightHunt.Gameplay.Weapons
 
         private CharacterCombat characterCombat;
         private InventorySystem inventorySystem;
+        private PlayerInputHandler inputHandler;
         private WeaponConfigData[] weaponSlots;
         private int currentWeaponIndex = 0;
         private bool isSwitching = false;
+        
+        // Input state tracking
+        private bool wasWeaponSwitch1Pressed = false;
+        private bool wasWeaponSwitch2Pressed = false;
+        private float lastScrollValue = 0f;
 
         private void Awake()
         {
             characterCombat = GetComponent<CharacterCombat>();
             inventorySystem = GetComponent<InventorySystem>();
+            inputHandler = GetComponent<PlayerInputHandler>();
             weaponSlots = new WeaponConfigData[maxWeaponSlots];
+        }
+
+        private void Start()
+        {
+            // Find input handler if not found
+            if (inputHandler == null)
+            {
+                inputHandler = GetComponentInParent<PlayerInputHandler>();
+            }
         }
 
         private void Update()
         {
-            // Weapon switch input
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha1) && weaponSlots[0] != null)
+            if (inputHandler == null) return;
+
+            // Weapon switch input using New Input System
+            bool ws1 = inputHandler.IsQuickSlot1Pressed(); // Reuse QuickSlot1 for Weapon1
+            bool ws2 = inputHandler.IsQuickSlot2Pressed(); // Reuse QuickSlot2 for Weapon2
+
+            if (ws1 && !wasWeaponSwitch1Pressed && weaponSlots[0] != null)
             {
                 SwitchToWeapon(0);
             }
-            else if (UnityEngine.Input.GetKeyDown(KeyCode.Alpha2) && weaponSlots[1] != null)
+            wasWeaponSwitch1Pressed = ws1;
+
+            if (ws2 && !wasWeaponSwitch2Pressed && weaponSlots[1] != null)
             {
                 SwitchToWeapon(1);
             }
+            wasWeaponSwitch2Pressed = ws2;
 
-            // Scroll wheel switching
-            float scroll = UnityEngine.Input.GetAxis("Mouse ScrollWheel");
-            if (scroll > 0f)
+            // Scroll wheel switching - need to get from Input System
+            // Check if Mouse.current is available
+            if (Mouse.current != null)
             {
-                SwitchToNextWeapon();
-            }
-            else if (scroll < 0f)
-            {
-                SwitchToPreviousWeapon();
+                float scroll = Mouse.current.scroll.ReadValue().y;
+                if (scroll > 0f && lastScrollValue <= 0f)
+                {
+                    SwitchToNextWeapon();
+                }
+                else if (scroll < 0f && lastScrollValue >= 0f)
+                {
+                    SwitchToPreviousWeapon();
+                }
+                lastScrollValue = scroll;
             }
         }
 

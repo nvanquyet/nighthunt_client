@@ -51,7 +51,11 @@ namespace NightHunt.Data
             if (_instance == null)
             {
                 _instance = this;
-                DontDestroyOnLoad(gameObject);
+                // In edit-mode (editor tooling), DontDestroyOnLoad throws.
+                if (Application.isPlaying)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
                 LoadConfig();
             }
             else if (_instance != this)
@@ -117,12 +121,27 @@ namespace NightHunt.Data
         }
 
         /// <summary>
-        /// Get item config by ID
+        /// Get item config by ID (legacy - returns ItemConfigData)
         /// </summary>
         public ItemConfigData GetItemConfig(string itemId)
         {
             if (ConfigData?.ItemConfig == null) return null;
             return ConfigData.ItemConfig.Find(i => i.ItemId == itemId);
+        }
+
+        /// <summary>
+        /// Get item config as BaseItemConfig (new structure)
+        /// Converts from legacy ItemConfigData if needed
+        /// </summary>
+        public BaseItemConfig GetItemConfigBase(string itemId)
+        {
+            if (ConfigData?.ItemConfig == null) return null;
+            
+            var legacy = ConfigData.ItemConfig.Find(i => i.ItemId == itemId);
+            if (legacy == null) return null;
+
+            // Convert from legacy to new structure
+            return ItemConfigLoader.ConvertFromLegacy(legacy);
         }
 
         /// <summary>

@@ -34,6 +34,9 @@ namespace NightHunt.Gameplay.Input
         private InputAction sprintAction;
         private InputAction reloadAction; 
         private InputAction inventoryAction;
+        private InputAction quickSlot1Action;
+        private InputAction quickSlot2Action;
+        private InputAction quickSlot3Action;
 
         // Current input state
         private Vector2 moveInput;
@@ -43,6 +46,10 @@ namespace NightHunt.Gameplay.Input
         private bool isCrouching;
         private bool isSprinting;
         private bool isReloading;
+        private bool isInventoryPressed;
+        private bool isQuickSlot1Pressed;
+        private bool isQuickSlot2Pressed;
+        private bool isQuickSlot3Pressed;
         private Vector3 aimDirection;
 
         // Camera reference for aim direction
@@ -83,6 +90,10 @@ namespace NightHunt.Gameplay.Input
                 interactAction = playerActionMap.FindAction("Interact");
                 crouchAction = playerActionMap.FindAction("Crouch");
                 sprintAction = playerActionMap.FindAction("Sprint");
+                inventoryAction = playerActionMap.FindAction("Inventory");
+                quickSlot1Action = playerActionMap.FindAction("QuickSlot1");
+                quickSlot2Action = playerActionMap.FindAction("QuickSlot2");
+                quickSlot3Action = playerActionMap.FindAction("QuickSlot3");
             }
             else
             {
@@ -173,6 +184,26 @@ namespace NightHunt.Gameplay.Input
                 sprintAction.performed += OnSprintPerformed;
             if (sprintAction != null)
                 sprintAction.canceled += OnSprintCanceled;
+
+            if (inventoryAction != null)
+                inventoryAction.performed += OnInventoryPerformed;
+            if (inventoryAction != null)
+                inventoryAction.canceled += OnInventoryCanceled;
+
+            if (quickSlot1Action != null)
+                quickSlot1Action.performed += OnQuickSlot1Performed;
+            if (quickSlot1Action != null)
+                quickSlot1Action.canceled += OnQuickSlot1Canceled;
+
+            if (quickSlot2Action != null)
+                quickSlot2Action.performed += OnQuickSlot2Performed;
+            if (quickSlot2Action != null)
+                quickSlot2Action.canceled += OnQuickSlot2Canceled;
+
+            if (quickSlot3Action != null)
+                quickSlot3Action.performed += OnQuickSlot3Performed;
+            if (quickSlot3Action != null)
+                quickSlot3Action.canceled += OnQuickSlot3Canceled;
         }
 
         /// <summary>
@@ -224,6 +255,26 @@ namespace NightHunt.Gameplay.Input
             if (sprintAction != null)
                 sprintAction.canceled -= OnSprintCanceled;
 
+            if (inventoryAction != null)
+                inventoryAction.performed -= OnInventoryPerformed;
+            if (inventoryAction != null)
+                inventoryAction.canceled -= OnInventoryCanceled;
+
+            if (quickSlot1Action != null)
+                quickSlot1Action.performed -= OnQuickSlot1Performed;
+            if (quickSlot1Action != null)
+                quickSlot1Action.canceled -= OnQuickSlot1Canceled;
+
+            if (quickSlot2Action != null)
+                quickSlot2Action.performed -= OnQuickSlot2Performed;
+            if (quickSlot2Action != null)
+                quickSlot2Action.canceled -= OnQuickSlot2Canceled;
+
+            if (quickSlot3Action != null)
+                quickSlot3Action.performed -= OnQuickSlot3Performed;
+            if (quickSlot3Action != null)
+                quickSlot3Action.canceled -= OnQuickSlot3Canceled;
+
             // Reset input state
             moveInput = Vector2.zero;
             lookInput = Vector2.zero;
@@ -231,6 +282,10 @@ namespace NightHunt.Gameplay.Input
             isInteracting = false;
             isCrouching = false;
             isSprinting = false;
+            isInventoryPressed = false;
+            isQuickSlot1Pressed = false;
+            isQuickSlot2Pressed = false;
+            isQuickSlot3Pressed = false;
         }
 
         private void Update()
@@ -373,6 +428,53 @@ namespace NightHunt.Gameplay.Input
         public Vector3 GetAimDirection() => aimDirection;
 
         public void SetReloading(bool reloading) => isReloading = reloading;
+
+        // Inventory and QuickSlot getters
+        public bool IsInventoryPressed() => isInventoryPressed;
+        public bool IsQuickSlot1Pressed() => isQuickSlot1Pressed;
+        public bool IsQuickSlot2Pressed() => isQuickSlot2Pressed;
+        public bool IsQuickSlot3Pressed() => isQuickSlot3Pressed;
+
+        // Input event handlers for inventory/quick slots
+        private void OnInventoryPerformed(InputAction.CallbackContext context)
+        {
+            isInventoryPressed = true;
+        }
+
+        private void OnInventoryCanceled(InputAction.CallbackContext context)
+        {
+            isInventoryPressed = false;
+        }
+
+        private void OnQuickSlot1Performed(InputAction.CallbackContext context)
+        {
+            isQuickSlot1Pressed = true;
+        }
+
+        private void OnQuickSlot1Canceled(InputAction.CallbackContext context)
+        {
+            isQuickSlot1Pressed = false;
+        }
+
+        private void OnQuickSlot2Performed(InputAction.CallbackContext context)
+        {
+            isQuickSlot2Pressed = true;
+        }
+
+        private void OnQuickSlot2Canceled(InputAction.CallbackContext context)
+        {
+            isQuickSlot2Pressed = false;
+        }
+
+        private void OnQuickSlot3Performed(InputAction.CallbackContext context)
+        {
+            isQuickSlot3Pressed = true;
+        }
+
+        private void OnQuickSlot3Canceled(InputAction.CallbackContext context)
+        {
+            isQuickSlot3Pressed = false;
+        }
 
         /// <summary>
         /// Get input prediction instance
