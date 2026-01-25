@@ -1,0 +1,4 @@
+namespace NightHunt.InteractionSystem.Core
+{
+    
+}
