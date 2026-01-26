@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 736fa88f6870e084eac33e820c2e8be8, type: 3}
+  m_Name: HelmetData_Tactical
+  m_EditorClassIdentifier: 
+  itemId: helmet_tactical
+  displayName: Tactical Helmet
+  description: A tactical helmet providing head protection.
+  icon: {fileID: 0}
+  weight: 1.2
+  maxStack: 1
+  isConsumable: 0
+  isStackable: 0
+  category: 2
+  hasDurability: 0
+  maxDurability: 100
+  equipmentSlot: 3
+  equipmentPrefab: {fileID: 0}
+  attachmentSlots:
+  - slotType: 5
+    displayName: Night Vision
+    attachmentPoint: {x: 0, y: 0, z: 0}
+    rotationOffset: {x: 0, y: 0, z: 0}
+    scaleMultiplier: 1
+    isRequired: 0
+    allowedAttachmentTypes: []
+  - slotType: 6
+    displayName: Flashlight
+    attachmentPoint: {x: 0, y: 0, z: 0}
+    rotationOffset: {x: 0, y: 0, z: 0}
+    scaleMultiplier: 1
+    isRequired: 0
+    allowedAttachmentTypes: []
+  - slotType: 7
+    displayName: Camera
+    attachmentPoint: {x: 0, y: 0, z: 0}
+    rotationOffset: {x: 0, y: 0, z: 0}
+    scaleMultiplier: 1
+    isRequired: 0
+    allowedAttachmentTypes: []
+  baseStatModifiers: []
+  headshotProtection: 0.5
+  visionRange: 20
+  detectionRange: 15

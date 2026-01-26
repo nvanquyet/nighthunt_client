@@ -71,7 +71,8 @@ namespace NightHunt.Gameplay.Input
                 InputState.Spectating,
                 InputState.MenuOpen,
                 InputState.Paused,
-                InputState.ScoutMode);
+                InputState.ScoutMode,
+                InputState.InventoryOpen);
 
             stateMachine.AddTransitions(InputState.PlayerDead,
                 InputState.Spectating,
@@ -88,16 +89,25 @@ namespace NightHunt.Gameplay.Input
                 InputState.PlayerAlive,
                 InputState.PlayerDead,
                 InputState.Spectating,
-                InputState.Paused);
+                InputState.Paused,
+                InputState.InventoryOpen);
 
             stateMachine.AddTransitions(InputState.Paused,
                 InputState.PlayerAlive,
                 InputState.PlayerDead,
                 InputState.Spectating,
-                InputState.MenuOpen);
+                InputState.MenuOpen,
+                InputState.InventoryOpen);
 
             stateMachine.AddTransitions(InputState.ScoutMode,
                 InputState.PlayerAlive,
+                InputState.MenuOpen,
+                InputState.Paused,
+                InputState.InventoryOpen);
+
+            stateMachine.AddTransitions(InputState.InventoryOpen,
+                InputState.PlayerAlive,
+                InputState.PlayerDead,
                 InputState.MenuOpen,
                 InputState.Paused);
 
@@ -192,6 +202,10 @@ namespace NightHunt.Gameplay.Input
                     EnableActionMap(CAMERA_MAP); // Scout only
                     // Attack disabled in PlayerInputHandler
                     break;
+
+                case InputState.InventoryOpen:
+                    EnableActionMap(UI_MAP); // Only UI map for inventory interactions
+                    break;
             }
         }
 
@@ -259,6 +273,7 @@ namespace NightHunt.Gameplay.Input
                     return SPECTATOR_MAP;
                 case InputState.MenuOpen:
                 case InputState.Paused:
+                case InputState.InventoryOpen:
                     return UI_MAP;
                 case InputState.Camera:
                 case InputState.ScoutMode:
