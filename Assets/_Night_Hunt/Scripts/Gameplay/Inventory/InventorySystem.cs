@@ -278,6 +278,169 @@ namespace NightHunt.Gameplay.Inventory
         /// Get quick slots
         /// </summary>
         public InventorySlot[] GetQuickSlots() => quickSlots;
+
+        /// <summary>
+        /// Move item within grid
+        /// </summary>
+        public bool MoveItem(int fromX, int fromY, int toX, int toY)
+        {
+            if (!inventoryGrid.IsValidPosition(fromX, fromY) || !inventoryGrid.IsValidPosition(toX, toY))
+                return false;
+
+            var fromSlot = inventoryGrid.GetSlot(fromX, fromY);
+            var toSlot = inventoryGrid.GetSlot(toX, toY);
+
+            if (fromSlot == null || fromSlot.IsEmpty)
+                return false;
+
+            // If target is empty, just move
+            if (toSlot == null || toSlot.IsEmpty)
+            {
+                inventoryGrid.RemoveItem(fromX, fromY);
+                inventoryGrid.PlaceItem(toX, toY, fromSlot);
+                SyncInventory();
+                return true;
+            }
+
+            // If target has item, try to swap
+            if (toSlot.Item.ItemId == fromSlot.Item.ItemId && toSlot.Item.IsConsumable && toSlot.Item.MaxStack > 1)
+            {
+                // Try to stack
+                int canAdd = toSlot.Item.MaxStack - toSlot.Quantity;
+                if (canAdd > 0)
+                {
+                    int toAdd = Mathf.Min(fromSlot.Quantity, canAdd);
+                    toSlot.AddQuantity(toAdd);
+                    fromSlot.RemoveQuantity(toAdd);
+                    if (fromSlot.IsEmpty)
+                    {
+                        inventoryGrid.RemoveItem(fromX, fromY);
+                    }
+                    SyncInventory();
+                    return true;
+                }
+            }
+
+            // Swap items
+            var tempSlot = fromSlot;
+            inventoryGrid.RemoveItem(fromX, fromY);
+            inventoryGrid.PlaceItem(fromX, fromY, toSlot);
+            inventoryGrid.RemoveItem(toX, toY);
+            inventoryGrid.PlaceItem(toX, toY, tempSlot);
+            SyncInventory();
+            return true;
+        }
+
+        /// <summary>
+        /// Assign item to quick slot
+        /// </summary>
+        public bool AssignQuickSlot(int slotIndex, string itemId)
+        {
+            if (slotIndex < 0 || slotIndex >= quickSlots.Length)
+                return false;
+
+            // Find item in inventory
+            var slot = FindSlotWithItem(itemId);
+            if (slot == null || slot.IsEmpty)
+                return false;
+
+            // If quick slot already has this item, do nothing
+            if (quickSlots[slotIndex].Item != null && quickSlots[slotIndex].Item.ItemId == itemId)
+                return true;
+
+            // Assign item to quick slot
+            var newSlot = new InventorySlot();
+            newSlot.SetItem(slot.Item, 1); // Assign 1 item to quick slot
+
+            // Remove from inventory if not already in quick slot
+            bool isInQuickSlot = false;
+            foreach (var qs in quickSlots)
+            {
+                if (qs != null && !qs.IsEmpty && qs.Item.ItemId == itemId)
+                {
+                    isInQuickSlot = true;
+                    break;
+                }
+            }
+
+            if (!isInQuickSlot)
+            {
+                slot.RemoveQuantity(1);
+                if (slot.IsEmpty)
+                {
+                    // Find and remove from grid
+                    for (int x = 0; x < inventoryGrid.Width; x++)
+                    {
+                        for (int y = 0; y < inventoryGrid.Height; y++)
+                        {
+                            var gridSlot = inventoryGrid.GetSlot(x, y);
+                            if (gridSlot == slot)
+                            {
+                                inventoryGrid.RemoveItem(x, y);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            quickSlots[slotIndex] = newSlot;
+            SyncInventory();
+            return true;
+        }
+
+        /// <summary>
+        /// Equip weapon to weapon slot
+        /// </summary>
+        public bool EquipWeapon(int slotIndex, string weaponId)
+        {
+            if (slotIndex < 0 || slotIndex >= 2) // Only 2 weapon slots
+                return false;
+
+            // Find weapon in inventory
+            var slot = FindSlotWithItem(weaponId);
+            if (slot == null || slot.IsEmpty)
+                return false;
+
+            // TODO: Check if item is actually a weapon
+            // For now, just remove from inventory
+            // In a full implementation, this would:
+            // 1. Unequip current weapon (if any) and return to inventory
+            // 2. Equip new weapon
+            // 3. Update combat system
+
+            RemoveItem(weaponId, 1);
+            SyncInventory();
+            return true;
+        }
+
+        /// <summary>
+        /// Drop item from inventory
+        /// </summary>
+        public bool DropItem(string itemId, int quantity)
+        {
+            var slot = FindSlotWithItem(itemId);
+            if (slot == null || slot.IsEmpty)
+                return false;
+
+            var itemConfig = slot.Item;
+            int toDrop = Mathf.Min(quantity, slot.Quantity);
+
+            // Remove from inventory
+            if (slot.RemoveQuantity(toDrop))
+            {
+                currentWeight -= itemConfig.Weight * toDrop;
+                UpdateWeight();
+
+                // TODO: Spawn item in world at player position
+                // This would require integration with item spawn system
+
+                SyncInventory();
+                return true;
+            }
+
+            return false;
+        }
     }
 }
 

@@ -38,7 +38,12 @@ namespace NightHunt.Gameplay.Input
         /// <summary>
         /// Camera controls (rotation, zoom)
         /// </summary>
-        Camera
+        Camera,
+
+        /// <summary>
+        /// Inventory UI is open
+        /// </summary>
+        InventoryOpen
     }
 }
 
