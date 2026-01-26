@@ -1,8 +1,8 @@
-﻿using _Night_Hunt.Scripts.Gameplay.Systems.Inventory.Components;
-using FishNet.Connection;
+﻿using FishNet.Connection;
 using FishNet.Object;
 using NightHunt.InteractionSystem.Core;
 using NightHunt.InteractionSystem.Interaction;
+using NightHunt.InteractionSystem.Inventory;
 using UnityEngine;
 
 namespace NightHunt.InteractionSystem.Loot

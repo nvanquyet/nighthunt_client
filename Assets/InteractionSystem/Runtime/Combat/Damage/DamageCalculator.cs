@@ -1,5 +1,0 @@
-namespace NightHunt.InteractionSystem.Combat
-{
-    
-
-}
