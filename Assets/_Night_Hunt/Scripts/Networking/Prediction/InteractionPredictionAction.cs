@@ -1,6 +1,6 @@
-using NightHunt.Gameplay.Interaction;
 using NightHunt.Networking.Prediction;
 using NightHunt.Utils;
+using NightHunt.InteractionSystem.Core.Interfaces;
 using FishNet.Object;
 using UnityEngine;
 

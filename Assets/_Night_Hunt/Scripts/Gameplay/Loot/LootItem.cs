@@ -2,6 +2,7 @@ using UnityEngine;
 using FishNet.Object;
 using NightHunt.Data;
 using NightHunt.Gameplay.Character;
+using NightHunt.Gameplay.Inventory;
 
 namespace NightHunt.Gameplay.Loot
 {
@@ -106,14 +107,10 @@ namespace NightHunt.Gameplay.Loot
                 if (characterStats != null)
                 {
                     // Try to add item to inventory
-                    var inventory = collider.GetComponent<Inventory.InventorySystem>();
+                    var inventory = collider.GetComponent<InventoryService>();
                     if (inventory != null)
                     {
-                        if (inventory.AddItem(itemId, 1))
-                        {
-                            PickupItem(collider.gameObject);
-                            break;
-                        }
+                        // TODO: Integrate with package-based pickup flow instead of direct add
                     }
                 }
             }

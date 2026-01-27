@@ -24,12 +24,12 @@ namespace NightHunt.Gameplay.UI
         [SerializeField] private TrashSlotUI trashSlot;
 
         private InventoryPanel inventoryPanel;
-        private InventorySystem inventorySystem;
+        private InventoryService inventorySystem;
 
         /// <summary>
         /// Initialize equipment panel
         /// </summary>
-        public void Initialize(InventoryPanel panel, InventorySystem inventory)
+        public void Initialize(InventoryPanel panel, InventoryService inventory)
         {
             inventoryPanel = panel;
             inventorySystem = inventory;

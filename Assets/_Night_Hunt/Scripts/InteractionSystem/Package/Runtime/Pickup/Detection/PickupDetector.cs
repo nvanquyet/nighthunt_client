@@ -1,9 +1,8 @@
 using UnityEngine;
 using NightHunt.InteractionSystem.Core.Interfaces;
 using NightHunt.InteractionSystem.Pickup.Handlers;
-#if UNITY_TEXTMESHPRO
-using TMPro;
-#endif
+using NightHunt.InteractionSystem.Events;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Pickup.Detection
 {
@@ -13,31 +12,36 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
     /// </summary>
     public class PickupDetector : MonoBehaviour
     {
-        [Header("Detection Settings")]
-        [SerializeField] private float detectionRange = 5f;
-        [SerializeField] private LayerMask pickupLayers = -1; 
-        [SerializeField] private Camera playerCamera;
+        [Header("Settings")] [SerializeField] private PickupSettings settings;
 
-        [Header("UI")]
-        [SerializeField] private GameObject pickupPromptUI;
-#if UNITY_TEXTMESHPRO
-        [SerializeField] private TextMeshProUGUI pickupText;
-#else
-        [SerializeField] private UnityEngine.UI.Text pickupText;
-#endif
+        [Header("Camera")] [SerializeField] private Camera playerCamera;
+
+        [Header("Pickup Handler")] [SerializeField]
+        private PickupHandler pickupHandler;
+        // Note: UI removed - gameplay UI should subscribe to InteractionEvents.OnPickupTargetChanged
 
         private IPickupable currentTarget;
-        private PickupHandler pickupHandler;
- 
+
         private void Awake()
         {
-            // Try to find PickupHandler in this object, parent, or children
-            pickupHandler = GetComponentInParent<PickupHandler>();
-            if (pickupHandler == null)
-                pickupHandler = GetComponentInChildren<PickupHandler>();
             if (pickupHandler == null)
             {
-                Debug.LogWarning("[PickupDetector] PickupHandler not found! Pickup functionality will be limited.");
+                // Use centralized component finder to search in hierarchy
+                pickupHandler = ComponentFinder.FindComponentInHierarchy<PickupHandler>(gameObject, includeInactive: false);
+                if (pickupHandler == null)
+                {
+                    Debug.LogWarning("[PickupDetector] PickupHandler not found! Pickup functionality will be limited.");
+                }
+            }
+
+            // Find settings if not assigned
+            if (settings == null)
+            {
+                settings = FindObjectOfType<PickupSettings>();
+                if (settings == null)
+                {
+                    Debug.LogWarning("[PickupDetector] PickupSettings not found! Using default values.");
+                }
             }
         }
 
@@ -75,13 +79,8 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
                 return;
             }
 
-            // Strategy 2: Find Camera in this object or children
-            playerCamera = GetComponentInChildren<Camera>();
-            if (playerCamera != null)
-                return;
-
-            // Strategy 3: Find Camera in parent
-            playerCamera = GetComponentInParent<Camera>();
+            // Strategy 2: Find Camera in hierarchy (this object, parent, children, root)
+            playerCamera = ComponentFinder.FindComponentInHierarchy<Camera>(gameObject, includeInactive: false);
             if (playerCamera != null)
                 return;
 
@@ -108,7 +107,8 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
             // If still null, log warning
             if (playerCamera == null)
             {
-                Debug.LogWarning($"[PickupDetector] Could not find player camera! GameObject: {gameObject.name}. Please assign camera manually in Inspector.");
+                Debug.LogWarning(
+                    $"[PickupDetector] Could not find player camera! GameObject: {gameObject.name}. Please assign camera manually in Inspector.");
             }
         }
 
@@ -127,6 +127,10 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
 
             IPickupable newTarget = null;
             float closestDistance = float.MaxValue;
+
+            // Get settings values
+            float detectionRange = settings != null ? settings.PickupDetectionRange : 5f;
+            LayerMask pickupLayers = settings != null ? settings.PickupLayers : -1;
 
             // Raycast from camera center
             Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
@@ -156,14 +160,15 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
             {
                 if (currentTarget != null)
                 {
-                    HidePickupPrompt();
+                    InteractionEvents.InvokePickupTargetLost();
                 }
 
                 currentTarget = newTarget;
 
                 if (currentTarget != null)
                 {
-                    ShowPickupPrompt(currentTarget);
+                    string promptText = $"Press F to Pickup {currentTarget.GetDisplayName()}";
+                    InteractionEvents.InvokePickupTargetChanged(currentTarget, promptText);
                 }
             }
         }
@@ -174,14 +179,23 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
         /// </summary>
         public void TryPickup()
         {
+            Debug.Log($"[PickupDetector] TryPickup called - currentTarget={currentTarget != null}, pickupHandler={pickupHandler != null}");
+            
             if (currentTarget == null)
+            {
+                Debug.LogWarning("[PickupDetector] currentTarget is null! Cannot pickup.");
                 return;
+            }
 
             if (!currentTarget.CanPickup(gameObject))
+            {
+                Debug.LogWarning($"[PickupDetector] Cannot pickup {currentTarget.GetDisplayName()} - CanPickup returned false");
                 return;
+            }
 
             if (pickupHandler != null)
             {
+                Debug.Log($"[PickupDetector] Calling RequestPickup for {currentTarget.GetDisplayName()}");
                 pickupHandler.RequestPickup(currentTarget);
             }
             else
@@ -190,32 +204,7 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
             }
         }
 
-        /// <summary>
-        /// Show pickup prompt UI.
-        /// </summary>
-        private void ShowPickupPrompt(IPickupable pickupable)
-        {
-            if (pickupPromptUI != null)
-            {
-                pickupPromptUI.SetActive(true);
-            }
-
-            if (pickupText != null)
-            {
-                pickupText.text = $"Press E to pickup {pickupable.GetDisplayName()}";
-            }
-        }
-
-        /// <summary>
-        /// Hide pickup prompt UI.
-        /// </summary>
-        private void HidePickupPrompt()
-        {
-            if (pickupPromptUI != null)
-            {
-                pickupPromptUI.SetActive(false);
-            }
-        }
+        // Note: UI methods removed - gameplay UI subscribes to InteractionEvents
 
         /// <summary>
         /// Get the current pickup target.
@@ -239,6 +228,9 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
                 return;
             }
 
+            float detectionRange = settings != null ? settings.PickupDetectionRange : 5f;
+            LayerMask pickupLayers = settings != null ? settings.PickupLayers : -1;
+
             start = playerCamera.transform.position;
             Vector3 direction = playerCamera.transform.forward;
             Ray ray = new Ray(start, direction);
@@ -251,13 +243,12 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
         /// </summary>
         public void GetDetectionSettings(out float range, out LayerMask layers, out Camera cam)
         {
-            range = detectionRange;
-            layers = pickupLayers;
+            range = settings != null ? settings.PickupDetectionRange : 5f;
+            layers = settings != null ? settings.PickupLayers : -1;
             cam = playerCamera;
         }
 
-        [Header("Debug")]
-        [SerializeField] private bool showGizmos = true;
+        [Header("Debug")] [SerializeField] private bool showGizmos = true;
         [SerializeField] private bool showGizmosOnlyWhenSelected = false;
 
         private RaycastHit lastHit;
@@ -283,6 +274,9 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
         {
             if (playerCamera == null)
                 return;
+
+            float detectionRange = settings != null ? settings.PickupDetectionRange : 5f;
+            LayerMask pickupLayers = settings != null ? settings.PickupLayers : -1;
 
             Vector3 start = playerCamera.transform.position;
             Vector3 direction = playerCamera.transform.forward;

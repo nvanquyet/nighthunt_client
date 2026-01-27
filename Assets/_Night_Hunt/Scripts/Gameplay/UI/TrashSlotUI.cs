@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using NightHunt.InteractionSystem.Core.Structs;
 
 namespace NightHunt.Gameplay.UI
 {
@@ -67,10 +68,10 @@ namespace NightHunt.Gameplay.UI
             if (quickSlot == null || inventoryPanel == null)
                 return;
 
-            var slot = quickSlot.GetSlot();
-            if (slot != null && !slot.IsEmpty)
+            var itemInstance = quickSlot.GetSlot();
+            if (itemInstance.HasValue && itemInstance.Value.IsValid())
             {
-                inventoryPanel.DropItem(slot.Item.ItemId, slot.Quantity);
+                inventoryPanel.DropItem(itemInstance.Value.itemDataId, itemInstance.Value.quantity);
             }
         }
 

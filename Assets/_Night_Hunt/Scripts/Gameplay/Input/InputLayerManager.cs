@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Core.State;
@@ -19,9 +20,26 @@ namespace NightHunt.Gameplay.Input
             {
                 if (_instance == null)
                 {
-                    GameObject go = new GameObject("InputLayerManager");
-                    _instance = go.AddComponent<InputLayerManager>();
-                    DontDestroyOnLoad(go);
+                    // Try to find existing instance first
+                    _instance = FindFirstObjectByType<InputLayerManager>();
+                    
+                    // If not found, create new one
+                    if (_instance == null)
+                    {
+                        Debug.LogWarning("[InputLayerManager] No instance found in scene! Creating one automatically. " +
+                                       $"WARNING: InputActionAsset will be null! Please create InputLayerManager manually and assign InputActionAsset.");
+                        GameObject go = new GameObject("InputLayerManager");
+                        _instance = go.AddComponent<InputLayerManager>();
+                        DontDestroyOnLoad(go);
+                        
+                        // Try to find InputActionAsset in Resources or scene
+                        var inputActionAsset = Resources.FindObjectsOfTypeAll<UnityEngine.InputSystem.InputActionAsset>().FirstOrDefault();
+                        if (inputActionAsset != null)
+                        {
+                            Debug.Log($"[InputLayerManager] Found InputActionAsset: {inputActionAsset.name}, assigning automatically.");
+                            _instance.inputActionAsset = inputActionAsset;
+                        }
+                    }
                 }
                 return _instance;
             }
@@ -121,7 +139,18 @@ namespace NightHunt.Gameplay.Input
         {
             if (inputActionAsset == null)
             {
-                Debug.LogError("[InputLayerManager] InputActionAsset is null! Please assign in inspector.");
+                Debug.LogError($"[InputLayerManager] InputActionAsset is null on {gameObject.name}! Please assign in inspector. " +
+                             $"This InputLayerManager was auto-created, so it needs InputActionAsset assigned manually.");
+                
+                // Try to find InputActionAsset in scene
+                var foundAsset = FindFirstObjectByType<UnityEngine.InputSystem.InputActionAsset>();
+                if (foundAsset != null)
+                {
+                    Debug.LogWarning($"[InputLayerManager] Found InputActionAsset in scene but it's not a MonoBehaviour. " +
+                                   $"Please create InputLayerManager from prefab or assign InputActionAsset manually.");
+                }
+                
+                // Don't throw exception - just disable functionality
                 return;
             }
 
@@ -225,7 +254,14 @@ namespace NightHunt.Gameplay.Input
         /// </summary>
         public bool TransitionToState(InputState newState)
         {
-            return stateMachine?.TransitionTo(newState) ?? false;
+            if (stateMachine == null)
+            {
+                Debug.LogWarning($"[InputLayerManager] StateMachine is null! Cannot transition to {newState}. " +
+                               $"This usually means InputActionAsset was not assigned.");
+                return false;
+            }
+            
+            return stateMachine.TransitionTo(newState);
         }
 
         /// <summary>

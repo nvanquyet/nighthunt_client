@@ -1,6 +1,7 @@
 using UnityEngine;
 using NightHunt.InteractionSystem.Core.Interfaces;
 using NightHunt.InteractionSystem.Core.Structs;
+using NightHunt.InteractionSystem.Events;
 
 namespace NightHunt.InteractionSystem.Interaction.Handlers
 {
@@ -27,8 +28,8 @@ namespace NightHunt.InteractionSystem.Interaction.Handlers
                 }
                 else
                 {
-                    // Update UI progress
-                    UpdateProgressUI();
+                    // Fire progress event for gameplay UI
+                    InteractionEvents.InvokeHoldProgressChanged(currentProgress.GetProgress());
                 }
             }
         }
@@ -53,8 +54,8 @@ namespace NightHunt.InteractionSystem.Interaction.Handlers
             currentProgress = currentProgress.StartHolding();
             isHolding = true;
 
-            // Show progress UI
-            ShowProgressUI();
+            // Fire event for gameplay UI
+            InteractionEvents.InvokeHoldProgressStarted();
         }
 
         /// <summary>
@@ -68,8 +69,8 @@ namespace NightHunt.InteractionSystem.Interaction.Handlers
             isHolding = false;
             currentProgress = currentProgress.StopHolding();
 
-            // Hide progress UI
-            HideProgressUI();
+            // Fire event for gameplay UI
+            InteractionEvents.InvokeHoldProgressCancelled();
 
             // Reset if not completed
             if (!currentProgress.isCompleted)
@@ -95,47 +96,11 @@ namespace NightHunt.InteractionSystem.Interaction.Handlers
             currentProgress = currentProgress.Reset();
             currentInteractable = null;
 
-            // Hide progress UI
-            HideProgressUI();
+            // Fire event for gameplay UI
+            InteractionEvents.InvokeHoldProgressCompleted();
         }
 
-        /// <summary>
-        /// Update progress UI.
-        /// </summary>
-        private void UpdateProgressUI()
-        {
-            float progress = currentProgress.GetProgress();
-            // UI update will be handled by InteractionUIController
-            var uiController = GetComponent<InteractionUIController>();
-            if (uiController != null)
-            {
-                uiController.UpdateProgress(progress);
-            }
-        }
-
-        /// <summary>
-        /// Show progress UI.
-        /// </summary>
-        private void ShowProgressUI()
-        {
-            var uiController = GetComponent<InteractionUIController>();
-            if (uiController != null)
-            {
-                uiController.ShowProgress();
-            }
-        }
-
-        /// <summary>
-        /// Hide progress UI.
-        /// </summary>
-        private void HideProgressUI()
-        {
-            var uiController = GetComponent<InteractionUIController>();
-            if (uiController != null)
-            {
-                uiController.HideProgress();
-            }
-        }
+        // Note: UI methods removed - gameplay UI subscribes to InteractionEvents
 
         /// <summary>
         /// Get current progress (0-1).

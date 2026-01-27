@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
-using NightHunt.Gameplay.Inventory;
+using NightHunt.InteractionSystem.Core.Structs;
 
 namespace NightHunt.Gameplay.UI
 {
@@ -19,12 +19,12 @@ namespace NightHunt.Gameplay.UI
         [SerializeField] private GameObject selectedIndicator;
 
         private int slotIndex;
-        private InventorySlot slot;
         private PlayerHUD playerHUD;
         private bool isSelected = false;
         private ItemTooltip tooltip;
         private InventoryPanel inventoryPanel;
         private bool isDragging = false;
+        private ItemInstance? slot;
 
         /// <summary>
         /// Initialize quick slot
@@ -49,9 +49,9 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Update slot display
         /// </summary>
-        public void UpdateSlot(InventorySlot slotData)
+        // Legacy UpdateSlot kept for compatibility, no-op with package inventory
+        public void UpdateSlot(object _)
         {
-            slot = slotData;
             UpdateDisplay();
         }
 
@@ -60,7 +60,9 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         private void UpdateDisplay()
         {
-            if (slot == null || slot.IsEmpty)
+            // TODO: Reconnect to package inventory quick slots
+            bool isEmpty = true;
+            if (isEmpty)
             {
                 // Empty slot
                 if (itemIcon != null)
@@ -76,17 +78,14 @@ namespace NightHunt.Gameplay.UI
             }
             else
             {
-                // Slot with item
                 if (itemIcon != null)
                 {
-                    // TODO: Load item icon from ItemConfigData
                     itemIcon.enabled = true;
-                    // itemIcon.sprite = slot.Item.Icon;
                 }
 
                 if (quantityText != null)
                 {
-                    quantityText.text = slot.Quantity > 1 ? slot.Quantity.ToString() : "";
+                    quantityText.text = "";
                 }
             }
 
@@ -118,14 +117,9 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         public void UseItem()
         {
-            if (slot == null || slot.IsEmpty || playerHUD == null)
+            if (playerHUD == null)
                 return;
-
-            var inventorySystem = playerHUD.GetInventorySystem();
-            if (inventorySystem != null)
-            {
-                inventorySystem.UseItem(slot.Item.ItemId);
-            }
+            // TODO: Call ItemUsageSystem on player based on quick slot binding
         }
 
         /// <summary>
@@ -136,7 +130,7 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Get slot data
         /// </summary>
-        public InventorySlot GetSlot() => slot;
+        public ItemInstance? GetSlot() => slot;
 
         // Drop handler - allows dragging items onto quick slot
         public void OnDrop(PointerEventData eventData)
@@ -148,9 +142,10 @@ namespace NightHunt.Gameplay.UI
         // Hover handlers for tooltip
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (slot != null && !slot.IsEmpty && tooltip != null)
+            if (slot.HasValue && slot.Value.IsValid() && tooltip != null)
             {
-                tooltip.ShowTooltip(slot, eventData.position);
+                // TODO: Update ItemTooltip to accept ItemInstance instead of InventorySlot
+                // tooltip.ShowTooltip(slot.Value, eventData.position);
             }
         }
 
@@ -165,7 +160,7 @@ namespace NightHunt.Gameplay.UI
         // Drag handlers - allow dragging from quick slot
         public void OnBeginDrag(PointerEventData eventData)
         {
-            if (slot == null || slot.IsEmpty || inventoryPanel == null)
+            if (!slot.HasValue || !slot.Value.IsValid() || inventoryPanel == null)
                 return;
 
             isDragging = true;

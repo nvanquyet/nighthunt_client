@@ -10,7 +10,6 @@ namespace NightHunt.InteractionSystem.Interaction.Handlers
     public class InteractionHandler : MonoBehaviour
     {
         private HoldInteractionHandler holdHandler;
-        private InteractionUIController uiController;
 
         private void Awake()
         {
@@ -20,11 +19,7 @@ namespace NightHunt.InteractionSystem.Interaction.Handlers
                 holdHandler = gameObject.AddComponent<HoldInteractionHandler>();
             }
 
-            uiController = GetComponent<InteractionUIController>();
-            if (uiController == null)
-            {
-                uiController = FindObjectOfType<InteractionUIController>();
-            }
+            // Note: UI removed - gameplay UI subscribes to InteractionEvents
         }
 
         /// <summary>

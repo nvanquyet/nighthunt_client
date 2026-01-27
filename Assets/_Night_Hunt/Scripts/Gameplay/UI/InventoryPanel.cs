@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Inventory;
 using NightHunt.Gameplay.Input;
+using NightHunt.InteractionSystem.Inventory;
+using NightHunt.InteractionSystem.Core.Structs;
 
 namespace NightHunt.Gameplay.UI
 {
@@ -32,8 +34,8 @@ namespace NightHunt.Gameplay.UI
         [SerializeField] private DragDropHandler dragDropHandler;
 
         private NetworkPlayer localPlayer;
-        private InventorySystem inventorySystem;
-        private InventoryGrid inventoryGrid;
+        private InventoryService inventorySystem;
+        private GridInventoryComponent inventoryGrid;
         private List<InventorySlotUI> slotUIs = new List<InventorySlotUI>();
         private InventorySlotUI selectedSlot;
         private bool isOpen = false;
@@ -42,7 +44,7 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Initialize inventory panel
         /// </summary>
-        public void Initialize(NetworkPlayer player, InventorySystem inventory)
+        public void Initialize(NetworkPlayer player, InventoryService inventory)
         {
             if (player == null || !player.IsLocalPlayer)
             {
@@ -215,13 +217,24 @@ namespace NightHunt.Gameplay.UI
             slotUIs.Clear();
 
             // Create slots for grid
-            for (int y = 0; y < inventoryGrid.Height; y++)
+            var (width, height) = inventoryGrid.GetGridSize();
+            for (int y = 0; y < height; y++)
             {
-                for (int x = 0; x < inventoryGrid.Width; x++)
+                for (int x = 0; x < width; x++)
                 {
-                    var slot = inventoryGrid.GetSlot(x, y);
-                    if (slot == null)
-                        continue;
+                    var itemInstance = inventoryGrid.GetItemAt(x, y);
+                    
+                    // Create wrapper InventorySlot for UI compatibility
+                    InventorySlot slot = new InventorySlot();
+                    if (itemInstance.HasValue)
+                    {
+                        var item = itemInstance.Value;
+                        var itemConfig = NightHunt.Data.GameConfigLoader.Instance?.GetItemConfig(item.itemDataId);
+                        if (itemConfig != null)
+                        {
+                            slot.SetItem(itemConfig, item.quantity);
+                        }
+                    }
 
                     // Create slot UI
                     if (inventorySlotPrefab != null)
@@ -410,25 +423,13 @@ namespace NightHunt.Gameplay.UI
             {
                 // Find empty slot or swap
                 var grid = inventorySystem.GetGrid();
-                var targetSlotData = grid.GetSlot(toX, toY);
+                if (grid == null) return;
                 
-                if (targetSlotData == null || targetSlotData.IsEmpty)
-                {
-                    // Move to empty slot
-                    var newSlot = new InventorySlot();
-                    newSlot.SetItem(quickSlot.Item, 1);
-                    grid.PlaceItem(toX, toY, newSlot);
-                    quickSlot.RemoveQuantity(1);
-                }
-                else
-                {
-                    // Swap items
-                    var temp = targetSlotData;
-                    grid.RemoveItem(toX, toY);
-                    grid.PlaceItem(toX, toY, quickSlot);
-                    quickSlots[quickSlotIndex] = temp;
-                }
+                var targetItemInstance = grid.GetItemAt(toX, toY);
                 
+                // TODO: Convert InventorySlot to ItemInstance for quick slot
+                // For now, this is a placeholder - quick slot system needs to be implemented
+                Debug.LogWarning("[InventoryPanel] MoveFromQuickSlotToInventory: Quick slot system not yet implemented");
                 RefreshInventoryGrid();
             }
         }
@@ -468,16 +469,13 @@ namespace NightHunt.Gameplay.UI
             if (toX >= 0 && toY >= 0)
             {
                 var grid = inventorySystem.GetGrid();
-                var targetSlotData = grid.GetSlot(toX, toY);
+                if (grid == null) return;
                 
-                if (targetSlotData == null || targetSlotData.IsEmpty)
-                {
-                    var newSlot = new InventorySlot();
-                    newSlot.SetItem(slot.Item, slot.Quantity);
-                    grid.PlaceItem(toX, toY, newSlot);
-                    sourceSlot.UpdateSlot(new InventorySlot()); // Clear equipment slot
-                }
+                var targetItemInstance = grid.GetItemAt(toX, toY);
                 
+                // TODO: Convert InventorySlot to ItemInstance for equipment
+                // For now, this is a placeholder - equipment system needs to be implemented
+                Debug.LogWarning("[InventoryPanel] UnequipItemToInventory: Equipment system not yet fully implemented");
                 RefreshInventoryGrid();
             }
         }

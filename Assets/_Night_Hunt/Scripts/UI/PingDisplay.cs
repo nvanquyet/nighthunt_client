@@ -4,6 +4,7 @@ using FishNet;
 using FishNet.Managing;
 using FishNet.Managing.Client;
 using FishNet.Managing.Statistic;
+using FishNet.Managing.Timing;
 using FishNet.Connection;
 using NightHunt.Core;
 using NightHunt.Services.Backend;
@@ -49,8 +50,11 @@ namespace NightHunt.UI
         [SerializeField] private float updateInterval = 1f; // Update every second
 
         [Header("Ping Settings")]
-        [SerializeField] private bool showBackendPingWhenDisconnected = true;
-        [SerializeField] private bool headlessPingEnabled = false; // headless is disabled currently
+        [Tooltip("If true, show FishNet (gameplay) ping when client is connected to server.")]
+        [SerializeField] private bool headlessPingEnabled = true;
+        
+        [Tooltip("If true, enable backend HTTP ping (used on menus / when not connected to game server).")]
+        [SerializeField] private bool backendPingEnabled = false;
 
         private NetworkManager networkManager;
         private BackendHttpClient backendClient;
@@ -148,7 +152,7 @@ namespace NightHunt.UI
                     currentPing = GetHeadlessServerPing();
                     UpdatePingDisplay("Headless", currentPing);
                 }
-                else if (showBackendPingWhenDisconnected || !headlessPingEnabled)
+                else if (backendPingEnabled && backendClient != null)
                 {
                     // Measure backend ping
                     yield return StartCoroutine(MeasureBackendPing());
@@ -163,61 +167,25 @@ namespace NightHunt.UI
 
         private int GetHeadlessServerPing()
         {
-            if (networkManager == null) return 0;
-
             try
             {
-                // FishNet provides ping through StatisticsManager
-                StatisticsManager statsManager = networkManager.StatisticsManager;
-                if (statsManager != null)
-                {
-                    // Get round trip time (RTT) from client connection
-                    ClientManager clientManager = networkManager.ClientManager;
-                    if (clientManager != null && clientManager.Connection.IsValid)
-                    {
-                        // FishNet provides RTT through connection statistics
-                        // Get RTT from connection's ping
-                        NetworkConnection connection = clientManager.Connection;
-                        if (connection != null)
-                        {
-                            // FishNet stores RTT in connection, access via RoundTripTime property
-                            // Note: This may need adjustment based on FishNet version
-                            // For now, use a placeholder approach
-                            return EstimateRTTFromConnection(connection);
-                        }
-                    }
-                }
+                // FishNet exposes RTT via TimeManager.
+                // See FishNet built-in component: FishNet.Component.Utility.PingDisplay
+                TimeManager tm = InstanceFinder.TimeManager;
+                if (tm == null)
+                    return 0;
 
-                // Fallback: Estimate from network time
-                return EstimateRTTFromNetworkTime();
+                long ping = tm.RoundTripTime;
+                // Match FishNet built-in behavior: subtract tick-rate latency to show "real ping"
+                long deduction = (long)(tm.TickDelta * 2000d);
+                ping = (long)Mathf.Max(1, ping - deduction);
+                return (int)ping;
             }
             catch (System.Exception ex)
             {
                 UnityEngine.Debug.LogWarning($"Failed to get headless ping: {ex.Message}");
                 return 0;
             }
-        }
-
-        private int EstimateRTTFromConnection(NetworkConnection connection)
-        {
-            // FishNet connection may have RTT information
-            // This is a simplified approach - check FishNet documentation for exact API
-            // For now, return a placeholder
-            return 50; // Placeholder - should be replaced with actual connection RTT
-        }
-
-        private int EstimateRTTFromNetworkTime()
-        {
-            // Estimate RTT from FishNet network time
-            // This is a simplified approach - actual RTT should come from transport
-            if (networkManager != null && networkManager.ClientManager != null && networkManager.ClientManager.Started)
-            {
-                // FishNet provides network time through TimeManager
-                // RTT can be estimated, but transport should provide direct access
-                // For now, return a placeholder
-                return 50; // Placeholder - should be replaced with actual transport RTT
-            }
-            return 0;
         }
 
         private IEnumerator MeasureBackendPing()

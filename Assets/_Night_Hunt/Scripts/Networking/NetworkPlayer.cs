@@ -22,7 +22,6 @@ namespace NightHunt.Networking
     {
         [Header("Player References")]
         [SerializeField] private PlayerInputHandler inputHandler;
-        [FormerlySerializedAs("movement")] [SerializeField] private CharacterPredictedMovement predictedMovement;
         [SerializeField] private CharacterCombat combat;
         [SerializeField] private CinemachineCamera playerCamera;
 
@@ -36,50 +35,87 @@ namespace NightHunt.Networking
         public bool IsLocalPlayer => IsOwner;
         public CinemachineCamera PlayerCamera => playerCamera;
 
+        private IMovementController predictedMovement;
         #region Initialization
 
         public override void OnStartNetwork()
         {
-            base.OnStartNetwork();
+            try
+            {
+                base.OnStartNetwork();
 
-            // Initialize components
-            if (predictedMovement == null)
-                predictedMovement = GetComponent<CharacterPredictedMovement>();
+                Debug.Log($"[NetworkPlayer] OnStartNetwork " +
+                         $"Go={gameObject.name}, ObjectId={ObjectId}, " +
+                         $"IsServer={IsServer}, IsClient={IsClient}");
 
-            if (combat == null)
-                combat = GetComponent<CharacterCombat>();
+                // Initialize components
+                if (predictedMovement == null)
+                    predictedMovement = GetComponent<IMovementController>();
 
-            if (inputHandler == null)
-                inputHandler = GetComponent<PlayerInputHandler>();
+                if (combat == null)
+                    combat = GetComponent<CharacterCombat>();
 
-            // Subscribe to sync var changes
-            playerName.OnChange += OnPlayerNameChanged;
-            teamId.OnChange += OnPlayerTeamChanged;
+                if (inputHandler == null)
+                    inputHandler = GetComponent<PlayerInputHandler>();
+
+                // Subscribe to sync var changes
+                playerName.OnChange += OnPlayerNameChanged;
+                teamId.OnChange += OnPlayerTeamChanged;
+                
+                Debug.Log($"[NetworkPlayer] OnStartNetwork completed successfully for {gameObject.name}");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[NetworkPlayer] EXCEPTION in OnStartNetwork for {gameObject.name}: {ex.Message}\n{ex.StackTrace}");
+                throw; // Re-throw để Unity biết có lỗi
+            }
         }
 
         public override void OnStartClient()
         {
-            base.OnStartClient();
-
-            // Initialize camera
-            if (playerCamera == null)
+            try
             {
-                playerCamera = GetComponentInChildren<CinemachineCamera>();
+                base.OnStartClient();
                 
+                Debug.Log($"[NetworkPlayer][CLIENT] OnStartClient " +
+                         $"Go={gameObject.name}, ObjectId={ObjectId}, " +
+                         $"Owner={Owner?.ClientId}, IsOwner={IsOwner}, " +
+                         $"IsServer={IsServer}, IsClient={IsClient}, " +
+                         $"Scene={gameObject.scene.name}, Active={gameObject.activeSelf}");
+
+                // Initialize camera
                 if (playerCamera == null)
                 {
-                    Debug.LogError($"[NetworkPlayer] No CinemachineCamera found for player: {playerName.Value}");
+                    playerCamera = GetComponentInChildren<CinemachineCamera>();
+                    
+                    if (playerCamera == null)
+                    {
+                        Debug.LogError($"[NetworkPlayer] No CinemachineCamera found for player: {playerName.Value}");
+                    }
                 }
-            }
 
-            // Setup camera and input based on ownership
-            SetupCameraForOwnership();
-            SetupInputForOwnership();
+                // Setup camera and input based on ownership
+                SetupCameraForOwnership();
+                SetupInputForOwnership();
+                
+                Debug.Log($"[NetworkPlayer][CLIENT] OnStartClient completed successfully for {gameObject.name}");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[NetworkPlayer][CLIENT] EXCEPTION in OnStartClient for {gameObject.name}: {ex.Message}\n{ex.StackTrace}");
+                throw; // Re-throw để Unity biết có lỗi
+            }
         }
 
         public override void OnStartServer()
         {
             base.OnStartServer();
+            
+            Debug.Log($"[NetworkPlayer][SERVER] OnStartServer " +
+                     $"Go={gameObject.name}, ObjectId={ObjectId}, " +
+                     $"Owner={Owner?.ClientId}, IsServer={IsServer}, " +
+                     $"Scene={gameObject.scene.name}, Active={gameObject.activeSelf}, " +
+                     $"PlayerName={playerName.Value}");
             
             // Server instance: Disable camera
             if (playerCamera != null && playerCamera.gameObject != null)
@@ -87,12 +123,15 @@ namespace NightHunt.Networking
                 playerCamera.gameObject.SetActive(false);
                 playerCamera.enabled = false;
             }
-
-            Debug.Log($"[NetworkPlayer] Player spawned on server: {playerName.Value}");
         }
 
         public override void OnStopNetwork()
         {
+            Debug.Log($"[NetworkPlayer] OnStopNetwork called! " +
+                     $"Go={gameObject.name}, ObjectId={ObjectId}, " +
+                     $"IsSpawned={IsSpawned}, IsServer={IsServer}, IsClient={IsClient}, " +
+                     $"Scene={gameObject.scene.name}, StackTrace:\n{System.Environment.StackTrace}");
+            
             base.OnStopNetwork();
             
             // Unsubscribe
@@ -100,6 +139,14 @@ namespace NightHunt.Networking
                 playerName.OnChange -= OnPlayerNameChanged;
             if (teamId != null)
                 teamId.OnChange -= OnPlayerTeamChanged;
+        }
+
+        private void OnDestroy()
+        {
+            Debug.Log($"[NetworkPlayer] OnDestroy called! " +
+                     $"Go={gameObject.name}, ObjectId={ObjectId}, " +
+                     $"IsSpawned={IsSpawned}, IsServer={IsServer}, IsClient={IsClient}, " +
+                     $"Scene={gameObject.scene.name}, StackTrace:\n{System.Environment.StackTrace}");
         }
 
         public override void OnOwnershipClient(NetworkConnection prevOwner)
@@ -150,17 +197,39 @@ namespace NightHunt.Networking
 
         private void SetupInputForOwnership()
         {
-            if (inputHandler == null) return;
-
             if (IsOwner)
             {
-                inputHandler.Initialize(this);
-                inputHandler.EnableInput();
-                Debug.Log($"[NetworkPlayer] Input enabled for owner: {playerName.Value}");
+                // Enable PlayerInputHandler
+                if (inputHandler != null)
+                {
+                    inputHandler.Initialize(this);
+                    inputHandler.EnableInput();
+                    Debug.Log($"[NetworkPlayer] Input enabled for owner: {playerName.Value}");
+                }
+
+                // Enable InputRouter action maps
+                var inputRouter = GetComponent<NightHunt.Gameplay.Input.InputRouter>();
+                if (inputRouter != null)
+                {
+                    inputRouter.UpdateInputMapsForOwnership();
+                    Debug.Log($"[NetworkPlayer] InputRouter maps enabled for owner");
+                }
             }
             else
             {
-                inputHandler.DisableInput();
+                // Disable PlayerInputHandler
+                if (inputHandler != null)
+                {
+                    inputHandler.DisableInput();
+                }
+
+                // Disable InputRouter action maps
+                var inputRouter = GetComponent<NightHunt.Gameplay.Input.InputRouter>();
+                if (inputRouter != null)
+                {
+                    inputRouter.UpdateInputMapsForOwnership();
+                    Debug.Log($"[NetworkPlayer] InputRouter maps disabled for non-owner");
+                }
             }
         }
 

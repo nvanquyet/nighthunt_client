@@ -7,6 +7,7 @@ using NightHunt.InteractionSystem.Items.Data;
 using NightHunt.InteractionSystem.Items.Attachments;
 using NightHunt.InteractionSystem.Events;
 using NightHunt.InteractionSystem.Equipment;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Items.Attachments
 {
@@ -173,12 +174,12 @@ namespace NightHunt.InteractionSystem.Items.Attachments
             if (equipmentSlot != EquipmentSlot.PrimaryWeapon)
                 return equipmentSlot;
 
-            // Try to find EquipmentManager in parent hierarchy
-            EquipmentManager equipmentManager = GetComponentInParent<EquipmentManager>();
+            // Use centralized component finder to search in hierarchy
+            EquipmentManager equipmentManager = ComponentFinder.FindComponentInHierarchy<EquipmentManager>(gameObject, includeInactive: false);
             if (equipmentManager != null)
             {
                 // Check which slot this equipment visual belongs to
-                EquipmentVisualController visualController = GetComponentInParent<EquipmentVisualController>();
+                EquipmentVisualController visualController = ComponentFinder.FindComponentInHierarchy<EquipmentVisualController>(gameObject, includeInactive: false);
                 if (visualController != null)
                 {
                     // Check each slot to find which one contains this visual

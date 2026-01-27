@@ -20,7 +20,7 @@ namespace NightHunt.Gameplay.Weapons
         [SerializeField] private GameObject[] weaponModels = new GameObject[2];
 
         private CharacterCombat characterCombat;
-        private InventorySystem inventorySystem;
+        private InventoryService inventorySystem;
         private WeaponConfigData[] weaponSlots;
         private int currentWeaponIndex = 0;
         private bool isSwitching = false;
@@ -28,7 +28,7 @@ namespace NightHunt.Gameplay.Weapons
         private void Awake()
         {
             characterCombat = GetComponent<CharacterCombat>();
-            inventorySystem = GetComponent<InventorySystem>();
+            inventorySystem = GetComponent<InventoryService>();
             weaponSlots = new WeaponConfigData[maxWeaponSlots];
         }
 

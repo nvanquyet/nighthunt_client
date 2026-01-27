@@ -1,63 +1,89 @@
+using System;
 using UnityEngine;
 using NightHunt.Data;
 
 namespace NightHunt.Gameplay.Inventory
 {
     /// <summary>
-    /// Individual inventory slot with item reference
+    /// Lightweight wrapper around an inventory item for gameplay/UI.
+    /// This is a replacement for the old InventorySlot type, backed by ItemConfigData.
+    /// Actual authoritative data lives in the InteractionSystem package (ItemInstance).
     /// </summary>
-    [System.Serializable]
+    [Serializable]
+    public class InventoryItem
+    {
+        public string ItemId;
+        public ItemConfigData Config;
+        public int Quantity;
+
+        public InventoryItem() { }
+
+        public InventoryItem(string itemId, int quantity)
+        {
+            ItemId = itemId;
+            Quantity = quantity;
+            Config = GameConfigLoader.Instance?.GetItemConfig(itemId);
+        }
+    }
+
+    [Serializable]
     public class InventorySlot
     {
-        public ItemConfigData Item { get; set; }
-        public int Quantity { get; set; }
-        public bool IsEmpty => Item == null || Quantity <= 0;
+        [SerializeField] private InventoryItem item;
 
-        public InventorySlot()
+        public InventoryItem Item => item;
+        public int Quantity => item != null ? item.Quantity : 0;
+        public bool IsEmpty => item == null || item.Quantity <= 0;
+
+        public void SetItem(ItemConfigData config, int quantity)
         {
-            Item = null;
-            Quantity = 0;
+            if (config == null || quantity <= 0)
+            {
+                item = null;
+                return;
+            }
+
+            item = new InventoryItem(config.ItemId, quantity)
+            {
+                Config = config
+            };
         }
 
-        /// <summary>
-        /// Set item in slot
-        /// </summary>
-        public void SetItem(ItemConfigData item, int quantity = 1)
+        public void SetItem(InventoryItem newItem, int quantity)
         {
-            Item = item;
-            Quantity = quantity;
+            if (newItem == null || quantity <= 0)
+        {
+                item = null;
+                return;
         }
 
-        /// <summary>
-        /// Clear slot
-        /// </summary>
-        public void Clear()
-        {
-            Item = null;
-            Quantity = 0;
+            newItem.Quantity = quantity;
+            item = newItem;
         }
 
-        /// <summary>
-        /// Add quantity
-        /// </summary>
         public void AddQuantity(int amount)
         {
-            Quantity += amount;
+            if (item == null) return;
+            item.Quantity += amount;
+            if (item.Quantity <= 0)
+            {
+                item = null;
+            }
         }
 
         /// <summary>
-        /// Remove quantity
+        /// Remove quantity; returns true if slot became empty.
         /// </summary>
         public bool RemoveQuantity(int amount)
         {
-            if (Quantity < amount) return false;
-            
-            Quantity -= amount;
-            if (Quantity <= 0)
+            if (item == null) return false;
+            item.Quantity -= amount;
+            if (item.Quantity <= 0)
             {
-                Clear();
-            }
+                item = null;
             return true;
+            }
+            return false;
         }
     }
 }

@@ -6,258 +6,75 @@ using NightHunt.Gameplay.Character;
 namespace NightHunt.Gameplay.Input
 {
     /// <summary>
-    /// Handles player input using Unity's new Input System
-    /// Supports multiple players without input conflicts
-    /// Uses PlayerInput component for multi-player support
-    /// Integrated with InputLayerManager for proper enable/disable management
+    /// Handles player movement input at gameplay level.
+    /// This class no longer reads InputActions directly – that responsibility
+    /// is moved to InputRouter. It simply subscribes to router events and
+    /// forwards movement state into CharacterPredictedMovement / prediction.
     /// </summary>
-    [RequireComponent(typeof(PlayerInput))]
+    [RequireComponent(typeof(InputRouter))]
     public class PlayerInputHandler : MonoBehaviour
     {
-        [Header("Input Settings")]
-        [SerializeField] private float mouseSensitivity = 1f;
-        [SerializeField] private bool invertY = false;
-
-        private PlayerInput playerInput;
-        private InputActionAsset inputActions; // Lấy từ PlayerInput.actions
-        private InputActionMap playerActionMap;
-        private InputActionMap uiActionMap;
-        private InputLayerManager inputLayerManager;
+        private InputRouter _inputRouter;
         private InputPrediction inputPrediction;
-
-        // Input actions
-        private InputAction moveAction;
-        private InputAction lookAction;
-        private InputAction attackAction;
-        private InputAction interactAction; 
-        private InputAction crouchAction;
-        private InputAction sprintAction;
-        private InputAction reloadAction; 
-        private InputAction inventoryAction;
 
         // Current input state
         private Vector2 moveInput;
-        private Vector2 lookInput;
-        private bool isAttacking;
-        private bool isInteracting;
         private bool isCrouching;
         private bool isSprinting;
-        private bool isReloading;
         private Vector3 aimDirection;
 
         // Camera reference for aim direction
         private UnityEngine.Camera playerCamera;
 
-        private NetworkPlayer networkPlayer;
-        private CharacterPredictedMovement _predictedMovement;
-        private bool inputEnabled = false;
+        private IMovementController _predictedMovement;
 
         private void Awake()
         {
-            playerInput = GetComponent<PlayerInput>();
-            inputLayerManager = InputLayerManager.Instance;
-            inputPrediction = new InputPrediction();
-
-            // Lấy InputActionAsset từ PlayerInput component
-            // PlayerInput component đã có field "Actions" để assign InputActionAsset
-            if (playerInput != null)
+            try
             {
-                inputActions = playerInput.actions;
-            }
+                Debug.Log($"[PlayerInputHandler] Awake - Go={gameObject.name}");
+                
+                _inputRouter = GetComponent<InputRouter>();
+                if (_inputRouter == null)
+                {
+                    Debug.LogError($"[PlayerInputHandler] InputRouter component not found on {gameObject.name}!");
+                    enabled = false;
+                    return;
+                }
+                
+                inputPrediction = new InputPrediction();
 
-            if (inputActions == null)
+                // Find camera (for top-down, this might be different)
+                playerCamera = UnityEngine.Camera.main;
+                if (playerCamera == null)
+                {
+                    playerCamera = FindFirstObjectByType<UnityEngine.Camera>();
+                }
+                
+                Debug.Log($"[PlayerInputHandler] Awake completed successfully");
+            }
+            catch (System.Exception ex)
             {
-                Debug.LogError("[PlayerInputHandler] PlayerInput.actions is null! Please assign InputActionAsset to PlayerInput component.");
-                return;
+                Debug.LogError($"[PlayerInputHandler] EXCEPTION in Awake for {gameObject.name}: {ex.Message}\n{ex.StackTrace}");
+                enabled = false;
             }
-
-            // Setup action maps
-            playerActionMap = inputActions.FindActionMap("Player");
-            uiActionMap = inputActions.FindActionMap("UI");
-
-            if (playerActionMap != null)
-            {
-                moveAction = playerActionMap.FindAction("Move");
-                lookAction = playerActionMap.FindAction("Look");
-                attackAction = playerActionMap.FindAction("Attack");
-                interactAction = playerActionMap.FindAction("Interact");
-                crouchAction = playerActionMap.FindAction("Crouch");
-                sprintAction = playerActionMap.FindAction("Sprint");
-            }
-            else
-            {
-                Debug.LogWarning("[PlayerInputHandler] Player action map not found in InputActionAsset!");
-            }
-
-            // Find camera (for top-down, this might be different)
-            playerCamera = UnityEngine.Camera.main;
-            if (playerCamera == null)
-            {
-                playerCamera = FindFirstObjectByType<UnityEngine.Camera>();
-            }
-        }
-
-        private void OnEnable()
-        {
-            // DON'T auto-enable input here!
-            // Input should only be enabled by NetworkPlayer when IsOwner
-            // Auto-enabling causes both host and client to control the same player
-        }
-
-        private void OnDisable()
-        {
-            DisableInput();
-        }
-
-        /// <summary>
-        /// Initialize with network player reference
-        /// </summary>
-        public void Initialize(NetworkPlayer player)
-        {
-            networkPlayer = player;
-        }
-
-        /// <summary>
-        /// Enable input handling
-        /// Only call this when NetworkPlayer.IsOwner = true
-        /// </summary>
-        public void EnableInput()
-        {
-            if (inputEnabled) return;
-            
-            // Safety check: Only enable if network player is owner
-            if (networkPlayer != null && !networkPlayer.IsOwner)
-            {
-                Debug.LogWarning("[PlayerInputHandler] Cannot enable input: Not owner!");
-                return;
-            }
-
-            inputEnabled = true;
-
-            // Use InputLayerManager to enable Player action map
-            if (inputLayerManager != null)
-            {
-                inputLayerManager.TransitionToState(InputState.PlayerAlive);
-            }
-            else if (playerActionMap != null)
-            {
-                // Fallback if InputLayerManager not available
-                playerActionMap.Enable();
-            }
-
-            // Subscribe to input events
-            if (moveAction != null)
-                moveAction.performed += OnMovePerformed;
-            if (moveAction != null)
-                moveAction.canceled += OnMoveCanceled;
-
-            if (lookAction != null)
-                lookAction.performed += OnLookPerformed;
-
-            if (attackAction != null)
-                attackAction.performed += OnAttackPerformed;
-            if (attackAction != null)
-                attackAction.canceled += OnAttackCanceled;
-
-            if (interactAction != null)
-                interactAction.performed += OnInteractPerformed;
-            if (interactAction != null)
-                interactAction.canceled += OnInteractCanceled;
-
-            if (crouchAction != null)
-                crouchAction.performed += OnCrouchPerformed;
-            if (crouchAction != null)
-                crouchAction.canceled += OnCrouchCanceled;
-
-            if (sprintAction != null)
-                sprintAction.performed += OnSprintPerformed;
-            if (sprintAction != null)
-                sprintAction.canceled += OnSprintCanceled;
-        }
-
-        /// <summary>
-        /// Disable input handling
-        /// </summary>
-        public void DisableInput()
-        {
-            if (!inputEnabled) return;
-
-            inputEnabled = false;
-
-            // Use InputLayerManager to disable Player action map
-            if (inputLayerManager != null)
-            {
-                inputLayerManager.TransitionToState(InputState.PlayerDead);
-            }
-            else if (playerActionMap != null)
-            {
-                // Fallback if InputLayerManager not available
-                playerActionMap.Disable();
-            }
-
-            // Unsubscribe from input events
-            if (moveAction != null)
-                moveAction.performed -= OnMovePerformed;
-            if (moveAction != null)
-                moveAction.canceled -= OnMoveCanceled;
-
-            if (lookAction != null)
-                lookAction.performed -= OnLookPerformed;
-
-            if (attackAction != null)
-                attackAction.performed -= OnAttackPerformed;
-            if (attackAction != null)
-                attackAction.canceled -= OnAttackCanceled;
-
-            if (interactAction != null)
-                interactAction.performed -= OnInteractPerformed;
-            if (interactAction != null)
-                interactAction.canceled -= OnInteractCanceled;
-
-            if (crouchAction != null)
-                crouchAction.performed -= OnCrouchPerformed;
-            if (crouchAction != null)
-                crouchAction.canceled -= OnCrouchCanceled;
-
-            if (sprintAction != null)
-                sprintAction.performed -= OnSprintPerformed;
-            if (sprintAction != null)
-                sprintAction.canceled -= OnSprintCanceled;
-
-            // Reset input state
-            moveInput = Vector2.zero;
-            lookInput = Vector2.zero;
-            isAttacking = false;
-            isInteracting = false;
-            isCrouching = false;
-            isSprinting = false;
         }
 
         private void Update()
         {
-            // Only process input if enabled AND network player is owner
-            if (!inputEnabled) return;
-            
-            // Double-check: Only owner should have input enabled
-            if (networkPlayer != null && !networkPlayer.IsOwner)
-            {
-                DisableInput();
-                return;
-            }
-
             // Update aim direction based on mouse position (for top-down)
             UpdateAimDirection();
 
             // Store input for prediction (legacy system)
             if (inputPrediction != null)
             {
-                inputPrediction.AddCommand(moveInput, isSprinting, isCrouching, isAttacking, aimDirection);
+                inputPrediction.AddCommand(moveInput, isSprinting, isCrouching, false, aimDirection);
             }
 
             // Submit input to CharacterMovementPredicted (which uses PredictedMovement package)
-            if (_predictedMovement == null && networkPlayer != null)
+            if (_predictedMovement == null)
             {
-                _predictedMovement = networkPlayer.GetComponent<CharacterPredictedMovement>();
+                _predictedMovement = GetComponent<IMovementController>();
                 if (_predictedMovement == null)
                 {
                     Debug.LogWarning($"[PlayerInputHandler] CharacterMovementPredicted component not found on NetworkPlayer!");
@@ -306,95 +123,120 @@ namespace NightHunt.Gameplay.Input
             }
         }
 
-        // Input event handlers
-        private void OnMovePerformed(InputAction.CallbackContext context)
-        {
-            moveInput = context.ReadValue<Vector2>();
-        }
-
-        private void OnMoveCanceled(InputAction.CallbackContext context)
-        {
-            moveInput = Vector2.zero;
-        }
-
-        private void OnLookPerformed(InputAction.CallbackContext context)
-        {
-            lookInput = context.ReadValue<Vector2>();
-        }
-
-        private void OnAttackPerformed(InputAction.CallbackContext context)
-        {
-            isAttacking = true;
-        }
-
-        private void OnAttackCanceled(InputAction.CallbackContext context)
-        {
-            isAttacking = false;
-        }
-
-        private void OnInteractPerformed(InputAction.CallbackContext context)
-        {
-            isInteracting = true;
-        }
-
-        private void OnInteractCanceled(InputAction.CallbackContext context)
-        {
-            isInteracting = false;
-        }
-
-        private void OnCrouchPerformed(InputAction.CallbackContext context)
-        {
-            isCrouching = !isCrouching; // Toggle
-        }
-
-        private void OnCrouchCanceled(InputAction.CallbackContext context)
-        {
-            // Crouch is toggle, so nothing on cancel
-        }
-
-        private void OnSprintPerformed(InputAction.CallbackContext context)
-        {
-            isSprinting = true;
-        }
-
-        private void OnSprintCanceled(InputAction.CallbackContext context)
-        {
-            isSprinting = false;
-        }
-
         // Public getters for input state
         public Vector2 GetMoveInput() => moveInput;
-        public Vector2 GetLookInput() => lookInput;
-        public bool IsAttacking() => isAttacking;
-        public bool IsInteracting() => isInteracting;
         public bool IsCrouching() => isCrouching;
         public bool IsSprinting() => isSprinting;
-        public bool IsReloading() => isReloading;
         public Vector3 GetAimDirection() => aimDirection;
-
-        public void SetReloading(bool reloading) => isReloading = reloading;
 
         /// <summary>
         /// Get input prediction instance
         /// </summary>
         public InputPrediction GetInputPrediction() => inputPrediction;
 
+        // Combat input state (read from InputRouter)
+        private bool isAttacking = false;
+        private bool isReloading = false;
+        private bool scoutModeEnabled = false;
+
+        /// <summary>
+        /// Initialize with network player (called by NetworkPlayer)
+        /// </summary>
+        public void Initialize(NetworkPlayer player)
+        {
+            // Component is already initialized in Awake, this is just for compatibility
+        }
+
+        /// <summary>
+        /// Enable input processing
+        /// </summary>
+        public void EnableInput()
+        {
+            enabled = true;
+        }
+
+        /// <summary>
+        /// Disable input processing
+        /// </summary>
+        public void DisableInput()
+        {
+            enabled = false;
+        }
+
+        /// <summary>
+        /// Check if attacking (read from InputRouter combat actions)
+        /// </summary>
+        public bool IsAttacking() => isAttacking;
+
+        /// <summary>
+        /// Check if reloading
+        /// </summary>
+        public bool IsReloading() => isReloading;
+
         /// <summary>
         /// Set scout mode (disables attack input)
         /// </summary>
         public void SetScoutMode(bool active)
         {
-            if (inputLayerManager != null)
+            scoutModeEnabled = active;
+            // TODO: Disable combat actions when scout mode is active
+        }
+
+        private void OnEnable()
+        {
+            if (_inputRouter != null)
             {
-                if (active)
-                {
-                    inputLayerManager.TransitionToState(InputState.ScoutMode);
-                }
-                else
-                {
-                    inputLayerManager.TransitionToState(InputState.PlayerAlive);
-                }
+                _inputRouter.OnMove += HandleMove;
+                _inputRouter.OnSprintChanged += HandleSprintChanged;
+                _inputRouter.OnCrouchChanged += HandleCrouchChanged;
+                _inputRouter.OnAttackChanged += HandleAttackChanged;
+                _inputRouter.OnReload += HandleReload;
             }
+        }
+
+        private void OnDisable()
+        {
+            if (_inputRouter != null)
+            {
+                _inputRouter.OnMove -= HandleMove;
+                _inputRouter.OnSprintChanged -= HandleSprintChanged;
+                _inputRouter.OnCrouchChanged -= HandleCrouchChanged;
+                _inputRouter.OnAttackChanged -= HandleAttackChanged;
+                _inputRouter.OnReload -= HandleReload;
+            }
+        }
+
+        private void HandleMove(Vector2 move)
+        {
+            moveInput = move;
+        }
+
+        private void HandleSprintChanged(bool isSprintingValue)
+        {
+            isSprinting = isSprintingValue;
+        }
+
+        private void HandleCrouchChanged(bool isCrouchingValue)
+        {
+            isCrouching = isCrouchingValue;
+        }
+
+        private void HandleAttackChanged(bool attacking)
+        {
+            isAttacking = attacking && !scoutModeEnabled; // Disable attack in scout mode
+        }
+
+        private void HandleReload()
+        {
+            isReloading = true;
+            // Reset after a frame (or use a timer)
+            StartCoroutine(ResetReloadFlag());
+        }
+
+        private System.Collections.IEnumerator ResetReloadFlag()
+        {
+            yield return null;
+            isReloading = false;
         }
     }
 }

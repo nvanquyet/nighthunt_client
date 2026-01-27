@@ -2,6 +2,7 @@ using UnityEngine;
 using NightHunt.InteractionSystem.Core.Interfaces;
 using NightHunt.InteractionSystem.Core.Abstractions;
 using NightHunt.InteractionSystem.Pickup.Handlers;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Pickup.Detection
 {
@@ -31,7 +32,7 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
             triggerCollider.isTrigger = true;
             triggerCollider.radius = autoPickupRadius;
 
-            pickupHandler = GetComponentInParent<PickupHandler>();
+            pickupHandler = ComponentFinder.FindComponentInHierarchy<PickupHandler>(gameObject, includeInactive: false);
             if (pickupHandler == null)
             {
                 pickupHandler = FindObjectOfType<PickupHandler>();

@@ -50,7 +50,9 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
-        /// Show tooltip for item
+        /// Show tooltip for item (legacy InventorySlot wrapper).
+        /// Under the hood this uses ItemConfigData from GameConfigLoader,
+        /// so data still comes from the central JSON config.
         /// </summary>
         public void ShowTooltip(InventorySlot slot, Vector2 screenPosition)
         {
@@ -112,36 +114,42 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
-        /// Update tooltip content
+        /// Update tooltip content.
+        /// Uses ItemConfigData looked up from GameConfigLoader based on the slot's item id.
         /// </summary>
         private void UpdateTooltipContent()
         {
             if (currentSlot == null || currentSlot.IsEmpty)
                 return;
 
-            var item = currentSlot.Item;
-            if (item == null)
+            var inventoryItem = currentSlot.Item;
+            if (inventoryItem == null)
+                return;
+
+            // Resolve config from wrapper or global config loader
+            ItemConfigData config = inventoryItem.Config ?? GameConfigLoader.Instance?.GetItemConfig(inventoryItem.ItemId);
+            if (config == null)
                 return;
 
             // Item name
             if (itemNameText != null)
             {
-                itemNameText.text = item.DisplayName ?? item.ItemId;
+                itemNameText.text = string.IsNullOrEmpty(config.DisplayName) ? config.ItemId : config.DisplayName;
             }
 
             // Item stats
             if (itemStatsText != null)
             {
-                string stats = $"Weight: {item.Weight:F1} kg\n";
-                stats += $"Category: {item.Category ?? "Unknown"}\n";
-                stats += $"Rarity: {item.Rarity ?? "Common"}\n";
+                string stats = $"Weight: {config.Weight:F1} kg\n";
+                stats += $"Category: {config.Category ?? "Unknown"}\n";
+                stats += $"Rarity: {config.Rarity ?? "Common"}\n";
                 
-                if (!string.IsNullOrEmpty(item.EffectType))
+                if (!string.IsNullOrEmpty(config.EffectType))
                 {
-                    stats += $"Effect: {item.EffectType}";
-                    if (item.EffectValue > 0)
+                    stats += $"Effect: {config.EffectType}";
+                    if (config.EffectValue > 0)
                     {
-                        stats += $" ({item.EffectValue})";
+                        stats += $" ({config.EffectValue})";
                     }
                 }
 
@@ -149,7 +157,7 @@ namespace NightHunt.Gameplay.UI
             }
 
             // Equipped items (nested equipment)
-            UpdateEquippedItems(item);
+            UpdateEquippedItems(config);
         }
 
         /// <summary>

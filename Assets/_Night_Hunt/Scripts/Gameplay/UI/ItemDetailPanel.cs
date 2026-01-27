@@ -44,7 +44,9 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
-        /// Display item information
+        /// Display item information.
+        /// Still accepts the legacy InventorySlot wrapper, but resolves all data
+        /// via ItemConfigData (either from the wrapper or GameConfigLoader).
         /// </summary>
         public void DisplayItem(InventorySlot slot, bool isNestedEquipment = false)
         {
@@ -64,7 +66,15 @@ namespace NightHunt.Gameplay.UI
                 return;
             }
 
-            var item = slot.Item;
+            var inventoryItem = slot.Item;
+            if (inventoryItem == null)
+            {
+                ClearDisplay();
+                return;
+            }
+
+            // Resolve config from wrapper or global config loader
+            ItemConfigData item = inventoryItem.Config ?? GameConfigLoader.Instance?.GetItemConfig(inventoryItem.ItemId);
             if (item == null)
             {
                 ClearDisplay();
@@ -74,7 +84,7 @@ namespace NightHunt.Gameplay.UI
             // Display basic info
             if (itemNameText != null)
             {
-                itemNameText.text = item.DisplayName ?? item.ItemId;
+                itemNameText.text = string.IsNullOrEmpty(item.DisplayName) ? item.ItemId : item.DisplayName;
             }
 
             if (itemDescriptionText != null)

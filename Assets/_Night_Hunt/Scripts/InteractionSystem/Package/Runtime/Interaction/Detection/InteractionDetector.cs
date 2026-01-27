@@ -1,6 +1,9 @@
 using UnityEngine;
 using NightHunt.InteractionSystem.Core.Interfaces;
 using NightHunt.InteractionSystem.Interaction.Handlers;
+using NightHunt.InteractionSystem.Events;
+using NightHunt.InteractionSystem.Pickup.Handlers;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Interaction.Detection
 {
@@ -10,28 +13,35 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
     /// </summary>
     public class InteractionDetector : MonoBehaviour
     {
-        [Header("Detection Settings")]
-        [SerializeField] private float detectionRange = 5f;
-        [SerializeField] private LayerMask interactionLayers = -1;
+        [Header("Settings")]
+        [SerializeField] private PickupSettings settings;
+
+        [Header("Camera")]
         [SerializeField] private Camera playerCamera;
 
-        [Header("UI")]
-        [SerializeField] private GameObject interactionPromptUI;
-        [SerializeField] private UnityEngine.UI.Text interactionText;
+        // Note: UI removed - gameplay UI should subscribe to InteractionEvents.OnInteractTargetChanged
 
         private IInteractable currentTarget;
         private InteractionHandler interactionHandler;
 
         private void Awake()
         {
-            // Try to find InteractionHandler in this object, parent, or children
-            interactionHandler = GetComponentInParent<InteractionHandler>();
-            if (interactionHandler == null)
-                interactionHandler = GetComponentInChildren<InteractionHandler>();
+            // Use centralized component finder to search in hierarchy
+            interactionHandler = ComponentFinder.FindComponentInHierarchy<InteractionHandler>(gameObject, includeInactive: false);
             
             if (interactionHandler == null)
             {
                 Debug.LogWarning("[InteractionDetector] InteractionHandler not found! Interaction functionality will be limited.");
+            }
+
+            // Find settings if not assigned
+            if (settings == null)
+            {
+                settings = FindObjectOfType<PickupSettings>();
+                if (settings == null)
+                {
+                    Debug.LogWarning("[InteractionDetector] PickupSettings not found! Using default values.");
+                }
             }
         }
 
@@ -69,13 +79,8 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
                 return;
             }
 
-            // Strategy 2: Find Camera in this object or children
-            playerCamera = GetComponentInChildren<Camera>();
-            if (playerCamera != null)
-                return;
-
-            // Strategy 3: Find Camera in parent
-            playerCamera = GetComponentInParent<Camera>();
+            // Strategy 2: Find Camera in hierarchy (this object, parent, children, root)
+            playerCamera = ComponentFinder.FindComponentInHierarchy<Camera>(gameObject, includeInactive: false);
             if (playerCamera != null)
                 return;
 
@@ -122,6 +127,10 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
             IInteractable newTarget = null;
             float closestDistance = float.MaxValue;
 
+            // Get settings values
+            float detectionRange = settings != null ? settings.InteractionDetectionRange : 5f;
+            LayerMask interactionLayers = settings != null ? settings.InteractionLayers : -1;
+
             // Raycast from camera center
             Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
             RaycastHit hit;
@@ -151,7 +160,7 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
                 if (currentTarget != null)
                 {
                     currentTarget.OnInteractionEnd(gameObject);
-                    HideInteractionPrompt();
+                    InteractionEvents.InvokeInteractTargetLost();
                 }
 
                 currentTarget = newTarget;
@@ -159,7 +168,8 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
                 if (currentTarget != null)
                 {
                     currentTarget.OnInteractionStart(gameObject);
-                    ShowInteractionPrompt(currentTarget);
+                    string promptText = currentTarget.GetInteractionText();
+                    InteractionEvents.InvokeInteractTargetChanged(currentTarget, promptText);
                 }
             }
         }
@@ -187,32 +197,7 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
             }
         }
 
-        /// <summary>
-        /// Show interaction prompt UI.
-        /// </summary>
-        private void ShowInteractionPrompt(IInteractable interactable)
-        {
-            if (interactionPromptUI != null)
-            {
-                interactionPromptUI.SetActive(true);
-            }
-
-            if (interactionText != null)
-            {
-                interactionText.text = interactable.GetInteractionText();
-            }
-        }
-
-        /// <summary>
-        /// Hide interaction prompt UI.
-        /// </summary>
-        private void HideInteractionPrompt()
-        {
-            if (interactionPromptUI != null)
-            {
-                interactionPromptUI.SetActive(false);
-            }
-        }
+        // Note: UI methods removed - gameplay UI subscribes to InteractionEvents
 
         /// <summary>
         /// Get the current interaction target.
@@ -236,6 +221,9 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
                 return;
             }
 
+            float detectionRange = settings != null ? settings.InteractionDetectionRange : 5f;
+            LayerMask interactionLayers = settings != null ? settings.InteractionLayers : -1;
+
             start = playerCamera.transform.position;
             Vector3 direction = playerCamera.transform.forward;
             Ray ray = new Ray(start, direction);
@@ -248,8 +236,8 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
         /// </summary>
         public void GetDetectionSettings(out float range, out LayerMask layers, out Camera cam)
         {
-            range = detectionRange;
-            layers = interactionLayers;
+            range = settings != null ? settings.InteractionDetectionRange : 5f;
+            layers = settings != null ? settings.InteractionLayers : -1;
             cam = playerCamera;
         }
 
@@ -280,6 +268,9 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
         {
             if (playerCamera == null)
                 return;
+
+            float detectionRange = settings != null ? settings.InteractionDetectionRange : 5f;
+            LayerMask interactionLayers = settings != null ? settings.InteractionLayers : -1;
 
             Vector3 start = playerCamera.transform.position;
             Vector3 direction = playerCamera.transform.forward;

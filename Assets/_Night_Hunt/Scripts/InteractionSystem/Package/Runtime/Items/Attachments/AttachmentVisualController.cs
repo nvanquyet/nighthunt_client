@@ -1,5 +1,6 @@
 using UnityEngine;
 using NightHunt.InteractionSystem.Items.Data;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Items.Attachments
 {
@@ -16,11 +17,7 @@ namespace NightHunt.InteractionSystem.Items.Attachments
 
         private void Awake()
         {
-            attachmentManager = GetComponent<AttachmentManager>();
-            if (attachmentManager == null)
-            {
-                attachmentManager = GetComponentInParent<AttachmentManager>();
-            }
+            attachmentManager = ComponentFinder.FindComponentInHierarchy<AttachmentManager>(gameObject, includeInactive: false);
 
             if (attachmentParent == null)
             {

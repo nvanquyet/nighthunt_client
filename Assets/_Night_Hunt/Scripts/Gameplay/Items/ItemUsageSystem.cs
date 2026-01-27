@@ -17,14 +17,14 @@ namespace NightHunt.Gameplay.Items
 
         private CharacterStats characterStats;
         private CharacterPredictedMovement _characterPredictedMovement;
-        private InventorySystem inventorySystem;
+        private InventoryService inventorySystem;
         private float lastUseTime;
 
         private void Awake()
         {
             characterStats = GetComponent<CharacterStats>();
             _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
-            inventorySystem = GetComponent<InventorySystem>();
+            inventorySystem = GetComponent<InventoryService>();
         }
 
         /// <summary>
@@ -47,7 +47,7 @@ namespace NightHunt.Gameplay.Items
             bool itemExists = false;
             foreach (var slot in items)
             {
-                if (slot != null && !slot.IsEmpty && slot.Item != null && slot.Item.ItemId == itemId)
+                if (slot.itemDataId == itemId && slot.quantity > 0)
                 {
                     itemExists = true;
                     break;

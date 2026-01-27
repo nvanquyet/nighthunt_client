@@ -4,6 +4,8 @@ using TMPro;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Inventory;
 using NightHunt.Gameplay.Character;
+using FishNet;
+using FishNet.Managing.Timing;
 
 namespace NightHunt.Gameplay.UI
 {
@@ -19,10 +21,6 @@ namespace NightHunt.Gameplay.UI
         [SerializeField] private Slider staminaBar;
         [SerializeField] private TextMeshProUGUI staminaText;
 
-        [Header("Prompt Text")]
-        [SerializeField] private GameObject promptPanel;
-        [SerializeField] private TextMeshProUGUI promptText;
-
         [Header("Quick Slots")]
         [SerializeField] private QuickSlotUI[] quickSlots = new QuickSlotUI[4]; // Assign manually in inspector
 
@@ -33,16 +31,25 @@ namespace NightHunt.Gameplay.UI
         [SerializeField] private Slider weightBar;
         [SerializeField] private TextMeshProUGUI weightText;
 
+        [Header("Networking")]
+        [Tooltip("Optional. If set, shows current client↔server RTT in milliseconds.")]
+        [SerializeField] private TextMeshProUGUI pingText;
+        [SerializeField] private float pingUpdateInterval = 0.5f;
+        [Tooltip("If true, subtracts an estimate of tick-rate latency from the RTT (similar to FishNet built-in PingDisplay).")]
+        [SerializeField] private bool pingHideTickRateLatency = true;
+
         private NetworkPlayer localPlayer;
-        private InventorySystem inventorySystem;
+        private InventoryService inventorySystem;
         private CharacterStats characterStats;
         private InventoryPanel inventoryPanel;
         private bool isInitialized = false;
 
+        private float _nextPingUpdateTime;
+
         /// <summary>
         /// Initialize HUD with player references
         /// </summary>
-        public void Initialize(NetworkPlayer player, InventorySystem inventory, InventoryPanel panel = null)
+        public void Initialize(NetworkPlayer player, InventoryService inventory, InventoryPanel panel = null)
         {
             if (player == null || !player.IsLocalPlayer)
             {
@@ -70,6 +77,7 @@ namespace NightHunt.Gameplay.UI
             UpdateHealthBar();
             UpdateStaminaBar();
             UpdateWeightDisplay();
+            UpdatePingDisplay();
             UpdateQuickSlots();
             UpdateWeaponSlots();
         }
@@ -162,20 +170,47 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
+        /// Update ping display (client ↔ server RTT).
+        /// </summary>
+        private void UpdatePingDisplay()
+        {
+            if (pingText == null) return;
+
+            if (Time.unscaledTime < _nextPingUpdateTime) return;
+            _nextPingUpdateTime = Time.unscaledTime + Mathf.Max(0.1f, pingUpdateInterval);
+
+            if (!InstanceFinder.IsClientStarted)
+            {
+                pingText.text = "--- ms";
+                return;
+            }
+
+            TimeManager tm = InstanceFinder.TimeManager;
+            if (tm == null)
+            {
+                pingText.text = "--- ms";
+                return;
+            }
+
+            long ping = tm.RoundTripTime;
+            if (pingHideTickRateLatency)
+            {
+                long deduction = (long)(tm.TickDelta * 2000d);
+                ping = (long)Mathf.Max(1, ping - deduction);
+            }
+
+            string color = ping < 50 ? "green" : ping < 100 ? "yellow" : "red";
+            pingText.text = $"<color={color}>{ping} ms</color>";
+        }
+
+        /// <summary>
         /// Update quick slots display
         /// </summary>
         private void UpdateQuickSlots()
         {
             if (inventorySystem == null) return;
 
-            var quickSlotData = inventorySystem.GetQuickSlots();
-            for (int i = 0; i < quickSlots.Length && i < quickSlotData.Length; i++)
-            {
-                if (quickSlots[i] != null)
-                {
-                    quickSlots[i].UpdateSlot(quickSlotData[i]);
-                }
-            }
+            // TODO: Rewire quick slots to package-based inventory service
         }
 
         /// <summary>
@@ -186,33 +221,7 @@ namespace NightHunt.Gameplay.UI
             // TODO: Get equipped weapons from combat system
             // For now, slots will be empty
         }
-
-        /// <summary>
-        /// Show interaction prompt
-        /// </summary>
-        public void ShowPrompt(string text)
-        {
-            if (promptPanel != null)
-            {
-                promptPanel.SetActive(true);
-            }
-
-            if (promptText != null)
-            {
-                promptText.text = text;
-            }
-        }
-
-        /// <summary>
-        /// Hide interaction prompt
-        /// </summary>
-        public void HidePrompt()
-        {
-            if (promptPanel != null)
-            {
-                promptPanel.SetActive(false);
-            }
-        }
+        
 
         /// <summary>
         /// Get quick slot by index
@@ -237,6 +246,6 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Get inventory system reference
         /// </summary>
-        public InventorySystem GetInventorySystem() => inventorySystem;
+        public InventoryService GetInventorySystem() => inventorySystem;
     }
 }

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using NightHunt.Gameplay.Inventory;
+using NightHunt.InteractionSystem.Core.Structs;
 
 namespace NightHunt.Gameplay.UI
 {
@@ -58,7 +59,8 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         public void StartDragFromQuickSlot(QuickSlotUI slot, PointerEventData eventData)
         {
-            if (slot == null || slot.GetSlot() == null || slot.GetSlot().IsEmpty)
+            var itemInstance = slot?.GetSlot();
+            if (slot == null || !itemInstance.HasValue || !itemInstance.Value.IsValid())
                 return;
 
             draggedQuickSlot = slot;
@@ -67,8 +69,8 @@ namespace NightHunt.Gameplay.UI
             draggedEquipmentSlot = null;
             isDragging = true;
 
-            // Create drag icon from quick slot
-            CreateDragIconFromSlot(slot.GetSlot());
+            // Create drag icon from quick slot - TODO: Update CreateDragIconFromSlot to accept ItemInstance
+            // CreateDragIconFromSlot(itemInstance.Value);
         }
 
         /// <summary>
@@ -236,8 +238,8 @@ namespace NightHunt.Gameplay.UI
             if (sourceSlot == null || dropTarget == null)
                 return;
 
-            var slot = sourceSlot.GetSlot();
-            if (slot == null || slot.IsEmpty)
+            var itemInstance = sourceSlot.GetSlot();
+            if (!itemInstance.HasValue || !itemInstance.Value.IsValid())
                 return;
 
             InventorySlotUI targetSlot = dropTarget.GetComponent<InventorySlotUI>();
@@ -321,7 +323,8 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
-        /// Create drag icon from inventory slot
+        /// Create drag icon from inventory slot (legacy - still accepts InventorySlot for compatibility)
+        /// TODO: Create overload for ItemInstance
         /// </summary>
         private void CreateDragIconFromSlot(InventorySlot slot)
         {

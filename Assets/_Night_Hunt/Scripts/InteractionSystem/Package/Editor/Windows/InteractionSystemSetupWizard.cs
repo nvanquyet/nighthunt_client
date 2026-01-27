@@ -252,12 +252,8 @@ namespace NightHunt.InteractionSystem.Editor.Windows
                 Debug.Log("[SetupWizard] Added HoldInteractionHandler to InteractionSystem child");
             }
 
-            // InteractionUIController
-            if (interactionSystemObj.GetComponent<InteractionUIController>() == null)
-            {
-                var uiController = interactionSystemObj.AddComponent<InteractionUIController>();
-                Debug.Log("[SetupWizard] Added InteractionUIController to InteractionSystem child");
-            }
+            // Note: UI is handled in gameplay layer, not in package.
+            // Subscribe to InteractionEvents in gameplay UI scripts.
 
             EditorUtility.SetDirty(selectedPlayer);
             EditorUtility.SetDirty(interactionSystemObj);

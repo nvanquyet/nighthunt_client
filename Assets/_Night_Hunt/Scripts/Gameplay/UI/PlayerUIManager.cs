@@ -30,7 +30,7 @@ namespace NightHunt.Gameplay.UI
         [SerializeField] private InventoryPanel inventoryPanel;
 
         private NetworkPlayer localPlayer;
-        private InventorySystem inventorySystem;
+        private InventoryService inventorySystem;
         private bool isInitialized = false;
 
         private void Awake()
@@ -75,7 +75,7 @@ namespace NightHunt.Gameplay.UI
                 if (player.IsLocalPlayer)
                 {
                     localPlayer = player;
-                    inventorySystem = player.GetComponent<InventorySystem>();
+                    inventorySystem = player.GetComponent<InventoryService>();
                     
                     InitializeUI();
                     break;
@@ -137,7 +137,7 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Get inventory system reference
         /// </summary>
-        public InventorySystem GetInventorySystem() => inventorySystem;
+            public InventoryService GetInventorySystem() => inventorySystem;
 
         /// <summary>
         /// Get PlayerHUD reference

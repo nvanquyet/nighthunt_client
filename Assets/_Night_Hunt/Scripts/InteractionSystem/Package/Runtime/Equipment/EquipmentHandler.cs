@@ -6,6 +6,7 @@ using NightHunt.InteractionSystem.Inventory;
 using NightHunt.InteractionSystem.Items.Data;
 using NightHunt.InteractionSystem.Items.Attachments;
 using NightHunt.InteractionSystem.Events;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Equipment
 {
@@ -24,10 +25,10 @@ namespace NightHunt.InteractionSystem.Equipment
         private void Awake()
         {
             if (equipmentManager == null)
-                equipmentManager = GetComponent<EquipmentManager>();
+                equipmentManager = ComponentFinder.FindComponentInHierarchy<EquipmentManager>(gameObject, includeInactive: false);
             
             if (inventory == null)
-                inventory = GetComponentInParent<InventoryComponentBase>();
+                inventory = ComponentFinder.FindComponentInHierarchy<InventoryComponentBase>(gameObject, includeInactive: false);
         }
 
         /// <summary>

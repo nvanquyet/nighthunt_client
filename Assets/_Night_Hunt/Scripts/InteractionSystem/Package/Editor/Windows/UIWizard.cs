@@ -1,9 +1,7 @@
 using UnityEngine;
 using UnityEditor;
 using UnityEngine.UI;
-using NightHunt.InteractionSystem.UI;
 using NightHunt.InteractionSystem.Loot;
-using NightHunt.InteractionSystem.Interaction.Handlers;
 
 namespace NightHunt.InteractionSystem.Editor.Windows
 {
@@ -60,9 +58,10 @@ namespace NightHunt.InteractionSystem.Editor.Windows
             EditorGUILayout.Space();
             EditorGUILayout.HelpBox(
                 "Note: After generating, you need to:\n" +
-                "1. Assign UI references to components (InventoryUIListener, LootContainerUI, etc.)\n" +
+                "1. Create gameplay UI scripts that subscribe to InventoryEvents/InteractionEvents\n" +
                 "2. Customize the UI design to match your game style\n" +
-                "3. Implement grid/item slot rendering (currently placeholder)",
+                "3. Implement grid/item slot rendering (currently placeholder)\n" +
+                "Note: UI is handled in gameplay layer, not in package.",
                 MessageType.Warning
             );
         }
@@ -233,12 +232,11 @@ namespace NightHunt.InteractionSystem.Editor.Windows
             btnTextRect.anchorMax = Vector2.one;
             btnTextRect.sizeDelta = Vector2.zero;
 
-            // Add InventoryUIListener
-            InventoryUIListener listener = canvasObj.AddComponent<InventoryUIListener>();
-            var listenerType = typeof(InventoryUIListener);
-            listenerType.GetField("weightText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(listener, weightText);
-            listenerType.GetField("weightSlider", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(listener, slider);
-            listenerType.GetField("slotCountText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(listener, slotText);
+            // Note: UI is handled in gameplay layer, not in package.
+            // Create a gameplay UI script that subscribes to InventoryEvents:
+            // - InventoryEvents.OnWeightChanged -> Update weightText and weightSlider
+            // - InventoryEvents.OnSlotCountChanged -> Update slotCountText
+            // Assign references: weightText, weightSlider, slotCountText
 
             // Hide by default
             panelObj.SetActive(false);
@@ -411,14 +409,11 @@ namespace NightHunt.InteractionSystem.Editor.Windows
             progressTextRect.anchorMax = Vector2.one;
             progressTextRect.sizeDelta = Vector2.zero;
 
-            // Add InteractionUIController
-            InteractionUIController controller = canvasObj.AddComponent<InteractionUIController>();
-            var controllerType = typeof(InteractionUIController);
-            controllerType.GetField("interactionPromptPanel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(controller, promptPanelObj);
-            controllerType.GetField("interactionText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(controller, interactionText);
-            controllerType.GetField("progressBarPanel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(controller, progressPanelObj);
-            controllerType.GetField("progressBarFill", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(controller, fillImage);
-            controllerType.GetField("progressText", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(controller, progressText);
+            // Note: UI is handled in gameplay layer, not in package.
+            // Create a gameplay UI script that subscribes to InteractionEvents:
+            // - InteractionEvents.OnInteractionTargetChanged -> Show/Hide promptPanelObj
+            // - InteractionEvents.OnHoldInteractionProgress -> Update progressBarFill and progressText
+            // Assign references: promptPanelObj, interactionText, progressPanelObj, fillImage, progressText
 
             // Hide by default
             promptPanelObj.SetActive(false);

@@ -270,10 +270,28 @@ namespace NightHunt.Networking
         /// </summary>
         private void OnPlayerNetworkObjectSpawned(NetworkObject networkObject)
         {
-            Debug.Log($"[ServerGameManager] Player NetworkObject spawned: {networkObject.ObjectId}");
+            Debug.Log($"[ServerGameManager] OnPlayerNetworkObjectSpawned START - ObjectId: {networkObject?.ObjectId}, IsSpawned: {networkObject?.IsSpawned}");
+            
+            // Debug: Log GameObject info để tìm trong Hierarchy
+            if (networkObject != null && networkObject.gameObject != null)
+            {
+                GameObject go = networkObject.gameObject;
+                string sceneName = go.scene.IsValid() ? go.scene.name : "Invalid Scene";
+                string parentName = go.transform.parent != null ? go.transform.parent.name : "None (Root)";
+                string hierarchyPath = GetHierarchyPath(go.transform);
+                
+                Debug.Log($"[ServerGameManager] Player GameObject Info:\n" +
+                         $"  - Name: {go.name}\n" +
+                         $"  - Scene: {sceneName}\n" +
+                         $"  - Parent: {parentName}\n" +
+                         $"  - Hierarchy Path: {hierarchyPath}\n" +
+                         $"  - Position: {go.transform.position}\n" +
+                         $"  - Active: {go.activeSelf}\n" +
+                         $"  - IsSpawned: {networkObject.IsSpawned}");
+            }
 
             // Get NetworkPlayer component
-            NetworkPlayer player = networkObject.GetComponent<NetworkPlayer>();
+            NetworkPlayer player = networkObject?.GetComponent<NetworkPlayer>();
             if (player == null)
             {
                 Debug.LogError("[ServerGameManager] NetworkObject doesn't have NetworkPlayer component!");
@@ -281,7 +299,90 @@ namespace NightHunt.Networking
             }
 
             // Initialize player (team assignment, spawn positioning)
-            InitializePlayer(player);
+            Debug.Log($"[ServerGameManager] About to call InitializePlayer. Player IsSpawned: {player.IsSpawned}, ObjectId: {player.ObjectId}");
+            
+            try
+            {
+                InitializePlayer(player);
+                Debug.Log($"[ServerGameManager] InitializePlayer returned successfully");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[ServerGameManager] EXCEPTION in InitializePlayer: {ex.Message}\n{ex.StackTrace}");
+                return;
+            }
+            
+            // Debug: Check if player still exists after initialization
+            if (player == null || !player.IsSpawned || player.gameObject == null)
+            {
+                Debug.LogError($"[ServerGameManager] Player was destroyed/despawned during InitializePlayer! " +
+                             $"player==null: {player == null}, IsSpawned: {player?.IsSpawned}, gameObject==null: {player?.gameObject == null}");
+                return;
+            }
+            
+            Debug.Log($"[ServerGameManager] Player still valid after InitializePlayer: {player.gameObject.name}, IsSpawned: {player.IsSpawned}, ObjectId: {player.ObjectId}");
+            
+            // Final check - is object still alive?
+            if (networkObject != null && networkObject.gameObject != null && networkObject.IsSpawned)
+            {
+                Debug.Log($"[ServerGameManager] OnPlayerNetworkObjectSpawned END - NetworkObject still exists: {networkObject.gameObject.name}, IsSpawned: {networkObject.IsSpawned}, Scene: {networkObject.gameObject.scene.name}");
+                
+                // Check again after a frame to see if it gets destroyed
+                StartCoroutine(CheckPlayerStillExistsAfterFrame(networkObject));
+            }
+            else
+            {
+                Debug.LogError($"[ServerGameManager] OnPlayerNetworkObjectSpawned END - NetworkObject was destroyed! " +
+                             $"networkObject==null: {networkObject == null}, gameObject==null: {networkObject?.gameObject == null}, IsSpawned: {networkObject?.IsSpawned}");
+            }
+        }
+
+        /// <summary>
+        /// Check if player still exists after a frame (to catch immediate destruction)
+        /// </summary>
+        private IEnumerator CheckPlayerStillExistsAfterFrame(NetworkObject networkObject)
+        {
+            yield return null; // Wait one frame
+            
+            try
+            {
+                if (networkObject != null && networkObject.gameObject != null && networkObject.IsSpawned)
+                {
+                    Debug.Log($"[ServerGameManager] Player still exists after 1 frame: {networkObject.gameObject.name}, IsSpawned: {networkObject.IsSpawned}");
+                }
+                else
+                {
+                    Debug.LogError($"[ServerGameManager] Player was destroyed within 1 frame! " +
+                                 $"networkObject==null: {networkObject == null}, IsSpawned: {networkObject?.IsSpawned}");
+                }
+            }
+            catch (UnityEngine.MissingReferenceException ex)
+            {
+                Debug.LogError($"[ServerGameManager] Player was destroyed within 1 frame (MissingReferenceException): {ex.Message}");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[ServerGameManager] Exception checking player after 1 frame: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get full hierarchy path for debugging
+        /// </summary>
+        private string GetHierarchyPath(Transform transform)
+        {
+            if (transform == null) return "null";
+            
+            string path = transform.name;
+            Transform current = transform.parent;
+            
+            while (current != null)
+            {
+                path = current.name + "/" + path;
+                current = current.parent;
+            }
+            
+            return path;
         }
 
         /// <summary>
@@ -290,34 +391,50 @@ namespace NightHunt.Networking
         [Server]
         private void InitializePlayer(NetworkPlayer player)
         {
-            if (!systemsInitialized)
+            try
             {
-                Debug.LogWarning("[ServerGameManager] Systems not initialized yet, delaying player initialization");
-                StartCoroutine(InitializePlayerDelayed(player));
-                return;
-            }
+                Debug.Log($"[ServerGameManager] InitializePlayer START - Player: {player?.gameObject?.name}, IsSpawned: {player?.IsSpawned}");
+                
+                if (!systemsInitialized)
+                {
+                    Debug.LogWarning("[ServerGameManager] Systems not initialized yet, delaying player initialization");
+                    StartCoroutine(InitializePlayerDelayed(player));
+                    return;
+                }
 
-            if (player == null || !player.IsSpawned)
+                if (player == null || !player.IsSpawned)
+                {
+                    Debug.LogError($"[ServerGameManager] Cannot initialize invalid player! player==null: {player == null}, IsSpawned: {player?.IsSpawned}");
+                    return;
+                }
+
+                Debug.Log($"[ServerGameManager] Initializing player: {player.PlayerName}");
+
+                // Set player name if empty
+                if (string.IsNullOrEmpty(player.PlayerName))
+                {
+                    Debug.Log($"[ServerGameManager] Setting player name to Player_{player.Owner.ClientId}");
+                    player.SetPlayerName($"Player_{player.Owner.ClientId}");
+                }
+
+                // Assign to team
+                Debug.Log($"[ServerGameManager] Assigning player to team...");
+                int teamId = AssignPlayerTeam(player);
+                Debug.Log($"[ServerGameManager] Player assigned to team {teamId}");
+
+                // Position at spawn point
+                Debug.Log($"[ServerGameManager] Positioning player at spawn...");
+                PositionPlayerAtSpawn(player, teamId);
+                Debug.Log($"[ServerGameManager] Player positioned");
+
+                Debug.Log($"[ServerGameManager] Player initialized: {player.PlayerName} on Team {teamId}");
+                Debug.Log($"[ServerGameManager] InitializePlayer END - Player still spawned: {player.IsSpawned}, ObjectId: {player.ObjectId}");
+            }
+            catch (System.Exception ex)
             {
-                Debug.LogError("[ServerGameManager] Cannot initialize invalid player!");
-                return;
+                Debug.LogError($"[ServerGameManager] EXCEPTION in InitializePlayer: {ex.Message}\n{ex.StackTrace}");
+                throw;
             }
-
-            Debug.Log($"[ServerGameManager] Initializing player: {player.PlayerName}");
-
-            // Set player name if empty
-            if (string.IsNullOrEmpty(player.PlayerName))
-            {
-                player.SetPlayerName($"Player_{player.Owner.ClientId}");
-            }
-
-            // Assign to team
-            int teamId = AssignPlayerTeam(player);
-
-            // Position at spawn point
-            PositionPlayerAtSpawn(player, teamId);
-
-            Debug.Log($"[ServerGameManager] Player initialized: {player.PlayerName} on Team {teamId}");
         }
 
         /// <summary>

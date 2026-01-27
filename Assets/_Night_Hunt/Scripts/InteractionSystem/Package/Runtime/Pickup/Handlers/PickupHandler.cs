@@ -7,6 +7,7 @@ using NightHunt.InteractionSystem.Core.Structs;
 using NightHunt.InteractionSystem.Core.Abstractions;
 using NightHunt.InteractionSystem.Inventory;
 using NightHunt.InteractionSystem.Events;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Pickup.Handlers
 {
@@ -16,26 +17,47 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
     [RequireComponent(typeof(InventoryComponentBase))]
     public class PickupHandler : NetworkBehaviour
     {
-        [Header("Pickup Settings")]
-        [SerializeField] private float maxPickupDistance = 5f;
-        [SerializeField] private LayerMask lineOfSightLayers = -1;
+        [Header("Settings")]
+        [SerializeField] private PickupSettings settings;
 
         private InventoryComponentBase inventory;
-        private PickupSettings pickupSettings;
 
         private void Awake()
         {
-            // Try to find InventoryComponentBase in this object, parent, or children
-            inventory = GetComponentInParent<InventoryComponentBase>();
-            if (inventory == null)
-                inventory = GetComponentInChildren<InventoryComponentBase>();
-            
-            if (inventory == null)
+            try
             {
-                Debug.LogError("[PickupHandler] InventoryComponentBase not found! Please ensure an inventory component is attached to the player or a child object.");
-            }
+                Debug.Log($"[PickupHandler] Awake - Go={gameObject.name}, Parent={transform.parent?.name ?? "None"}, Root={transform.root?.name ?? "None"}");
+                
+                // Use centralized component finder to search in hierarchy
+                inventory = ComponentFinder.FindComponentInHierarchy<InventoryComponentBase>(gameObject, includeInactive: false);
+            
+                if (inventory == null)
+                {
+                    Debug.LogError($"[PickupHandler] InventoryComponentBase not found! Searched in: {gameObject.name}, parent, children, and root ({transform.root?.name ?? "None"}) and its children. Please ensure an inventory component is attached.");
+                    // Don't destroy - just disable this component
+                    enabled = false;
+                    return;
+                }
+                
+                Debug.Log($"[PickupHandler] Found InventoryComponentBase: {inventory.gameObject.name}");
 
-            pickupSettings = FindObjectOfType<PickupSettings>();
+            // Find settings if not assigned
+            if (settings == null)
+            {
+                settings = FindObjectOfType<PickupSettings>();
+                if (settings == null)
+                {
+                    Debug.LogWarning("[PickupHandler] PickupSettings not found! Using default values.");
+                }
+                }
+                
+                Debug.Log($"[PickupHandler] Awake completed successfully");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[PickupHandler] EXCEPTION in Awake for {gameObject.name}: {ex.Message}\n{ex.StackTrace}");
+                enabled = false;
+            }
         }
 
         /// <summary>
@@ -43,21 +65,36 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
         /// </summary>
         public void RequestPickup(IPickupable pickupable)
         {
+            Debug.Log($"[PickupHandler] RequestPickup called - pickupable={pickupable != null}, IsOwner={IsOwner}, IsSpawned={IsSpawned}");
+            
             if (!IsOwner)
+            {
+                Debug.LogWarning($"[PickupHandler] Not owner! Cannot pickup. IsOwner={IsOwner}, Owner={Owner?.ClientId}");
                 return;
+            }
 
             if (pickupable == null)
+            {
+                Debug.LogWarning("[PickupHandler] Pickupable is null!");
                 return;
+            }
 
             // Validate on client first
             if (!pickupable.CanPickup(gameObject))
+            {
+                Debug.LogWarning($"[PickupHandler] Cannot pickup {pickupable.GetDisplayName()} - CanPickup returned false");
                 return;
+            }
 
             // Get NetworkObject from pickupable
             NetworkObject pickupableObject = (pickupable as MonoBehaviour)?.GetComponent<NetworkObject>();
             if (pickupableObject == null)
+            {
+                Debug.LogWarning($"[PickupHandler] Pickupable {pickupable.GetDisplayName()} does not have NetworkObject component!");
                 return;
+            }
 
+            Debug.Log($"[PickupHandler] Sending ServerRpc for pickupable {pickupable.GetDisplayName()}, NetworkObject={pickupableObject.ObjectId}");
             // Send to server
             ServerRequestPickup(pickupableObject);
         }
@@ -74,7 +111,7 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
                 return;
 
             // Check if auto pickup is enabled
-            if (pickupSettings != null && !pickupSettings.AutoPickupEnabled)
+            if (settings != null && !settings.AutoPickupEnabled)
                 return;
 
             // Validate
@@ -96,74 +133,135 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
         [ServerRpc(RequireOwnership = true)]
         private void ServerRequestPickup(NetworkObject pickupableObject)
         {
-            if (pickupableObject == null)
-                return;
-
-            IPickupable pickupable = pickupableObject.GetComponent<IPickupable>();
-            if (pickupable == null)
-                return;
-
-            // Validate distance
-            float distance = Vector3.Distance(transform.position, pickupableObject.transform.position);
-            if (distance > maxPickupDistance)
+            try
             {
-                Debug.LogWarning($"[PickupHandler] Pickup distance too far: {distance}m");
-                return;
-            }
-
-            // Validate line of sight
-            Vector3 direction = (pickupableObject.transform.position - transform.position).normalized;
-            RaycastHit hit;
-            if (Physics.Raycast(transform.position, direction, out hit, distance, lineOfSightLayers))
-            {
-                if (hit.collider.gameObject != pickupableObject.gameObject)
+                Debug.Log($"[PickupHandler] ServerRequestPickup called - pickupableObject={pickupableObject != null}, IsServer={IsServer}");
+                
+                if (pickupableObject == null)
                 {
-                    Debug.LogWarning("[PickupHandler] Line of sight blocked");
+                    Debug.LogWarning("[PickupHandler] ServerRpc: pickupableObject is null!");
                     return;
                 }
-            }
 
-            // Get item data
-            ItemDataBase itemData = pickupable.GetItemData();
-            if (itemData == null)
-                return;
-
-            // Create item instance - preserve state if NetworkLootItem
-            ItemInstance itemInstance;
-            var networkLootItem = pickupable as Items.Runtime.NetworkLootItem;
-            if (networkLootItem != null)
-            {
-                // Preserve state from dropped item (durability, customData, attachments, etc.)
-                itemInstance = networkLootItem.GetItemInstance();
-            }
-            else
-            {
-                // Fresh item from spawner
-                itemInstance = itemData.CreateInstance(pickupable.GetQuantity());
-            }
-
-            // Try to add to inventory
-            if (inventory != null && inventory.CanAddItem(itemInstance))
-            {
-                if (inventory.AddItem(itemInstance))
+                Debug.Log($"[PickupHandler] Getting IPickupable component from {pickupableObject.gameObject.name}");
+                IPickupable pickupable = pickupableObject.GetComponent<IPickupable>();
+                if (pickupable == null)
                 {
-                    // Success - notify pickupable
-                    pickupable.OnPickedUp(gameObject);
+                    Debug.LogWarning($"[PickupHandler] No IPickupable component found on {pickupableObject.gameObject.name}!");
+                    return;
+                }
 
-                    // Invoke pickup event
-                    InventoryEvents.InvokeItemPickedUp(itemInstance, pickupable.GetDisplayName());
-                    // Note: ItemAdded event is already invoked by inventory component
+                Debug.Log($"[PickupHandler] Validating distance for {pickupable.GetDisplayName()}");
+                // Validate distance
+                float maxDistance = settings != null ? settings.MaxPickupDistance : 5f;
+                float distance = Vector3.Distance(transform.position, pickupableObject.transform.position);
+                Debug.Log($"[PickupHandler] Distance: {distance}m (max: {maxDistance}m)");
+                if (distance > maxDistance)
+                {
+                    Debug.LogWarning($"[PickupHandler] Pickup distance too far: {distance}m (max: {maxDistance}m)");
+                    return;
+                }
 
-                    // Notify client - get connection from this NetworkBehaviour's owner (the player)
-                    NetworkConnection ownerConn = Owner;
-                    if (ownerConn != null)
+                // Validate line of sight
+                LayerMask losLayers = settings != null ? settings.PickupLineOfSightLayers : -1;
+                Vector3 direction = (pickupableObject.transform.position - transform.position).normalized;
+                RaycastHit hit;
+                if (Physics.Raycast(transform.position, direction, out hit, distance, losLayers))
+                {
+                    if (hit.collider.gameObject != pickupableObject.gameObject)
                     {
-                        ClientOnPickupSuccess(ownerConn, pickupable.GetDisplayName());
+                        Debug.LogWarning($"[PickupHandler] Line of sight blocked by {hit.collider.gameObject.name}");
+                        return;
+                    }
+                }
+
+                Debug.Log($"[PickupHandler] Getting item data from {pickupable.GetDisplayName()}");
+                // Get item data
+                ItemDataBase itemData = pickupable.GetItemData();
+                if (itemData == null)
+                {
+                    Debug.LogWarning($"[PickupHandler] GetItemData() returned null for {pickupable.GetDisplayName()}!");
+                    return;
+                }
+
+                Debug.Log($"[PickupHandler] Creating item instance - itemData={itemData.name}, quantity={pickupable.GetQuantity()}");
+                // Create item instance - preserve state if NetworkLootItem
+                ItemInstance itemInstance;
+                var networkLootItem = pickupable as Items.Runtime.NetworkLootItem;
+                if (networkLootItem != null)
+                {
+                    Debug.Log($"[PickupHandler] Preserving state from NetworkLootItem");
+                    // Preserve state from dropped item (durability, customData, attachments, etc.)
+                    itemInstance = networkLootItem.GetItemInstance();
+                }
+                else
+                {
+                    Debug.Log($"[PickupHandler] Creating fresh item instance");
+                    // Fresh item from spawner
+                    itemInstance = itemData.CreateInstance(pickupable.GetQuantity());
+                }
+
+                if (!itemInstance.IsValid())
+                {
+                    Debug.LogError($"[PickupHandler] Failed to create valid item instance! instanceId={itemInstance.instanceId}, itemDataId={itemInstance.itemDataId}, quantity={itemInstance.quantity}");
+                    return;
+                }
+                
+                Debug.Log($"[PickupHandler] Item instance created successfully - instanceId={itemInstance.instanceId}, itemDataId={itemInstance.itemDataId}, quantity={itemInstance.quantity}");
+
+                Debug.Log($"[PickupHandler] Checking inventory - inventory={inventory != null}");
+                // Try to add to inventory
+                if (inventory == null)
+                {
+                    Debug.LogError($"[PickupHandler] Inventory is null! Cannot add item.");
+                    return;
+                }
+
+                bool canAdd = inventory.CanAddItem(itemInstance);
+                Debug.Log($"[PickupHandler] CanAddItem={canAdd}");
+                if (canAdd)
+                {
+                    Debug.Log($"[PickupHandler] Attempting to add item to inventory");
+                    if (inventory.AddItem(itemInstance))
+                    {
+                        Debug.Log($"[PickupHandler] Successfully added {pickupable.GetDisplayName()} to inventory!");
+                        
+                        // Success - notify pickupable
+                        pickupable.OnPickedUp(gameObject);
+
+                        // Invoke pickup event
+                        InventoryEvents.InvokeItemPickedUp(itemInstance, pickupable.GetDisplayName());
+                        // Note: ItemAdded event is already invoked by inventory component
+
+                        // Notify client - get connection from this NetworkBehaviour's owner (the player)
+                        NetworkConnection ownerConn = Owner;
+                        if (ownerConn != null)
+                        {
+                            Debug.Log($"[PickupHandler] Sending success RPC to client {ownerConn.ClientId}");
+                            ClientOnPickupSuccess(ownerConn, pickupable.GetDisplayName());
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[PickupHandler] Owner connection is null!");
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[PickupHandler] AddItem returned false - inventory full?");
+                        string reason = "Inventory full";
+                        InventoryEvents.InvokePickupFailed(reason);
+                        
+                        NetworkConnection ownerConn = Owner;
+                        if (ownerConn != null)
+                        {
+                            ClientOnPickupFailed(ownerConn, reason);
+                        }
                     }
                 }
                 else
                 {
-                    string reason = "Inventory full";
+                    Debug.LogWarning($"[PickupHandler] Cannot add item - not enough space");
+                    string reason = "Not enough space";
                     InventoryEvents.InvokePickupFailed(reason);
                     
                     NetworkConnection ownerConn = Owner;
@@ -173,16 +271,9 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
                     }
                 }
             }
-            else
+            catch (System.Exception ex)
             {
-                string reason = "Not enough space";
-                InventoryEvents.InvokePickupFailed(reason);
-                
-                NetworkConnection ownerConn = Owner;
-                if (ownerConn != null)
-                {
-                    ClientOnPickupFailed(ownerConn, reason);
-                }
+                Debug.LogError($"[PickupHandler] EXCEPTION in ServerRequestPickup: {ex.Message}\n{ex.StackTrace}");
             }
         }
 
