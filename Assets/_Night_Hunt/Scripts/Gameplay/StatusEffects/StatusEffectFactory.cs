@@ -9,9 +9,16 @@ namespace NightHunt.Gameplay.StatusEffects
     {
         /// <summary>
         /// Create status effect from config
+        /// TODO: Implement StatusEffectConfig ScriptableObject system to replace GameConfigLoader
         /// </summary>
         public static IStatusEffect CreateEffect(string statusId, float duration)
         {
+            // TODO: Load status effect config from ScriptableObject registry
+            // For now, status effect creation is disabled
+            UnityEngine.Debug.LogWarning($"[StatusEffectFactory] CreateEffect({statusId}) - Status effect system needs StatusEffectConfig ScriptableObject implementation");
+            return null;
+            
+            /* OLD CODE - REMOVED (GameConfigLoader dependency)
             var config = GameConfigLoader.Instance?.GetStatusEffectConfig(statusId);
             if (config == null)
             {
@@ -33,6 +40,7 @@ namespace NightHunt.Gameplay.StatusEffects
                 default:
                     return new GenericStatusEffect(config, duration);
             }
+            */
         }
     }
 

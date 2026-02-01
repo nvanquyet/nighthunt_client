@@ -6,7 +6,7 @@ namespace NightHunt.Gameplay.Character.Movement
     public class MovementSettings : ScriptableObject
     {
         [Header("Speed")]
-        [Min(0f)] public float baseSpeed = 5f;
+        [Tooltip("Base speed is now managed by CharacterStats system. Use CharacterStatsConfig to set base MoveSpeed.")]
         [Min(0f)] public float sprintMultiplier = 1.5f;
         [Min(0f)] public float crouchMultiplier = 0.6f;
 

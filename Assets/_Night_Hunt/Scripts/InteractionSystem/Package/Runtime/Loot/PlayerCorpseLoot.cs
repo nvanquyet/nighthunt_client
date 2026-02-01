@@ -2,30 +2,49 @@ using UnityEngine;
 using FishNet.Object;
 using NightHunt.InteractionSystem.Core.Structs;
 using NightHunt.InteractionSystem.Inventory;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Loot
 {
     /// <summary>
     /// Corpse loot container spawned when player dies.
     /// </summary>
-    [RequireComponent(typeof(LootContainer))]
+    [RequireComponent(typeof(NetworkLootContainer))]
     public class PlayerCorpseLoot : NetworkBehaviour
     {
         [Header("Corpse Settings")]
         [SerializeField] private float despawnDelay = 300f; // 5 minutes
         [SerializeField] private GameObject corpsePrefab;
 
-        private LootContainer lootContainer;
+        private NetworkLootContainer lootContainer;
         private float spawnTime;
 
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-            lootContainer = GetComponent<LootContainer>();
+            // Use ComponentFinder to search in hierarchy (component might be in child)
+            lootContainer = ComponentFinder.FindComponentInHierarchy<NetworkLootContainer>(gameObject, includeInactive: false);
             spawnTime = Time.time;
 
             // Auto-despawn after delay
             Invoke(nameof(DespawnCorpse), despawnDelay);
+        }
+
+        public override void OnStartServer()
+        {
+            base.OnStartServer();
+            
+            // Configure corpse container: ReadOnly (can only take items, not add) and always open
+            if (lootContainer != null)
+            {
+                // Set permissions: ReadOnly (allowRemoveItems = true, allowAddItems = false)
+                lootContainer.SetContainerPermissions(allowAdd: false, allowRemove: true);
+                
+                // Auto-open corpse container (always open for looting)
+                lootContainer.SetOpenedState(true);
+                
+                Debug.Log($"[PlayerCorpseLoot] Corpse container configured - ReadOnly, Always Open");
+            }
         }
 
         private void Update()

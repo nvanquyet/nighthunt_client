@@ -116,8 +116,8 @@ namespace NightHunt.Gameplay.Respawn
             // Respawn player
             player.transform.position = respawnPosition;
             
-            // Restore player stats
-            var stats = player.GetComponent<CharacterStats>();
+            // Restore player stats - use ComponentFinder to search in hierarchy (including children)
+            var stats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(player.gameObject, includeInactive: false);
             if (stats != null)
             {
                 stats.SetHP(stats.GetMaxHP());
@@ -232,13 +232,15 @@ namespace NightHunt.Gameplay.Respawn
         /// </summary>
         private bool IsPlayerDead(NetworkPlayer player)
         {
-            var stats = player.GetComponent<CharacterStats>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var stats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(player.gameObject, includeInactive: false);
             if (stats != null)
             {
                 return !stats.IsAlive();
             }
 
-            var deathSystem = player.GetComponent<CharacterDeathSystem>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var deathSystem = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterDeathSystem>(player.gameObject, includeInactive: false);
             if (deathSystem != null)
             {
                 return !deathSystem.IsAlive;

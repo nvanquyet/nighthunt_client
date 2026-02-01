@@ -46,6 +46,12 @@ namespace NightHunt.InteractionSystem.Core.Abstractions
         {
             return GetAttachmentSlot(slotType).HasValue;
         }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            // Equipment-specific initialization can be done here or in derived classes
+        }
     }
 
     /// <summary>

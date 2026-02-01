@@ -138,10 +138,15 @@ namespace NightHunt.Gameplay.Match
             }
 
             string phaseName = GetPhaseName(phase);
-            var config = GameConfigLoader.Instance?.GetMatchPhaseConfig(phaseName);
+            // TODO: Implement MatchPhaseConfig ScriptableObject system to replace GameConfigLoader
+            var config = (MatchPhaseConfigData)null; // Disabled until config system is implemented
             if (config == null)
             {
+                Debug.LogWarning($"[MatchPhaseManager] Phase config not found: {phaseName} - MatchPhaseConfig system needs implementation");
+                // Continue without config (use defaults)
+                /* OLD CODE - REMOVED (GameConfigLoader dependency)
                 Debug.LogError($"[MatchPhaseManager] Phase config not found: {phaseName}");
+                */
                 return;
             }
 
@@ -326,7 +331,8 @@ namespace NightHunt.Gameplay.Match
         public MatchPhaseConfigData GetCurrentPhaseConfig()
         {
             string phaseName = GetPhaseName((MatchPhaseState)networkPhase.Value);
-            return GameConfigLoader.Instance?.GetMatchPhaseConfig(phaseName);
+            // TODO: Implement MatchPhaseConfig ScriptableObject system to replace GameConfigLoader
+            return null; // Disabled until config system is implemented
         }
     }
 }

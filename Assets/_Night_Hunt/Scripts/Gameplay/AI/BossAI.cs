@@ -154,7 +154,8 @@ namespace NightHunt.Gameplay.AI
             {
                 if (player == null || !player.IsSpawned) continue;
                 
-                var playerStats = player.GetComponent<CharacterStats>();
+                // Use ComponentFinder to search in hierarchy (including children)
+                var playerStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(player.gameObject, includeInactive: false);
                 if (playerStats == null || !playerStats.IsAlive()) continue;
 
                 float distance = Vector3.Distance(transform.position, player.transform.position);
@@ -252,7 +253,8 @@ namespace NightHunt.Gameplay.AI
             if (currentTarget == null) return;
 
             // Deal damage
-            var targetStats = currentTarget.GetComponent<CharacterStats>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var targetStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(currentTarget.gameObject, includeInactive: false);
             if (targetStats != null)
             {
                 targetStats.TakeDamage(bossDamage);

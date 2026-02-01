@@ -12,7 +12,7 @@ namespace NightHunt.InteractionSystem.Inventory
     public class ListInventoryComponent : InventoryComponentBase
     {
         private Dictionary<string, ItemDataBase> itemDataCache = new Dictionary<string, ItemDataBase>();
-
+  
         /// <summary>
         /// Add an item to the inventory.
         /// </summary>
@@ -55,7 +55,7 @@ namespace NightHunt.InteractionSystem.Inventory
                             InventoryEvents.InvokeItemQuantityChanged(items[i], items[i].quantity);
                             return true;
                         }
-                    }
+                    } 
                 }
             }
 
@@ -130,11 +130,26 @@ namespace NightHunt.InteractionSystem.Inventory
         /// </summary>
         private ItemDataBase GetItemData(string itemId)
         {
+            if (string.IsNullOrEmpty(itemId))
+                return null;
+
+            // Check cache first
             if (itemDataCache.ContainsKey(itemId))
                 return itemDataCache[itemId];
 
-            // Load from resources or database
-            // TODO: Implement proper item data loading
+            // Load from ItemDataRegistry
+            var registry = ItemDataRegistry.Load();
+            if (registry != null)
+            {
+                var itemData = registry.GetById(itemId);
+                if (itemData != null)
+                {
+                    itemDataCache[itemId] = itemData;
+                    return itemData;
+                }
+            }
+
+            Debug.LogWarning($"[ListInventoryComponent] ItemData '{itemId}' not found in ItemDataRegistry. Please ensure ItemDataRegistry asset exists in Resources/ItemDataRegistry.asset and contains this item.");
             return null;
         }
     }

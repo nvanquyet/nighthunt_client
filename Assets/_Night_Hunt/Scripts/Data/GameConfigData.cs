@@ -71,6 +71,28 @@ namespace NightHunt.Data
         public string Rarity;
         public int AllowedPhaseMask;
         public string ExtraParamsJson; // For additional parameters
+
+        // New fields for enhanced item system
+        [Header("Item Type & Usage")]
+        public NightHunt.Gameplay.Inventory.ItemType itemType = NightHunt.Gameplay.Inventory.ItemType.Misc;
+        public float useDuration = 0f; // Thời gian sử dụng (cho consumable) - 0 = instant
+        public bool canCancelUse = true; // Có thể hủy khi đang sử dụng
+
+        [Header("Equipment Slots")]
+        public List<ItemEquipmentSlotConfig> equipmentSlots = new List<ItemEquipmentSlotConfig>(); // Nested equipment slots
+
+        [Header("Shop")]
+        public int price = 0; // Giá tiền mua (cho shop)
+        public bool isSellable = false; // Có thể bán
+        public int sellPrice = 0; // Giá bán
+
+        [System.Serializable]
+        public class ItemEquipmentSlotConfig
+        {
+            public string slotId; // "Grip", "Scope", "Magazine", etc.
+            public string displayName;
+            public string allowedItemCategory; // Category of items that can be attached
+        }
     }
 
     [Serializable]

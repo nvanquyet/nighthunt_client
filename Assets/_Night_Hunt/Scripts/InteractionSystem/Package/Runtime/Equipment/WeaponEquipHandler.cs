@@ -3,6 +3,7 @@ using NightHunt.InteractionSystem.Core.Abstractions;
 using NightHunt.InteractionSystem.Core.Structs;
 using NightHunt.InteractionSystem.Items.Data;
 using NightHunt.InteractionSystem.Items.Attachments;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Equipment
 {
@@ -16,11 +17,8 @@ namespace NightHunt.InteractionSystem.Equipment
 
         private void Awake()
         {
-            equipmentManager = GetComponent<EquipmentManager>();
-            if (equipmentManager == null)
-            {
-                equipmentManager = GetComponentInParent<EquipmentManager>();
-            }
+            // Use ComponentFinder to search in hierarchy (component might be in parent or child)
+            equipmentManager = ComponentFinder.FindComponentInHierarchy<EquipmentManager>(gameObject, includeInactive: false);
         }
 
         /// <summary>
@@ -45,7 +43,8 @@ namespace NightHunt.InteractionSystem.Equipment
         {
             if (attachmentManager == null)
             {
-                attachmentManager = GetComponent<AttachmentManager>();
+                // Use ComponentFinder to search in hierarchy (component might be in child)
+                attachmentManager = ComponentFinder.FindComponentInHierarchy<AttachmentManager>(gameObject, includeInactive: false);
                 if (attachmentManager == null)
                 {
                     GameObject attachmentObj = new GameObject("AttachmentManager");

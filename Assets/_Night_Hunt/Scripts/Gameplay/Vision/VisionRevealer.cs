@@ -28,12 +28,9 @@ namespace NightHunt.Gameplay.Vision
 
         private void Start()
         {
-            // Load base vision from config
-            var config = NightHunt.Data.GameConfigLoader.Instance?.GetCharacterConfig("CHAR_DEFAULT");
-            if (config != null)
-            {
-                baseVisionRadius = config.BaseVisionRadius;
-            }
+            // TODO: Load base vision from CharacterStatsConfig ScriptableObject or CharacterStats component
+            // For now, use default value or get from CharacterStats component if available
+            // baseVisionRadius should be set in Inspector or use CharacterStats.GetVisionRadius()
 
             UpdateVisionRadius();
         }

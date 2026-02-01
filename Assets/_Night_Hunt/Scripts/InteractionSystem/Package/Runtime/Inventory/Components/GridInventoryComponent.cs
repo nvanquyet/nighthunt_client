@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using NightHunt.InteractionSystem.Core.Structs;
 using NightHunt.InteractionSystem.Core.Abstractions;
@@ -109,16 +110,31 @@ namespace NightHunt.InteractionSystem.Inventory
                 {
                     if (!grid[x, y].HasValue)
                     {
+                        Debug.Log($"[GridInventoryComponent] Adding item to grid at ({x}, {y}): {item.itemDataId}, Quantity: {item.quantity}");
                         grid[x, y] = item;
                         currentWeight += itemData.GetTotalWeight(item.quantity);
-                        items.Add(item);
+                        
+                        // Sync items list from grid to ensure consistency
+                        SyncItemsListFromGrid();
+                        
+                        Debug.Log($"[GridInventoryComponent] Item added - Grid[{x},{y}]: {grid[x, y].HasValue}, Items list count: {items.Count}");
+                        Debug.Log($"[GridInventoryComponent] GameObject: {gameObject.name}, InstanceID: {GetInstanceID()}");
+                        
                         UpdateWeight();
                         InventoryEvents.InvokeItemAdded(item);
+                        
+                        // Verify item is in grid and list
+                        var verifyItem = grid[x, y];
+                        string itemIdStr = verifyItem.HasValue ? verifyItem.Value.itemDataId : "N/A";
+                        Debug.Log($"[GridInventoryComponent] Verification - Grid[{x},{y}] has item: {verifyItem.HasValue}, ItemId: {itemIdStr}");
+                        Debug.Log($"[GridInventoryComponent] Items list contains item: {items.Any(i => i.itemDataId == item.itemDataId)}, Items count: {items.Count}");
+                        
                         return true;
                     }
                 }
             }
 
+            Debug.LogWarning($"[GridInventoryComponent] No empty slot found! Grid is full. Grid size: {gridWidth}x{gridHeight}");
             return false;
         }
 
@@ -253,11 +269,46 @@ namespace NightHunt.InteractionSystem.Inventory
         /// </summary>
         private ItemDataBase GetItemData(string itemId)
         {
-            if (itemDataCache.ContainsKey(itemId))
-                return itemDataCache[itemId];
+            if (string.IsNullOrEmpty(itemId))
+            {
+                Debug.LogWarning($"[GridInventoryComponent] GetItemData called with null/empty itemId");
+                return null;
+            }
 
-            // Load from resources or database
-            // TODO: Implement proper item data loading
+            Debug.Log($"[GridInventoryComponent] GetItemData called for itemId: '{itemId}'");
+
+            // Check cache first
+            if (itemDataCache.ContainsKey(itemId))
+            {
+                Debug.Log($"[GridInventoryComponent] ItemData '{itemId}' found in cache");
+                return itemDataCache[itemId];
+            }
+
+            Debug.Log($"[GridInventoryComponent] ItemData '{itemId}' not in cache, loading from registry...");
+
+            // Load from ItemDataRegistry
+            var registry = ItemDataRegistry.Load();
+            if (registry == null)
+            {
+                Debug.LogError($"[GridInventoryComponent] ItemDataRegistry is NULL! Check Resources/ItemDataRegistry.asset exists and is named correctly.");
+                return null;
+            }
+
+            Debug.Log($"[GridInventoryComponent] ItemDataRegistry loaded successfully");
+
+            // List all items in registry for debugging
+            var allItems = registry.GetAllItems().ToList();
+            Debug.Log($"[GridInventoryComponent] Items in registry ({allItems.Count} total): {string.Join(", ", allItems.Select(i => $"'{i.ItemId}'"))}");
+
+                var itemData = registry.GetById(itemId);
+                if (itemData != null)
+                {
+                Debug.Log($"[GridInventoryComponent] ItemData '{itemId}' found in registry: {itemData.DisplayName ?? itemData.name}");
+                    itemDataCache[itemId] = itemData;
+                    return itemData;
+            }
+
+            Debug.LogWarning($"[GridInventoryComponent] ItemData '{itemId}' not found in ItemDataRegistry. Available IDs: {string.Join(", ", allItems.Select(i => $"'{i.ItemId}'"))}");
             return null;
         }
 

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using NightHunt.InteractionSystem.Core.Structs;
 
@@ -5,6 +7,8 @@ namespace NightHunt.InteractionSystem.Core.Abstractions
 {
     /// <summary>
     /// Base class for all item data (ScriptableObject).
+    /// All item data classes (WeaponData, ArmorData, BackpackData, etc.) inherit from this.
+    /// This is the core abstraction for all items in the InteractionSystem.
     /// </summary>
     public abstract class ItemDataBase : ScriptableObject
     {
@@ -86,4 +90,5 @@ namespace NightHunt.InteractionSystem.Core.Abstractions
         Attachment,
         Misc
     }
+
 }

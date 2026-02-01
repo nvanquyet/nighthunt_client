@@ -86,7 +86,7 @@ GameObject:
   - component: {fileID: 2541524953162364301}
   - component: {fileID: 8079650026763760590}
   - component: {fileID: 3678620094081628749}
-  - component: {fileID: 3925919846741592718}
+  - component: {fileID: 3476671556401267807}
   m_Layer: 0
   m_Name: Inventory Grid Cell
   m_TagString: Untagged
@@ -154,7 +154,7 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &3925919846741592718
+--- !u!114 &3476671556401267807
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -163,13 +163,30 @@ MonoBehaviour:
   m_GameObject: {fileID: 2372447198308707309}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4a95df3acb0c0284d90c4a2bd9bb544c, type: 3}
+  m_Script: {fileID: 11500000, guid: 5db668ba1b8ad6c4c93817b6d02fb621, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   slotBackground: {fileID: 3678620094081628749}
   itemIcon: {fileID: 2613264984315488806}
   quantityText: {fileID: 5737648996807133224}
+  slotLabelText: {fileID: 0}
   selectedIndicator: {fileID: 201819970106989367}
+  emptyIndicator: {fileID: 0}
+  cellLocation: 0
+  cellIndex: -1
+  equipmentSlotType: 0
+  onCellHover:
+    m_PersistentCalls:
+      m_Calls: []
+  onCellUnhover:
+    m_PersistentCalls:
+      m_Calls: []
+  onCellSelect:
+    m_PersistentCalls:
+      m_Calls: []
+  onCellUnselect:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &3766407582676419660
 GameObject:
   m_ObjectHideFlags: 0

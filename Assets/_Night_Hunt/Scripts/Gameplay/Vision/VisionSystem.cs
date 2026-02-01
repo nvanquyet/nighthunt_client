@@ -38,13 +38,10 @@ namespace NightHunt.Gameplay.Vision
 
         private void Start()
         {
-            // Load base vision from config
-            var config = GameConfigLoader.Instance?.GetCharacterConfig("CHAR_DEFAULT");
-            if (config != null)
-            {
-                baseVisionRadius = config.BaseVisionRadius;
-                currentVisionRadius = baseVisionRadius;
-            }
+            // TODO: Load base vision from CharacterStatsConfig ScriptableObject or CharacterStats component
+            // For now, use default value or get from CharacterStats component if available
+            // baseVisionRadius should be set in Inspector or use CharacterStats.GetVisionRadius()
+            // currentVisionRadius = baseVisionRadius;
 
             // Initialize fog of war
             if (useFogOfWar)
@@ -95,23 +92,29 @@ namespace NightHunt.Gameplay.Vision
         /// </summary>
         public void ApplyVisionModifier(string modifierId)
         {
+            // TODO: Implement VisionModifierConfig ScriptableObject system to replace GameConfigLoader
+            // For now, vision modifiers are disabled
+            return;
+            /* OLD CODE - REMOVED (GameConfigLoader dependency)
             var modifier = GameConfigLoader.Instance?.ConfigData?.VisionModifiers?.Find(m => m.ModifierId == modifierId);
             if (modifier == null) return;
+            */
 
+            // TODO: Implement vision modifier system when VisionModifierConfig ScriptableObject is implemented
             // Check if already applied and if stackable
-            var existing = activeModifiers.Find(m => m.ModifierId == modifierId);
-            if (existing != null && !modifier.Stackable)
-            {
-                return; // Already applied and not stackable
-            }
-
-            activeModifiers.Add(modifier);
-
-            // Remove after duration if temporary
-            if (modifier.Duration > 0f)
-            {
-                StartCoroutine(RemoveModifierAfterDuration(modifierId, modifier.Duration));
-            }
+            // var existing = activeModifiers.Find(m => m.ModifierId == modifierId);
+            // if (existing != null && !modifier.Stackable)
+            // {
+            //     return; // Already applied and not stackable
+            // }
+            //
+            // activeModifiers.Add(modifier);
+            //
+            // // Remove after duration if temporary
+            // if (modifier.Duration > 0f)
+            // {
+            //     StartCoroutine(RemoveModifierAfterDuration(modifierId, modifier.Duration));
+            // }
         }
 
         /// <summary>

@@ -3,6 +3,7 @@ using NightHunt.Data;
 using NightHunt.Gameplay.Core.Networking;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.Utils;
+using NightHunt.Gameplay.ClientEffects;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
@@ -44,7 +45,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         private void ProcessHit(RaycastHit hit)
         {
             // Check if hit a character
-            var hitCharacter = hit.collider.GetComponent<CharacterStats>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var hitCharacter = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(hit.collider.gameObject, includeInactive: false);
             if (hitCharacter != null)
             {
                 // Calculate damage
@@ -62,13 +64,12 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 hitCharacter.TakeDamage(damage);
 
                 // Publish damage event
-                var damageEvent = new DamageEffectEvent
-                {
-                    Damage = damage,
-                    HitPoint = hit.point,
-                    HitDirection = hit.normal,
-                    NetworkId = hitCharacter.GetInstanceID()
-                };
+                var damageEvent = new DamageEffectEvent(
+                    hit.point,
+                    hit.normal,
+                    damage,
+                    gameObject
+                );
                 GameplayEventBus.Instance?.Publish(damageEvent);
             }
 

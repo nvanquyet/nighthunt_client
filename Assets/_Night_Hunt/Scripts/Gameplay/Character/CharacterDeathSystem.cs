@@ -4,7 +4,9 @@ using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Respawn;
 using NightHunt.Gameplay.Spawn;
+using NightHunt.Gameplay.Core;
 using NightHunt.Networking;
+using NightHunt.InteractionSystem.Utilities;
 using FishNet;
 
 namespace NightHunt.Gameplay.Character
@@ -51,10 +53,28 @@ namespace NightHunt.Gameplay.Character
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-            characterStats = GetComponent<CharacterStats>();
-            _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
-            characterCombat = GetComponent<CharacterCombat>();
-            networkPlayer = GetComponent<NetworkPlayer>();
+            
+            // Get NetworkPlayer using ComponentFinder
+            networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            
+            // Use ComponentRegistry instead of GetComponent (event-based, no FindObject)
+            if (networkPlayer != null)
+            {
+                characterStats = ComponentRegistry.GetCharacterStats(networkPlayer);
+                var movement = ComponentRegistry.GetMovementController(networkPlayer);
+                if (movement is CharacterPredictedMovement predictedMovement)
+                {
+                    _characterPredictedMovement = predictedMovement;
+                }
+                characterCombat = ComponentRegistry.GetCharacterCombat(networkPlayer);
+            }
+            else
+            {
+                // Fallback to ComponentFinder if NetworkPlayer not found (shouldn't happen normally)
+                characterStats = gameObject.FindInHierarchy<CharacterStats>();
+                _characterPredictedMovement = gameObject.FindInHierarchy<CharacterPredictedMovement>();
+                characterCombat = gameObject.FindInHierarchy<CharacterCombat>();
+            }
             
             // Subscribe to state changes
             currentState.OnChange += OnDeathStateChanged;

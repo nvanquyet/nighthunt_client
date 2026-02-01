@@ -9,6 +9,7 @@ namespace NightHunt.InteractionSystem.Pickup.Detection
     /// <summary>
     /// Trigger-based auto pickup system.
     /// Automatically picks up items when player enters trigger zone (if auto pickup is enabled).
+    /// Uses ItemCategory enum from ItemDataBase for category filtering.
     /// </summary>
     [RequireComponent(typeof(SphereCollider))]
     public class AutoPickupTrigger : MonoBehaviour

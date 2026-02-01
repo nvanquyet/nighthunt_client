@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a37363816ba2844d829acd4154f4d47, type: 3}
+  m_Name: loot_item_helmet_tactical
+  m_EditorClassIdentifier: 
+  definitionId: loot_item_helmet_tactical
+  itemData: {fileID: 11400000, guid: aecf731f29c82a24e86cd5887eca0a19, type: 2}
+  worldPrefab: {fileID: 3909467020731924538, guid: 1897b6afbabc0e04796e690673133111, type: 3}
+  pickupRange: 3
+  defaultMinQuantity: 1
+  defaultMaxQuantity: 1
+  rotationSpeed: 90
+  floatSpeed: 1
+  floatAmount: 0.5

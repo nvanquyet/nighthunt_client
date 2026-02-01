@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 249b3664f9362644c8cbf7c247e57b2c, type: 3}
+  m_Name: LootContainerConfig
+  m_EditorClassIdentifier: 
+  containerPrefab: {fileID: 5436539294578710531, guid: 5d83853af9733de46b347433a19fdd28, type: 3}
+  maxSlots: 12
+  isLocked: 0
+  containerName: Container
+  spawnRadius: 1
+  spawnEffectPrefab: {fileID: 0}

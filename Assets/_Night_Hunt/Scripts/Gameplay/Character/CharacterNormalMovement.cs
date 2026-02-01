@@ -1,28 +1,15 @@
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Component.Transforming;
-using NightHunt.Data;
 using NightHunt.Gameplay.Character.Movement;
+using NightHunt.InteractionSystem.Utilities;
 using Unity.Cinemachine;
 
 namespace NightHunt.Gameplay.Character
 {
     /// <summary>
-    /// 🎮 SIMPLE MOVEMENT: Dùng RPC + NetworkTransform thay vì Client-Side Prediction
-    /// 
-    /// PROS:
-    /// - Đơn giản hơn, ít bug hơn
-    /// - Không cần reconcile logic phức tạp
-    /// - Dễ debug và maintain
-    /// 
-    /// CONS:
-    /// - Có thể lag hơn vì không có client-side prediction
-    /// - Phụ thuộc vào network latency
-    /// - Không responsive bằng prediction cho owner
-    /// 
-    /// USAGE:
-    /// - Phù hợp cho casual game hoặc khi network tốt
-    /// - Không phù hợp cho competitive FPS
+    /// Simple movement system using RPC + NetworkTransform instead of client-side prediction.
+    /// Simpler and easier to maintain, but may have higher latency than predicted movement.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     [RequireComponent(typeof(NetworkTransform))]
@@ -72,14 +59,13 @@ namespace NightHunt.Gameplay.Character
         private Quaternion _targetRotation;
         private Vector3 _positionVelocity;
 
-        // ============= INITIALIZATION =============
-
         private void Awake()
         {
-            _characterController = GetComponent<CharacterController>();
-            _characterStats = GetComponent<CharacterStats>();
-            _networkTransform = GetComponent<NetworkTransform>();
-            _playerCamera = GetComponentInChildren<CinemachineCamera>();
+            // Use ComponentFinder to find components in hierarchy (supports child objects)
+            _characterController = gameObject.FindInHierarchy<CharacterController>();
+            _characterStats = gameObject.FindInHierarchy<CharacterStats>();
+            _networkTransform = gameObject.FindInHierarchy<NetworkTransform>();
+            _playerCamera = gameObject.FindInHierarchy<CinemachineCamera>();
 
             if (_characterController == null)
             {
@@ -128,8 +114,6 @@ namespace NightHunt.Gameplay.Character
             _lastSendTime = 0f;
         }
 
-        // ============= UPDATE LOOPS =============
-
         private void Update()
         {
             if (!IsSpawned) return;
@@ -177,8 +161,6 @@ namespace NightHunt.Gameplay.Character
             }
         }
 
-        // ============= MOVEMENT SIMULATION =============
-
         private void SimulateMovement(float deltaTime)
         {
             if (_characterController == null) return;
@@ -192,7 +174,33 @@ namespace NightHunt.Gameplay.Character
             );
 
             // Calculate speed
-            float finalSpeed = movementSettings.baseSpeed;
+            // QUAN TRỌNG: Movement speed CHỈ load từ CharacterStats system (stat config)
+            // Không còn fallback về movementSettings.baseSpeed nữa
+            // Điều này cho phép dynamic modifiers (booster, status effects, equipment, etc.)
+            float baseSpeed = 5f; // Default fallback chỉ khi CharacterStats null (shouldn't happen)
+            
+            if (_characterStats != null)
+            {
+                float speedFromStats = _characterStats.GetSpeedMultiplier();
+                if (speedFromStats > 0.01f)
+                {
+                    baseSpeed = speedFromStats;
+                    if (enableDebugLogs)
+                    {
+                        Debug.Log($"[NormalMovement] Using stat speed: {speedFromStats} (from CharacterStats)");
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"[NormalMovement] ❌ Stat speed is invalid ({speedFromStats})! Check CharacterStatsConfig MoveSpeed value. Using fallback: {baseSpeed}");
+                }
+            }
+            else
+            {
+                Debug.LogError($"[NormalMovement] ❌ CharacterStats is NULL! Movement speed cannot be loaded. Using fallback: {baseSpeed}");
+            }
+            
+            float finalSpeed = baseSpeed;
 
             if (_sprintHeld && CanSprint())
             {
@@ -255,8 +263,6 @@ namespace NightHunt.Gameplay.Character
             _velocity = horizontalVelocity;
             _currentMoveSpeed = horizontalVelocity.magnitude;
         }
-
-        // ============= NETWORK =============
 
         /// <summary>
         /// Send movement input to server via RPC
@@ -327,16 +333,12 @@ namespace NightHunt.Gameplay.Character
             // NetworkTransform sẽ tự động sync position
         }
 
-        // ============= INTERPOLATION (NON-OWNER) =============
-
         private void UpdateInterpolation(float deltaTime)
         {
             // QUAN TRỌNG: NetworkTransform tự động sync position từ server
             // Không cần làm gì thêm, NetworkTransform đã handle interpolation
             // Chỉ cần đảm bảo NetworkTransform component được config đúng
         }
-
-        // ============= IMovementController IMPLEMENTATION =============
 
         public void SetMoveInput(Vector2 input)
         {
@@ -391,8 +393,6 @@ namespace NightHunt.Gameplay.Character
             _currentStamina = state.Stamina;
         }
 
-        // ============= UTILITIES =============
-
         private bool CanSprint()
         {
             return _currentStamina >= movementSettings.minStaminaToSprint;
@@ -401,18 +401,16 @@ namespace NightHunt.Gameplay.Character
         private void LoadCharacterConfig()
         {
             if (_characterStats == null) return;
-            var config = GameConfigLoader.Instance?.GetCharacterConfig("CHAR_DEFAULT");
-            if (config != null)
-            {
-                movementSettings.baseSpeed = config.BaseMoveSpeed;
-                movementSettings.maxStamina = config.BaseStamina;
-            }
+            // NOTE: Character stats are now loaded from CharacterStatsConfig ScriptableObject
+            // or from CharacterStats component's serialized fields
+            // No need to load from GameConfigLoader anymore
+            // If needed, stamina can be read from CharacterStats.GetMaxStamina()
         }
 
         private MovementSettings CreateFallbackSettings()
         {
             MovementSettings settings = ScriptableObject.CreateInstance<MovementSettings>();
-            settings.baseSpeed = 5f;
+            // NOTE: baseSpeed đã được remove, giờ dùng CharacterStats system
             settings.sprintMultiplier = 1.5f;
             settings.crouchMultiplier = 0.6f;
             settings.maxStamina = 100f;

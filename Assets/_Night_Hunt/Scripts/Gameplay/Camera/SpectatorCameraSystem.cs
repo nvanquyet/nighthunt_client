@@ -127,7 +127,8 @@ namespace NightHunt.Gameplay.Camera
             }
 
             // Check if player is dead or downed (waiting for revive)
-            CharacterDeathSystem deathSystem = localPlayer.GetComponent<CharacterDeathSystem>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            CharacterDeathSystem deathSystem = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterDeathSystem>(localPlayer.gameObject, includeInactive: false);
             bool shouldSpectate = false;
 
             if (deathSystem != null)
@@ -315,8 +316,8 @@ namespace NightHunt.Gameplay.Camera
                 {
                     if (player != null && player.gameObject.activeInHierarchy)
                     {
-                        // Check if player is alive (not dead)
-                        CharacterDeathSystem deathSystem = player.GetComponent<CharacterDeathSystem>();
+                        // Check if player is alive (not dead) - use ComponentFinder to search in hierarchy (including children)
+                        CharacterDeathSystem deathSystem = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterDeathSystem>(player.gameObject, includeInactive: false);
                         bool isAlive = deathSystem == null || deathSystem.IsAlive;
                         
                         if (isAlive)

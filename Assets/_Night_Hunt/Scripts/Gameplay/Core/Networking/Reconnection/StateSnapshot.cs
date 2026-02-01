@@ -23,8 +23,8 @@ namespace NightHunt.Gameplay.Core.Networking.Reconnection
                 state.PlayerPosition = localPlayer.transform.position;
                 state.PlayerRotation = localPlayer.transform.rotation;
 
-                // Get character stats
-                var stats = localPlayer.GetComponent<CharacterStats>();
+                // Get character stats - use ComponentFinder to search in hierarchy (including children)
+                var stats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(localPlayer.gameObject, includeInactive: false);
                 if (stats != null)
                 {
                     state.CurrentHP = stats.GetHP();
@@ -66,8 +66,8 @@ namespace NightHunt.Gameplay.Core.Networking.Reconnection
                 localPlayer.transform.position = state.PlayerPosition;
                 localPlayer.transform.rotation = state.PlayerRotation;
 
-                // Restore character stats
-                var stats = localPlayer.GetComponent<CharacterStats>();
+                // Restore character stats - use ComponentFinder to search in hierarchy (including children)
+                var stats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(localPlayer.gameObject, includeInactive: false);
                 if (stats != null)
                 {
                     stats.SetHP(state.CurrentHP);

@@ -20,6 +20,10 @@ namespace NightHunt.Networking
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
+        /// <summary>
+        /// Static event fired when local player spawns/is ready
+        /// </summary>
+        public static event System.Action<NetworkPlayer> OnLocalPlayerReady;
         [Header("Player References")]
         [SerializeField] private PlayerInputHandler inputHandler;
         [SerializeField] private CharacterCombat combat;
@@ -98,6 +102,28 @@ namespace NightHunt.Networking
                 SetupCameraForOwnership();
                 SetupInputForOwnership();
                 
+                // Notify UI manager if this is the local player
+                // This handles both early spawn and late join scenarios
+                if (IsOwner && IsSpawned)
+                {
+                    int listenerCount = OnLocalPlayerReady?.GetInvocationList().Length ?? 0;
+                    Debug.Log($"[NetworkPlayer] ===== INVOKING OnLocalPlayerReady EVENT =====");
+                    Debug.Log($"[NetworkPlayer] Player: {gameObject.name}, IsOwner: {IsOwner}, IsSpawned: {IsSpawned}");
+                    Debug.Log($"[NetworkPlayer] Event listeners: {listenerCount}");
+                    
+                    if (listenerCount == 0)
+                    {
+                        Debug.LogWarning("[NetworkPlayer] WARNING: No listeners subscribed to OnLocalPlayerReady! PlayerUIManager may not be initialized.");
+                    }
+                    
+                    OnLocalPlayerReady?.Invoke(this);
+                    Debug.Log($"[NetworkPlayer] OnLocalPlayerReady event invoked for {gameObject.name}");
+                }
+                else
+                {
+                    Debug.Log($"[NetworkPlayer] Not local player or not spawned yet. IsOwner={IsOwner}, IsSpawned={IsSpawned}");
+                }
+                
                 Debug.Log($"[NetworkPlayer][CLIENT] OnStartClient completed successfully for {gameObject.name}");
             }
             catch (System.Exception ex)
@@ -141,6 +167,13 @@ namespace NightHunt.Networking
                 teamId.OnChange -= OnPlayerTeamChanged;
         }
 
+        private void OnApplicationQuit()
+        {
+            // Cleanup static event on application quit to prevent memory leaks
+            Debug.Log("[NetworkPlayer] Application quitting - clearing static event subscribers");
+            OnLocalPlayerReady = null;
+        }
+
         private void OnDestroy()
         {
             Debug.Log($"[NetworkPlayer] OnDestroy called! " +
@@ -155,6 +188,24 @@ namespace NightHunt.Networking
             
             SetupCameraForOwnership();
             SetupInputForOwnership();
+            
+            // Notify UI manager if ownership changed to local player
+            // This handles late join scenarios where ownership is assigned after spawn
+            if (IsOwner && IsSpawned)
+            {
+                int listenerCount = OnLocalPlayerReady?.GetInvocationList().Length ?? 0;
+                Debug.Log($"[NetworkPlayer] ===== INVOKING OnLocalPlayerReady EVENT (OnOwnershipClient) =====");
+                Debug.Log($"[NetworkPlayer] Player: {gameObject.name}, IsOwner: {IsOwner}, IsSpawned: {IsSpawned}");
+                Debug.Log($"[NetworkPlayer] Event listeners: {listenerCount}");
+                
+                if (listenerCount == 0)
+                {
+                    Debug.LogWarning("[NetworkPlayer] WARNING: No listeners subscribed to OnLocalPlayerReady! PlayerUIManager may not be initialized.");
+                }
+                
+                OnLocalPlayerReady?.Invoke(this);
+                Debug.Log($"[NetworkPlayer] OnLocalPlayerReady event invoked (OnOwnershipClient) for {gameObject.name}");
+            }
         }
 
         #endregion
@@ -207,8 +258,12 @@ namespace NightHunt.Networking
                     Debug.Log($"[NetworkPlayer] Input enabled for owner: {playerName.Value}");
                 }
 
-                // Enable InputRouter action maps
-                var inputRouter = GetComponent<NightHunt.Gameplay.Input.InputRouter>();
+                // Enable InputRouter action maps - use ComponentRegistry or ComponentFinder
+                var inputRouter = NightHunt.Gameplay.Core.ComponentRegistry.GetInputRouter(this);
+                if (inputRouter == null)
+                {
+                    inputRouter = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<NightHunt.Gameplay.Input.InputRouter>(gameObject, includeInactive: false);
+                }
                 if (inputRouter != null)
                 {
                     inputRouter.UpdateInputMapsForOwnership();
@@ -223,8 +278,12 @@ namespace NightHunt.Networking
                     inputHandler.DisableInput();
                 }
 
-                // Disable InputRouter action maps
-                var inputRouter = GetComponent<NightHunt.Gameplay.Input.InputRouter>();
+                // Disable InputRouter action maps - use ComponentRegistry or ComponentFinder
+                var inputRouter = NightHunt.Gameplay.Core.ComponentRegistry.GetInputRouter(this);
+                if (inputRouter == null)
+                {
+                    inputRouter = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<NightHunt.Gameplay.Input.InputRouter>(gameObject, includeInactive: false);
+                }
                 if (inputRouter != null)
                 {
                     inputRouter.UpdateInputMapsForOwnership();

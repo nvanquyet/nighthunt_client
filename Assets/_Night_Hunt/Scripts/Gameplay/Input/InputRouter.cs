@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Core;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.Gameplay.Input
 {
@@ -76,11 +78,12 @@ namespace NightHunt.Gameplay.Input
             {
                 Debug.Log($"[InputRouter] Awake - Go={gameObject.name}");
                 
-                _playerInput = GetComponent<PlayerInput>();
+                // Use ComponentFinder to find components in hierarchy (supports child objects)
+                _playerInput = gameObject.FindInHierarchy<PlayerInput>();
 
                 if (networkPlayer == null)
                 {
-                    networkPlayer = GetComponent<NetworkPlayer>();
+                    networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
                 }
 
                 if (inputLayerManager == null)
@@ -106,12 +109,28 @@ namespace NightHunt.Gameplay.Input
                 }
 
                 CacheActionMapsAndActions();
+                
+                // Register in ComponentRegistry (event-based, no FindObject after this)
+                if (networkPlayer != null)
+                {
+                    ComponentRegistry.RegisterInputRouter(networkPlayer, this);
+                }
+                
                 Debug.Log($"[InputRouter] Awake completed successfully");
             }
             catch (System.Exception ex)
             {
                 Debug.LogError($"[InputRouter] EXCEPTION in Awake for {gameObject.name}: {ex.Message}\n{ex.StackTrace}");
                 enabled = false;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            // Unregister from ComponentRegistry
+            if (networkPlayer != null)
+            {
+                ComponentRegistry.UnregisterInputRouter(networkPlayer, this);
             }
         }
 

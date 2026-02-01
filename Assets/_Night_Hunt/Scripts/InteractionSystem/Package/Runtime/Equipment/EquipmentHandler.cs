@@ -263,7 +263,8 @@ namespace NightHunt.InteractionSystem.Equipment
         private GameObject GetEquipmentVisual(EquipmentSlot slot)
         {
             // This should be managed by EquipmentVisualController
-            EquipmentVisualController visualController = GetComponent<EquipmentVisualController>();
+            // Use ComponentFinder to search in hierarchy (component might be in child)
+            EquipmentVisualController visualController = ComponentFinder.FindComponentInHierarchy<EquipmentVisualController>(gameObject, includeInactive: false);
             if (visualController != null)
             {
                 // Use reflection or add public method to get visual

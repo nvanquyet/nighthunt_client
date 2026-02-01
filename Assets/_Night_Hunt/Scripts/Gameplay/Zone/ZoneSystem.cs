@@ -161,13 +161,17 @@ namespace NightHunt.Gameplay.Zone
         {
             spawnTime = Time.time;
             
-            // Load config
+            // TODO: Implement ZoneConfig ScriptableObject system to replace GameConfigLoader
+            // For now, zone config is not loaded
+            config = null;
+            /* OLD CODE - REMOVED (GameConfigLoader dependency)
             config = GameConfigLoader.Instance?.GetZoneConfig(zoneId);
             if (config != null)
             {
                 radius = config.Radius;
                 duration = config.Duration;
             }
+            */
 
             // Register with zone system
             if (ZoneSystem.Instance != null)
@@ -204,7 +208,8 @@ namespace NightHunt.Gameplay.Zone
 
             foreach (var collider in colliders)
             {
-                var characterStats = collider.GetComponent<Gameplay.Character.CharacterStats>();
+                // Use ComponentFinder to search in hierarchy (including children)
+                var characterStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<Gameplay.Character.CharacterStats>(collider.gameObject, includeInactive: false);
                 if (characterStats != null && !currentPlayers.Contains(characterStats))
                 {
                     currentPlayers.Add(characterStats);

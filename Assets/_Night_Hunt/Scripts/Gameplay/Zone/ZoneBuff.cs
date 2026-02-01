@@ -17,7 +17,8 @@ namespace NightHunt.Gameplay.Zone
 
         private void OnTriggerEnter(Collider other)
         {
-            var characterStats = other.GetComponent<CharacterStats>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var characterStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(other.gameObject, includeInactive: false);
             if (characterStats != null)
             {
                 ApplyBuff(characterStats);
@@ -26,7 +27,8 @@ namespace NightHunt.Gameplay.Zone
 
         private void OnTriggerExit(Collider other)
         {
-            var characterStats = other.GetComponent<CharacterStats>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var characterStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(other.gameObject, includeInactive: false);
             if (characterStats != null)
             {
                 RemoveBuff(characterStats);

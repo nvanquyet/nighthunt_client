@@ -1,6 +1,3 @@
-// ============================================================================
-// GameplayBootstrap.cs - SYSTEM CONTROLLER
-// ============================================================================
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Managing;
@@ -12,7 +9,7 @@ using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.Gameplay.PredatorPrey;
 using NightHunt.Gameplay.Zone;
-using NightHunt.Gameplay.Loot;
+using NightHunt.InteractionSystem.Loot.Spawn;
 using NightHunt.Gameplay.AntiCamping;
 using NightHunt.Gameplay.Vision;
 using NightHunt.Gameplay.Spawn;
@@ -32,7 +29,8 @@ namespace NightHunt.Gameplay.Core
         [SerializeField] private ScoringSystem scoringSystem;
         [SerializeField] private PredatorPreySystem predatorPreySystem;
         [SerializeField] private ZoneSystem zoneSystem;
-        [SerializeField] private LootSpawner lootSpawner;
+        [SerializeField] private LootSpawnManager lootSpawnManager;
+        [SerializeField] private LootContainerManager lootContainerManager;
         [SerializeField] private AntiCampingSystem antiCampingSystem;
         [SerializeField] private VisionSystem visionSystem;
 
@@ -131,8 +129,11 @@ namespace NightHunt.Gameplay.Core
             if (zoneSystem == null)
                 zoneSystem = ZoneSystem.Instance;
 
-            if (lootSpawner == null)
-                lootSpawner = FindFirstObjectByType<LootSpawner>();
+            if (lootSpawnManager == null)
+                lootSpawnManager = FindFirstObjectByType<LootSpawnManager>();
+            
+            if (lootContainerManager == null)
+                lootContainerManager = FindFirstObjectByType<LootContainerManager>();
 
             if (antiCampingSystem == null)
                 antiCampingSystem = FindFirstObjectByType<AntiCampingSystem>();
@@ -150,10 +151,6 @@ namespace NightHunt.Gameplay.Core
                 objectiveSystem = FindFirstObjectByType<ObjectiveSystem>();
         }
 
-        // ========================================================================
-        // PHASE ACTIVATION - Called từ ServerGameManager
-        // ========================================================================
-
         /// <summary>
         /// Activate systems cho Phase 1: Preparation
         /// </summary>
@@ -161,8 +158,11 @@ namespace NightHunt.Gameplay.Core
         {
             Debug.Log("[GameplayBootstrap] Activating Phase 1 systems...");
 
-            // Spawn/Activate LootSpawner
-            SpawnOrActivateSystem(lootSpawner, "LootSpawner");
+            // Spawn/Activate LootSpawnManager (package)
+            SpawnOrActivateSystem(lootSpawnManager, "LootSpawnManager");
+            
+            // Spawn/Activate LootContainerManager (package)
+            SpawnOrActivateSystem(lootContainerManager, "LootContainerManager");
             
             //Spawn/Activate TeamSystem
             SpawnOrActivateSystem(teamSystem, "TeamSystem");
@@ -231,10 +231,6 @@ namespace NightHunt.Gameplay.Core
 
             Debug.Log("[GameplayBootstrap] Phase 3 systems activated!");
         }
-
-        // ========================================================================
-        // HELPER METHODS
-        // ========================================================================
 
         /// <summary>
         /// Spawn NetworkObject hoặc SetActive - PUBLIC để ServerGameManager có thể dùng
@@ -324,10 +320,6 @@ namespace NightHunt.Gameplay.Core
             Cleanup();
         }
 
-        // ========================================================================
-        // GETTERS
-        // ========================================================================
-
         public bool IsInitialized => isInitialized;
 
         public void GetSystemReferences(
@@ -335,7 +327,6 @@ namespace NightHunt.Gameplay.Core
             out ScoringSystem scoring,
             out PredatorPreySystem predatorPrey,
             out ZoneSystem zone,
-            out LootSpawner loot,
             out AntiCampingSystem antiCamping,
             out VisionSystem vision)
         {
@@ -343,7 +334,6 @@ namespace NightHunt.Gameplay.Core
             scoring = scoringSystem;
             predatorPrey = predatorPreySystem;
             zone = zoneSystem;
-            loot = lootSpawner;
             antiCamping = antiCampingSystem;
             vision = visionSystem;
         }

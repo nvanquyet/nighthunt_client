@@ -8,8 +8,27 @@ using NightHunt.InteractionSystem.Items.Data;
 namespace NightHunt.InteractionSystem.Events
 {
     /// <summary>
-    /// Event system for inventory and equipment changes.
-    /// Uses observer pattern to decouple UI from logic.
+    /// Event system for inventory and equipment changes (InteractionSystem package level).
+    /// Uses observer pattern to decouple components from each other.
+    /// 
+    /// ARCHITECTURE NOTE - Event System Separation:
+    /// This class (InventoryEvents) is part of the InteractionSystem package and is used by
+    /// package components (GridInventoryComponent, EquipmentManager, LootContainer, etc.).
+    /// 
+    /// For Gameplay layer UI events, see: NightHunt.Gameplay.Inventory.Events.InventoryLogicEvents
+    /// 
+    /// Event Flow:
+    /// 1. InteractionSystem components fire InventoryEvents (this class) when state changes
+    /// 2. InventoryService (Gameplay layer) subscribes to these events
+    /// 3. InventoryService fires InventoryLogicEvents for UI layer consumption
+    /// 
+    /// This separation allows:
+    /// - InteractionSystem package to remain independent and reusable
+    /// - Gameplay layer to have its own event system for UI
+    /// - Clear separation of concerns between package and gameplay code
+    /// 
+    /// NOTE: Some events (like OnLootContainerOpened) are CLIENT-ONLY for UI updates.
+    /// Callers should check IsServer before invoking these UI-related events.
     /// </summary>
     public static class InventoryEvents
     {
@@ -36,9 +55,16 @@ namespace NightHunt.InteractionSystem.Events
         public static event Action OnEquipmentChanged;
 
         // Loot Events
+        // NOTE: These events are CLIENT-ONLY (for UI updates). Should only be fired on client, never on server.
+        // Callers should check IsServer before invoking these events.
         public static event Action<ILootContainer> OnLootContainerOpened;
         public static event Action<ILootContainer> OnLootContainerClosed;
         public static event Action<ItemInstance, ILootContainer> OnItemLooted;
+        public static event Action<ILootContainer> OnLootContainerItemsChanged; // Fired when container items are added/removed/changed
+
+        // Shop Events
+        public static event Action<object> OnShopOpened; // ShopContainer or IShop interface
+        public static event Action<object> OnShopClosed;
 
         // Pickup Events
         public static event Action<ItemInstance, string> OnItemPickedUp; // item, pickupableName
@@ -136,6 +162,7 @@ namespace NightHunt.InteractionSystem.Events
 
         /// <summary>
         /// Invoke when loot container is opened.
+        /// NOTE: Should only be called on client (for UI updates). Server should not fire UI events.
         /// </summary>
         public static void InvokeLootContainerOpened(ILootContainer container)
         {
@@ -144,6 +171,7 @@ namespace NightHunt.InteractionSystem.Events
 
         /// <summary>
         /// Invoke when loot container is closed.
+        /// NOTE: Should only be called on client (for UI updates). Server should not fire UI events.
         /// </summary>
         public static void InvokeLootContainerClosed(ILootContainer container)
         {
@@ -152,10 +180,21 @@ namespace NightHunt.InteractionSystem.Events
 
         /// <summary>
         /// Invoke when item is looted.
+        /// NOTE: Should only be called on client (for UI updates). Server should not fire UI events.
         /// </summary>
         public static void InvokeItemLooted(ItemInstance item, ILootContainer source)
         {
             OnItemLooted?.Invoke(item, source);
+        }
+
+        /// <summary>
+        /// Invoke when container items change (added/removed/modified).
+        /// NOTE: Should only be called on client (for UI updates). Server should not fire UI events.
+        /// Callers should check IsServer before invoking this event.
+        /// </summary>
+        public static void InvokeLootContainerItemsChanged(ILootContainer container)
+        {
+            OnLootContainerItemsChanged?.Invoke(container);
         }
 
         /// <summary>
@@ -164,6 +203,22 @@ namespace NightHunt.InteractionSystem.Events
         public static void InvokeItemPickedUp(ItemInstance item, string pickupableName)
         {
             OnItemPickedUp?.Invoke(item, pickupableName);
+        }
+
+        /// <summary>
+        /// Invoke when shop is opened.
+        /// </summary>
+        public static void InvokeShopOpened(object shop)
+        {
+            OnShopOpened?.Invoke(shop);
+        }
+
+        /// <summary>
+        /// Invoke when shop is closed.
+        /// </summary>
+        public static void InvokeShopClosed(object shop)
+        {
+            OnShopClosed?.Invoke(shop);
         }
 
         /// <summary>

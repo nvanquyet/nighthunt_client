@@ -43,7 +43,8 @@ namespace NightHunt.Gameplay.Objective
             if (bossAI != null && !IsCompleted)
             {
                 // Calculate progress based on boss HP
-                var bossStats = bossAI.GetComponent<CharacterStats>();
+                // Use ComponentFinder to search in hierarchy (including children)
+                var bossStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(bossAI.gameObject, includeInactive: false);
                 if (bossStats != null)
                 {
                     float maxHP = bossStats.GetMaxHP();

@@ -73,6 +73,17 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
         /// <returns>List of ItemInstance with random quantities</returns>
         public List<ItemInstance> GenerateLoot()
         {
+            return GenerateLoot(0, 0);
+        }
+
+        /// <summary>
+        /// Generate a list of items based on the loot table (weighted random) with override min/max items.
+        /// </summary>
+        /// <param name="overrideMinItems">Override minItemsPerSpawn (0 = use default)</param>
+        /// <param name="overrideMaxItems">Override maxItemsPerSpawn (0 = use default)</param>
+        /// <returns>List of ItemInstance with random quantities</returns>
+        public List<ItemInstance> GenerateLoot(int overrideMinItems, int overrideMaxItems)
+        {
             List<ItemInstance> generatedItems = new List<ItemInstance>();
 
             if (entries == null || entries.Length == 0)
@@ -95,8 +106,10 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
                 return generatedItems;
             }
 
-            // Determine how many items to spawn
-            int itemsToSpawn = Random.Range(minItemsPerSpawn, maxItemsPerSpawn + 1);
+            // Determine how many items to spawn (use override if provided)
+            int minItems = overrideMinItems > 0 ? overrideMinItems : minItemsPerSpawn;
+            int maxItems = overrideMaxItems > 0 ? overrideMaxItems : maxItemsPerSpawn;
+            int itemsToSpawn = Random.Range(minItems, maxItems + 1);
             HashSet<LootTableEntry> usedEntries = new HashSet<LootTableEntry>();
 
             for (int i = 0; i < itemsToSpawn; i++)

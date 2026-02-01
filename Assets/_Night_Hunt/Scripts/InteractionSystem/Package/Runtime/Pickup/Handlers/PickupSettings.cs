@@ -6,6 +6,7 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
     /// <summary>
     /// ScriptableObject configuration for pickup and interaction settings.
     /// Single source of truth for all detection ranges, layers, and LOS settings.
+    /// Uses ItemCategory enum from ItemDataBase for auto pickup filtering.
     /// </summary>
     [CreateAssetMenu(fileName = "InteractionSettings", menuName = "NightHunt/InteractionSystem/InteractionSettings")]
     public class PickupSettings : ScriptableObject

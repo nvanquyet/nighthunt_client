@@ -65,7 +65,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             }
 
             // Collider-based collision
-            var character = other.GetComponent<CharacterStats>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var character = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(other.gameObject, includeInactive: false);
             if (character != null)
             {
                 float damage = weaponConfig.DamageBody;

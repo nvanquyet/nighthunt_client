@@ -1,6 +1,8 @@
 using UnityEngine;
-using NightHunt.Data;
 using System.Collections;
+using NightHunt.Gameplay.Core;
+using NightHunt.Networking;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -19,7 +21,8 @@ namespace NightHunt.Gameplay.Character
         [SerializeField] private GameObject muzzleFlashPrefab;
         [SerializeField] private GameObject hitEffectPrefab;
 
-        private WeaponConfigData currentWeapon;
+        // TODO: Replace with WeaponConfig ScriptableObject when implemented
+        private object currentWeapon; // Was: WeaponConfigData
         private CharacterStats characterStats;
         private CharacterPredictedMovement _characterPredictedMovement;
 
@@ -36,12 +39,37 @@ namespace NightHunt.Gameplay.Character
 
         private void Awake()
         {
-            characterStats = GetComponent<CharacterStats>();
-            _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
+            // Use ComponentFinder to find components in hierarchy (supports child objects)
+            characterStats = gameObject.FindInHierarchy<CharacterStats>();
+            _characterPredictedMovement = gameObject.FindInHierarchy<CharacterPredictedMovement>();
 
             if (firePoint == null)
             {
                 firePoint = transform;
+            }
+            
+            // Register in ComponentRegistry (event-based, no FindObject after this)
+            RegisterInComponentRegistry();
+        }
+
+        /// <summary>
+        /// Register this component in ComponentRegistry
+        /// </summary>
+        private void RegisterInComponentRegistry()
+        {
+            NetworkPlayer networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            if (networkPlayer != null)
+            {
+                ComponentRegistry.RegisterCharacterCombat(networkPlayer, this);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            NetworkPlayer networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            if (networkPlayer != null)
+            {
+                ComponentRegistry.UnregisterCharacterCombat(networkPlayer, this);
             }
         }
 
@@ -53,9 +81,17 @@ namespace NightHunt.Gameplay.Character
 
         /// <summary>
         /// Equip a weapon by ID
+        /// TODO: Implement WeaponConfig ScriptableObject system to replace GameConfigLoader
         /// </summary>
         public void EquipWeapon(string weaponId)
         {
+            // TODO: Load weapon config from ScriptableObject registry
+            // For now, weapon equipping is disabled until WeaponConfig system is implemented
+            Debug.LogWarning($"[CharacterCombat] EquipWeapon({weaponId}) - Weapon system needs WeaponConfig ScriptableObject implementation");
+            currentWeapon = null;
+            return;
+            
+            /* OLD CODE - REMOVED (GameConfigLoader dependency)
             currentWeapon = GameConfigLoader.Instance?.GetWeaponConfig(weaponId);
             if (currentWeapon == null)
             {
@@ -67,8 +103,8 @@ namespace NightHunt.Gameplay.Character
             reserveAmmo = currentWeapon.ReserveAmmo;
             isReloading = false;
             currentSpread = currentWeapon.SpreadBase;
-
             Debug.Log($"[CharacterCombat] Equipped: {currentWeapon.DisplayName}");
+            */
         }
 
         /// <summary>
@@ -109,9 +145,11 @@ namespace NightHunt.Gameplay.Character
             }
 
             // Update spread (recovery)
+            // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
             if (Time.time - lastFireTime > 0.1f)
             {
-                currentSpread = Mathf.Lerp(currentSpread, currentWeapon.SpreadBase, Time.deltaTime * 5f);
+                // currentSpread = Mathf.Lerp(currentSpread, currentWeapon.SpreadBase, Time.deltaTime * 5f);
+                currentSpread = Mathf.Lerp(currentSpread, 0.1f, Time.deltaTime * 5f); // Placeholder
             }
         }
 
@@ -122,7 +160,9 @@ namespace NightHunt.Gameplay.Character
             if (currentAmmo <= 0) return false;
 
             float timeSinceLastFire = Time.time - lastFireTime;
-            float fireInterval = 1f / currentWeapon.FireRate;
+            // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
+            // float fireInterval = 1f / currentWeapon.FireRate;
+            float fireInterval = 0.1f; // Placeholder
             return timeSinceLastFire >= fireInterval;
         }
 
@@ -130,7 +170,9 @@ namespace NightHunt.Gameplay.Character
         {
             if (currentWeapon == null) return false;
             if (isReloading) return false;
-            if (currentAmmo >= currentWeapon.MagazineSize) return false;
+            // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
+            // if (currentAmmo >= currentWeapon.MagazineSize) return false;
+            if (currentAmmo >= 30) return false; // Placeholder magazine size
             if (reserveAmmo <= 0) return false;
             return true;
         }
@@ -146,21 +188,24 @@ namespace NightHunt.Gameplay.Character
             float spread = currentSpread;
             if (_characterPredictedMovement != null && _characterPredictedMovement.GetCurrentMoveSpeed() > 0.1f)
             {
-                spread *= currentWeapon.SpreadMoveMul;
+                // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
+                // spread *= currentWeapon.SpreadMoveMul;
+                spread *= 1.5f; // Placeholder
             }
 
             // Calculate fire direction with spread
             Vector3 fireDirection = ApplySpread(aimDirection, spread);
 
+            // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
             // Fire based on weapon type
-            if (currentWeapon.BallisticType == "Hitscan")
-            {
-                FireHitscan(fireDirection);
-            }
-            else if (currentWeapon.BallisticType == "Projectile")
-            {
-                FireProjectile(fireDirection);
-            }
+            // if (currentWeapon.BallisticType == "Hitscan")
+            // {
+                FireHitscan(fireDirection); // Default to hitscan for now
+            // }
+            // else if (currentWeapon.BallisticType == "Projectile")
+            // {
+            //     FireProjectile(fireDirection);
+            // }
 
             // Update spread
             currentSpread = Mathf.Min(currentSpread + 0.1f, 1f);
@@ -188,25 +233,31 @@ namespace NightHunt.Gameplay.Character
         {
             RaycastHit hit;
             Vector3 startPos = firePoint != null ? firePoint.position : transform.position;
-            Vector3 endPos = startPos + direction * currentWeapon.MaxRange;
+            // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
+            // float maxRange = currentWeapon.MaxRange;
+            float maxRange = 100f; // Placeholder
+            Vector3 endPos = startPos + direction * maxRange;
 
-            if (Physics.Raycast(startPos, direction, out hit, currentWeapon.MaxRange, hitLayers))
+            if (Physics.Raycast(startPos, direction, out hit, maxRange, hitLayers))
             {
                 // Hit something
                 endPos = hit.point;
 
-                // Check if hit a character
-                var hitCharacter = hit.collider.GetComponent<CharacterStats>();
+                // Check if hit a character - use ComponentFinder to search in hierarchy (including children)
+                var hitCharacter = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(hit.collider.gameObject, includeInactive: false);
                 if (hitCharacter != null)
                 {
+                    // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
                     // Calculate damage
-                    float damage = currentWeapon.DamageBody;
+                    // float damage = currentWeapon.DamageBody;
+                    float damage = 10f; // Placeholder
                     
                     // Check for headshot (simplified - check if hit upper body)
                     bool isHeadshot = hit.collider.CompareTag("Head");
                     if (isHeadshot)
                     {
-                        damage *= currentWeapon.DamageHeadMul;
+                        // damage *= currentWeapon.DamageHeadMul;
+                        damage *= 2f; // Placeholder headshot multiplier
                     }
 
                     // Apply damage
@@ -246,10 +297,14 @@ namespace NightHunt.Gameplay.Character
         private IEnumerator ReloadCoroutine()
         {
             isReloading = true;
-            yield return new WaitForSeconds(currentWeapon.ReloadTime);
+            // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
+            // yield return new WaitForSeconds(currentWeapon.ReloadTime);
+            yield return new WaitForSeconds(2f); // Placeholder reload time
 
             // Reload logic
-            int ammoNeeded = currentWeapon.MagazineSize - currentAmmo;
+            // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
+            // int ammoNeeded = currentWeapon.MagazineSize - currentAmmo;
+            int ammoNeeded = 30 - currentAmmo; // Placeholder magazine size
             int ammoToReload = Mathf.Min(ammoNeeded, reserveAmmo);
 
             currentAmmo += ammoToReload;
@@ -259,7 +314,8 @@ namespace NightHunt.Gameplay.Character
             Debug.Log($"[CharacterCombat] Reloaded. Ammo: {currentAmmo}/{reserveAmmo}");
         }
         // Public getters
-        public WeaponConfigData GetCurrentWeapon() => currentWeapon;
+        // TODO: Replace return type with WeaponConfig ScriptableObject when implemented
+        public object GetCurrentWeapon() => currentWeapon; // Was: WeaponConfigData
         public int GetCurrentAmmo() => currentAmmo;
         public int GetReserveAmmo() => reserveAmmo;
         public bool IsReloading() => isReloading;
@@ -270,24 +326,31 @@ namespace NightHunt.Gameplay.Character
     /// </summary>
     public class Projectile : MonoBehaviour
     {
-        private WeaponConfigData weaponConfig;
+        // TODO: Replace with WeaponConfig ScriptableObject when implemented
+        private object weaponConfig; // Was: WeaponConfigData
         private Vector3 direction;
         private float speed;
         private float lifetime;
 
-        public void Initialize(WeaponConfigData config, Vector3 dir)
+        // TODO: Replace parameter type with WeaponConfig ScriptableObject when implemented
+        public void Initialize(object config, Vector3 dir) // Was: WeaponConfigData config
         {
             weaponConfig = config;
             direction = dir;
-            speed = config.ProjectileSpeed;
-            lifetime = config.MaxRange / speed;
+            // TODO: Access weapon config properties when WeaponConfig ScriptableObject is implemented
+            // speed = config.ProjectileSpeed;
+            // lifetime = config.MaxRange / speed;
+            speed = 10f; // Placeholder
+            lifetime = 5f; // Placeholder
         }
 
         private void Update()
         {
             // Move projectile
             Vector3 movement = direction * speed * Time.deltaTime;
-            movement.y -= weaponConfig.GravityScale * 9.81f * Time.deltaTime;
+            // TODO: Access weapon config when WeaponConfig ScriptableObject is implemented
+            // movement.y -= weaponConfig.GravityScale * 9.81f * Time.deltaTime;
+            movement.y -= 1f * 9.81f * Time.deltaTime; // Placeholder gravity
             transform.position += movement;
 
             // Update direction based on gravity
@@ -303,11 +366,13 @@ namespace NightHunt.Gameplay.Character
 
         private void OnTriggerEnter(Collider other)
         {
-            // Handle hit
-            var character = other.GetComponent<CharacterStats>();
+            // Handle hit - use ComponentFinder to search in hierarchy (including children)
+            var character = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(other.gameObject, includeInactive: false);
             if (character != null)
             {
-                character.TakeDamage(weaponConfig.DamageBody);
+                // TODO: Get damage from WeaponConfig ScriptableObject when implemented
+                // character.TakeDamage(weaponConfig.DamageBody);
+                character.TakeDamage(10f); // Placeholder damage
             }
 
             Destroy(gameObject);

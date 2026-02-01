@@ -107,7 +107,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         /// </summary>
         private void ProcessHit(RaycastHit hit)
         {
-            var hitCharacter = hit.collider.GetComponent<CharacterStats>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var hitCharacter = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(hit.collider.gameObject, includeInactive: false);
             if (hitCharacter != null)
             {
                 float damage = weaponConfig.DamageBody;

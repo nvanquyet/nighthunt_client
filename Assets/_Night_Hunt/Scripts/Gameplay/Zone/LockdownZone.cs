@@ -114,7 +114,8 @@ namespace NightHunt.Gameplay.Zone
         [Server]
         private void DamagePlayer(NetworkPlayer player)
         {
-            var stats = player.GetComponent<CharacterStats>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var stats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(player.gameObject, includeInactive: false);
             if (stats != null)
             {
                 stats.TakeDamage(damagePerSecond * Time.deltaTime);

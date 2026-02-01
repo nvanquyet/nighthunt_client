@@ -1,13 +1,12 @@
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Connection;
-using FishNet.Object.Synchronizing;
 using NightHunt.InteractionSystem.Core.Interfaces;
 using NightHunt.InteractionSystem.Core.Structs;
 using NightHunt.InteractionSystem.Core.Abstractions;
-using NightHunt.InteractionSystem.Inventory;
 using NightHunt.InteractionSystem.Events;
 using NightHunt.InteractionSystem.Utilities;
+using NightHunt.InteractionSystem.Inventory;
 
 namespace NightHunt.InteractionSystem.Pickup.Handlers
 {
@@ -21,9 +20,10 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
         [SerializeField] private PickupSettings settings;
 
         private InventoryComponentBase inventory;
+        private IInventoryNetworkSync inventoryNetworkSync;
 
         private void Awake()
-        {
+        { 
             try
             {
                 Debug.Log($"[PickupHandler] Awake - Go={gameObject.name}, Parent={transform.parent?.name ?? "None"}, Root={transform.root?.name ?? "None"}");
@@ -41,15 +41,28 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
                 
                 Debug.Log($"[PickupHandler] Found InventoryComponentBase: {inventory.gameObject.name}");
 
-            // Find settings if not assigned
+                // Find IInventoryNetworkSync for network synchronization (interface allows package to work with any implementation)
+                inventoryNetworkSync = ComponentFinder.FindInterfaceInHierarchy<IInventoryNetworkSync>(gameObject, includeInactive: false);
+                if (inventoryNetworkSync == null)
+                {
+                    Debug.LogError($"[PickupHandler] ===== IInventoryNetworkSync NOT FOUND! =====");
+                    Debug.LogError($"[PickupHandler] Items will NOT sync to clients!");
+                    Debug.LogError($"[PickupHandler] Searched in: {gameObject.name}, parent, children, and root.");
+                    Debug.LogError($"[PickupHandler] Please ensure InventoryNetworkSync component is attached to player GameObject!");
+                }
+                else
+                {
+                    Debug.Log($"[PickupHandler] ===== Found IInventoryNetworkSync =====");
+                    Debug.Log($"[PickupHandler] Type: {inventoryNetworkSync.GetType().Name}");
+                    Debug.Log($"[PickupHandler] IsSpawned: {inventoryNetworkSync.IsSpawned}");
+                }
+
+            // Validate settings - must be assigned in Inspector (no FindObjectOfType for headless server compatibility)
             if (settings == null)
             {
-                settings = FindObjectOfType<PickupSettings>();
-                if (settings == null)
-                {
-                    Debug.LogWarning("[PickupHandler] PickupSettings not found! Using default values.");
-                }
-                }
+                Debug.LogWarning("[PickupHandler] PickupSettings not assigned in Inspector! Using default values. For headless server compatibility, settings must be assigned in prefab/Inspector, not found at runtime.");
+                // Settings will be null, but we'll use default values in methods that need it
+            }
                 
                 Debug.Log($"[PickupHandler] Awake completed successfully");
             }
@@ -217,21 +230,28 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
                     return;
                 }
 
+                Debug.Log($"[PickupHandler] Calling CanAddItem with itemDataId: '{itemInstance.itemDataId}'");
                 bool canAdd = inventory.CanAddItem(itemInstance);
-                Debug.Log($"[PickupHandler] CanAddItem={canAdd}");
+                Debug.Log($"[PickupHandler] CanAddItem={canAdd} for itemDataId: '{itemInstance.itemDataId}'");
                 if (canAdd)
                 {
-                    Debug.Log($"[PickupHandler] Attempting to add item to inventory");
-                    if (inventory.AddItem(itemInstance))
+                    Debug.Log($"[PickupHandler] Attempting to add item to inventory via network sync");
+                    
+                    // Use InventoryNetworkSync to add item (ensures sync to all clients)
+                    if (inventoryNetworkSync != null && inventoryNetworkSync.IsSpawned)
                     {
-                        Debug.Log($"[PickupHandler] Successfully added {pickupable.GetDisplayName()} to inventory!");
+                        Debug.Log($"[PickupHandler] Using InventoryNetworkSync.AddItemServer() to sync item to clients");
+                        // AddItemServer validates on server and syncs to all clients via ObserversRpc
+                        inventoryNetworkSync.AddItemServer(itemInstance.itemDataId, itemInstance.quantity);
+                        
+                        Debug.Log($"[PickupHandler] Successfully added {pickupable.GetDisplayName()} to inventory via network sync!");
                         
                         // Success - notify pickupable
                         pickupable.OnPickedUp(gameObject);
 
                         // Invoke pickup event
                         InventoryEvents.InvokeItemPickedUp(itemInstance, pickupable.GetDisplayName());
-                        // Note: ItemAdded event is already invoked by inventory component
+                        // Note: ItemAdded event will be fired by inventory component after sync
 
                         // Notify client - get connection from this NetworkBehaviour's owner (the player)
                         NetworkConnection ownerConn = Owner;
@@ -247,14 +267,38 @@ namespace NightHunt.InteractionSystem.Pickup.Handlers
                     }
                     else
                     {
-                        Debug.LogWarning($"[PickupHandler] AddItem returned false - inventory full?");
-                        string reason = "Inventory full";
-                        InventoryEvents.InvokePickupFailed(reason);
-                        
-                        NetworkConnection ownerConn = Owner;
-                        if (ownerConn != null)
+                        // Fallback: Direct add if InventoryNetworkSync not available (single player or testing)
+                        Debug.LogWarning($"[PickupHandler] InventoryNetworkSync not available, using direct AddItem (items will NOT sync to clients!)");
+                        if (inventory.AddItem(itemInstance))
                         {
-                            ClientOnPickupFailed(ownerConn, reason);
+                            Debug.Log($"[PickupHandler] Successfully added {pickupable.GetDisplayName()} to inventory (direct, no sync)!");
+                            
+                            // Success - notify pickupable
+                            pickupable.OnPickedUp(gameObject);
+
+                            // Invoke pickup event
+                            InventoryEvents.InvokeItemPickedUp(itemInstance, pickupable.GetDisplayName());
+                            // Note: ItemAdded event is already invoked by inventory component
+
+                            // Notify client
+                            NetworkConnection ownerConn = Owner;
+                            if (ownerConn != null)
+                            {
+                                Debug.Log($"[PickupHandler] Sending success RPC to client {ownerConn.ClientId}");
+                                ClientOnPickupSuccess(ownerConn, pickupable.GetDisplayName());
+                            }
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[PickupHandler] AddItem returned false - inventory full?");
+                            string reason = "Inventory full";
+                            InventoryEvents.InvokePickupFailed(reason);
+                            
+                            NetworkConnection ownerConn = Owner;
+                            if (ownerConn != null)
+                            {
+                                ClientOnPickupFailed(ownerConn, reason);
+                            }
                         }
                     }
                 }

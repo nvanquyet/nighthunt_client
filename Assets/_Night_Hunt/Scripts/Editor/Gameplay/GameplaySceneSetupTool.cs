@@ -7,7 +7,6 @@ using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.Gameplay.PredatorPrey;
 using NightHunt.Gameplay.Zone;
-using NightHunt.Gameplay.Loot;
 using NightHunt.Gameplay.AI;
 using NightHunt.Gameplay.AntiCamping;
 using NightHunt.Gameplay.Vision;
@@ -41,7 +40,6 @@ namespace NightHunt.Editor.Gameplay
             CreateScoringSystem();
             CreatePredatorPreySystem();
             CreateZoneSystem();
-            CreateLootSpawner();
             CreateAntiCampingSystem();
             CreateVisionSystem();
             CreateInputLayerManager();
@@ -103,12 +101,6 @@ namespace NightHunt.Editor.Gameplay
             Debug.Log("[GameplaySceneSetupTool] Created ZoneSystem");
         }
 
-        private static void CreateLootSpawner()
-        {
-            GameObject go = new GameObject("LootSpawner");
-            go.AddComponent<LootSpawner>();
-            Debug.Log("[GameplaySceneSetupTool] Created LootSpawner");
-        }
 
         private static void CreateAntiCampingSystem()
         {

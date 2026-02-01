@@ -1,21 +1,31 @@
 using System.Collections.Generic;
 using UnityEngine;
-using NightHunt.Data;
 using System;
 using NightHunt.Gameplay.Core.Prediction;
 using NightHunt.Gameplay.Character.Stats;
+using NightHunt.Gameplay.Core;
+using NightHunt.Networking;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.Gameplay.Character
 {
     /// <summary>
     /// Manages character stats (HP, Stamina, Speed, Vision, etc.)
+    /// Uses enum-based stat system with ScriptableObject config support.
     /// Applies modifiers from equipment, status effects, zones, etc.
     /// Formula: FinalStat = BaseStat × Multipliers + Additions
     /// Implements IPredictable for client-side prediction
     /// </summary>
     public class CharacterStats : MonoBehaviour, IPredictable<CharacterStatsState>
     {
-        [Header("Base Stats")]
+        [Header("Stats Config")]
+        [SerializeField] private CharacterStatsConfig statsConfig;
+        [SerializeField] private bool useConfigFile = false;
+        
+        [Header("Debug")]
+        [SerializeField] private bool enableDebugLogs = false;
+
+        [Header("Base Stats (fallback if config not used)")]
         [SerializeField] private int baseHP = 100;
         [SerializeField] private float baseStamina = 100f;
         [SerializeField] private float baseMoveSpeed = 1f;
@@ -28,15 +38,11 @@ namespace NightHunt.Gameplay.Character
         private float currentStamina;
         private float currentWeight = 0f;
 
-        // Modifiers (Multipliers and Additions)
-        private Dictionary<string, float> statMultipliers = new Dictionary<string, float>();
-        private Dictionary<string, float> statAdditions = new Dictionary<string, float>();
-
         // Status effects
         private List<ActiveStatusEffect> activeStatusEffects = new List<ActiveStatusEffect>();
 
         // Prediction
-        private PredictionManager<CharacterStatsState> predictionManager;
+        private GenericPredictionManager<CharacterStatsState> predictionManager;
         private CharacterStatsSync statsSync;
 
         // Modifier stack
@@ -48,16 +54,41 @@ namespace NightHunt.Gameplay.Character
             InitializeStats();
             
             // Initialize prediction
-            predictionManager = new PredictionManager<CharacterStatsState>(this);
+            predictionManager = new GenericPredictionManager<CharacterStatsState>(this);
             
-            // Get network sync component
-            statsSync = GetComponent<CharacterStatsSync>();
+            statsSync = gameObject.FindInHierarchy<CharacterStatsSync>();
+            RegisterInComponentRegistry();
+        }
+
+        /// <summary>
+        /// Register this component in ComponentRegistry
+        /// </summary>
+        private void RegisterInComponentRegistry()
+        {
+            NetworkPlayer networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            
+            if (networkPlayer != null)
+            {
+                ComponentRegistry.RegisterCharacterStats(networkPlayer, this);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            // Unregister from ComponentRegistry
+            // Search NetworkPlayer using ComponentFinder (searches in current, parent, children, root, root's children)
+            NetworkPlayer networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            
+            if (networkPlayer != null)
+            {
+                ComponentRegistry.UnregisterCharacterStats(networkPlayer, this);
+            }
         }
 
         private void Start()
         {
-            currentHP = baseHP;
-            currentStamina = baseStamina;
+            currentHP = GetBaseStat(CharacterStatType.MaxHP);
+            currentStamina = GetBaseStat(CharacterStatType.Stamina);
         }
 
         private void Update()
@@ -66,69 +97,119 @@ namespace NightHunt.Gameplay.Character
         }
 
         /// <summary>
-        /// Load base stats from config
+        /// Load base stats from config (ScriptableObject or fallback fields)
         /// </summary>
         private void LoadBaseStats()
         {
-            var config = GameConfigLoader.Instance?.GetCharacterConfig("CHAR_DEFAULT");
-            if (config != null)
+            if (useConfigFile && statsConfig != null)
             {
-                baseHP = config.BaseHP;
-                baseStamina = config.BaseStamina;
-                baseMoveSpeed = config.BaseMoveSpeed;
-                baseWeightCapacity = config.BaseWeightCapacity;
-                baseVisionRadius = config.BaseVisionRadius;
-                baseNoiseLevel = config.BaseNoiseLevel;
+                // Use ScriptableObject config
+                return; // Values are read via GetBaseStat() at runtime
+            }
+            else
+            {
+                // Use serialized fallback fields (baseHP, baseStamina, etc.)
+                // These are set in Inspector or have default values
             }
         }
 
         private void InitializeStats()
         {
-            // Initialize multipliers to 1.0
-            statMultipliers["MoveSpeed"] = 1f;
-            statMultipliers["Stamina"] = 1f;
-            statMultipliers["Vision"] = 1f;
-            statMultipliers["Noise"] = 1f;
+            // Clear all runtime modifiers (status effects, equipment, zones, etc.)
+            modifierStack.Clear();
+        }
 
-            // Initialize additions to 0
-            statAdditions["MoveSpeed"] = 0f;
-            statAdditions["Stamina"] = 0f;
-            statAdditions["Vision"] = 0f;
-            statAdditions["Noise"] = 0f;
+        /// <summary>
+        /// Get base stat value (from config or fallback fields)
+        /// </summary>
+        private float GetBaseStat(CharacterStatType statType)
+        {
+            if (useConfigFile && statsConfig != null)
+            {
+                float value = statsConfig.GetBaseValue(statType);
+                if (enableDebugLogs && statType == CharacterStatType.MoveSpeed)
+                {
+                    Debug.Log($"[CharacterStats] GetBaseStat({statType}) = {value} (from Config)");
+                }
+                return value;
+            }
+
+            // Fallback to serialized fields
+            float fallbackValue = 0f;
+            switch (statType)
+            {
+                case CharacterStatType.MaxHP:
+                    fallbackValue = baseHP;
+                    break;
+                case CharacterStatType.Stamina:
+                    fallbackValue = baseStamina;
+                    break;
+                case CharacterStatType.MoveSpeed:
+                    fallbackValue = baseMoveSpeed;
+                    break;
+                case CharacterStatType.WeightCapacity:
+                    fallbackValue = baseWeightCapacity;
+                    break;
+                case CharacterStatType.VisionRadius:
+                    fallbackValue = baseVisionRadius;
+                    break;
+                case CharacterStatType.NoiseLevel:
+                    fallbackValue = baseNoiseLevel;
+                    break;
+                default:
+                    fallbackValue = 0f;
+                    break;
+            }
+            
+            if (enableDebugLogs && statType == CharacterStatType.MoveSpeed)
+            {
+                Debug.LogWarning($"[CharacterStats] GetBaseStat({statType}) = {fallbackValue} (FALLBACK - useConfigFile={useConfigFile}, hasConfig={statsConfig != null})");
+            }
+            
+            return fallbackValue;
+        }
+
+        /// <summary>
+        /// Map status effect string stat name to CharacterStatType enum
+        /// </summary>
+        private CharacterStatType? MapStatusEffectStatName(string statName)
+        {
+            // Map legacy string names to enum
+            switch (statName)
+            {
+                case "HP":
+                case "MaxHP":
+                    return CharacterStatType.MaxHP;
+                case "Stamina":
+                    return CharacterStatType.Stamina;
+                case "MoveSpeed":
+                    return CharacterStatType.MoveSpeed;
+                case "WeightCapacity":
+                    return CharacterStatType.WeightCapacity;
+                case "Vision":
+                case "VisionRadius":
+                    return CharacterStatType.VisionRadius;
+                case "Noise":
+                case "NoiseLevel":
+                    return CharacterStatType.NoiseLevel;
+                default:
+                    // Try to parse as enum name directly
+                    if (Enum.TryParse<CharacterStatType>(statName, out var parsed))
+                        return parsed;
+                    return null;
+            }
         }
 
         /// <summary>
         /// Apply status effect
+        /// TODO: Implement StatusEffectConfig ScriptableObject system to replace GameConfigLoader
         /// </summary>
         public void ApplyStatusEffect(string statusId, float duration)
         {
-            var config = GameConfigLoader.Instance?.GetStatusEffectConfig(statusId);
-            if (config == null)
-            {
-                Debug.LogWarning($"[CharacterStats] Status effect config not found: {statusId}");
+            // TODO: Load status effect config from ScriptableObject registry
+            // For now, status effects are disabled until StatusEffectConfig system is implemented
+            Debug.LogWarning($"[CharacterStats] ApplyStatusEffect({statusId}) - Status effect system needs StatusEffectConfig ScriptableObject implementation");
                 return;
-            }
-
-            // Check if already exists and if stackable
-            var existing = activeStatusEffects.Find(s => s.StatusId == statusId);
-            if (existing != null && !config.Stackable)
-            {
-                // Refresh duration
-                existing.Duration = duration;
-                return;
-            }
-
-            // Add new status effect
-            var effect = new ActiveStatusEffect
-            {
-                StatusId = statusId,
-                Config = config,
-                Duration = duration,
-                TimeRemaining = duration
-            };
-
-            activeStatusEffects.Add(effect);
-            ApplyStatusEffectModifier(effect);
         }
 
         /// <summary>
@@ -151,12 +232,15 @@ namespace NightHunt.Gameplay.Character
                 var effect = activeStatusEffects[i];
                 effect.TimeRemaining -= Time.deltaTime;
 
+                // TODO: Handle status effects when StatusEffectConfig ScriptableObject is implemented
                 // Handle damage over time
+                /*
                 if (effect.Config.Operation == "DamageOverTime")
                 {
                     float damage = effect.Config.Value * Time.deltaTime;
                     TakeDamage(damage);
                 }
+                */
 
                 // Remove expired effects
                 if (effect.TimeRemaining <= 0f)
@@ -169,66 +253,108 @@ namespace NightHunt.Gameplay.Character
 
         private void ApplyStatusEffectModifier(ActiveStatusEffect effect)
         {
+            // TODO: Access status effect config when StatusEffectConfig ScriptableObject is implemented
+            // For now, status effect modifiers are disabled
+            return;
+            
+            /*
             string targetStat = effect.Config.TargetStat;
             string operation = effect.Config.Operation;
             float value = effect.Config.Value;
 
-            if (operation == "Multiply")
+            // Map string stat name to enum (backward compatibility)
+            var statType = MapStatusEffectStatName(targetStat);
+            if (statType.HasValue)
             {
-                if (!statMultipliers.ContainsKey(targetStat))
-                    statMultipliers[targetStat] = 1f;
-                statMultipliers[targetStat] *= value;
+                var type = operation == "Multiply" ? ModifierType.Multiply : ModifierType.Add;
+                modifierStack.AddModifier(statType.Value, type, value, $"Status:{effect.StatusId}");
             }
-            else if (operation == "Add")
+            else
             {
-                if (!statAdditions.ContainsKey(targetStat))
-                    statAdditions[targetStat] = 0f;
-                statAdditions[targetStat] += value;
+                // Fallback: use string (for custom stats not in enum yet)
+                var type = operation == "Multiply" ? ModifierType.Multiply : ModifierType.Add;
+                var modifier = new StatModifier(targetStat, type, value, $"Status:{effect.StatusId}");
+                modifierStack.AddModifier(modifier);
             }
+            */
         }
 
         private void RemoveStatusEffectModifier(ActiveStatusEffect effect)
         {
+            // TODO: Access status effect config when StatusEffectConfig ScriptableObject is implemented
+            // For now, status effect modifiers are disabled
+            return;
+            
+            /*
             string targetStat = effect.Config.TargetStat;
-            string operation = effect.Config.Operation;
-            float value = effect.Config.Value;
-
-            if (operation == "Multiply")
+            var statType = MapStatusEffectStatName(targetStat);
+            if (statType.HasValue)
             {
-                if (statMultipliers.ContainsKey(targetStat))
-                    statMultipliers[targetStat] /= value;
+                modifierStack.RemoveModifier(statType.Value, $"Status:{effect.StatusId}");
             }
-            else if (operation == "Add")
+            else
             {
-                if (statAdditions.ContainsKey(targetStat))
-                    statAdditions[targetStat] -= value;
+                modifierStack.RemoveModifier(targetStat, $"Status:{effect.StatusId}");
             }
+            */
         }
 
         /// <summary>
-        /// Get final stat value (Base × Multipliers + Additions)
+        /// Get final stat value (Base × Multipliers + Additions) using enum
+        /// </summary>
+        public float GetFinalStat(CharacterStatType statType, float baseValue)
+        {
+            return modifierStack.CalculateFinalValue(statType, baseValue);
+        }
+
+        /// <summary>
+        /// Get final stat value using string (backward compatibility)
         /// </summary>
         public float GetFinalStat(string statName, float baseValue)
         {
-            float multiplier = statMultipliers.ContainsKey(statName) ? statMultipliers[statName] : 1f;
-            float addition = statAdditions.ContainsKey(statName) ? statAdditions[statName] : 0f;
-            return baseValue * multiplier + addition;
+            return modifierStack.CalculateFinalValue(statName, baseValue);
         }
 
-        // Public getters for stats
+        // Public getters for stats (using enum internally)
         public float GetHP() => currentHP;
-        public float GetMaxHP() => baseHP;
+        public float GetMaxHP() => GetFinalStat(CharacterStatType.MaxHP, GetBaseStat(CharacterStatType.MaxHP));
         public float GetStamina() => currentStamina;
-        public float GetMaxStamina() => baseStamina;
+        public float GetMaxStamina() => GetFinalStat(CharacterStatType.Stamina, GetBaseStat(CharacterStatType.Stamina));
         public float GetCurrentWeight() => currentWeight;
-        public float GetWeightCapacity() => baseWeightCapacity;
-        public float GetVisionRadius() => GetFinalStat("Vision", baseVisionRadius);
-        public float GetNoiseLevel() => GetFinalStat("Noise", baseNoiseLevel);
-        public float GetSpeedMultiplier() => statMultipliers.ContainsKey("MoveSpeed") ? statMultipliers["MoveSpeed"] : 1f;
+        
+        /// <summary>
+        /// Final carry capacity after all modifiers (backpack, armor, status effects...).
+        /// </summary>
+        public float GetWeightCapacity() => GetFinalStat(CharacterStatType.WeightCapacity, GetBaseStat(CharacterStatType.WeightCapacity));
+        
+        public float GetVisionRadius() => GetFinalStat(CharacterStatType.VisionRadius, GetBaseStat(CharacterStatType.VisionRadius));
+        public float GetNoiseLevel() => GetFinalStat(CharacterStatType.NoiseLevel, GetBaseStat(CharacterStatType.NoiseLevel));
+        public float GetSpeedMultiplier()
+        {
+            float baseValue = GetBaseStat(CharacterStatType.MoveSpeed);
+            float finalValue = GetFinalStat(CharacterStatType.MoveSpeed, baseValue);
+            
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[CharacterStats] GetSpeedMultiplier() - Base: {baseValue}, Final: {finalValue}, UseConfig: {useConfigFile}, HasConfig: {statsConfig != null}");
+            }
+            
+            return finalValue;
+        }
 
         // Setters
-        public void SetHP(float hp) => currentHP = Mathf.Clamp(hp, 0f, baseHP);
-        public void SetStamina(float stamina) => currentStamina = Mathf.Clamp(stamina, 0f, baseStamina);
+        public void SetHP(float hp)
+        {
+            float maxHP = GetMaxHP();
+            currentHP = Mathf.Clamp(hp, 0f, maxHP);
+        }
+        
+        public void SetStamina(float stamina)
+        {
+            float maxStamina = GetMaxStamina();
+            currentStamina = Mathf.Clamp(stamina, 0f, maxStamina);
+        }
+        
         public void SetWeight(float weight) => currentWeight = weight;
 
         /// <summary>
@@ -244,7 +370,8 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         public void Heal(float amount)
         {
-            currentHP = Mathf.Min(baseHP, currentHP + amount);
+            float maxHP = GetMaxHP();
+            currentHP = Mathf.Min(maxHP, currentHP + amount);
         }
 
         /// <summary>
@@ -255,7 +382,72 @@ namespace NightHunt.Gameplay.Character
         /// <summary>
         /// Get weight percentage (0-1)
         /// </summary>
-        public float GetWeightPercentage() => baseWeightCapacity > 0 ? currentWeight / baseWeightCapacity : 0f;
+        public float GetWeightPercentage()
+        {
+            float capacity = GetWeightCapacity();
+            return capacity > 0f ? currentWeight / capacity : 0f;
+        }
+
+        #region External modifiers (equipment, zones, etc.)
+
+        /// <summary>
+        /// Add a modifier using enum (preferred method).
+        /// </summary>
+        public void AddModifier(CharacterStatType statType, ModifierType type, float value, string sourceId)
+        {
+            modifierStack.AddModifier(statType, type, value, sourceId);
+        }
+
+        /// <summary>
+        /// Add a modifier using string (backward compatibility).
+        /// </summary>
+        public void AddModifier(string statName, ModifierType type, float value, string sourceId)
+        {
+            var statType = MapStatusEffectStatName(statName);
+            if (statType.HasValue)
+            {
+                modifierStack.AddModifier(statType.Value, type, value, sourceId);
+            }
+            else
+            {
+                var modifier = new StatModifier(statName, type, value, sourceId);
+                modifierStack.AddModifier(modifier);
+            }
+        }
+
+        /// <summary>
+        /// Remove a modifier using enum.
+        /// </summary>
+        public void RemoveModifier(CharacterStatType statType, string sourceId)
+        {
+            modifierStack.RemoveModifier(statType, sourceId);
+        }
+
+        /// <summary>
+        /// Remove a modifier using string (backward compatibility).
+        /// </summary>
+        public void RemoveModifier(string statName, string sourceId)
+        {
+            var statType = MapStatusEffectStatName(statName);
+            if (statType.HasValue)
+            {
+                modifierStack.RemoveModifier(statType.Value, sourceId);
+            }
+            else
+            {
+                modifierStack.RemoveModifier(statName, sourceId);
+            }
+        }
+
+        /// <summary>
+        /// Remove all modifiers whose SourceId starts with the given prefix (eg. "Equip:" or "Status:").
+        /// </summary>
+        public void RemoveAllModifiersWithSourcePrefix(string sourcePrefix)
+        {
+            modifierStack.RemoveAllWithSourcePrefix(sourcePrefix);
+        }
+
+        #endregion
 
         #region IPredictable Implementation
 
@@ -322,9 +514,9 @@ namespace NightHunt.Gameplay.Character
     public class ActiveStatusEffect
     {
         public string StatusId;
-        public StatusEffectConfigData Config;
+        // TODO: Replace with StatusEffectConfig ScriptableObject when implemented
+        public object Config; // Was: StatusEffectConfigData
         public float Duration;
         public float TimeRemaining;
     }
 }
-

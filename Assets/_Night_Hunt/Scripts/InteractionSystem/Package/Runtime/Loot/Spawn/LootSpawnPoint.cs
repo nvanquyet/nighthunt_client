@@ -8,45 +8,51 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
 {
     /// <summary>
     /// Loot spawn point that spawns items based on a LootTable ScriptableObject.
-    /// Only manages spawn timing and mode - config is in LootTable.
+    /// Each point has its own LootTable and spawn settings.
     /// </summary>
     public class LootSpawnPoint : NetworkBehaviour
     {
+        [Header("Spawn Config")]
+        [Tooltip("Configuration for prefab, radius, and visual effects (fixed settings)")]
+        [SerializeField] private LootSpawnConfig config;
+
         [Header("Loot Table")]
-        [Tooltip("Reference to LootTable ScriptableObject (contains all spawn config)")]
+        [Tooltip("LootTable to generate items from (per-point configuration)")]
         [SerializeField] private LootTable lootTable;
 
-        [Header("Prefab")]
-        [Tooltip("Generic NetworkLootItem prefab to spawn (will be initialized with loot data)")]
-        [SerializeField] private NetworkLootItem lootItemPrefab;
-
-        [Header("Spawn Settings")]
-        [Tooltip("Radius around spawn point to randomly place items")]
-        [SerializeField] private float spawnRadius = 1f;
-
         [Header("Spawn Timing")]
+        [Tooltip("When should items spawn?")]
         [SerializeField] private SpawnMode spawnMode = SpawnMode.Once;
-        [SerializeField] private float respawnInterval = 300f; // 5 minutes default
+        
+        [Tooltip("Respawn interval in seconds (for Interval mode)")]
+        [SerializeField] private float respawnInterval = 300f;
+        
+        [Tooltip("Initial delay before first spawn")]
         [SerializeField] private float initialDelay = 0f;
 
+        [Header("Loot Generation Override")]
+        [Tooltip("Override LootTable's minItemsPerSpawn? (0 = use LootTable default)")]
+        [SerializeField] private int overrideMinItems = 0;
+
+        [Tooltip("Override LootTable's maxItemsPerSpawn? (0 = use LootTable default)")]
+        [SerializeField] private int overrideMaxItems = 0;
+
         [Header("Visual")]
-        [SerializeField] private GameObject spawnEffectPrefab;
         [SerializeField] private bool showGizmos = true;
 
         private float lastSpawnTime = 0f;
         private bool hasSpawned = false;
         private List<NetworkLootItem> spawnedItems = new List<NetworkLootItem>();
 
-        public enum SpawnMode
-        {
-            Once,           // Spawn once when scene starts
-            Interval,       // Spawn every N seconds
-            OnDemand        // Spawn manually via code
-        }
-
         public override void OnStartServer()
         {
             base.OnStartServer();
+
+            if (config == null)
+            {
+                Debug.LogError("[LootSpawnPoint] Spawn config is not assigned!");
+                return;
+            }
 
             if (spawnMode == SpawnMode.Once || spawnMode == SpawnMode.Interval)
             {
@@ -86,9 +92,15 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
         [Server]
         public void SpawnLoot()
         {
-            if (lootItemPrefab == null)
+            if (config == null)
             {
-                Debug.LogError("[LootSpawnPoint] lootItemPrefab is not assigned. Please set a NetworkLootItem prefab.");
+                Debug.LogError("[LootSpawnPoint] Spawn config is not assigned!");
+                return;
+            }
+
+            if (config.LootItemPrefab == null)
+            {
+                Debug.LogError("[LootSpawnPoint] Loot item prefab is not assigned in config!");
                 return;
             }
 
@@ -102,7 +114,10 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
             spawnedItems.Clear();
 
             // Generate loot from LootTable (weighted random)
-            var generatedItems = lootTable.GenerateLoot();
+            var generatedItems = lootTable.GenerateLoot(
+                overrideMinItems > 0 ? overrideMinItems : 0,
+                overrideMaxItems > 0 ? overrideMaxItems : 0
+            );
             if (generatedItems == null || generatedItems.Count == 0)
             {
                 Debug.LogWarning("[LootSpawnPoint] No items generated from loot table!");
@@ -127,9 +142,9 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
             hasSpawned = true;
 
             // Spawn visual effect
-            if (spawnEffectPrefab != null)
+            if (config != null && config.SpawnEffectPrefab != null)
             {
-                GameObject effect = Instantiate(spawnEffectPrefab, transform.position, Quaternion.identity);
+                GameObject effect = Instantiate(config.SpawnEffectPrefab, transform.position, Quaternion.identity);
                 NetworkObject effectNO = effect.GetComponent<NetworkObject>();
                 if (effectNO != null)
                 {
@@ -164,11 +179,17 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
         private void SpawnItem(LootItemDefinition lootDef, int quantity)
         {
             // Calculate spawn position (random within radius)
-            Vector2 randomCircle = Random.insideUnitCircle * spawnRadius;
+            float radius = config != null ? config.SpawnRadius : 1f;
+            Vector2 randomCircle = Random.insideUnitCircle * radius;
             Vector3 spawnPosition = transform.position + new Vector3(randomCircle.x, 0f, randomCircle.y);
 
             // Spawn generic NetworkLootItem prefab and inject definition at runtime (server)
-            NetworkLootItem lootItem = Instantiate(lootItemPrefab, spawnPosition, Quaternion.identity);
+            if (config == null || config.LootItemPrefab == null)
+            {
+                Debug.LogError("[LootSpawnPoint] Config or LootItemPrefab is not assigned!");
+                return;
+            }
+            NetworkLootItem lootItem = Instantiate(config.LootItemPrefab, spawnPosition, Quaternion.identity);
             NetworkObject lootNO = lootItem.GetComponent<NetworkObject>();
             if (lootNO == null)
             {
@@ -197,8 +218,9 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
             if (!showGizmos)
                 return;
 
+            float radius = config != null ? config.SpawnRadius : 1f;
             Gizmos.color = Color.green;
-            Gizmos.DrawWireSphere(transform.position, spawnRadius);
+            Gizmos.DrawWireSphere(transform.position, radius);
 
             Gizmos.color = Color.yellow;
             Gizmos.DrawSphere(transform.position, 0.2f);

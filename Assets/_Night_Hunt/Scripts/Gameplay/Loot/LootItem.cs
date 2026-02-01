@@ -20,13 +20,12 @@ namespace NightHunt.Gameplay.Loot
         [Header("Visual")]
         [SerializeField] private GameObject itemModel;
         [SerializeField] private ParticleSystem pickupEffect;
-        [SerializeField] private float rotationSpeed = 90f;
-        [SerializeField] private float floatSpeed = 1f;
-        [SerializeField] private float floatAmount = 0.5f;
+        
+        [Header("VFX (for future implementation)")]
+        [SerializeField] private GameObject highlightVFX;
+        [SerializeField] private GameObject targetVFX;
 
         private ItemConfigData itemConfig;
-        private Vector3 startPosition;
-        private float floatOffset;
 
         public string ItemId => itemId;
         public string Rarity => rarity;
@@ -45,23 +44,22 @@ namespace NightHunt.Gameplay.Loot
         {
             base.OnStartNetwork();
 
-            // Load config
-            itemConfig = GameConfigLoader.Instance?.GetItemConfig(itemId);
-            if (itemConfig != null)
+            // TODO: Load item data from ItemDataRegistry instead of GameConfigLoader
+            // For now, item config is not loaded
+            var registry = NightHunt.InteractionSystem.Core.Abstractions.ItemDataRegistry.Load();
+            if (registry != null)
             {
-                // Update display name, etc.
+                var itemData = registry.GetById(itemId);
+                if (itemData != null)
+                {
+                    // Use itemData directly - no need for itemConfig conversion
+                }
             }
-
-            startPosition = transform.position;
-            floatOffset = Random.Range(0f, Mathf.PI * 2f);
         }
 
         private void Update()
         {
             if (!IsSpawned || IsPickedUp) return;
-
-            // Visual effects
-            UpdateVisuals();
 
             // Check for pickup
             if (IsServer)
@@ -80,17 +78,29 @@ namespace NightHunt.Gameplay.Loot
             IsPickedUp = false;
         }
 
-        private void UpdateVisuals()
+        /// <summary>
+        /// Show VFX effects (highlight, target indicator, etc.)
+        /// Can be called when player targets this item or for other visual feedback.
+        /// </summary>
+        public void ShowVFX(bool showHighlight = true, bool showTarget = false)
         {
-            // Rotate
-            if (itemModel != null)
+            if (highlightVFX != null)
             {
-                itemModel.transform.Rotate(Vector3.up, rotationSpeed * Time.deltaTime);
+                highlightVFX.SetActive(showHighlight);
             }
 
-            // Float up and down
-            float yOffset = Mathf.Sin((Time.time + floatOffset) * floatSpeed) * floatAmount;
-            transform.position = startPosition + Vector3.up * yOffset;
+            if (targetVFX != null)
+            {
+                targetVFX.SetActive(showTarget);
+            }
+        }
+
+        /// <summary>
+        /// Hide all VFX effects
+        /// </summary>
+        public void HideVFX()
+        {
+            ShowVFX(false, false);
         }
 
         /// <summary>
@@ -103,11 +113,12 @@ namespace NightHunt.Gameplay.Loot
             
             foreach (var collider in colliders)
             {
-                var characterStats = collider.GetComponent<CharacterStats>();
+                // Use ComponentFinder to search in hierarchy (including children)
+                var characterStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(collider.gameObject, includeInactive: false);
                 if (characterStats != null)
                 {
-                    // Try to add item to inventory
-                    var inventory = collider.GetComponent<InventoryService>();
+                    // Try to add item to inventory - use ComponentFinder to search in hierarchy
+                    var inventory = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<InventoryService>(collider.gameObject, includeInactive: false);
                     if (inventory != null)
                     {
                         // TODO: Integrate with package-based pickup flow instead of direct add

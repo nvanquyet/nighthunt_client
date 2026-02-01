@@ -47,7 +47,7 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Handle drop item
         /// </summary>
-        public void DropItem(InventorySlotUI slotUI)
+        public void DropItem(ItemCell slotUI)
         {
             if (slotUI == null || slotUI.IsEmpty() || inventoryPanel == null)
                 return;
@@ -63,28 +63,28 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Drop item from quick slot
         /// </summary>
-        public void DropItemFromQuickSlot(QuickSlotUI quickSlot)
+        public void DropItemFromQuickSlot(ItemCell quickSlot)
         {
-            if (quickSlot == null || inventoryPanel == null)
+            if (quickSlot == null || quickSlot.IsEmpty() || inventoryPanel == null)
                 return;
 
-            var itemInstance = quickSlot.GetSlot();
-            if (itemInstance.HasValue && itemInstance.Value.IsValid())
+            var slot = quickSlot.GetSlot();
+            if (slot != null && !slot.IsEmpty)
             {
-                inventoryPanel.DropItem(itemInstance.Value.itemDataId, itemInstance.Value.quantity);
+                inventoryPanel.DropItem(slot.Item.ItemId, slot.Quantity);
             }
         }
 
         /// <summary>
         /// Drop item from weapon slot
         /// </summary>
-        public void DropItemFromWeaponSlot(WeaponSlotUI weaponSlot)
+        public void DropItemFromWeaponSlot(ItemCell weaponSlot)
         {
-            if (weaponSlot == null || inventoryPanel == null)
+            if (weaponSlot == null || weaponSlot.IsEmpty() || inventoryPanel == null)
                 return;
 
-            var slot = weaponSlot.GetWeaponSlot();
-            if (slot != null && !slot.IsEmpty)
+            var slot = weaponSlot.GetSlot();
+            if (slot != null && !slot.IsEmpty) 
             {
                 inventoryPanel.DropItem(slot.Item.ItemId, slot.Quantity);
             }
@@ -93,9 +93,9 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Drop item from equipment slot
         /// </summary>
-        public void DropItemFromEquipmentSlot(EquipmentSlotUI equipmentSlot)
+        public void DropItemFromEquipmentSlot(ItemCell equipmentSlot)
         {
-            if (equipmentSlot == null || inventoryPanel == null)
+            if (equipmentSlot == null || equipmentSlot.IsEmpty() || inventoryPanel == null)
                 return;
 
             var slot = equipmentSlot.GetSlot();

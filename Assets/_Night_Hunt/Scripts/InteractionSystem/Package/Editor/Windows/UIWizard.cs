@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEditor;
 using UnityEngine.UI;
-using NightHunt.InteractionSystem.Loot;
 
 namespace NightHunt.InteractionSystem.Editor.Windows
 {
@@ -288,39 +287,8 @@ namespace NightHunt.InteractionSystem.Editor.Windows
             inventoryGridRect.sizeDelta = Vector2.zero;
             inventoryGridRect.anchoredPosition = Vector2.zero;
 
-            // Close Button
-            GameObject closeBtnObj = new GameObject("CloseButton");
-            closeBtnObj.transform.SetParent(panelObj.transform, false);
-            Button closeBtn = closeBtnObj.AddComponent<Button>();
-            Image btnImage = closeBtnObj.AddComponent<Image>();
-            btnImage.color = new Color(0.8f, 0.2f, 0.2f);
-
-            RectTransform btnRect = closeBtnObj.GetComponent<RectTransform>();
-            btnRect.anchorMin = new Vector2(1, 1);
-            btnRect.anchorMax = new Vector2(1, 1);
-            btnRect.sizeDelta = new Vector2(30, 30);
-            btnRect.anchoredPosition = new Vector2(-15, -15);
-
-            GameObject btnTextObj = new GameObject("Text");
-            btnTextObj.transform.SetParent(closeBtnObj.transform, false);
-            Text btnText = btnTextObj.AddComponent<Text>();
-            btnText.text = "X";
-            btnText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-            btnText.fontSize = 18;
-            btnText.alignment = TextAnchor.MiddleCenter;
-            btnText.color = Color.white;
-            RectTransform btnTextRect = btnTextObj.GetComponent<RectTransform>();
-            btnTextRect.anchorMin = Vector2.zero;
-            btnTextRect.anchorMax = Vector2.one;
-            btnTextRect.sizeDelta = Vector2.zero;
-
-            // Add LootContainerUI
-            LootContainerUI containerUI = canvasObj.AddComponent<LootContainerUI>();
-            var containerUIType = typeof(LootContainerUI);
-            containerUIType.GetField("containerPanel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(containerUI, panelObj);
-            containerUIType.GetField("containerGrid", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(containerUI, containerGridObj);
-            containerUIType.GetField("inventoryGrid", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(containerUI, inventoryGridObj);
-            containerUIType.GetField("closeButton", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(containerUI, closeBtn);
+            // Note: Container UI is now handled by LootContainerPanel in Gameplay.UI namespace
+            // This is just a placeholder prefab structure
 
             // Hide by default
             panelObj.SetActive(false);

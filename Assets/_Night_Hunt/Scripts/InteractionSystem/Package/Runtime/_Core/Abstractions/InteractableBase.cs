@@ -47,11 +47,18 @@ namespace NightHunt.InteractionSystem.Core.Abstractions
         /// </summary>
         public virtual string GetInteractionText()
         {
-            if (interactionType == InteractionType.Hold && requiredHoldTime > 0f)
+            // Replace "Press" with "Hold" for Hold interactions
+            string text = interactionText;
+            if (interactionType == InteractionType.Hold)
             {
-                return $"{interactionText} ({requiredHoldTime:F1}s)";
+                // Replace "Press" with "Hold" if present
+                text = text.Replace("Press", "Hold");
+                if (requiredHoldTime > 0f)
+                {
+                    text = $"{text} ({requiredHoldTime:F1}s)";
+                }
             }
-            return interactionText;
+            return text;
         }
 
         /// <summary>

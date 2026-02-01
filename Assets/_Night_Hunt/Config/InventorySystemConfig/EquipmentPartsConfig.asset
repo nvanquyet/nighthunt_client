@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 82b0aa595616d424e875372eb3288c0a, type: 3}
+  m_Name: EquipmentPartsConfig
+  m_EditorClassIdentifier: 
+  slotPrefab: {fileID: 2372447198308707309, guid: f703cb1183130d545b9973d57857c75d, type: 3}
+  parts:
+  - partId: backpack
+    displayName: BackPack
+    slotType: 0
+    partIcon: {fileID: 0}
+  - partId: armor
+    displayName: Armor
+    slotType: 1
+    partIcon: {fileID: 0}
+  - partId: helmet
+    displayName: Helmet
+    slotType: 2
+    partIcon: {fileID: 0}
+  - partId: vest
+    displayName: Vest
+    slotType: 3
+    partIcon: {fileID: 0}

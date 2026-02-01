@@ -30,8 +30,12 @@ namespace NightHunt.Gameplay.Scoring
         {
             base.OnStartServer();
 
-            // Load score configs
+            // TODO: Implement ScoreConfig ScriptableObject system to replace GameConfigLoader
+            // For now, score configs are not loaded
+            scoreConfigs = null;
+            /* OLD CODE - REMOVED (GameConfigLoader dependency)
             scoreConfigs = GameConfigLoader.Instance?.ConfigData?.ScoreSystem;
+            */
             phaseManager = FindObjectOfType<MatchPhaseManager>();
         }
 

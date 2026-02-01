@@ -2,6 +2,9 @@ using UnityEngine;
 using NightHunt.Data;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Inventory;
+using NightHunt.Gameplay.Core;
+using NightHunt.Networking;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.Gameplay.Weapons
 {
@@ -25,11 +28,39 @@ namespace NightHunt.Gameplay.Weapons
         private int currentWeaponIndex = 0;
         private bool isSwitching = false;
 
+        private NetworkPlayer _networkPlayer;
+
         private void Awake()
         {
-            characterCombat = GetComponent<CharacterCombat>();
-            inventorySystem = GetComponent<InventoryService>();
+            // Get NetworkPlayer using ComponentFinder (searches in current, parent, children, root, root's children)
+            _networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            
+            // Use ComponentRegistry instead of GetComponent (event-based, no FindObject)
+            if (_networkPlayer != null)
+            {
+                characterCombat = ComponentRegistry.GetCharacterCombat(_networkPlayer);
+                inventorySystem = ComponentRegistry.GetInventoryService(_networkPlayer);
+                
+                // Register this system in ComponentRegistry
+                ComponentRegistry.RegisterWeaponSwitchingSystem(_networkPlayer, this);
+            }
+            else
+            {
+                // Fallback to ComponentFinder if NetworkPlayer not found (searches in hierarchy including children)
+                characterCombat = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterCombat>(gameObject, includeInactive: false);
+                inventorySystem = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<InventoryService>(gameObject, includeInactive: false);
+            }
+            
             weaponSlots = new WeaponConfigData[maxWeaponSlots];
+        }
+
+        private void OnDestroy()
+        {
+            // Unregister from ComponentRegistry
+            if (_networkPlayer != null)
+            {
+                ComponentRegistry.UnregisterWeaponSwitchingSystem(_networkPlayer, this);
+            }
         }
 
         private void Update()
@@ -75,9 +106,16 @@ namespace NightHunt.Gameplay.Weapons
             if (slotIndex < 0 || slotIndex >= maxWeaponSlots)
                 return false;
 
+            // TODO: Implement WeaponConfig ScriptableObject system to replace GameConfigLoader
+            // For now, weapon switching is disabled until WeaponConfig system is implemented
+            Debug.LogWarning($"[WeaponSwitchingSystem] SwitchWeapon({weaponId}) - Weapon system needs WeaponConfig ScriptableObject implementation");
+            return false;
+            
+            /* OLD CODE - REMOVED (GameConfigLoader dependency)
             var weaponConfig = GameConfigLoader.Instance?.GetWeaponConfig(weaponId);
             if (weaponConfig == null)
                 return false;
+            */
 
             // Drop current weapon in slot if exists
             if (weaponSlots[slotIndex] != null)
@@ -85,8 +123,10 @@ namespace NightHunt.Gameplay.Weapons
                 DropWeapon(slotIndex);
             }
 
+            // TODO: Equip weapon when WeaponConfig ScriptableObject is implemented
             // Equip new weapon
-            weaponSlots[slotIndex] = weaponConfig;
+            // weaponSlots[slotIndex] = weaponConfig;
+            weaponSlots[slotIndex] = null; // Placeholder
             
             // If switching to this slot, equip it
             if (slotIndex == currentWeaponIndex)

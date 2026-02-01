@@ -46,9 +46,14 @@ namespace NightHunt.Gameplay.StatusEffects
             var existing = activeEffects.FirstOrDefault(e => e.StatusId == effect.StatusId);
             if (existing != null)
             {
-                // Check stackable rules from config
+                // TODO: Check stackable rules from StatusEffectConfig ScriptableObject
+                // For now, assume all effects are stackable
+                bool isStackable = true; // Default to stackable
+                /* OLD CODE - REMOVED (GameConfigLoader dependency)
                 var config = NightHunt.Data.GameConfigLoader.Instance?.GetStatusEffectConfig(effect.StatusId);
                 if (config != null && !config.Stackable)
+                */
+                if (!isStackable)
                 {
                     // Refresh duration
                     if (existing is StatusEffect statusEffect)

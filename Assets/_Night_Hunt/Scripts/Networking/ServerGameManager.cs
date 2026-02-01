@@ -24,6 +24,7 @@ namespace NightHunt.Networking
     {
         [Header("Bootstrap Controller")]
         [SerializeField] private GameplayBootstrap gameplayBootstrap;
+        [SerializeField] private GameStartupManager gameStartupManager;
 
         [Header("FishNet Components")]
         [SerializeField] private PlayerSpawner fishnetSpawner;
@@ -35,7 +36,6 @@ namespace NightHunt.Networking
         private TeamSystem teamSystem;
         private PredatorPreySystem predatorPreySystem;
         private AntiCampingSystem antiCampingSystem;
-        private LootSpawner lootSpawner;
         private ObjectiveSystem objectiveSystem;
         private ZoneSystem zoneSystem;
         private VisionSystem visionSystem;
@@ -65,6 +65,24 @@ namespace NightHunt.Networking
                 {
                     fishnetSpawner.OnSpawned += OnPlayerNetworkObjectSpawned;
                     Debug.Log("[ServerGameManager] Subscribed to PlayerSpawner.OnSpawned");
+                }
+
+                // Find GameStartupManager if not assigned
+                if (gameStartupManager == null)
+                {
+                    gameStartupManager = FindFirstObjectByType<GameStartupManager>();
+                }
+
+                // Initialize GameStartupManager first (if available)
+                if (gameStartupManager != null)
+                {
+                    gameStartupManager.OnGameReady += OnGameStartupComplete;
+                    if (!gameStartupManager.IsGameReady)
+                    {
+                        gameStartupManager.Initialize();
+                        Debug.Log("[ServerGameManager] Waiting for GameStartupManager to complete...");
+                        return; // Wait for startup to complete
+                    }
                 }
 
                 // Subscribe to Bootstrap initialization
@@ -101,6 +119,12 @@ namespace NightHunt.Networking
                 fishnetSpawner.OnSpawned -= OnPlayerNetworkObjectSpawned;
             }
 
+            // Unsubscribe from GameStartupManager
+            if (gameStartupManager != null)
+            {
+                gameStartupManager.OnGameReady -= OnGameStartupComplete;
+            }
+
             // ✅ Unsubscribe from MatchPhaseManager events
             if (matchPhaseManager != null)
             {
@@ -109,6 +133,27 @@ namespace NightHunt.Networking
             }
 
             Debug.Log("[ServerGameManager] Server stopped");
+        }
+
+        /// <summary>
+        /// Callback when GameStartupManager has completed startup
+        /// </summary>
+        private void OnGameStartupComplete()
+        {
+            Debug.Log("[ServerGameManager] GameStartupManager completed! Proceeding with system initialization...");
+            
+            // Now initialize Bootstrap systems
+            if (gameplayBootstrap != null)
+            {
+                if (gameplayBootstrap.IsInitialized)
+                {
+                    OnBootstrapInitialized();
+                }
+                else
+                {
+                    gameplayBootstrap.OnSystemsInitialized += OnBootstrapInitialized;
+                }
+            }
         }
 
         /// <summary>
@@ -228,7 +273,6 @@ namespace NightHunt.Networking
                 out scoringSystem,
                 out predatorPreySystem,
                 out zoneSystem,
-                out lootSpawner,
                 out antiCampingSystem,
                 out visionSystem
             );
@@ -270,26 +314,6 @@ namespace NightHunt.Networking
         /// </summary>
         private void OnPlayerNetworkObjectSpawned(NetworkObject networkObject)
         {
-            Debug.Log($"[ServerGameManager] OnPlayerNetworkObjectSpawned START - ObjectId: {networkObject?.ObjectId}, IsSpawned: {networkObject?.IsSpawned}");
-            
-            // Debug: Log GameObject info để tìm trong Hierarchy
-            if (networkObject != null && networkObject.gameObject != null)
-            {
-                GameObject go = networkObject.gameObject;
-                string sceneName = go.scene.IsValid() ? go.scene.name : "Invalid Scene";
-                string parentName = go.transform.parent != null ? go.transform.parent.name : "None (Root)";
-                string hierarchyPath = GetHierarchyPath(go.transform);
-                
-                Debug.Log($"[ServerGameManager] Player GameObject Info:\n" +
-                         $"  - Name: {go.name}\n" +
-                         $"  - Scene: {sceneName}\n" +
-                         $"  - Parent: {parentName}\n" +
-                         $"  - Hierarchy Path: {hierarchyPath}\n" +
-                         $"  - Position: {go.transform.position}\n" +
-                         $"  - Active: {go.activeSelf}\n" +
-                         $"  - IsSpawned: {networkObject.IsSpawned}");
-            }
-
             // Get NetworkPlayer component
             NetworkPlayer player = networkObject?.GetComponent<NetworkPlayer>();
             if (player == null)
@@ -299,12 +323,9 @@ namespace NightHunt.Networking
             }
 
             // Initialize player (team assignment, spawn positioning)
-            Debug.Log($"[ServerGameManager] About to call InitializePlayer. Player IsSpawned: {player.IsSpawned}, ObjectId: {player.ObjectId}");
-            
             try
             {
                 InitializePlayer(player);
-                Debug.Log($"[ServerGameManager] InitializePlayer returned successfully");
             }
             catch (System.Exception ex)
             {
@@ -312,78 +333,15 @@ namespace NightHunt.Networking
                 return;
             }
             
-            // Debug: Check if player still exists after initialization
+            // Check if player still exists after initialization
             if (player == null || !player.IsSpawned || player.gameObject == null)
             {
                 Debug.LogError($"[ServerGameManager] Player was destroyed/despawned during InitializePlayer! " +
                              $"player==null: {player == null}, IsSpawned: {player?.IsSpawned}, gameObject==null: {player?.gameObject == null}");
                 return;
             }
-            
-            Debug.Log($"[ServerGameManager] Player still valid after InitializePlayer: {player.gameObject.name}, IsSpawned: {player.IsSpawned}, ObjectId: {player.ObjectId}");
-            
-            // Final check - is object still alive?
-            if (networkObject != null && networkObject.gameObject != null && networkObject.IsSpawned)
-            {
-                Debug.Log($"[ServerGameManager] OnPlayerNetworkObjectSpawned END - NetworkObject still exists: {networkObject.gameObject.name}, IsSpawned: {networkObject.IsSpawned}, Scene: {networkObject.gameObject.scene.name}");
-                
-                // Check again after a frame to see if it gets destroyed
-                StartCoroutine(CheckPlayerStillExistsAfterFrame(networkObject));
-            }
-            else
-            {
-                Debug.LogError($"[ServerGameManager] OnPlayerNetworkObjectSpawned END - NetworkObject was destroyed! " +
-                             $"networkObject==null: {networkObject == null}, gameObject==null: {networkObject?.gameObject == null}, IsSpawned: {networkObject?.IsSpawned}");
-            }
         }
 
-        /// <summary>
-        /// Check if player still exists after a frame (to catch immediate destruction)
-        /// </summary>
-        private IEnumerator CheckPlayerStillExistsAfterFrame(NetworkObject networkObject)
-        {
-            yield return null; // Wait one frame
-            
-            try
-            {
-                if (networkObject != null && networkObject.gameObject != null && networkObject.IsSpawned)
-                {
-                    Debug.Log($"[ServerGameManager] Player still exists after 1 frame: {networkObject.gameObject.name}, IsSpawned: {networkObject.IsSpawned}");
-                }
-                else
-                {
-                    Debug.LogError($"[ServerGameManager] Player was destroyed within 1 frame! " +
-                                 $"networkObject==null: {networkObject == null}, IsSpawned: {networkObject?.IsSpawned}");
-                }
-            }
-            catch (UnityEngine.MissingReferenceException ex)
-            {
-                Debug.LogError($"[ServerGameManager] Player was destroyed within 1 frame (MissingReferenceException): {ex.Message}");
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"[ServerGameManager] Exception checking player after 1 frame: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Get full hierarchy path for debugging
-        /// </summary>
-        private string GetHierarchyPath(Transform transform)
-        {
-            if (transform == null) return "null";
-            
-            string path = transform.name;
-            Transform current = transform.parent;
-            
-            while (current != null)
-            {
-                path = current.name + "/" + path;
-                current = current.parent;
-            }
-            
-            return path;
-        }
 
         /// <summary>
         /// Initialize player with game-specific logic
@@ -393,8 +351,6 @@ namespace NightHunt.Networking
         {
             try
             {
-                Debug.Log($"[ServerGameManager] InitializePlayer START - Player: {player?.gameObject?.name}, IsSpawned: {player?.IsSpawned}");
-                
                 if (!systemsInitialized)
                 {
                     Debug.LogWarning("[ServerGameManager] Systems not initialized yet, delaying player initialization");
@@ -408,27 +364,17 @@ namespace NightHunt.Networking
                     return;
                 }
 
-                Debug.Log($"[ServerGameManager] Initializing player: {player.PlayerName}");
-
                 // Set player name if empty
                 if (string.IsNullOrEmpty(player.PlayerName))
                 {
-                    Debug.Log($"[ServerGameManager] Setting player name to Player_{player.Owner.ClientId}");
                     player.SetPlayerName($"Player_{player.Owner.ClientId}");
                 }
 
                 // Assign to team
-                Debug.Log($"[ServerGameManager] Assigning player to team...");
                 int teamId = AssignPlayerTeam(player);
-                Debug.Log($"[ServerGameManager] Player assigned to team {teamId}");
 
                 // Position at spawn point
-                Debug.Log($"[ServerGameManager] Positioning player at spawn...");
                 PositionPlayerAtSpawn(player, teamId);
-                Debug.Log($"[ServerGameManager] Player positioned");
-
-                Debug.Log($"[ServerGameManager] Player initialized: {player.PlayerName} on Team {teamId}");
-                Debug.Log($"[ServerGameManager] InitializePlayer END - Player still spawned: {player.IsSpawned}, ObjectId: {player.ObjectId}");
             }
             catch (System.Exception ex)
             {
@@ -461,7 +407,6 @@ namespace NightHunt.Networking
             if (teamSystem != null && teamSystem.IsSpawned)
             {
                 int teamId = teamSystem.AssignPlayerToTeam(player);
-                Debug.Log($"[ServerGameManager] Player assigned to team {teamId}");
                 return teamId;
             }
             else
@@ -480,8 +425,7 @@ namespace NightHunt.Networking
         {
             if (spawnSystem != null && spawnSystem.IsSpawned)
             {
-                Vector3 spawnPosition = spawnSystem.SpawnPlayer(player, teamId);
-                Debug.Log($"[ServerGameManager] Player positioned at {spawnPosition}");
+                spawnSystem.SpawnPlayer(player, teamId);
             }
             else
             {
@@ -572,7 +516,6 @@ namespace NightHunt.Networking
         public TeamSystem TeamSystem => teamSystem;
         public PredatorPreySystem PredatorPreySystem => predatorPreySystem;
         public AntiCampingSystem AntiCampingSystem => antiCampingSystem;
-        public LootSpawner LootSpawner => lootSpawner;
         public ObjectiveSystem ObjectiveSystem => objectiveSystem;
         public ZoneSystem ZoneSystem => zoneSystem;
         public VisionSystem VisionSystem => visionSystem;

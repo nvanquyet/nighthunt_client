@@ -83,10 +83,11 @@ namespace NightHunt.UI
                 if (player.IsLocalPlayer)
                 {
                     localPlayer = player;
-                    characterStats = player.GetComponent<CharacterStats>();
-                    characterCombat = player.GetComponent<CharacterCombat>();
-                    _characterPredictedMovement = player.GetComponent<CharacterPredictedMovement>();
-                    inventorySystem = player.GetComponent<Gameplay.Inventory.InventoryService>();
+                    // Use ComponentFinder to search in hierarchy (including children)
+                    characterStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(player.gameObject, includeInactive: false);
+                    characterCombat = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterCombat>(player.gameObject, includeInactive: false);
+                    _characterPredictedMovement = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterPredictedMovement>(player.gameObject, includeInactive: false);
+                    inventorySystem = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<Gameplay.Inventory.InventoryService>(player.gameObject, includeInactive: false);
                     break;
                 }
             }
@@ -168,10 +169,12 @@ namespace NightHunt.UI
             }
 
             // Update weapon name
+            // TODO: Access weapon DisplayName when WeaponConfig ScriptableObject is implemented
             var weapon = characterCombat.GetCurrentWeapon();
             if (weapon != null && weaponNameText != null)
             {
-                weaponNameText.text = weapon.DisplayName;
+                // weaponNameText.text = weapon.DisplayName;
+                weaponNameText.text = "Weapon"; // Placeholder
             }
         }
 

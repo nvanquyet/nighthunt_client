@@ -18,9 +18,9 @@ namespace NightHunt.InteractionSystem.Loot.Definitions
 
         [Header("World Presentation")]
         [SerializeField] private GameObject worldPrefab;
-        [SerializeField] private Vector3 worldPrefabLocalPosition = Vector3.zero;
-        [SerializeField] private Vector3 worldPrefabLocalEuler = Vector3.zero;
-        [SerializeField] private Vector3 worldPrefabLocalScale = Vector3.one;
+        // [SerializeField] private Vector3 worldPrefabLocalPosition = Vector3.zero;
+        // [SerializeField] private Vector3 worldPrefabLocalEuler = Vector3.zero;
+        // [SerializeField] private Vector3 worldPrefabLocalScale = Vector3.one;
 
         [Header("Pickup")]
         [SerializeField] private float pickupRange = 3f;
@@ -35,9 +35,13 @@ namespace NightHunt.InteractionSystem.Loot.Definitions
         public string DefinitionId => definitionId;
         public ItemDataBase ItemData => itemData;
         public GameObject WorldPrefab => worldPrefab;
-        public Vector3 WorldPrefabLocalPosition => worldPrefabLocalPosition;
-        public Vector3 WorldPrefabLocalEuler => worldPrefabLocalEuler;
-        public Vector3 WorldPrefabLocalScale => worldPrefabLocalScale;
+        // public Vector3 WorldPrefabLocalPosition => worldPrefabLocalPosition;
+        // public Vector3 WorldPrefabLocalEuler => worldPrefabLocalEuler;
+        // public Vector3 WorldPrefabLocalScale => worldPrefabLocalScale;
+
+        public Vector3 WorldPrefabLocalPosition => Vector3.zero;
+        public Vector3 WorldPrefabLocalEuler => Vector3.zero;
+        public Vector3 WorldPrefabLocalScale => Vector3.one;
         public float PickupRange => pickupRange;
         public int DefaultMinQuantity => defaultMinQuantity;
         public int DefaultMaxQuantity => defaultMaxQuantity;

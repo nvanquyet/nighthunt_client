@@ -5,6 +5,7 @@ using NightHunt.InteractionSystem.Core.Abstractions;
 using NightHunt.InteractionSystem.Inventory;
 using NightHunt.InteractionSystem.Items.Runtime;
 using NightHunt.InteractionSystem.Loot.Definitions;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Items.Drop
 {
@@ -29,10 +30,11 @@ namespace NightHunt.InteractionSystem.Items.Drop
 
         private void Awake()
         {
-            inventory = GetComponent<InventoryComponentBase>();
+            // Use ComponentFinder to search in hierarchy (component might be in child)
+            inventory = ComponentFinder.FindComponentInHierarchy<InventoryComponentBase>(gameObject, includeInactive: false);
             if (inventory == null)
             {
-                Debug.LogError("[ItemDropHandler] InventoryComponentBase not found!");
+                Debug.LogError("[ItemDropHandler] InventoryComponentBase not found in hierarchy!");
             }
         }
 

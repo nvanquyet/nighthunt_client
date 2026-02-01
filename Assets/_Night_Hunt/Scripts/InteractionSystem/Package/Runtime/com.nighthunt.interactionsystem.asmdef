@@ -2,8 +2,7 @@
   "name": "com.nighthunt.interactionsystem",
   "rootNamespace": "NightHunt.InteractionSystem",
   "references": [
-    "FishNet.Runtime",
-    "Unity.InputSystem"
+    "FishNet.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

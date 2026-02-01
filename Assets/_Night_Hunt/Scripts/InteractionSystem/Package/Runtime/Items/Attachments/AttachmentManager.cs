@@ -25,7 +25,8 @@ namespace NightHunt.InteractionSystem.Items.Attachments
 
         private void Awake()
         {
-            statCalculator = GetComponent<StatCalculator>();
+            // Use ComponentFinder to search in hierarchy (component might be in child)
+            statCalculator = ComponentFinder.FindComponentInHierarchy<StatCalculator>(gameObject, includeInactive: false);
             if (statCalculator == null)
             {
                 statCalculator = gameObject.AddComponent<StatCalculator>();

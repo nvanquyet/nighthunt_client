@@ -44,12 +44,16 @@ namespace NightHunt.Gameplay.Respawn
         {
             base.OnStartNetwork();
 
-            // Load config
+            // TODO: Implement RespawnConfig ScriptableObject system to replace GameConfigLoader
+            // For now, respawn config is not loaded
+            config = null;
+            /* OLD CODE - REMOVED (GameConfigLoader dependency)
             var configData = GameConfigLoader.Instance?.ConfigData;
             if (configData != null && configData.RespawnConfig != null && configData.RespawnConfig.Count > 0)
             {
                 config = configData.RespawnConfig[0];
             }
+            */
             if (config != null)
             {
                 maxHP = config.BeaconHP;

@@ -10,6 +10,20 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
     /// <summary>
     /// Detects interactable objects via raycast from camera.
     /// Only detects objects implementing IInteractable (separate from IPickupable).
+    /// 
+    /// RESPONSIBILITIES:
+    /// - Detects interactables via raycast from player camera
+    /// - Shows interaction prompts via events (InteractionEvents.InvokeInteractTargetChanged)
+    /// - Does NOT perform interactions - delegates to InteractionHandler or calls Interact() directly
+    /// 
+    /// FLOW:
+    /// 1. Raycast detects IInteractable (e.g., ContainerInteractable)
+    /// 2. Calls GetInteractionText() to get prompt text
+    /// 3. Fires event to show prompt in UI
+    /// 4. When player presses E, calls TryInteract() which delegates to InteractionHandler
+    /// 5. InteractionHandler calls the IInteractable's Interact() method
+    /// 
+    /// NOTE: This component does NOT implement IInteractable - it only detects them.
     /// </summary>
     public class InteractionDetector : MonoBehaviour
     {
@@ -23,6 +37,13 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
 
         private IInteractable currentTarget;
         private InteractionHandler interactionHandler;
+
+        /// <summary>
+        /// Get the current interaction target detected by raycast.
+        /// Returns null if no target is currently detected.
+        /// </summary>
+        /// <returns>The current IInteractable target, or null if none.</returns>
+        public IInteractable GetCurrentTarget() => currentTarget;
 
         private void Awake()
         {
@@ -141,15 +162,29 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
                 IInteractable interactable = hit.collider.GetComponent<IInteractable>();
                 if (interactable != null)
                 {
+                    Debug.Log($"[InteractionDetector] Found IInteractable: {interactable.GetType().Name} on {hit.collider.gameObject.name}");
+                    
                     // Check if player can interact
                     if (interactable.CanInteract(gameObject))
                     {
                         float distance = Vector3.Distance(transform.position, hit.point);
-                        if (distance <= interactable.GetInteractionRange())
+                        float interactionRange = interactable.GetInteractionRange();
+                        //Debug.Log($"[InteractionDetector] CanInteract: true, Distance: {distance:F2}m, Range: {interactionRange:F2}m");
+                        
+                        if (distance <= interactionRange)
                         {
                             newTarget = interactable;
                             closestDistance = distance;
+                            Debug.Log($"[InteractionDetector] Target is within range, setting as new target");
                         }
+                        else
+                        {
+                            Debug.Log($"[InteractionDetector] Target is too far: {distance:F2}m > {interactionRange:F2}m");
+                        }
+                    }
+                    else
+                    {
+                        //Debug.Log($"[InteractionDetector] CanInteract returned false for {interactable.GetType().Name}");
                     }
                 }
             }
@@ -159,6 +194,7 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
             {
                 if (currentTarget != null)
                 {
+                    Debug.Log($"[InteractionDetector] Lost target: {currentTarget.GetType().Name}");
                     currentTarget.OnInteractionEnd(gameObject);
                     InteractionEvents.InvokeInteractTargetLost();
                 }
@@ -167,9 +203,15 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
 
                 if (currentTarget != null)
                 {
+                    Debug.Log($"[InteractionDetector] Found new target: {currentTarget.GetType().Name}, Type: {currentTarget.GetInteractionType()}");
                     currentTarget.OnInteractionStart(gameObject);
                     string promptText = currentTarget.GetInteractionText();
+                    Debug.Log($"[InteractionDetector] Prompt text: {promptText}");
                     InteractionEvents.InvokeInteractTargetChanged(currentTarget, promptText);
+                }
+                else
+                {
+                    Debug.Log("[InteractionDetector] No interactable target detected");
                 }
             }
         }
@@ -180,11 +222,21 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
         /// </summary>
         public void TryInteract()
         {
+            Debug.Log($"[InteractionDetector] TryInteract called - currentTarget={currentTarget?.GetType().Name ?? "null"}, interactionHandler={interactionHandler != null}");
+            
             if (currentTarget == null)
+            {
+                Debug.LogWarning("[InteractionDetector] TryInteract: No current target!");
                 return;
+            }
 
             if (!currentTarget.CanInteract(gameObject))
+            {
+                Debug.LogWarning($"[InteractionDetector] TryInteract: Cannot interact with {currentTarget.GetType().Name} - CanInteract returned false");
                 return;
+            }
+
+            Debug.Log($"[InteractionDetector] Interacting with {currentTarget.GetType().Name}, Type: {currentTarget.GetInteractionType()}");
 
             if (interactionHandler != null)
             {
@@ -192,20 +244,13 @@ namespace NightHunt.InteractionSystem.Interaction.Detection
             }
             else
             {
+                Debug.LogWarning("[InteractionDetector] InteractionHandler is null, using fallback direct interaction");
                 // Fallback: direct interaction
                 currentTarget.Interact(gameObject);
             }
         }
 
         // Note: UI methods removed - gameplay UI subscribes to InteractionEvents
-
-        /// <summary>
-        /// Get the current interaction target.
-        /// </summary>
-        public IInteractable GetCurrentTarget()
-        {
-            return currentTarget;
-        }
 
         /// <summary>
         /// Get raycast info for gizmo drawing (Editor only).

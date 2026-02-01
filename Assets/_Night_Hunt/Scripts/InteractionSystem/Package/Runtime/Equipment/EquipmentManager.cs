@@ -4,6 +4,7 @@ using NightHunt.InteractionSystem.Core.Abstractions;
 using NightHunt.InteractionSystem.Core.Structs;
 using NightHunt.InteractionSystem.Items.Attachments;
 using NightHunt.InteractionSystem.Events;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.InteractionSystem.Equipment
 {
@@ -19,7 +20,8 @@ namespace NightHunt.InteractionSystem.Equipment
 
         private void Awake()
         {
-            visualController = GetComponent<EquipmentVisualController>();
+            // Use ComponentFinder to search in hierarchy (component might be in child)
+            visualController = ComponentFinder.FindComponentInHierarchy<EquipmentVisualController>(gameObject, includeInactive: false);
             if (visualController == null)
             {
                 visualController = gameObject.AddComponent<EquipmentVisualController>();

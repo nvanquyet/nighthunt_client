@@ -2,6 +2,8 @@ using UnityEngine;
 using NightHunt.InteractionSystem.Core.Abstractions;
 using NightHunt.InteractionSystem.Core.Interfaces;
 using NightHunt.InteractionSystem.Loot;
+using NightHunt.InteractionSystem.Utilities;
+using NightHunt.InteractionSystem.Events;
 
 namespace NightHunt.InteractionSystem.Interaction.Implementations
 {
@@ -12,13 +14,14 @@ namespace NightHunt.InteractionSystem.Interaction.Implementations
     public class CorpseInteractable : InteractableBase
     {
         private PlayerCorpseLoot corpseLoot;
-        private LootContainer lootContainer;
+        private NetworkLootContainer lootContainer;
 
         protected override void Awake()
         {
             base.Awake();
-            corpseLoot = GetComponent<PlayerCorpseLoot>();
-            lootContainer = GetComponent<LootContainer>();
+            // Use ComponentFinder to search in hierarchy (components might be in child)
+            corpseLoot = ComponentFinder.FindComponentInHierarchy<PlayerCorpseLoot>(gameObject, includeInactive: false);
+            lootContainer = ComponentFinder.FindComponentInHierarchy<NetworkLootContainer>(gameObject, includeInactive: false);
 
             // Set interaction type to Container
             interactionType = InteractionType.Container;
@@ -29,11 +32,13 @@ namespace NightHunt.InteractionSystem.Interaction.Implementations
             if (lootContainer == null)
                 return;
 
-            // Request to open container (one-way transfer only)
+            // Corpse container is always open - just fire event to show UI
+            // No need to RequestOpenContainer since it's already opened
             var networkObject = interactor.GetComponent<FishNet.Object.NetworkObject>();
             if (networkObject != null && networkObject.IsOwner)
             {
-                lootContainer.RequestOpenContainer(networkObject.Owner);
+                // Fire event to show UI (container is already opened)
+                InventoryEvents.InvokeLootContainerOpened(lootContainer);
             }
         }
 

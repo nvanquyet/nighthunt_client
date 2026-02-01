@@ -34,20 +34,17 @@ namespace NightHunt.InteractionSystem.Items.Runtime
 
         [Header("Visual")]
         [SerializeField] private Transform modelRoot;
-        [SerializeField] private float rotationSpeed = 90f;
-        [SerializeField] private float floatSpeed = 1f;
-        [SerializeField] private float floatAmount = 0.5f;
+        
+        [Header("VFX (for future implementation)")]
+        [SerializeField] private GameObject highlightVFX;
+        [SerializeField] private GameObject targetVFX;
 
-        private Vector3 startPosition;
-        private float floatOffset;
         private bool isPickedUp = false;
         private LootItemDefinition _definition;
 
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-            startPosition = transform.position;
-            floatOffset = Random.Range(0f, Mathf.PI * 2f);
 
             if (modelRoot == null)
                 modelRoot = transform;
@@ -134,28 +131,29 @@ namespace NightHunt.InteractionSystem.Items.Runtime
             }
         }
 
-        private void Update()
+        /// <summary>
+        /// Show VFX effects (highlight, target indicator, etc.)
+        /// Can be called when player targets this item or for other visual feedback.
+        /// </summary>
+        public void ShowVFX(bool showHighlight = true, bool showTarget = false)
         {
-            if (!IsSpawned || isPickedUp)
-                return;
+            if (highlightVFX != null)
+            {
+                highlightVFX.SetActive(showHighlight);
+            }
 
-            UpdateVisuals();
+            if (targetVFX != null)
+            {
+                targetVFX.SetActive(showTarget);
+            }
         }
 
         /// <summary>
-        /// Update visual effects (rotation, floating).
+        /// Hide all VFX effects
         /// </summary>
-        private void UpdateVisuals()
+        public void HideVFX()
         {
-            // Rotate
-            if (modelRoot != null)
-            {
-                modelRoot.Rotate(Vector3.up, rotationSpeed * Time.deltaTime, Space.Self);
-            }
-
-            // Float up and down
-            float yOffset = Mathf.Sin((Time.time + floatOffset) * floatSpeed) * floatAmount;
-            transform.position = startPosition + Vector3.up * yOffset;
+            ShowVFX(false, false);
         }
 
         /// <summary>
@@ -177,9 +175,6 @@ namespace NightHunt.InteractionSystem.Items.Runtime
             itemData = def.ItemData;
             syncQuantity.Value = Mathf.Max(1, qty);
             pickupRange = Mathf.Max(0.1f, def.PickupRange);
-            rotationSpeed = def.RotationSpeed;
-            floatSpeed = def.FloatSpeed;
-            floatAmount = def.FloatAmount;
 
             // Reset state (for fresh spawns)
             durability = -1f;
@@ -210,9 +205,6 @@ namespace NightHunt.InteractionSystem.Items.Runtime
             itemData = def.ItemData;
             syncQuantity.Value = itemInstance.quantity;
             pickupRange = Mathf.Max(0.1f, def.PickupRange);
-            rotationSpeed = def.RotationSpeed;
-            floatSpeed = def.FloatSpeed;
-            floatAmount = def.FloatAmount;
 
             // Preserve state from ItemInstance
             durability = itemInstance.durability;
@@ -285,9 +277,6 @@ namespace NightHunt.InteractionSystem.Items.Runtime
             _definition = def;
             itemData = def.ItemData;
             pickupRange = Mathf.Max(0.1f, def.PickupRange);
-            rotationSpeed = def.RotationSpeed;
-            floatSpeed = def.FloatSpeed;
-            floatAmount = def.FloatAmount;
 
             Debug.Log($"[NetworkLootItem] Definition resolved. WorldPrefab: {(def.WorldPrefab != null ? def.WorldPrefab.name : "NULL")}");
 
@@ -309,11 +298,30 @@ namespace NightHunt.InteractionSystem.Items.Runtime
         /// </summary>
         public Core.Structs.ItemInstance GetItemInstance()
         {
-            return new Core.Structs.ItemInstance(itemData.ItemId, quantity, durability)
+            if (itemData == null)
             {
-                instanceId = instanceId,
+                Debug.LogError("[NetworkLootItem] GetItemInstance called but itemData is NULL!");
+                return default;
+            }
+
+            Debug.Log($"[NetworkLootItem] GetItemInstance - itemData.ItemId: '{itemData.ItemId}', itemData.name: '{itemData.name}', quantity: {quantity}");
+
+            // Create item instance - constructor will auto-generate GUID if instanceId is empty
+            var itemInstance = new Core.Structs.ItemInstance(itemData.ItemId, quantity, durability)
+            {
                 customData = customData
             };
+            
+            // Only preserve instanceId if it's not empty (for dropped items with preserved state)
+            // If empty, let the constructor's auto-generated GUID remain
+            if (!string.IsNullOrEmpty(instanceId))
+            {
+                itemInstance.instanceId = instanceId;
+            }
+            
+            Debug.Log($"[NetworkLootItem] Created ItemInstance - instanceId: '{itemInstance.instanceId}', itemDataId: '{itemInstance.itemDataId}', quantity: {itemInstance.quantity}");
+            
+            return itemInstance;
         }
 
         private void ApplyWorldPresentation(LootItemDefinition def)

@@ -29,7 +29,8 @@ namespace NightHunt.Gameplay.AntiCamping
         private static void RevealPosition(NetworkPlayer player, float radius)
         {
             // Create reveal effect for enemies
-            var visionSystem = player.GetComponent<Vision.VisionSystem>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var visionSystem = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<Vision.VisionSystem>(player.gameObject, includeInactive: false);
             if (visionSystem != null)
             {
                 // Increase vision radius temporarily (makes player visible)

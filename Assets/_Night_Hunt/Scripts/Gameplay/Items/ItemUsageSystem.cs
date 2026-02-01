@@ -2,6 +2,11 @@ using UnityEngine;
 using NightHunt.Data;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Inventory;
+using NightHunt.Gameplay.Inventory.Events;
+using NightHunt.Gameplay.Inventory.Logic.Services;
+using NightHunt.Gameplay.Core;
+using NightHunt.Networking;
+using NightHunt.InteractionSystem.Utilities;
 using System.Collections;
 
 namespace NightHunt.Gameplay.Items
@@ -9,8 +14,9 @@ namespace NightHunt.Gameplay.Items
     /// <summary>
     /// Handles item usage: heal, buff, consumables, etc.
     /// Integrates with Inventory and Character systems
+    /// Implements IItemUsageService and fires InventoryLogicEvents for UI layer
     /// </summary>
-    public class ItemUsageSystem : MonoBehaviour
+    public class ItemUsageSystem : MonoBehaviour, IItemUsageService
     {
         [Header("Usage Settings")]
         [SerializeField] private float useCooldown = 0.5f;
@@ -20,65 +26,269 @@ namespace NightHunt.Gameplay.Items
         private InventoryService inventorySystem;
         private float lastUseTime;
 
+        // Current usage state
+        private string currentUsingItemId = null;
+        private Coroutine currentUsageCoroutine = null;
+        private float usageStartTime = 0f;
+        private float usageDuration = 0f;
+
         private void Awake()
         {
-            characterStats = GetComponent<CharacterStats>();
-            _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
-            inventorySystem = GetComponent<InventoryService>();
+            NetworkPlayer networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            if (networkPlayer != null)
+            {
+                characterStats = ComponentRegistry.GetCharacterStats(networkPlayer);
+                var movement = ComponentRegistry.GetMovementController(networkPlayer);
+                if (movement is CharacterPredictedMovement predictedMovement)
+                {
+                    _characterPredictedMovement = predictedMovement;
+                }
+                inventorySystem = ComponentRegistry.GetInventoryService(networkPlayer);
+                ComponentRegistry.RegisterItemUsageSystem(networkPlayer, this);
+            }
+            else
+            {
+                characterStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(gameObject, includeInactive: false);
+                _characterPredictedMovement = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterPredictedMovement>(gameObject, includeInactive: false);
+                inventorySystem = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<InventoryService>(gameObject, includeInactive: false);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            NetworkPlayer networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            
+            if (networkPlayer != null)
+            {
+                ComponentRegistry.UnregisterItemUsageSystem(networkPlayer, this);
+            }
         }
 
         /// <summary>
-        /// Use item by ID
+        /// Check if item can be used
         /// </summary>
-        public bool UseItem(string itemId)
+        public bool CanUseItem(string itemId)
         {
             if (Time.time - lastUseTime < useCooldown)
                 return false;
 
-            var itemConfig = GameConfigLoader.Instance?.GetItemConfig(itemId);
-            if (itemConfig == null)
+            if (IsUsingItem())
                 return false;
 
-            // Check if item exists in inventory
             if (inventorySystem == null)
                 return false;
-            
-            var items = inventorySystem.GetItems();
-            bool itemExists = false;
-            foreach (var slot in items)
+
+            return inventorySystem.HasItem(itemId);
+        }
+
+        /// <summary>
+        /// Start using item (with progress bar support)
+        /// </summary>
+        public bool StartUseItem(string itemId)
+        {
+            if (!CanUseItem(itemId))
+                return false;
+
+            // TODO: Load item data from ItemDataRegistry
+            // For now, item usage is disabled until ItemDataBase system is fully implemented
+            var registry = NightHunt.InteractionSystem.Core.Abstractions.ItemDataRegistry.Load();
+            if (registry == null)
             {
-                if (slot.itemDataId == itemId && slot.quantity > 0)
+                Debug.LogWarning($"[ItemUsageSystem] ItemDataRegistry is null - cannot use item: {itemId}");
+                return false;
+            }
+            
+            var itemData = registry.GetById(itemId);
+            if (itemData == null)
+            {
+                Debug.LogWarning($"[ItemUsageSystem] Item not found in ItemDataRegistry: {itemId}");
+                return false;
+            }
+            
+            // Use itemData instead of itemConfig
+
+            // Check if item exists in inventory
+            if (!inventorySystem.HasItem(itemId))
+                return false;
+
+            // TODO: Check item type when ItemDataBase is extended with useDuration property
+            // Check item type to determine usage method
+            if (itemData.IsConsumable)
+            {
+                // For now, treat all consumables as instant use
+                // TODO: Check useDuration when ItemDataBase is extended
+                // if (itemData.useDuration > 0f)
+                // {
+                //     // Consumable with duration - use with progress bar
+                //     return StartUseConsumable(itemId, itemData);
+                // }
+            }
+            
+                // Instant use or other types
+                return UseItem(itemId);
+        }
+
+        /// <summary>
+        /// Start using consumable item with progress bar
+        /// </summary>
+        private bool StartUseConsumable(string itemId, ItemConfigData itemConfig)
+        {
+            if (IsUsingItem())
+            {
+                // Cancel current usage if different item
+                if (currentUsingItemId != itemId)
                 {
-                    itemExists = true;
-                    break;
+                    CancelUseItem(currentUsingItemId);
+                }
+                else
+                {
+                    // Same item - cancel current usage
+                    CancelUseItem(itemId);
+                    return false;
                 }
             }
-            if (!itemExists) return false;
 
-            // Use based on item type
-            bool used = false;
-            switch (itemConfig.UseType)
+            currentUsingItemId = itemId;
+            usageStartTime = Time.time;
+            usageDuration = itemConfig.useDuration;
+
+            // Fire event for UI
+            InventoryLogicEvents.FireItemUseStarted(itemId);
+
+            // Start usage coroutine
+            currentUsageCoroutine = StartCoroutine(UseConsumableWithProgress(itemId, itemConfig));
+
+            return true;
+        }
+
+        /// <summary>
+        /// Use consumable item with progress tracking
+        /// </summary>
+        private IEnumerator UseConsumableWithProgress(string itemId, ItemConfigData itemConfig)
+        {
+            float elapsed = 0f;
+            float updateInterval = 0.1f; // Update progress every 0.1 seconds
+
+            while (elapsed < usageDuration)
             {
-                case "Instant":
-                    used = UseInstantItem(itemConfig);
-                    break;
-                case "Channel":
-                    used = StartCoroutine(UseChannelItem(itemConfig)) != null;
-                    break;
-                case "PlaceOnGround":
-                    used = PlaceItemOnGround(itemConfig);
-                    break;
-                case "Throw":
-                    used = ThrowItem(itemConfig);
-                    break;
+                // Check if should cancel
+                if (ShouldCancelUsage())
+                {
+                    CancelUseItem(itemId);
+                    yield break;
+                }
+
+                yield return new WaitForSeconds(updateInterval);
+                elapsed += updateInterval;
+
+                // Fire progress event
+                float progress = Mathf.Clamp01(elapsed / usageDuration);
+                InventoryLogicEvents.FireItemUseProgress(itemId, progress);
             }
 
-            if (used)
+            // Usage completed
+            CompleteUseItem(itemId, itemConfig);
+        }
+
+        /// <summary>
+        /// Check if usage should be cancelled
+        /// </summary>
+        private bool ShouldCancelUsage()
+        {
+            // Cancel if moving
+            if (_characterPredictedMovement != null && _characterPredictedMovement.GetCurrentMoveSpeed() > 0.1f)
             {
-                lastUseTime = Time.time;
+                return true;
             }
 
-            return used;
+            // TODO: Cancel if taking damage
+            // TODO: Cancel if inventory/menu opened
+
+            return false;
+        }
+
+        /// <summary>
+        /// Complete item usage
+        /// </summary>
+        private void CompleteUseItem(string itemId, ItemConfigData itemConfig)
+        {
+            // Apply effect
+            UseInstantItem(itemConfig);
+
+            // Remove from inventory if consumable
+            if (itemConfig.IsConsumable && inventorySystem != null)
+            {
+                inventorySystem.RemoveItem(itemId, 1);
+            }
+
+            // Fire completion event
+            InventoryLogicEvents.FireItemUseCompleted(itemId);
+
+            // Reset state
+            currentUsingItemId = null;
+            currentUsageCoroutine = null;
+            lastUseTime = Time.time;
+        }
+
+        /// <summary>
+        /// Cancel item usage
+        /// </summary>
+        public bool CancelUseItem(string itemId)
+        {
+            if (currentUsingItemId != itemId)
+                return false;
+
+            if (currentUsageCoroutine != null)
+            {
+                StopCoroutine(currentUsageCoroutine);
+                currentUsageCoroutine = null;
+            }
+
+            // Fire cancel event
+            InventoryLogicEvents.FireItemUseCancelled(itemId);
+
+            // Reset state
+            currentUsingItemId = null;
+            usageStartTime = 0f;
+            usageDuration = 0f;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Check if currently using item
+        /// </summary>
+        public bool IsUsingItem()
+        {
+            return !string.IsNullOrEmpty(currentUsingItemId);
+        }
+
+        /// <summary>
+        /// Get current using item ID
+        /// </summary>
+        public string GetCurrentUsingItemId()
+        {
+            return currentUsingItemId;
+        }
+
+        /// <summary>
+        /// Get usage progress (0-1)
+        /// </summary>
+        public float GetUseProgress()
+        {
+            if (!IsUsingItem() || usageDuration <= 0f)
+                return 0f;
+
+            float elapsed = Time.time - usageStartTime;
+            return Mathf.Clamp01(elapsed / usageDuration);
+        }
+
+        /// <summary>
+        /// Use item by ID (legacy method, now calls StartUseItem)
+        /// </summary>
+        public bool UseItem(string itemId)
+        {
+            return StartUseItem(itemId);
         }
 
         /// <summary>
@@ -142,7 +352,75 @@ namespace NightHunt.Gameplay.Items
         }
 
         /// <summary>
-        /// Use channel item (over time)
+        /// Use consumable item
+        /// </summary>
+        public bool UseConsumable(string itemId)
+        {
+            return StartUseItem(itemId);
+        }
+
+        /// <summary>
+        /// Equip item
+        /// </summary>
+        public bool EquipItem(string itemId)
+        {
+            // TODO: Implement equipment logic
+            // For now, delegate to inventory service
+            if (inventorySystem == null)
+                return false;
+
+            // TODO: Determine equipment slot type from ItemDataBase.Category
+            // For now, equipment usage is disabled until ItemDataBase system is fully implemented
+            var registry = NightHunt.InteractionSystem.Core.Abstractions.ItemDataRegistry.Load();
+            if (registry == null)
+            {
+                Debug.LogWarning($"[ItemUsageSystem] ItemDataRegistry is null - cannot use item: {itemId}");
+                return false;
+            }
+            
+            var itemData = registry.GetById(itemId);
+            if (itemData == null)
+            {
+                Debug.LogWarning($"[ItemUsageSystem] Item not found in ItemDataRegistry: {itemId}");
+                return false;
+            }
+            
+            // Use itemData.Category to determine equipment slot type
+
+            // TODO: Map item category to EquipmentSlotType
+            // For now, just return false
+            return false;
+        }
+
+        /// <summary>
+        /// Prepare to throw item
+        /// </summary>
+        public bool PrepareThrowItem(string itemId)
+        {
+            // TODO: Implement throw preparation logic
+            return false;
+        }
+
+        /// <summary>
+        /// Trigger event item
+        /// </summary>
+        public bool TriggerEventItem(string itemId)
+        {
+            // TODO: Implement event trigger logic
+            return false;
+        }
+
+        /// <summary>
+        /// Trigger quest item
+        /// </summary>
+        public bool TriggerQuestItem(string itemId)
+        {
+            // TODO: Implement quest trigger logic
+            return false;
+        }
+
+        /// <summary>
+        /// Use channel item (over time) - legacy method
         /// </summary>
         private IEnumerator UseChannelItem(ItemConfigData item)
         {

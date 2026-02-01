@@ -4,6 +4,7 @@ using TMPro;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Inventory;
 using NightHunt.Gameplay.Character;
+using NightHunt.Gameplay.Core;
 using FishNet;
 using FishNet.Managing.Timing;
 
@@ -22,10 +23,10 @@ namespace NightHunt.Gameplay.UI
         [SerializeField] private TextMeshProUGUI staminaText;
 
         [Header("Quick Slots")]
-        [SerializeField] private QuickSlotUI[] quickSlots = new QuickSlotUI[4]; // Assign manually in inspector
+        [SerializeField] private ItemCell[] quickSlots = new ItemCell[4]; // Assign manually in inspector
 
         [Header("Weapon Slots")]
-        [SerializeField] private WeaponSlotUI[] weaponSlots = new WeaponSlotUI[2]; // Assign manually in inspector
+        [SerializeField] private ItemCell[] weaponSlots = new ItemCell[2]; // Assign manually in inspector
 
         [Header("Weight Display")]
         [SerializeField] private Slider weightBar;
@@ -46,27 +47,68 @@ namespace NightHunt.Gameplay.UI
 
         private float _nextPingUpdateTime;
 
+        private void Awake()
+        {
+            Debug.Log($"[PlayerHUD] Awake() called - GameObject: {gameObject.name}, Active: {gameObject.activeSelf}, ActiveInHierarchy: {gameObject.activeInHierarchy}");
+            
+            // Register this HUD in the static registry (no FindObject needed)
+            UIRegistry.RegisterPlayerHUD(this);
+            
+            Debug.Log($"[PlayerHUD] Awake() completed - Registered: {UIRegistry.GetPlayerHUD() != null}");
+        }
+
+        private void OnDestroy()
+        {
+            // Unregister when destroyed
+            UIRegistry.UnregisterPlayerHUD(this);
+        }
+
         /// <summary>
         /// Initialize HUD with player references
         /// </summary>
         public void Initialize(NetworkPlayer player, InventoryService inventory, InventoryPanel panel = null)
         {
+            Debug.Log($"[PlayerHUD] Initialize() called - player: {player?.name ?? "NULL"}, IsLocalPlayer: {player?.IsLocalPlayer ?? false}, inventory: {inventory != null}, panel: {panel != null}");
+            
             if (player == null || !player.IsLocalPlayer)
             {
-                Debug.LogWarning("[PlayerHUD] Cannot initialize: Not local player!");
+                Debug.LogWarning($"[PlayerHUD] Cannot initialize: Not local player! player={player != null}, IsLocalPlayer={player?.IsLocalPlayer ?? false}");
                 return;
             }
 
+            Debug.Log($"[PlayerHUD] Initializing for local player: {player.name}");
+            
             localPlayer = player;
             inventorySystem = inventory;
             inventoryPanel = panel;
-            characterStats = player.GetComponent<CharacterStats>();
+            
+            // Use ComponentRegistry instead of GetComponent (event-based, no FindObject)
+            characterStats = ComponentRegistry.GetCharacterStats(player);
+            if (characterStats == null)
+            {
+                Debug.LogWarning($"[PlayerHUD] CharacterStats not found in ComponentRegistry for player: {player.name}");
+            }
+
+            Debug.Log($"[PlayerHUD] References set - characterStats: {characterStats != null}");
 
             SetupQuickSlots();
             SetupWeaponSlots();
 
+            // Ensure GameObject is active
+            if (!gameObject.activeSelf)
+            {
+                gameObject.SetActive(true);
+            }
+            
             isInitialized = true;
-            gameObject.SetActive(true);
+            
+            Debug.Log($"[PlayerHUD] Initialize() completed - isInitialized: {isInitialized}, active: {gameObject.activeSelf}, activeInHierarchy: {gameObject.activeInHierarchy}");
+            
+            // Verify UI is visible
+            if (!gameObject.activeInHierarchy)
+            {
+                Debug.LogError($"[PlayerHUD] GameObject is not active in hierarchy! Parent: {transform.parent?.name ?? "None"}, Root: {transform.root.name}");
+            }
         }
 
         private void Update()
@@ -92,7 +134,9 @@ namespace NightHunt.Gameplay.UI
             {
                 if (quickSlots[i] != null)
                 {
-                    quickSlots[i].Initialize(i, this, inventoryPanel);
+                    // Create empty slot for quick slot
+                    InventorySlot emptySlot = new InventorySlot();
+                    quickSlots[i].Initialize(emptySlot, inventoryPanel, ItemCellLocation.QuickSlot, i);
                 }
             }
         }
@@ -107,7 +151,9 @@ namespace NightHunt.Gameplay.UI
             {
                 if (weaponSlots[i] != null)
                 {
-                    weaponSlots[i].Initialize(i, this, inventoryPanel);
+                    // Create empty slot for weapon
+                    InventorySlot emptySlot = new InventorySlot();
+                    weaponSlots[i].Initialize(emptySlot, inventoryPanel, ItemCellLocation.Weapon, i);
                 }
             }
         }
@@ -226,7 +272,7 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Get quick slot by index
         /// </summary>
-        public QuickSlotUI GetQuickSlot(int index)
+        public ItemCell GetQuickSlot(int index)
         {
             if (index >= 0 && index < quickSlots.Length)
                 return quickSlots[index];
@@ -236,7 +282,7 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// Get weapon slot by index
         /// </summary>
-        public WeaponSlotUI GetWeaponSlot(int index)
+        public ItemCell GetWeaponSlot(int index)
         {
             if (index >= 0 && index < weaponSlots.Length)
                 return weaponSlots[index];

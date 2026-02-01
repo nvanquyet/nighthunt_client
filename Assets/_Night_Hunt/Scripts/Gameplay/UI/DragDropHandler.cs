@@ -1,28 +1,37 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using System.Collections;
 using NightHunt.Gameplay.Inventory;
-using NightHunt.InteractionSystem.Core.Structs;
 
 namespace NightHunt.Gameplay.UI
 {
     /// <summary>
     /// Handles drag and drop operations for inventory items
     /// Provides visual feedback and drop validation
+    /// Unified to work with ItemCell for all slot types
     /// </summary>
     public class DragDropHandler : MonoBehaviour
     {
         [Header("Drag Visual")]
-        [SerializeField] private GameObject dragIconPrefab;
+        [SerializeField] private ItemCell dragCell; // Reference to ItemCell for drag visual (set in Inspector)
         [SerializeField] private Canvas dragCanvas;
 
-        private GameObject currentDragIcon;
-        private InventorySlotUI draggedSlot;
-        private QuickSlotUI draggedQuickSlot;
-        private WeaponSlotUI draggedWeaponSlot;
-        private EquipmentSlotUI draggedEquipmentSlot;
+        private ItemCell draggedCell; // Unified: thay thế draggedSlot, draggedQuickSlot, etc.
+        private InventorySlot draggedData; // Store data đang được drag
         private bool isDragging = false;
         private InventoryPanel inventoryPanel;
+        
+        // For improved UX: Store reference to original slot icon to restore after drag
+        private Image originalSlotIcon; // Original slot's icon image (to disable/enable)
+        private bool originalIconWasEnabled = false; // Track if original icon was enabled
+
+        [Header("Events")]
+        public UnityEngine.Events.UnityEvent<ItemCell, ItemCell, InventorySlot> OnItemMoved;
+        public UnityEngine.Events.UnityEvent<ItemCell, ItemCell, InventorySlot, InventorySlot> OnItemSwapped;
+        public UnityEngine.Events.UnityEvent<ItemCell> OnDragStarted;
+        public UnityEngine.Events.UnityEvent<ItemCell> OnDragEnded;
+        public UnityEngine.Events.UnityEvent<ItemCell, bool> OnDropZoneHighlight; // cell, isValid
 
         /// <summary>
         /// Initialize drag drop handler
@@ -37,76 +46,39 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
-        /// Start drag operation from inventory slot
+        /// Start drag operation từ bất kỳ ItemCell nào
+        /// Store data và clear tạm thời source cell
         /// </summary>
-        public void StartDrag(InventorySlotUI slot, PointerEventData eventData)
+        public void StartDrag(ItemCell cell, PointerEventData eventData)
         {
-            if (slot == null || slot.IsEmpty())
+            if (cell == null || cell.IsEmpty())
                 return;
 
-            draggedSlot = slot;
-            draggedQuickSlot = null;
-            draggedWeaponSlot = null;
-            draggedEquipmentSlot = null;
-            isDragging = true;
-
-            // Create drag icon
-            CreateDragIcon(slot);
-        }
-
-        /// <summary>
-        /// Start drag operation from quick slot
-        /// </summary>
-        public void StartDragFromQuickSlot(QuickSlotUI slot, PointerEventData eventData)
-        {
-            var itemInstance = slot?.GetSlot();
-            if (slot == null || !itemInstance.HasValue || !itemInstance.Value.IsValid())
+            // Store data đang được drag
+            draggedData = cell.GetSlot();
+            if (draggedData == null || draggedData.IsEmpty)
                 return;
 
-            draggedQuickSlot = slot;
-            draggedSlot = null;
-            draggedWeaponSlot = null;
-            draggedEquipmentSlot = null;
+            draggedCell = cell;
             isDragging = true;
 
-            // Create drag icon from quick slot - TODO: Update CreateDragIconFromSlot to accept ItemInstance
-            // CreateDragIconFromSlot(itemInstance.Value);
-        }
+            // Clear tạm thời source cell (UI hiển thị empty)
+            cell.ClearSlot();
 
-        /// <summary>
-        /// Start drag operation from weapon slot
-        /// </summary>
-        public void StartDragFromWeaponSlot(WeaponSlotUI slot, PointerEventData eventData)
-        {
-            if (slot == null || slot.GetWeaponSlot() == null || slot.GetWeaponSlot().IsEmpty)
-                return;
+            // Store original slot icon reference and disable it for better UX
+            originalSlotIcon = cell.GetComponentInChildren<Image>();
+            if (originalSlotIcon != null)
+            {
+                originalIconWasEnabled = originalSlotIcon.enabled;
+                originalSlotIcon.enabled = false; // Hide original icon while dragging
+                Debug.Log("[DragDropHandler] Disabled original cell icon for drag");
+            }
 
-            draggedWeaponSlot = slot;
-            draggedSlot = null;
-            draggedQuickSlot = null;
-            draggedEquipmentSlot = null;
-            isDragging = true;
+            // Setup drag cell với data từ source cell
+            SetupDragCell(draggedData);
 
-            // Create drag icon from weapon slot
-            CreateDragIconFromSlot(slot.GetWeaponSlot());
-        }
-
-        /// <summary>
-        /// Start drag operation from equipment slot
-        /// </summary>
-        public void StartDragFromEquipmentSlot(EquipmentSlotUI slot, PointerEventData eventData)
-        {
-            if (slot == null || slot.GetSlot() == null || slot.GetSlot().IsEmpty)
-                return;
-
-            draggedEquipmentSlot = slot;
-            draggedSlot = null;
-            draggedQuickSlot = null;
-            draggedWeaponSlot = null;
-            isDragging = true;
-
-            // Create drag icon from equipment slot
-            CreateDragIconFromSlot(slot.GetSlot());
+            // Fire event
+            OnDragStarted?.Invoke(cell);
         }
 
         /// <summary>
@@ -114,12 +86,12 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         public void UpdateDrag(PointerEventData eventData)
         {
-            if (!isDragging || currentDragIcon == null)
+            if (!isDragging || dragCell == null || !dragCell.gameObject.activeSelf)
                 return;
 
-            // Update drag icon position to follow mouse
-            RectTransform dragIconRect = currentDragIcon.GetComponent<RectTransform>();
-            if (dragIconRect != null && dragCanvas != null)
+            // Update drag cell position to follow mouse
+            RectTransform dragCellRect = dragCell.GetComponent<RectTransform>();
+            if (dragCellRect != null && dragCanvas != null)
             {
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     dragCanvas.transform as RectTransform,
@@ -127,7 +99,7 @@ namespace NightHunt.Gameplay.UI
                     dragCanvas.worldCamera,
                     out Vector2 localPoint);
 
-                dragIconRect.anchoredPosition = localPoint;
+                dragCellRect.anchoredPosition = localPoint;
             }
 
             // Update highlight on valid drop zones
@@ -137,51 +109,41 @@ namespace NightHunt.Gameplay.UI
         /// <summary>
         /// End drag operation
         /// </summary>
-        public void EndDrag(InventorySlotUI slot, PointerEventData eventData)
+        public void EndDrag(ItemCell cell, PointerEventData eventData)
         {
             if (!isDragging)
                 return;
 
-            // Find drop target
-            GameObject dropTarget = eventData.pointerCurrentRaycast.gameObject;
+            GameObject dropTarget = FindDropTarget(eventData);
             if (dropTarget != null)
             {
-                HandleDrop(slot, dropTarget);
+                HandleDrop(cell, dropTarget);
             }
-
+            else
+                    {
+                Debug.LogWarning("[DragDropHandler] No drop target found!");
+                    }
+                    
             // Cleanup
             CleanupDrag();
         }
 
         /// <summary>
-        /// End drag operation from any slot type
+        /// End drag operation from any cell type
         /// </summary>
         public void EndDragAny(PointerEventData eventData)
         {
-            if (!isDragging)
+            if (!isDragging || draggedCell == null)
                 return;
 
-            // Find drop target
-            GameObject dropTarget = eventData.pointerCurrentRaycast.gameObject;
+            GameObject dropTarget = FindDropTarget(eventData);
             if (dropTarget != null)
             {
-                // Determine source type
-                if (draggedSlot != null)
-                {
-                    HandleDrop(draggedSlot, dropTarget);
-                }
-                else if (draggedQuickSlot != null)
-                {
-                    HandleDropFromQuickSlot(draggedQuickSlot, dropTarget);
-                }
-                else if (draggedWeaponSlot != null)
-                {
-                    HandleDropFromWeaponSlot(draggedWeaponSlot, dropTarget);
-                }
-                else if (draggedEquipmentSlot != null)
-                {
-                    HandleDropFromEquipmentSlot(draggedEquipmentSlot, dropTarget);
-                }
+                HandleDrop(draggedCell, dropTarget);
+            }
+            else
+            {
+                Debug.LogWarning("[DragDropHandler] No drop target found in EndDragAny!");
             }
 
             // Cleanup
@@ -189,161 +151,487 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
-        /// Handle drop operation
+        /// Find drop target, skipping drag icon
         /// </summary>
-        private void HandleDrop(InventorySlotUI sourceSlot, GameObject dropTarget)
+        private GameObject FindDropTarget(PointerEventData eventData)
         {
-            if (sourceSlot == null || dropTarget == null)
-                return;
+            GameObject dropTarget = null;
+            
+            // Use RaycastAll to get all objects under mouse, then filter out drag icon
+            var eventSystem = EventSystem.current;
+            if (eventSystem != null)
+            {
+                PointerEventData pointerData = new PointerEventData(eventSystem)
+                {
+                    position = eventData.position
+                };
+                var results = new System.Collections.Generic.List<RaycastResult>();
+                eventSystem.RaycastAll(pointerData, results);
+                
+                // Find first object that is NOT the drag icon
+                foreach (var result in results)
+                {
+                    // Skip if this is the drag cell itself
+                    if (dragCell != null && dragCell.gameObject.activeSelf && (result.gameObject == dragCell.gameObject || result.gameObject.transform.IsChildOf(dragCell.transform)))
+                    {
+                        continue;
+                    }
+                    
+                    // Found valid drop target
+                    dropTarget = result.gameObject;
+                    Debug.Log($"[DragDropHandler] Found drop target: {dropTarget.name}");
+                    break;
+                }
+            }
+            
+            // Fallback: Use pointerCurrentRaycast if RaycastAll didn't work
+            if (dropTarget == null && eventData.pointerCurrentRaycast.gameObject != null)
+            {
+                var candidate = eventData.pointerCurrentRaycast.gameObject;
+                if (dragCell == null || !dragCell.gameObject.activeSelf || (candidate != dragCell.gameObject && !candidate.transform.IsChildOf(dragCell.transform)))
+                {
+                    dropTarget = candidate;
+                }
+            }
 
-            // Check drop target type
-            InventorySlotUI targetSlot = dropTarget.GetComponent<InventorySlotUI>();
-            QuickSlotUI quickSlot = dropTarget.GetComponent<QuickSlotUI>();
-            WeaponSlotUI weaponSlot = dropTarget.GetComponent<WeaponSlotUI>();
-            EquipmentSlotUI equipmentSlot = dropTarget.GetComponent<EquipmentSlotUI>();
+            return dropTarget;
+        }
+
+        /// <summary>
+        /// Handle drop operation - unified logic cho tất cả cell types
+        /// Swap data nếu target có item, move nếu target empty
+        /// </summary>
+        private void HandleDrop(ItemCell sourceCell, GameObject dropTarget)
+        {
+            if (sourceCell == null || dropTarget == null || draggedData == null || draggedData.IsEmpty)
+            {
+                Debug.LogWarning($"[DragDropHandler] HandleDrop: sourceCell={sourceCell != null}, dropTarget={dropTarget != null}, draggedData={draggedData != null}");
+                // Restore data to source cell if drop failed
+                if (sourceCell != null && draggedData != null)
+                {
+                    sourceCell.SetSlot(draggedData);
+                }
+                return;
+            }
+
+            Debug.Log($"[DragDropHandler] HandleDrop: sourceCell={sourceCell.name}, dropTarget={dropTarget.name}");
+
+            // Find target cell
+            ItemCell targetCell = dropTarget.GetComponent<ItemCell>();
+            if (targetCell == null)
+            {
+                // Check parent hierarchy
+                Transform current = dropTarget.transform;
+                for (int i = 0; i < 5 && current != null; i++)
+                {
+                    targetCell = current.GetComponent<ItemCell>();
+                    if (targetCell != null) break;
+                    current = current.parent;
+                }
+            }
+
+            // Check for TrashSlotUI
             TrashSlotUI trashSlot = dropTarget.GetComponent<TrashSlotUI>();
+            if (trashSlot == null)
+            {
+                Transform current = dropTarget.transform;
+                for (int i = 0; i < 5 && current != null; i++)
+                {
+                        trashSlot = current.GetComponent<TrashSlotUI>();
+                    if (trashSlot != null) break;
+                    current = current.parent;
+                }
+            }
 
-            if (targetSlot != null)
+            if (trashSlot != null)
             {
-                // Drop on inventory slot
-                inventoryPanel?.MoveItem(sourceSlot, targetSlot);
+                // Drop on trash slot - restore data first
+                sourceCell.SetSlot(draggedData);
+                Debug.Log($"[DragDropHandler] Dropping on trash slot");
+                trashSlot.DropItem(sourceCell);
+                return;
             }
-            else if (quickSlot != null)
-            {
-                // Drop on quick slot
-                inventoryPanel?.AssignQuickSlot(sourceSlot, quickSlot.GetSlotIndex());
+
+            if (targetCell == null)
+                                {
+                Debug.LogWarning($"[DragDropHandler] Drop target is not a valid ItemCell or TrashSlot!");
+                // Restore data to source cell
+                sourceCell.SetSlot(draggedData);
+                return;
             }
-            else if (weaponSlot != null)
-            {
-                // Drop on weapon slot
-                inventoryPanel?.EquipWeapon(sourceSlot, weaponSlot.GetSlotIndex());
+
+            // Validate: Check if item can be dropped to target cell
+            if (!CanDropItemToCell(draggedData, targetCell))
+                            {
+                Debug.LogWarning($"[DragDropHandler] Cannot drop item to target cell - validation failed");
+                // Restore data to source cell
+                sourceCell.SetSlot(draggedData);
+                return;
             }
-            else if (equipmentSlot != null)
+
+            // Handle drop: Swap if target has item, Move if target is empty
+            if (targetCell.IsEmpty())
             {
-                // Drop on equipment slot
-                inventoryPanel?.EquipItem(sourceSlot, equipmentSlot);
+                // MOVE: Gán data vào target
+                targetCell.SetSlot(draggedData);
+                // sourceCell đã empty rồi (từ StartDrag)
+                OnItemMoved?.Invoke(sourceCell, targetCell, draggedData);
+                Debug.Log($"[DragDropHandler] Moved item from {sourceCell.GetLocation()} to {targetCell.GetLocation()}");
+                    }
+                    else
+                    {
+                // SWAP: Swap data
+                var targetData = targetCell.GetSlot();
+                targetCell.SetSlot(draggedData);
+                sourceCell.SetSlot(targetData);
+                OnItemSwapped?.Invoke(sourceCell, targetCell, draggedData, targetData);
+                Debug.Log($"[DragDropHandler] Swapped items between {sourceCell.GetLocation()} and {targetCell.GetLocation()}");
             }
-            else if (trashSlot != null)
+
+            // Refresh UI
+            sourceCell.UpdateDisplay();
+            targetCell.UpdateDisplay();
+
+            // Fire network events
+            FireNetworkEvents(sourceCell, targetCell, draggedData);
+
+            // Clear dragged data
+            draggedData = null;
+        }
+
+        /// <summary>
+        /// Check if can drop from source location to target location
+        /// </summary>
+        private bool CanDropToLocation(ItemCellLocation source, ItemCellLocation target)
+        {
+            // Define compatibility rules
+            switch (target)
             {
-                // Drop on trash slot
-                trashSlot.DropItem(sourceSlot);
+                case ItemCellLocation.Inventory:
+                    return source == ItemCellLocation.Container || source == ItemCellLocation.Inventory || 
+                           source == ItemCellLocation.QuickSlot || source == ItemCellLocation.Weapon || 
+                           source == ItemCellLocation.Equipment || source == ItemCellLocation.Attachment;
+                case ItemCellLocation.Container:
+                    return source == ItemCellLocation.Inventory;
+                case ItemCellLocation.QuickSlot:
+                    return source == ItemCellLocation.Inventory || source == ItemCellLocation.QuickSlot;
+                case ItemCellLocation.Weapon:
+                    return source == ItemCellLocation.Inventory || source == ItemCellLocation.Weapon;
+                case ItemCellLocation.Equipment:
+                    return source == ItemCellLocation.Inventory || source == ItemCellLocation.Equipment;
+                case ItemCellLocation.Attachment:
+                    return source == ItemCellLocation.Inventory || source == ItemCellLocation.Attachment;
+                default:
+                    return false;
             }
         }
 
         /// <summary>
-        /// Handle drop from quick slot
+        /// Check if item can be dropped to target cell (validation với item data)
         /// </summary>
-        private void HandleDropFromQuickSlot(QuickSlotUI sourceSlot, GameObject dropTarget)
+        private bool CanDropItemToCell(InventorySlot itemSlot, ItemCell targetCell)
         {
-            if (sourceSlot == null || dropTarget == null)
-                return;
+            if (itemSlot == null || itemSlot.IsEmpty || targetCell == null)
+                return false;
 
-            var itemInstance = sourceSlot.GetSlot();
-            if (!itemInstance.HasValue || !itemInstance.Value.IsValid())
-                return;
+            // Get item data from registry
+            var itemData = GetItemDataFromRegistry(itemSlot.Item.ItemId);
+            if (itemData == null)
+                return false;
 
-            InventorySlotUI targetSlot = dropTarget.GetComponent<InventorySlotUI>();
-            TrashSlotUI trashSlot = dropTarget.GetComponent<TrashSlotUI>();
-
-            if (targetSlot != null)
+            // Event items: chỉ vào Inventory hoặc Container
+            if (IsEventItem(itemData))
             {
-                // Move from quick slot to inventory
-                inventoryPanel?.MoveFromQuickSlotToInventory(sourceSlot.GetSlotIndex(), targetSlot);
+                var location = targetCell.GetLocation();
+                return location == ItemCellLocation.Inventory || location == ItemCellLocation.Container;
             }
-            else if (trashSlot != null)
+
+            // Validation theo location
+            var targetLocation = targetCell.GetLocation();
+            switch (targetLocation)
             {
-                // Drop from quick slot
-                trashSlot.DropItemFromQuickSlot(sourceSlot);
+                case ItemCellLocation.Inventory:
+                case ItemCellLocation.Container:
+                    return true; // Tất cả items có thể vào inventory/container
+                
+                case ItemCellLocation.QuickSlot:
+                    return itemData.Category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Consumable || 
+                           itemData.Category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Ammo;
+                
+                case ItemCellLocation.Weapon:
+                    return itemData.Category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Weapon;
+                
+                case ItemCellLocation.Equipment:
+                    return CanEquipToSlotType(itemData.Category, targetCell.GetEquipmentSlotType());
+                
+                case ItemCellLocation.Attachment:
+                    return itemData.Category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Attachment;
+                
+                default:
+                    return false;
             }
         }
 
         /// <summary>
-        /// Handle drop from weapon slot
+        /// Check if item is an event item (chỉ có thể vào inventory/container)
         /// </summary>
-        private void HandleDropFromWeaponSlot(WeaponSlotUI sourceSlot, GameObject dropTarget)
+        private bool IsEventItem(NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase itemData)
         {
-            if (sourceSlot == null || dropTarget == null)
-                return;
+            if (itemData == null)
+                return false;
 
-            var slot = sourceSlot.GetWeaponSlot();
-            if (slot == null || slot.IsEmpty)
-                return;
+            // Dùng category: Misc category có thể là event items
+            // Có thể mở rộng sau với pattern hoặc flag riêng
+            return itemData.Category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Misc && 
+                   (itemData.ItemId.StartsWith("event_") || itemData.ItemId.Contains("_event"));
+                }
 
-            InventorySlotUI targetSlot = dropTarget.GetComponent<InventorySlotUI>();
-            TrashSlotUI trashSlot = dropTarget.GetComponent<TrashSlotUI>();
+        /// <summary>
+        /// Check if item category can be equipped to equipment slot type
+        /// </summary>
+        private bool CanEquipToSlotType(NightHunt.InteractionSystem.Core.Abstractions.ItemCategory category, EquipmentSlotType slotType)
+        {
+            return (slotType == EquipmentSlotType.Armor && category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Armor) ||
+                   (slotType == EquipmentSlotType.Helmet && category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Helmet) ||
+                   (slotType == EquipmentSlotType.Vest && category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Armor) || // TODO: Check if Vest is separate category
+                   (slotType == EquipmentSlotType.Backpack && category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Backpack);
+        }
 
-            if (targetSlot != null)
+        /// <summary>
+        /// Get ItemDataBase from ItemDataRegistry
+        /// </summary>
+        private NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase GetItemDataFromRegistry(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId))
+                return null;
+
+            var registry = NightHunt.InteractionSystem.Core.Abstractions.ItemDataRegistry.Load();
+            if (registry != null)
             {
-                // Unequip weapon to inventory
-                inventoryPanel?.UnequipWeaponToInventory(sourceSlot.GetSlotIndex(), targetSlot);
+                return registry.GetById(itemId);
             }
-            else if (trashSlot != null)
+
+            return null;
+        }
+
+        /// <summary>
+        /// Handle swap or move within same location type
+        /// </summary>
+        private void HandleSwapOrMove(ItemCell sourceCell, ItemCell targetCell)
+        {
+            var sourceSlot = sourceCell.GetSlot();
+            var targetSlot = targetCell.GetSlot();
+
+            if (targetSlot == null || targetSlot.IsEmpty)
             {
-                // Drop weapon
-                trashSlot.DropItemFromWeaponSlot(sourceSlot);
+                // Target is empty - move item
+                targetCell.SetSlot(sourceSlot);
+                sourceCell.ClearSlot();
+            }
+            else
+            {
+                // Both have items - swap
+                var temp = targetSlot;
+                targetCell.SetSlot(sourceSlot);
+                sourceCell.SetSlot(temp);
+            }
+
+            // Refresh UI
+            sourceCell.UpdateDisplay();
+            targetCell.UpdateDisplay();
+
+            // Fire events based on location
+            var location = sourceCell.GetLocation();
+            FireMoveEvents(location, location, sourceSlot);
+        }
+
+        /// <summary>
+        /// Handle move between different locations
+        /// </summary>
+        private void HandleMoveBetweenLocations(ItemCell sourceCell, ItemCell targetCell)
+        {
+            var sourceSlot = sourceCell.GetSlot();
+            var sourceLocation = sourceCell.GetLocation();
+            var targetLocation = targetCell.GetLocation();
+
+            // Special handling for container <-> inventory
+            if ((sourceLocation == ItemCellLocation.Container && targetLocation == ItemCellLocation.Inventory) ||
+                (sourceLocation == ItemCellLocation.Inventory && targetLocation == ItemCellLocation.Container))
+            {
+                HandleContainerInventoryMove(sourceCell, targetCell);
+                return;
+            }
+
+            // Special handling for weapon/equipment slots
+            if (targetLocation == ItemCellLocation.Weapon || targetLocation == ItemCellLocation.Equipment)
+            {
+                HandleEquipmentMove(sourceCell, targetCell);
+                return;
+            }
+
+            // Default: Clear source and set target (if empty) or swap
+            if (targetCell.IsEmpty())
+            {
+                targetCell.SetSlot(sourceSlot);
+                sourceCell.ClearSlot();
+                }
+                else
+                {
+                // Swap: move target item to source location
+                var targetSlot = targetCell.GetSlot();
+                targetCell.SetSlot(sourceSlot);
+                sourceCell.SetSlot(targetSlot);
+                }
+
+            // Refresh UI
+            sourceCell.UpdateDisplay();
+            targetCell.UpdateDisplay();
+
+            // Fire events
+            FireMoveEvents(sourceLocation, targetLocation, sourceSlot);
+        }
+
+        /// <summary>
+        /// Handle move between container and inventory
+        /// </summary>
+        private void HandleContainerInventoryMove(ItemCell sourceCell, ItemCell targetCell)
+        {
+            var sourceSlot = sourceCell.GetSlot();
+            var sourceLocation = sourceCell.GetLocation();
+            var targetLocation = targetCell.GetLocation();
+            var lootPanel = inventoryPanel?.GetLootContainerPanel();
+
+            if (lootPanel == null || !lootPanel.IsContainerLoaded())
+            {
+                Debug.LogWarning("[DragDropHandler] Cannot move between container and inventory - container not loaded");
+                return;
+            }
+
+            if (sourceLocation == ItemCellLocation.Inventory && targetLocation == ItemCellLocation.Container)
+            {
+                // Move from inventory to container
+                if (lootPanel.CanAddItems())
+                {
+                    Debug.Log($"[DragDropHandler] Moving item from inventory to container");
+                    // Note: We need grid position for container, but ItemCell doesn't have it
+                    // This will need to be handled by InventoryPanel/LootContainerPanel
+                    inventoryPanel?.MoveItemToContainer(sourceCell, targetCell);
+                }
+            }
+            else if (sourceLocation == ItemCellLocation.Container && targetLocation == ItemCellLocation.Inventory)
+            {
+                // Move from container to inventory
+                if (lootPanel.CanRemoveItems())
+                {
+                    Debug.Log($"[DragDropHandler] Moving item from container to inventory");
+                    inventoryPanel?.MoveItemFromContainer(sourceCell, targetCell);
+                }
+            }
+
+            // Refresh UI after move (ServerRpc is async)
+            StartCoroutine(RefreshUIAfterMove());
+        }
+
+        /// <summary>
+        /// Handle move to/from equipment/weapon slots
+        /// </summary>
+        private void HandleEquipmentMove(ItemCell sourceCell, ItemCell targetCell)
+        {
+            var sourceSlot = sourceCell.GetSlot();
+            var targetLocation = targetCell.GetLocation();
+                    
+            if (targetLocation == ItemCellLocation.Weapon)
+                    {
+                // Equip weapon
+                int weaponSlotIndex = targetCell.GetCellIndex();
+                if (targetCell.IsEmpty())
+                {
+                    // Target is empty - equip weapon
+                    inventoryPanel?.EquipWeapon(sourceCell, weaponSlotIndex);
+                    }
+                    else
+                    {
+                    // Target has weapon - swap
+                    inventoryPanel?.SwapWeapon(sourceCell, weaponSlotIndex);
+                }
+            }
+            else if (targetLocation == ItemCellLocation.Equipment)
+            {
+                // Equip equipment
+                EquipmentSlotType slotType = targetCell.GetEquipmentSlotType();
+                if (targetCell.IsEmpty())
+                {
+                    // Target is empty - equip item
+                    inventoryPanel?.EquipItem(sourceCell, targetCell);
+                }
+                else
+                {
+                    // Target has item - swap
+                    inventoryPanel?.SwapEquipment(sourceCell, targetCell);
+                }
             }
         }
 
         /// <summary>
-        /// Handle drop from equipment slot
+        /// Fire move events based on locations
         /// </summary>
-        private void HandleDropFromEquipmentSlot(EquipmentSlotUI sourceSlot, GameObject dropTarget)
-        {
-            if (sourceSlot == null || dropTarget == null)
-                return;
-
-            var slot = sourceSlot.GetSlot();
-            if (slot == null || slot.IsEmpty)
-                return;
-
-            InventorySlotUI targetSlot = dropTarget.GetComponent<InventorySlotUI>();
-            TrashSlotUI trashSlot = dropTarget.GetComponent<TrashSlotUI>();
-
-            if (targetSlot != null)
+        private void FireMoveEvents(ItemCellLocation sourceLocation, ItemCellLocation targetLocation, InventorySlot sourceSlot)
             {
-                // Unequip item to inventory
-                inventoryPanel?.UnequipItemToInventory(sourceSlot, targetSlot);
-            }
-            else if (trashSlot != null)
-            {
-                // Drop equipment
-                trashSlot.DropItemFromEquipmentSlot(sourceSlot);
-            }
+            // TODO: Fire appropriate events based on locations
+            // This will be handled by InventoryPanel methods
         }
 
         /// <summary>
-        /// Create drag icon visual
+        /// Fire network events sau khi swap/move thành công
         /// </summary>
-        private void CreateDragIcon(InventorySlotUI slot)
+        private void FireNetworkEvents(ItemCell sourceCell, ItemCell targetCell, InventorySlot movedData)
         {
-            if (slot == null || slot.IsEmpty())
+            if (movedData == null || movedData.IsEmpty)
                 return;
 
-            CreateDragIconFromSlot(slot.GetSlot());
+            var sourceLocation = sourceCell.GetLocation();
+            var targetLocation = targetCell.GetLocation();
+
+            // Fire appropriate InventoryUIEvents based on locations
+            // Note: Network events will be fired by InventoryPanel methods for equipment/weapon slots
+            // For inventory-to-inventory moves, events are already fired in HandleDrop
+            // This method is mainly for logging/debugging
+            Debug.Log($"[DragDropHandler] FireNetworkEvents: {sourceLocation} -> {targetLocation}, Item: {movedData.Item.ItemId}");
         }
 
         /// <summary>
-        /// Create drag icon from inventory slot (legacy - still accepts InventorySlot for compatibility)
-        /// TODO: Create overload for ItemInstance
+        /// Setup drag cell với data từ InventorySlot
+        /// Copy data và hiển thị drag cell
         /// </summary>
-        private void CreateDragIconFromSlot(InventorySlot slot)
+        private void SetupDragCell(InventorySlot slot)
         {
-            if (slot == null || slot.IsEmpty || dragIconPrefab == null || dragCanvas == null)
-                return;
-
-            currentDragIcon = Instantiate(dragIconPrefab, dragCanvas.transform);
-            currentDragIcon.transform.SetAsLastSibling();
-
-            // Set icon image
-            Image iconImage = currentDragIcon.GetComponent<Image>();
-            if (iconImage != null)
+            if (slot == null || slot.IsEmpty || dragCell == null || dragCanvas == null)
             {
-                // TODO: Set icon from item data
-                // iconImage.sprite = slot.Item.Icon;
+                Debug.LogWarning("[DragDropHandler] Cannot setup drag cell - slot is empty or dragCell is null");
+                return;
             }
 
-            // Make it follow mouse
-            currentDragIcon.GetComponent<RectTransform>().anchoredPosition = Vector2.zero;
+            // Set data vào drag cell (copy từ source slot)
+            dragCell.SetSlot(slot);
+            dragCell.UpdateDisplay();
+
+            // Ensure drag cell is in correct canvas and active
+            if (dragCell.transform.parent != dragCanvas.transform)
+            {
+                dragCell.transform.SetParent(dragCanvas.transform, false);
+            }
+            
+            dragCell.gameObject.SetActive(true);
+            dragCell.transform.SetAsLastSibling(); // Show on top
+
+            // Set initial position (will be updated by UpdateDrag)
+            RectTransform dragCellRect = dragCell.GetComponent<RectTransform>();
+            if (dragCellRect != null)
+            {
+                dragCellRect.anchoredPosition = Vector2.zero;
+            }
+
+            Debug.Log($"[DragDropHandler] Setup drag cell with item: {slot.Item.ItemId}");
         }
 
         /// <summary>
@@ -351,8 +639,68 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         private void UpdateDropZoneHighlight(PointerEventData eventData)
         {
-            // TODO: Implement highlight logic for valid drop zones
-            // This would highlight slots that can accept the dragged item
+            if (!isDragging || dragCell == null || !dragCell.gameObject.activeSelf || draggedData == null || draggedData.IsEmpty)
+                return;
+
+            // Find all ItemCells under mouse
+            var eventSystem = EventSystem.current;
+            if (eventSystem == null)
+                return;
+
+            PointerEventData pointerData = new PointerEventData(eventSystem)
+            {
+                position = eventData.position
+            };
+            var results = new System.Collections.Generic.List<RaycastResult>();
+            eventSystem.RaycastAll(pointerData, results);
+
+            // Clear previous highlights
+            ClearDropZoneHighlights();
+
+            // Highlight valid/invalid drop zones
+            foreach (var result in results)
+            {
+                // Skip if this is the drag cell itself
+                if (dragCell != null && dragCell.gameObject.activeSelf && (result.gameObject == dragCell.gameObject || result.gameObject.transform.IsChildOf(dragCell.transform)))
+                {
+                    continue;
+                }
+
+                ItemCell targetCell = result.gameObject.GetComponent<ItemCell>();
+                if (targetCell == null)
+                {
+                    // Check parent hierarchy
+                    Transform current = result.gameObject.transform;
+                    for (int i = 0; i < 5 && current != null; i++)
+                {
+                        targetCell = current.GetComponent<ItemCell>();
+                        if (targetCell != null) break;
+                        current = current.parent;
+                    }
+                }
+
+                if (targetCell != null && targetCell != draggedCell)
+                    {
+                    // Check if can drop to this cell
+                    bool isValid = CanDropItemToCell(draggedData, targetCell);
+                    
+                    // Visual feedback: Change background color or add outline
+                    Image cellBackground = targetCell.GetComponent<Image>();
+                    if (cellBackground == null)
+                        {
+                        cellBackground = targetCell.GetComponentInChildren<Image>();
+                    }
+
+                    if (cellBackground != null)
+                    {
+                        // Set color based on validity (green for valid, red for invalid)
+                        cellBackground.color = isValid ? new Color(0.5f, 1f, 0.5f, 0.5f) : new Color(1f, 0.5f, 0.5f, 0.5f);
+                    }
+
+                    // Fire event
+                    OnDropZoneHighlight?.Invoke(targetCell, isValid);
+                }
+            }
         }
 
         /// <summary>
@@ -360,16 +708,39 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         private void CleanupDrag()
         {
-            if (currentDragIcon != null)
+            // Restore original slot icon (re-enable it)
+            if (originalSlotIcon != null)
             {
-                Destroy(currentDragIcon);
-                currentDragIcon = null;
+                originalSlotIcon.enabled = originalIconWasEnabled;
+                originalSlotIcon = null;
+                originalIconWasEnabled = false;
+                Debug.Log("[DragDropHandler] Restored original cell icon after drag");
             }
 
-            draggedSlot = null;
-            draggedQuickSlot = null;
-            draggedWeaponSlot = null;
-            draggedEquipmentSlot = null;
+            // Hide drag cell instead of destroying
+            if (dragCell != null)
+            {
+                dragCell.ClearSlot();
+                dragCell.gameObject.SetActive(false);
+                Debug.Log("[DragDropHandler] Hidden drag cell after drag");
+            }
+
+            // Restore data to source cell if drag was cancelled (no valid drop)
+            if (draggedCell != null && draggedData != null && !draggedData.IsEmpty)
+            {
+                draggedCell.SetSlot(draggedData);
+                draggedCell.UpdateDisplay();
+                Debug.Log("[DragDropHandler] Restored data to source cell after drag cancelled");
+            }
+
+            // Fire event
+            if (draggedCell != null)
+            {
+                OnDragEnded?.Invoke(draggedCell);
+            }
+
+            draggedCell = null;
+            draggedData = null;
             isDragging = false;
 
             // Clear all highlights
@@ -381,12 +752,55 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         private void ClearDropZoneHighlights()
         {
-            // TODO: Clear highlights on all slots
+            // Find all ItemCells in scene and reset their colors
+            ItemCell[] allCells = FindObjectsByType<ItemCell>(FindObjectsSortMode.None);
+            foreach (var cell in allCells)
+            {
+                if (cell != null)
+                {
+                    Image cellBackground = cell.GetComponent<Image>();
+                    if (cellBackground == null)
+                    {
+                        cellBackground = cell.GetComponentInChildren<Image>();
+                    }
+
+                    if (cellBackground != null)
+                    {
+                        // Reset to default color (white/transparent)
+                        cellBackground.color = Color.white;
+                    }
+                }
+            }
         }
 
         /// <summary>
         /// Check if currently dragging
         /// </summary>
         public bool IsDragging() => isDragging;
+
+        /// <summary>
+        /// Refresh UI after moving items between container and inventory
+        /// ServerRpc is async, so we need to wait a bit for server to process and sync
+        /// </summary>
+        private IEnumerator RefreshUIAfterMove()
+        {
+            // Wait a bit for ServerRpc to process and sync
+            yield return new WaitForSeconds(0.1f);
+            
+            // Refresh inventory panel
+            if (inventoryPanel != null)
+            {
+                inventoryPanel.RefreshInventoryGrid();
+            }
+            
+            // Refresh loot container panel
+            var lootPanel = inventoryPanel?.GetLootContainerPanel();
+            if (lootPanel != null && lootPanel.IsContainerLoaded())
+            {
+                lootPanel.RefreshLootGrid();
+            }
+            
+            Debug.Log("[DragDropHandler] Refreshed UI after move operation");
+        }
     }
 }

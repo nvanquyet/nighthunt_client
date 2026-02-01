@@ -114,9 +114,10 @@ namespace NightHunt.Gameplay.PredatorPrey
         [Server]
         private void ApplyRoleToPlayer(NetworkPlayer player, bool isPredator)
         {
-            var characterStats = player.GetComponent<CharacterStats>();
-            var characterMovement = player.GetComponent<CharacterPredictedMovement>();
-            var visionSystem = player.GetComponent<Vision.VisionSystem>();
+            // Use ComponentFinder to search in hierarchy (including children)
+            var characterStats = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterStats>(player.gameObject, includeInactive: false);
+            var characterMovement = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterPredictedMovement>(player.gameObject, includeInactive: false);
+            var visionSystem = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<Vision.VisionSystem>(player.gameObject, includeInactive: false);
 
             if (characterStats == null) return;
 

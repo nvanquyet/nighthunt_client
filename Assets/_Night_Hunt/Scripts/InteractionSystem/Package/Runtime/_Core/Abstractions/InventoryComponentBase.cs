@@ -31,6 +31,20 @@ namespace NightHunt.InteractionSystem.Core.Abstractions
         public IReadOnlyList<ItemInstance> Items => items;
 
         /// <summary>
+        /// Set maximum weight capacity.
+        /// NOTE: Gameplay systems should NOT call this directly. Capacity is owned by CharacterStats
+        /// and synchronized via InventoryService to keep a single source of truth.
+        /// </summary>
+        public void SetMaxWeight(float newMaxWeight)
+        {
+            if (newMaxWeight < 0f)
+                newMaxWeight = 0f;
+            
+            maxWeight = newMaxWeight;
+            UpdateWeight();
+        }
+
+        /// <summary>
         /// Add an item to the inventory.
         /// </summary>
         public abstract bool AddItem(ItemInstance item);

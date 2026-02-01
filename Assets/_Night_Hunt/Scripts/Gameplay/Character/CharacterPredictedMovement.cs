@@ -2,64 +2,59 @@ using UnityEngine;
 using FishNet.Object.Prediction;
 using FishNet.Transporting;
 using FishNet.Managing;
-using NightHunt.Data;
 using NightHunt.Networking;
 using NightHunt.Networking.Prediction.FishNet;
 using NightHunt.Gameplay.Character.Movement;
+using NightHunt.Gameplay.Core;
+using NightHunt.InteractionSystem.Utilities;
 using Unity.Cinemachine;
 using MovementState = NightHunt.Gameplay.Character.Movement.MovementState;
 
 namespace NightHunt.Gameplay.Character
 {
     /// <summary>
-    /// 🎯 ADAPTIVE MOVEMENT: Tự động adjust settings dựa trên player count
-    /// 
-    /// SCALABILITY:
-    /// - 1-2 players: Tight thresholds, high quality
-    /// - 3-5 players: Balanced thresholds
-    /// - 6-10 players: Relaxed thresholds, performance priority
-    /// - 10+ players: Ultra relaxed, maximum performance
+    /// Adaptive movement system that automatically adjusts settings based on player count.
+    /// Scales from tight thresholds (1-2 players) to relaxed thresholds (10+ players) for performance.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class CharacterPredictedMovement : FishNetPredictedBehaviour<MovementReplicateData, MovementReconcileData>, IMovementController
     {
-        // Settings - Hardcoded để test, sau đó sẽ thêm [SerializeField] nếu OK
+        [Header("Settings")]
         [SerializeField] private MovementSettings movementSettings;
 
-        // Adaptive Scaling - Hardcoded values
-        private bool enableAdaptiveScaling = true;
-        private float scalingUpdateInterval = 3f;
+        [Header("Adaptive Scaling")]
+        [SerializeField] private bool enableAdaptiveScaling = true;
+        [SerializeField] private float scalingUpdateInterval = 3f;
 
-        // Base Settings (1-2 Players) - Test values
-        private float baseSoftThreshold = 0.25f;
-        private float baseHardThreshold = 2.0f;
-        private float baseSoftTime = 0.12f;
-        private float baseDeadZone = 0.05f;
-        private float baseInterpolationTime = 0.12f; // Giảm để responsive hơn
-        private int baseReconcileInterval = 2; // Tăng frequency để sync tốt hơn
+        [Header("Base Settings (1-2 Players)")]
+        [SerializeField] private float baseSoftThreshold = 0.25f;
+        [SerializeField] private float baseHardThreshold = 2.0f;
+        [SerializeField] private float baseSoftTime = 0.12f;
+        [SerializeField] private float baseDeadZone = 0.05f;
+        [SerializeField] private float baseInterpolationTime = 0.12f;
+        [SerializeField] private int baseReconcileInterval = 2;
 
-        // Scaled Settings (6-10 Players) - Test values
-        private float scaledSoftThreshold = 0.5f;
-        private float scaledHardThreshold = 3.5f;
-        private float scaledSoftTime = 0.2f;
-        private float scaledDeadZone = 0.08f;
-        private float scaledInterpolationTime = 0.2f;
-        private int scaledReconcileInterval = 4;
+        [Header("Scaled Settings (6-10 Players)")]
+        [SerializeField] private float scaledSoftThreshold = 0.5f;
+        [SerializeField] private float scaledHardThreshold = 3.5f;
+        [SerializeField] private float scaledSoftTime = 0.2f;
+        [SerializeField] private float scaledDeadZone = 0.08f;
+        [SerializeField] private float scaledInterpolationTime = 0.2f;
+        [SerializeField] private int scaledReconcileInterval = 4;
 
-        // Advanced - Test values cho smooth movement
-        private bool useVelocityExtrapolation = true;
-        private float maxExtrapolationDistance = 0.2f; // Giảm để tránh overshoot
-        private float extrapolationDamping = 0.7f; // Tăng damping
-        private bool separateVerticalReconcile = true;
-        private float verticalDeadZoneMultiplier = 2.5f;
-        private bool useTickBasedInterpolation = true;
-        private float interpolationDamping = 0.08f; // Giảm để smooth hơn
+        [Header("Advanced Settings")]
+        [SerializeField] private bool useVelocityExtrapolation = true;
+        [SerializeField] private float maxExtrapolationDistance = 0.2f;
+        [SerializeField] private float extrapolationDamping = 0.7f;
+        [SerializeField] private bool separateVerticalReconcile = true;
+        [SerializeField] private float verticalDeadZoneMultiplier = 2.5f;
+        [SerializeField] private bool useTickBasedInterpolation = true;
+        [SerializeField] private float interpolationDamping = 0.08f;
 
         // Debug
         private bool enableDebugLogs = false;
         private bool showAdaptiveInfo = false;
         
-        // ============= ADAPTIVE STATE =============
         private float _currentSoftThreshold;
         private float _currentHardThreshold;
         private float _currentSoftTime;
@@ -71,7 +66,7 @@ namespace NightHunt.Gameplay.Character
         private int _cachedPlayerCount = 0;
         private float _lastScalingUpdateTime = 0f;
         private float _previousScaleFactor = 0f;
-        private float _playerCountCheckInterval = 2f; // Check player count mỗi 2 giây
+        private float _playerCountCheckInterval = 2f;
         private float _lastPlayerCountCheck = 0f;
         
         // Components
@@ -142,15 +137,17 @@ namespace NightHunt.Gameplay.Character
         private uint _lastReconcileTick;
         private float _lastReconcileTime;
         private int _consecutiveHardReconciles;
-
-        // ============= INITIALIZATION =============
         
         private void Awake()
         {
-            _characterController = GetComponent<CharacterController>();
-            _characterStats = GetComponent<CharacterStats>();
-            _networkPlayer = GetComponent<NetworkPlayer>();
-            _playerCamera = GetComponentInChildren<CinemachineCamera>();
+            // Use ComponentFinder to find components in hierarchy (supports child objects)
+            _characterController = gameObject.FindInHierarchy<CharacterController>();
+            _characterStats = gameObject.FindInHierarchy<CharacterStats>();
+            
+            // Search NetworkPlayer using ComponentFinder (searches in current, parent, children, root, root's children)
+            _networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+            
+            _playerCamera = gameObject.FindInHierarchy<CinemachineCamera>();
             _mainCamera = UnityEngine.Camera.main;
             
             if (_mainCamera == null)
@@ -177,6 +174,12 @@ namespace NightHunt.Gameplay.Character
                 Debug.LogError("[Movement] MovementSettings is NULL! Creating fallback...", this);
                 movementSettings = CreateFallbackSettings();
             }
+            
+            // Register in ComponentRegistry (after _networkPlayer is set in Awake)
+            if (_networkPlayer != null)
+            {
+                ComponentRegistry.RegisterMovementController(_networkPlayer, this);
+            }
             LoadCharacterConfig();
         }
 
@@ -196,7 +199,7 @@ namespace NightHunt.Gameplay.Character
             
             if (_characterController == null)
             {
-                _characterController = GetComponent<CharacterController>();
+                _characterController = gameObject.FindInHierarchy<CharacterController>();
                 if (_characterController == null)
                 {
                     Debug.LogError("[Movement] ❌ CharacterController NULL!", this);
@@ -264,8 +267,6 @@ namespace NightHunt.Gameplay.Character
             _hasValidTimeManager = false;
         }
 
-        // ============= ADAPTIVE SCALING =============
-
         /// <summary>
         /// 🎯 Core adaptive logic: Scale settings based on player count
         /// </summary>
@@ -298,11 +299,10 @@ namespace NightHunt.Gameplay.Character
             
             // Reconcile interval is discrete, so use steps
             // More aggressive scaling for multiple clients to reduce overhead
-            // QUAN TRỌNG: Tăng interval ngay từ 2 players để tránh lag
             if (playerCount <= 1)
                 _currentReconcileInterval = baseReconcileInterval;
             else if (playerCount == 2)
-                _currentReconcileInterval = baseReconcileInterval + 1; // Tăng ngay từ 2 players
+                _currentReconcileInterval = baseReconcileInterval + 1;
             else if (playerCount <= 4)
                 _currentReconcileInterval = baseReconcileInterval + 2;
             else if (playerCount <= 6)
@@ -353,7 +353,9 @@ namespace NightHunt.Gameplay.Character
                         int count = 0;
                         foreach (var obj in base.NetworkManager.ClientManager.Objects.Spawned.Values)
                         {
-                            if (obj != null && obj.GetComponent<CharacterPredictedMovement>() != null)
+                            // Use ComponentFinder to search in hierarchy (including children)
+                            // obj is NetworkObject, need to get GameObject
+                            if (obj != null && obj.gameObject != null && NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<CharacterPredictedMovement>(obj.gameObject, includeInactive: false) != null)
                             {
                                 count++;
                             }
@@ -384,8 +386,6 @@ namespace NightHunt.Gameplay.Character
             _currentReconcileInterval = baseReconcileInterval;
             _currentVerticalDeadZone = baseDeadZone * verticalDeadZoneMultiplier;
         }
-
-        // ============= UPDATE LOOPS =============
 
         private void Update()
         {
@@ -426,11 +426,9 @@ namespace NightHunt.Gameplay.Character
             }
         }
 
-        // ============= INTERPOLATION =============
-
         /// <summary>
-        /// QUAN TRỌNG: Client B phải thấy Client A di chuyển từ A→B với vận tốc X, cùng thời gian
-        /// Non-owner CHỈ interpolate, KHÔNG simulate movement
+        /// Interpolates movement to ensure clients see consistent velocity and timing.
+        /// Non-owner clients only interpolate, they do not simulate movement.
         /// </summary>
         private void UpdateNonOwnerInterpolation(float deltaTime)
         {
@@ -438,21 +436,18 @@ namespace NightHunt.Gameplay.Character
             
             float tickDelta = (float)base.TimeManager.TickDelta;
             
-            // Interpolation time - phải đủ nhanh để responsive nhưng đủ chậm để smooth
-            // Giảm smooth time để responsive hơn
             float smoothTime = useTickBasedInterpolation 
-                ? Mathf.Max(_currentInterpolationTime, tickDelta * 1.0f) // Giảm từ 1.2f
+                ? Mathf.Max(_currentInterpolationTime, tickDelta * 1.0f)
                 : _currentInterpolationTime;
             
-            // Adaptive smooth time nếu network lag
             if (_timeSinceLastUpdate > tickDelta * 2f)
             {
-                smoothTime *= 1.1f; // Giảm từ 1.15f
+                smoothTime *= 1.1f;
             }
             
             Vector3 targetPos = _targetPosition;
             
-            // QUAN TRỌNG: Extrapolation dùng server velocity để đảm bảo đúng vận tốc
+            // Extrapolation uses server velocity to ensure correct speed
             // Client B phải thấy Client A di chuyển với đúng velocity từ server
             if (useVelocityExtrapolation && _serverVelocity.sqrMagnitude > 0.01f)
             {
@@ -579,8 +574,6 @@ namespace NightHunt.Gameplay.Character
                 : 1f - Mathf.Pow(-2f * t + 2f, 3f) / 2f;
         }
 
-        // ============= FISHNET TICK =============
-
         protected override void TimeManager_OnTick()
         {
             if (!_isInitialized || !_hasValidTimeManager || base.TimeManager == null || _characterController == null || transform == null)
@@ -682,8 +675,6 @@ namespace NightHunt.Gameplay.Character
             );
         }
 
-        // ============= REPLICATE =============
-
         [Replicate]
         private void PerformReplicate(MovementReplicateData data, ReplicateState state, Channel channel = Channel.Unreliable)
         {
@@ -772,8 +763,6 @@ namespace NightHunt.Gameplay.Character
             // Owner hoặc Server: Simulate movement
             SimulateMovement(data, useDefaultForces, delta);
         }
-
-        // ============= RECONCILE =============
 
         [Reconcile]
         private void PerformReconcile(MovementReconcileData data, Channel channel = Channel.Unreliable)
@@ -966,8 +955,6 @@ namespace NightHunt.Gameplay.Character
             return new MovementReconcileData(transform.position, transform.rotation, fullVelocity, _currentStamina);
         }
 
-        // ============= MOVEMENT SIMULATION =============
-
         private void SimulateMovement(MovementReplicateData data, bool useDefaultForces, float delta)
         {
             if (_characterController == null) return;
@@ -987,7 +974,34 @@ namespace NightHunt.Gameplay.Character
 
             _currentStamina = Mathf.Min(_currentStamina + movementSettings.staminaRegenRate * delta, movementSettings.maxStamina);
 
-            float finalSpeed = movementSettings.baseSpeed;
+            // Calculate speed
+            // QUAN TRỌNG: Movement speed CHỈ load từ CharacterStats system (stat config)
+            // Không còn fallback về movementSettings.baseSpeed nữa
+            // Điều này cho phép dynamic modifiers (booster, status effects, equipment, etc.)
+            float baseSpeed = 5f; // Default fallback chỉ khi CharacterStats null (shouldn't happen)
+            
+            if (_characterStats != null)
+            {
+                float speedFromStats = _characterStats.GetSpeedMultiplier();
+                if (speedFromStats > 0.01f)
+                {
+                    baseSpeed = speedFromStats;
+                    if (enableDebugLogs)
+                    {
+                        Debug.Log($"[PredictedMovement] Using stat speed: {speedFromStats} (from CharacterStats)");
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"[PredictedMovement] ❌ Stat speed is invalid ({speedFromStats})! Check CharacterStatsConfig MoveSpeed value. Using fallback: {baseSpeed}");
+                }
+            }
+            else
+            {
+                Debug.LogError($"[PredictedMovement] ❌ CharacterStats is NULL! Movement speed cannot be loaded. Using fallback: {baseSpeed}");
+            }
+            
+            float finalSpeed = baseSpeed;
 
             if (data.IsSprinting && CanSprint())
             {
@@ -1037,8 +1051,6 @@ namespace NightHunt.Gameplay.Character
             return _currentStamina >= movementSettings.minStaminaToSprint;
         }
 
-        // ============= INPUT API =============
-
         public void SetMoveInput(Vector2 input)
         {
             _nextInput.MoveInput = input;
@@ -1056,8 +1068,6 @@ namespace NightHunt.Gameplay.Character
             _nextInput.CrouchHeld = crouching;
             _nextInput.FrameNumber = (uint)Time.frameCount;
         }
-
-        // ============= GETTERS =============
 
         public float GetCurrentMoveSpeed() => _currentMoveSpeed;
         public float GetStamina() => _currentStamina;
@@ -1091,23 +1101,19 @@ namespace NightHunt.Gameplay.Character
             _velocity = state.Velocity;
         }
 
-        // ============= UTILITIES =============
-
         private void LoadCharacterConfig()
         {
             if (_characterStats == null) return;
-            var config = GameConfigLoader.Instance?.GetCharacterConfig("CHAR_DEFAULT");
-            if (config != null)
-            {
-                movementSettings.baseSpeed = config.BaseMoveSpeed;
-                movementSettings.maxStamina = config.BaseStamina;
-            }
+            // NOTE: Character stats are now loaded from CharacterStatsConfig ScriptableObject
+            // or from CharacterStats component's serialized fields
+            // No need to load from GameConfigLoader anymore
+            // If needed, stamina can be read from CharacterStats.GetMaxStamina()
         }
 
         private MovementSettings CreateFallbackSettings()
         {
             MovementSettings settings = ScriptableObject.CreateInstance<MovementSettings>();
-            settings.baseSpeed = 5f;
+            // NOTE: baseSpeed đã được remove, giờ dùng CharacterStats system
             settings.sprintMultiplier = 1.5f;
             settings.crouchMultiplier = 0.6f;
             settings.maxStamina = 100f;
@@ -1117,7 +1123,14 @@ namespace NightHunt.Gameplay.Character
             return settings;
         }
 
-        // ============= DEBUG =============
+        private void OnDestroy()
+        {
+            // Unregister from ComponentRegistry
+            if (_networkPlayer != null)
+            {
+                ComponentRegistry.UnregisterMovementController(_networkPlayer, this);
+            }
+        }
 
         private void OnGUI()
         {

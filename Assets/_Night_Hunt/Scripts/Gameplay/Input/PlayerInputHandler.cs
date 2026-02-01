@@ -2,6 +2,8 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Character;
+using NightHunt.Gameplay.Core;
+using NightHunt.InteractionSystem.Utilities;
 
 namespace NightHunt.Gameplay.Input
 {
@@ -14,6 +16,9 @@ namespace NightHunt.Gameplay.Input
     [RequireComponent(typeof(InputRouter))]
     public class PlayerInputHandler : MonoBehaviour
     {
+        [Header("Debug Settings")]
+        [SerializeField] private bool enableLog = false;
+
         private InputRouter _inputRouter;
         private InputPrediction inputPrediction;
 
@@ -32,9 +37,19 @@ namespace NightHunt.Gameplay.Input
         {
             try
             {
-                Debug.Log($"[PlayerInputHandler] Awake - Go={gameObject.name}");
+                if (enableLog)
+                    Debug.Log($"[PlayerInputHandler] Awake - Go={gameObject.name}");
                 
-                _inputRouter = GetComponent<InputRouter>();
+                NetworkPlayer networkPlayer = gameObject.FindInHierarchy<NetworkPlayer>();
+                if (networkPlayer != null)
+                {
+                    _inputRouter = ComponentRegistry.GetInputRouter(networkPlayer);
+                }
+                else
+                {
+                    _inputRouter = NightHunt.InteractionSystem.Utilities.ComponentFinder.FindComponentInHierarchy<InputRouter>(gameObject, includeInactive: false);
+                }
+                
                 if (_inputRouter == null)
                 {
                     Debug.LogError($"[PlayerInputHandler] InputRouter component not found on {gameObject.name}!");
@@ -51,7 +66,8 @@ namespace NightHunt.Gameplay.Input
                     playerCamera = FindFirstObjectByType<UnityEngine.Camera>();
                 }
                 
-                Debug.Log($"[PlayerInputHandler] Awake completed successfully");
+                if (enableLog)
+                    Debug.Log($"[PlayerInputHandler] Awake completed successfully");
             }
             catch (System.Exception ex)
             {
@@ -84,7 +100,7 @@ namespace NightHunt.Gameplay.Input
             if (_predictedMovement != null)
             {
                 // Debug log để verify movement component và state
-                if (moveInput.sqrMagnitude > 0.0001f)
+                if (enableLog && moveInput.sqrMagnitude > 0.0001f)
                 {
                     Debug.Log($"[PlayerInputHandler] Input: move={moveInput} sprint={isSprinting} crouch={isCrouching} IsSpawned={_predictedMovement.IsSpawned} IsOwner={_predictedMovement.IsOwner}");
                 }
@@ -99,7 +115,7 @@ namespace NightHunt.Gameplay.Input
                 else
                 {
                     // Debug log nếu không thể submit
-                    if (moveInput.sqrMagnitude > 0.0001f)
+                    if (enableLog && moveInput.sqrMagnitude > 0.0001f)
                     {
                         Debug.LogWarning($"[PlayerInputHandler] Cannot submit input: IsSpawned={_predictedMovement.IsSpawned} IsOwner={_predictedMovement.IsOwner}");
                     }
