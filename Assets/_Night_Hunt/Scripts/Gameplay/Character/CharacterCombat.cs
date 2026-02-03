@@ -21,7 +21,7 @@ namespace NightHunt.Gameplay.Character
 
         private WeaponConfigData currentWeapon;
         private CharacterStats characterStats;
-        private CharacterPredictedMovement _characterPredictedMovement;
+        private IMovementController _characterPredictedMovement;
 
         // Weapon state
         private int currentAmmo;
@@ -37,7 +37,7 @@ namespace NightHunt.Gameplay.Character
         private void Awake()
         {
             characterStats = GetComponent<CharacterStats>();
-            _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
+            _characterPredictedMovement = GetComponent<IMovementController>();
 
             if (firePoint == null)
             {

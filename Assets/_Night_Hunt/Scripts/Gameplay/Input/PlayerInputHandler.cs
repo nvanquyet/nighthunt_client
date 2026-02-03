@@ -49,7 +49,7 @@ namespace NightHunt.Gameplay.Input
         private UnityEngine.Camera playerCamera;
 
         private NetworkPlayer networkPlayer;
-        private CharacterPredictedMovement _predictedMovement;
+        private IMovementController _movement;
         private bool inputEnabled = false;
 
         private void Awake()
@@ -255,36 +255,36 @@ namespace NightHunt.Gameplay.Input
             }
 
             // Submit input to CharacterMovementPredicted (which uses PredictedMovement package)
-            if (_predictedMovement == null && networkPlayer != null)
+            if (_movement == null && networkPlayer != null)
             {
-                _predictedMovement = networkPlayer.GetComponent<CharacterPredictedMovement>();
-                if (_predictedMovement == null)
+                _movement = networkPlayer.GetComponent<IMovementController>();
+                if (_movement == null)
                 {
                     Debug.LogWarning($"[PlayerInputHandler] CharacterMovementPredicted component not found on NetworkPlayer!");
                 }
             }
 
-            if (_predictedMovement != null)
+            if (_movement != null)
             {
                 // Debug log để verify movement component và state
                 if (moveInput.sqrMagnitude > 0.0001f)
                 {
-                    Debug.Log($"[PlayerInputHandler] Input: move={moveInput} sprint={isSprinting} crouch={isCrouching} IsSpawned={_predictedMovement.IsSpawned} IsOwner={_predictedMovement.IsOwner}");
+                    Debug.Log($"[PlayerInputHandler] Input: move={moveInput} sprint={isSprinting} crouch={isCrouching} IsSpawned={_movement.IsSpawned} IsOwner={_movement.IsOwner}");
                 }
                 
-                if (_predictedMovement.IsSpawned && _predictedMovement.IsOwner)
+                if (_movement.IsSpawned && _movement.IsOwner)
                 {
                     // Use SetMoveInput/SetSprinting/SetCrouching API (CharacterMovement will handle SubmitInput internally)
-                    _predictedMovement.SetMoveInput(moveInput);
-                    _predictedMovement.SetSprinting(isSprinting);
-                    _predictedMovement.SetCrouching(isCrouching);
+                    _movement.SetMoveInput(moveInput);
+                    _movement.SetSprinting(isSprinting);
+                    _movement.SetCrouching(isCrouching);
                 }
                 else
                 {
                     // Debug log nếu không thể submit
                     if (moveInput.sqrMagnitude > 0.0001f)
                     {
-                        Debug.LogWarning($"[PlayerInputHandler] Cannot submit input: IsSpawned={_predictedMovement.IsSpawned} IsOwner={_predictedMovement.IsOwner}");
+                        Debug.LogWarning($"[PlayerInputHandler] Cannot submit input: IsSpawned={_movement.IsSpawned} IsOwner={_movement.IsOwner}");
                     }
                 }
             }

@@ -115,7 +115,7 @@ namespace NightHunt.Gameplay.PredatorPrey
         private void ApplyRoleToPlayer(NetworkPlayer player, bool isPredator)
         {
             var characterStats = player.GetComponent<CharacterStats>();
-            var characterMovement = player.GetComponent<CharacterPredictedMovement>();
+            var characterMovement = player.GetComponent<IMovementController>();
             var visionSystem = player.GetComponent<Vision.VisionSystem>();
 
             if (characterStats == null) return;
@@ -142,7 +142,7 @@ namespace NightHunt.Gameplay.PredatorPrey
         /// - Slower stamina regen
         /// - Louder footsteps
         /// </summary>
-        private void ApplyPredatorEffects(CharacterStats stats, CharacterPredictedMovement predictedMovement, Vision.VisionSystem vision)
+        private void ApplyPredatorEffects(CharacterStats stats, IMovementController predictedMovement, Vision.VisionSystem vision)
         {
             // Slower stamina regen
             if (predictedMovement != null)
@@ -170,7 +170,7 @@ namespace NightHunt.Gameplay.PredatorPrey
         /// - Faster stamina regen
         /// - Quieter movement
         /// </summary>
-        private void ApplyPreyEffects(CharacterStats stats, CharacterPredictedMovement predictedMovement, Vision.VisionSystem vision)
+        private void ApplyPreyEffects(CharacterStats stats, IMovementController predictedMovement, Vision.VisionSystem vision)
         {
             // Faster stamina regen
             if (predictedMovement != null)
@@ -195,7 +195,7 @@ namespace NightHunt.Gameplay.PredatorPrey
         /// <summary>
         /// Remove role effects
         /// </summary>
-        private void RemoveRoleEffects(CharacterStats stats, CharacterPredictedMovement predictedMovement, Vision.VisionSystem vision)
+        private void RemoveRoleEffects(CharacterStats stats, IMovementController predictedMovement, Vision.VisionSystem vision)
         {
             if (stats != null)
             {

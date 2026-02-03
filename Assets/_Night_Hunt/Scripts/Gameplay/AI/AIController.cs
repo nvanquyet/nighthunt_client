@@ -16,14 +16,14 @@ namespace NightHunt.Gameplay.AI
         [SerializeField] protected float moveSpeed = 3f;
 
         protected CharacterStats characterStats;
-        protected CharacterPredictedMovement CharacterPredictedMovement;
+        protected IMovementController CharacterPredictedMovement;
         protected CharacterCombat characterCombat;
         protected List<NetworkPlayer> detectedPlayers = new List<NetworkPlayer>();
 
         protected virtual void Awake()
         {
             characterStats = GetComponent<CharacterStats>();
-            CharacterPredictedMovement = GetComponent<CharacterPredictedMovement>();
+            CharacterPredictedMovement = GetComponent<IMovementController>();
             characterCombat = GetComponent<CharacterCombat>();
         }
 

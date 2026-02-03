@@ -171,7 +171,7 @@ namespace NightHunt.Gameplay.Inventory
                 characterStats.SetWeight(currentWeight);
                 
                 // Update weight penalty in movement
-                var movement = GetComponent<CharacterPredictedMovement>();
+                var movement = GetComponent<IMovementController>();
                 if (movement != null)
                 {
                     float penalty = 1f - WeightCalculator.GetWeightPenaltyMultiplier(currentWeight, baseWeightCapacity);

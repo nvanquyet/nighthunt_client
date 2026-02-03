@@ -1,0 +1,21 @@
+{
+  "name": "com.nighthunt.inventory",
+  "displayName": "NightHunt Inventory System",
+  "version": "1.0.0",
+  "unity": "6000.0",
+  "description": "Production-ready multiplayer inventory system with equipment, weapons, attachments, containers, and world drops. Server-authoritative with FishNet integration.",
+  "keywords": [
+    "inventory",
+    "fishnet",
+    "multiplayer",
+    "equipment",
+    "networking"
+  ],
+  "author": {
+    "name": "NightHunt",
+    "email": "dev@nighthunt.local"
+  },
+  "dependencies": {
+    "com.firstgeargames.fishnet": "4.0.0"
+  }
+}

@@ -22,7 +22,7 @@ namespace NightHunt.Networking
     {
         [Header("Player References")]
         [SerializeField] private PlayerInputHandler inputHandler;
-        [FormerlySerializedAs("movement")] [SerializeField] private CharacterPredictedMovement predictedMovement;
+        [SerializeField] private CharacterNormalMovement movement;
         [SerializeField] private CharacterCombat combat;
         [SerializeField] private CinemachineCamera playerCamera;
 
@@ -43,8 +43,8 @@ namespace NightHunt.Networking
             base.OnStartNetwork();
 
             // Initialize components
-            if (predictedMovement == null)
-                predictedMovement = GetComponent<CharacterPredictedMovement>();
+            if (movement == null)
+                movement = GetComponent<CharacterNormalMovement>();
 
             if (combat == null)
                 combat = GetComponent<CharacterCombat>();

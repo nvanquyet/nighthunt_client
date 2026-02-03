@@ -29,7 +29,7 @@ namespace NightHunt.Gameplay.Character
         private readonly SyncVar<float> stateStartTime = new SyncVar<float>();
 
         private CharacterStats characterStats;
-        private CharacterPredictedMovement _characterPredictedMovement;
+        private IMovementController _characterPredictedMovement;
         private CharacterCombat characterCombat;
         private NetworkPlayer networkPlayer;
         private NetworkPlayer revivingPlayer;
@@ -52,7 +52,7 @@ namespace NightHunt.Gameplay.Character
         {
             base.OnStartNetwork();
             characterStats = GetComponent<CharacterStats>();
-            _characterPredictedMovement = GetComponent<CharacterPredictedMovement>();
+            _characterPredictedMovement = GetComponent<IMovementController>();
             characterCombat = GetComponent<CharacterCombat>();
             networkPlayer = GetComponent<NetworkPlayer>();
             

@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d33603ddce62e64697513542816572c, type: 3}
+  m_Name: EquipmentConfig
+  m_EditorClassIdentifier: 
+  Slots:
+  - SlotType: 0
+    SlotIcon: {fileID: 21300000, guid: d4856a986af1a6442bc0ae7c0348f2f7, type: 3}
+    SlotName: Helmet
+    SlotDescription: Protects your head
+  - SlotType: 1
+    SlotIcon: {fileID: 21300000, guid: 382fa5a2011bcd141a17f4f5a20ca5cc, type: 3}
+    SlotName: Armor
+    SlotDescription: Protects your body
+  - SlotType: 2
+    SlotIcon: {fileID: 21300000, guid: ae081045687b08948a1b166f44643dee, type: 3}
+    SlotName: Backpack
+    SlotDescription: Increases inventory capacity
+  - SlotType: 3
+    SlotIcon: {fileID: 21300000, guid: bfd5639b41fe02b4db9a0d5ce7479f9c, type: 3}
+    SlotName: Footwear
+    SlotDescription: Increases movement speed
