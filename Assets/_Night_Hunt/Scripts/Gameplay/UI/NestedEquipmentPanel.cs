@@ -3,14 +3,15 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Inventory;
-using NightHunt.Data;
+using NightHunt.InteractionSystem.Core.Abstractions;
+using NightHunt.InteractionSystem.Core.Interfaces;
+using NightHunt.InteractionSystem.Core.Structs;
 
 namespace NightHunt.Gameplay.UI
 {
     /// <summary>
-    /// Nested Equipment Panel - Shows equipment slots of the currently selected item
-    /// Only 1 level deep: item can have equipment slots (e.g., weapon has grip slot)
-    /// Activated when an item with equipment slots is selected in inventory
+    /// Nested Equipment Panel - Shows attachment slots for equipped items
+    /// FIXED VERSION with proper slot generation and tooltip support
     /// </summary>
     public class NestedEquipmentPanel : MonoBehaviour
     {
@@ -18,18 +19,16 @@ namespace NightHunt.Gameplay.UI
         [SerializeField] private GameObject panelRoot;
         [SerializeField] private Transform slotsContainer;
         [SerializeField] private TextMeshProUGUI titleText;
-        [SerializeField] private GameObject slotPrefab; // Default prefab for nested equipment slots
+        [SerializeField] private GameObject slotPrefab;
 
         [Header("Settings")]
-        [SerializeField] private string titleFormat = "Equipment Slots: {0}";
+        [SerializeField] private string titleFormat = "{0} Attachments";
 
         private InventoryPanel inventoryPanel;
-        private InventorySlot currentItemSlot; // Item that has these nested equipment slots
+        private InventorySlot currentItemSlot;
         private List<ItemCell> nestedSlotUIs = new List<ItemCell>();
+        private EquipmentDataBase currentEquipmentData;
 
-        /// <summary>
-        /// Initialize nested equipment panel
-        /// </summary>
         public void Initialize(InventoryPanel panel)
         {
             inventoryPanel = panel;
@@ -37,9 +36,9 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
-        /// Show nested equipment panel for selected item
+        /// Show panel for item with attachments
         /// </summary>
-        public void ShowForItem(InventorySlot itemSlot)
+        public void ShowForItem(InventorySlot itemSlot, bool isEquipped = false)
         {
             if (itemSlot == null || itemSlot.IsEmpty)
             {
@@ -49,41 +48,39 @@ namespace NightHunt.Gameplay.UI
 
             currentItemSlot = itemSlot;
             var item = itemSlot.Item;
-            if (item == null)
+            if (item == null || item.ItemData == null)
             {
                 Hide();
                 return;
             }
 
-            // Get item config to check for equipment slots
-            ItemConfigData itemConfig = GetItemConfig(item.ItemId);
-            if (itemConfig == null)
+            // Check if item is EquipmentDataBase (has attachment slots)
+            if (item.ItemData is EquipmentDataBase equipmentData)
             {
-                Hide();
-                return;
-            }
+                currentEquipmentData = equipmentData;
+                
+                if (equipmentData.AttachmentSlots == null || equipmentData.AttachmentSlots.Length == 0)
+                {
+                    // No attachment slots - hide panel
+                    Hide();
+                    return;
+                }
 
-            // Check if item has equipment slots (nested equipment)
-            // This would come from ItemConfigData or ItemDataBase
-            // For now, we'll check ExtraParamsJson or a future property
-            var equipmentSlots = GetItemEquipmentSlots(itemConfig);
-            if (equipmentSlots == null || equipmentSlots.Count == 0)
+                // Show panel and create slots
+                if (panelRoot != null)
+                {
+                    panelRoot.SetActive(true);
+                }
+                
+                CreateNestedSlots(equipmentData, itemSlot);
+            }
+            else
             {
+                // Not an equipment item - hide
                 Hide();
-                return;
             }
-
-            // Show panel and create slots
-            if (panelRoot != null)
-            {
-                panelRoot.SetActive(true);
-            }
-            CreateNestedSlots(equipmentSlots, itemSlot);
         }
 
-        /// <summary>
-        /// Hide nested equipment panel
-        /// </summary>
         public void Hide()
         {
             if (panelRoot != null)
@@ -92,135 +89,71 @@ namespace NightHunt.Gameplay.UI
             }
             ClearSlots();
             currentItemSlot = null;
+            currentEquipmentData = null;
         }
 
-        /// <summary>
-        /// Check if panel is showing
-        /// </summary>
         public bool IsShowing()
         {
             return panelRoot != null && panelRoot.activeSelf;
         }
 
         /// <summary>
-        /// Get item config from registry or config loader
+        /// Create attachment slots from EquipmentDataBase
         /// </summary>
-        private ItemConfigData GetItemConfig(string itemId)
-        {
-            // Try ItemDataRegistry first (ScriptableObject)
-            var registry = NightHunt.InteractionSystem.Core.Abstractions.ItemDataRegistry.Load();
-            if (registry != null)
-            {
-                var itemData = registry.GetById(itemId);
-                if (itemData != null)
-                {
-                    // Convert ItemDataBase to ItemConfigData (adapter)
-                    return ConvertToItemConfigData(itemData);
-                }
-            }
-
-            // TODO: Implement ItemConfigData system using ScriptableObject if needed
-            // For now, return null - ItemDataBase should be used directly instead
-            return null;
-        }
-
-        /// <summary>
-        /// Convert ItemDataBase to ItemConfigData (adapter)
-        /// </summary>
-        private ItemConfigData ConvertToItemConfigData(NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase itemData)
-        {
-            // Create ItemConfigData from ItemDataBase
-            // This is a simplified conversion - you may need to map more fields
-            return new ItemConfigData
-            {
-                ItemId = itemData.ItemId,
-                DisplayName = itemData.DisplayName,
-                // Category is ItemCategory enum, not string - skip for now
-                Weight = itemData.Weight,
-                MaxStack = itemData.MaxStack,
-                // Map other fields as needed
-            };
-        }
-
-        /// <summary>
-        /// Get equipment slots for item (from config)
-        /// </summary>
-        private List<ItemEquipmentSlotData> GetItemEquipmentSlots(ItemConfigData itemConfig)
-        {
-            List<ItemEquipmentSlotData> slots = new List<ItemEquipmentSlotData>();
-
-            // Get from ItemConfigData.equipmentSlots (new field)
-            if (itemConfig.equipmentSlots != null && itemConfig.equipmentSlots.Count > 0)
-            {
-                foreach (var slotConfig in itemConfig.equipmentSlots)
-                {
-                    slots.Add(new ItemEquipmentSlotData
-                    {
-                        slotId = slotConfig.slotId,
-                        displayName = slotConfig.displayName,
-                        allowedItemCategory = slotConfig.allowedItemCategory,
-                        slotPrefab = slotPrefab // Use default prefab or get from config
-                    });
-                }
-            }
-
-            return slots;
-        }
-
-        /// <summary>
-        /// Create nested equipment slots
-        /// </summary>
-        private void CreateNestedSlots(List<ItemEquipmentSlotData> equipmentSlots, InventorySlot parentItemSlot)
+        private void CreateNestedSlots(EquipmentDataBase equipmentData, InventorySlot parentItemSlot)
         {
             ClearSlots();
-
-            if (slotsContainer == null)
+            
+            if (equipmentData.AttachmentSlots == null) return;
+            
+            // Create slot for EACH attachment slot definition
+            foreach (var slotDef in equipmentData.AttachmentSlots)
             {
-                Debug.LogError("[NestedEquipmentPanel] slotsContainer is null!");
-                return;
-            }
-
-            // Update title
-            if (titleText != null)
-            {
-                var item = parentItemSlot.Item;
-                string displayName = item?.ItemData?.DisplayName ?? item?.ItemId ?? "Item";
-                titleText.text = string.Format(titleFormat, displayName);
-            }
-
-            // Create slot for each equipment slot
-            foreach (var slotData in equipmentSlots)
-            {
-                if (slotData.slotPrefab == null)
-                {
-                    Debug.LogWarning($"[NestedEquipmentPanel] Slot prefab is null for slot: {slotData.slotId}");
-                    continue;
-                }
-
-                GameObject slotObj = Instantiate(slotData.slotPrefab, slotsContainer);
+                GameObject slotObj = Instantiate(slotPrefab, slotsContainer);
                 slotObj.SetActive(true);
-
+                
                 ItemCell slotUI = slotObj.GetComponent<ItemCell>();
                 if (slotUI == null)
                 {
                     slotUI = slotObj.AddComponent<ItemCell>();
                 }
-
-                // Create empty slot for nested equipment
+                
+                // Create empty slot
                 InventorySlot nestedSlot = new InventorySlot();
+                
                 // TODO: Check if parent item has this slot filled
-                // nestedSlot.SetItem(...);
-
-                // Initialize as nested equipment (marked so it won't show in detail panel)
-                slotUI.Initialize(nestedSlot, inventoryPanel, ItemCellLocation.Attachment, nestedSlotUIs.Count);
-                slotUI.SetNestedEquipment(true);
+                // Load attached item if exists
+                
+                // Initialize as attachment slot
+                slotUI.Initialize(
+                    nestedSlot, 
+                    inventoryPanel, 
+                    ItemCellLocation.Attachment, 
+                    nestedSlotUIs.Count
+                );
+                
+                // Store attachment slot type for validation
+                slotUI.SetAttachmentSlotType(slotDef.slotType);
+                
                 nestedSlotUIs.Add(slotUI);
             }
         }
 
         /// <summary>
-        /// Clear all nested slots
+        /// Set slot label text (shows attachment slot name)
         /// </summary>
+        private void SetSlotLabel(GameObject slotObj, AttachmentSlotDefinition slotDef)
+        {
+            // Find label text in slot prefab
+            var labels = slotObj.GetComponentsInChildren<TextMeshProUGUI>();
+            if (labels != null && labels.Length > 0)
+            {
+                // Use first text component as label
+                var label = labels[0];
+                label.text = slotDef.displayName ?? slotDef.slotType.ToString();
+            }
+        }
+
         private void ClearSlots()
         {
             foreach (var slotUI in nestedSlotUIs)
@@ -234,15 +167,38 @@ namespace NightHunt.Gameplay.UI
         }
 
         /// <summary>
-        /// Data structure for item equipment slot
+        /// Get all attachment slot UIs
         /// </summary>
-        [System.Serializable]
-        public class ItemEquipmentSlotData
+        public List<ItemCell> GetAttachmentSlots()
         {
-            public string slotId; // "Grip", "Scope", "Magazine", etc.
-            public string displayName;
-            public string allowedItemCategory; // Category of items that can be attached
-            public GameObject slotPrefab; // Prefab for the slot UI
+            return nestedSlotUIs;
+        }
+
+        /// <summary>
+        /// Get attachment slot by index
+        /// </summary>
+        public ItemCell GetAttachmentSlot(int index)
+        {
+            if (index >= 0 && index < nestedSlotUIs.Count)
+            {
+                return nestedSlotUIs[index];
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Get attachment slot by type
+        /// </summary>
+        public ItemCell GetAttachmentSlotByType(AttachmentSlotType slotType)
+        {
+            foreach (var slotUI in nestedSlotUIs)
+            {
+                if (slotUI != null && slotUI.GetAttachmentSlotType() == slotType)
+                {
+                    return slotUI;
+                }
+            }
+            return null;
         }
     }
 }

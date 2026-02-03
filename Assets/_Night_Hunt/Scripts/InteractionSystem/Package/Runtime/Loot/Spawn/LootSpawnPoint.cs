@@ -213,6 +213,14 @@ namespace NightHunt.InteractionSystem.Loot.Spawn
             SpawnLoot();
         }
 
+        /// <summary>
+        /// Get the spawn config (for centralized spawning).
+        /// </summary>
+        public LootSpawnConfig GetConfig()
+        {
+            return config;
+        }
+
         private void OnDrawGizmosSelected()
         {
             if (!showGizmos)

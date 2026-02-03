@@ -6,6 +6,7 @@ using NightHunt.InteractionSystem.Inventory;
 using NightHunt.InteractionSystem.Items.Runtime;
 using NightHunt.InteractionSystem.Loot.Definitions;
 using NightHunt.InteractionSystem.Utilities;
+using NightHunt.InteractionSystem.Loot.Spawn;
 
 namespace NightHunt.InteractionSystem.Items.Drop
 {
@@ -104,41 +105,40 @@ namespace NightHunt.InteractionSystem.Items.Drop
 
         /// <summary>
         /// Server-side drop item.
+        /// Uses LootSpawnManager for centralized spawning.
         /// </summary>
         [ServerRpc(RequireOwnership = true)]
         private void ServerDropItem(ItemInstance itemInstance, Vector3 spawnPosition)
-        {
-            if (lootItemPrefab == null)
-            {
-                Debug.LogError("[ItemDropHandler] lootItemPrefab is not assigned!");
-                return;
-            }
-
-            // Find LootItemDefinition for this item
-            LootItemDefinition lootDef = FindLootDefinitionForItem(itemInstance.itemDataId);
-            if (lootDef == null)
-            {
-                Debug.LogWarning($"[ItemDropHandler] Could not find LootItemDefinition for item {itemInstance.itemDataId}. Creating default definition.");
-                lootDef = CreateDefaultDefinition(itemInstance.itemDataId);
-            }
-
-            // Spawn NetworkLootItem
-            NetworkLootItem lootItem = Instantiate(lootItemPrefab, spawnPosition, Quaternion.identity);
-            NetworkObject lootNO = lootItem.GetComponent<NetworkObject>();
-            if (lootNO == null)
-            {
-                Debug.LogError("[ItemDropHandler] lootItemPrefab must have a NetworkObject component.");
-                Destroy(lootItem.gameObject);
-                return;
-            }
-
-            // Spawn on network
-            Spawn(lootNO);
-
-            // Initialize with preserved state (durability, customData, attachments, etc.)
-            lootItem.ServerInitializeFromItemInstance(itemInstance, lootDef);
-        }
-
+{
+    // 1. Find LootItemDefinition
+    LootItemDefinition lootDef = FindLootDefinitionForItem(itemInstance.itemDataId);
+    if (lootDef == null)
+    {
+        Debug.LogError($"[Drop] No LootItemDefinition for {itemInstance.itemDataId}");
+        return;
+    }
+    
+    // 2. Get LootSpawnManager
+    LootSpawnManager spawnManager = FindFirstObjectByType<LootSpawnManager>();
+    if (spawnManager == null)
+    {
+        Debug.LogError("[Drop] LootSpawnManager not found!");
+        return;
+    }
+    
+    // 3. Spawn NetworkLootItem
+    NetworkLootItem spawnedItem = spawnManager.SpawnItemAtPosition(
+        itemInstance, 
+        lootDef, 
+        spawnPosition, 
+        lootItemPrefab // Fallback prefab
+    );
+    
+    if (spawnedItem != null)
+    {
+        Debug.Log($"[Drop] Spawned {itemInstance.itemDataId} at {spawnPosition}");
+    }
+}
         /// <summary>
         /// Find LootItemDefinition for an item ID.
         /// </summary>

@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   definitionId: loot_item_attachment_scope_redot
   itemData: {fileID: 11400000, guid: dcabed2838e8734489db2314432cac6c, type: 2}
-  worldPrefab: {fileID: 3909467020731924538, guid: 1897b6afbabc0e04796e690673133111, type: 3}
+  worldPrefab: {fileID: 7630192573885376679, guid: 9f60c8ddbd1f8cb47ac48fc198d8b845, type: 3}
   pickupRange: 3
   defaultMinQuantity: 1
   defaultMaxQuantity: 1

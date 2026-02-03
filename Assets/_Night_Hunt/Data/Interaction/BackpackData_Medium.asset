@@ -15,7 +15,7 @@ MonoBehaviour:
   itemId: backpack_medium
   displayName: Medium Backpack
   description: A medium-sized backpack with additional storage capacity.
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 44a054df1702e39458b7072b08d0f212, type: 3}
   weight: 1.5
   maxStack: 1
   isConsumable: 0
@@ -24,7 +24,7 @@ MonoBehaviour:
   hasDurability: 0
   maxDurability: 100
   equipmentSlot: 5
-  equipmentPrefab: {fileID: 0}
+  equipmentPrefab: {fileID: 3608075307664393182, guid: eb6dc321642d19b41b69f64f7e5a41ac, type: 3}
   attachmentSlots:
   - slotType: 13
     displayName: Pouch 1

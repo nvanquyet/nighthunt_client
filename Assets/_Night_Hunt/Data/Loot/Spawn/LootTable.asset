@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: LootTable
   m_EditorClassIdentifier: 
   entries:
-  - loot: {fileID: 11400000, guid: b5bb45246200f4e4a8b49dd7ace6d922, type: 2}
+  - loot: {fileID: 11400000, guid: 51cdcf35a78611e4aa57df6cdb7cc8aa, type: 2}
     weight: 100
     minQuantity: 1
     maxQuantity: 1

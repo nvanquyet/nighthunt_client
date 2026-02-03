@@ -4,6 +4,7 @@ using UnityEngine.EventSystems;
 using TMPro;
 using UnityEngine.Events;
 using NightHunt.Gameplay.Inventory;
+using NightHunt.InteractionSystem.Core.Interfaces;
 
 namespace NightHunt.Gameplay.UI
 {
@@ -12,12 +13,12 @@ namespace NightHunt.Gameplay.UI
     /// </summary>
     public enum ItemCellLocation
     {
-        Inventory,      // Inventory grid
-        Container,     // Loot container
-        QuickSlot,     // Quick slot (1-4)
-        Weapon,        // Weapon slot (Primary/Secondary)
-        Equipment,     // Equipment slot (Backpack, Armor, Helmet, Vest)
-        Attachment     // Attachment slot (nested equipment)
+        Inventory, // Inventory grid
+        Container, // Loot container
+        QuickSlot, // Quick slot (1-4)
+        Weapon, // Weapon slot (Primary/Secondary)
+        Equipment, // Equipment slot (Backpack, Armor, Helmet, Vest)
+        Attachment // Attachment slot (nested equipment)
     }
 
     /// <summary>
@@ -25,23 +26,28 @@ namespace NightHunt.Gameplay.UI
     /// Handles display, click, and drag operations
     /// Logic chỉ cần index trong List/Array, UI thì do người chơi tự kéo thả
     /// </summary>
-    public class ItemCell : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler, IPointerEnterHandler, IPointerExitHandler
+    public class ItemCell : MonoBehaviour, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler,
+        IDropHandler, IPointerEnterHandler, IPointerExitHandler
     {
-        [Header("UI References")]
-        [SerializeField] private Image slotBackground;
+        [Header("UI References")] [SerializeField]
+        private Image slotBackground;
+
         [SerializeField] private Image itemIcon;
         [SerializeField] private TextMeshProUGUI quantityText;
         [SerializeField] private TextMeshProUGUI slotLabelText; // For quick slot number, weapon label, etc.
         [SerializeField] private GameObject selectedIndicator;
         [SerializeField] private GameObject emptyIndicator;
 
-        [Header("Cell Configuration")]
-        [SerializeField] private ItemCellLocation cellLocation = ItemCellLocation.Inventory;
-        [SerializeField] private int cellIndex = -1; // Index trong list/array (cho quick slot, weapon slot)
-        [SerializeField] private EquipmentSlotType equipmentSlotType = EquipmentSlotType.Backpack; // Chỉ dùng khi cellLocation == Equipment
+        [Header("Cell Configuration")] [SerializeField]
+        private ItemCellLocation cellLocation = ItemCellLocation.Inventory;
 
-        [Header("Events")]
-        [SerializeField] private UnityEvent<ItemCell> onCellHover;
+        [SerializeField] private int cellIndex = -1; // Index trong list/array (cho quick slot, weapon slot)
+
+        [SerializeField]
+        private EquipmentSlotType
+            equipmentSlotType = EquipmentSlotType.Backpack; // Chỉ dùng khi cellLocation == Equipment
+ 
+        [Header("Events")] [SerializeField] private UnityEvent<ItemCell> onCellHover;
         [SerializeField] private UnityEvent<ItemCell> onCellUnhover;
         [SerializeField] private UnityEvent<ItemCell> onCellSelect;
         [SerializeField] private UnityEvent<ItemCell> onCellUnselect;
@@ -51,16 +57,26 @@ namespace NightHunt.Gameplay.UI
         private bool isSelected = false;
         private bool isDragging = false;
         private ItemTooltip tooltip;
-        private bool isNestedEquipment = false; // Flag to indicate if this is nested equipment (attached to another item)
-        
+
+        private bool
+            isNestedEquipment = false; // Flag to indicate if this is nested equipment (attached to another item)
+
         // For double-click detection
         private float lastClickTime = 0f;
         private const float doubleClickDelay = 0.3f; // Time window for double-click
 
+
+        // ADD these fields to ItemCell class
+        private AttachmentSlotType attachmentSlotType = AttachmentSlotType.None;
+        private bool isAttachmentSlot = false;
+
+        public ItemCellLocation GetCellLocation() => cellLocation;
+
         /// <summary>
         /// Initialize cell với inventory data
         /// </summary>
-        public void Initialize(InventorySlot slotData, InventoryPanel panel, ItemCellLocation location, int index = -1, EquipmentSlotType equipType = EquipmentSlotType.Backpack, bool nested = false)
+        public void Initialize(InventorySlot slotData, InventoryPanel panel, ItemCellLocation location, int index = -1,
+            EquipmentSlotType equipType = EquipmentSlotType.Backpack, bool nested = false)
         {
             slot = slotData;
             inventoryPanel = panel;
@@ -68,27 +84,57 @@ namespace NightHunt.Gameplay.UI
             cellIndex = index;
             equipmentSlotType = equipType;
             isNestedEquipment = nested;
-            
+
             // Find tooltip from inventory panel
             if (inventoryPanel != null)
             {
                 tooltip = inventoryPanel.GetItemTooltip();
             }
-            
+
             // Fallback: Find in scene
             if (tooltip == null)
             {
                 tooltip = FindFirstObjectByType<ItemTooltip>();
             }
-            
+
             // Setup slot label based on location
             SetupSlotLabel();
-            
+
             // Initialize field visibility based on slot state
             InitializeFieldVisibility();
-            
+
             UpdateDisplay();
         }
+
+
+        /// <summary>
+        /// Set attachment slot type (for validation)
+        /// ADD this method to ItemCell.cs
+        /// </summary>
+        public void SetAttachmentSlotType(AttachmentSlotType slotType)
+        {
+            attachmentSlotType = slotType;
+            isAttachmentSlot = true;
+        }
+
+        /// <summary>
+        /// Get attachment slot type
+        /// ADD this method to ItemCell.cs
+        /// </summary>
+        public AttachmentSlotType GetAttachmentSlotType()
+        {
+            return attachmentSlotType;
+        }
+
+        /// <summary>
+        /// Check if this is an attachment slot
+        /// ADD this method to ItemCell.cs
+        /// </summary>
+        public bool IsAttachmentSlot()
+        {
+            return isAttachmentSlot;
+        }
+
 
         /// <summary>
         /// Setup slot label text based on cell location
@@ -133,13 +179,13 @@ namespace NightHunt.Gameplay.UI
         private void InitializeFieldVisibility()
         {
             bool isEmpty = slot == null || slot.IsEmpty;
-            
+
             // Item icon: enable only if slot has item
             if (itemIcon != null)
             {
                 itemIcon.enabled = !isEmpty;
             }
-            
+
             // Quantity text: active only if slot has item AND quantity > 1
             if (quantityText != null)
             {
@@ -151,7 +197,8 @@ namespace NightHunt.Gameplay.UI
                 else
                 {
                     // Will be set in UpdateDisplay() based on actual quantity
-                    quantityText.gameObject.SetActive(false); // Start as inactive, UpdateDisplay will activate if needed
+                    quantityText.gameObject
+                        .SetActive(false); // Start as inactive, UpdateDisplay will activate if needed
                 }
             }
 
@@ -168,7 +215,7 @@ namespace NightHunt.Gameplay.UI
         public void UpdateDisplay()
         {
             bool isEmpty = slot == null || slot.IsEmpty;
-            
+
             if (isEmpty)
             {
                 // Empty slot
@@ -195,7 +242,7 @@ namespace NightHunt.Gameplay.UI
                 if (itemIcon != null)
                 {
                     itemIcon.enabled = true;
-                    
+
                     // Load icon from ItemDataBase (ItemDataRegistry)
                     if (slot.Item != null && !string.IsNullOrEmpty(slot.Item.ItemId))
                     {
@@ -266,7 +313,7 @@ namespace NightHunt.Gameplay.UI
             bool wasSelected = isSelected;
             isSelected = selected;
             UpdateSelectedState();
-            
+
             // Invoke events
             if (selected && !wasSelected)
             {
@@ -414,19 +461,101 @@ namespace NightHunt.Gameplay.UI
             {
                 inventoryPanel.EndDrag(this, eventData);
             }
+
             isDragging = false;
         }
 
         // Hover handlers for tooltip
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (slot != null && !slot.IsEmpty && tooltip != null)
+            // Show tooltip for items or empty equipment slots
+            if (tooltip != null)
             {
-                tooltip.ShowTooltip(slot, eventData.position);
+                if (slot != null && !slot.IsEmpty)
+                {
+                    // Show tooltip for items
+                    tooltip.ShowTooltip(slot, eventData.position);
+                }
+                else if (cellLocation == ItemCellLocation.Attachment && isAttachmentSlot)
+                {
+                    // ADDED: Show attachment slot tooltip
+                    tooltip.ShowAttachmentSlotTooltip(attachmentSlotType, eventData.position);
+                }
+                else
+                {
+                    tooltip.ShowTooltip(slot, eventData.position);
+                }
+                // else if (cellLocation == ItemCellLocation.Equipment)
+                // {
+                //     tooltip.ShowEquipmentSlotTooltip(equipmentSlotType, eventData.position);
+                // }
+                // else if (cellLocation == ItemCellLocation.Weapon)
+                // {
+                //     tooltip.ShowWeaponSlotTooltip(cellIndex, eventData.position);
+                // }
+                // else if (cellLocation == ItemCellLocation.QuickSlot)
+                // {
+                //     tooltip.ShowQuickSlotTooltip(cellIndex, eventData.position);
+                // }
             }
-            
+
+            // Show nested equipment panel when hovering over item that can have attachments
+            if (inventoryPanel != null && slot != null && !slot.IsEmpty)
+            {
+                var slotData = GetSlot();
+                if (slotData != null && !slotData.IsEmpty)
+                {
+                    // Check if item can have attachments (weapon, equipment with attachment slots, etc.)
+                    var itemData = GetItemDataFromRegistry(slotData.Item.ItemId);
+                    if (itemData != null)
+                    {
+                        bool canHaveAttachments = false;
+
+                        // Check if item is EquipmentDataBase and has attachment slots
+                        if (itemData is NightHunt.InteractionSystem.Core.Abstractions.EquipmentDataBase equipmentData)
+                        {
+                            if (equipmentData.AttachmentSlots != null && equipmentData.AttachmentSlots.Length > 0)
+                            {
+                                canHaveAttachments = true;
+                            }
+                        }
+
+                        // Fallback: Check if item is a weapon
+                        if (!canHaveAttachments && itemData.Category ==
+                            NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Weapon)
+                        {
+                            canHaveAttachments = true;
+                        }
+
+                        if (canHaveAttachments)
+                        {
+                            // Show nested equipment panel for items with attachments
+                            bool isEquippedItem = inventoryPanel.IsEquippedItem(this);
+                            inventoryPanel.ShowNestedEquipmentPanelOnHover(slotData, isEquippedItem);
+                        }
+                    }
+                }
+            }
+
             // Invoke hover event
             onCellHover?.Invoke(this);
+        }
+
+        /// <summary>
+        /// Get ItemDataBase from ItemDataRegistry (helper method)
+        /// </summary>
+        private NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase GetItemDataFromRegistry(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId))
+                return null;
+
+            var registry = NightHunt.InteractionSystem.Core.Abstractions.ItemDataRegistry.Load();
+            if (registry != null)
+            {
+                return registry.GetById(itemId);
+            }
+
+            return null;
         }
 
         public void OnPointerExit(PointerEventData eventData)
@@ -435,7 +564,13 @@ namespace NightHunt.Gameplay.UI
             {
                 tooltip.HideTooltip();
             }
-            
+
+            // Hide nested equipment panel when unhovering (only if not selected)
+            if (inventoryPanel != null && !isSelected)
+            {
+                inventoryPanel.HideNestedEquipmentPanelOnUnhover();
+            }
+
             // Invoke unhover event
             onCellUnhover?.Invoke(this);
         }

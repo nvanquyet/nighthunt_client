@@ -24,7 +24,7 @@ MonoBehaviour:
   hasDurability: 0
   maxDurability: 100
   equipmentSlot: 4
-  equipmentPrefab: {fileID: 0}
+  equipmentPrefab: {fileID: 215271333202822813, guid: e6ad20a7ef57c53498042811a5693616, type: 3}
   attachmentSlots:
   - slotType: 8
     displayName: Plate

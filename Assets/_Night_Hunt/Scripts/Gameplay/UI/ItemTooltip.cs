@@ -6,6 +6,7 @@ using UnityEngine.InputSystem;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Inventory;
 using NightHunt.Data;
+using NightHunt.InteractionSystem.Core.Interfaces;
 
 namespace NightHunt.Gameplay.UI
 {
@@ -16,15 +17,15 @@ namespace NightHunt.Gameplay.UI
     /// </summary>
     public class ItemTooltip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
-        [Header("UI References")]
-        [SerializeField] private GameObject tooltipPanel;
+        [Header("UI References")] [SerializeField]
+        private GameObject tooltipPanel;
+
         [SerializeField] private TextMeshProUGUI itemNameText;
         [SerializeField] private TextMeshProUGUI itemStatsText;
         [SerializeField] private Transform equippedItemsContainer;
         [SerializeField] private GameObject equippedItemIconPrefab;
 
-        [Header("Settings")]
-        [SerializeField] private float showDelay = 0.3f;
+        [Header("Settings")] [SerializeField] private float showDelay = 0.3f;
         [SerializeField] private Vector2 offset = new Vector2(10, -10);
         [SerializeField] private bool persistOnHover = true; // Tooltip doesn't disappear when mouse enters tooltip
 
@@ -44,7 +45,7 @@ namespace NightHunt.Gameplay.UI
             if (tooltipPanel != null)
             {
                 tooltipPanel.SetActive(false);
-                
+
                 // Add EventTrigger to tooltip panel to detect mouse enter/exit
                 if (persistOnHover)
                 {
@@ -53,13 +54,13 @@ namespace NightHunt.Gameplay.UI
                     {
                         trigger = tooltipPanel.AddComponent<EventTrigger>();
                     }
-                    
+
                     // Pointer Enter
                     EventTrigger.Entry enterEntry = new EventTrigger.Entry();
                     enterEntry.eventID = EventTriggerType.PointerEnter;
                     enterEntry.callback.AddListener((data) => { OnPointerEnter((PointerEventData)data); });
                     trigger.triggers.Add(enterEntry);
-                    
+
                     // Pointer Exit
                     EventTrigger.Entry exitEntry = new EventTrigger.Entry();
                     exitEntry.eventID = EventTriggerType.PointerExit;
@@ -78,6 +79,235 @@ namespace NightHunt.Gameplay.UI
             }
         }
 
+
+        /// <summary>
+        /// Show tooltip for empty attachment slot
+        /// ADD this method to ItemTooltip.cs
+        /// </summary>
+        public void ShowAttachmentSlotTooltip(AttachmentSlotType slotType, Vector2 screenPosition)
+        {
+            if (!gameObject.activeInHierarchy)
+            {
+                gameObject.SetActive(true);
+            }
+
+            string slotName = GetAttachmentSlotName(slotType);
+            string slotDescription = GetAttachmentSlotDescription(slotType);
+
+            // Update tooltip text
+            if (itemNameText != null)
+            {
+                itemNameText.text = slotName;
+            }
+
+            if (itemStatsText != null)
+            {
+                itemStatsText.text = slotDescription;
+            }
+
+            // Show tooltip panel
+            isShowing = true;
+            if (tooltipPanel != null)
+            {
+                tooltipPanel.SetActive(true);
+            }
+
+            UpdatePosition();
+        }
+
+        /// <summary>
+        /// Get attachment slot name
+        /// </summary>
+        private string GetAttachmentSlotName(AttachmentSlotType slotType)
+        {
+            return slotType switch
+            {
+                AttachmentSlotType.Scope => "Optic Sight Slot",
+                AttachmentSlotType.Barrel => "Barrel Slot",
+                AttachmentSlotType.Grip => "Foregrip Slot",
+                AttachmentSlotType.Magazine => "Magazine Slot",
+                AttachmentSlotType.Stock => "Stock Slot",
+                _ => "Attachment Slot"
+            };
+        }
+
+        /// <summary>
+        /// Get attachment slot description
+        /// </summary>
+        private string GetAttachmentSlotDescription(AttachmentSlotType slotType)
+        {
+            return slotType switch
+            {
+                AttachmentSlotType.Scope =>
+                    "Attach optical sights for better accuracy.\nAccepts: Red Dot, Holographic, ACOG, Sniper Scopes",
+                AttachmentSlotType.Barrel =>
+                    "Modify barrel for different performance.\nAccepts: Suppressors, Extended Barrels, Compensators",
+                AttachmentSlotType.Grip =>
+                    "Attach foregrips to reduce recoil.\nAccepts: Vertical Grip, Angled Grip, Bipod",
+                AttachmentSlotType.Magazine =>
+                    "Change magazine for different capacity.\nAccepts: Standard, Extended, Drum Magazines",
+                AttachmentSlotType.Stock =>
+                    "Modify stock for better handling.\nAccepts: Tactical Stock, Lightweight Stock",
+                _ => "Drag compatible attachments here to equip them."
+            };
+        }
+
+
+        /// <summary>
+        /// Show tooltip for empty slot (equipment, weapon, quick slot, attachment)
+        /// </summary>
+        public void ShowSlotTooltip(ItemCell slotCell, Vector2 screenPosition)
+        {
+            if (slotCell == null)
+            {
+                HideTooltip();
+                return;
+            }
+
+            // Ensure gameObject is active in hierarchy before starting coroutine
+            if (!gameObject.activeInHierarchy)
+            {
+                Debug.LogWarning(
+                    $"[ItemTooltip] ShowSlotTooltip called but gameObject '{gameObject.name}' is inactive in hierarchy! Activating...");
+                gameObject.SetActive(true);
+
+                if (!gameObject.activeInHierarchy)
+                {
+                    Debug.LogError(
+                        $"[ItemTooltip] Cannot activate GameObject '{gameObject.name}' - parent hierarchy might be inactive!");
+                    return;
+                }
+            }
+
+            currentSlot = null; // No item slot for empty slots
+            hoverTime = 0f;
+
+            // Start showing after delay
+            if (!isShowing)
+            {
+                if (gameObject.activeInHierarchy)
+                {
+                    StartCoroutine(ShowSlotTooltipAfterDelay(slotCell, screenPosition));
+                }
+            }
+            else
+            {
+                UpdateSlotTooltipContent(slotCell);
+                UpdatePosition();
+            }
+        }
+
+        /// <summary>
+        /// Show slot tooltip after delay
+        /// </summary>
+        private System.Collections.IEnumerator ShowSlotTooltipAfterDelay(ItemCell slotCell, Vector2 screenPosition)
+        {
+            while (hoverTime < showDelay)
+            {
+                hoverTime += Time.deltaTime;
+                yield return null;
+            }
+
+            if (slotCell != null)
+            {
+                isShowing = true;
+                if (tooltipPanel != null)
+                {
+                    tooltipPanel.SetActive(true);
+                }
+
+                UpdateSlotTooltipContent(slotCell);
+                UpdatePosition();
+            }
+        }
+
+        /// <summary>
+        /// Update slot tooltip content for empty slots
+        /// </summary>
+        private void UpdateSlotTooltipContent(ItemCell slotCell)
+        {
+            if (slotCell == null)
+                return;
+
+            var location = slotCell.GetLocation();
+            string slotName = "";
+            string slotDescription = "";
+
+            switch (location)
+            {
+                case ItemCellLocation.Weapon:
+                    int weaponIndex = slotCell.GetCellIndex();
+                    slotName = weaponIndex == 0 ? "Primary Weapon Slot" : "Secondary Weapon Slot";
+                    slotDescription = "Drag a weapon here to equip it.\nOnly weapons can be equipped to this slot.";
+                    break;
+
+                case ItemCellLocation.Equipment:
+                    var slotType = slotCell.GetEquipmentSlotType();
+                    slotName = GetEquipmentSlotName(slotType);
+                    slotDescription = GetEquipmentSlotDescription(slotType);
+                    break;
+
+                case ItemCellLocation.QuickSlot:
+                    int quickIndex = slotCell.GetCellIndex();
+                    slotName = $"Quick Slot {quickIndex + 1}";
+                    slotDescription =
+                        "Drag consumable items here for quick access.\nOnly consumable items can be assigned to quick slots.";
+                    break;
+
+                case ItemCellLocation.Attachment:
+                    slotName = "Attachment Slot";
+                    slotDescription =
+                        "Drag attachments here to attach them to this item.\nOnly compatible attachments can be attached.";
+                    break;
+
+                default:
+                    return; // Don't show tooltip for other locations
+            }
+
+            // Update tooltip text
+            if (itemNameText != null)
+            {
+                itemNameText.text = slotName;
+            }
+
+            if (itemStatsText != null)
+            {
+                itemStatsText.text = slotDescription;
+            }
+        }
+
+        /// <summary>
+        /// Get equipment slot name
+        /// </summary>
+        private string GetEquipmentSlotName(EquipmentSlotType slotType)
+        {
+            return slotType switch
+            {
+                EquipmentSlotType.Backpack => "Backpack Slot",
+                EquipmentSlotType.Armor => "Armor Slot",
+                EquipmentSlotType.Helmet => "Helmet Slot",
+                EquipmentSlotType.Vest => "Vest Slot",
+                _ => "Equipment Slot"
+            };
+        }
+
+        /// <summary>
+        /// Get equipment slot description
+        /// </summary>
+        private string GetEquipmentSlotDescription(EquipmentSlotType slotType)
+        {
+            string itemType = slotType switch
+            {
+                EquipmentSlotType.Backpack => "backpack",
+                EquipmentSlotType.Armor => "armor",
+                EquipmentSlotType.Helmet => "helmet",
+                EquipmentSlotType.Vest => "vest",
+                _ => "equipment"
+            };
+
+            return $"Drag {itemType} items here to equip them.\nOnly {itemType} items can be equipped to this slot.";
+        }
+
         /// <summary>
         /// Show tooltip for item (legacy InventorySlot wrapper).
         /// Under the hood this uses ItemConfigData from GameConfigLoader,
@@ -94,21 +324,23 @@ namespace NightHunt.Gameplay.UI
             // Ensure gameObject is active in hierarchy before starting coroutine
             if (!gameObject.activeInHierarchy)
             {
-                Debug.LogWarning($"[ItemTooltip] ShowTooltip called but gameObject '{gameObject.name}' is inactive in hierarchy! Activating...");
+                Debug.LogWarning(
+                    $"[ItemTooltip] ShowTooltip called but gameObject '{gameObject.name}' is inactive in hierarchy! Activating...");
                 // Try to activate the GameObject
                 gameObject.SetActive(true);
-                
+
                 // Check again after activation
                 if (!gameObject.activeInHierarchy)
                 {
-                    Debug.LogError($"[ItemTooltip] Cannot activate GameObject '{gameObject.name}' - parent hierarchy might be inactive!");
+                    Debug.LogError(
+                        $"[ItemTooltip] Cannot activate GameObject '{gameObject.name}' - parent hierarchy might be inactive!");
                     return;
                 }
             }
 
             currentSlot = slot;
             hoverTime = 0f;
- 
+
             // Start showing after delay
             if (!isShowing)
             {
@@ -119,7 +351,8 @@ namespace NightHunt.Gameplay.UI
                 }
                 else
                 {
-                    Debug.LogError($"[ItemTooltip] Cannot start coroutine - GameObject '{gameObject.name}' is not active in hierarchy!");
+                    Debug.LogError(
+                        $"[ItemTooltip] Cannot start coroutine - GameObject '{gameObject.name}' is not active in hierarchy!");
                 }
             }
             else
@@ -138,20 +371,20 @@ namespace NightHunt.Gameplay.UI
             isShowing = false;
             isMouseOverTooltip = false;
             currentSlot = null;
-            
+
             // Hide nested tooltip if exists
             if (nestedTooltip != null)
             {
                 nestedTooltip.HideTooltip();
                 nestedTooltip = null;
             }
-            
+
             if (tooltipPanel != null)
             {
                 tooltipPanel.SetActive(false);
             }
         }
-        
+
         /// <summary>
         /// IPointerEnterHandler - Mouse entered tooltip panel
         /// </summary>
@@ -163,7 +396,7 @@ namespace NightHunt.Gameplay.UI
                 Debug.Log("[ItemTooltip] Mouse entered tooltip panel - keeping tooltip visible");
             }
         }
-        
+
         /// <summary>
         /// IPointerExitHandler - Mouse exited tooltip panel
         /// </summary>
@@ -177,14 +410,14 @@ namespace NightHunt.Gameplay.UI
                 StartCoroutine(HideAfterDelay(0.1f));
             }
         }
-        
+
         /// <summary>
         /// Hide tooltip after delay (allows moving to nested tooltip)
         /// </summary>
         private System.Collections.IEnumerator HideAfterDelay(float delay)
         {
             yield return new WaitForSeconds(delay);
-            
+
             // Only hide if mouse is still not over tooltip
             if (!isMouseOverTooltip && !isShowing)
             {
@@ -210,11 +443,12 @@ namespace NightHunt.Gameplay.UI
                 {
                     tooltipPanel.SetActive(true);
                 }
+
                 UpdateTooltipContent();
                 UpdatePosition();
             }
         }
-        
+
         /// <summary>
         /// Check if tooltip should stay visible (mouse is over tooltip or slot)
         /// </summary>
@@ -240,7 +474,7 @@ namespace NightHunt.Gameplay.UI
             // For now, tooltip is disabled until ItemDataBase is used
             if (inventoryItem.ItemData == null)
                 return;
-            
+
             var itemData = inventoryItem.ItemData;
             // Use itemData directly instead of config
 
@@ -257,7 +491,7 @@ namespace NightHunt.Gameplay.UI
                 stats += $"Category: {itemData.Category}\n";
                 // TODO: Add rarity and effect info when ItemDataBase is extended
                 // stats += $"Rarity: {itemData.Rarity ?? "Common"}\n";
-                
+
                 // if (!string.IsNullOrEmpty(itemData.EffectType))
                 // {
                 //     stats += $"Effect: {itemData.EffectType}";
@@ -292,6 +526,7 @@ namespace NightHunt.Gameplay.UI
                     Destroy(icon);
                 }
             }
+
             equippedItemIcons.Clear();
 
             // TODO: Get nested equipment from item
@@ -299,7 +534,7 @@ namespace NightHunt.Gameplay.UI
             // 1. ItemConfigData.ExtraParamsJson (parse JSON for attachments)
             // 2. ItemInstance.attachedItems (if exists in InteractionSystem)
             // 3. EquipmentManager.GetAttachedItems(item.ItemId)
-            
+
             // Check if item has nested equipment slots defined
             // Example structure (would need to be defined in ItemConfigData or ItemDataBase):
             // if (item.HasAttachments || item.AttachmentSlots != null)
@@ -309,7 +544,7 @@ namespace NightHunt.Gameplay.UI
             //         CreateEquippedItemIcon(attachment);
             //     }
             // }
-            
+
             // TODO: Check for weapon category when ItemDataBase is extended with nested equipment support
             // if (item.Category == ItemCategory.Weapon)
             // {
@@ -329,7 +564,7 @@ namespace NightHunt.Gameplay.UI
             GameObject iconObj = Instantiate(equippedItemIconPrefab, equippedItemsContainer);
             iconObj.SetActive(true); // Ensure prefab is active even if it was disabled
             equippedItemIcons.Add(iconObj);
-            
+
             Image iconImage = iconObj.GetComponent<Image>();
             if (iconImage != null)
             {
@@ -344,41 +579,44 @@ namespace NightHunt.Gameplay.UI
                     iconImage.enabled = false;
                 }
             }
-            
+
             // Add click handler for nested tooltip
             Button button = iconObj.GetComponent<Button>();
             if (button == null)
             {
                 button = iconObj.AddComponent<Button>();
             }
-            
-            button.onClick.AddListener(() => {
+
+            button.onClick.AddListener(() =>
+            {
                 // TODO: Show nested tooltip when ItemDataBase is extended with nested equipment support
                 // Create nested tooltip for this equipment item
                 // ShowNestedTooltip(item, iconObj.transform.position);
             });
-            
+
             // Also add hover handler (optional - can show tooltip on hover too)
             EventTrigger trigger = iconObj.GetComponent<EventTrigger>();
             if (trigger == null)
             {
                 trigger = iconObj.AddComponent<EventTrigger>();
             }
-            
+
             EventTrigger.Entry hoverEntry = new EventTrigger.Entry();
             hoverEntry.eventID = EventTriggerType.PointerEnter;
-            hoverEntry.callback.AddListener((data) => {
+            hoverEntry.callback.AddListener((data) =>
+            {
                 // Show nested tooltip on hover (optional)
                 // ShowNestedTooltip(item, iconObj.transform.position);
             });
             trigger.triggers.Add(hoverEntry);
         }
-        
+
         /// <summary>
         /// Show nested tooltip for equipment icon
         /// TODO: Update when ItemDataBase is extended with nested equipment support
         /// </summary>
-        private void ShowNestedTooltip(NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase item, Vector3 position)
+        private void ShowNestedTooltip(NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase item,
+            Vector3 position)
         {
             // Hide previous nested tooltip
             if (nestedTooltip != null)
@@ -386,19 +624,19 @@ namespace NightHunt.Gameplay.UI
                 nestedTooltip.HideTooltip();
                 nestedTooltip = null;
             }
-            
+
             // Create nested tooltip (could be a child tooltip or separate instance)
             // Create a new InventorySlot wrapper for the nested item
             InventorySlot nestedSlot = new InventorySlot();
             nestedSlot.SetItem(item, 1);
-            
+
             // Get screen position
             Vector2 screenPos = RectTransformUtility.WorldToScreenPoint(canvas.worldCamera, position);
-            
+
             // Create nested tooltip instance (could be pooled or instantiated)
             // For simplicity, we'll use the same tooltip system but offset position
             // TODO: Implement proper nested tooltip system with separate prefab/instance
-            
+
             Debug.Log($"[ItemTooltip] Show nested tooltip for item: {item.ItemId}");
         }
 

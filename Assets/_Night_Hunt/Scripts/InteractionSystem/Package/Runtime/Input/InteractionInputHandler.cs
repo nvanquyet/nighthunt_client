@@ -315,6 +315,19 @@ namespace NightHunt.InteractionSystem.Input
         private void OnInventoryPerformed(InputAction.CallbackContext context)
         {
             Debug.Log("[InteractionInputHandler] OnInventoryPerformed - F key pressed, toggling inventory");
+            // #region agent log
+            try
+            {
+                long ts = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                string stack = System.Environment.StackTrace;
+                stack = stack.Replace("\r", " ").Replace("\n", " ");
+                System.IO.File.AppendAllText(
+                    @"w:\Unity\Shotter\.cursor\debug.log",
+                    $"{{\"id\":\"log_{ts}_input\",\"timestamp\":{ts},\"location\":\"InteractionInputHandler.cs:OnInventoryPerformed\",\"message\":\"F pressed -> InvokeInventoryChanged\",\"data\":{{\"stack\":\"{stack}\"}},\"sessionId\":\"debug-session\",\"runId\":\"run4\",\"hypothesisId\":\"UI_CLOSE\"}}\n"
+                );
+            }
+            catch { /* ignore */ }
+            // #endregion
             // Toggle inventory UI - invoke via method, not direct event access
             InventoryEvents.InvokeInventoryChanged();
         }

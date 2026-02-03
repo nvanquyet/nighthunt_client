@@ -19,7 +19,7 @@ namespace NightHunt.Networking.Prediction.FishNet
     /// - Define abstract methods cho derived classes
     /// 
     /// USAGE:
-    /// Derived classes MUST implement:
+    /// Derived classes MUST implement: 
     /// - TimeManager_OnTick(): Build và send replicate data
     /// - CreateReconcileData(): Tạo reconcile state
     /// - [Replicate] method: Simulate movement

@@ -30,4 +30,4 @@ MonoBehaviour:
     modifierType: 0
     value: 10
     source: Red Dot Scope
-  attachmentPrefab: {fileID: 0}
+  attachmentPrefab: {fileID: 7630192573885376679, guid: 9f60c8ddbd1f8cb47ac48fc198d8b845, type: 3}

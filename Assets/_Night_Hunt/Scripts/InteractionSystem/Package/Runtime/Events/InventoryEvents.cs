@@ -80,7 +80,9 @@ namespace NightHunt.InteractionSystem.Events
         public static void InvokeItemAdded(ItemInstance item)
         {
             OnItemAdded?.Invoke(item);
-            OnInventoryChanged?.Invoke();
+            // IMPORTANT: Do NOT invoke OnInventoryChanged here.
+            // OnInventoryChanged is used for UI toggle (open/close). Firing it on item add/remove causes the
+            // inventory panel to unexpectedly close right after looting/pickup.
         }
 
         /// <summary>
@@ -89,7 +91,7 @@ namespace NightHunt.InteractionSystem.Events
         public static void InvokeItemRemoved(ItemInstance item, int quantityRemoved)
         {
             OnItemRemoved?.Invoke(item, quantityRemoved);
-            OnInventoryChanged?.Invoke();
+            // IMPORTANT: Do NOT invoke OnInventoryChanged here. See InvokeItemAdded note.
         }
 
         /// <summary>
@@ -98,7 +100,7 @@ namespace NightHunt.InteractionSystem.Events
         public static void InvokeItemQuantityChanged(ItemInstance item, int newQuantity)
         {
             OnItemQuantityChanged?.Invoke(item, newQuantity);
-            OnInventoryChanged?.Invoke();
+            // IMPORTANT: Do NOT invoke OnInventoryChanged here. See InvokeItemAdded note.
         }
 
         /// <summary>

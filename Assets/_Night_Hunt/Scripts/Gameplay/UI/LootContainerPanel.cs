@@ -234,11 +234,12 @@ namespace NightHunt.Gameplay.UI
 
         /// <summary>
         /// Handle container items changed event - refresh UI
+        /// NOTE: This should NOT close the UI, only refresh the grid
         /// </summary>
         private void HandleContainerItemsChanged(ILootContainer container)
         {
             // Only refresh if this is the current container we're displaying
-            if (container == currentContainer)
+            if (container == currentContainer && isRaycastingContainer)
             {
                 RefreshLootGrid();
             }
@@ -333,7 +334,8 @@ namespace NightHunt.Gameplay.UI
                 if (slotIndex < validItemsWithData.Count)
                 {
                     var (item, itemData) = validItemsWithData[slotIndex];
-                    slot.SetItem(itemData, item.quantity);
+                    // Preserve instanceId so drag from container → inventory can keep the same identity
+                    slot.SetItem(itemData, item.quantity, item.instanceId);
                     Debug.Log($"[LootContainerPanel] DisplayItems - Added item to slot {slotIndex}: {item.itemDataId} (Qty: {item.quantity}), Slot empty: {slot.IsEmpty}");
                 }
                 // If no item, slot remains empty (default InventorySlot is empty)
@@ -560,8 +562,9 @@ namespace NightHunt.Gameplay.UI
                 {
                     var itemData = registry.GetById(item.itemDataId);
                     if (itemData != null)
-                {
-                        slot.SetItem(itemData, item.quantity);
+                    {
+                        // Preserve instanceId for container preview as well
+                        slot.SetItem(itemData, item.quantity, item.instanceId);
                     }
                 }
                 slots.Add(slot);
@@ -611,6 +614,8 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         public void MoveItemFromContainer(string itemId, int toX, int toY)
         {
+            Debug.Log($"[LootContainerPanel] MoveItemFromContainer called - itemId: {itemId}, toX: {toX}, toY: {toY}, containerId: {GetContainerId() ?? "null"}");
+            
             if (currentContainer == null)
             {
                 Debug.LogWarning("[LootContainerPanel] MoveItemFromContainer: No container loaded");
@@ -618,7 +623,10 @@ namespace NightHunt.Gameplay.UI
             }
 
             // Fire UI event - Logic layer will handle it
-            InventoryUIEvents.RequestMoveItemFromContainer(GetContainerId(), itemId, toX, toY);
+            string containerId = GetContainerId();
+            Debug.Log($"[LootContainerPanel] Firing RequestMoveItemFromContainer event - containerId: {containerId}, itemId: {itemId}, toX: {toX}, toY: {toY}");
+            InventoryUIEvents.RequestMoveItemFromContainer(containerId, itemId, toX, toY);
+            Debug.Log($"[LootContainerPanel] RequestMoveItemFromContainer event fired");
         }
 
         /// <summary>
@@ -739,31 +747,39 @@ namespace NightHunt.Gameplay.UI
 
         /// <summary>
         /// Handle container closed event
+        /// NOTE: Only hide UI if container is actually closed AND not actively raycasting
+        /// This prevents UI from closing when items are moved (which might trigger close events)
         /// </summary>
         private void HandleContainerClosed(ILootContainer container)
         {
-            if (container == currentContainer)
+            // Only process if this is our current container
+            if (container != currentContainer) return;
+            
+            // CRITICAL: Only hide if we're NOT actively raycasting the container
+            // This prevents UI from closing when items are moved between inventory and container
+            if (!isRaycastingContainer && isUIPanelVisible)
             {
-                // Hide UI and clear container reference
                 Hide();
-                if (container == currentContainer)
-                {
-                    ClearContainer();
-                }
-                // REMOVED: No longer use openedContainer cache
+                ClearContainer();
             }
+            // If still raycasting, ignore the close event (container might be closing due to item changes, not player leaving)
         }
 
         /// <summary>
         /// Handle interaction target lost (raycast lost) - replaces ContainerDistanceManager logic
-        /// Hide UI immediately when raycast is lost
+        /// Hide UI immediately when raycast is lost and clear container reference
         /// </summary>
         private void HandleInteractTargetLost()
         {
             Debug.Log($"[LootContainerPanel] HandleInteractTargetLost - Raycast lost, isUIPanelVisible: {isUIPanelVisible}, isRaycastingContainer: {isRaycastingContainer}");
             isRaycastingContainer = false;
             
-            // REMOVED: No longer use cache - just hide when raycast is lost
+            // Clear container reference when raycast is lost
+            if (currentContainer != null)
+            {
+                Debug.Log($"[LootContainerPanel] HandleInteractTargetLost - Clearing container reference: {currentContainer.name}");
+                ClearContainer();
+            }
             
             // Hide UI immediately when raycast is lost
             if (isUIPanelVisible)

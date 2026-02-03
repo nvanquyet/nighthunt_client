@@ -83,6 +83,14 @@ namespace NightHunt.InteractionSystem.Utilities
 
             return FindComponentInHierarchy<T>(component.gameObject, includeInactive);
         }
+        
+        public static T[] FindComponentsInHierarchy<T>(this Component component, bool includeInactive = false) where T : Component
+        {
+            if (component == null)
+                return null;
+
+            return component.gameObject.GetComponentsInChildren<T>(includeInactive);
+        }
 
         /// <summary>
         /// Find component that implements interface using comprehensive search strategy.

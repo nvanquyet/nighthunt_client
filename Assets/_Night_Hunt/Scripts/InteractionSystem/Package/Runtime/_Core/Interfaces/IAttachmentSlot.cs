@@ -69,6 +69,7 @@ namespace NightHunt.InteractionSystem.Core.Interfaces
         
         // Universal
         Tactical,
-        Utility
+        Utility,
+        None
     }
 }

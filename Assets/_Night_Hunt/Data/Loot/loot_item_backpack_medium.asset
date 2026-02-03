@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   definitionId: loot_item_backpack_medium
   itemData: {fileID: 11400000, guid: 393dbcaecc252c44dad18f8709cf9b65, type: 2}
-  worldPrefab: {fileID: 3909467020731924538, guid: 1897b6afbabc0e04796e690673133111, type: 3}
+  worldPrefab: {fileID: 3608075307664393182, guid: eb6dc321642d19b41b69f64f7e5a41ac, type: 3}
   pickupRange: 3
   defaultMinQuantity: 1
   defaultMaxQuantity: 1

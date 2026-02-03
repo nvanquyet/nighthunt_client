@@ -1,91 +1,69 @@
 ﻿using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 namespace NightHunt.InteractionSystem.Core.Abstractions
 {
-  
-    /// <summary>
-    /// Registry/Collection for resolving ItemDataBase by id at runtime (client + server).
-    /// Place an instance under Resources/ with name: ItemDataRegistry
-    /// </summary>
-    [CreateAssetMenu(fileName = "ItemDataRegistry", menuName = "NightHunt/InteractionSystem/ItemDataRegistry")]
+    [CreateAssetMenu(
+        fileName = "ItemDataRegistry",
+        menuName = "NightHunt/InteractionSystem/ItemDataRegistry")]
     public class ItemDataRegistry : ScriptableObject
     {
         [SerializeField] private ItemDataBase[] items = new ItemDataBase[0];
 
         private Dictionary<string, ItemDataBase> _byId;
+        private bool _cacheBuilt;
 
         public ItemDataBase GetById(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
             {
-                Debug.LogWarning($"[ItemDataRegistry] GetById called with null/empty id");
+                Debug.LogWarning("[ItemDataRegistry] GetById called with null/empty id");
                 return null;
             }
 
             BuildCacheIfNeeded();
-            
-            Debug.Log($"[ItemDataRegistry] Looking up item with id: '{id}'");
-            Debug.Log($"[ItemDataRegistry] Cache contains {(_byId?.Count ?? 0)} items");
 
-            _byId.TryGetValue(id, out var itemData);
-            
-            if (itemData == null)
-            {
-                Debug.LogWarning($"[ItemDataRegistry] Item with id '{id}' not found in registry");
-            }
-            else
-            {
-                Debug.Log($"[ItemDataRegistry] Found item: '{id}' -> {itemData.DisplayName ?? itemData.name}");
-            }
-            
-            return itemData;
+            if (_byId.TryGetValue(id, out var item))
+                return item;
+
+            Debug.LogWarning($"[ItemDataRegistry] Item not found for id: '{id}'");
+            return null;
         }
 
         private void BuildCacheIfNeeded()
         {
-            if (_byId != null)
+            if (_cacheBuilt)
                 return;
 
-            Debug.Log($"[ItemDataRegistry] Building cache from {items?.Length ?? 0} items");
+            _cacheBuilt = true;
             _byId = new Dictionary<string, ItemDataBase>();
-            if (items == null)
+
+            if (items == null || items.Length == 0)
             {
-                Debug.LogWarning("[ItemDataRegistry] Items array is null!");
+                Debug.LogWarning("[ItemDataRegistry] No items assigned in registry");
                 return;
             }
 
-            int validCount = 0;
-            int nullCount = 0;
-            int emptyIdCount = 0;
+            int valid = 0;
+            int skipped = 0;
 
             foreach (var item in items)
             {
-                if (item == null)
+                if (item == null || string.IsNullOrWhiteSpace(item.ItemId))
                 {
-                    nullCount++;
-                    continue;
-                }
-
-                if (string.IsNullOrWhiteSpace(item.ItemId))
-                {
-                    emptyIdCount++;
-                    Debug.LogWarning($"[ItemDataRegistry] Item '{item.name}' has null/empty ItemId, skipping");
+                    skipped++;
                     continue;
                 }
 
                 _byId[item.ItemId] = item;
-                validCount++;
-                Debug.Log($"[ItemDataRegistry] Cached item: '{item.ItemId}' -> {item.DisplayName ?? item.name}");
+                valid++;
             }
 
-            Debug.Log($"[ItemDataRegistry] Cache built: {validCount} valid, {nullCount} null, {emptyIdCount} empty IDs");
+            Debug.Log(
+                $"[ItemDataRegistry] Cache built. Valid: {valid}, Skipped: {skipped}"
+            );
         }
 
-        /// <summary>
-        /// Get all items (for searching).
-        /// </summary>
         public IEnumerable<ItemDataBase> GetAllItems()
         {
             BuildCacheIfNeeded();
@@ -94,23 +72,16 @@ namespace NightHunt.InteractionSystem.Core.Abstractions
 
         public static ItemDataRegistry Load()
         {
-            Debug.Log("[ItemDataRegistry] Attempting to load ItemDataRegistry from Resources/ItemDataRegistry");
             var registry = Resources.Load<ItemDataRegistry>("ItemDataRegistry");
-            
+
             if (registry == null)
             {
-                Debug.LogError("[ItemDataRegistry] Failed to load ItemDataRegistry from Resources/ItemDataRegistry.asset. Please ensure:");
-                Debug.LogError("  1. Asset exists at path: Resources/ItemDataRegistry.asset");
-                Debug.LogError("  2. Asset name matches exactly: 'ItemDataRegistry' (case-sensitive)");
-                Debug.LogError("  3. Asset is a valid ItemDataRegistry ScriptableObject");
+                Debug.LogError(
+                    "[ItemDataRegistry] Missing Resources/ItemDataRegistry.asset"
+                );
+                return null;
             }
-            else
-            {
-                Debug.Log($"[ItemDataRegistry] Successfully loaded ItemDataRegistry asset");
-                var itemCount = registry.items != null ? registry.items.Length : 0;
-                Debug.Log($"[ItemDataRegistry] Registry contains {itemCount} items in array");
-            }
-            
+
             return registry;
         }
     }

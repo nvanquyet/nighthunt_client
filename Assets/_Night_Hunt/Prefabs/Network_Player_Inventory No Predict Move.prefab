@@ -28,8 +28,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 17242479382696605}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.11795814, y: 0.8742113, z: -0.2646899, w: -0.38958925}
-  m_LocalPosition: {x: 11.154168, y: 10, z: 10.0291815}
+  m_LocalRotation: {x: -0.08124599, y: 0.91870576, z: -0.27816167, w: -0.2683373}
+  m_LocalPosition: {x: 8.073678, y: 10, z: 12.641827}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -112,7 +112,7 @@ MonoBehaviour:
     SplineCurvature: 0.5
   RecenteringTarget: 2
   HorizontalAxis:
-    Value: -131.96004
+    Value: -147.43575
     Center: 0
     Range: {x: -180, y: 180}
     Wrap: 1
@@ -228,6 +228,69 @@ MonoBehaviour:
         DecelTime: 0
   PlayerIndex: -1
   AutoEnableInputs: 1
+--- !u!1 &813671741825901228
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4099982977552618394}
+  - component: {fileID: 8991747108373421165}
+  - component: {fileID: 6401425936526608058}
+  m_Layer: 0
+  m_Name: LootSystem
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4099982977552618394
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 813671741825901228}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6069126812610099979}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8991747108373421165
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 813671741825901228}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 59920ffaccadca546872a44c247bf97d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 7643909161608398846}
+  _networkObjectCache: {fileID: 0}
+--- !u!114 &6401425936526608058
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 813671741825901228}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ee21c92adeb55ac4d94c81397538f379, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 7643909161608398846}
+  _networkObjectCache: {fileID: 0}
 --- !u!1 &1165222439944251418
 GameObject:
   m_ObjectHideFlags: 0
@@ -534,6 +597,7 @@ GameObject:
   m_Component:
   - component: {fileID: 376788347168487192}
   - component: {fileID: 7582083967678722365}
+  - component: {fileID: 3317979190475925734}
   m_Layer: 0
   m_Name: WeaponSystem
   m_TagString: Untagged
@@ -574,6 +638,21 @@ MonoBehaviour:
   weaponModels:
   - {fileID: 0}
   - {fileID: 0}
+--- !u!114 &3317979190475925734
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5001534260593829630}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cc6d2b2309ee03e438f5c76bb8ad59c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 7643909161608398846}
+  _networkObjectCache: {fileID: 0}
 --- !u!1 &6055109698772685963
 GameObject:
   m_ObjectHideFlags: 0
@@ -688,6 +767,7 @@ Transform:
   - {fileID: 7108143427295559753}
   - {fileID: 2000662467721325208}
   - {fileID: 947320338689894778}
+  - {fileID: 4099982977552618394}
   - {fileID: 8927038683568933759}
   - {fileID: 1783542692564661310}
   - {fileID: 376788347168487192}
@@ -941,6 +1021,8 @@ GameObject:
   - component: {fileID: 4459143147264609494}
   - component: {fileID: 5584340506047650588}
   - component: {fileID: 6642182741135613482}
+  - component: {fileID: 2600866457735288163}
+  - component: {fileID: 6335443353249441176}
   m_Layer: 0
   m_Name: InventorySystem
   m_TagString: Untagged
@@ -1024,6 +1106,36 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 7643909161608398846}
   _networkObjectCache: {fileID: 0}
+--- !u!114 &2600866457735288163
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7261284278873893811}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7fbb3415d1d6eb2419a2e12bb9007847, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &6335443353249441176
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7261284278873893811}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9d5413edc1fe15b4fad68c712e2e4656, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 7643909161608398846}
+  _networkObjectCache: {fileID: 0}
+  lootItemPrefab: {fileID: 3367596752983132564, guid: b799110fa0207f44397eec8462ea043f, type: 3}
+  dropOffset: {x: 0, y: 0.5, z: 1}
+  dropSpreadRadius: 0.5
 --- !u!1 &7621794338634648654
 GameObject:
   m_ObjectHideFlags: 0

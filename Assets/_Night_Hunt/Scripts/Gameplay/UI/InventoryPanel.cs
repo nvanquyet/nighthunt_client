@@ -1,8 +1,10 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using System.Collections.Generic;
+using System.Linq;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Inventory;
 using NightHunt.Gameplay.Inventory.Events;
@@ -11,68 +13,77 @@ using NightHunt.Gameplay.Core;
 using NightHunt.InteractionSystem.Inventory;
 using NightHunt.InteractionSystem.Core.Structs;
 using NightHunt.InteractionSystem.Events;
-using NightHunt.InteractionSystem.Core.Abstractions;
 using NightHunt.InteractionSystem.Core.Interfaces;
 using NightHunt.InteractionSystem.Loot;
 using NightHunt.Data;
 using FishNet;
+using NightHunt.InteractionSystem.Core.Abstractions;
  
 namespace NightHunt.Gameplay.UI
 {
     /// <summary>
-    /// Main inventory panel with grid layout
-    /// Manages inventory display, drag & drop, and mode switching
+    /// Main inventory panel with grid layout. Manages inventory display, drag & drop, and mode switching
     /// </summary>
     public class InventoryPanel : MonoBehaviour
     {
-        [Header("Panel References")]
-        [SerializeField] private GameObject panelRoot;
-        [SerializeField] private Transform inventoryPanel; // Inventory grid container (top-left)
-        [SerializeField] private Transform shopContainer; // Shop container (below inventory) - separate from loot
-        [SerializeField] private Transform lootContainer; // Loot container (below inventory) - separate from shop
-        [SerializeField] private Transform quickSlotsPanel; // Quick slots panel (below shop/loot)
-        [SerializeField] private Transform characterPanel; // Character equipment panel (right side)
+        [Header("Panel References")] [SerializeField]
+        private GameObject panelRoot;
 
-        [Header("Inventory Grid")]
-        [SerializeField] private Transform inventoryGridParent;
+        [SerializeField] private Transform inventoryPanel;
+        [SerializeField] private Transform shopContainer;
+        [SerializeField] private Transform lootContainer;
+        [SerializeField] private Transform quickSlotsPanel;
+        [SerializeField] private Transform characterPanel;
+
+        [Header("Inventory Grid")] [SerializeField]
+        private Transform inventoryGridParent;
+
         [SerializeField] private GameObject inventorySlotPrefab;
         [SerializeField] private GridLayoutGroup gridLayout;
-        
-        [Header("UI Grid Settings")]
         [SerializeField] private int uiGridWidth = 4;
         [SerializeField] private int uiGridHeight = 3;
 
-        [Header("UI Components")]
-        [SerializeField] private ItemTooltip itemTooltip; // Floating tooltip
-        [SerializeField] private NestedEquipmentPanel nestedEquipmentLeft; // Panel for inventory items (center-left)
-        [SerializeField] private NestedEquipmentPanel nestedEquipmentRight; // Panel for equipped items (right side)
+        [Header("UI Components")] [SerializeField]
+        private ItemTooltip itemTooltip;
+
+        [SerializeField] private NestedEquipmentPanel nestedEquipmentLeft;
+        [SerializeField] private NestedEquipmentPanel nestedEquipmentRight;
         [SerializeField] private EquipmentPanel equipmentPanel;
         [SerializeField] private LootContainerPanel lootContainerPanel;
         [SerializeField] private ShopPanel shopPanel;
         [SerializeField] private DragDropHandler dragDropHandler;
-        [SerializeField] private TrashSlotUI trashSlot; // Trash slot for dropping items (inventory, quick slots, equipment)
+        [SerializeField] private TrashSlotUI trashSlot;
 
         private NetworkPlayer localPlayer;
         private InventoryService inventorySystem;
         private GridInventoryComponent inventoryGrid;
         private List<ItemCell> slotUIs = new List<ItemCell>();
         private ItemCell selectedSlot;
+        private Dictionary<string, int> localItemPositions = new Dictionary<string, int>(); // key = ItemInstance.instanceId
         private bool isOpen = false;
-        private InventoryMode? currentMode = null; // null = không có mode nào (chỉ equipment panel)
-        
-        // Direct input handling for inventory toggle
+        private InventoryMode? currentMode = null;
         private InputAction openInventoryAction;
         private bool isInputSubscribed = false;
+        private bool isSubscribed = false;
+
+        // Public accessors
+        public List<ItemCell> GetSlotUIs() => slotUIs;
+        public ItemTooltip GetItemTooltip() => itemTooltip;
+        public LootContainerPanel GetLootContainerPanel() => lootContainerPanel;
+        public ShopPanel GetShopPanel() => shopPanel;
+        public EquipmentPanel GetEquipmentPanel() => equipmentPanel;
+        public bool IsOpen() => isOpen;
+        public InventoryMode? GetMode() => currentMode;
+
+        #region Unity Lifecycle
 
         private void Awake()
         {
-            // Register this panel in the static registry (no FindObject needed)
             UIRegistry.RegisterInventoryPanel(this);
         }
 
         private void OnDestroy()
         {
-            // Unregister when destroyed
             UIRegistry.UnregisterInventoryPanel(this);
             UnsubscribeFromInputActions();
             UnsubscribeFromLogicEvents();
@@ -80,19 +91,14 @@ namespace NightHunt.Gameplay.UI
 
         private void OnEnable()
         {
-            // UI components should not run on server (headless server compatibility)
             if (InstanceFinder.IsServer)
             {
-                Debug.Log($"[InventoryPanel] Running on server - disabling UI component (headless server compatibility)");
                 enabled = false;
                 return;
             }
             
             SubscribeToLogicEvents();
-            if (!isSubscribed)
-            {
-                SubscribeToEvents();
-            }
+            if (!isSubscribed) SubscribeToEvents();
         }
 
         private void OnDisable()
@@ -102,11 +108,64 @@ namespace NightHunt.Gameplay.UI
             UnsubscribeFromInputActions();
         }
 
-        /// <summary>
-        /// Subscribe to Logic Layer events to update UI
-        /// </summary>
-        private void SubscribeToLogicEvents()
+        #endregion
+
+        #region Initialization
+
+        public void Initialize(NetworkPlayer player, InventoryService inventory)
         {
+            if (player == null || !player.IsLocalPlayer)
+            {
+                Debug.LogWarning("[InventoryPanel] Cannot initialize: Not local player");
+                return;
+            }
+
+            localPlayer = player;
+            inventorySystem = inventory;
+            inventoryGrid = inventorySystem?.GetGrid();
+            
+            if (inventoryGrid == null)
+            {
+                Debug.LogError(
+                    "[InventoryPanel] inventoryGrid is NULL! Ensure InventoryService has GridInventoryComponent");
+                return;
+            }
+
+            InitializeSubPanels();
+            InitializeDragDrop();
+
+            if (panelRoot != null) panelRoot.SetActive(false);
+            HideContainerPanels();
+
+            if (!isSubscribed) SubscribeToEvents();
+            SubscribeToInputActions();
+        }
+
+        private void InitializeSubPanels()
+            {
+            nestedEquipmentLeft?.Initialize(this);
+            nestedEquipmentRight?.Initialize(this);
+            equipmentPanel?.Initialize(this, inventorySystem);
+            lootContainerPanel?.Initialize(this);
+            shopPanel?.Initialize(this);
+            trashSlot?.Initialize(this);
+            }
+
+        private void InitializeDragDrop()
+        {
+            Canvas canvas = GetComponentInParent<Canvas>();
+            if (dragDropHandler != null && canvas != null)
+            {
+                dragDropHandler.Initialize(this, canvas);
+            }
+        }
+
+        #endregion
+
+        #region Event Subscription
+
+        private void SubscribeToLogicEvents()
+            {
             InventoryLogicEvents.OnItemAdded += HandleItemAdded;
             InventoryLogicEvents.OnItemRemoved += HandleItemRemoved;
             InventoryLogicEvents.OnItemQuantityChanged += HandleItemQuantityChanged;
@@ -122,9 +181,6 @@ namespace NightHunt.Gameplay.UI
             InventoryLogicEvents.OnItemUseProgress += HandleItemUseProgress;
         }
 
-        /// <summary>
-        /// Unsubscribe from Logic Layer events
-        /// </summary>
         private void UnsubscribeFromLogicEvents()
         {
             InventoryLogicEvents.OnItemAdded -= HandleItemAdded;
@@ -142,233 +198,24 @@ namespace NightHunt.Gameplay.UI
             InventoryLogicEvents.OnItemUseProgress -= HandleItemUseProgress;
         }
 
-        // Event handlers from Logic Layer
-        private void HandleItemAdded(ItemInstance item)
-        {
-            RefreshInventoryGrid();
-        }
-
-        private void HandleItemRemoved(ItemInstance item, int removedQuantity)
-        {
-            RefreshInventoryGrid();
-        }
-
-        private void HandleItemQuantityChanged(ItemInstance item, int newQuantity)
-        {
-            RefreshInventoryGrid();
-        }
-
-        private void HandleInventoryChanged()
-        {
-            RefreshInventoryGrid();
-        }
-
-        private void HandleItemMoved(string itemId, int fromX, int fromY, int toX, int toY)
-        {
-            RefreshInventoryGrid();
-        }
-
-        private void HandleItemEquipped(string itemId, EquipmentSlotType slotType)
-        {
-            // Update equipment panel if needed
-            if (equipmentPanel != null)
-            {
-                equipmentPanel.RefreshSlots();
-            }
-        }
-
-        private void HandleItemUnequipped(string itemId, EquipmentSlotType slotType)
-        {
-            // Update equipment panel if needed
-            if (equipmentPanel != null)
-            {
-                equipmentPanel.RefreshSlots();
-            }
-        }
-
-        private void HandleQuickSlotAssigned(int slotIndex, string itemId)
-        {
-            // Update quick slots if needed
-            if (equipmentPanel != null)
-            {
-                equipmentPanel.RefreshQuickSlots();
-            }
-        }
-
-        private void HandleQuickSlotCleared(int slotIndex)
-        {
-            // Update quick slots if needed
-            if (equipmentPanel != null)
-            {
-                equipmentPanel.RefreshQuickSlots();
-            }
-        }
-
-        private void HandleItemUseStarted(string itemId)
-        {
-            // Show progress bar or update UI
-            Debug.Log($"[InventoryPanel] Item use started: {itemId}");
-        }
-
-        private void HandleItemUseCompleted(string itemId)
-        {
-            // Hide progress bar or update UI
-            Debug.Log($"[InventoryPanel] Item use completed: {itemId}");
-            RefreshInventoryGrid();
-        }
-
-        private void HandleItemUseCancelled(string itemId)
-        {
-            // Hide progress bar or update UI
-            Debug.Log($"[InventoryPanel] Item use cancelled: {itemId}");
-        }
-
-        private void HandleItemUseProgress(string itemId, float progress)
-        {
-            // Update progress bar
-            // TODO: Show progress bar in HUD or on item icon
-        }
-
-        /// <summary>
-        /// Initialize inventory panel
-        /// </summary>
-        public void Initialize(NetworkPlayer player, InventoryService inventory)
-        {
-            if (player == null || !player.IsLocalPlayer)
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot initialize: Not local player! player={player != null}, IsLocalPlayer={player?.IsLocalPlayer ?? false}");
-                return;
-            }
-
-            localPlayer = player;
-            inventorySystem = inventory;
-            inventoryGrid = inventorySystem?.GetGrid();
-            
-            if (inventoryGrid == null)
-            {
-                Debug.LogError($"[InventoryPanel] inventoryGrid is NULL! inventorySystem.GetGrid() returned null.");
-                Debug.LogError($"[InventoryPanel] Please ensure InventoryService has GridInventoryComponent (not ListInventoryComponent).");
-            }
-            
-            // Ensure GameObject is active
-            if (!gameObject.activeSelf)
-            {
-                gameObject.SetActive(true);
-            }
-            
-            // Verify UI is visible
-            if (!gameObject.activeInHierarchy)
-            {
-                Debug.LogError($"[InventoryPanel] GameObject is not active in hierarchy! Parent: {transform.parent?.name ?? "None"}, Root: {transform.root.name}");
-            }
-
-            // Initialize sub-panels
-            // ItemTooltip doesn't need Initialize - it's event-driven
-            if (itemTooltip != null)
-            {
-                Debug.Log("[InventoryPanel] ItemTooltip reference found");
-            }
-
-            // Initialize NestedEquipmentPanels (left and right)
-            if (nestedEquipmentLeft != null)
-            {
-                nestedEquipmentLeft.Initialize(this);
-                Debug.Log("[InventoryPanel] NestedEquipmentPanel (Left) initialized");
-            }
-            if (nestedEquipmentRight != null)
-            {
-                nestedEquipmentRight.Initialize(this);
-                Debug.Log("[InventoryPanel] NestedEquipmentPanel (Right) initialized");
-            }
-
-            if (equipmentPanel != null)
-            {
-                equipmentPanel.Initialize(this, inventorySystem);
-            }
-
-            if (lootContainerPanel != null)
-            {
-                lootContainerPanel.Initialize(this);
-            }
-
-            // Initialize TrashSlot (for dropping items from inventory, quick slots, equipment)
-            if (trashSlot != null)
-            {
-                trashSlot.Initialize(this);
-                Debug.Log("[InventoryPanel] TrashSlot initialized");
-            }
-
-
-            if (shopPanel != null)
-            {
-                shopPanel.Initialize(this);
-            }
-
-            // Initialize drag drop handler
-            Canvas canvas = GetComponentInParent<Canvas>();
-            if (dragDropHandler != null && canvas != null)
-            {
-                dragDropHandler.Initialize(this, canvas);
-            }
-
-            // Hide panel initially
-            if (panelRoot != null)
-            {
-                panelRoot.SetActive(false);
-            }
-
-            // Hide container panels initially (only equipment panel visible)
-            HideContainerPanels();
-
-            // Subscribe to inventory toggle event (if not already subscribed)
-            if (!isSubscribed)
-            {
-                SubscribeToEvents();
-            }
-            
-            // Subscribe to direct input action from UI map (for closing inventory)
-            SubscribeToInputActions();
-        }
-
-        private bool isSubscribed = false;
-
-        /// <summary>
-        /// Subscribe to inventory events (prevent duplicate subscription)
-        /// </summary>
         private void SubscribeToEvents()
         {
-            if (isSubscribed)
-            {
-                Debug.LogWarning("[InventoryPanel] Already subscribed to inventory events, skipping duplicate subscription");
-                return;
-            }
+            if (isSubscribed) return;
 
-            // Subscribe to toggle event (for opening/closing inventory)
             InventoryEvents.OnInventoryChanged += OnInventoryToggleRequested;
-            
-            // Subscribe to container opened event (auto-open inventory when container/shop is opened)
             InventoryEvents.OnLootContainerOpened += OnLootContainerOpened;
             InventoryEvents.OnShopOpened += OnShopOpened;
-            
-            // Subscribe to pickup event (auto-open inventory when item is picked up)
             InventoryEvents.OnItemPickedUp += OnItemPickedUp;
-            
-            // Subscribe to item change events (for refreshing UI when items are added/removed/changed)
             InventoryEvents.OnItemAdded += OnItemAdded;
             InventoryEvents.OnItemRemoved += OnItemRemoved;
             InventoryEvents.OnItemQuantityChanged += OnItemQuantityChanged;
             
             isSubscribed = true;
-            Debug.Log("[InventoryPanel] Subscribed to inventory events: OnInventoryChanged, OnItemAdded, OnItemRemoved, OnItemQuantityChanged");
         }
 
-        /// <summary>
-        /// Unsubscribe from inventory events
-        /// </summary>
         private void UnsubscribeFromEvents()
         {
-            if (!isSubscribed)
-                return;
+            if (!isSubscribed) return;
 
             InventoryEvents.OnInventoryChanged -= OnInventoryToggleRequested;
             InventoryEvents.OnLootContainerOpened -= OnLootContainerOpened;
@@ -379,88 +226,28 @@ namespace NightHunt.Gameplay.UI
             InventoryEvents.OnItemQuantityChanged -= OnItemQuantityChanged;
             
             isSubscribed = false;
-            Debug.Log("[InventoryPanel] Unsubscribed from all inventory events");
         }
 
-        /// <summary>
-        /// Handle item added event - refresh UI
-        /// </summary>
-        private void OnItemAdded(ItemInstance item)
-        {
-            RefreshInventoryGrid();
-        }
-
-        /// <summary>
-        /// Handle item removed event - refresh UI
-        /// </summary>
-        private void OnItemRemoved(ItemInstance item, int removedQuantity)
-        {
-            RefreshInventoryGrid();
-        }
-
-        /// <summary>
-        /// Handle item quantity changed event - refresh UI
-        /// </summary>
-        private void OnItemQuantityChanged(ItemInstance item, int newQuantity)
-        {
-            RefreshInventoryGrid();
-        }
-
-        /// <summary>
-        /// Subscribe to direct input actions from UI map (for closing inventory when UI map is active)
-        /// </summary>
         private void SubscribeToInputActions()
         {
-            if (isInputSubscribed)
-            {
-                Debug.LogWarning("[InventoryPanel] Already subscribed to input actions, skipping duplicate subscription");
-                return;
-            }
+            if (isInputSubscribed || localPlayer == null) return;
 
-            if (localPlayer == null)
-            {
-                Debug.LogWarning("[InventoryPanel] Cannot subscribe to input actions: localPlayer is null");
-                return;
-            }
-
-            // Get InputActionAsset from InputLayerManager
             var inputManager = InputLayerManager.Instance;
-            if (inputManager == null)
-            {
-                Debug.LogWarning("[InventoryPanel] InputLayerManager.Instance is null! Cannot subscribe to input actions.");
-                return;
-            }
+            if (inputManager == null) return;
 
-            // Get UI map controller
             var uiMapController = inputManager.GetActionMapController("UI");
-            if (uiMapController == null)
-            {
-                Debug.LogWarning("[InventoryPanel] UI map controller not found! Cannot subscribe to OpenInventory action.");
-                return;
-            }
+            openInventoryAction = uiMapController?.GetAction("OpenInventory");
 
-            // Get OpenInventory action directly from controller
-            openInventoryAction = uiMapController.GetAction("OpenInventory");
             if (openInventoryAction != null)
             {
                 openInventoryAction.performed += OnInventoryInputPerformed;
                 isInputSubscribed = true;
-                Debug.Log("[InventoryPanel] Subscribed to OpenInventory action from UI map (for closing inventory)");
-            }
-            else
-            {
-                Debug.LogWarning("[InventoryPanel] OpenInventory action not found in UI map! Inventory cannot be closed with Tab key when open. " +
-                               "Please ensure 'OpenInventory' action exists in UI action map in InputActionAsset.");
             }
         }
 
-        /// <summary>
-        /// Unsubscribe from input actions
-        /// </summary>
         private void UnsubscribeFromInputActions()
         {
-            if (!isInputSubscribed)
-                return;
+            if (!isInputSubscribed) return;
 
             if (openInventoryAction != null)
             {
@@ -468,45 +255,89 @@ namespace NightHunt.Gameplay.UI
             }
 
             isInputSubscribed = false;
-            Debug.Log("[InventoryPanel] Unsubscribed from input actions");
         }
 
-        /// <summary>
-        /// Handle direct input from UI map (for closing inventory)
-        /// </summary>
-        private void OnInventoryInputPerformed(InputAction.CallbackContext context)
+        #endregion
+
+        #region Event Handlers
+
+        private void HandleItemAdded(ItemInstance item) => RefreshInventoryGrid();
+        private void HandleItemRemoved(ItemInstance item, int removedQuantity) => RefreshInventoryGrid();
+        private void HandleItemQuantityChanged(ItemInstance item, int newQuantity) => RefreshInventoryGrid();
+        private void HandleInventoryChanged() => RefreshInventoryGrid();
+
+        private void HandleItemMoved(string itemId, int fromX, int fromY, int toX, int toY)
         {
-            Debug.Log($"[InventoryPanel] OnInventoryInputPerformed (from UI map) - isOpen: {isOpen}");
-            ToggleInventory();
+            // Server confirmed - keep local UI state
         }
 
-        /// <summary>
-        /// Handle inventory toggle event from input system (from Player map via InventoryEvents)
-        /// </summary>
-        private void OnInventoryToggleRequested()
+        private void HandleItemEquipped(string itemId, EquipmentSlotType slotType)
         {
-            Debug.Log($"[InventoryPanel] OnInventoryToggleRequested (from InventoryEvents) - isOpen: {isOpen}");
-            ToggleInventory();
+            equipmentPanel?.RefreshSlots();
         }
 
-        /// <summary>
-        /// Handle loot container opened event - DO NOT auto-open inventory
-        /// Container opens first (state syncs to all clients), player must press Tab to open inventory
-        /// </summary>
+        private void HandleItemUnequipped(string itemId, EquipmentSlotType slotType)
+        {
+            equipmentPanel?.RefreshSlots();
+        }
+
+        private void HandleQuickSlotAssigned(int slotIndex, string itemId)
+        {
+            equipmentPanel?.RefreshQuickSlots();
+        }
+
+        private void HandleQuickSlotCleared(int slotIndex)
+        {
+            equipmentPanel?.RefreshQuickSlots();
+        }
+
+        private void HandleItemUseStarted(string itemId)
+        {
+        }
+
+        private void HandleItemUseCompleted(string itemId) => RefreshInventoryGrid();
+
+        private void HandleItemUseCancelled(string itemId)
+        {
+        }
+
+        private void HandleItemUseProgress(string itemId, float progress)
+        {
+        }
+
+        private void OnItemAdded(ItemInstance item)
+        {
+            if (dragDropHandler == null || !dragDropHandler.IsDragging())
+            {
+                RefreshInventoryGrid();
+            }
+        }
+
+        private void OnItemRemoved(ItemInstance item, int removedQuantity)
+        {
+            if (!string.IsNullOrEmpty(item.instanceId))
+            {
+                ClearLocalItemPosition(item.instanceId);
+            }
+
+            if (dragDropHandler == null || !dragDropHandler.IsDragging())
+            {
+                RefreshInventoryGrid();
+            }
+        }
+
+        private void OnItemQuantityChanged(ItemInstance item, int newQuantity) => RefreshInventoryGrid();
+
+        private void OnInventoryInputPerformed(InputAction.CallbackContext context) => ToggleInventory();
+        private void OnInventoryToggleRequested() => ToggleInventory();
+
         private void OnLootContainerOpened(ILootContainer container)
         {
-            if (container == null)
-                return;
+            if (container == null) return;
 
-            Debug.Log($"[InventoryPanel] OnLootContainerOpened: {container.GetDisplayName()} - Container opened, but NOT auto-opening inventory. Player must press Tab to open inventory.");
+            if (!isOpen) OpenInventory();
 
-            // Container state is now OPENED (syncIsOpened = true), all clients can see it
-
-            // DO NOT auto-open inventory - player must press Tab manually
-            // LootContainerPanel will check if container is opened when inventory opens
-
-            // If inventory is already open, load container immediately
-            if (isOpen && lootContainerPanel != null)
+            if (lootContainerPanel != null)
             {
                 var lootContainer = container as NetworkLootContainer;
                 if (lootContainer != null)
@@ -514,322 +345,211 @@ namespace NightHunt.Gameplay.UI
                     lootContainerPanel.LoadContainer(lootContainer);
                     lootContainerPanel.Show();
                     SetMode(InventoryMode.Loot);
-                    Debug.Log($"[InventoryPanel] Inventory already open, loaded container into LootContainerPanel");
                 }
-            }
-            else
-            {
-                Debug.Log($"[InventoryPanel] Inventory not open, container will be loaded when player opens inventory (Tab key)");
             }
         }
 
-        /// <summary>
-        /// Handle shop opened event - auto-open inventory and load shop
-        /// </summary>
         private void OnShopOpened(object shop)
         {
-            if (shop == null)
-                return;
+            if (shop == null) return;
 
-            Debug.Log($"[InventoryPanel] OnShopOpened: {shop.GetType().Name}");
+            if (!isOpen) OpenInventory();
 
-            // No need to manually call OpenShopContainer - package already handled it
-
-            // Auto-open inventory if not already open
-            if (!isOpen)
-            {
-                OpenInventory();
-            }
-
-            // Load shop into shop panel
             if (shopPanel != null)
             {
-                // Cast to ShopContainer (specific implementation)
                 var shopContainer = shop as NightHunt.InteractionSystem.Shop.ShopContainer;
                 if (shopContainer != null)
                 {
-                    // Get shop ID (NetworkObject ID)
                     string shopId = shopContainer.NetworkObject.ObjectId.ToString();
                     shopPanel.LoadShop(shopId, shopContainer);
                     shopPanel.Show();
-                    
-                    // Switch to Shop mode (this will hide loot panel and equipment panel)
                     SetMode(InventoryMode.Shop);
                 }
             }
         }
 
-        /// <summary>
-        /// Handle item picked up event - auto-open inventory when item is picked up
-        /// </summary>
         private void OnItemPickedUp(ItemInstance item, string pickupableName)
         {
-            // Only refresh inventory grid if already open (no auto-open)
-            if (isOpen)
-            {
-                Debug.Log($"[InventoryPanel] Inventory already open, refreshing display...");
-                RefreshInventoryGrid();
+            if (isOpen) RefreshInventoryGrid();
             }
-            else
-            {
-                Debug.Log($"[InventoryPanel] Inventory is closed. Item picked up but not auto-opening inventory. Player can press Tab to open manually.");
-            }
-        }
 
-        private void Update()
-        {
-            // Input handling is done via:
-            // 1. InventoryEvents (from Player map via InteractionInputHandler) - for opening
-            // 2. Direct UI map subscription (for closing when inventory is open)
-        }
+        #endregion
 
-        /// <summary>
-        /// Toggle inventory panel
-        /// </summary>
+        #region Inventory Open/Close
+
         public void ToggleInventory()
         {
-            if (isOpen)
+            // #region agent log
+            try
             {
-                CloseInventory();
+                long ts = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                string stack = System.Environment.StackTrace;
+                // keep it single-line-ish for ndjson
+                stack = stack.Replace("\r", " ").Replace("\n", " ");
+                System.IO.File.AppendAllText(
+                    @"w:\Unity\Shotter\.cursor\debug.log",
+                    $"{{\"id\":\"log_{ts}_invui\",\"timestamp\":{ts},\"location\":\"InventoryPanel.cs:ToggleInventory\",\"message\":\"ToggleInventory called\",\"data\":{{\"isOpen\":{isOpen.ToString().ToLower()},\"currentMode\":\"{currentMode?.ToString() ?? "null"}\",\"stack\":\"{stack}\"}},\"sessionId\":\"debug-session\",\"runId\":\"run4\",\"hypothesisId\":\"UI_CLOSE\"}}\n"
+                );
             }
-            else
-            {
-                OpenInventory();
-            }
+            catch { /* ignore */ }
+            // #endregion
+            if (isOpen) CloseInventory();
+            else OpenInventory();
         }
 
-        /// <summary>
-        /// Open inventory panel
-        /// </summary>
         public void OpenInventory()
         {
-            if (isOpen)
-            {
-                Debug.Log("[InventoryPanel] OpenInventory called but inventory is already open");
-                return;
-            }
+            if (isOpen) return;
 
-            // Re-check localPlayer if null or not local
-            if (localPlayer == null || (!localPlayer.IsOwner && !localPlayer.IsLocalPlayer))
-            {
-                Debug.LogWarning($"[InventoryPanel] localPlayer is null or not local player! " +
-                    $"localPlayer={localPlayer != null}, " +
-                    $"IsOwner={localPlayer?.IsOwner ?? false}, " +
-                    $"IsLocalPlayer={localPlayer?.IsLocalPlayer ?? false}, " +
-                    $"IsSpawned={localPlayer?.IsSpawned ?? false}");
-                
-                // Try to get from PlayerUIManager
-                var uiManager = PlayerUIManager.Instance;
-                if (uiManager != null)
-                {
-                    localPlayer = uiManager.GetLocalPlayer();
-                    inventorySystem = uiManager.GetInventorySystem();
-                    Debug.Log($"[InventoryPanel] Retrieved from PlayerUIManager: " +
-                        $"localPlayer={localPlayer != null}, " +
-                        $"IsOwner={localPlayer?.IsOwner ?? false}, " +
-                        $"IsLocalPlayer={localPlayer?.IsLocalPlayer ?? false}");
-                }
-                
-                // Final check - use IsOwner as primary check (more reliable in FishNet)
-                if (localPlayer == null || (!localPlayer.IsOwner && !localPlayer.IsLocalPlayer))
-                {
-                    Debug.LogError($"[InventoryPanel] Cannot open inventory: Still not local player after retry! " +
-                        $"localPlayer={localPlayer != null}, " +
-                        $"IsOwner={localPlayer?.IsOwner ?? false}, " +
-                        $"IsLocalPlayer={localPlayer?.IsLocalPlayer ?? false}");
-                    return;
-                }
-            }
-            
-            // Ensure inventoryGrid is set before opening
-            if (inventoryGrid == null && inventorySystem != null)
-            {
-                inventoryGrid = inventorySystem.GetGrid();
-            }
-            
-            // If still null, try to get from ComponentRegistry
-            if (inventoryGrid == null && localPlayer != null)
-            {
-                if (inventorySystem == null)
-                {
-                    inventorySystem = ComponentRegistry.GetInventoryService(localPlayer);
-                }
-                if (inventorySystem != null)
-                {
-                    inventoryGrid = inventorySystem.GetGrid();
-                    Debug.Log($"[InventoryPanel] Got inventoryGrid from ComponentRegistry: {inventoryGrid != null}");
-                }
-            }
-
-            Debug.Log("[InventoryPanel] Opening inventory...");
+            if (!ValidateLocalPlayer()) return;
+            EnsureInventoryGrid();
+            SpawnGridSlotsIfNeeded();
             isOpen = true;
+            if (panelRoot != null) panelRoot.SetActive(true);
 
-            if (panelRoot != null)
-            {
-                panelRoot.SetActive(true);
-            }
-
-            // Switch input state - update both InputLayerManager (global) and InputRouter (per-player)
-            // IMPORTANT: This disables Player map and enables UI map
-            var inputManager = InputLayerManager.Instance;
-            if (inputManager != null)
-            {
-                bool transitioned = inputManager.TransitionToState(InputState.InventoryOpen);
-                Debug.Log($"[InventoryPanel] InputLayerManager transitioned to InventoryOpen state: {transitioned}");
-                
-                // After state transition, UI map should be enabled
-                // Subscribe to UI map action for closing inventory
-                if (transitioned && !isInputSubscribed)
-                {
-                    SubscribeToInputActions();
-                }
-            }
-            else
-            {
-                Debug.LogWarning("[InventoryPanel] InputLayerManager.Instance is null!");
-            }
-
-            // Also update InputRouter (per-player state management)
-            // Use ComponentRegistry instead of GetComponent (event-based, no FindObject)
-            var inputRouter = ComponentRegistry.GetInputRouter(localPlayer);
-            if (inputRouter != null)
-            {
-                inputRouter.TransitionToState(InputState.InventoryOpen);
-                Debug.Log($"[InventoryPanel] InputRouter transitioned to InventoryOpen state");
-            }
-            else
-            {
-                Debug.LogWarning("[InventoryPanel] InputRouter not found on localPlayer!");
-            }
-
-            // Refresh inventory display
+            TransitionInputState(InputState.InventoryOpen);
             RefreshInventoryGrid();
 
-            // Equipment panel (right side) ALWAYS shows when inventory is open
-            // It's part of the main inventory UI, not a mode-specific panel
-            if (equipmentPanel != null)
-            {
-                equipmentPanel.Show();
-            }
+            equipmentPanel?.Show();
 
-            // Check if any container is opened and load it into LootContainerPanel
             if (lootContainerPanel != null)
             {
                 lootContainerPanel.CheckAndLoadOpenedContainer();
-                
-                // If container was loaded, set mode to Loot, otherwise hide container panels
                 if (lootContainerPanel.IsContainerLoaded())
                 {
-                    Debug.Log($"[InventoryPanel] OpenInventory - Container loaded, setting mode to Loot");
                     SetMode(InventoryMode.Loot);
                 }
                 else
                 {
-                    Debug.Log($"[InventoryPanel] OpenInventory - No container loaded, hiding container panels");
                     HideContainerPanels();
                 }
             }
             else
             {
-                // No loot container panel, hide container panels
                 HideContainerPanels();
+                }
             }
+        private int CalculateRequiredSlotCount(int itemCount)
+                {
+            int minSlots = uiGridWidth * uiGridHeight;
+            return Mathf.Max(minSlots, itemCount + 1);
+                }
+
+        private int RoundUpToRow(int count)
+            {
+            return Mathf.CeilToInt((float)count / uiGridWidth) * uiGridWidth;
         }
 
-        /// <summary>
-        /// Close inventory panel
-        /// </summary>
+        private void EnsureEnoughSlots(int itemCount)
+                {
+            int requiredSlots = RoundUpToRow(CalculateRequiredSlotCount(itemCount));
+            if (slotUIs.Count >= requiredSlots) return;
+            CreateEmptySlots(requiredSlots - slotUIs.Count);
+            }
+
+        private void SpawnGridSlotsIfNeeded()
+            {
+            int totalSlots = uiGridWidth * uiGridHeight;
+
+            if (slotUIs.Count == totalSlots)
+                return;
+
+            ClearSlots();
+            CreateEmptySlots(totalSlots);
+            }
+
         public void CloseInventory()
         {
-            if (!isOpen)
-            {
-                Debug.Log("[InventoryPanel] CloseInventory called but inventory is already closed");
-                return;
-            }
+            if (!isOpen) return;
 
-            Debug.Log("[InventoryPanel] Closing inventory...");
+            // #region agent log
+            try
+            {
+                long ts = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                string stack = System.Environment.StackTrace;
+                stack = stack.Replace("\r", " ").Replace("\n", " ");
+                System.IO.File.AppendAllText(
+                    @"w:\Unity\Shotter\.cursor\debug.log",
+                    $"{{\"id\":\"log_{ts}_invui\",\"timestamp\":{ts},\"location\":\"InventoryPanel.cs:CloseInventory\",\"message\":\"CloseInventory called\",\"data\":{{\"currentMode\":\"{currentMode?.ToString() ?? "null"}\",\"stack\":\"{stack}\"}},\"sessionId\":\"debug-session\",\"runId\":\"run4\",\"hypothesisId\":\"UI_CLOSE\"}}\n"
+                );
+            }
+            catch { /* ignore */ }
+            // #endregion
+
             isOpen = false;
+            if (panelRoot != null) panelRoot.SetActive(false);
 
-            if (panelRoot != null)
-            {
-                panelRoot.SetActive(false);
-            }
+            TransitionInputState(InputState.PlayerAlive);
 
-            // Switch input state back - update both InputLayerManager (global) and InputRouter (per-player)
-            var inputManager = InputLayerManager.Instance;
-            if (inputManager != null)
-            {
-                bool transitioned = inputManager.TransitionToState(InputState.PlayerAlive);
-                Debug.Log($"[InventoryPanel] InputLayerManager transitioned to PlayerAlive state: {transitioned}");
-            }
-            else
-            {
-                Debug.LogWarning("[InventoryPanel] InputLayerManager.Instance is null!");
-            }
-
-            // Also update InputRouter (per-player state management)
-            // Use ComponentRegistry instead of GetComponent (event-based, no FindObject)
-            var inputRouter = ComponentRegistry.GetInputRouter(localPlayer);
-            if (inputRouter != null)
-            {
-                inputRouter.TransitionToState(InputState.PlayerAlive);
-                Debug.Log($"[InventoryPanel] InputRouter transitioned to PlayerAlive state");
-            }
-            else
-            {
-                Debug.LogWarning("[InventoryPanel] InputRouter not found on localPlayer!");
-            }
-
-            // Hide loot container UI if open, but DON'T close the container itself
-            // Container remains opened for re-interaction until player moves away
             if (currentMode == InventoryMode.Loot)
             {
-                // Just hide the loot panel UI
-                if (lootContainerPanel != null)
-                {
-                    lootContainerPanel.Hide();
-                }
-                // Script will handle panelRoot visibility internally
-                // Update mode but don't trigger container close
+                lootContainerPanel?.Hide();
                 currentMode = null;
-                Debug.Log("[InventoryPanel] Hid loot panel UI, but container remains opened for re-interaction");
             }
 
-            // Deselect item when closing inventory
-            if (selectedSlot != null)
+            SelectItem(null);
+            itemTooltip?.HideTooltip();
+            nestedEquipmentLeft?.Hide();
+            nestedEquipmentRight?.Hide();
+        }
+
+        private bool ValidateLocalPlayer()
+        {
+            if (localPlayer != null && (localPlayer.IsOwner || localPlayer.IsLocalPlayer))
             {
-                SelectItem(null);
+                return true;
             }
 
-            // Hide tooltip
-            if (itemTooltip != null)
+            var uiManager = PlayerUIManager.Instance;
+            if (uiManager != null)
             {
-                itemTooltip.HideTooltip();
+                localPlayer = uiManager.GetLocalPlayer();
+                inventorySystem = uiManager.GetInventorySystem();
             }
 
-            // Hide nested equipment panels
-            if (nestedEquipmentLeft != null)
+            if (localPlayer == null || (!localPlayer.IsOwner && !localPlayer.IsLocalPlayer))
             {
-                nestedEquipmentLeft.Hide();
+                Debug.LogError("[InventoryPanel] Cannot open inventory: Not local player");
+                return false;
             }
-            if (nestedEquipmentRight != null)
+
+            return true;
+        }
+
+        private void EnsureInventoryGrid()
             {
-                nestedEquipmentRight.Hide();
+            if (inventoryGrid == null && inventorySystem != null)
+                {
+                inventoryGrid = inventorySystem.GetGrid();
+                }
+
+            if (inventoryGrid == null && localPlayer != null)
+            {
+                inventorySystem = ComponentRegistry.GetInventoryService(localPlayer);
+                inventoryGrid = inventorySystem?.GetGrid();
             }
         }
 
-        /// <summary>
-        /// Set inventory mode (Equipment, Loot, or Shop)
-        /// NOTE: Equipment panel (right side) ALWAYS shows when inventory is open
-        /// Only shop/loot container toggles based on mode
-        /// </summary>
-        /// <summary>
-        /// Set inventory mode (Loot or Shop)
-        /// Equipment panel always shows regardless of mode
-        /// </summary>
+        private void TransitionInputState(InputState state)
+        {
+            var inputManager = InputLayerManager.Instance;
+            inputManager?.TransitionToState(state);
+
+            var inputRouter = ComponentRegistry.GetInputRouter(localPlayer);
+            inputRouter?.TransitionToState(state);
+
+            if (state == InputState.InventoryOpen && !isInputSubscribed)
+            {
+                SubscribeToInputActions();
+            }
+        }
+
+        #endregion
+
+        #region Mode Management
+
         public void SetMode(InventoryMode mode)
         {
-            // Deselect item when switching modes (to avoid confusion)
             if (currentMode != mode && selectedSlot != null)
             {
                 SelectItem(null);
@@ -837,387 +557,250 @@ namespace NightHunt.Gameplay.UI
 
             currentMode = mode;
 
-            // Equipment panel (right side) ALWAYS shows when inventory is open
-            // It's part of the main inventory UI, not a mode-specific panel
-            if (equipmentPanel != null && isOpen)
-            {
-                equipmentPanel.Show();
-            }
+            if (equipmentPanel != null && isOpen) equipmentPanel.Show();
 
             switch (mode)
             {
                 case InventoryMode.Loot:
-                    // Show loot container, hide shop
-                    if (lootContainerPanel != null)
-                    {
-                        lootContainerPanel.Show();
-                    }
-                    if (shopPanel != null)
-                    {
-                        shopPanel.Hide();
-                    }
+                    lootContainerPanel?.Show();
+                    shopPanel?.Hide();
                     break;
 
                 case InventoryMode.Shop:
-                    // Show shop, hide loot
-                    if (shopPanel != null)
-                    {
-                        shopPanel.Show();
-                    }
-                    if (lootContainerPanel != null)
-                    {
-                        lootContainerPanel.Hide();
-                    }
+                    shopPanel?.Show();
+                    lootContainerPanel?.Hide();
                     break;
             }
         }
 
-        /// <summary>
-        /// Hide both loot and shop panels (no mode active, only equipment panel visible)
-        /// </summary>
         public void HideContainerPanels()
         {
-            if (lootContainerPanel != null)
-            {
-                lootContainerPanel.Hide();
-            }
-            if (shopPanel != null)
-            {
-                shopPanel.Hide();
-            }
+            lootContainerPanel?.Hide();
+            shopPanel?.Hide();
             currentMode = null;
         }
 
-        /// <summary>
-        /// Check if selected slot is an equipped item
-        /// </summary>
-        private bool IsEquippedItem(ItemCell slot)
-        {
-            if (slot == null) return false;
+        #endregion
 
-            // Check if slot is in equipment panel
-            if (equipmentPanel != null)
+        #region Item Position Management
+
+        public void UpdateLocalItemPosition(string instanceId, int slotIndex)
             {
-                // Check if slot is part of equipment slots
-                var equipmentSlots = equipmentPanel.GetEquipmentSlots();
-                if (equipmentSlots != null)
-                {
-                    foreach (var eqSlot in equipmentSlots)
-                    {
-                        if (eqSlot != null && eqSlot == slot)
-                        {
-                            return true;
+            if (string.IsNullOrEmpty(instanceId) || slotIndex < 0) return;
+            localItemPositions[instanceId] = slotIndex;
                         }
-                    }
-                }
 
-                // Check if slot is part of weapon slots
-                var weaponSlots = equipmentPanel.GetWeaponSlots();
-                if (weaponSlots != null)
-                {
-                    foreach (var wpSlot in weaponSlots)
+        public void ClearLocalItemPosition(string instanceId)
                     {
-                        if (wpSlot != null && wpSlot == slot)
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return false;
+            if (string.IsNullOrEmpty(instanceId)) return;
+            localItemPositions.Remove(instanceId);
         }
 
-        /// <summary>
-        /// Show nested equipment panel based on item location
-        /// </summary>
-        private void ShowNestedEquipmentPanel(InventorySlot slotData, bool isEquippedItem)
-        {
-            if (slotData == null || slotData.IsEmpty)
-            {
-                // Hide both panels if no item
-                if (nestedEquipmentLeft != null) nestedEquipmentLeft.Hide();
-                if (nestedEquipmentRight != null) nestedEquipmentRight.Hide();
-                return;
-            }
+        public int GetSlotIndex(ItemCell cell) => cell == null ? -1 : slotUIs.IndexOf(cell);
 
-            // Get item config to check for equipment slots
-            var itemData = GetItemDataFromRegistry(slotData.Item.ItemId);
-
-            if (itemData == null)
-            {
-                // Hide both panels if item config not found
-                if (nestedEquipmentLeft != null) nestedEquipmentLeft.Hide();
-                if (nestedEquipmentRight != null) nestedEquipmentRight.Hide();
-                return;
-            }
-
-            // Check if item has equipment slots
-            // TODO: When ItemDataBase is extended with equipmentSlots property, use it directly
-            // Note: ItemDataBase doesn't have equipmentSlots property yet
-            // For now, assume no equipment slots until ItemDataBase is extended
-            bool hasEquipmentSlots = false;
-            // var equipmentSlots = GetItemEquipmentSlots(itemData);
-
-            if (!hasEquipmentSlots)
-            {
-                // Hide both panels if item doesn't have equipment slots
-                if (nestedEquipmentLeft != null) nestedEquipmentLeft.Hide();
-                if (nestedEquipmentRight != null) nestedEquipmentRight.Hide();
-                return;
-            }
-
-            // Show appropriate panel based on item location
-            if (isEquippedItem)
-            {
-                // Show right panel for equipped items
-                if (nestedEquipmentRight != null)
-                {
-                    nestedEquipmentRight.ShowForItem(slotData);
-                }
-                if (nestedEquipmentLeft != null)
-                {
-                    nestedEquipmentLeft.Hide();
-                }
-            }
-            else
-            {
-                // Show left panel for inventory items
-                if (nestedEquipmentLeft != null)
-                {
-                    nestedEquipmentLeft.ShowForItem(slotData);
-                }
-                if (nestedEquipmentRight != null)
-                {
-                    nestedEquipmentRight.Hide();
-                }
-            }
-        }
-
-        /// <summary>
-        /// Get equipment slots from item config
-        /// </summary>
-        private List<string> GetItemEquipmentSlots(ItemConfigData itemConfig)
-        {
-            if (itemConfig == null) return null;
-
-            // Check if item has equipment slots defined
-            if (itemConfig.equipmentSlots != null && itemConfig.equipmentSlots.Count > 0)
-            {
-                // Return list of equipment slot IDs
-                List<string> slotIds = new List<string>();
-                foreach (var slotConfig in itemConfig.equipmentSlots)
-                {
-                    if (slotConfig != null && !string.IsNullOrEmpty(slotConfig.slotId))
-                    {
-                        slotIds.Add(slotConfig.slotId);
-                    }
-                }
-                return slotIds.Count > 0 ? slotIds : null;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Refresh inventory grid display
-        /// </summary>
-        /// <summary>
-        /// Get slot index from ItemCell (for network events)
-        /// </summary>
-        public int GetSlotIndex(ItemCell cell)
-        {
-            if (cell == null)
-                return -1;
-            return slotUIs.IndexOf(cell);
-        }
-
-        /// <summary>
-        /// Get grid position from cell index in list (for events)
-        /// </summary>
         public (int x, int y) GetGridPositionFromIndex(int index)
         {
-            int uiGridWidth = 4; // Default grid width
             return (index % uiGridWidth, index / uiGridWidth);
         }
 
+        #endregion
+
+        #region Grid Refresh
+
         public void RefreshInventoryGrid()
         {
-            // Try to refresh inventoryGrid reference if null
-            if (inventoryGrid == null)
+            if (!EnsureGridReferences())
+                return;
+
+            var allItems = inventoryGrid.Items.ToList();
+
+            EnsureEnoughSlots(allItems.Count);
+
+            // Clear all current slot contents before re-placing items to avoid "ghost" items
+            foreach (var slotUI in slotUIs)
             {
-                // Try to get from inventorySystem
-                if (inventorySystem != null)
+                if (slotUI == null) continue;
+                slotUI.SetSlot(new InventorySlot());
+                slotUI.UpdateDisplay();
+            }
+
+            CleanupLocalPositions(allItems);
+            var itemPlacements = CalculateItemPlacements(allItems);
+            PlaceItems(itemPlacements);
+        }
+
+
+        //  CalculateItemPlacements - Prioritize local positions
+        private List<(ItemInstance, int)> CalculateItemPlacements(List<ItemInstance> allItems)
+        {
+            var placements = new List<(ItemInstance, int)>();
+            var usedSlots = new HashSet<int>();
+
+            // PRIORITY 1: Items with local positions (by instanceId)
+            foreach (var item in allItems)
+            {
+                if (string.IsNullOrEmpty(item.instanceId))
+                    continue;
+
+                if (localItemPositions.TryGetValue(item.instanceId, out int targetSlot))
                 {
-                    inventoryGrid = inventorySystem.GetGrid();
-                }
-                
-                // If still null, try to get inventorySystem from localPlayer
-                if (inventoryGrid == null && localPlayer != null)
-                {
-                    inventorySystem = ComponentRegistry.GetInventoryService(localPlayer);
-                    if (inventorySystem != null)
+                    if (targetSlot >= 0 && targetSlot < slotUIs.Count &&
+                        !usedSlots.Contains(targetSlot))
                     {
-                        inventoryGrid = inventorySystem.GetGrid();
+                        placements.Add((item, targetSlot));
+                        usedSlots.Add(targetSlot);
                     }
                 }
-                
-                // If still null, try to get from PlayerUIManager
-                if (inventoryGrid == null)
+            }
+
+            // PRIORITY 2: New items without local positions
+            foreach (var item in allItems)
                 {
-                    var uiManager = PlayerUIManager.Instance;
-                    if (uiManager != null)
+                // Nếu item chưa có instanceId (vd: item spawn cũ), vẫn phải hiển thị
+                if (string.IsNullOrEmpty(item.instanceId))
+                {
+                    for (int i = 0; i < slotUIs.Count; i++)
                     {
-                        localPlayer = uiManager.GetLocalPlayer();
-                        inventorySystem = uiManager.GetInventorySystem();
-                        if (inventorySystem != null)
+                        if (!usedSlots.Contains(i))
                         {
-                            inventoryGrid = inventorySystem.GetGrid();
+                            placements.Add((item, i));
+                            usedSlots.Add(i);
+                            break;
+                        }
+                    }
+                    continue;
+                }
+
+                // Item có instanceId nhưng chưa có local position
+                if (!localItemPositions.ContainsKey(item.instanceId))
+                {
+                    for (int i = 0; i < slotUIs.Count; i++)
+                    {
+                        if (!usedSlots.Contains(i))
+                        {
+                            placements.Add((item, i));
+                            usedSlots.Add(i);
+                            localItemPositions[item.instanceId] = i; // Save new position
+                            break;
                         }
                     }
                 }
+            }
+
+            return placements;
+        }
+        private void PlaceItems(List<(ItemInstance item, int targetSlotIndex)> placements)
+        {
+            foreach (var (item, targetSlotIndex) in placements)
+        {
+                if (targetSlotIndex < 0 || targetSlotIndex >= slotUIs.Count)
+                    continue;
+
+                var itemData = GetItemDataFromRegistry(item.itemDataId);
+                if (itemData == null)
+                    continue;
+
+                var slot = new InventorySlot();
+                // Preserve per-instance identity for local layout
+                slot.SetItem(itemData, item.quantity, item.instanceId);
+
+                var slotUI = slotUIs[targetSlotIndex];
+                slotUI.SetSlot(slot);
+                slotUI.UpdateDisplay();
+                    }
+                }
+        private bool EnsureGridReferences()
+        {
+                if (inventoryGrid == null)
+                {
+                inventoryGrid = inventorySystem?.GetGrid() ??
+                                ComponentRegistry.GetInventoryService(localPlayer)?.GetGrid() ??
+                                PlayerUIManager.Instance?.GetInventorySystem()?.GetGrid();
             }
             
             if (inventoryGrid == null)
             {
-                Debug.LogError("[InventoryPanel] RefreshInventoryGrid: inventoryGrid is still NULL after refresh attempts! Cannot refresh UI.");
-                Debug.LogError("[InventoryPanel] Please ensure InventoryPanel.Initialize() was called with valid InventoryService.");
-                return;
+                Debug.LogError("[InventoryPanel] Cannot refresh: inventoryGrid is NULL");
+                return false;
             }
             
             if (inventoryGridParent == null)
             {
-                Debug.LogError("[InventoryPanel] RefreshInventoryGrid: inventoryGridParent is NULL! Cannot refresh UI.");
-                return;
+                Debug.LogError("[InventoryPanel] Cannot refresh: inventoryGridParent is NULL");
+                return false;
             }
 
-            // Get all items from inventory (not based on grid position)
-            var allItems = inventoryGrid.Items;
-            
-            // Calculate how many slots we need
-            int defaultSlotCount = uiGridWidth * uiGridHeight;
-            int totalSlotsNeeded = Mathf.Max(defaultSlotCount, allItems?.Count ?? 0);
-            
-            // Clear existing slots
+            return true;
+        }
+
+        private void ClearSlots()
+        {
             foreach (var slotUI in slotUIs)
             {
-                if (slotUI != null)
-                {
-                    Destroy(slotUI.gameObject);
+                if (slotUI != null) Destroy(slotUI.gameObject);
                 }
-            }
-            slotUIs.Clear();
 
+            slotUIs.Clear();
+        }
+
+        private void CreateEmptySlots(int count)
+        {
             if (inventorySlotPrefab == null)
             {
-                Debug.LogError("[InventoryPanel] inventorySlotPrefab is NULL! Cannot create slots.");
+                Debug.LogError("[InventoryPanel] inventorySlotPrefab is NULL");
                 return;
             }
 
-            int itemIndex = 0;
-            int slotCreated = 0;
-            
-            // Create slots: first create default grid (4x3), then add extra if needed
-            for (int slotIndex = 0; slotIndex < totalSlotsNeeded; slotIndex++)
+            for (int i = 0; i < count; i++)
             {
-                int x = slotIndex % uiGridWidth;
-                int y = slotIndex / uiGridWidth;
-                
-                // Create wrapper InventorySlot for UI compatibility
-                InventorySlot slot = new InventorySlot();
-                
-                // Fill slot with item if available
-                if (allItems != null && itemIndex < allItems.Count)
-                {
-                    var item = allItems[itemIndex];
-                    
-                    // Load ItemDataBase directly from ItemDataRegistry
-                    var itemData = GetItemDataFromRegistry(item.itemDataId);
-                    
-                    if (itemData != null)
-                    {
-                        slot.SetItem(itemData, item.quantity);
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[InventoryPanel] Item NOT FOUND in ItemDataRegistry: {item.itemDataId}");
-                    }
-                    
-                    itemIndex++;
-                }
-
-                // Create slot UI
                 GameObject slotObj = Instantiate(inventorySlotPrefab, inventoryGridParent);
-                slotObj.SetActive(true); // Ensure prefab is active even if it was disabled
-                ItemCell slotUI = slotObj.GetComponent<ItemCell>();
-                if (slotUI == null)
-                {
-                    slotUI = slotObj.AddComponent<ItemCell>();
-                }
+                slotObj.SetActive(true);
 
-                // Initialize with ItemCellLocation.Inventory and index in list
-                slotUI.Initialize(slot, this, ItemCellLocation.Inventory, slotUIs.Count);
+                ItemCell slotUI = slotObj.GetComponent<ItemCell>() ?? slotObj.AddComponent<ItemCell>();
+                slotUI.Initialize(new InventorySlot(), this, ItemCellLocation.Inventory, slotUIs.Count);
                 slotUIs.Add(slotUI);
-            }
-            
-            // Auto-select first item if available
-            if (slotUIs.Count > 0)
-            {
-                // Find first slot with item
-                ItemCell firstItemSlot = null;
-                foreach (var slotUI in slotUIs)
-                {
-                    if (slotUI != null && !slotUI.IsEmpty())
-                    {
-                        firstItemSlot = slotUI;
-                        break;
-                    }
-                }
-                
-                // REMOVED: Auto-select first item - user requested to disable this
-                // No longer auto-select first item when opening inventory
-                if (itemTooltip != null)
-                {
-                    itemTooltip.HideTooltip();
-                }
-            }
-            else
-            {
-                // No slots created - hide tooltip
-                if (itemTooltip != null)
-                {
-                    itemTooltip.HideTooltip();
-                    Debug.Log("[InventoryPanel] No slots created - hiding tooltip");
-                }
             }
         }
 
-        /// <summary>
-        /// Select item slot (can be null to deselect)
-        /// </summary>
+        private void PopulateSlots(List<ItemInstance> allItems)
+                {
+            if (allItems == null || allItems.Count == 0)
+                    {
+                itemTooltip?.HideTooltip();
+                return;
+                    }
+
+            CleanupLocalPositions(allItems);
+            var itemPlacements = CalculateItemPlacements(allItems);
+            PlaceItems(itemPlacements);
+        }
+
+        private void CleanupLocalPositions(List<ItemInstance> allItems)
+                {
+            var itemsToRemove = new List<string>();
+            foreach (var kvp in localItemPositions)
+            {
+                bool exists = allItems.Exists(item => item.instanceId == kvp.Key);
+                if (!exists) itemsToRemove.Add(kvp.Key);
+            }
+
+            itemsToRemove.ForEach(id => localItemPositions.Remove(id));
+                }
+
+        #endregion
+
+        #region Item Selection & Tooltip
+
         public void SelectItem(ItemCell slot)
         {
-            // Deselect previous
             if (selectedSlot != null)
             {
                 selectedSlot.SetSelected(false);
-                // Hide tooltip for previous selection
-                if (itemTooltip != null)
-                {
-                    itemTooltip.HideTooltip();
+                itemTooltip?.HideTooltip();
+                nestedEquipmentLeft?.Hide();
+                nestedEquipmentRight?.Hide();
                 }
-                // Hide nested equipment panels for previous selection
-                if (nestedEquipmentLeft != null)
-                {
-                    nestedEquipmentLeft.Hide();
-                }
-                if (nestedEquipmentRight != null)
-                {
-                    nestedEquipmentRight.Hide();
-                }
-            }
 
-            // Select new
             selectedSlot = slot;
             if (selectedSlot != null)
             {
@@ -1226,164 +809,166 @@ namespace NightHunt.Gameplay.UI
                 var slotData = selectedSlot.GetSlot();
                 if (slotData != null && !slotData.IsEmpty)
                 {
-                    // Show tooltip for selected item
-                    if (itemTooltip != null)
-                    {
-                        // Get mouse position for tooltip positioning
-                        Vector2 mousePos = Vector2.zero;
-                        if (UnityEngine.InputSystem.Mouse.current != null)
+                    ShowTooltipForSlot(slotData);
+                    ShowNestedEquipmentPanel(slotData, IsEquippedItem(selectedSlot));
+                }
+            }
+        }
+
+        private void ShowTooltipForSlot(InventorySlot slotData)
+        {
+            if (itemTooltip != null && UnityEngine.InputSystem.Mouse.current != null)
                         {
-                            mousePos = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
-                        }
+                Vector2 mousePos = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
                         itemTooltip.ShowTooltip(slotData, mousePos);
                     }
+        }
 
-                    // Show nested equipment panel if item has equipment slots
-                    // Determine which panel to show based on where item is located
-                    bool isEquippedItem = IsEquippedItem(selectedSlot);
-                    ShowNestedEquipmentPanel(slotData, isEquippedItem);
-                }
+        public void ShowNestedEquipmentPanelOnHover(InventorySlot slotData, bool isEquippedItem)
+        {
+            if (selectedSlot != null && selectedSlot.GetSlot() == slotData) return;
+            ShowNestedEquipmentPanel(slotData, isEquippedItem);
+        }
+
+        public void HideNestedEquipmentPanelOnUnhover()
+        {
+            if (selectedSlot == null)
+            {
+                nestedEquipmentLeft?.Hide();
+                nestedEquipmentRight?.Hide();
             }
+        }
+
+        private void ShowNestedEquipmentPanel(InventorySlot slotData, bool isEquippedItem)
+        {
+            if (slotData == null || slotData.IsEmpty)
+            {
+                nestedEquipmentLeft?.Hide();
+                nestedEquipmentRight?.Hide();
+                return;
+            }
+
+            var itemData = GetItemDataFromRegistry(slotData.Item.ItemId);
+            if (itemData == null || !HasEquipmentSlots(itemData))
+                {
+                nestedEquipmentLeft?.Hide();
+                nestedEquipmentRight?.Hide();
+                return;
+            }
+
+            if (isEquippedItem)
+            {
+                nestedEquipmentRight?.ShowForItem(slotData);
+                nestedEquipmentLeft?.Hide();
+                }
             else
             {
-                // Deselect - hide tooltip and nested equipment panels
-                if (itemTooltip != null)
-                {
-                    itemTooltip.HideTooltip();
-                }
-                if (nestedEquipmentLeft != null)
-                {
-                    nestedEquipmentLeft.Hide();
-                }
-                if (nestedEquipmentRight != null)
-                {
-                    nestedEquipmentRight.Hide();
+                nestedEquipmentLeft?.ShowForItem(slotData);
+                nestedEquipmentRight?.Hide();
                 }
             }
-        }
 
-        /// <summary>
-        /// Get ItemTooltip reference (for InventorySlotUI)
-        /// </summary>
-        public ItemTooltip GetItemTooltip()
+        private bool HasEquipmentSlots(ItemDataBase itemData)
         {
-            return itemTooltip;
-        }
+            if (itemData == null) return false;
 
-        /// <summary>
-        /// Get LootContainerPanel reference (for DragDropHandler)
-        /// </summary>
-        public LootContainerPanel GetLootContainerPanel()
+            // 1. Check if EquipmentDataBase with attachment slots
+            if (itemData is EquipmentDataBase equipmentData)
+            {
+                if (equipmentData.AttachmentSlots != null &&
+                    equipmentData.AttachmentSlots.Length > 0)
         {
-            return lootContainerPanel;
-        }
+                    return true;
+                }
+            }
 
-        /// <summary>
-        /// Get ShopPanel reference
-        /// </summary>
-        public ShopPanel GetShopPanel()
+            // 2. Fallback: All weapons can have attachments
+            if (itemData.Category == ItemCategory.Weapon)
+            {
+                return true;
+            }
+
+            // 3. Check equipment categories
+            if (itemData.Category == ItemCategory.Armor ||
+                itemData.Category == ItemCategory.Helmet ||
+                itemData.Category == ItemCategory.Backpack)
+            {
+                // Check if this specific equipment has attachment slots
+                if (itemData is EquipmentDataBase eqData)
         {
-            return shopPanel;
+                    return eqData.AttachmentSlots != null && eqData.AttachmentSlots.Length > 0;
+                }
+            }
+
+            return false;
         }
 
-        /// <summary>
-        /// Handle slot right click
-        /// </summary>
+        public bool IsEquippedItem(ItemCell slot)
+        {
+            if (slot == null || equipmentPanel == null) return false;
+
+            var equipmentSlots = equipmentPanel.GetEquipmentSlots();
+            if (equipmentSlots != null && System.Array.Exists(equipmentSlots, s => s == slot))
+        {
+                return true;
+            }
+
+            var weaponSlots = equipmentPanel.GetWeaponSlots();
+            return weaponSlots != null && System.Array.Exists(weaponSlots, s => s == slot);
+        }
+
+        #endregion
+
+        #region Slot Interactions
+
         public void HandleSlotRightClick(ItemCell slot)
         {
-            if (slot == null || slot.IsEmpty())
-                return;
+            if (slot == null || slot.IsEmpty()) return;
 
-            // TODO: Implement right click actions (split stack, drop, etc.)
             var slotData = slot.GetSlot();
             if (slotData != null && !slotData.IsEmpty)
             {
-                // Right click actions (split stack, drop, etc.)
                 UseItem(slotData);
             }
         }
 
-        /// <summary>
-        /// Handle slot double click - split logic cho inventory open vs HUD/home
-        /// </summary>
         public void HandleSlotDoubleClick(ItemCell slot)
         {
-            if (slot == null || slot.IsEmpty())
-                return;
+            if (slot == null || slot.IsEmpty()) return;
 
             var slotData = slot.GetSlot();
-            if (slotData == null || slotData.IsEmpty)
-                return;
+            if (slotData == null || slotData.IsEmpty) return;
 
             var itemData = GetItemDataFromRegistry(slotData.Item.ItemId);
-            if (itemData == null)
-                return;
+            if (itemData == null) return;
 
-            bool isInventoryOpen = isOpen;
-            ItemCellLocation location = slot.GetLocation();
-
-            if (isInventoryOpen)
+            if (isOpen)
             {
-                // Inventory panel is open - handle equip/use logic
-                HandleDoubleClickInInventory(slot, itemData, location);
+                HandleDoubleClickInInventory(slot, itemData, slot.GetLocation());
             }
             else
             {
-                // HUD/Home - inventory closed - handle use/reload logic
-                HandleDoubleClickInHUD(slot, itemData, location);
+                HandleDoubleClickInHUD(slot, itemData, slot.GetLocation());
             }
         }
         
-
-        /// <summary>
-        /// Use item based on item type - fires UI event instead of direct call
-        /// </summary>
         private void UseItem(InventorySlot slotData)
         {
-            if (slotData == null || slotData.IsEmpty)
-                return;
-
-            var item = slotData.Item;
-            if (item == null)
-                return;
-
-            // Fire UI event - Logic layer will handle it
-            InventoryUIEvents.RequestUseItem(item.ItemId);
-        }
-
-        /// <summary>
-        /// Get ItemDataBase from ItemDataRegistry
-        /// </summary>
-        private NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase GetItemDataFromRegistry(string itemId)
-        {
-            if (string.IsNullOrEmpty(itemId))
-                return null;
-
-            var registry = NightHunt.InteractionSystem.Core.Abstractions.ItemDataRegistry.Load();
-            if (registry != null)
-            {
-                return registry.GetById(itemId);
+            if (slotData?.Item == null) return;
+            InventoryUIEvents.RequestUseItem(slotData.Item.ItemId);
             }
 
-            return null;
-        }
-
-        /// <summary>
-        /// Handle double click in inventory panel (open)
-        /// Auto-equip weapon/equipment/attachment, use consumable
-        /// </summary>
-        private void HandleDoubleClickInInventory(ItemCell slot, NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase itemData, ItemCellLocation location)
+        private void HandleDoubleClickInInventory(ItemCell slot,
+            NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase itemData, ItemCellLocation location)
         {
-            var category = itemData.Category;
-
-            switch (category)
+            switch (itemData.Category)
             {
                 case NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Consumable:
                     if (itemData.IsConsumable)
                     {
-                        Debug.Log($"[InventoryPanel] TODO: Implement consumable usage for {itemData.ItemId}");
                         InventoryUIEvents.RequestUseItem(itemData.ItemId);
                     }
+
                     break;
 
                 case NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Weapon:
@@ -1393,59 +978,31 @@ namespace NightHunt.Gameplay.UI
                 case NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Armor:
                 case NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Helmet:
                 case NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Backpack:
-                    AutoEquipEquipment(slot, category);
+                    AutoEquipEquipment(slot, itemData.Category);
                     break;
 
                 case NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Attachment:
                     AutoEquipAttachment(slot);
                     break;
-
-                case NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Misc:
-                    Debug.Log($"[InventoryPanel] TODO: Implement throwable/other misc item usage for {itemData.ItemId}");
-                    break;
             }
         }
 
-        /// <summary>
-        /// Handle double click in HUD/Home (inventory closed)
-        /// Use consumable/throwable, reload weapon từ quick/weapon slots
-        /// </summary>
-        private void HandleDoubleClickInHUD(ItemCell slot, NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase itemData, ItemCellLocation location)
+        private void HandleDoubleClickInHUD(ItemCell slot,
+            NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase itemData, ItemCellLocation location)
         {
-            var category = itemData.Category;
-
-            switch (location)
-            {
-                case ItemCellLocation.QuickSlot:
-                    if (itemData.IsConsumable)
+            if (location == ItemCellLocation.QuickSlot && itemData.IsConsumable)
                     {
-                        Debug.Log($"[InventoryPanel] TODO: Implement consumable usage from quick slot for {itemData.ItemId}");
                         InventoryUIEvents.RequestUseItem(itemData.ItemId);
                     }
-                    else if (category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Misc)
-                    {
-                        Debug.Log($"[InventoryPanel] TODO: Implement throwable usage from quick slot for {itemData.ItemId}");
-                        InventoryUIEvents.RequestUseItem(itemData.ItemId);
-                    }
-                    break;
-
-                case ItemCellLocation.Weapon:
-                    Debug.Log($"[InventoryPanel] TODO: Implement weapon reload for {itemData.ItemId}");
-                    break;
-            }
         }
 
-        /// <summary>
-        /// Auto-equip weapon: Find empty weapon slot hoặc replace first weapon
-        /// </summary>
+        #endregion
+
+        #region Equipment Operations
+
         private void AutoEquipWeapon(ItemCell slot)
         {
-            var equipmentPanel = GetEquipmentPanel();
-            if (equipmentPanel == null)
-            {
-                Debug.LogWarning("[InventoryPanel] AutoEquipWeapon: EquipmentPanel is null!");
-                return;
-            }
+            if (equipmentPanel == null) return;
 
             // Find empty weapon slot
             for (int i = 0; i < 2; i++)
@@ -1458,21 +1015,14 @@ namespace NightHunt.Gameplay.UI
                 }
             }
 
-            // No empty slot - replace first weapon
+            // Replace first weapon
             EquipWeapon(slot, 0);
         }
 
-        /// <summary>
-        /// Auto-equip equipment: Find empty equipment slot hoặc replace matching equipment
-        /// </summary>
-        private void AutoEquipEquipment(ItemCell slot, NightHunt.InteractionSystem.Core.Abstractions.ItemCategory category)
+        private void AutoEquipEquipment(ItemCell slot,
+            NightHunt.InteractionSystem.Core.Abstractions.ItemCategory category)
         {
-            var equipmentPanel = GetEquipmentPanel();
-            if (equipmentPanel == null)
-            {
-                Debug.LogWarning("[InventoryPanel] AutoEquipEquipment: EquipmentPanel is null!");
-                return;
-            }
+            if (equipmentPanel == null) return;
 
             EquipmentSlotType slotType = GetEquipmentSlotTypeFromCategory(category);
             var equipmentSlot = equipmentPanel.GetEquipmentSlot(slotType);
@@ -1482,18 +1032,13 @@ namespace NightHunt.Gameplay.UI
             }
         }
 
-        /// <summary>
-        /// Auto-equip attachment: Find compatible attachment slot
-        /// </summary>
         private void AutoEquipAttachment(ItemCell slot)
         {
-            Debug.Log($"[InventoryPanel] TODO: Implement AutoEquipAttachment for {slot.GetSlot().Item.ItemId}");
+            // TODO: Implement attachment equipping
         }
 
-        /// <summary>
-        /// Get EquipmentSlotType from ItemCategory
-        /// </summary>
-        private EquipmentSlotType GetEquipmentSlotTypeFromCategory(NightHunt.InteractionSystem.Core.Abstractions.ItemCategory category)
+        private EquipmentSlotType GetEquipmentSlotTypeFromCategory(
+            NightHunt.InteractionSystem.Core.Abstractions.ItemCategory category)
         {
             return category switch
             {
@@ -1504,286 +1049,86 @@ namespace NightHunt.Gameplay.UI
             };
         }
 
-        // Drag & Drop handlers
-        public void StartDrag(ItemCell slot, PointerEventData eventData)
-        {
-            if (dragDropHandler != null)
-            {
-                dragDropHandler.StartDrag(slot, eventData);
-            }
-        }
-
-        public void UpdateDrag(PointerEventData eventData)
-        {
-            if (dragDropHandler != null)
-            {
-                dragDropHandler.UpdateDrag(eventData);
-            }
-        }
-
-        public void EndDrag(ItemCell sourceSlot, PointerEventData eventData)
-        {
-            if (dragDropHandler != null)
-            {
-                dragDropHandler.EndDrag(sourceSlot, eventData);
-            }
-        }
-
-        /// <summary>
-        /// Move item between slots
-        /// </summary>
-        /// <summary>
-        /// Move or swap item between inventory slots
-        /// If target slot has item, swap them; otherwise just move
-        /// </summary>
-        public void MoveItem(ItemCell from, ItemCell to)
-        {
-            if (from == null || to == null || from.IsEmpty())
-                return;
-
-            var fromSlot = from.GetSlot();
-            if (fromSlot == null || fromSlot.IsEmpty)
-                return;
-
-            // Get indices in list (logic chỉ cần trong List/Array)
-            int fromIndex = slotUIs.IndexOf(from);
-            int toIndex = slotUIs.IndexOf(to);
-
-            // Only move if both are valid inventory cells
-            if (fromIndex >= 0 && toIndex >= 0 && from.GetLocation() == ItemCellLocation.Inventory && to.GetLocation() == ItemCellLocation.Inventory)
-            {
-                var (fromX, fromY) = GetGridPositionFromIndex(fromIndex);
-                var (toX, toY) = GetGridPositionFromIndex(toIndex);
-                var toSlot = to.GetSlot();
-                
-                // Check if target slot has item - if yes, swap; if no, just move
-                if (toSlot != null && !toSlot.IsEmpty)
-                {
-                    // SWAP: Both slots have items - swap their positions
-                    Debug.Log($"[InventoryPanel] Swapping items: {fromSlot.Item.ItemId} (at {fromX},{fromY}) <-> {toSlot.Item.ItemId} (at {toX},{toY})");
-                    InventoryUIEvents.RequestSwapItems(fromSlot.Item.ItemId, fromX, fromY, toSlot.Item.ItemId, toX, toY);
-                }
-                else
-                {
-                    // MOVE: Target is empty - just move item
-                    Debug.Log($"[InventoryPanel] Moving item: {fromSlot.Item.ItemId} from ({fromX},{fromY}) to ({toX},{toY})");
-                    InventoryUIEvents.RequestMoveItem(fromSlot.Item.ItemId, fromX, fromY, toX, toY);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Swap items between two inventory slots
-        /// </summary>
-        public void SwapItems(ItemCell from, ItemCell to)
-        {
-            if (from == null || to == null || from.IsEmpty() || to.IsEmpty())
-                return;
-
-            var fromSlot = from.GetSlot();
-            var toSlot = to.GetSlot();
-            
-            if (fromSlot == null || fromSlot.IsEmpty || toSlot == null || toSlot.IsEmpty)
-                return;
-
-            // Get indices in list (logic chỉ cần trong List/Array)
-            int fromIndex = slotUIs.IndexOf(from);
-            int toIndex = slotUIs.IndexOf(to);
-            
-            if (fromIndex < 0 || toIndex < 0 || from.GetLocation() != ItemCellLocation.Inventory || to.GetLocation() != ItemCellLocation.Inventory)
-                return;
-
-            var (fromX, fromY) = GetGridPositionFromIndex(fromIndex);
-            var (toX, toY) = GetGridPositionFromIndex(toIndex);
-            {
-                Debug.Log($"[InventoryPanel] SwapItems: {fromSlot.Item.ItemId} <-> {toSlot.Item.ItemId}");
-                InventoryUIEvents.RequestSwapItems(fromSlot.Item.ItemId, fromX, fromY, toSlot.Item.ItemId, toX, toY);
-            }
-        }
-
-        /// <summary>
-        /// Assign item to quick slot (only consumable items like medkit, grenade, etc.)
-        /// </summary>
-        public void AssignQuickSlot(ItemCell slot, int quickSlotIndex)
-        {
-            if (slot == null || slot.IsEmpty())
-                return;
-
-            var slotData = slot.GetSlot();
-            if (slotData == null || slotData.IsEmpty)
-                return;
-
-            // Get item data to validate item type
-            var itemData = GetItemDataFromRegistry(slotData.Item.ItemId);
-            if (itemData == null)
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot assign item {slotData.Item.ItemId} to quick slot - item data not found");
-                return;
-            }
-
-            // Quick slot is only for consumable items (medkit, grenade, etc.)
-            // Check if item is consumable using ItemDataBase.IsConsumable
-            if (!itemData.IsConsumable)
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot assign {slotData.Item.ItemId} to quick slot - only consumable items can be assigned to quick slots!");
-                // TODO: Show error message to user (e.g., via UI notification)
-                return;
-            }
-
-            // Fire UI event - Logic layer will handle it
-            InventoryUIEvents.RequestAssignQuickSlot(slotData.Item.ItemId, quickSlotIndex);
-        }
-
-        /// <summary>
-        /// Equip weapon to weapon slot (not equipment slot)
-        /// </summary>
         public void EquipWeapon(ItemCell slot, int weaponSlotIndex)
         {
-            if (slot == null || slot.IsEmpty())
-                return;
+            if (slot == null || slot.IsEmpty() || equipmentPanel == null) return;
 
             var slotData = slot.GetSlot();
-            if (slotData == null || slotData.IsEmpty)
-                return;
+            var itemData = GetItemDataFromRegistry(slotData?.Item?.ItemId);
 
-            // Get item data to validate item type
-            var itemData = GetItemDataFromRegistry(slotData.Item.ItemId);
-            if (itemData == null)
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot equip weapon {slotData.Item.ItemId} - item data not found");
+            if (itemData == null ||
+                itemData.Category != NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Weapon)
+        {
+                Debug.LogWarning("[InventoryPanel] Only weapons can be equipped to weapon slots");
                 return;
             }
 
-            // Weapon slot is only for weapons
-            // Check if item is a weapon by checking Category
-            bool isWeapon = false;
-            if (itemData.Category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Weapon)
+            var weaponSlotUI = equipmentPanel.GetWeaponSlot(weaponSlotIndex);
+            if (weaponSlotUI != null && !weaponSlotUI.IsEmpty())
             {
-                isWeapon = true;
-                Debug.Log($"[InventoryPanel] Item {slotData.Item.ItemId} is a weapon (Category: Weapon)");
+                // Swap weapons
+                var equippedWeaponSlot = weaponSlotUI.GetSlot();
+                int slotIndex = slotUIs.IndexOf(slot);
+                var (inventoryX, inventoryY) = GetGridPositionFromIndex(slotIndex);
+
+                InventoryUIEvents.RequestEquipWeapon(slotData.Item.ItemId, weaponSlotIndex);
+                InventoryUIEvents.RequestMoveItemToSlot(equippedWeaponSlot.Item.ItemId, inventoryX, inventoryY);
             }
             else
             {
-                // TODO: Check equipment slots when ItemDataBase is extended with equipmentSlots property
-                // Fallback: Check if item has weapon-related slotId in equipmentSlots (e.g., "Weapon", "Primary", "Secondary")
-                // if (itemData.equipmentSlots != null)
-                // {
-                //     foreach (var slotConfig in itemData.equipmentSlots)
-                //     {
-                //         if (slotConfig != null)
-                //         {
-                //             string slotId = slotConfig.slotId?.ToLower() ?? "";
-                //             if (slotId == "weapon" || slotId == "primary" || slotId == "secondary")
-                //             {
-                //                 isWeapon = true;
-                //                 Debug.Log($"[InventoryPanel] Item {slotData.Item.ItemId} is a weapon (has weapon slotId: {slotConfig.slotId})");
-                //                 break;
-                //             }
-                //         }
-                //     }
-                // }
-            }
-            
-            if (!isWeapon)
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot equip {slotData.Item.ItemId} to weapon slot - only weapons can be equipped to weapon slots!");
-                // TODO: Show error message to user (e.g., via UI notification)
-                return;
+                // Equip to empty slot
+                InventoryUIEvents.RequestEquipWeapon(slotData.Item.ItemId, weaponSlotIndex);
             }
 
-            // Check if weapon slot already has weapon - if yes, swap
-            var equipmentPanel = GetEquipmentPanel();
-            if (equipmentPanel != null)
+            StartCoroutine(RefreshInventoryAfterMove());
+        }
+
+        public void EquipItem(ItemCell slot, ItemCell equipmentSlot)
             {
-                var weaponSlotUI = equipmentPanel.GetWeaponSlot(weaponSlotIndex);
-                if (weaponSlotUI != null && !weaponSlotUI.IsEmpty())
+            if (slot == null || slot.IsEmpty() || equipmentSlot == null) return;
+
+            var slotData = slot.GetSlot();
+            var itemData = GetItemDataFromRegistry(slotData?.Item?.ItemId);
+
+            if (itemData == null) return;
+
+            EquipmentSlotType slotType = equipmentSlot.GetEquipmentSlotType();
+            if (!CanEquipItemToSlot(itemData, slotType)) return;
+
+            var equippedSlot = equipmentSlot.GetSlot();
+            if (equippedSlot != null && !equippedSlot.IsEmpty)
                 {
-                    // SWAP: Weapon slot has weapon - swap them
-                    var equippedWeaponSlot = weaponSlotUI.GetSlot();
-                    if (equippedWeaponSlot != null && !equippedWeaponSlot.IsEmpty)
-                    {
-                        int slotIndex = slotUIs.IndexOf(slot);
-                        var (inventoryX, inventoryY) = slotIndex >= 0 ? GetGridPositionFromIndex(slotIndex) : (0, 0);
-                        var equippedWeaponId = equippedWeaponSlot.Item.ItemId;
-                        var equippedWeaponQuantity = equippedWeaponSlot.Quantity;
-                        
-                        // Both are weapons - can swap
-                        Debug.Log($"[InventoryPanel] Swapping weapons: {slotData.Item.ItemId} (inventory at {inventoryX},{inventoryY}) <-> {equippedWeaponId} (equipped)");
-                        
-                        // Step 1: Remove new weapon from inventory (temporarily)
-                        // Step 2: Add old weapon to inventory at new weapon's position
-                        // Step 3: Equip new weapon
-                        
-                        if (inventorySystem != null)
-                        {
-                            // Get item data for old weapon to add it back
-                            var oldWeaponData = GetItemDataFromRegistry(equippedWeaponId);
-                            
-                            if (oldWeaponData != null)
-                            {
-                                // Move new weapon out first (will be equipped)
-                                // Then add old weapon to that position
-                                // Then equip new weapon
-                                
-                                // For swap: We need to:
-                                // 1. Remove new weapon from inventory (it will be equipped)
-                                // 2. Add old weapon to inventory at new weapon's position
-                                // 3. Equip new weapon
-                                
-                                // Since EquipWeapon will handle removing from inventory,
-                                // we just need to add old weapon to the position first
-                                // But we can't add if slot is occupied...
-                                
-                                // Better approach: 
-                                // 1. Move new weapon to a temp position (or just let EquipWeapon handle it)
-                                // 2. Add old weapon to new weapon's original position
-                                // 3. Equip new weapon
-                                
-                                // Actually, simplest: 
-                                // 1. Equip new weapon (removes it from inventory)
-                                // 2. Add old weapon to the now-empty slot
-                                
-                                bool equipSuccess = inventorySystem.EquipWeapon(weaponSlotIndex, slotData.Item.ItemId);
-                                if (equipSuccess)
-                                {
-                                    // Now add old weapon to inventory at the position where new weapon was
-                                    Debug.Log($"[InventoryPanel] Weapon swap: Equipped {slotData.Item.ItemId}, adding old weapon {equippedWeaponId} to inventory slot ({inventoryX}, {inventoryY})");
-                                    // Add old weapon to inventory at the position
-                                    InventoryUIEvents.RequestMoveItemToSlot(equippedWeaponId, inventoryX, inventoryY);
-                                }
-                            }
-                        }
-                    }
+                // Swap equipment
+                int slotIndex = slotUIs.IndexOf(slot);
+                var (inventoryX, inventoryY) = GetGridPositionFromIndex(slotIndex);
+
+                InventoryUIEvents.RequestUnequipItem(equippedSlot.Item.ItemId, slotType);
+                InventoryUIEvents.RequestEquipItem(slotData.Item.ItemId, slotType);
+                InventoryUIEvents.RequestMoveItemToSlot(equippedSlot.Item.ItemId, inventoryX, inventoryY);
                 }
                 else
                 {
-                    // EQUIP: Weapon slot is empty - just equip
-                    Debug.Log($"[InventoryPanel] Equipping weapon {slotData.Item.ItemId} to weapon slot {weaponSlotIndex}");
-                    if (inventorySystem != null)
-                    {
-                        bool equipSuccess = inventorySystem.EquipWeapon(weaponSlotIndex, slotData.Item.ItemId);
-                        if (!equipSuccess)
-                        {
-                            Debug.LogWarning($"[InventoryPanel] EquipWeapon failed for {slotData.Item.ItemId} to slot {weaponSlotIndex}");
-                        }
-                        else
-                        {
-                            Debug.Log($"[InventoryPanel] EquipWeapon succeeded for {slotData.Item.ItemId} to slot {weaponSlotIndex}");
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogWarning($"[InventoryPanel] EquipWeapon: inventorySystem is null!");
-                    }
-                }
+                // Equip to empty slot
+                InventoryUIEvents.RequestEquipItem(slotData.Item.ItemId, slotType);
             }
-            else
+
+            RefreshInventoryGrid();
+        }
+
+        private bool CanEquipItemToSlot(NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase itemData,
+            EquipmentSlotType slotType)
+        {
+            if (itemData == null) return false;
+
+            if (itemData.Category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Weapon)
             {
-                Debug.LogWarning($"[InventoryPanel] EquipWeapon: equipmentPanel is null!");
+                return false;
             }
-            
-            // Refresh inventory after equip to sync with server
-            StartCoroutine(RefreshInventoryAfterMove());
+
+            var category = itemData.Category;
+            return category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Armor ||
+                   category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Helmet ||
+                   category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Backpack;
         }
 
         /// <summary>
@@ -1791,7 +1136,6 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         public void SwapWeapon(ItemCell slot, int weaponSlotIndex)
         {
-            // Same logic as EquipWeapon but explicitly for swap
             EquipWeapon(slot, weaponSlotIndex);
         }
 
@@ -1800,244 +1144,7 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         public void SwapEquipment(ItemCell slot, ItemCell equipmentSlot)
         {
-            // Same logic as EquipItem but explicitly for swap
             EquipItem(slot, equipmentSlot);
-        }
-
-        /// <summary>
-        /// Move item from inventory to container
-        /// </summary>
-        public void MoveItemToContainer(ItemCell sourceCell, ItemCell targetCell)
-        {
-            if (sourceCell == null || targetCell == null || sourceCell.IsEmpty())
-                return;
-
-            var slotData = sourceCell.GetSlot();
-            if (slotData == null || slotData.IsEmpty)
-                return;
-
-            var lootPanel = GetLootContainerPanel();
-            if (lootPanel == null || !lootPanel.IsContainerLoaded())
-            {
-                Debug.LogWarning("[InventoryPanel] MoveItemToContainer: LootContainerPanel is null or container not loaded");
-                return;
-            }
-
-            // Get grid position from source cell index
-            int sourceIndex = slotUIs.IndexOf(sourceCell);
-            var (fromX, fromY) = sourceIndex >= 0 ? GetGridPositionFromIndex(sourceIndex) : (0, 0);
-
-            // Fire UI event - Logic layer will handle it
-            lootPanel.MoveItemToContainer(slotData.Item.ItemId, fromX, fromY);
-        }
-
-        /// <summary>
-        /// Move item from container to inventory
-        /// </summary>
-        public void MoveItemFromContainer(ItemCell sourceCell, ItemCell targetCell)
-        {
-            if (sourceCell == null || targetCell == null || sourceCell.IsEmpty())
-                return;
-
-            var slotData = sourceCell.GetSlot();
-            if (slotData == null || slotData.IsEmpty)
-                return;
-
-            var lootPanel = GetLootContainerPanel();
-            if (lootPanel == null || !lootPanel.IsContainerLoaded())
-            {
-                Debug.LogWarning("[InventoryPanel] MoveItemFromContainer: LootContainerPanel is null or container not loaded");
-                return;
-            }
-
-            // Get grid position from target cell index
-            int targetIndex = slotUIs.IndexOf(targetCell);
-            var (toX, toY) = targetIndex >= 0 ? GetGridPositionFromIndex(targetIndex) : (0, 0);
-
-            // Fire UI event - Logic layer will handle it
-            lootPanel.MoveItemFromContainer(slotData.Item.ItemId, toX, toY);
-            
-            // Refresh inventory after move to sync with server
-            StartCoroutine(RefreshInventoryAfterMove());
-        }
-        
-        /// <summary>
-        /// Refresh inventory after move operation (wait for server sync)
-        /// </summary>
-        private IEnumerator RefreshInventoryAfterMove()
-        {
-            yield return new WaitForSeconds(0.2f); // Wait for server RPC to process
-            RefreshInventoryGrid();
-        }
-
-        /// <summary>
-        /// Check if item can be equipped to slot type
-        /// Equipment slots are for equipment items (helmet, armor, etc.) - NOT weapons
-        /// Weapons go to weapon slots, not equipment slots
-        /// </summary>
-        private bool CanEquipItemToSlot(NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase itemData, EquipmentSlotType slotType)
-        {
-            if (itemData == null)
-                return false;
-
-            // Equipment slots are NOT for weapons - weapons have their own weapon slots
-            // Check if item is a weapon by checking Category
-            if (itemData.Category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Weapon)
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot equip weapon {itemData.ItemId} to equipment slot {slotType} - weapons must go to weapon slots!");
-                return false;
-            }
-
-            // Equipment slots are for equipment items (helmet, armor, backpack, etc.)
-            // Check Category to see if it's an equipment type
-            var category = itemData.Category;
-            bool isEquipment = category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Armor ||
-                              category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Helmet ||
-                              category == NightHunt.InteractionSystem.Core.Abstractions.ItemCategory.Backpack;
-
-            if (!isEquipment)
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot equip {itemData.ItemId} (Category: {category}) to equipment slot {slotType} - only equipment items can be equipped!");
-                return false;
-            }
-
-            // TODO: When ItemDataBase is extended with equipmentSlots, check if item can be equipped to this slot type
-            // For now, allow if it's an equipment category
-            return true;
-        }
-
-        /// <summary>
-        /// Equip item to equipment slot (with swap support)
-        /// If equipment slot already has item, swap them
-        /// </summary>
-        public void EquipItem(ItemCell slot, ItemCell equipmentSlot)
-        {
-            if (slot == null || slot.IsEmpty() || equipmentSlot == null)
-                return;
-
-            var slotData = slot.GetSlot();
-            if (slotData == null || slotData.IsEmpty)
-                return;
-
-            // Get item data
-            var itemData = GetItemDataFromRegistry(slotData.Item.ItemId);
-            if (itemData == null)
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot equip item {slotData.Item.ItemId} - item data not found");
-                return;
-            }
-
-            // Validate item can be equipped to this slot type
-            EquipmentSlotType slotType = equipmentSlot.GetEquipmentSlotType();
-            if (!CanEquipItemToSlot(itemData, slotType))
-            {
-                Debug.LogWarning($"[InventoryPanel] Cannot equip {slotData.Item.ItemId} to {slotType} slot - item is not compatible with this slot type!");
-                return;
-            }
-
-            // Check if equipment slot already has item - if yes, swap
-            var equippedSlot = equipmentSlot.GetSlot();
-            if (equippedSlot != null && !equippedSlot.IsEmpty)
-            {
-                // SWAP: Equipment slot has item - swap them
-                int slotIndex = slotUIs.IndexOf(slot);
-                var (inventoryX, inventoryY) = slotIndex >= 0 ? GetGridPositionFromIndex(slotIndex) : (0, 0);
-                
-                // Validate items are same type for swap
-                if (AreItemsCompatibleForSwap(slotData.Item, equippedSlot.Item, slotType))
-                {
-                    Debug.Log($"[InventoryPanel] Swapping equipment: {slotData.Item.ItemId} (inventory) <-> {equippedSlot.Item.ItemId} (equipped)");
-                    // Unequip current item to inventory slot position
-                    InventoryUIEvents.RequestUnequipItem(equippedSlot.Item.ItemId, slotType);
-                    // Equip new item
-                    InventoryUIEvents.RequestEquipItem(slotData.Item.ItemId, slotType);
-                    // Move unequipped item to inventory slot
-                    InventoryUIEvents.RequestMoveItemToSlot(equippedSlot.Item.ItemId, inventoryX, inventoryY);
-                }
-                else
-                {
-                    Debug.LogWarning($"[InventoryPanel] Cannot swap - items are not compatible: {slotData.Item.ItemId} and {equippedSlot.Item.ItemId}");
-                }
-            }
-            else
-            {
-                // EQUIP: Equipment slot is empty - just equip
-                Debug.Log($"[InventoryPanel] Equipping item: {slotData.Item.ItemId} to {slotType} slot");
-                InventoryUIEvents.RequestEquipItem(slotData.Item.ItemId, slotType);
-            }
-            
-            RefreshInventoryGrid();
-        }
-
-        /// <summary>
-        /// Check if two items are compatible for swap (same type: weapon with weapon, vest with vest, etc.)
-        /// </summary>
-        private bool AreItemsCompatibleForSwap(InventoryItem item1, InventoryItem item2, EquipmentSlotType slotType)
-        {
-            if (item1 == null || item2 == null)
-                return false;
-
-            // Same item ID - always compatible
-            if (item1.ItemId == item2.ItemId)
-                return true;
-
-            // Get item configs
-            var itemData1 = GetItemDataFromRegistry(item1.ItemId);
-            var itemData2 = GetItemDataFromRegistry(item2.ItemId);
-
-            if (itemData1 == null || itemData2 == null)
-                return false;
-
-            // Check if both items can be equipped to the same slot type
-            // This ensures they are the same category (vest with vest, armor with armor, etc.)
-            bool item1CanEquip = CanEquipItemToSlot(itemData1, slotType);
-            bool item2CanEquip = CanEquipItemToSlot(itemData2, slotType);
-
-            return item1CanEquip && item2CanEquip;
-        }
-
-        /// <summary>
-        /// Drop item
-        /// </summary>
-        public void DropItem(string itemId, int quantity)
-        {
-            if (inventorySystem != null)
-            {
-                inventorySystem.DropItem(itemId, quantity);
-                RefreshInventoryGrid();
-            }
-        }
-
-        /// <summary>
-        /// Move item from quick slot to inventory
-        /// </summary>
-        public void MoveFromQuickSlotToInventory(int quickSlotIndex, ItemCell targetSlot)
-        {
-            if (inventorySystem == null || targetSlot == null)
-                return;
-
-            var quickSlots = inventorySystem.GetQuickSlots();
-            if (quickSlotIndex < 0 || quickSlotIndex >= quickSlots.Length)
-                return;
-
-            var quickSlot = quickSlots[quickSlotIndex];
-            if (quickSlot == null || quickSlot.IsEmpty)
-                return;
-
-            // Move item from quick slot to inventory
-            int targetIndex = slotUIs.IndexOf(targetSlot);
-            var (toX, toY) = targetIndex >= 0 ? GetGridPositionFromIndex(targetIndex) : (0, 0);
-            if (toX >= 0 && toY >= 0)
-            {
-                // Find empty slot or swap
-                var grid = inventorySystem.GetGrid();
-                if (grid == null) return;
-                
-                var targetItemInstance = grid.GetItemAt(toX, toY);
-                
-                Debug.LogWarning("[InventoryPanel] MoveFromQuickSlotToInventory: Quick slot system not yet implemented");
-                RefreshInventoryGrid();
-            }
         }
 
         /// <summary>
@@ -2045,15 +1152,12 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         public void UnequipWeaponToInventory(int weaponSlotIndex, ItemCell targetSlot)
         {
-            if (inventorySystem == null || targetSlot == null)
-                return;
+            if (inventorySystem == null || targetSlot == null) return;
 
-            // TODO: Get equipped weapon from combat system
             int targetIndex = slotUIs.IndexOf(targetSlot);
-            var (toX, toY) = targetIndex >= 0 ? GetGridPositionFromIndex(targetIndex) : (0, 0);
+            var (toX, toY) = GetGridPositionFromIndex(targetIndex);
             if (toX >= 0 && toY >= 0)
             {
-                // Similar logic to MoveFromQuickSlotToInventory
                 RefreshInventoryGrid();
             }
         }
@@ -2063,67 +1167,274 @@ namespace NightHunt.Gameplay.UI
         /// </summary>
         public void UnequipItemToInventory(ItemCell sourceSlot, ItemCell targetSlot)
         {
-            if (sourceSlot == null || targetSlot == null || inventorySystem == null)
-                return;
+            if (sourceSlot == null || targetSlot == null || inventorySystem == null) return;
 
             var slot = sourceSlot.GetSlot();
-            if (slot == null || slot.IsEmpty)
-                return;
+            if (slot == null || slot.IsEmpty) return;
 
-            // Move equipment item to inventory
             int targetIndex = slotUIs.IndexOf(targetSlot);
-            var (toX, toY) = targetIndex >= 0 ? GetGridPositionFromIndex(targetIndex) : (0, 0);
+            var (toX, toY) = GetGridPositionFromIndex(targetIndex);
             if (toX >= 0 && toY >= 0)
             {
                 var grid = inventorySystem.GetGrid();
                 if (grid == null) return;
-                
-                var targetItemInstance = grid.GetItemAt(toX, toY);
-                
-                Debug.LogWarning("[InventoryPanel] UnequipItemToInventory: Equipment system not yet fully implemented");
+
                 RefreshInventoryGrid();
             }
         }
 
         /// <summary>
-        /// Check if inventory is open
+        /// Move item from quick slot to inventory
         /// </summary>
-        public bool IsOpen() => isOpen;
-
-        /// <summary>
-        /// Get current mode (null if no mode active, only equipment panel visible)
-        /// </summary>
-        public InventoryMode? GetMode() => currentMode;
-
-        /// <summary>
-        /// Get equipment panel
-        /// </summary>
-        public EquipmentPanel GetEquipmentPanel() => equipmentPanel;
-
-        /// <summary>
-        /// Force disable panel (for non-owner players)
-        /// </summary>
-        public void ForceDisable()
+        public void MoveFromQuickSlotToInventory(int quickSlotIndex, ItemCell targetSlot)
         {
-            isOpen = false;
-            if (panelRoot != null)
+            if (inventorySystem == null || targetSlot == null) return;
+
+            var quickSlots = inventorySystem.GetQuickSlots();
+            if (quickSlotIndex < 0 || quickSlotIndex >= quickSlots.Length) return;
+
+            var quickSlot = quickSlots[quickSlotIndex];
+            if (quickSlot == null || quickSlot.IsEmpty) return;
+
+            int targetIndex = slotUIs.IndexOf(targetSlot);
+            var (toX, toY) = GetGridPositionFromIndex(targetIndex);
+            if (toX >= 0 && toY >= 0)
             {
-                panelRoot.SetActive(false);
+                var grid = inventorySystem.GetGrid();
+                if (grid == null) return;
+
+                RefreshInventoryGrid();
+            }
+        }
+
+        #endregion
+
+        #region Drag & Drop
+
+        public void StartDrag(ItemCell slot, PointerEventData eventData)
+        {
+            dragDropHandler?.StartDrag(slot, eventData);
+        }
+
+        public void UpdateDrag(PointerEventData eventData)
+        {
+            dragDropHandler?.UpdateDrag(eventData);
+        }
+
+        public void EndDrag(ItemCell sourceSlot, PointerEventData eventData)
+        {
+            dragDropHandler?.EndDrag(sourceSlot, eventData);
+            }
+
+        public void MoveItem(ItemCell from, ItemCell to)
+        {
+            if (from == null || to == null || from.IsEmpty()) return;
+
+            var fromSlot = from.GetSlot();
+            if (fromSlot == null || fromSlot.IsEmpty) return;
+
+            int fromIndex = slotUIs.IndexOf(from);
+            int toIndex = slotUIs.IndexOf(to);
+
+            if (fromIndex >= 0 && toIndex >= 0 &&
+                from.GetLocation() == ItemCellLocation.Inventory &&
+                to.GetLocation() == ItemCellLocation.Inventory)
+                        {
+                var (fromX, fromY) = GetGridPositionFromIndex(fromIndex);
+                var (toX, toY) = GetGridPositionFromIndex(toIndex);
+                var toSlot = to.GetSlot();
+
+                if (toSlot != null && !toSlot.IsEmpty)
+                {
+                    InventoryUIEvents.RequestSwapItems(fromSlot.Item.ItemId, fromX, fromY, toSlot.Item.ItemId, toX,
+                        toY);
+                }
+                else
+                {
+                    InventoryUIEvents.RequestMoveItem(fromSlot.Item.ItemId, fromX, fromY, toX, toY);
+                }
+            }
+        }
+
+        public void SwapItems(ItemCell from, ItemCell to)
+                    {
+            if (from == null || to == null || from.IsEmpty() || to.IsEmpty()) return;
+
+            var fromSlot = from.GetSlot();
+            var toSlot = to.GetSlot();
+
+            if (fromSlot == null || fromSlot.IsEmpty || toSlot == null || toSlot.IsEmpty) return;
+
+            int fromIndex = slotUIs.IndexOf(from);
+            int toIndex = slotUIs.IndexOf(to);
+
+            if (fromIndex < 0 || toIndex < 0 ||
+                from.GetLocation() != ItemCellLocation.Inventory ||
+                to.GetLocation() != ItemCellLocation.Inventory) return;
+
+            var (fromX, fromY) = GetGridPositionFromIndex(fromIndex);
+            var (toX, toY) = GetGridPositionFromIndex(toIndex);
+
+            InventoryUIEvents.RequestSwapItems(fromSlot.Item.ItemId, fromX, fromY, toSlot.Item.ItemId, toX, toY);
+        }
+
+        #endregion
+
+        #region Container Operations
+
+        public void MoveItemToContainer(ItemCell sourceCell, ItemCell targetCell)
+        {
+            if (sourceCell == null || targetCell == null || sourceCell.IsEmpty()) return;
+
+            var slotData = sourceCell.GetSlot();
+            if (slotData == null || slotData.IsEmpty) return;
+
+            var lootPanel = GetLootContainerPanel();
+            // #region agent log
+            long timestamp11 = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            System.IO.File.AppendAllText(@"w:\Unity\Shotter\.cursor\debug.log", 
+                $"{{\"id\":\"log_{timestamp11}_inventory\",\"timestamp\":{timestamp11},\"location\":\"InventoryPanel.cs:MoveItemToContainer\",\"message\":\"MoveItemToContainer called\",\"data\":{{\"itemId\":\"{slotData.Item.ItemId}\",\"lootPanel\":{lootPanel != null},\"isContainerLoaded\":{lootPanel?.IsContainerLoaded() ?? false}}},\"sessionId\":\"debug-session\",\"runId\":\"run2\",\"hypothesisId\":\"F\"}}\n");
+            // #endregion
+            if (lootPanel == null || !lootPanel.IsContainerLoaded()) return;
+
+            int sourceIndex = slotUIs.IndexOf(sourceCell);
+            var (fromX, fromY) = GetGridPositionFromIndex(sourceIndex);
+
+            // Clear local position when moving item to container
+            var instanceId = slotData.Item.InstanceId;
+            if (!string.IsNullOrEmpty(instanceId))
+            {
+                ClearLocalItemPosition(instanceId);
+            }
+
+            lootPanel.MoveItemToContainer(slotData.Item.ItemId, fromX, fromY);
+        }
+
+        public void MoveItemFromContainer(ItemCell sourceCell, ItemCell targetCell)
+        {
+            if (sourceCell == null || targetCell == null || sourceCell.IsEmpty()) return;
+
+            var slotData = sourceCell.GetSlot();
+            if (slotData == null || slotData.IsEmpty) return;
+
+            var lootPanel = GetLootContainerPanel();
+            // #region agent log
+            long timestamp12 = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            System.IO.File.AppendAllText(@"w:\Unity\Shotter\.cursor\debug.log", 
+                $"{{\"id\":\"log_{timestamp12}_inventory\",\"timestamp\":{timestamp12},\"location\":\"InventoryPanel.cs:MoveItemFromContainer\",\"message\":\"MoveItemFromContainer called\",\"data\":{{\"itemId\":\"{slotData.Item.ItemId}\",\"lootPanel\":{lootPanel != null},\"isContainerLoaded\":{lootPanel?.IsContainerLoaded() ?? false}}},\"sessionId\":\"debug-session\",\"runId\":\"run2\",\"hypothesisId\":\"F\"}}\n");
+            // #endregion
+            if (lootPanel == null || !lootPanel.IsContainerLoaded()) return;
+
+            int targetIndex = slotUIs.IndexOf(targetCell);
+            var (toX, toY) = GetGridPositionFromIndex(targetIndex);
+
+            // Save target position BEFORE server sync so RefreshInventoryGrid() can use it
+            // This ensures item appears at the correct position when OnItemAdded fires
+            var instanceId = slotData.Item.InstanceId;
+            if (!string.IsNullOrEmpty(instanceId))
+            {
+                UpdateLocalItemPosition(instanceId, targetIndex);
+            }
+
+            lootPanel.MoveItemFromContainer(slotData.Item.ItemId, toX, toY);
+        }
+
+        #endregion
+
+        #region Quick Slot & Drop
+
+        public void AssignQuickSlot(ItemCell slot, int quickSlotIndex)
+        {
+            if (slot == null || slot.IsEmpty()) return;
+
+            var slotData = slot.GetSlot();
+            if (slotData == null || slotData.IsEmpty) return;
+
+            var itemData = GetItemDataFromRegistry(slotData.Item.ItemId);
+            if (itemData == null || !itemData.IsConsumable)
+            {
+                Debug.LogWarning("[InventoryPanel] Only consumable items can be assigned to quick slots");
+                return;
+            }
+
+            InventoryUIEvents.RequestAssignQuickSlot(slotData.Item.ItemId, quickSlotIndex);
+        }
+
+        public void DropItem(string itemId, int quantity)
+        {
+            if (inventorySystem == null || localPlayer == null) return;
+
+            ItemInstance? itemInstance = null;
+            var allItems = inventoryGrid?.Items;
+            if (allItems != null)
+            {
+                foreach (var item in allItems)
+                {
+                    if (item.itemDataId == itemId)
+                    {
+                        itemInstance = item.WithQuantity(Mathf.Min(item.quantity, quantity));
+                        break;
+                    }
+                }
+            }
+
+            if (!itemInstance.HasValue) return;
+
+            var itemDropHandler = localPlayer.GetComponent<NightHunt.InteractionSystem.Items.Drop.ItemDropHandler>() ??
+                                  localPlayer
+                                      .GetComponentInChildren<NightHunt.InteractionSystem.Items.Drop.ItemDropHandler>();
+
+            if (itemDropHandler != null && itemDropHandler.IsSpawned)
+            {
+                Vector3 dropPosition = localPlayer.transform.position +
+                                       localPlayer.transform.forward * 1.5f +
+                                       Vector3.up * 0.5f;
+
+                itemDropHandler.DropItem(itemInstance.Value, dropPosition);
+                // Clear local layout for this specific instance
+                var instanceId = itemInstance.Value.instanceId;
+                if (!string.IsNullOrEmpty(instanceId))
+                {
+                    ClearLocalItemPosition(instanceId);
+                }
             }
             else
             {
-                gameObject.SetActive(false);
+                InventoryUIEvents.RequestRemoveItem(itemId, quantity);
             }
         }
+
+        #endregion
+
+        #region Utilities
+
+        private NightHunt.InteractionSystem.Core.Abstractions.ItemDataBase GetItemDataFromRegistry(string itemId)
+        {
+            if (string.IsNullOrEmpty(itemId)) return null;
+
+            var registry = NightHunt.InteractionSystem.Core.Abstractions.ItemDataRegistry.Load();
+            return registry?.GetById(itemId);
+        }
+
+        private IEnumerator RefreshInventoryAfterMove()
+        {
+            yield return new WaitForSeconds(0.2f);
+                RefreshInventoryGrid();
+            }
+
+        public void ForceDisable()
+        {
+            isOpen = false;
+            if (panelRoot != null) panelRoot.SetActive(false);
+            else gameObject.SetActive(false);
+            }
+
+        #endregion
     }
 
-    /// <summary>
-    /// Inventory panel modes
-    /// </summary>
     public enum InventoryMode
     {
-        Loot,   // Hiển thị loot container panel (khi đang loot container)
-        Shop    // Hiển thị shop panel (khi đang mua bán)
+        Loot,
+        Shop
     }
 } 
- 

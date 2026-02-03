@@ -13,15 +13,17 @@ namespace NightHunt.Gameplay.Inventory
     public class InventoryItem
     {
         public string ItemId;
+        public string InstanceId;
         public ItemDataBase ItemData; // Direct reference to ItemDataBase from ItemDataRegistry
         public int Quantity;
 
         public InventoryItem() { }
 
-        public InventoryItem(string itemId, int quantity)
+        public InventoryItem(string itemId, int quantity, string instanceId = null)
         {
             ItemId = itemId;
             Quantity = quantity;
+            InstanceId = instanceId;
             // Load ItemDataBase from ItemDataRegistry
             var registry = ItemDataRegistry.Load();
             if (registry != null)
@@ -43,7 +45,7 @@ namespace NightHunt.Gameplay.Inventory
         /// <summary>
         /// Set item using ItemDataBase directly (no conversion needed)
         /// </summary>
-        public void SetItem(ItemDataBase itemData, int quantity)
+        public void SetItem(ItemDataBase itemData, int quantity, string instanceId = null)
         {
             if (itemData == null || quantity <= 0)
             {
@@ -51,7 +53,7 @@ namespace NightHunt.Gameplay.Inventory
                 return;
             }
 
-            item = new InventoryItem(itemData.ItemId, quantity)
+            item = new InventoryItem(itemData.ItemId, quantity, instanceId)
             {
                 ItemData = itemData
             };

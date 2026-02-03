@@ -19,17 +19,7 @@ MonoBehaviour:
   m_PlatformBuildProfile:
     rid: 4600310714778517787
   m_OverrideGlobalSceneList: 1
-  m_Scenes:
-  - m_enabled: 1
-    m_path: Assets/Plugins/FishNet/Demos/SceneManager/Additive Scenes/Scenes/AdditiveScenes_Start.unity
-  - m_enabled: 1
-    m_path: Assets/Plugins/FishNet/Demos/SceneManager/Additive Scenes/Scenes/AdditiveScenes_0.unity
-  - m_enabled: 1
-    m_path: Assets/Plugins/FishNet/Demos/SceneManager/Additive Scenes/Scenes/AdditiveScenes_1.unity
-  - m_enabled: 1
-    m_path: Assets/Plugins/FishNet/Demos/SceneManager/Additive Scenes/Scenes/AdditiveScenes_2.unity
-  - m_enabled: 1
-    m_path: Assets/Plugins/FishNet/Demos/SceneManager/Additive Scenes/Scenes/AdditiveScenes_3.unity
+  m_Scenes: []
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
     m_Settings:
