@@ -12,7 +12,6 @@ using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.Gameplay.PredatorPrey;
 using NightHunt.Gameplay.Zone;
-using NightHunt.Gameplay.Loot;
 using NightHunt.Gameplay.AntiCamping;
 using NightHunt.Gameplay.Vision;
 using NightHunt.Gameplay.Spawn;
@@ -32,7 +31,6 @@ namespace NightHunt.Gameplay.Core
         [SerializeField] private ScoringSystem scoringSystem;
         [SerializeField] private PredatorPreySystem predatorPreySystem;
         [SerializeField] private ZoneSystem zoneSystem;
-        [SerializeField] private LootSpawner lootSpawner;
         [SerializeField] private AntiCampingSystem antiCampingSystem;
         [SerializeField] private VisionSystem visionSystem;
 
@@ -131,8 +129,6 @@ namespace NightHunt.Gameplay.Core
             if (zoneSystem == null)
                 zoneSystem = ZoneSystem.Instance;
 
-            if (lootSpawner == null)
-                lootSpawner = FindFirstObjectByType<LootSpawner>();
 
             if (antiCampingSystem == null)
                 antiCampingSystem = FindFirstObjectByType<AntiCampingSystem>();
@@ -161,9 +157,6 @@ namespace NightHunt.Gameplay.Core
         {
             Debug.Log("[GameplayBootstrap] Activating Phase 1 systems...");
 
-            // Spawn/Activate LootSpawner
-            SpawnOrActivateSystem(lootSpawner, "LootSpawner");
-            
             //Spawn/Activate TeamSystem
             SpawnOrActivateSystem(teamSystem, "TeamSystem");
             
@@ -335,7 +328,6 @@ namespace NightHunt.Gameplay.Core
             out ScoringSystem scoring,
             out PredatorPreySystem predatorPrey,
             out ZoneSystem zone,
-            out LootSpawner loot,
             out AntiCampingSystem antiCamping,
             out VisionSystem vision)
         {
@@ -343,7 +335,6 @@ namespace NightHunt.Gameplay.Core
             scoring = scoringSystem;
             predatorPrey = predatorPreySystem;
             zone = zoneSystem;
-            loot = lootSpawner;
             antiCamping = antiCampingSystem;
             vision = visionSystem;
         }

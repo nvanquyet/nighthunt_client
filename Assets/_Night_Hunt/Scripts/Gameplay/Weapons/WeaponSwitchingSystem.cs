@@ -1,7 +1,6 @@
 using UnityEngine;
 using NightHunt.Data;
 using NightHunt.Gameplay.Character;
-using NightHunt.Gameplay.Inventory;
 
 namespace NightHunt.Gameplay.Weapons
 {
@@ -20,7 +19,6 @@ namespace NightHunt.Gameplay.Weapons
         [SerializeField] private GameObject[] weaponModels = new GameObject[2];
 
         private CharacterCombat characterCombat;
-        private InventorySystem inventorySystem;
         private WeaponConfigData[] weaponSlots;
         private int currentWeaponIndex = 0;
         private bool isSwitching = false;
@@ -28,7 +26,6 @@ namespace NightHunt.Gameplay.Weapons
         private void Awake()
         {
             characterCombat = GetComponent<CharacterCombat>();
-            inventorySystem = GetComponent<InventorySystem>();
             weaponSlots = new WeaponConfigData[maxWeaponSlots];
         }
 

@@ -49,7 +49,6 @@ namespace NightHunt.UI
         private CharacterStats characterStats;
         private CharacterCombat characterCombat;
         private CharacterPredictedMovement _characterPredictedMovement;
-        private Gameplay.Inventory.InventorySystem inventorySystem;
 
         private void Start()
         {
@@ -86,7 +85,6 @@ namespace NightHunt.UI
                     characterStats = player.GetComponent<CharacterStats>();
                     characterCombat = player.GetComponent<CharacterCombat>();
                     _characterPredictedMovement = player.GetComponent<CharacterPredictedMovement>();
-                    inventorySystem = player.GetComponent<Gameplay.Inventory.InventorySystem>();
                     break;
                 }
             }
@@ -180,31 +178,31 @@ namespace NightHunt.UI
         /// </summary>
         private void UpdateWeightDisplay()
         {
-            if (inventorySystem == null || weightBar == null) return;
-
-            float currentWeight = inventorySystem.GetCurrentWeight();
-            float maxWeight = inventorySystem.GetWeightCapacity();
-            float weightPercentage = maxWeight > 0 ? currentWeight / maxWeight : 0f;
-
-            weightBar.value = weightPercentage;
-
-            if (weightText != null)
-            {
-                weightText.text = $"{currentWeight:F1}/{maxWeight:F1} kg";
-            }
-
-            // Color based on weight
-            if (weightBar != null)
-            {
-                var fillImage = weightBar.fillRect?.GetComponent<Image>();
-                if (fillImage != null)
-                {
-                    if (weightPercentage < 0.8f)
-                        fillImage.color = normalWeightColor;
-                    else
-                        fillImage.color = Color.Lerp(normalWeightColor, heavyWeightColor, (weightPercentage - 0.8f) / 0.2f);
-                }
-            }
+            // // if (inventorySystem == null || weightBar == null) return;
+            // //
+            // // float currentWeight = inventorySystem.GetCurrentWeight();
+            // // float maxWeight = inventorySystem.GetWeightCapacity();
+            // float weightPercentage = maxWeight > 0 ? currentWeight / maxWeight : 0f;
+            //
+            // weightBar.value = weightPercentage;
+            //
+            // if (weightText != null)
+            // {
+            //     weightText.text = $"{currentWeight:F1}/{maxWeight:F1} kg";
+            // }
+            //
+            // // Color based on weight
+            // if (weightBar != null)
+            // {
+            //     var fillImage = weightBar.fillRect?.GetComponent<Image>();
+            //     if (fillImage != null)
+            //     {
+            //         if (weightPercentage < 0.8f)
+            //             fillImage.color = normalWeightColor;
+            //         else
+            //             fillImage.color = Color.Lerp(normalWeightColor, heavyWeightColor, (weightPercentage - 0.8f) / 0.2f);
+            //     }
+            // }
         }
 
         /// <summary>

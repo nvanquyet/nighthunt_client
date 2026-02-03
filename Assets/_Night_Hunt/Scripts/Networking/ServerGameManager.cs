@@ -6,7 +6,6 @@ using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Team;
 using NightHunt.Gameplay.PredatorPrey;
 using NightHunt.Gameplay.AntiCamping;
-using NightHunt.Gameplay.Loot;
 using NightHunt.Gameplay.Objective;
 using NightHunt.Gameplay.Zone;
 using NightHunt.Gameplay.Vision;
@@ -35,7 +34,6 @@ namespace NightHunt.Networking
         private TeamSystem teamSystem;
         private PredatorPreySystem predatorPreySystem;
         private AntiCampingSystem antiCampingSystem;
-        private LootSpawner lootSpawner;
         private ObjectiveSystem objectiveSystem;
         private ZoneSystem zoneSystem;
         private VisionSystem visionSystem;
@@ -228,7 +226,6 @@ namespace NightHunt.Networking
                 out scoringSystem,
                 out predatorPreySystem,
                 out zoneSystem,
-                out lootSpawner,
                 out antiCampingSystem,
                 out visionSystem
             );
@@ -455,7 +452,6 @@ namespace NightHunt.Networking
         public TeamSystem TeamSystem => teamSystem;
         public PredatorPreySystem PredatorPreySystem => predatorPreySystem;
         public AntiCampingSystem AntiCampingSystem => antiCampingSystem;
-        public LootSpawner LootSpawner => lootSpawner;
         public ObjectiveSystem ObjectiveSystem => objectiveSystem;
         public ZoneSystem ZoneSystem => zoneSystem;
         public VisionSystem VisionSystem => visionSystem;
