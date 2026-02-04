@@ -49,6 +49,10 @@ namespace NightHunt.UI
         private CharacterStats characterStats;
         private CharacterCombat characterCombat;
         private CharacterPredictedMovement _characterPredictedMovement;
+        
+        // Cooldown to avoid FindObjectsOfType every frame
+        private float lastPlayerSearchTime = 0f;
+        private const float playerSearchCooldown = 1f; // Search every 1 second if not found
 
         private void Start()
         {
@@ -60,7 +64,12 @@ namespace NightHunt.UI
         {
             if (localPlayer == null)
             {
-                FindLocalPlayer();
+                // Only search if cooldown expired
+                if (Time.time - lastPlayerSearchTime >= playerSearchCooldown)
+                {
+                    FindLocalPlayer();
+                    lastPlayerSearchTime = Time.time;
+                }
                 return;
             }
 

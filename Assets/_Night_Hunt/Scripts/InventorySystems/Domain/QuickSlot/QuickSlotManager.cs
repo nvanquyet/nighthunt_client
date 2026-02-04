@@ -1,6 +1,7 @@
-﻿using UnityEngine;
+using UnityEngine;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Enums;
+using NightHunt.Inventory.Core.Events;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -61,6 +62,9 @@ namespace NightHunt.Inventory.Domain.QuickSlot
 
             quickSlots[slotIndex] = item;
 
+            // Fire event for UI update
+            QuickSlotEvents.InvokeQuickSlotChanged(slotIndex, item);
+
             if (enableDebugLogs)
                 Debug.Log($"[QuickSlotManager] Added {item.Definition.ItemId} to slot {slotIndex}");
 
@@ -77,6 +81,9 @@ namespace NightHunt.Inventory.Domain.QuickSlot
 
             var item = quickSlots[slotIndex];
             quickSlots[slotIndex] = null;
+
+            // Fire event for UI update
+            QuickSlotEvents.InvokeQuickSlotChanged(slotIndex, null);
 
             if (enableDebugLogs && item != null)
                 Debug.Log($"[QuickSlotManager] Removed {item.Definition.ItemId} from slot {slotIndex}");
@@ -111,6 +118,7 @@ namespace NightHunt.Inventory.Domain.QuickSlot
             if (slotIndex >= 0 && slotIndex < quickSlots.Length)
             {
                 quickSlots[slotIndex] = null;
+                QuickSlotEvents.InvokeQuickSlotChanged(slotIndex, null);
             }
         }
 
@@ -122,6 +130,7 @@ namespace NightHunt.Inventory.Domain.QuickSlot
             for (int i = 0; i < quickSlots.Length; i++)
             {
                 quickSlots[i] = null;
+                QuickSlotEvents.InvokeQuickSlotChanged(i, null);
             }
 
             if (enableDebugLogs)

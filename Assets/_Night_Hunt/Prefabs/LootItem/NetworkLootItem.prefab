@@ -10,8 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 5169786318526661856}
   - component: {fileID: 8684772394605836597}
-  - component: {fileID: 3367596752983132564}
   - component: {fileID: 6631652388191917779}
+  - component: {fileID: -5661064222142574142}
   m_Layer: 0
   m_Name: NetworkLootItem
   m_TagString: Untagged
@@ -55,30 +55,6 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 1
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &3367596752983132564
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 174602186970268867}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9a54cf26af7d92a4992aeab8d380ebbb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 255
-  _addedNetworkObject: {fileID: 6631652388191917779}
-  _networkObjectCache: {fileID: 0}
-  testDefinition: {fileID: 0}
-  definitionId: 
-  itemData: {fileID: 11400000, guid: 7c22584fcba466e41a13b8ec3ad638d5, type: 2}
-  quantity: 1
-  pickupRange: 3
-  modelRoot: {fileID: 0}
-  rotationSpeed: 90
-  floatSpeed: 1
-  floatAmount: 0.5
 --- !u!114 &6631652388191917779
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -97,7 +73,8 @@ MonoBehaviour:
   <ComponentIndex>k__BackingField: 0
   <PredictedSpawn>k__BackingField: {fileID: 0}
   <PredictedOwner>k__BackingField: {fileID: 0}
-  NetworkBehaviours: []
+  NetworkBehaviours:
+  - {fileID: -5661064222142574142}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -122,12 +99,27 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 65535
+  <PrefabId>k__BackingField: 10
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 11800316602160545267
   <SceneId>k__BackingField: 0
   SerializedTransformProperties:
-    Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: 0, y: 0, z: 0, w: 0}
-    Scale: {x: 0, y: 0, z: 0}
-    IsValid: 0
+    Position: {x: -0.89101577, y: 0.98753345, z: 1.2216433}
+    Rotation: {x: 0, y: 0, z: 0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
+--- !u!114 &-5661064222142574142
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 174602186970268867}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a6a39c46bf52104ba8efe3100bce3f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 0
+  _addedNetworkObject: {fileID: 6631652388191917779}
+  _networkObjectCache: {fileID: 6631652388191917779}

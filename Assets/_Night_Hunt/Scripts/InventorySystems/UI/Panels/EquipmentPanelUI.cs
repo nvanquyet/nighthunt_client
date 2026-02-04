@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
@@ -13,37 +13,91 @@ namespace NightHunt.Inventory.UI.Panels
     /// </summary>
     public class EquipmentPanelUI : MonoBehaviour
     {
-        [Header("Equipment Slots")]
-        [SerializeField] private EquipmentSlotUI helmetSlot;
-        [SerializeField] private EquipmentSlotUI armorSlot;
-        [SerializeField] private EquipmentSlotUI backpackSlot;
-        
-        [Header("References")]
-        [SerializeField] private EquipmentManager equipmentManager;
+        [Header("Spawn Configuration")]
+        [SerializeField] private Transform slotContainer;
+        [SerializeField] private GameObject slotPrefab;
+        [SerializeField] private EquipmentSlotsConfig config;
         
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
         
+        // Runtime-only fields (not shown in Inspector)
+        private EquipmentManager equipmentManager;
         private Dictionary<EquipmentSlotType, EquipmentSlotUI> slotMap;
         
         #region Lifecycle
         
         void Awake()
         {
-            // Map slots
-            slotMap = new Dictionary<EquipmentSlotType, EquipmentSlotUI>
-            {
-                { EquipmentSlotType.Helmet, helmetSlot },
-                { EquipmentSlotType.Armor, armorSlot },
-                { EquipmentSlotType.Backpack, backpackSlot }
-            };
+            // Initialize slot map
+            slotMap = new Dictionary<EquipmentSlotType, EquipmentSlotUI>();
             
-            // Initialize slots
-            foreach (var kvp in slotMap)
+            // Spawn slots from config (required)
+            if (config == null)
             {
-                if (kvp.Value != null)
+                Debug.LogError("[EquipmentPanelUI] EquipmentSlotsConfig is required! Please assign config in Inspector.");
+                return;
+            }
+            
+            if (slotContainer == null)
+            {
+                Debug.LogError("[EquipmentPanelUI] SlotContainer is required! Please assign container Transform in Inspector.");
+                return;
+            }
+            
+            if (slotPrefab == null)
+            {
+                Debug.LogError("[EquipmentPanelUI] SlotPrefab is required! Please assign slot prefab in Inspector.");
+                return;
+            }
+            
+            SpawnSlotsFromConfig();
+        }
+        
+        /// <summary>
+        /// Sets the EquipmentManager reference (from local player).
+        /// Called by parent controller or player setup.
+        /// </summary>
+        public void SetEquipmentManager(EquipmentManager manager)
+        {
+            equipmentManager = manager;
+            
+            if (enableDebugLogs)
+                Debug.Log("[EquipmentPanelUI] EquipmentManager injected");
+            
+            // Refresh slots after manager is set
+            if (slotMap.Count > 0)
+            {
+                RefreshAllSlots();
+            }
+        }
+        
+        private void SpawnSlotsFromConfig()
+        {
+            if (config.Slots == null || config.Slots.Length == 0)
+            {
+                Debug.LogError("[EquipmentPanelUI] Config has no slots defined! Please configure EquipmentSlotsConfig.");
+                return;
+            }
+            
+            // Spawn slots from config
+            foreach (var slotData in config.Slots)
+            {
+                var slotObj = Instantiate(slotPrefab, slotContainer);
+                var slotUI = slotObj.GetComponent<EquipmentSlotUI>();
+                
+                if (slotUI != null)
                 {
-                    kvp.Value.Initialize(kvp.Key, this);
+                    slotUI.Initialize(slotData.SlotType, this);
+                    slotMap[slotData.SlotType] = slotUI;
+                    
+                    if (enableDebugLogs)
+                        Debug.Log($"[EquipmentPanelUI] Spawned {slotData.SlotType} slot from config");
+                }
+                else
+                {
+                    Debug.LogError($"[EquipmentPanelUI] Slot prefab doesn't have EquipmentSlotUI component!");
+                    Destroy(slotObj);
                 }
             }
         }

@@ -19,13 +19,38 @@ namespace NightHunt.Gameplay.Camera
         
         private void OnEnable()
         {
-            if (_inputHandler == null) _inputHandler = InputManager.Instance.CameraHandler;
-            if (_inputHandler != null) _inputHandler.OnZoom += OnZoomPerformed;
+            TrySubscribe();
         }
 
         private void OnDisable()
         {
-            if (_inputHandler != null) _inputHandler.OnZoom -= OnZoomPerformed;
+            if (_inputHandler != null)
+            {
+                _inputHandler.OnZoom -= OnZoomPerformed;
+            }
+        }
+        
+        private void Update()
+        {
+            // Retry subscription if InputManager spawns after this component
+            if (_inputHandler == null && InputManager.Instance != null)
+            {
+                TrySubscribe();
+            }
+        }
+        
+        private void TrySubscribe()
+        {
+            if (InputManager.Instance == null)
+                return;
+                
+            if (_inputHandler == null)
+                _inputHandler = InputManager.Instance.CameraHandler;
+                
+            if (_inputHandler != null)
+            {
+                _inputHandler.OnZoom += OnZoomPerformed;
+            }
         }
 
         private void OnZoomPerformed(float zoomDelta)

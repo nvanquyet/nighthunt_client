@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking;
@@ -89,15 +89,27 @@ namespace NightHunt.Inventory.Input
         {
             networkPlayer = player;
 
-            // Auto-find QuickSlotManager if not assigned
-            if (quickSlotManager == null)
+            // Get QuickSlotManager from player component (not FindObjectOfType)
+            if (quickSlotManager == null && player != null)
             {
-                quickSlotManager = FindObjectOfType<QuickSlotManager>();
+                quickSlotManager = player.GetComponent<QuickSlotManager>();
                 if (quickSlotManager == null)
                 {
-                    Debug.LogWarning("[QuickSlotInputHandler] QuickSlotManager not found in scene!");
+                    Debug.LogWarning("[QuickSlotInputHandler] QuickSlotManager not found on player!");
                 }
             }
+        }
+        
+        /// <summary>
+        /// Sets the QuickSlotManager reference directly.
+        /// Alternative to Initialize if manager is already known.
+        /// </summary>
+        public void SetQuickSlotManager(QuickSlotManager manager)
+        {
+            quickSlotManager = manager;
+            
+            if (enableDebugLogs)
+                Debug.Log("[QuickSlotInputHandler] QuickSlotManager injected");
         }
 
         private void RegisterWithManager()
@@ -229,6 +241,9 @@ namespace NightHunt.Inventory.Input
                     return;
             }
 
+            // Log usage (for analytics/debugging) - same event as UI double-click
+            QuickSlotEvents.InvokeQuickSlotDoubleClicked(item, slotIndex);
+
             // Fire event
             OnQuickSlotUsed?.Invoke(slotIndex);
 
@@ -263,17 +278,6 @@ namespace NightHunt.Inventory.Input
         }
 
         #endregion
-
-        #region Public API
-
-        /// <summary>
-        /// Assign QuickSlotManager reference
-        /// </summary>
-        public void SetQuickSlotManager(QuickSlotManager manager)
-        {
-            quickSlotManager = manager;
-        }
-
-        #endregion
+        
     }
 }

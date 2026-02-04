@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b46f2092b6f34a9cab1172f26bac3dbd, type: 3}
+  m_Name: WeaponSlotConfig
+  m_EditorClassIdentifier: 
+  Slots:
+  - SlotType: 0
+    SlotIcon: {fileID: 21300002, guid: 8a9605cca7152fc4bbef9451d4171c96, type: 3}
+    SlotName: 
+    SlotDescription: 
+  - SlotType: 1
+    SlotIcon: {fileID: 21300000, guid: 395800a7c7a30f448b61fb690556100f, type: 3}
+    SlotName: 
+    SlotDescription: 

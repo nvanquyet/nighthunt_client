@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
@@ -13,33 +13,91 @@ namespace NightHunt.Inventory.UI.Panels
     /// </summary>
     public class WeaponPanelUI : MonoBehaviour
     {
-        [Header("Weapon Slots")]
-        [SerializeField] private WeaponSlotUI primarySlot;
-        [SerializeField] private WeaponSlotUI secondarySlot;
-        
-        [Header("References")]
-        [SerializeField] private WeaponManager weaponManager;
+        [Header("Spawn Configuration")]
+        [SerializeField] private Transform slotContainer;
+        [SerializeField] private GameObject slotPrefab;
+        [SerializeField] private WeaponSlotConfig config;
         
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
         
+        // Runtime-only fields (not shown in Inspector)
+        private WeaponManager weaponManager;
         private Dictionary<WeaponSlotType, WeaponSlotUI> slotMap;
         
         #region Lifecycle
         
         void Awake()
         {
-            slotMap = new Dictionary<WeaponSlotType, WeaponSlotUI>
-            {
-                { WeaponSlotType.Primary, primarySlot },
-                { WeaponSlotType.Secondary, secondarySlot }
-            };
+            // Initialize slot map
+            slotMap = new Dictionary<WeaponSlotType, WeaponSlotUI>();
             
-            foreach (var kvp in slotMap)
+            // Spawn slots from config (required)
+            if (config == null)
             {
-                if (kvp.Value != null)
+                Debug.LogError("[WeaponPanelUI] WeaponSlotConfig is required! Please assign config in Inspector.");
+                return;
+            }
+            
+            if (slotContainer == null)
+            {
+                Debug.LogError("[WeaponPanelUI] SlotContainer is required! Please assign container Transform in Inspector.");
+                return;
+            }
+            
+            if (slotPrefab == null)
+            {
+                Debug.LogError("[WeaponPanelUI] SlotPrefab is required! Please assign slot prefab in Inspector.");
+                return;
+            }
+            
+            SpawnSlotsFromConfig();
+        }
+        
+        /// <summary>
+        /// Sets the WeaponManager reference (from local player).
+        /// Called by parent controller or player setup.
+        /// </summary>
+        public void SetWeaponManager(WeaponManager manager)
+        {
+            weaponManager = manager;
+            
+            if (enableDebugLogs)
+                Debug.Log("[WeaponPanelUI] WeaponManager injected");
+            
+            // Refresh slots after manager is set
+            if (slotMap.Count > 0)
+            {
+                RefreshAllSlots();
+            }
+        }
+        
+        private void SpawnSlotsFromConfig()
+        {
+            if (config.Slots == null || config.Slots.Length == 0)
+            {
+                Debug.LogError("[WeaponPanelUI] Config has no slots defined! Please configure WeaponSlotConfig.");
+                return;
+            }
+            
+            // Spawn slots from config
+            foreach (var slotData in config.Slots)
+            {
+                var slotObj = Instantiate(slotPrefab, slotContainer);
+                var slotUI = slotObj.GetComponent<WeaponSlotUI>();
+                
+                if (slotUI != null)
                 {
-                    kvp.Value.Initialize(kvp.Key, this);
+                    slotUI.Initialize(slotData.SlotType, this);
+                    slotMap[slotData.SlotType] = slotUI;
+                    
+                    if (enableDebugLogs)
+                        Debug.Log($"[WeaponPanelUI] Spawned {slotData.SlotType} slot from config");
+                }
+                else
+                {
+                    Debug.LogError($"[WeaponPanelUI] Slot prefab doesn't have WeaponSlotUI component!");
+                    Destroy(slotObj);
                 }
             }
         }

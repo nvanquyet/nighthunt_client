@@ -27,7 +27,16 @@
                     "name": "Crouch",
                     "type": "Button",
                     "id": "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
-                    "expectedControlType": "Button",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "ToggleCameraLock",
+                    "type": "Button",
+                    "id": "8da4c240-a559-4252-b121-29a2f0e7e5ca",
+                    "expectedControlType": "",
                     "processors": "",
                     "interactions": "Press",
                     "initialStateCheck": false
@@ -146,6 +155,17 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "Crouch",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "0568a3c8-c8f1-4655-ac3c-e3d6b6ac3a6f",
+                    "path": "<Keyboard>/x",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "ToggleCameraLock",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

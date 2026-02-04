@@ -9,9 +9,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3720a77c84deec84788b9748018c7ea8, type: 3}
+  m_Script: {fileID: 11500000, guid: c16788765648499a8d8c6d43e411dd91, type: 3}
   m_Name: NetworkSyncConfig
   m_EditorClassIdentifier: 
   useDeltaSync: 1
   fullSyncInterval: 5
   useCompression: 1
+  enableClientPrediction: 1
+  maxPendingOperations: 3

@@ -13,8 +13,8 @@ TagManager:
   - UI
   - VisionLayer
   - 'FogLayer '
-  - 
-  - 
+  - Interactable
+  - Pickup
   - 
   - 
   - 

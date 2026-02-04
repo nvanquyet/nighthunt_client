@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.UI.Cells;
@@ -23,6 +23,7 @@ namespace NightHunt.Inventory.UI.Controllers
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
         
+        // Runtime-only fields (not shown in Inspector)
         private List<InventoryCellUI> cells;
         private bool isOpen;
         

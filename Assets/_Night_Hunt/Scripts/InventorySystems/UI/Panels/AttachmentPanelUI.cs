@@ -1,81 +1,187 @@
-﻿using UnityEngine;
+using UnityEngine;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
 using NightHunt.Inventory.Domain.Attachment;
-using NightHunt.Inventory.Domain.Weapon;
 using System.Collections.Generic;
 
 namespace NightHunt.Inventory.UI.Panels
 {
     /// <summary>
-    /// Attachment panel UI showing available attachment slots for active weapon.
-    /// Dynamically shows/hides slots based on weapon's allowed attachments.
+    /// Attachment panel UI showing attachment slots for a specific item.
+    /// Spawns slots dynamically from item.Definition.AttachmentSlots (data-driven).
+    /// Works for both weapons and equipment (helmet, armor, etc.).
     /// </summary>
     public class AttachmentPanelUI : MonoBehaviour
     {
-        [Header("Attachment Slots")]
-        [SerializeField] private AttachmentSlotUI scopeSlot;
-        [SerializeField] private AttachmentSlotUI gripSlot;
-        [SerializeField] private AttachmentSlotUI muzzleSlot;
-        [SerializeField] private AttachmentSlotUI magazineSlot;
-        [SerializeField] private AttachmentSlotUI flashlightSlot;
-        [SerializeField] private AttachmentSlotUI nvgSlot;
-        
-        [Header("References")]
-        [SerializeField] private WeaponManager weaponManager;
-        [SerializeField] private AttachmentManager attachmentManager;
+        [Header("UI References")]
+        [SerializeField] private GameObject attachmentPanel; // Main panel GameObject to show/hide
+        [SerializeField] private Transform slotContainer;
+        [SerializeField] private GameObject slotPrefab;
         
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
         
+        // Runtime-only fields (not shown in Inspector)
+        private AttachmentManager attachmentManager; // Injected from local player
         private Dictionary<AttachmentSlotType, AttachmentSlotUI> slotMap;
-        private ItemInstance currentWeapon;
+        private ItemInstance currentItem; // Current item being viewed (weapon/equipment)
         
         #region Lifecycle
         
         void Awake()
         {
-            slotMap = new Dictionary<AttachmentSlotType, AttachmentSlotUI>
-            {
-                { AttachmentSlotType.Scope, scopeSlot },
-                { AttachmentSlotType.Grip, gripSlot },
-                { AttachmentSlotType.Muzzle, muzzleSlot },
-                { AttachmentSlotType.Magazine, magazineSlot },
-                { AttachmentSlotType.Flashlight, flashlightSlot },
-                { AttachmentSlotType.NVG, nvgSlot }
-            };
+            slotMap = new Dictionary<AttachmentSlotType, AttachmentSlotUI>();
             
-            foreach (var kvp in slotMap)
+            // Ensure panel starts hidden
+            if (attachmentPanel != null)
             {
-                if (kvp.Value != null)
-                {
-                    kvp.Value.Initialize(kvp.Key, this);
-                }
+                attachmentPanel.SetActive(false);
             }
         }
         
         void OnEnable()
         {
-            WeaponEvents.OnWeaponSwitched += HandleWeaponSwitched;
-            WeaponEvents.OnWeaponEquipped += HandleWeaponEquipped;
-            WeaponEvents.OnWeaponUnequipped += HandleWeaponUnequipped;
             AttachmentEvents.OnAttachmentAdded += HandleAttachmentAdded;
             AttachmentEvents.OnAttachmentRemoved += HandleAttachmentRemoved;
         }
         
         void OnDisable()
         {
-            WeaponEvents.OnWeaponSwitched -= HandleWeaponSwitched;
-            WeaponEvents.OnWeaponEquipped -= HandleWeaponEquipped;
-            WeaponEvents.OnWeaponUnequipped -= HandleWeaponUnequipped;
             AttachmentEvents.OnAttachmentAdded -= HandleAttachmentAdded;
             AttachmentEvents.OnAttachmentRemoved -= HandleAttachmentRemoved;
         }
         
-        void Start()
+        #endregion
+        
+        #region Initialization
+        
+        /// <summary>
+        /// Sets the AttachmentManager reference (from local player).
+        /// Called by parent controller or player setup.
+        /// </summary>
+        public void SetAttachmentManager(AttachmentManager manager)
         {
-            RefreshForActiveWeapon();
+            attachmentManager = manager;
+            
+            if (enableDebugLogs)
+                Debug.Log("[AttachmentPanelUI] AttachmentManager injected");
+        }
+        
+        /// <summary>
+        /// Shows attachment slots for a specific item.
+        /// Called when hovering/selecting an item that has attachment slots.
+        /// </summary>
+        public void ShowForItem(ItemInstance item)
+        {
+            if (item == null || item.Definition == null)
+            {
+                Hide();
+                return;
+            }
+            
+            // Check if item has attachment slots
+            if (item.Definition.AttachmentSlots == null || item.Definition.AttachmentSlots.Length == 0)
+            {
+                Hide();
+                return;
+            }
+            
+            currentItem = item;
+            
+            // Clear existing slots
+            ClearAllSlots();
+            
+            // Spawn slots from item data
+            SpawnSlotsFromItemData(item);
+            
+            // Update attachment displays
+            RefreshAttachments();
+            
+            // Show panel
+            if (attachmentPanel != null)
+            {
+                attachmentPanel.SetActive(true);
+            }
+            
+            if (enableDebugLogs)
+                Debug.Log($"[AttachmentPanelUI] Showing attachment slots for {item.Definition.ItemId}");
+        }
+        
+        /// <summary>
+        /// Hides the attachment panel.
+        /// Called when item has no attachments or item is deselected.
+        /// </summary>
+        public void Hide()
+        {
+            currentItem = null;
+            ClearAllSlots();
+            
+            // Hide panel
+            if (attachmentPanel != null)
+            {
+                attachmentPanel.SetActive(false);
+            }
+            
+            if (enableDebugLogs)
+                Debug.Log("[AttachmentPanelUI] Hiding attachment panel");
+        }
+        
+        private void SpawnSlotsFromItemData(ItemInstance item)
+        {
+            if (slotContainer == null)
+            {
+                Debug.LogError("[AttachmentPanelUI] SlotContainer not assigned!");
+                return;
+            }
+            
+            if (slotPrefab == null)
+            {
+                Debug.LogError("[AttachmentPanelUI] SlotPrefab not assigned!");
+                return;
+            }
+            
+            // Spawn slots from item's AttachmentSlots data
+            foreach (var slotType in item.Definition.AttachmentSlots)
+            {
+                var slotObj = Instantiate(slotPrefab, slotContainer);
+                var slotUI = slotObj.GetComponent<AttachmentSlotUI>();
+                
+                if (slotUI != null)
+                {
+                    slotUI.Initialize(slotType, this);
+                    slotMap[slotType] = slotUI;
+                    
+                    if (enableDebugLogs)
+                        Debug.Log($"[AttachmentPanelUI] Spawned {slotType} slot for {item.Definition.ItemId}");
+                }
+                else
+                {
+                    Debug.LogError($"[AttachmentPanelUI] Slot prefab doesn't have AttachmentSlotUI component!");
+                    Destroy(slotObj);
+                }
+            }
+        }
+        
+        private void ClearAllSlots()
+        {
+            foreach (var kvp in slotMap)
+            {
+                if (kvp.Value != null)
+                    Destroy(kvp.Value.gameObject);
+            }
+            slotMap.Clear();
+        }
+        
+        private void RefreshAttachments()
+        {
+            if (currentItem == null || attachmentManager == null) return;
+            
+            foreach (var kvp in slotMap)
+            {
+                var attachment = attachmentManager.GetAttachmentInSlot(currentItem, kvp.Key);
+                kvp.Value.SetAttachment(attachment);
+            }
         }
         
         #endregion
@@ -84,9 +190,9 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnAttachmentDropped(ItemInstance attachment, AttachmentSlotType targetSlot)
         {
-            if (attachmentManager == null || currentWeapon == null)
+            if (attachmentManager == null || currentItem == null)
             {
-                Debug.LogError("[AttachmentPanelUI] Manager not assigned or no active weapon!");
+                Debug.LogError("[AttachmentPanelUI] Manager not assigned or no item selected!");
                 return;
             }
             
@@ -104,24 +210,23 @@ namespace NightHunt.Inventory.UI.Panels
                 return;
             }
             
-            // Validate weapon accepts this attachment type
-            if (!System.Array.Exists(currentWeapon.Definition.AttachmentSlots, 
+            // Validate item accepts this attachment type
+            if (!System.Array.Exists(currentItem.Definition.AttachmentSlots, 
                 slot => slot == targetSlot))
             {
-                UIEvents.InvokeShowError($"This weapon doesn't support {targetSlot} attachments");
+                UIEvents.InvokeShowError($"This item doesn't support {targetSlot} attachments");
                 return;
             }
             
             // Try attach
-            var result = attachmentManager.TryAttach(attachment, currentWeapon);
+            var result = attachmentManager.TryAttach(attachment, currentItem);
             
             if (result.IsSuccess)
             {
-                // Remove from inventory
                 InventoryEvents.InvokeRequestRemoveItem(attachment.InstanceId);
                 
                 if (enableDebugLogs)
-                    Debug.Log($"[AttachmentPanelUI] Attached {attachment.Definition.ItemId} to weapon");
+                    Debug.Log($"[AttachmentPanelUI] Attached {attachment.Definition.ItemId} to {currentItem.Definition.ItemId}");
             }
             else
             {
@@ -131,14 +236,13 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnDetachRequested(AttachmentSlotType slotType)
         {
-            if (attachmentManager == null || currentWeapon == null) return;
+            if (attachmentManager == null || currentItem == null) return;
             
-            var attachment = attachmentManager.GetAttachmentInSlot(currentWeapon, slotType);
+            var attachment = attachmentManager.GetAttachmentInSlot(currentItem, slotType);
             if (attachment != null)
             {
-                if (attachmentManager.TryDetach(attachment, currentWeapon))
+                if (attachmentManager.TryDetach(attachment, currentItem))
                 {
-                    // Add back to inventory
                     InventoryEvents.InvokeRequestAddItem(attachment);
                     
                     if (enableDebugLogs)
@@ -147,83 +251,13 @@ namespace NightHunt.Inventory.UI.Panels
             }
         }
         
-        public void RefreshForActiveWeapon()
-        {
-            if (weaponManager == null)
-            {
-                currentWeapon = null;
-                HideAllSlots();
-                return;
-            }
-            
-            currentWeapon = weaponManager.GetActiveWeapon();
-            
-            if (currentWeapon == null)
-            {
-                HideAllSlots();
-                return;
-            }
-            
-            // Show only slots that weapon supports
-            foreach (var kvp in slotMap)
-            {
-                bool isSupported = System.Array.Exists(currentWeapon.Definition.AttachmentSlots,
-                    slot => slot == kvp.Key);
-                
-                if (kvp.Value != null)
-                {
-                    kvp.Value.gameObject.SetActive(isSupported);
-                    
-                    if (isSupported)
-                    {
-                        // Update attachment display
-                        var attachment = attachmentManager?.GetAttachmentInSlot(currentWeapon, kvp.Key);
-                        kvp.Value.SetAttachment(attachment);
-                    }
-                }
-            }
-        }
-        
-        private void HideAllSlots()
-        {
-            foreach (var kvp in slotMap)
-            {
-                if (kvp.Value != null)
-                {
-                    kvp.Value.gameObject.SetActive(false);
-                }
-            }
-        }
-        
         #endregion
         
         #region Event Handlers
         
-        private void HandleWeaponSwitched(WeaponSlotType newActiveSlot)
+        private void HandleAttachmentAdded(ItemInstance attachment, ItemInstance parentItem)
         {
-            RefreshForActiveWeapon();
-        }
-        
-        private void HandleWeaponEquipped(ItemInstance weapon, WeaponSlotType slotType)
-        {
-            // Refresh if this is the active weapon
-            if (weaponManager != null && weaponManager.GetActiveSlot() == slotType)
-            {
-                RefreshForActiveWeapon();
-            }
-        }
-        
-        private void HandleWeaponUnequipped(ItemInstance weapon, WeaponSlotType slotType)
-        {
-            if (currentWeapon == weapon)
-            {
-                RefreshForActiveWeapon();
-            }
-        }
-        
-        private void HandleAttachmentAdded(ItemInstance attachment, ItemInstance parentWeapon)
-        {
-            if (parentWeapon == currentWeapon)
+            if (parentItem == currentItem)
             {
                 var slotType = attachment.Definition.AttachmentType;
                 if (slotMap.TryGetValue(slotType, out var slot))
@@ -233,9 +267,9 @@ namespace NightHunt.Inventory.UI.Panels
             }
         }
         
-        private void HandleAttachmentRemoved(ItemInstance attachment, ItemInstance parentWeapon)
+        private void HandleAttachmentRemoved(ItemInstance attachment, ItemInstance parentItem)
         {
-            if (parentWeapon == currentWeapon)
+            if (parentItem == currentItem)
             {
                 var slotType = attachment.Definition.AttachmentType;
                 if (slotMap.TryGetValue(slotType, out var slot))

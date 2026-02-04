@@ -1,11 +1,12 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 
 namespace NightHunt.Gameplay.Input.Handlers.Movement
 {
     /// <summary>
-    /// Handles ONLY player movement input (Move, Sprint, Crouch)
+    /// Handles ONLY player movement input (Move, Sprint, Crouch, Camera Lock)
     /// Separated from combat and interaction for clean architecture
     /// Components read input values from this handler via InputManager
     /// </summary>
@@ -15,14 +16,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         private InputAction moveAction;
         private InputAction sprintAction;
         private InputAction crouchAction;
+        private InputAction toggleCameraLockAction; // ✅ NEW
 
         // Current input state
-        private Vector2 moveInput;
+        [SerializeField] private Vector2 moveInput;
         private bool isSprinting;
         private bool isCrouching;
+        private bool isCameraLocked; // ✅ NEW
 
         private bool inputEnabled = false;
-
+        
         #region Lifecycle
 
         private void Awake()
@@ -63,6 +66,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
                 moveAction = playerActionMap.FindAction("Move");
                 sprintAction = playerActionMap.FindAction("Sprint");
                 crouchAction = playerActionMap.FindAction("Crouch");
+                toggleCameraLockAction = playerActionMap.FindAction("ToggleCameraLock"); // ✅ NEW
             }
             else
             {
@@ -121,6 +125,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
                 crouchAction.performed += OnCrouchPerformed;
             }
 
+            // ✅ NEW: Subscribe to toggle camera lock
+            if (toggleCameraLockAction != null)
+            {
+                toggleCameraLockAction.performed += OnToggleCameraLockPerformed;
+            }
+
             Debug.Log("[MovementInputHandler] Input enabled");
         }
 
@@ -151,10 +161,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
                 crouchAction.performed -= OnCrouchPerformed;
             }
 
+            // ✅ NEW: Unsubscribe toggle camera lock
+            if (toggleCameraLockAction != null)
+            {
+                toggleCameraLockAction.performed -= OnToggleCameraLockPerformed;
+            }
+
             // Reset state
             moveInput = Vector2.zero;
             isSprinting = false;
             isCrouching = false;
+            // Don't reset camera lock on disable - preserve state
 
             Debug.Log("[MovementInputHandler] Input disabled");
         }
@@ -188,6 +205,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
             isCrouching = !isCrouching; // Toggle
         }
 
+        // ✅ NEW: Toggle camera lock handler
+        private void OnToggleCameraLockPerformed(InputAction.CallbackContext context)
+        {
+            isCameraLocked = !isCameraLocked; // Toggle
+            Debug.Log($"[MovementInputHandler] Camera Lock: {(isCameraLocked ? "ON (Strafe)" : "OFF (Tank)")}");
+        }
+
         #endregion
 
         #region Public API
@@ -195,6 +219,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         public Vector2 GetMoveInput() => moveInput;
         public bool IsSprinting() => isSprinting;
         public bool IsCrouching() => isCrouching;
+        public bool IsCameraLocked() => isCameraLocked; // ✅ NEW
 
         #endregion
     }

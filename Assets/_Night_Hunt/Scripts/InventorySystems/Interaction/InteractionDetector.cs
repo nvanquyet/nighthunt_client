@@ -22,14 +22,14 @@ namespace NightHunt.Inventory.Interaction
         [SerializeField] private bool enableDebugDraw = true;
         [SerializeField] private bool enableDebugLogs = false;
         
-        private Camera mainCamera;
+        private UnityEngine.Camera mainCamera;
         private IInteractable currentInteractable;
         
         #region Lifecycle
         
         void Start()
         {
-            mainCamera = Camera.main;
+            mainCamera =  UnityEngine.Camera.main;
             
             if (mainCamera == null)
             {
