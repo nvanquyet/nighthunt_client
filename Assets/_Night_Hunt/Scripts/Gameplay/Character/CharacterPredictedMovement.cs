@@ -116,7 +116,7 @@ namespace NightHunt.Gameplay.Character
         private MovementReplicateData _lastTickedReplicateData;
         
         // Interpolation (PUBG-style smooth interpolation)
-        private Vector3 _targetPosition;
+        private Vector3 _targetPosition; 
         private Quaternion _targetRotation;
         private Vector3 _targetVelocity;
         private Vector3 _serverVelocity; // Server-authoritative velocity
@@ -139,8 +139,8 @@ namespace NightHunt.Gameplay.Character
         private float _reconcileProgress;
         private Vector3 _reconcileVelocity;
         
-        private uint _lastReconcileTick;
-        private float _lastReconcileTime;
+        private uint _lastTickReconcile;
+        private float _lastTimeReconcile;
         private int _consecutiveHardReconciles;
 
         // ============= INITIALIZATION =============
@@ -230,9 +230,9 @@ namespace NightHunt.Gameplay.Character
             _interpolationSmoothTime = baseInterpolationTime;
             _currentReconcileMode = ReconcileMode.None;
             _reconcileProgress = 1f;
-            _lastReconcileTick = 0;
+            _lastTickReconcile = 0;
             _lastInterpolationTick = 0;
-            _lastReconcileTime = 0f;
+            _lastTimeReconcile = 0f;
             _consecutiveHardReconciles = 0;
             _previousPosition = transform.position;
             _previousPositionTime = Time.time;
@@ -614,7 +614,7 @@ namespace NightHunt.Gameplay.Character
             // ✅ Adaptive reconcile interval based on network conditions
             // QUAN TRỌNG: Chỉ reconcile khi cần thiết để tránh lag với nhiều clients
             uint currentTick = base.TimeManager.LocalTick;
-            float timeSinceLastReconcile = Time.time - _lastReconcileTime;
+            float timeSinceLastReconcile = Time.time - _lastTimeReconcile;
             
             // Dynamic reconcile interval adjustment
             int dynamicInterval = _currentReconcileInterval;
@@ -639,7 +639,7 @@ namespace NightHunt.Gameplay.Character
             }
             
             // Check if we should reconcile
-            bool shouldReconcile = (currentTick - _lastReconcileTick) >= dynamicInterval;
+            bool shouldReconcile = (currentTick - _lastTickReconcile) >= dynamicInterval;
             
             // Also reconcile if too much time has passed (safety check) - nhưng tăng threshold
             if (!shouldReconcile && timeSinceLastReconcile > 0.5f) // Tăng từ 0.3f lên 0.5f
@@ -653,8 +653,8 @@ namespace NightHunt.Gameplay.Character
                 try
                 {
                     CreateReconcile();
-                    _lastReconcileTick = currentTick;
-                    _lastReconcileTime = Time.time;
+                    _lastTickReconcile = currentTick;
+                    _lastTimeReconcile = Time.time;
                 }
                 catch (System.Exception e)
                 {

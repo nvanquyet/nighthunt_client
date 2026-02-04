@@ -13,6 +13,7 @@ using NightHunt.Gameplay.Scoring;
 using NightHunt.Gameplay.PredatorPrey;
 using NightHunt.Gameplay.Zone;
 using NightHunt.Gameplay.AntiCamping;
+using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Vision;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Team;

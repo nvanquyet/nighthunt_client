@@ -67,24 +67,13 @@ namespace NightHunt.Editor.Gameplay.SetupTools
             {
                 obj.AddComponent<CharacterCombat>();
             }
-
-            // Input components
-            if (obj.GetComponent<PlayerInputHandler>() == null)
-            {
-                obj.AddComponent<PlayerInputHandler>();
-            }
-
+            
             // Vision components
             if (obj.GetComponent<VisionRevealer>() == null)
             {
                 obj.AddComponent<VisionRevealer>();
             }
 
-            // Camera components
-            if (obj.GetComponent<CinemachineCameraController>() == null)
-            {
-                obj.AddComponent<CinemachineCameraController>();
-            }
 
             Debug.Log($"[ComponentSetupTool] Setup complete for: {obj.name}");
         }

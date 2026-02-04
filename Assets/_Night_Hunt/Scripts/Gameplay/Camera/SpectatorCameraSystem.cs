@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Camera = UnityEngine.Camera;
 using NightHunt.Gameplay.Camera.Spectator;
+using NightHunt.Gameplay.Input.Core;
+using NightHunt.Gameplay.Input.Handlers.Spectator;
 
 namespace NightHunt.Gameplay.Camera
 {
@@ -188,7 +190,7 @@ namespace NightHunt.Gameplay.Camera
                 spectatorInputHandler.OnNextPlayer += OnNextPlayer;
                 spectatorInputHandler.OnPreviousPlayer += OnPreviousPlayer;
                 spectatorInputHandler.OnExitSpectator += ExitSpectatorMode;
-                spectatorInputHandler.EnableSpectatorInput();
+                spectatorInputHandler.EnableInput();
             }
 
             Debug.Log("[SpectatorCameraSystem] Entered spectator mode");
@@ -227,7 +229,7 @@ namespace NightHunt.Gameplay.Camera
                 spectatorInputHandler.OnNextPlayer -= OnNextPlayer;
                 spectatorInputHandler.OnPreviousPlayer -= OnPreviousPlayer;
                 spectatorInputHandler.OnExitSpectator -= ExitSpectatorMode;
-                spectatorInputHandler.DisableSpectatorInput();
+                spectatorInputHandler.DisableInput();
             }
 
             currentSpectatedPlayer = null;

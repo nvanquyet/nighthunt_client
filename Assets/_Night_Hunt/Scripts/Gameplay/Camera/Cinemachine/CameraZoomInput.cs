@@ -1,8 +1,8 @@
+using System;
 using UnityEngine;
+using NightHunt.Gameplay.Input.Core;
+using NightHunt.Gameplay.Input.Handlers.Camera;
 using Unity.Cinemachine;
-using UnityEngine.InputSystem;
-using NightHunt.Gameplay.Input;
-using NightHunt.Gameplay.Camera.Cinemachine;
 
 namespace NightHunt.Gameplay.Camera
 {
@@ -13,48 +13,28 @@ namespace NightHunt.Gameplay.Camera
     {
         [Header("Zoom Settings")]
         [SerializeField] private float zoomSpeed = 5f;
+        [SerializeField] private CinemachineCamera playerCamera;
 
-        private CinemachineCameraController cameraController;
-        private InputAction zoomAction;
-        private bool isInitialized = false;
-
-        /// <summary>
-        /// Initialize with camera controller
-        /// </summary>
-        public void Initialize(CinemachineCameraController controller)
-        {
-            cameraController = controller;
-
-            if (InputLayerManager.Instance != null)
-            {
-                var cameraMap = InputLayerManager.Instance.GetController(InputState.Camera);
-                if (cameraMap != null)
-                {
-                    zoomAction = cameraMap.GetAction("Zoom");
-                }
-            }
-
-            isInitialized = true;
-        }
-
+        private CameraInputHandler _inputHandler;
+        
         private void OnEnable()
         {
-            if (!isInitialized) return;
-
-            if (zoomAction != null) zoomAction.performed += OnZoomPerformed;
+            if (_inputHandler == null) _inputHandler = InputManager.Instance.CameraHandler;
+            if (_inputHandler != null) _inputHandler.OnZoom += OnZoomPerformed;
         }
 
         private void OnDisable()
         {
-            if (zoomAction != null) zoomAction.performed -= OnZoomPerformed;
+            if (_inputHandler != null) _inputHandler.OnZoom -= OnZoomPerformed;
         }
 
-        private void OnZoomPerformed(InputAction.CallbackContext context)
+        private void OnZoomPerformed(float zoomDelta)
         {
-            if (cameraController == null) return;
-
-            float scrollValue = context.ReadValue<Vector2>().y; // Mouse scroll wheel Y-axis
-            cameraController.ZoomCamera(scrollValue);
+            if (playerCamera == null) return;
+            var lens = playerCamera.Lens;
+            lens.FieldOfView -= zoomDelta * zoomSpeed;
+            lens.FieldOfView = Mathf.Clamp(lens.FieldOfView, 20f, 80f);
+            playerCamera.Lens = lens;
         }
     }
 }

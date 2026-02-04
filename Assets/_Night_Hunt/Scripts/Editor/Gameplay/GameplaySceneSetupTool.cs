@@ -125,9 +125,7 @@ namespace NightHunt.Editor.Gameplay
 
         private static void CreateInputLayerManager()
         {
-            GameObject go = new GameObject("InputLayerManager");
-            go.AddComponent<InputLayerManager>();
-            Debug.Log("[GameplaySceneSetupTool] Created InputLayerManager");
+          
         }
 
         private static void CreateGameplayEventBus()

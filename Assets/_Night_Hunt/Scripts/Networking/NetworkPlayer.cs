@@ -2,7 +2,7 @@ using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using UnityEngine;
-using NightHunt.Gameplay.Input;
+using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Character;
 using Unity.Cinemachine;
 using UnityEngine.Serialization;
@@ -20,8 +20,7 @@ namespace NightHunt.Networking
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
-        [Header("Player References")]
-        [SerializeField] private PlayerInputHandler inputHandler;
+
         [SerializeField] private CharacterNormalMovement movement;
         [SerializeField] private CharacterCombat combat;
         [SerializeField] private CinemachineCamera playerCamera;
@@ -49,8 +48,6 @@ namespace NightHunt.Networking
             if (combat == null)
                 combat = GetComponent<CharacterCombat>();
 
-            if (inputHandler == null)
-                inputHandler = GetComponent<PlayerInputHandler>();
 
             // Subscribe to sync var changes
             playerName.OnChange += OnPlayerNameChanged;
@@ -100,6 +97,11 @@ namespace NightHunt.Networking
                 playerName.OnChange -= OnPlayerNameChanged;
             if (teamId != null)
                 teamId.OnChange -= OnPlayerTeamChanged;
+            
+            if (IsOwner && InputManager.Instance != null)
+            {
+                InputManager.Instance.DisableAllInput();
+            }
         }
 
         public override void OnOwnershipClient(NetworkConnection prevOwner)
@@ -150,17 +152,9 @@ namespace NightHunt.Networking
 
         private void SetupInputForOwnership()
         {
-            if (inputHandler == null) return;
-
-            if (IsOwner)
+            if (IsOwner && InputManager.Instance != null)
             {
-                inputHandler.Initialize(this);
-                inputHandler.EnableInput();
-                Debug.Log($"[NetworkPlayer] Input enabled for owner: {playerName.Value}");
-            }
-            else
-            {
-                inputHandler.DisableInput();
+                InputManager.Instance.EnableAllInput();
             }
         }
 
@@ -182,66 +176,6 @@ namespace NightHunt.Networking
         }
 
         #endregion
-
-        #region Combat Input (still needs ServerRpc if not using PredictedObject)
-
-        // ✅ If combat also uses prediction, remove this
-        // ❌ If combat is separate, keep ServerRpc
-        private void Update()
-        {
-            if (!IsSpawned || !IsOwner || IsServerInitialized) return;
-
-            // Send combat input to server
-            if (combat != null && inputHandler != null)
-            {
-                Vector3 aimDirection = inputHandler.GetAimDirection();
-                bool isAttacking = inputHandler.IsAttacking();
-                bool isReloading = inputHandler.IsReloading();
-                
-                if (isAttacking || isReloading || aimDirection != Vector3.zero)
-                {
-                    ServerReceiveCombatInput(aimDirection, isAttacking, isReloading);
-                }
-            }
-        }
-
-        [ServerRpc(RequireOwnership = true, RunLocally = false)]
-        private void ServerReceiveCombatInput(Vector3 aimDirection, bool isAttacking, bool isReloading)
-        {
-            if (!IsSpawned || combat == null) return;
-            
-            combat.SetAimDirection(aimDirection);
-            combat.SetAttacking(isAttacking);
-            combat.SetReloading(isReloading);
-        }
-
-        #endregion
-
-        #region Game Events
-
-        public void OnDeath()
-        {
-            Debug.Log($"[NetworkPlayer] Player {playerName.Value} died");
-            
-            if (IsServerInitialized)
-            {
-                var serverGameManager = FindFirstObjectByType<ServerGameManager>();
-                if (serverGameManager != null)
-                {
-                    serverGameManager.RespawnPlayer(this, delay: 3f);
-                }
-            }
-        }
-
-        [Server]
-        public void RespawnAtPosition(Vector3 spawnPosition)
-        {
-            transform.position = spawnPosition;
-            Debug.Log($"[NetworkPlayer] Player {playerName.Value} respawned at {spawnPosition}");
-        }
-
-        #endregion
-
         private void OnPlayerNameChanged(string oldName, string newName, bool asServer)
         {
             Debug.Log($"[NetworkPlayer] Name changed: {oldName} → {newName}");

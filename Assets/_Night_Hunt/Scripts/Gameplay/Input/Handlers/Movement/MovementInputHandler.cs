@@ -1,0 +1,201 @@
+﻿using UnityEngine;
+using UnityEngine.InputSystem;
+using NightHunt.Gameplay.Input.Core;
+
+namespace NightHunt.Gameplay.Input.Handlers.Movement
+{
+    /// <summary>
+    /// Handles ONLY player movement input (Move, Sprint, Crouch)
+    /// Separated from combat and interaction for clean architecture
+    /// Components read input values from this handler via InputManager
+    /// </summary>
+    public class MovementInputHandler : MonoBehaviour, IInputHandler
+    {
+        private InputActionMap playerActionMap;
+        private InputAction moveAction;
+        private InputAction sprintAction;
+        private InputAction crouchAction;
+
+        // Current input state
+        private Vector2 moveInput;
+        private bool isSprinting;
+        private bool isCrouching;
+
+        private bool inputEnabled = false;
+
+        #region Lifecycle
+
+        private void Awake()
+        {
+            InitializeActions();
+        }
+
+        private void OnEnable()
+        {
+            RegisterWithManager();
+        }
+
+        private void OnDisable()
+        {
+            DisableInput();
+            UnregisterFromManager();
+        }
+
+        #endregion
+
+        #region Initialization
+
+        /// <summary>
+        /// Initialize input actions from InputLayerManager
+        /// </summary>
+        private void InitializeActions()
+        {
+            if (InputLayerManager.Instance == null)
+            {
+                Debug.LogError("[MovementInputHandler] InputLayerManager.Instance is null!");
+                return;
+            }
+
+            playerActionMap = InputLayerManager.Instance.PlayerMap;
+
+            if (playerActionMap != null)
+            {
+                moveAction = playerActionMap.FindAction("Move");
+                sprintAction = playerActionMap.FindAction("Sprint");
+                crouchAction = playerActionMap.FindAction("Crouch");
+            }
+            else
+            {
+                Debug.LogError("[MovementInputHandler] 'Player' action map not found!");
+            }
+        }
+
+        /// <summary>
+        /// Register with InputLayerManager
+        /// </summary>
+        private void RegisterWithManager()
+        {
+            InputLayerManager.Instance?.RegisterHandler(this);
+        }
+
+        /// <summary>
+        /// Unregister from InputLayerManager
+        /// </summary>
+        private void UnregisterFromManager()
+        {
+            InputLayerManager.Instance?.UnregisterHandler(this);
+        }
+
+        #endregion
+
+        #region IInputHandler Implementation
+
+        public bool IsInputEnabled => inputEnabled;
+
+        public InputActionMap GetActionMap() => playerActionMap;
+
+        /// <summary>
+        /// Enable movement input
+        /// </summary>
+        public void EnableInput()
+        {
+            if (inputEnabled) return;
+
+            inputEnabled = true;
+
+            // Subscribe to input events
+            if (moveAction != null)
+            {
+                moveAction.performed += OnMovePerformed;
+                moveAction.canceled += OnMoveCanceled;
+            }
+
+            if (sprintAction != null)
+            {
+                sprintAction.performed += OnSprintPerformed;
+                sprintAction.canceled += OnSprintCanceled;
+            }
+
+            if (crouchAction != null)
+            {
+                crouchAction.performed += OnCrouchPerformed;
+            }
+
+            Debug.Log("[MovementInputHandler] Input enabled");
+        }
+
+        /// <summary>
+        /// Disable movement input
+        /// </summary>
+        public void DisableInput()
+        {
+            if (!inputEnabled) return;
+
+            inputEnabled = false;
+
+            // Unsubscribe
+            if (moveAction != null)
+            {
+                moveAction.performed -= OnMovePerformed;
+                moveAction.canceled -= OnMoveCanceled;
+            }
+
+            if (sprintAction != null)
+            {
+                sprintAction.performed -= OnSprintPerformed;
+                sprintAction.canceled -= OnSprintCanceled;
+            }
+
+            if (crouchAction != null)
+            {
+                crouchAction.performed -= OnCrouchPerformed;
+            }
+
+            // Reset state
+            moveInput = Vector2.zero;
+            isSprinting = false;
+            isCrouching = false;
+
+            Debug.Log("[MovementInputHandler] Input disabled");
+        }
+
+        #endregion
+
+        #region Input Event Handlers
+
+        private void OnMovePerformed(InputAction.CallbackContext context)
+        {
+            moveInput = context.ReadValue<Vector2>();
+        }
+
+        private void OnMoveCanceled(InputAction.CallbackContext context)
+        {
+            moveInput = Vector2.zero;
+        }
+
+        private void OnSprintPerformed(InputAction.CallbackContext context)
+        {
+            isSprinting = true;
+        }
+
+        private void OnSprintCanceled(InputAction.CallbackContext context)
+        {
+            isSprinting = false;
+        }
+
+        private void OnCrouchPerformed(InputAction.CallbackContext context)
+        {
+            isCrouching = !isCrouching; // Toggle
+        }
+
+        #endregion
+
+        #region Public API
+
+        public Vector2 GetMoveInput() => moveInput;
+        public bool IsSprinting() => isSprinting;
+        public bool IsCrouching() => isCrouching;
+
+        #endregion
+    }
+}
