@@ -24,7 +24,7 @@ namespace NightHunt.Inventory.UI.Visuals
         void Awake()
         {
             rectTransform = GetComponent<RectTransform>();
-            gameObject.SetActive(false);
+            //gameObject.SetActive(false);
         }
         
         void OnEnable()

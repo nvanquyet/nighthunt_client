@@ -1,6 +1,7 @@
 using UnityEngine;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
+using NightHunt.Inventory.Core.Enums;
 using NightHunt.Inventory.UI.Cells;
 using System.Collections.Generic;
 
@@ -114,7 +115,7 @@ namespace NightHunt.Inventory.UI.Panels
                 if (cell != null)
                 {
                     // Use Container location type
-                    cell.Initialize(slots[i].Item, i, Core.Enums.SlotLocationType.Container);
+                    cell.Initialize(slots[i].Item, i, SlotLocationType.Container);
                     cells.Add(cell);
                 }
             }
@@ -151,7 +152,7 @@ namespace NightHunt.Inventory.UI.Panels
             
             for (int i = 0; i < slots.Count && i < cells.Count; i++)
             {
-                cells[i].Initialize(slots[i].Item, i, Core.Enums.SlotLocationType.Container);
+                cells[i].Initialize(slots[i].Item, i, SlotLocationType.Container);
             }
             
             if (enableDebugLogs)

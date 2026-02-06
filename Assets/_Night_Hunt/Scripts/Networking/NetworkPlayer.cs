@@ -6,6 +6,8 @@ using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Character;
 using Unity.Cinemachine;
 using UnityEngine.Serialization;
+using NightHunt.Networking.ClientOnly;
+using NightHunt.Inventory.Core;
 
 namespace NightHunt.Networking
 {
@@ -21,11 +23,11 @@ namespace NightHunt.Networking
     public class NetworkPlayer : NetworkBehaviour
     {
 
-        [SerializeField] private CharacterNormalMovement movement;
         [SerializeField] private CharacterCombat combat;
         [SerializeField] private CinemachineCamera playerCamera;
 
         // Synchronized variables
+        private IMovementController _movement;
         private readonly SyncVar<string> playerName = new SyncVar<string>();
         private readonly SyncVar<int> teamId = new SyncVar<int>();
 
@@ -42,8 +44,8 @@ namespace NightHunt.Networking
             base.OnStartNetwork();
 
             // Initialize components
-            if (movement == null)
-                movement = GetComponent<CharacterNormalMovement>();
+            if (_movement == null)
+                _movement = GetComponent<IMovementController>();
 
             if (combat == null)
                 combat = GetComponent<CharacterCombat>();
@@ -72,6 +74,18 @@ namespace NightHunt.Networking
             // Setup camera and input based on ownership
             SetupCameraForOwnership();
             SetupInputForOwnership();
+
+            // Notify UI manager if this is the local player
+            if (IsOwner && ClientOnlyUIManager.Instance != null)
+            {
+                ClientOnlyUIManager.Instance.SetLocalPlayer(this);
+            }
+            
+            // Notify SpectateManager if this is the local player
+            if (IsOwner && SpectateManager.Instance != null)
+            {
+                SpectateManager.Instance.SetLocalPlayer(this);
+            }
         }
 
         public override void OnStartServer()
@@ -102,6 +116,12 @@ namespace NightHunt.Networking
             {
                 InputManager.Instance.DisableAllInput();
             }
+
+            // Clear local player from UI manager if this was the local player
+            if (IsOwner && ClientOnlyUIManager.Instance != null)
+            {
+                ClientOnlyUIManager.Instance.ClearLocalPlayer();
+            }
         }
 
         public override void OnOwnershipClient(NetworkConnection prevOwner)
@@ -110,6 +130,12 @@ namespace NightHunt.Networking
             
             SetupCameraForOwnership();
             SetupInputForOwnership();
+
+            // Notify UI manager of ownership change
+            if (ClientOnlyUIManager.Instance != null)
+            {
+                ClientOnlyUIManager.Instance.OnLocalPlayerOwnershipChanged(this);
+            }
         }
 
         #endregion

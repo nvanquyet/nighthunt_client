@@ -1,6 +1,8 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Inventory.Core.Events;
+using NightHunt.Inventory.Core.Enums;
+using NightHunt.Inventory.Core.Utilities;
 using NightHunt.Inventory.Input;
 
 namespace NightHunt.Inventory.UI.Controllers
@@ -74,28 +76,23 @@ namespace NightHunt.Inventory.UI.Controllers
             isDragging = true;
             currentDragContext = context;
             
-            if (enableDebugLogs)
-            {
-                Debug.Log($"[DragDropController] Drag started: {context.ItemInstance?.Definition.ItemId}");
-            }
+            InventoryLogger.Log("DragDropController", $"Drag started: {context.ItemInstance?.Definition.ItemId}", enableDebugLogs);
         }
         
         private void OnDragEnded()
         {
             isDragging = false;
             
-            if (enableDebugLogs)
-            {
-                Debug.Log("[DragDropController] Drag ended");
-            }
+            InventoryLogger.Log("DragDropController", "Drag ended", enableDebugLogs);
         }
         
         private void OnDropped(DragContext context)
         {
-            if (enableDebugLogs)
-            {
-                Debug.Log($"[DragDropController] Dropped from {context.SourceLocation} to {context.TargetLocation}");
-            }
+            InventoryLogger.Log("DragDropController", $"Dropped from {context.SourceLocation} to {context.TargetLocation}", enableDebugLogs);
+            
+            // QuickSlot drops are handled by QuickSlotSlotUI.OnDrop()
+            // Inventory-to-Inventory drops need handler (TODO: implement in InventoryManager)
+            // Other location types are handled by their respective UI components
         }
         
         #endregion
@@ -109,7 +106,7 @@ namespace NightHunt.Inventory.UI.Controllers
         {
             if (!isDragging) return;
             
-            Debug.Log($"[DragDropController] Drag cancelled: {reason}");
+            InventoryLogger.Log("DragDropController", $"Drag cancelled: {reason}", enableDebugLogs);
             isDragging = false;
             DragDropEvents.InvokeDragCancelled();
         }

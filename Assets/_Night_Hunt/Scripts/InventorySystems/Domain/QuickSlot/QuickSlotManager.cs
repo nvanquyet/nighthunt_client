@@ -2,6 +2,7 @@ using UnityEngine;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Enums;
 using NightHunt.Inventory.Core.Events;
+using NightHunt.Inventory.Core.Utilities;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -15,6 +16,9 @@ namespace NightHunt.Inventory.Domain.QuickSlot
         [Header("Configuration")] [SerializeField]
         private QuickSlotConfig config;
 
+        [Header("References")]
+        [SerializeField] private Networking.QuickSlotNetworkSync networkSync;
+
         [Header("Debug")] [SerializeField] private bool enableDebugLogs = false;
 
         private ItemInstance[] quickSlots;
@@ -25,14 +29,13 @@ namespace NightHunt.Inventory.Domain.QuickSlot
         {
             if (config == null)
             {
-                Debug.LogError("[QuickSlotManager] Config not assigned!");
+                InventoryLogger.LogError("QuickSlotManager", "Config not assigned!");
                 return;
             }
 
             quickSlots = new ItemInstance[config.SlotCount];
 
-            if (enableDebugLogs)
-                Debug.Log($"[QuickSlotManager] Initialized with {config.SlotCount} slots");
+            InventoryLogger.Log("QuickSlotManager", $"Initialized with {config.SlotCount} slots", enableDebugLogs);
         }
 
         #endregion
@@ -46,8 +49,7 @@ namespace NightHunt.Inventory.Domain.QuickSlot
         {
             if (slotIndex < 0 || slotIndex >= quickSlots.Length)
             {
-                if (enableDebugLogs)
-                    Debug.LogWarning($"[QuickSlotManager] Invalid slot index: {slotIndex}");
+                InventoryLogger.LogWarning("QuickSlotManager", $"Invalid slot index: {slotIndex}", enableDebugLogs);
                 return false;
             }
 
@@ -55,8 +57,7 @@ namespace NightHunt.Inventory.Domain.QuickSlot
             if (item.Definition.ItemType != ItemType.Consumable &&
                 item.Definition.ItemType != ItemType.Throwable)
             {
-                if (enableDebugLogs)
-                    Debug.LogWarning("[QuickSlotManager] Only consumables/throwables allowed in quick slots");
+                InventoryLogger.LogWarning("QuickSlotManager", "Only consumables/throwables allowed in quick slots", enableDebugLogs);
                 return false;
             }
 
@@ -65,8 +66,7 @@ namespace NightHunt.Inventory.Domain.QuickSlot
             // Fire event for UI update
             QuickSlotEvents.InvokeQuickSlotChanged(slotIndex, item);
 
-            if (enableDebugLogs)
-                Debug.Log($"[QuickSlotManager] Added {item.Definition.ItemId} to slot {slotIndex}");
+            InventoryLogger.Log("QuickSlotManager", $"Added {item.Definition.ItemId} to slot {slotIndex}", enableDebugLogs);
 
             return true;
         }
@@ -85,8 +85,10 @@ namespace NightHunt.Inventory.Domain.QuickSlot
             // Fire event for UI update
             QuickSlotEvents.InvokeQuickSlotChanged(slotIndex, null);
 
-            if (enableDebugLogs && item != null)
-                Debug.Log($"[QuickSlotManager] Removed {item.Definition.ItemId} from slot {slotIndex}");
+            if (item != null)
+            {
+                InventoryLogger.Log("QuickSlotManager", $"Removed {item.Definition.ItemId} from slot {slotIndex}", enableDebugLogs);
+            }
 
             return item;
         }
@@ -133,8 +135,7 @@ namespace NightHunt.Inventory.Domain.QuickSlot
                 QuickSlotEvents.InvokeQuickSlotChanged(i, null);
             }
 
-            if (enableDebugLogs)
-                Debug.Log("[QuickSlotManager] Cleared all quick slots");
+            InventoryLogger.Log("QuickSlotManager", "Cleared all quick slots", enableDebugLogs);
         }
 
         #endregion

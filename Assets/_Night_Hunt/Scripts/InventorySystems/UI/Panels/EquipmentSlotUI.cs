@@ -5,17 +5,20 @@ using TMPro;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
+using NightHunt.Inventory.Core;
+using NightHunt.Inventory.UI.Core;
 
 namespace NightHunt.Inventory.UI.Panels
 {
     /// <summary>
     /// Individual equipment slot UI (Helmet, Armor, Backpack).
     /// Supports drag & drop, tooltip, and right-click unequip.
+    /// Implements state management for visual feedback.
     /// </summary>
     public class EquipmentSlotUI : MonoBehaviour,
         IBeginDragHandler, IDragHandler, IEndDragHandler,
         IDropHandler, IPointerEnterHandler, IPointerExitHandler,
-        IPointerClickHandler
+        IPointerClickHandler, IUISlotStateManager
     {
         [Header("UI References")]
         [SerializeField] private Image slotIcon;
@@ -26,10 +29,12 @@ namespace NightHunt.Inventory.UI.Panels
         [Header("Visual Settings")]
         [SerializeField] private Color emptyColor = new Color(0.2f, 0.2f, 0.2f, 0.5f);
         [SerializeField] private Color occupiedColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+        [SerializeField] private Color hoverColor = new Color(0.4f, 0.4f, 0.4f, 1f);
         
         private ItemInstance currentItem;
         private EquipmentSlotType slotType;
         private EquipmentPanelUI parentPanel;
+        private UISlotState currentState = UISlotState.Empty;
         
         #region Initialization
         
@@ -65,15 +70,12 @@ namespace NightHunt.Inventory.UI.Panels
                     itemIcon.enabled = true;
                 }
                 
-                if (slotIcon != null)
-                {
-                    slotIcon.color = occupiedColor;
-                }
-                
                 if (unequipButton != null)
                 {
                     unequipButton.gameObject.SetActive(true);
                 }
+                
+                SetState(UISlotState.Occupied);
             }
             else
             {
@@ -83,15 +85,12 @@ namespace NightHunt.Inventory.UI.Panels
                     itemIcon.enabled = false;
                 }
                 
-                if (slotIcon != null)
-                {
-                    slotIcon.color = emptyColor;
-                }
-                
                 if (unequipButton != null)
                 {
                     unequipButton.gameObject.SetActive(false);
                 }
+                
+                SetState(UISlotState.Empty);
             }
         }
         
@@ -101,6 +100,12 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnBeginDrag(PointerEventData eventData)
         {
+            // Block drag if not local player (spectating)
+            if (!SpectateManager.Instance?.IsCurrentPlayerLocal() ?? true)
+            {
+                return; // Spectating - cannot drag
+            }
+            
             if (eventData.button != PointerEventData.InputButton.Left) return;
             if (currentItem == null) return;
             
@@ -126,6 +131,12 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnDrop(PointerEventData eventData)
         {
+            // Block drop if not local player (spectating)
+            if (!SpectateManager.Instance?.IsCurrentPlayerLocal() ?? true)
+            {
+                return; // Spectating - cannot drop
+            }
+            
             var draggedCell = eventData.pointerDrag?.GetComponent<UI.Cells.InventoryCellUI>();
             if (draggedCell == null || draggedCell.GetItemData() == null)
             {
@@ -149,10 +160,84 @@ namespace NightHunt.Inventory.UI.Panels
         
         #endregion
         
+        #region State Management
+        
+        public void SetState(UISlotState state)
+        {
+            currentState = state;
+            UpdateVisualState();
+        }
+        
+        public UISlotState GetCurrentState() => currentState;
+        
+        public void OnPointerEnter()
+        {
+            if (currentState != UISlotState.Empty)
+            {
+                SetState(UISlotState.Hover);
+            }
+        }
+        
+        public void OnPointerExit()
+        {
+            if (currentState == UISlotState.Hover)
+            {
+                SetState(currentItem != null ? UISlotState.Occupied : UISlotState.Empty);
+            }
+        }
+        
+        public void OnSelect()
+        {
+            if (currentItem != null)
+            {
+                SetState(UISlotState.Selected);
+            }
+        }
+        
+        public void OnUnselect()
+        {
+            if (currentState == UISlotState.Selected)
+            {
+                SetState(currentItem != null ? UISlotState.Occupied : UISlotState.Empty);
+            }
+        }
+        
+        private void UpdateVisualState()
+        {
+            if (slotIcon == null) return;
+            
+            switch (currentState)
+            {
+                case UISlotState.Empty:
+                    slotIcon.color = emptyColor;
+                    break;
+                    
+                case UISlotState.Occupied:
+                    slotIcon.color = occupiedColor;
+                    break;
+                    
+                case UISlotState.Hover:
+                    slotIcon.color = hoverColor;
+                    break;
+                    
+                case UISlotState.Selected:
+                    slotIcon.color = hoverColor;
+                    break;
+                    
+                case UISlotState.Unselected:
+                    slotIcon.color = occupiedColor;
+                    break;
+            }
+        }
+        
+        #endregion
+        
         #region Tooltip
         
         public void OnPointerEnter(PointerEventData eventData)
         {
+            OnPointerEnter();
+            
             if (currentItem != null)
             {
                 TooltipEvents.InvokeShowTooltip(currentItem, transform.position);
@@ -165,6 +250,7 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnPointerExit(PointerEventData eventData)
         {
+            OnPointerExit();
             TooltipEvents.InvokeHideTooltip();
         }
         

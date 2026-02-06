@@ -410,6 +410,7 @@ GameObject:
   - component: {fileID: 2205465924979101453}
   - component: {fileID: 6193876726637652787}
   - component: {fileID: 4326130117318841088}
+  - component: {fileID: 3931950557086145594}
   m_Layer: 0
   m_Name: Network_Player No Predict
   m_TagString: Untagged
@@ -522,7 +523,7 @@ MonoBehaviour:
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
   NetworkObserver: {fileID: 0}
-  _enablePrediction: 1
+  _enablePrediction: 0
   _predictionType: 0
   _graphicalObject: {fileID: 0}
   _detachGraphicalObject: 0
@@ -734,6 +735,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   config: {fileID: 11400000, guid: 5752f758f35127d40a0e8ff532a85c80, type: 2}
+  networkSync: {fileID: 0}
   enableDebugLogs: 0
 --- !u!114 &903616381516195827
 MonoBehaviour:
@@ -803,8 +805,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   consumeDuration: 2
   inventoryHandler: {fileID: 0}
-  progressBarRoot: {fileID: 0}
-  progressBarFill: {fileID: 0}
   enableDebugLogs: 0
 --- !u!114 &4326130117318841088
 MonoBehaviour:
@@ -823,6 +823,22 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 0}
   config: {fileID: 11400000, guid: d2ce4c46781ebd5458569cd574cea81a, type: 2}
   inventoryManager: {fileID: 6307512581538016077}
+  enableDebugLogs: 0
+--- !u!114 &3931950557086145594
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1cd3f3b319ec40718ca8428494a24870, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  config: {fileID: 11400000, guid: 5752f758f35127d40a0e8ff532a85c80, type: 2}
+  quickSlotManager: {fileID: 5009962661295879563}
+  cooldownManager: {fileID: 0}
   enableDebugLogs: 0
 --- !u!1 &7515422132242615850
 GameObject:

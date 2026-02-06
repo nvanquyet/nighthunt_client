@@ -5,6 +5,8 @@ using NightHunt.Inventory.Domain.Equipment;
 using NightHunt.Inventory.Domain.Weapon;
 using NightHunt.Inventory.Domain.Attachment;
 using NightHunt.Inventory.Domain.QuickSlot;
+using NightHunt.Inventory.Core;
+using NightHunt.Inventory.Core.Utilities;
 using NightHunt.Networking;
 
 namespace NightHunt.Inventory.UI.Controllers
@@ -25,11 +27,13 @@ namespace NightHunt.Inventory.UI.Controllers
         [SerializeField] private WeaponPanelUI weaponPanelUI;
         [SerializeField] private AttachmentPanelUI attachmentPanelUI;
         [SerializeField] private QuickSlotHUDController quickSlotHUDController;
+        [SerializeField] private QuickSlotPanelUI quickSlotPanelUI;
         
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
         
         private InventoryInputHandler inventoryInputHandler;
+        private NetworkPlayer currentDisplayedPlayer;
         
         #region Lifecycle
         
@@ -54,17 +58,23 @@ namespace NightHunt.Inventory.UI.Controllers
                 inventoryInputHandler.OnToggleInventory += HandleInventoryToggle;
             }
             
+            // Subscribe to spectate changes
+            if (SpectateManager.Instance != null)
+            {
+                SpectateManager.Instance.OnCurrentPlayerChanged += OnCurrentPlayerChanged;
+            }
+            
             // Initialize UI state
             SetInitialUIState();
             
-            // Try to setup managers from local player (if already spawned)
-            FindAndSetupLocalPlayer();
+            // Try to setup managers from current player (if already spawned)
+            FindAndSetupCurrentPlayer();
         }
         
         void Start()
         {
             // Try again in Start in case player spawns after OnEnable
-            FindAndSetupLocalPlayer();
+            FindAndSetupCurrentPlayer();
         }
         
         void OnDisable()
@@ -72,6 +82,11 @@ namespace NightHunt.Inventory.UI.Controllers
             if (inventoryInputHandler != null)
             {
                 inventoryInputHandler.OnToggleInventory -= HandleInventoryToggle;
+            }
+            
+            if (SpectateManager.Instance != null)
+            {
+                SpectateManager.Instance.OnCurrentPlayerChanged -= OnCurrentPlayerChanged;
             }
         }
         
@@ -93,6 +108,11 @@ namespace NightHunt.Inventory.UI.Controllers
                 // Show HUD, hide inventory
                 ShowPlayerHUD();
             }
+        }
+        
+        private void OnCurrentPlayerChanged(NetworkPlayer player)
+        {
+            SetupForPlayer(player);
         }
         
         #endregion
@@ -161,91 +181,117 @@ namespace NightHunt.Inventory.UI.Controllers
         #region Manager Injection
         
         /// <summary>
-        /// Sets up all UI panels with managers from local player.
-        /// Called when local player spawns.
+        /// Sets up all UI panels with managers from current player (local or spectated).
+        /// Called when player spawns or spectate changes.
         /// </summary>
-        public void SetupForPlayer(NetworkPlayer localPlayer)
+        public void SetupForPlayer(NetworkPlayer player)
         {
-            if (localPlayer == null)
+            // Use SpectateManager to get current player (local or spectated)
+            var currentPlayer = SpectateManager.Instance?.GetCurrentPlayer() ?? player;
+            
+            if (currentPlayer == null)
             {
-                Debug.LogError("[UIRootController] Cannot setup - localPlayer is null!");
+                InventoryLogger.LogError("UIRootController", "Cannot setup - currentPlayer is null!");
                 return;
             }
+            
+            currentDisplayedPlayer = currentPlayer;
             
             // Inject EquipmentManager
             if (equipmentPanelUI != null)
             {
-                var equipmentManager = localPlayer.GetComponent<EquipmentManager>();
+                var equipmentManager = currentPlayer.GetComponent<EquipmentManager>();
                 if (equipmentManager != null)
                 {
                     equipmentPanelUI.SetEquipmentManager(equipmentManager);
                 }
                 else
                 {
-                    Debug.LogWarning("[UIRootController] EquipmentManager not found on player!");
+                    InventoryLogger.LogWarning("UIRootController", "EquipmentManager not found on player!", enableDebugLogs);
                 }
             }
             
             // Inject WeaponManager
             if (weaponPanelUI != null)
             {
-                var weaponManager = localPlayer.GetComponent<WeaponManager>();
+                var weaponManager = currentPlayer.GetComponent<WeaponManager>();
                 if (weaponManager != null)
                 {
                     weaponPanelUI.SetWeaponManager(weaponManager);
                 }
                 else
                 {
-                    Debug.LogWarning("[UIRootController] WeaponManager not found on player!");
+                    InventoryLogger.LogWarning("UIRootController", "WeaponManager not found on player!", enableDebugLogs);
                 }
             }
             
             // Inject AttachmentManager
             if (attachmentPanelUI != null)
             {
-                var attachmentManager = localPlayer.GetComponent<AttachmentManager>();
+                var attachmentManager = currentPlayer.GetComponent<AttachmentManager>();
                 if (attachmentManager != null)
                 {
                     attachmentPanelUI.SetAttachmentManager(attachmentManager);
                 }
                 else
                 {
-                    Debug.LogWarning("[UIRootController] AttachmentManager not found on player!");
+                    InventoryLogger.LogWarning("UIRootController", "AttachmentManager not found on player!", enableDebugLogs);
                 }
             }
             
-            // Inject QuickSlotManager
+            // Inject QuickSlotManager to HUD controller
             if (quickSlotHUDController != null)
             {
-                var quickSlotManager = localPlayer.GetComponent<QuickSlotManager>();
+                var quickSlotManager = currentPlayer.GetComponent<QuickSlotManager>();
                 if (quickSlotManager != null)
                 {
                     quickSlotHUDController.SetQuickSlotManager(quickSlotManager);
                 }
                 else
                 {
-                    Debug.LogWarning("[UIRootController] QuickSlotManager not found on player!");
+                    InventoryLogger.LogWarning("UIRootController", "QuickSlotManager not found on player!", enableDebugLogs);
                 }
             }
             
-            if (enableDebugLogs)
-                Debug.Log("[UIRootController] Setup complete for local player");
+            // Inject QuickSlotManager to Inventory Panel
+            if (quickSlotPanelUI != null)
+            {
+                var quickSlotManager = currentPlayer.GetComponent<QuickSlotManager>();
+                if (quickSlotManager != null)
+                {
+                    quickSlotPanelUI.SetQuickSlotManager(quickSlotManager);
+                }
+                else
+                {
+                    InventoryLogger.LogWarning("UIRootController", "QuickSlotManager not found on player!", enableDebugLogs);
+                }
+            }
+            
+            InventoryLogger.Log("UIRootController", $"Setup complete for player: {currentPlayer.PlayerName}", enableDebugLogs);
         }
         
         /// <summary>
-        /// Helper method to find local player and setup UI.
+        /// Helper method to find local player, set it in SpectateManager, and setup UI for current player.
         /// Can be called from Start() or when player spawns.
         /// </summary>
-        public void FindAndSetupLocalPlayer()
+        public void FindAndSetupCurrentPlayer()
         {
+            // First, set local player in SpectateManager
             NetworkPlayer[] players = FindObjectsOfType<NetworkPlayer>();
             foreach (var player in players)
             {
                 if (player.IsLocalPlayer)
                 {
-                    SetupForPlayer(player);
+                    SpectateManager.Instance?.SetLocalPlayer(player);
                     break;
                 }
+            }
+            
+            // Then setup UI for current player (local or spectated)
+            var currentPlayer = SpectateManager.Instance?.GetCurrentPlayer();
+            if (currentPlayer != null)
+            {
+                SetupForPlayer(currentPlayer);
             }
         }
         

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NightHunt.Inventory.Domain.QuickSlot;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Data;
+using NightHunt.Inventory.Core.Utilities;
 using NightHunt.Inventory.UI.Buttons;
 
 namespace NightHunt.Inventory.UI.Controllers
@@ -44,8 +45,7 @@ namespace NightHunt.Inventory.UI.Controllers
         {
             quickSlotManager = manager;
             
-            if (enableDebugLogs)
-                Debug.Log("[QuickSlotHUDController] QuickSlotManager injected");
+            InventoryLogger.Log("QuickSlotHUDController", "QuickSlotManager injected", enableDebugLogs);
             
             // Initialize buttons if config is ready
             if (config != null && quickSlotContainer != null && quickSlotButtonPrefab != null)
@@ -82,25 +82,25 @@ namespace NightHunt.Inventory.UI.Controllers
         {
             if (config == null)
             {
-                Debug.LogError("[QuickSlotHUDController] QuickSlotConfig not assigned!");
+                InventoryLogger.LogError("QuickSlotHUDController", "QuickSlotConfig not assigned!");
                 return;
             }
             
             if (quickSlotContainer == null)
             {
-                Debug.LogError("[QuickSlotHUDController] QuickSlotContainer not assigned!");
+                InventoryLogger.LogError("QuickSlotHUDController", "QuickSlotContainer not assigned!");
                 return;
             }
             
             if (quickSlotButtonPrefab == null)
             {
-                Debug.LogError("[QuickSlotHUDController] QuickSlotButtonPrefab not assigned!");
+                InventoryLogger.LogError("QuickSlotHUDController", "QuickSlotButtonPrefab not assigned!");
                 return;
             }
             
             if (quickSlotManager == null)
             {
-                Debug.LogError("[QuickSlotHUDController] QuickSlotManager not assigned! Call SetQuickSlotManager first.");
+                InventoryLogger.LogError("QuickSlotHUDController", "QuickSlotManager not assigned! Call SetQuickSlotManager first.");
                 return;
             }
             
@@ -130,12 +130,11 @@ namespace NightHunt.Inventory.UI.Controllers
                     button.Initialize(i, quickSlotManager, displayKey);
                     buttons.Add(button);
                     
-                    if (enableDebugLogs)
-                        Debug.Log($"[QuickSlotHUDController] Spawned quick slot button {i} with key {displayKey}");
+                    InventoryLogger.Log("QuickSlotHUDController", $"Spawned quick slot button {i} with key {displayKey}", enableDebugLogs);
                 }
                 else
                 {
-                    Debug.LogError($"[QuickSlotHUDController] Button prefab doesn't have QuickSlotHUDButton component!");
+                    InventoryLogger.LogError("QuickSlotHUDController", "Button prefab doesn't have QuickSlotHUDButton component!");
                     Destroy(buttonObj);
                 }
             }

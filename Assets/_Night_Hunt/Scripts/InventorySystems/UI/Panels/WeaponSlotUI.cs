@@ -5,17 +5,20 @@ using TMPro;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
+using NightHunt.Inventory.Core;
+using NightHunt.Inventory.UI.Core;
 
 namespace NightHunt.Inventory.UI.Panels
 {
     /// <summary>
     /// Individual weapon slot UI (Primary/Secondary).
     /// Shows weapon, ammo, active state, supports drag & drop.
+    /// Implements state management for visual feedback.
     /// </summary>
     public class WeaponSlotUI : MonoBehaviour,
         IBeginDragHandler, IDragHandler, IEndDragHandler,
         IDropHandler, IPointerEnterHandler, IPointerExitHandler,
-        IPointerClickHandler
+        IPointerClickHandler, IUISlotStateManager
     {
         [Header("UI References")]
         [SerializeField] private Image slotBackground;
@@ -30,11 +33,13 @@ namespace NightHunt.Inventory.UI.Panels
         [SerializeField] private Color emptyColor = new Color(0.2f, 0.2f, 0.2f, 0.5f);
         [SerializeField] private Color occupiedColor = new Color(0.3f, 0.3f, 0.3f, 1f);
         [SerializeField] private Color activeColor = new Color(0.4f, 0.6f, 0.4f, 1f);
+        [SerializeField] private Color hoverColor = new Color(0.4f, 0.4f, 0.4f, 1f);
         
         private ItemInstance currentWeapon;
         private WeaponSlotType slotType;
         private WeaponPanelUI parentPanel;
         private bool isActive;
+        private UISlotState currentState = UISlotState.Empty;
         
         #region Initialization
         
@@ -77,11 +82,6 @@ namespace NightHunt.Inventory.UI.Panels
                     weaponIcon.enabled = true;
                 }
                 
-                if (slotBackground != null)
-                {
-                    slotBackground.color = isActive ? activeColor : occupiedColor;
-                }
-                
                 UpdateAmmoDisplay(weapon.CurrentAmmo);
                 
                 if (switchButton != null)
@@ -93,6 +93,8 @@ namespace NightHunt.Inventory.UI.Panels
                 {
                     unequipButton.gameObject.SetActive(true);
                 }
+                
+                SetState(UISlotState.Occupied);
             }
             else
             {
@@ -100,11 +102,6 @@ namespace NightHunt.Inventory.UI.Panels
                 if (weaponIcon != null)
                 {
                     weaponIcon.enabled = false;
-                }
-                
-                if (slotBackground != null)
-                {
-                    slotBackground.color = emptyColor;
                 }
                 
                 if (ammoText != null)
@@ -121,6 +118,8 @@ namespace NightHunt.Inventory.UI.Panels
                 {
                     unequipButton.gameObject.SetActive(false);
                 }
+                
+                SetState(UISlotState.Empty);
             }
         }
         
@@ -133,10 +132,7 @@ namespace NightHunt.Inventory.UI.Panels
                 activeIndicator.SetActive(active);
             }
             
-            if (slotBackground != null && currentWeapon != null)
-            {
-                slotBackground.color = active ? activeColor : occupiedColor;
-            }
+            UpdateVisualState();
         }
         
         public void UpdateAmmoDisplay(int ammo)
@@ -155,6 +151,12 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnBeginDrag(PointerEventData eventData)
         {
+            // Block drag if not local player (spectating)
+            if (!SpectateManager.Instance?.IsCurrentPlayerLocal() ?? true)
+            {
+                return; // Spectating - cannot drag
+            }
+            
             if (eventData.button != PointerEventData.InputButton.Left) return;
             if (currentWeapon == null) return;
             
@@ -180,6 +182,12 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnDrop(PointerEventData eventData)
         {
+            // Block drop if not local player (spectating)
+            if (!SpectateManager.Instance?.IsCurrentPlayerLocal() ?? true)
+            {
+                return; // Spectating - cannot drop
+            }
+            
             var draggedCell = eventData.pointerDrag?.GetComponent<UI.Cells.InventoryCellUI>();
             if (draggedCell == null || draggedCell.GetItemData() == null)
             {
@@ -202,10 +210,90 @@ namespace NightHunt.Inventory.UI.Panels
         
         #endregion
         
+        #region State Management
+        
+        public void SetState(UISlotState state)
+        {
+            currentState = state;
+            UpdateVisualState();
+        }
+        
+        public UISlotState GetCurrentState() => currentState;
+        
+        public void OnPointerEnter()
+        {
+            if (currentState != UISlotState.Empty && !isActive)
+            {
+                SetState(UISlotState.Hover);
+            }
+        }
+        
+        public void OnPointerExit()
+        {
+            if (currentState == UISlotState.Hover)
+            {
+                SetState(currentWeapon != null ? UISlotState.Occupied : UISlotState.Empty);
+            }
+        }
+        
+        public void OnSelect()
+        {
+            if (currentWeapon != null)
+            {
+                SetState(UISlotState.Selected);
+            }
+        }
+        
+        public void OnUnselect()
+        {
+            if (currentState == UISlotState.Selected)
+            {
+                SetState(currentWeapon != null ? UISlotState.Occupied : UISlotState.Empty);
+            }
+        }
+        
+        private void UpdateVisualState()
+        {
+            if (slotBackground == null) return;
+            
+            if (isActive)
+            {
+                slotBackground.color = activeColor;
+                return;
+            }
+            
+            switch (currentState)
+            {
+                case UISlotState.Empty:
+                    slotBackground.color = emptyColor;
+                    break;
+                    
+                case UISlotState.Occupied:
+                    slotBackground.color = occupiedColor;
+                    break;
+                    
+                case UISlotState.Hover:
+                    slotBackground.color = hoverColor;
+                    break;
+                    
+                case UISlotState.Selected:
+                    slotBackground.color = hoverColor;
+                    break;
+                    
+                case UISlotState.Unselected:
+                    slotBackground.color = occupiedColor;
+                    break;
+            }
+        }
+        
+        #endregion
+        
         #region Tooltip
         
         public void OnPointerEnter(PointerEventData eventData)
         {
+            OnPointerEnter();
+            
             if (currentWeapon != null)
             {
                 TooltipEvents.InvokeShowTooltip(currentWeapon, transform.position);
@@ -218,6 +306,7 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnPointerExit(PointerEventData eventData)
         {
+            OnPointerExit();
             TooltipEvents.InvokeHideTooltip();
         }
         

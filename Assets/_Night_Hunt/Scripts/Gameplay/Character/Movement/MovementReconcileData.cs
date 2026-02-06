@@ -12,7 +12,11 @@ namespace NightHunt.Gameplay.Character.Movement
 
         private uint _tick;
 
-        public MovementReconcileData(Vector3 position, Quaternion rotation, Vector3 velocity, float stamina = 100f)
+        public MovementReconcileData(
+            Vector3 position,
+            Quaternion rotation,
+            Vector3 velocity,
+            float stamina)
         {
             Position = position;
             Rotation = rotation;
@@ -21,9 +25,8 @@ namespace NightHunt.Gameplay.Character.Movement
             _tick = 0;
         }
 
-        public void Dispose() { }
         public uint GetTick() => _tick;
         public void SetTick(uint value) => _tick = value;
+        public void Dispose() { }
     }
 }
-

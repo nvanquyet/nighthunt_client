@@ -4,6 +4,8 @@ using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
+using NightHunt.Inventory.Core.Utilities;
+using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Domain.QuickSlot;
 
 namespace NightHunt.Inventory.Input
@@ -16,10 +18,10 @@ namespace NightHunt.Inventory.Input
     {
         [Header("Configuration")]
         [SerializeField] private QuickSlotConfig config;
-        [SerializeField] private float useCooldown = 0.5f;
 
         [Header("References")]
         [SerializeField] private QuickSlotManager quickSlotManager;
+        [SerializeField] private QuickSlotCooldownManager cooldownManager;
 
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
@@ -33,7 +35,11 @@ namespace NightHunt.Inventory.Input
         private NetworkPlayer networkPlayer;
         private bool inputEnabled = false;
         private bool isInventoryOpen = false;
-        private float lastUseTime = 0f;
+        
+        // Fast/slow press tracking
+        private int selectedSlotIndex = -1;
+        private float lastKeyPressTime = 0f;
+        private const float FastPressThreshold = 0.3f;
 
         // Events
         public event System.Action<int> OnQuickSlotUsed; // 0-3
@@ -66,7 +72,7 @@ namespace NightHunt.Inventory.Input
         {
             if (InputLayerManager.Instance == null)
             {
-                Debug.LogError("[QuickSlotInputHandler] InputLayerManager.Instance is null!");
+                InventoryLogger.LogError("QuickSlotInputHandler", "InputLayerManager.Instance is null!");
                 return;
             }
 
@@ -81,7 +87,7 @@ namespace NightHunt.Inventory.Input
             }
             else
             {
-                Debug.LogError("[QuickSlotInputHandler] 'Inventory' action map not found!");
+                InventoryLogger.LogError("QuickSlotInputHandler", "'Inventory' action map not found!");
             }
         }
 
@@ -95,7 +101,17 @@ namespace NightHunt.Inventory.Input
                 quickSlotManager = player.GetComponent<QuickSlotManager>();
                 if (quickSlotManager == null)
                 {
-                    Debug.LogWarning("[QuickSlotInputHandler] QuickSlotManager not found on player!");
+                    InventoryLogger.LogWarning("QuickSlotInputHandler", "QuickSlotManager not found on player!", enableDebugLogs);
+                }
+            }
+            
+            // Get QuickSlotCooldownManager from player component
+            if (cooldownManager == null && player != null)
+            {
+                cooldownManager = player.GetComponent<QuickSlotCooldownManager>();
+                if (cooldownManager == null)
+                {
+                    InventoryLogger.LogWarning("QuickSlotInputHandler", "QuickSlotCooldownManager not found on player!", enableDebugLogs);
                 }
             }
         }
@@ -108,8 +124,17 @@ namespace NightHunt.Inventory.Input
         {
             quickSlotManager = manager;
             
-            if (enableDebugLogs)
-                Debug.Log("[QuickSlotInputHandler] QuickSlotManager injected");
+            InventoryLogger.Log("QuickSlotInputHandler", "QuickSlotManager injected", enableDebugLogs);
+        }
+        
+        /// <summary>
+        /// Sets the QuickSlotCooldownManager reference directly.
+        /// </summary>
+        public void SetCooldownManager(QuickSlotCooldownManager manager)
+        {
+            cooldownManager = manager;
+            
+            InventoryLogger.Log("QuickSlotInputHandler", "QuickSlotCooldownManager injected", enableDebugLogs);
         }
 
         private void RegisterWithManager()
@@ -136,7 +161,7 @@ namespace NightHunt.Inventory.Input
 
             if (networkPlayer != null && !networkPlayer.IsOwner)
             {
-                Debug.LogWarning("[QuickSlotInputHandler] Cannot enable: Not owner!");
+                InventoryLogger.LogWarning("QuickSlotInputHandler", "Cannot enable: Not owner!", enableDebugLogs);
                 return;
             }
 
@@ -155,7 +180,7 @@ namespace NightHunt.Inventory.Input
             if (quickSlot4Action != null)
                 quickSlot4Action.performed += ctx => UseQuickSlot(3);
 
-            Debug.Log("[QuickSlotInputHandler] Input enabled");
+            InventoryLogger.Log("QuickSlotInputHandler", "Input enabled", enableDebugLogs);
         }
 
         public void DisableInput()
@@ -177,7 +202,7 @@ namespace NightHunt.Inventory.Input
             if (quickSlot4Action != null)
                 quickSlot4Action.performed -= ctx => UseQuickSlot(3);
 
-            Debug.Log("[QuickSlotInputHandler] Input disabled");
+            InventoryLogger.Log("QuickSlotInputHandler", "Input disabled", enableDebugLogs);
         }
 
         #endregion
@@ -189,22 +214,13 @@ namespace NightHunt.Inventory.Input
             // Block if inventory is open
             if (isInventoryOpen)
             {
-                if (enableDebugLogs)
-                    Debug.Log($"[QuickSlotInputHandler] Blocked - inventory is open");
-                return;
-            }
-
-            // Cooldown check
-            if (Time.time - lastUseTime < useCooldown)
-            {
-                if (enableDebugLogs)
-                    Debug.Log($"[QuickSlotInputHandler] Cooldown active");
+                InventoryLogger.Log("QuickSlotInputHandler", "Blocked - inventory is open", enableDebugLogs);
                 return;
             }
 
             if (quickSlotManager == null)
             {
-                Debug.LogError("[QuickSlotInputHandler] QuickSlotManager not assigned!");
+                InventoryLogger.LogError("QuickSlotInputHandler", "QuickSlotManager not assigned!");
                 return;
             }
 
@@ -212,10 +228,52 @@ namespace NightHunt.Inventory.Input
             var item = quickSlotManager.GetItem(slotIndex);
             if (item == null)
             {
-                if (enableDebugLogs)
-                    Debug.Log($"[QuickSlotInputHandler] Slot {slotIndex} is empty");
+                // Empty slot - log "Trống"
+                InventoryLogger.Log("QuickSlotInputHandler", "Trống", enableDebugLogs);
                 return;
             }
+
+            // Check cooldown
+            if (cooldownManager != null && cooldownManager.IsOnCooldown(slotIndex))
+            {
+                InventoryLogger.Log("QuickSlotInputHandler", "Cooldown active", enableDebugLogs);
+                return;
+            }
+
+            // Fast/slow press logic
+            float timeSinceLastPress = Time.time - lastKeyPressTime;
+            bool isFastPress = timeSinceLastPress < FastPressThreshold && selectedSlotIndex == slotIndex;
+            
+            if (isFastPress)
+            {
+                // Fast press: Select + Use immediately
+                QuickSlotEvents.InvokeQuickSlotSelected(slotIndex);
+                ExecuteUse(slotIndex, item);
+            }
+            else
+            {
+                // Slow press or different slot: Select only
+                if (selectedSlotIndex != slotIndex)
+                {
+                    // Unselect previous slot
+                    if (selectedSlotIndex >= 0)
+                    {
+                        QuickSlotEvents.InvokeQuickSlotUnselected(selectedSlotIndex);
+                    }
+                    
+                    // Select new slot
+                    selectedSlotIndex = slotIndex;
+                    QuickSlotEvents.InvokeQuickSlotSelected(slotIndex);
+                }
+            }
+            
+            lastKeyPressTime = Time.time;
+        }
+        
+        private void ExecuteUse(int slotIndex, ItemInstance item)
+        {
+            // Log usage
+            InventoryLogger.Log("QuickSlotInputHandler", $"Sử dụng item: {item.Definition.ItemId}", enableDebugLogs);
 
             // Handle based on item type
             switch (item.Definition.ItemType)
@@ -223,32 +281,29 @@ namespace NightHunt.Inventory.Input
                 case ItemType.Consumable:
                     // Start consume with progress bar (can be cancelled)
                     QuickSlotEvents.InvokeRequestConsume(item);
-                    
-                    if (enableDebugLogs)
-                        Debug.Log($"[QuickSlotInputHandler] Started consuming {item.Definition.ItemId}");
                     break;
 
                 case ItemType.Throwable:
                     // Instant equip to hand (like weapon switch)
                     QuickSlotEvents.InvokeRequestEquipThrowable(item);
-                    
-                    if (enableDebugLogs)
-                        Debug.Log($"[QuickSlotInputHandler] Equipped throwable {item.Definition.ItemId}");
                     break;
 
                 default:
-                    Debug.LogWarning($"[QuickSlotInputHandler] Item type {item.Definition.ItemType} not supported for quick slots");
+                    InventoryLogger.LogWarning("QuickSlotInputHandler", $"Item type {item.Definition.ItemType} not supported for quick slots", enableDebugLogs);
                     return;
             }
 
-            // Log usage (for analytics/debugging) - same event as UI double-click
+            // Fire analytics event
             QuickSlotEvents.InvokeQuickSlotDoubleClicked(item, slotIndex);
 
-            // Fire event
+            // Fire custom event
             OnQuickSlotUsed?.Invoke(slotIndex);
 
-            // Update cooldown
-            lastUseTime = Time.time;
+            // Start cooldown
+            if (cooldownManager != null)
+            {
+                cooldownManager.StartCooldown(slotIndex);
+            }
         }
 
         #endregion

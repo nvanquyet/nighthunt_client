@@ -5,17 +5,20 @@ using TMPro;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
+using NightHunt.Inventory.Core;
+using NightHunt.Inventory.UI.Core;
 
 namespace NightHunt.Inventory.UI.Panels
 {
     /// <summary>
     /// Individual attachment slot UI (Scope, Grip, Muzzle, etc.).
     /// Supports drag & drop, tooltip, right-click detach.
+    /// Implements state management for visual feedback.
     /// </summary>
     public class AttachmentSlotUI : MonoBehaviour,
         IBeginDragHandler, IDragHandler, IEndDragHandler,
         IDropHandler, IPointerEnterHandler, IPointerExitHandler,
-        IPointerClickHandler
+        IPointerClickHandler, IUISlotStateManager
     {
         [Header("UI References")]
         [SerializeField] private Image slotBackground;
@@ -26,10 +29,12 @@ namespace NightHunt.Inventory.UI.Panels
         [Header("Visual Settings")]
         [SerializeField] private Color emptyColor = new Color(0.2f, 0.2f, 0.2f, 0.5f);
         [SerializeField] private Color occupiedColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+        [SerializeField] private Color hoverColor = new Color(0.4f, 0.4f, 0.4f, 1f);
         
         private ItemInstance currentAttachment;
         private AttachmentSlotType slotType;
         private AttachmentPanelUI parentPanel;
+        private UISlotState currentState = UISlotState.Empty;
         
         #region Initialization
         
@@ -65,15 +70,12 @@ namespace NightHunt.Inventory.UI.Panels
                     attachmentIcon.enabled = true;
                 }
                 
-                if (slotBackground != null)
-                {
-                    slotBackground.color = occupiedColor;
-                }
-                
                 if (detachButton != null)
                 {
                     detachButton.gameObject.SetActive(true);
                 }
+                
+                SetState(UISlotState.Occupied);
             }
             else
             {
@@ -83,15 +85,12 @@ namespace NightHunt.Inventory.UI.Panels
                     attachmentIcon.enabled = false;
                 }
                 
-                if (slotBackground != null)
-                {
-                    slotBackground.color = emptyColor;
-                }
-                
                 if (detachButton != null)
                 {
                     detachButton.gameObject.SetActive(false);
                 }
+                
+                SetState(UISlotState.Empty);
             }
         }
         
@@ -101,6 +100,12 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnBeginDrag(PointerEventData eventData)
         {
+            // Block drag if not local player (spectating)
+            if (!SpectateManager.Instance?.IsCurrentPlayerLocal() ?? true)
+            {
+                return; // Spectating - cannot drag
+            }
+            
             if (eventData.button != PointerEventData.InputButton.Left) return;
             if (currentAttachment == null) return;
             
@@ -126,6 +131,12 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnDrop(PointerEventData eventData)
         {
+            // Block drop if not local player (spectating)
+            if (!SpectateManager.Instance?.IsCurrentPlayerLocal() ?? true)
+            {
+                return; // Spectating - cannot drop
+            }
+            
             var draggedCell = eventData.pointerDrag?.GetComponent<UI.Cells.InventoryCellUI>();
             if (draggedCell == null || draggedCell.GetItemData() == null)
             {
@@ -148,10 +159,84 @@ namespace NightHunt.Inventory.UI.Panels
         
         #endregion
         
+        #region State Management
+        
+        public void SetState(UISlotState state)
+        {
+            currentState = state;
+            UpdateVisualState();
+        }
+        
+        public UISlotState GetCurrentState() => currentState;
+        
+        public void OnPointerEnter()
+        {
+            if (currentState != UISlotState.Empty)
+            {
+                SetState(UISlotState.Hover);
+            }
+        }
+        
+        public void OnPointerExit()
+        {
+            if (currentState == UISlotState.Hover)
+            {
+                SetState(currentAttachment != null ? UISlotState.Occupied : UISlotState.Empty);
+            }
+        }
+        
+        public void OnSelect()
+        {
+            if (currentAttachment != null)
+            {
+                SetState(UISlotState.Selected);
+            }
+        }
+        
+        public void OnUnselect()
+        {
+            if (currentState == UISlotState.Selected)
+            {
+                SetState(currentAttachment != null ? UISlotState.Occupied : UISlotState.Empty);
+            }
+        }
+        
+        private void UpdateVisualState()
+        {
+            if (slotBackground == null) return;
+            
+            switch (currentState)
+            {
+                case UISlotState.Empty:
+                    slotBackground.color = emptyColor;
+                    break;
+                    
+                case UISlotState.Occupied:
+                    slotBackground.color = occupiedColor;
+                    break;
+                    
+                case UISlotState.Hover:
+                    slotBackground.color = hoverColor;
+                    break;
+                    
+                case UISlotState.Selected:
+                    slotBackground.color = hoverColor;
+                    break;
+                    
+                case UISlotState.Unselected:
+                    slotBackground.color = occupiedColor;
+                    break;
+            }
+        }
+        
+        #endregion
+        
         #region Tooltip
         
         public void OnPointerEnter(PointerEventData eventData)
         {
+            OnPointerEnter();
+            
             if (currentAttachment != null)
             {
                 TooltipEvents.InvokeShowTooltip(currentAttachment, transform.position);
@@ -164,6 +249,7 @@ namespace NightHunt.Inventory.UI.Panels
         
         public void OnPointerExit(PointerEventData eventData)
         {
+            OnPointerExit();
             TooltipEvents.InvokeHideTooltip();
         }
         

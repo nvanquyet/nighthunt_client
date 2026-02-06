@@ -4,6 +4,7 @@ using TMPro;
 using NightHunt.Inventory.Core.Interfaces;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
+using NightHunt.Inventory.Core;
 
 namespace NightHunt.Inventory.UI.Prompts
 {
@@ -59,6 +60,12 @@ namespace NightHunt.Inventory.UI.Prompts
         
         private void ShowPrompt(object interactableObj)
         {
+            // Only show prompt if current player is local (not spectating)
+            if (!SpectateManager.Instance?.IsCurrentPlayerLocal() ?? true)
+            {
+                return; // Spectating - disable prompt
+            }
+            
             currentInteractable = interactableObj as IInteractable;
             if (currentInteractable == null) return;
             

@@ -33,14 +33,15 @@ namespace NightHunt.Inventory.Networking
         public override void OnStartClient()
         {
             base.OnStartClient();
-
-            if (!IsOwner) return;
-
-            // Subscribe to SyncVar changes
+            
+            // Subscribe to SyncVar changes (for all clients, including spectators)
             syncedSnapshot.OnChange += OnInventoryDataChanged;
-
-            // Subscribe to local inventory changes
-            InventoryEvents.OnInventoryChanged += OnLocalInventoryChanged;
+            
+            // Only subscribe to local changes if owner
+            if (IsOwner)
+            {
+                InventoryEvents.OnInventoryChanged += OnLocalInventoryChanged;
+            }
 
             if (enableDebugLogs)
                 Debug.Log("[InventoryNetworkSync] Client started");
@@ -50,10 +51,14 @@ namespace NightHunt.Inventory.Networking
         {
             base.OnStopClient();
 
-            if (!IsOwner) return;
-
+            // Unsubscribe from SyncVar changes (for all clients)
             syncedSnapshot.OnChange -= OnInventoryDataChanged;
-            InventoryEvents.OnInventoryChanged -= OnLocalInventoryChanged;
+            
+            // Unsubscribe from local changes if owner
+            if (IsOwner)
+            {
+                InventoryEvents.OnInventoryChanged -= OnLocalInventoryChanged;
+            }
         }
 
         #endregion
@@ -136,7 +141,7 @@ namespace NightHunt.Inventory.Networking
 
         #region Observers RPCs (Server → All Clients)
 
-        [ObserversRpc(ExcludeOwner = true)]
+        [ObserversRpc] // Removed ExcludeOwner = true to allow spectator to receive updates
         private void BroadcastDeltaObserversRpc(InventoryDeltaData delta)
         {
             if (enableDebugLogs)
@@ -151,7 +156,7 @@ namespace NightHunt.Inventory.Networking
             }
         }
 
-        [ObserversRpc(ExcludeOwner = true)]
+        [ObserversRpc] // Removed ExcludeOwner = true to allow spectator to receive updates
         private void BroadcastFullSyncObserversRpc(InventorySnapshotData snapshot)
         {
             if (enableDebugLogs)

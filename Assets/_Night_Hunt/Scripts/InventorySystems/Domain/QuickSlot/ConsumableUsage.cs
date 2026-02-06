@@ -2,6 +2,7 @@
 using UnityEngine.InputSystem;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
+using NightHunt.Inventory.Core.Utilities;
 using System.Collections;
 using NightHunt.Inventory.Input;
 using UnityEngine.Serialization;
@@ -20,10 +21,6 @@ namespace NightHunt.Inventory.Domain.QuickSlot
         [FormerlySerializedAs("inputActions")]
         [Header("Input")]
         [SerializeField] private InventoryInputHandler inventoryHandler;
-        
-        [Header("UI References")]
-        [SerializeField] private GameObject progressBarRoot;
-        [SerializeField] private UnityEngine.UI.Image progressBarFill;
         
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
@@ -103,30 +100,23 @@ namespace NightHunt.Inventory.Domain.QuickSlot
             startPosition = transform.position;
             consumeCoroutine = StartCoroutine(ConsumeRoutine(item));
             
-            if (enableDebugLogs)
-                Debug.Log($"[ConsumableUsage] Started consuming {item.Definition.ItemId}");
+            InventoryLogger.Log("ConsumableUsage", $"Started consuming {item.Definition.ItemId}", enableDebugLogs);
         }
         
         private IEnumerator ConsumeRoutine(ItemInstance item)
         {
             float elapsed = 0f;
             
-            // Show progress bar
-            if (progressBarRoot != null)
-            {
-                progressBarRoot.SetActive(true);
-            }
+            // Fire consume started event (for UI to show progress bar)
+            QuickSlotEvents.InvokeConsumeStarted();
             
             while (elapsed < consumeDuration)
             {
                 elapsed += Time.deltaTime;
                 float progress = elapsed / consumeDuration;
                 
-                // Update progress bar
-                if (progressBarFill != null)
-                {
-                    progressBarFill.fillAmount = progress;
-                }
+                // Fire progress event (for UI to update progress bar)
+                QuickSlotEvents.InvokeConsumeProgress(progress);
                 
                 yield return null;
             }
@@ -137,14 +127,10 @@ namespace NightHunt.Inventory.Domain.QuickSlot
         
         private void CompleteConsume(ItemInstance item)
         {
-            if (enableDebugLogs)
-                Debug.Log($"[ConsumableUsage] Completed: {item.Definition.ItemId}");
+            InventoryLogger.Log("ConsumableUsage", $"Completed: {item.Definition.ItemId}", enableDebugLogs);
             
-            // Hide progress bar
-            if (progressBarRoot != null)
-            {
-                progressBarRoot.SetActive(false);
-            }
+            // Fire consume completed event (for UI to hide progress bar)
+            QuickSlotEvents.InvokeConsumeCompleted();
             
             consumeCoroutine = null;
             
@@ -170,8 +156,7 @@ namespace NightHunt.Inventory.Domain.QuickSlot
         
         private void CancelConsume(string reason)
         {
-            if (enableDebugLogs)
-                Debug.Log($"[ConsumableUsage] Cancelled: {reason}");
+            InventoryLogger.Log("ConsumableUsage", $"Cancelled: {reason}", enableDebugLogs);
             
             if (consumeCoroutine != null)
             {
@@ -179,11 +164,8 @@ namespace NightHunt.Inventory.Domain.QuickSlot
                 consumeCoroutine = null;
             }
             
-            // Hide progress bar
-            if (progressBarRoot != null)
-            {
-                progressBarRoot.SetActive(false);
-            }
+            // Fire consume completed event (for UI to hide progress bar)
+            QuickSlotEvents.InvokeConsumeCompleted();
             
             QuickSlotEvents.InvokeConsumeCancelled(currentItem, reason);
         }
@@ -208,8 +190,7 @@ namespace NightHunt.Inventory.Domain.QuickSlot
             // TODO: Implement specific consumable effects system
             // For now, just fire event for external systems to handle
             
-            if (enableDebugLogs)
-                Debug.Log($"[ConsumableUsage] Applied effects for {item.Definition.ItemId}");
+            InventoryLogger.Log("ConsumableUsage", $"Applied effects for {item.Definition.ItemId}", enableDebugLogs);
         }
         
         #endregion

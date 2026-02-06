@@ -5,17 +5,20 @@ using TMPro;
 using NightHunt.Inventory.Core.Data;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
+using NightHunt.Inventory.Core;
+using NightHunt.Inventory.Core.Interfaces;
 using NightHunt.Inventory.UI.Visuals;
 
 namespace NightHunt.Inventory.UI.Cells
 {
     /// <summary>
     /// UI cell for displaying an inventory item.
-    /// Implements drag & drop and tooltip functionality.
+    /// Implements drag & drop, tooltip functionality, and state management.
     /// </summary>
     public class InventoryCellUI : MonoBehaviour,
         IBeginDragHandler, IDragHandler, IEndDragHandler,
-        IPointerEnterHandler, IPointerExitHandler
+        IPointerEnterHandler, IPointerExitHandler,
+        IUISlotStateHandler
     {
         [Header("UI References")]
         [SerializeField] private Image itemIcon;
@@ -26,10 +29,13 @@ namespace NightHunt.Inventory.UI.Cells
         [Header("Visual Settings")]
         [SerializeField] private Color emptyColor = new Color(0.2f, 0.2f, 0.2f, 0.5f);
         [SerializeField] private Color occupiedColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+        [SerializeField] private Color hoverColor = new Color(0.4f, 0.4f, 0.4f, 1f);
+        [SerializeField] private Color selectedColor = new Color(0.5f, 0.7f, 0.5f, 1f);
         
         private ItemInstance itemData;
         private int slotIndex;
         private SlotLocationType locationType = SlotLocationType.Inventory;
+        private UISlotState currentState = UISlotState.Empty;
         
         #region Initialization
         
@@ -54,7 +60,6 @@ namespace NightHunt.Inventory.UI.Cells
                 // Show item
                 itemIcon.sprite = itemData.Definition.Icon;
                 itemIcon.enabled = true;
-                backgroundImage.color = occupiedColor;
                 
                 // Show stack size if stackable
                 if (itemData.Definition.IsStackable && itemData.StackSize > 1)
@@ -77,18 +82,23 @@ namespace NightHunt.Inventory.UI.Cells
                 {
                     durabilityBar.enabled = false;
                 }
+                
+                // Update state
+                SetState(UISlotState.Occupied);
             }
             else
             {
                 // Empty slot
                 itemIcon.enabled = false;
                 stackText.enabled = false;
-                backgroundImage.color = emptyColor;
                 
                 if (durabilityBar != null)
                 {
                     durabilityBar.enabled = false;
                 }
+                
+                // Update state
+                SetState(UISlotState.Empty);
             }
         }
         
@@ -98,6 +108,12 @@ namespace NightHunt.Inventory.UI.Cells
         
         public void OnBeginDrag(PointerEventData eventData)
         {
+            // Block drag if not local player (spectating)
+            if (!SpectateManager.Instance?.IsCurrentPlayerLocal() ?? true)
+            {
+                return; // Spectating - cannot drag
+            }
+            
             // Only left-click drag
             if (eventData.button != PointerEventData.InputButton.Left) return;
             if (itemData == null) return;
@@ -119,7 +135,7 @@ namespace NightHunt.Inventory.UI.Cells
         
         public void OnEndDrag(PointerEventData eventData)
         {
-            // Detect drop target
+            // Detect drop target - check InventoryCellUI first
             var targetCell = eventData.pointerCurrentRaycast.gameObject?.GetComponent<InventoryCellUI>();
             
             if (targetCell != null)
@@ -137,8 +153,26 @@ namespace NightHunt.Inventory.UI.Cells
             }
             else
             {
-                // Drop outside valid zone - cancel
-                DragDropEvents.InvokeDragCancelled();
+                // Check QuickSlotSlotUI
+                var quickSlotSlot = eventData.pointerCurrentRaycast.gameObject?.GetComponent<UI.Panels.QuickSlotSlotUI>();
+                if (quickSlotSlot != null)
+                {
+                    var dropContext = new DragContext
+                    {
+                        SourceLocation = locationType,
+                        SourceIndex = slotIndex,
+                        TargetLocation = SlotLocationType.QuickSlot,
+                        TargetIndex = quickSlotSlot.GetSlotIndex(),
+                        ItemInstance = itemData
+                    };
+                    
+                    DragDropEvents.InvokeDrop(dropContext);
+                }
+                else
+                {
+                    // Drop outside valid zone - cancel
+                    DragDropEvents.InvokeDragCancelled();
+                }
             }
             
             DragDropEvents.InvokeEndDrag();
@@ -150,6 +184,12 @@ namespace NightHunt.Inventory.UI.Cells
         
         public void OnPointerEnter(PointerEventData eventData)
         {
+            // Update state
+            if (currentState != UISlotState.Empty)
+            {
+                SetState(UISlotState.Hover);
+            }
+            
             if (itemData != null)
             {
                 // Show item tooltip
@@ -164,6 +204,12 @@ namespace NightHunt.Inventory.UI.Cells
         
         public void OnPointerExit(PointerEventData eventData)
         {
+            // Update state
+            if (currentState == UISlotState.Hover)
+            {
+                SetState(itemData != null ? UISlotState.Occupied : UISlotState.Empty);
+            }
+            
             // Check if moving to tooltip (don't hide if so)
             var tooltipObj = eventData.pointerEnter?.GetComponent<TooltipHoverDetector>();
             if (tooltipObj != null)
@@ -173,6 +219,46 @@ namespace NightHunt.Inventory.UI.Cells
             }
             
             TooltipEvents.InvokeHideTooltip();
+        }
+        
+        #endregion
+        
+        #region State Management
+        
+        public void SetState(UISlotState state)
+        {
+            currentState = state;
+            UpdateVisualState();
+        }
+        
+        public UISlotState GetCurrentState() => currentState;
+        
+        private void UpdateVisualState()
+        {
+            if (backgroundImage == null) return;
+            
+            switch (currentState)
+            {
+                case UISlotState.Empty:
+                    backgroundImage.color = emptyColor;
+                    break;
+                    
+                case UISlotState.Occupied:
+                    backgroundImage.color = occupiedColor;
+                    break;
+                    
+                case UISlotState.Hover:
+                    backgroundImage.color = hoverColor;
+                    break;
+                    
+                case UISlotState.Selected:
+                    backgroundImage.color = selectedColor;
+                    break;
+                    
+                case UISlotState.Unselected:
+                    backgroundImage.color = occupiedColor;
+                    break;
+            }
         }
         
         #endregion
