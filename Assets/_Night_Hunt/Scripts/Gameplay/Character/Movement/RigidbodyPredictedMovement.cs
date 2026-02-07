@@ -112,14 +112,14 @@ namespace NightHunt.Gameplay.Character
 
             // RECOMMENDED: Hybrid approach - direct velocity for horizontal, addForce for vertical
             Vector3 currentVelocity = _rigidbody.linearVelocity;
-            
+
             // Set horizontal velocity directly for responsive movement
             currentVelocity.x = movement.x;
             currentVelocity.z = movement.z;
-            
+
             // Apply vertical movement (gravity)
             currentVelocity.y = Mathf.Max(movement.y, maxFallSpeed);
-            
+
             _rigidbody.linearVelocity = currentVelocity;
 
             if (enableDebugLogs && movement.sqrMagnitude > 0.01f)
@@ -226,5 +226,6 @@ namespace NightHunt.Gameplay.Character
         }
 
         #endregion
+        
     }
 }

@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using FishNet.Object.Prediction;
 using FishNet.Transporting;
 using NightHunt.Gameplay.Character.Movement;
@@ -24,27 +25,29 @@ namespace NightHunt.Gameplay.Character
     /// </summary>
     public abstract class BaseCharacterPredictedMovement
         : FishNetPredictedBehaviour<MovementReplicateData, MovementReconcileData>,
-          IMovementController
+            IMovementController
     {
         [Header("Movement Settings")]
-        [SerializeField] protected MovementSettings movementSettings;
+        [SerializeField]
+        protected MovementSettings movementSettings;
 
-        [Header("Rotation")]
-        [SerializeField] protected float tankTurnSpeed = 10f;
+        [Header("Rotation")][SerializeField] protected float tankTurnSpeed = 10f;
         [SerializeField] protected float lockTurnSpeed = 18f;
 
         [Header("Camera Lock")]
+        [SerializeField]
+        protected CinemachineCamera cinemachineCamera;
+
         [SerializeField] protected bool allowCameraLockToggle = true;
         [SerializeField] protected bool startWithCameraLock = false;
 
         [Header("Network Interpolation")]
-        [SerializeField] protected float interpolationSpeed = 15f;
+        [SerializeField]
+        protected float interpolationSpeed = 15f;
 
-        [Header("Debug")]
-        [SerializeField] protected bool enableDebugLogs = false;
+        [Header("Debug")][SerializeField] protected bool enableDebugLogs = false;
 
         // Components
-        protected CinemachineCamera _camera;
 
         // ===== INPUT (OWNER ONLY) =====
         protected Vector2 _moveInput;
@@ -61,6 +64,7 @@ namespace NightHunt.Gameplay.Character
         // ===== NON OWNER INTERPOLATION =====
         protected Vector3 _targetPosition;
         protected Quaternion _targetRotation;
+
 
         #region ABSTRACT METHODS - MUST IMPLEMENT
 
@@ -110,7 +114,7 @@ namespace NightHunt.Gameplay.Character
 
         private void Awake()
         {
-            _camera = GetComponentInChildren<CinemachineCamera>();
+            cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
             InitializePhysicsComponents();
         }
 
@@ -118,14 +122,23 @@ namespace NightHunt.Gameplay.Character
         {
             base.OnStartNetwork();
 
+            if (movementSettings == null)
+            {
+                Debug.LogWarning(
+                    $"[{GetType().Name}] movementSettings is NULL in OnStartNetwork! Character may not work correctly.");
+                return;
+            }
+
             _stamina = movementSettings.maxStamina;
             _targetPosition = transform.position;
             _targetRotation = transform.rotation;
             _verticalVelocity = -2f;
             _cameraLocked = startWithCameraLock;
 
+
             if (enableDebugLogs)
-                Debug.Log($"[{GetType().Name}] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}");
+                Debug.Log(
+                    $"[{GetType().Name}] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}");
         }
 
         #endregion
@@ -137,7 +150,7 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         protected virtual void GatherInput()
         {
-            if (!IsOwner) return;
+            if (!IsOwner || !IsSpawned) return;
 
             var inputManager = InputManager.Instance;
             if (inputManager == null)
@@ -174,9 +187,9 @@ namespace NightHunt.Gameplay.Character
             }
 
             // Capture camera yaw
-            if (_camera != null)
+            if (cinemachineCamera != null)
             {
-                _yaw = _camera.transform.eulerAngles.y;
+                _yaw = cinemachineCamera.transform.eulerAngles.y;
             }
         }
 
@@ -186,29 +199,30 @@ namespace NightHunt.Gameplay.Character
 
         protected override void TimeManager_OnTick()
         {
-            if (!IsOwner && !IsServerStarted)
+            if (!IsSpawned)
                 return;
-
-            // Owner: gather input first
+            MovementReplicateData replicateData = default;
             if (IsOwner)
             {
                 GatherInput();
+                replicateData = new MovementReplicateData(
+                    _moveInput,
+                    _yaw,
+                    _sprint,
+                    _crouch,
+                    _cameraLocked
+                );
             }
 
-            // Build replicate data
-            MovementReplicateData replicateData = new(
-                _moveInput,
-                _yaw,
-                _sprint,
-                _crouch,
-                _cameraLocked
-            );
-
-            // Send to server
+            // All (Owner, Server, Non-owner): Call Replicate
+            // Owner uses real data, Server uses data received from Owner via network,
+            // Non-owner will be blocked in Replicate() method
             Replicate(replicateData, ReplicateState.Ticked, Channel.Unreliable);
 
-            // Create reconcile
-            CreateReconcile();
+            if (IsServerStarted)
+            {
+                CreateReconcile();
+            }
         }
 
         [Replicate]
@@ -217,6 +231,17 @@ namespace NightHunt.Gameplay.Character
             ReplicateState state = ReplicateState.Invalid,
             Channel channel = Channel.Unreliable)
         {
+            // Callback này FishNet tự gọi
+            // Server + Owner replay đều vào đây
+
+            // CRITICAL: Check all critical references before doing anything
+            if (this == null || !IsSpawned)
+                return;
+
+            // CRITICAL: Non-owner clients should NOT simulate movement
+            if (!IsOwner && !IsServerStarted)
+                return;
+
             SimulateMovement(data, TickDelta);
         }
 
@@ -229,6 +254,13 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         protected virtual void SimulateMovement(MovementReplicateData data, float dt)
         {
+            if (!IsSpawned) return;
+
+            if (movementSettings == null)
+            {
+                return; // Skip simulation until movementSettings is ready
+            }
+
             bool grounded = IsGrounded();
 
             // ===== STAMINA =====
@@ -283,7 +315,7 @@ namespace NightHunt.Gameplay.Character
                     transform.rotation = Quaternion.RotateTowards(
                         transform.rotation,
                         targetRot,
-                        tankTurnSpeed * dt * 100f
+                        tankTurnSpeed * dt
                     );
                 }
                 else
@@ -295,7 +327,7 @@ namespace NightHunt.Gameplay.Character
                         transform.rotation = Quaternion.RotateTowards(
                             transform.rotation,
                             camRot,
-                            tankTurnSpeed * 0.5f * dt * 100f
+                            tankTurnSpeed * 0.5f * dt
                         );
                     }
                 }
@@ -333,10 +365,17 @@ namespace NightHunt.Gameplay.Character
 
         public override void CreateReconcile()
         {
-            if (!IsSpawned) return;
+            if (!IsServerStarted || !IsSpawned)
+                return;
 
-            MovementReconcileData reconcileData = CreateReconcileData();
-            Reconcile(reconcileData, Channel.Unreliable);
+            var data = new MovementReconcileData(
+                transform.position,
+                transform.rotation,
+                _velocity,
+                _stamina
+            );
+
+            Reconcile(data, Channel.Unreliable);
         }
 
         protected override MovementReconcileData CreateReconcileData()
@@ -408,8 +447,13 @@ namespace NightHunt.Gameplay.Character
         public bool IsCrouching() => _crouch;
         public bool IsCameraLocked() => _cameraLocked;
 
-        public virtual void SetWeightPenalty(float penalty) { }
-        public virtual void SetStaminaDrainMultiplier(float multiplier) { }
+        public virtual void SetWeightPenalty(float penalty)
+        {
+        }
+
+        public virtual void SetStaminaDrainMultiplier(float multiplier)
+        {
+        }
 
         public MovementState GetCurrentState()
         {
@@ -447,7 +491,7 @@ namespace NightHunt.Gameplay.Character
                 Gizmos.DrawRay(transform.position + Vector3.up, transform.forward * 2f);
 
                 // Camera direction (yellow)
-                if (_camera != null)
+                if (cinemachineCamera != null)
                 {
                     Gizmos.color = Color.yellow;
                     Vector3 camForward = Quaternion.Euler(0, _yaw, 0) * Vector3.forward;

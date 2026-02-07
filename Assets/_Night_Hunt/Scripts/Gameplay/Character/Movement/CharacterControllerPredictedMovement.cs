@@ -132,5 +132,6 @@ namespace NightHunt.Gameplay.Character
         }
 
         #endregion
+
     }
 }

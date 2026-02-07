@@ -22,7 +22,6 @@ namespace NightHunt.Networking
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
-
         [SerializeField] private CharacterCombat combat;
         [SerializeField] private CinemachineCamera playerCamera;
 
@@ -64,14 +63,13 @@ namespace NightHunt.Networking
             if (playerCamera == null)
             {
                 playerCamera = GetComponentInChildren<CinemachineCamera>();
-                
+
                 if (playerCamera == null)
                 {
                     Debug.LogError($"[NetworkPlayer] No CinemachineCamera found for player: {playerName.Value}");
                 }
             }
 
-            // Setup camera and input based on ownership
             SetupCameraForOwnership();
             SetupInputForOwnership();
 
@@ -80,7 +78,7 @@ namespace NightHunt.Networking
             {
                 ClientOnlyUIManager.Instance.SetLocalPlayer(this);
             }
-            
+
             // Notify SpectateManager if this is the local player
             if (IsOwner && SpectateManager.Instance != null)
             {
@@ -91,7 +89,7 @@ namespace NightHunt.Networking
         public override void OnStartServer()
         {
             base.OnStartServer();
-            
+
             // Server instance: Disable camera
             if (playerCamera != null && playerCamera.gameObject != null)
             {
@@ -105,13 +103,13 @@ namespace NightHunt.Networking
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-            
+
             // Unsubscribe
             if (playerName != null)
                 playerName.OnChange -= OnPlayerNameChanged;
             if (teamId != null)
                 teamId.OnChange -= OnPlayerTeamChanged;
-            
+
             if (IsOwner && InputManager.Instance != null)
             {
                 InputManager.Instance.DisableAllInput();
@@ -127,7 +125,7 @@ namespace NightHunt.Networking
         public override void OnOwnershipClient(NetworkConnection prevOwner)
         {
             base.OnOwnershipClient(prevOwner);
-            
+
             SetupCameraForOwnership();
             SetupInputForOwnership();
 
@@ -146,30 +144,32 @@ namespace NightHunt.Networking
         {
             if (playerCamera == null) return;
 
-            // Only enable camera for client owner
-            if (IsOwner && !IsServerInitialized)
+            // ✅ FIX: Kiểm tra cả IsOwner VÀ IsServerInitialized
+            bool shouldEnableCamera = IsOwner && !IsServerInitialized;
+
+            if (playerCamera.gameObject != null)
             {
-                if (playerCamera.gameObject != null)
+                playerCamera.gameObject.SetActive(shouldEnableCamera);
+                playerCamera.enabled = shouldEnableCamera;
+
+                if (shouldEnableCamera)
                 {
-                    playerCamera.gameObject.SetActive(true);
-                    playerCamera.enabled = true;
-                    
-                    if (Camera.main == null || Camera.main == playerCamera)
+                    // ✅ Chỉ set tag nếu chưa có MainCamera khác
+                    if (Camera.main == null)
                     {
-                        playerCamera.tag = "MainCamera";
+                        var cameraComponent = playerCamera.GetComponent<Camera>();
+                        if (cameraComponent != null)
+                        {
+                            cameraComponent.tag = "MainCamera";
+                        }
                     }
-                    
+
                     Debug.Log($"[NetworkPlayer] Camera enabled for owner: {playerName.Value}");
                 }
             }
-            else
-            {
-                if (playerCamera.gameObject != null)
-                {
-                    playerCamera.gameObject.SetActive(false);
-                    playerCamera.enabled = false;
-                }
-            }
+            
+            Debug.Log(
+                    $"[NetworkPlayer] Camera setup - OwnerId: {NetworkObject.OwnerId}, IsOwner: {IsOwner}, Active: {playerCamera.gameObject.activeSelf}");
         }
 
         #endregion
@@ -202,6 +202,7 @@ namespace NightHunt.Networking
         }
 
         #endregion
+
         private void OnPlayerNameChanged(string oldName, string newName, bool asServer)
         {
             Debug.Log($"[NetworkPlayer] Name changed: {oldName} → {newName}");
