@@ -201,6 +201,17 @@ namespace NightHunt.Gameplay.Character
         {
             if (!IsSpawned)
                 return;
+
+
+            if (!IsSpawned || this == null || gameObject == null)
+            {
+                Debug.LogError($"[{GetType().Name}] Object invalid in Tick!");
+                return;
+            }
+
+            if (!IsOwner && !IsServerStarted)
+                return;
+
             MovementReplicateData replicateData = default;
             if (IsOwner)
             {
@@ -232,8 +243,6 @@ namespace NightHunt.Gameplay.Character
             Channel channel = Channel.Unreliable)
         {
             // Callback này FishNet tự gọi
-            // Server + Owner replay đều vào đây
-
             // CRITICAL: Check all critical references before doing anything
             if (this == null || !IsSpawned)
                 return;

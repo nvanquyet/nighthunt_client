@@ -301,9 +301,75 @@ namespace FishNet.Object
                 _networkObjectCache.NetworkManager.LogWarning($"Replicate not found for hash {hash.Value} on {gameObject.name}, behaviour {GetType().Name}. Remainder of packet may become corrupt.");
 
 #if !UNITY_SERVER
-            if (_networkTrafficStatistics != null)
-                _networkTrafficStatistics.AddInboundPacketIdData(PacketId.Replicate, GetRpcName(PacketId.Replicate, hash.Value), reader.Position - readerPositionAfterDebug + Managing.Transporting.TransportManager.PACKETID_LENGTH, gameObject, asServer: sendingClient.IsValid);
+            _networkTrafficStatistics.AddInboundPacketIdData(
+                PacketId.Replicate,
+                GetRpcName(PacketId.Replicate, hash.Value),
+                reader.Position - readerPositionAfterDebug + Managing.Transporting.TransportManager.PACKETID_LENGTH,
+                gameObject,
+                asServer: sendingClient != null && sendingClient.IsValid  // ← FIX!
+            );
 #endif
+// #if !UNITY_SERVER
+            //             if (_networkTrafficStatistics != null)
+            //             {
+            //                 // Check từng biến một
+            //                 if (gameObject == null)
+            //                 {
+            //                     Debug.LogError("[OnReplicateRpc] gameObject is NULL!");
+            //                 }
+
+            //                 if (reader == null)
+            //                 {
+            //                     Debug.LogError("[OnReplicateRpc] reader is NULL!");
+            //                 }
+
+            //                 if (sendingClient == null)
+            //                 {
+            //                     Debug.LogError("[OnReplicateRpc] sendingClient is NULL!");
+            //                 }
+
+            //                 if (_networkObjectCache == null)
+            //                 {
+            //                     Debug.LogError("[OnReplicateRpc] _networkObjectCache is NULL!");
+            //                 }
+
+            //                 if (_networkObjectCache != null && _networkObjectCache.NetworkManager == null)
+            //                 {
+            //                     Debug.LogError("[OnReplicateRpc] _networkObjectCache.NetworkManager is NULL!");
+            //                 }
+
+            //                 string rpcName = null;
+            //                 try
+            //                 {
+            //                     rpcName = GetRpcName(PacketId.Replicate, hash.Value);
+            //                     if (rpcName == null)
+            //                         Debug.LogError("[OnReplicateRpc] GetRpcName returned NULL!");
+            //                 }
+            //                 catch (System.Exception e)
+            //                 {
+            //                     Debug.LogError($"[OnReplicateRpc] GetRpcName threw exception: {e.Message}");
+            //                 }
+
+            //                 // Nếu tất cả đều OK, thử gọi
+            //                 if (gameObject != null && reader != null && sendingClient != null && rpcName != null)
+            //                 {
+            //                     try
+            //                     {
+            //                         _networkTrafficStatistics.AddInboundPacketIdData(
+            //                             PacketId.Replicate,
+            //                             rpcName,
+            //                             reader.Position - readerPositionAfterDebug + Managing.Transporting.TransportManager.PACKETID_LENGTH,
+            //                             gameObject,
+            //                             asServer: sendingClient.IsValid
+            //                         );
+            //                     }
+            //                     catch (System.Exception e)
+            //                     {
+            //                         Debug.LogError($"[OnReplicateRpc] AddInboundPacketIdData threw exception: {e.Message}\nStack: {e.StackTrace}");
+            //                     }
+            //                 }
+            //             }
+            // #endif
         }
 
         /// <summary>
@@ -1001,7 +1067,7 @@ namespace FishNet.Object
         /// </summary>
         [MakePublic]
         internal void Replicate_Reader<T>(uint hash, PooledReader reader, NetworkConnection sender, ref ReplicateDataContainer<T> lastReadReplicate, BasicQueue<ReplicateDataContainer<T>> replicatesQueue, RingBuffer<ReplicateDataContainer<T>> replicatesHistory, Channel channel) where T : IReplicateData, new()
-        { 
+        {
             /* This will never be received on owner, except in the condition
              * the server is the owner and also a client. In such condition
              * the method is exited after data is parsed. */

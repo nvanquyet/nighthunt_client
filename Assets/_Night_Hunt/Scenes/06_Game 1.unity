@@ -17024,7 +17024,7 @@ MonoBehaviour:
   _runInRelease: 0
   _networkTraffic:
     _enableMode: 1
-    _updateClient: 1
+    _updateClient: 0
     _updateServer: 1
 --- !u!114 &7875531158751040202
 MonoBehaviour:
@@ -17038,7 +17038,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 211a9f6ec51ddc14f908f5acc0cd0423, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _playerPrefab: {fileID: 3090291657640884822, guid: 57e50ab2ca6febf44962528f592d473b, type: 3}
+  _playerPrefab: {fileID: 3090291657640884822, guid: 271db8c843e12284bb95c4b42ee69b93, type: 3}
   _addToDefaultScene: 1
   Spawns:
   - {fileID: 1484433501}
@@ -17057,7 +17057,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3fdaae44044276a49a52229c1597e33b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _updateOrder: 0
+  _updateOrder: 1
   _timingType: 0
   _allowTickDropping: 1
   _maximumFrameTicks: 3
