@@ -2,21 +2,22 @@
 {
     /// <summary>
     /// Defines how stat modifiers are calculated.
-    /// This is a GLOBAL setting that affects ALL items in the game.
+    /// Flat: Add/subtract exact value
+    /// Percentage: Multiply by percentage (0.15 = +15%)
     /// </summary>
     public enum ModifierCalculationType
     {
         /// <summary>
-        /// Flat addition: Final = Base + Sum(Additions)
-        /// Example: Base 100 HP + 50 HP = 150 HP
+        /// Flat addition/subtraction.
+        /// Example: +10 HP, -5 Noise Level
         /// </summary>
-        FlatAddition,
+        Flat,
         
         /// <summary>
-        /// Percentage multiplier: Final = Base * (1 + Sum(Percentages))
-        /// Example: Base 100 HP * (1 + 0.2) = 120 HP
-        /// Value 0.2 means +20%
+        /// Percentage modification.
+        /// Example: +0.15 = +15% increase, -0.1 = -10% decrease
+        /// Formula: BaseStat × (1 + PercentageValue)
         /// </summary>
-        PercentMultiplier
+        Percentage
     }
 }

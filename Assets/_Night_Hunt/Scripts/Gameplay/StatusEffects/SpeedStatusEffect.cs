@@ -1,5 +1,5 @@
 using NightHunt.Data;
-using NightHunt.Gameplay.Character;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.StatusEffects
 {

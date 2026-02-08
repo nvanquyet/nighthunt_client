@@ -1,5 +1,6 @@
 using UnityEngine;
 using NightHunt.Data;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {

@@ -2,6 +2,7 @@ using UnityEngine;
 using NightHunt.Gameplay.Character;
 using NightHunt.Networking;
 using System.Collections.Generic;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.AI
 {

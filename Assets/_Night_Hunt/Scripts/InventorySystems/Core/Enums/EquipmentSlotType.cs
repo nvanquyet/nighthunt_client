@@ -13,7 +13,10 @@
         Armor,
         
         /// <summary>Storage capacity expansion slot</summary>
-        Backpack
+        Backpack,
+        
+        /// <summary>Boot raise speed for player</summary>
+        Boots,
         
         // TODO: Accessories (rings, necklaces) - runtime flexible expansion
     }

@@ -1,112 +1,112 @@
+using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
-using UnityEngine;
-using NightHunt.Gameplay.Core.Networking;
+using NightHunt.Gameplay.Character.Stats;
+using NightHunt.Inventory.Stats;
+using NightHunt.Inventory.Core.Events;
+using NightHunt.Inventory.Core.Enums;
 
-namespace NightHunt.Gameplay.Character.Stats
+namespace NightHunt.Gameplay.Character
 {
     /// <summary>
-    /// Network sync component for character stats
-    /// Syncs critical stats (HP, Stamina) via SyncVar
+    /// Network sync for character stats.
+    /// Syncs ALL final calculated stats, not just HP/Stamina.
     /// </summary>
     public class CharacterStatsSync : NetworkBehaviour
     {
-        private CharacterStats characterStats;
-
-        // Synchronized variables for critical stats
+        [Header("References")]
+        [SerializeField] private CharacterStats characterStats;
+        
+        [Header("Debug")]
+        [SerializeField] private bool enableDebugLogs = false;
+        
+        // SyncVars for all stats
         private readonly SyncVar<float> networkHP = new SyncVar<float>();
         private readonly SyncVar<float> networkStamina = new SyncVar<float>();
-
-        private void Awake()
-        {
-            characterStats = GetComponent<CharacterStats>();
-        }
-
+        private readonly SyncVar<float> networkMoveSpeed = new SyncVar<float>();
+        private readonly SyncVar<float> networkWeightCapacity = new SyncVar<float>();
+        private readonly SyncVar<float> networkVisionRadius = new SyncVar<float>();
+        private readonly SyncVar<float> networkNoiseLevel = new SyncVar<float>();
+        
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-
-            // Subscribe to sync var changes
-            networkHP.OnChange += OnHPChanged;
-            networkStamina.OnChange += OnStaminaChanged;
+            
+            // Subscribe to SyncVar changes
+            networkHP.OnChange += (prev, next, asServer) => OnStatChanged("HP", prev, next, asServer);
+            networkStamina.OnChange += (prev, next, asServer) => OnStatChanged("Stamina", prev, next, asServer);
+            networkMoveSpeed.OnChange += (prev, next, asServer) => OnStatChanged("MoveSpeed", prev, next, asServer);
+            networkWeightCapacity.OnChange += (prev, next, asServer) => OnStatChanged("WeightCapacity", prev, next, asServer);
+            networkVisionRadius.OnChange += (prev, next, asServer) => OnStatChanged("VisionRadius", prev, next, asServer);
+            networkNoiseLevel.OnChange += (prev, next, asServer) => OnStatChanged("NoiseLevel", prev, next, asServer);
+            
+            // If server, subscribe to stat changes
+            if (IsServer)
+            {
+                CharacterStatsEvents.OnStatsChanged += OnLocalStatsChanged;
+            }
         }
-
+        
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-
-            // Unsubscribe from sync var changes
-            if (networkHP != null)
-                networkHP.OnChange -= OnHPChanged;
-            if (networkStamina != null)
-                networkStamina.OnChange -= OnStaminaChanged;
+            
+            if (IsServer)
+            {
+                CharacterStatsEvents.OnStatsChanged -= OnLocalStatsChanged;
+            }
         }
-
-        private void Update()
+        
+        #region Server: Sync Stats
+        
+        void OnLocalStatsChanged()
         {
             if (!IsServer) return;
-
-            // Server: Sync stats to clients
-            if (characterStats != null)
-            {
-                networkHP.Value = characterStats.GetHP();
-                networkStamina.Value = characterStats.GetStamina();
-            }
+            
+            if (characterStats == null) return;
+            
+            // Update all SyncVars
+            networkHP.Value = characterStats.GetCurrentHP();
+            networkStamina.Value = characterStats.GetCurrentStamina();
+            networkMoveSpeed.Value = characterStats.GetMoveSpeed();
+            networkWeightCapacity.Value = characterStats.GetWeightCapacity();
+            networkVisionRadius.Value = characterStats.GetVisionRadius();
+            networkNoiseLevel.Value = characterStats.GetNoiseLevel();
+            
+            Log($"[SERVER] Synced all stats");
         }
-
-        /// <summary>
-        /// Server: Set HP
-        /// </summary>
-        [ServerRpc(RequireOwnership = false)]
-        public void SetHP(float hp)
+        
+        #endregion
+        
+        #region Client: Apply Synced Stats
+        
+        void OnStatChanged(string statName, float prev, float next, bool asServer)
         {
-            networkHP.Value = hp;
-            if (characterStats != null)
-            {
-                characterStats.SetHP(hp);
-            }
+            if (asServer) return;
+            
+            Log($"[CLIENT] Stat changed: {statName} {prev:F2} → {next:F2}");
+            
+            // Fire event for UI update
+            CharacterStatsEvents.InvokeStatsChanged();
         }
-
-        /// <summary>
-        /// Server: Set Stamina
-        /// </summary>
-        [ServerRpc(RequireOwnership = false)]
-        public void SetStamina(float stamina)
-        {
-            networkStamina.Value = stamina;
-            if (characterStats != null)
-            {
-                characterStats.SetStamina(stamina);
-            }
-        }
-
-        private void OnHPChanged(float oldHP, float newHP, bool asServer)
-        {
-            if (!asServer && characterStats != null)
-            {
-                // Client: Apply server HP
-                characterStats.SetHP(newHP);
-            }
-        }
-
-        private void OnStaminaChanged(float oldStamina, float newStamina, bool asServer)
-        {
-            if (!asServer && characterStats != null)
-            {
-                // Client: Apply server Stamina
-                characterStats.SetStamina(newStamina);
-            }
-        }
-
-        /// <summary>
-        /// Get network HP
-        /// </summary>
+        
+        #endregion
+        
+        #region Public API (for UI/other systems to read synced values)
+        
         public float GetNetworkHP() => networkHP.Value;
-
-        /// <summary>
-        /// Get network Stamina
-        /// </summary>
         public float GetNetworkStamina() => networkStamina.Value;
+        public float GetNetworkMoveSpeed() => networkMoveSpeed.Value;
+        public float GetNetworkWeightCapacity() => networkWeightCapacity.Value;
+        public float GetNetworkVisionRadius() => networkVisionRadius.Value;
+        public float GetNetworkNoiseLevel() => networkNoiseLevel.Value;
+        
+        #endregion
+        
+        void Log(string msg)
+        {
+            if (enableDebugLogs)
+                Debug.Log($"[CharacterStatsSync] {msg}");
+        }
     }
 }
-

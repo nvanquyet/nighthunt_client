@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.Character;
+using NightHunt.Inventory.Stats;
 using NightHunt.Networking;
 
 namespace NightHunt.UI
@@ -106,8 +107,8 @@ namespace NightHunt.UI
         {
             if (characterStats == null || healthBar == null) return;
 
-            float currentHP = characterStats.GetHP();
-            float maxHP = characterStats.GetMaxHP();
+            float currentHP = characterStats.GetCurrentHP();
+            float maxHP = characterStats.GetCurrentStamina();
             float hpPercentage = maxHP > 0 ? currentHP / maxHP : 0f;
 
             healthBar.value = hpPercentage;
@@ -136,7 +137,7 @@ namespace NightHunt.UI
         {
             if (characterStats == null || staminaBar == null) return;
 
-            float currentStamina = characterStats.GetStamina();
+            float currentStamina = characterStats.GetCurrentStamina();
             float maxStamina = characterStats.GetMaxStamina();
             float staminaPercentage = maxStamina > 0 ? currentStamina / maxStamina : 0f;
 

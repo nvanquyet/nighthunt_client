@@ -1,7 +1,7 @@
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
-using NightHunt.Gameplay.Character;
+using NightHunt.Inventory.Stats;
 using NightHunt.Gameplay.Respawn;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Networking;

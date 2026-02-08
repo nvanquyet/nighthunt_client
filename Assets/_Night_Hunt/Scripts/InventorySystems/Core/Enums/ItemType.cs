@@ -1,27 +1,39 @@
 ﻿namespace NightHunt.Inventory.Core.Enums
 {
     /// <summary>
-    /// Defines the type of item.
-    /// Used for sorting, filtering, and validation.
+    /// Defines all item types in the game.
+    /// Used for categorization and validation.
     /// </summary>
     public enum ItemType
     {
-        /// <summary>Weapons (rifles, pistols, etc.)</summary>
+        /// <summary>Weapons (guns, melee weapons)</summary>
         Weapon,
         
-        /// <summary>Armor and protective equipment</summary>
-        Armor,
+        /// <summary>Equipment (helmet, armor, backpack, boots)</summary>
+        Equipment,
         
-        /// <summary>Consumable items (medkits, food, etc.)</summary>
+        /// <summary>Consumable items (health potions, food, buffs)</summary>
         Consumable,
         
-        /// <summary>Weapon/equipment attachments</summary>
-        Attachment,
-        
-        /// <summary>Throwable items (grenades, etc.)</summary>
+        /// <summary>Throwable items (grenades, smoke bombs)</summary>
         Throwable,
         
+        /// <summary>Ammunition</summary>
+        Ammo,
+        
+        /// <summary>Crafting materials</summary>
+        Material,
+        
+        /// <summary>Quest items</summary>
+        Quest,
+        
+        /// <summary>Attachments for weapons/equipment</summary>
+        Attachment,
+        
+        /// <summary>Key items (permanent unlocks)</summary>
+        Key,
+        
         /// <summary>Miscellaneous items</summary>
-        Misc
+        Miscellaneous
     }
 }

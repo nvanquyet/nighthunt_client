@@ -1287,8 +1287,6 @@ MonoBehaviour:
   movementHandler: {fileID: 1730558292}
   combatHandler: {fileID: 1651662725}
   cameraHandler: {fileID: 249819555}
-  interactionHandler: {fileID: 655943708}
-  inventoryHandler: {fileID: 1619835827}
 --- !u!4 &149721642
 Transform:
   m_ObjectHideFlags: 0
@@ -3026,10 +3024,36 @@ MonoBehaviour:
   backgroundImage: {fileID: 415002439}
   stackText: {fileID: 1613197023}
   durabilityBar: {fileID: 573064632}
-  emptyColor: {r: 0.2, g: 0.2, b: 0.2, a: 0.5}
-  occupiedColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-  hoverColor: {r: 0.4, g: 0.4, b: 0.4, a: 1}
-  selectedColor: {r: 0.5, g: 0.7, b: 0.5, a: 1}
+  emptyColor:
+    r: 0.2
+    g: 0.2
+    b: 0.2
+    a: 0.5
+  occupiedColor:
+    r: 0.3
+    g: 0.3
+    b: 0.3
+    a: 1
+  hoverColor:
+    r: 0.4
+    g: 0.4
+    b: 0.4
+    a: 1
+  selectedColor:
+    r: 0.5
+    g: 0.7
+    b: 0.5
+    a: 1
+  itemData:
+    InstanceId: 
+    Definition: {fileID: 0}
+    StackSize: 1
+    CurrentDurability: 0
+    CurrentAmmo: 0
+    AttachedItems: []
+  slotIndex: 0
+  locationType: 0
+  currentState: 0
 --- !u!114 &415002439
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4210,6 +4234,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7af3861181274d6a806f961c6aeed19a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  playerActionMap:
+    m_Name: 
+    m_Id: 
+    m_Asset: {fileID: 0}
+    m_Actions: []
+    m_Bindings: []
+  interactAction:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: a1f10953-33a5-4a0d-ba8d-f7ee61c37d16
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  pickupAction:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 41ff369c-5ac7-44f6-8fa5-2529519c17ba
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  isInteracting: 0
+  isPickingUp: 0
+  inputEnabled: 0
 --- !u!4 &655943709
 Transform:
   m_ObjectHideFlags: 0
@@ -4286,10 +4337,37 @@ MonoBehaviour:
   activeIndicator: {fileID: 1750622315}
   switchButton: {fileID: 0}
   unequipButton: {fileID: 0}
-  emptyColor: {r: 0.2, g: 0.2, b: 0.2, a: 0.5}
-  occupiedColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-  activeColor: {r: 0.4, g: 0.6, b: 0.4, a: 1}
-  hoverColor: {r: 0.4, g: 0.4, b: 0.4, a: 1}
+  emptyColor:
+    r: 0.2
+    g: 0.2
+    b: 0.2
+    a: 0.5
+  occupiedColor:
+    r: 0.3
+    g: 0.3
+    b: 0.3
+    a: 1
+  activeColor:
+    r: 0.4
+    g: 0.6
+    b: 0.4
+    a: 1
+  hoverColor:
+    r: 0.4
+    g: 0.4
+    b: 0.4
+    a: 1
+  currentWeapon:
+    InstanceId: 
+    Definition: {fileID: 0}
+    StackSize: 1
+    CurrentDurability: 0
+    CurrentAmmo: 0
+    AttachedItems: []
+  slotType: 0
+  parentPanel: {fileID: 0}
+  isActive: 0
+  currentState: 0
 --- !u!114 &663140863
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4337,7 +4415,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 665147891}
-  - component: {fileID: 665147892}
   m_Layer: 5
   m_Name: ToolTip
   m_TagString: Untagged
@@ -4365,26 +4442,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &665147892
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 665147890}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 91444875e4d4487689e21e947ecc6010, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  tooltipPanel: {fileID: 1169816153}
-  titleText: {fileID: 164870780}
-  descriptionText: {fileID: 0}
-  statsText: {fileID: 1093148216}
-  tooltipRect: {fileID: 1169816154}
-  offset: {x: 10, y: 0}
-  edgePadding: 10
-  enableDebugLogs: 0
 --- !u!1 &677189525
 GameObject:
   m_ObjectHideFlags: 0
@@ -5761,10 +5818,36 @@ MonoBehaviour:
   backgroundImage: {fileID: 814166783}
   stackText: {fileID: 237842928}
   durabilityBar: {fileID: 1153822295}
-  emptyColor: {r: 0.2, g: 0.2, b: 0.2, a: 0.5}
-  occupiedColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-  hoverColor: {r: 0.4, g: 0.4, b: 0.4, a: 1}
-  selectedColor: {r: 0.5, g: 0.7, b: 0.5, a: 1}
+  emptyColor:
+    r: 0.2
+    g: 0.2
+    b: 0.2
+    a: 0.5
+  occupiedColor:
+    r: 0.3
+    g: 0.3
+    b: 0.3
+    a: 1
+  hoverColor:
+    r: 0.4
+    g: 0.4
+    b: 0.4
+    a: 1
+  selectedColor:
+    r: 0.5
+    g: 0.7
+    b: 0.5
+    a: 1
+  itemData:
+    InstanceId: 
+    Definition: {fileID: 0}
+    StackSize: 1
+    CurrentDurability: 0
+    CurrentAmmo: 0
+    AttachedItems: []
+  slotIndex: 0
+  locationType: 0
+  currentState: 0
 --- !u!114 &814166783
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6914,7 +6997,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 982154175}
-  - component: {fileID: 982154176}
   m_Layer: 0
   m_Name: NestedNonEquipmentContainer
   m_TagString: Untagged
@@ -6942,22 +7024,6 @@ RectTransform:
   m_AnchoredPosition: {x: 576, y: -32}
   m_SizeDelta: {x: 512, y: 140}
   m_Pivot: {x: 0, y: 1}
---- !u!114 &982154176
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 982154174}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0d82c7b267b24a0aa9a601f9fbe1be8a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  attachmentPanel: {fileID: 1072925288}
-  slotContainer: {fileID: 457946349}
-  slotPrefab: {fileID: 415002437}
-  enableDebugLogs: 0
 --- !u!1 &990545590
 GameObject:
   m_ObjectHideFlags: 0
@@ -7399,7 +7465,6 @@ GameObject:
   - component: {fileID: 1037492432}
   - component: {fileID: 1037492434}
   - component: {fileID: 1037492433}
-  - component: {fileID: 1037492435}
   m_Layer: 5
   m_Name: Trash
   m_TagString: Untagged
@@ -7467,18 +7532,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1037492431}
   m_CullTransparentMesh: 1
---- !u!114 &1037492435
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1037492431}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 18476b8514df36b4f92bc250d0f8381a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &1053803958
 GameObject:
   m_ObjectHideFlags: 0
@@ -7489,7 +7542,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1053803959}
   - component: {fileID: 1053803960}
-  - component: {fileID: 1053803961}
   m_Layer: 5
   m_Name: Horizontal Bottom
   m_TagString: Untagged
@@ -7543,22 +7595,6 @@ MonoBehaviour:
   m_ChildScaleWidth: 1
   m_ChildScaleHeight: 1
   m_ReverseArrangement: 0
---- !u!114 &1053803961
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1053803958}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: daedb1a68c694651983a9c73844a80cb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  slotContainer: {fileID: 1053803959}
-  slotPrefab: {fileID: 663140860}
-  config: {fileID: 11400000, guid: b17c6b56636e00446969bfd29866f512, type: 2}
-  enableDebugLogs: 0
 --- !u!1 &1054783366
 GameObject:
   m_ObjectHideFlags: 0
@@ -8609,7 +8645,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1117626786}
-  - component: {fileID: 1117626787}
   m_Layer: 0
   m_Name: InventoryUIRoot
   m_TagString: Untagged
@@ -8638,23 +8673,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &1117626787
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1117626784}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 06502dd0b6d34198a5d6e9561e3c7fd3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  inventoryPanel: {fileID: 1938647893}
-  cellContainer: {fileID: 1846915046}
-  cellPrefab: {fileID: 814166781}
-  openOnStart: 0
-  enableDebugLogs: 0
 --- !u!1 &1118506979
 GameObject:
   m_ObjectHideFlags: 0
@@ -12893,7 +12911,6 @@ GameObject:
   - component: {fileID: 1604741468}
   - component: {fileID: 1604741467}
   - component: {fileID: 1604741466}
-  - component: {fileID: 1604741470}
   m_Layer: 5
   m_Name: HUD
   m_TagString: Untagged
@@ -12987,26 +13004,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
---- !u!114 &1604741470
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1604741464}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c81c2c4c2449d4744ba54f37a0be31e3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  playerHUDRoot: {fileID: 798396092}
-  inventoryUIRoot: {fileID: 1938647893}
-  equipmentPanelUI: {fileID: 2099928719}
-  weaponPanelUI: {fileID: 1053803961}
-  attachmentPanelUI: {fileID: 982154176}
-  quickSlotHUDController: {fileID: 2114667421}
-  quickSlotPanelUI: {fileID: 2094744614}
-  enableDebugLogs: 0
 --- !u!1 &1613197022
 GameObject:
   m_ObjectHideFlags: 0
@@ -13172,6 +13169,83 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3ebe933f0d65468dbfb40c83dbdcc54d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  inventoryActionMap:
+    m_Name: 
+    m_Id: 
+    m_Asset: {fileID: 0}
+    m_Actions: []
+    m_Bindings: []
+  uiActionMap:
+    m_Name: 
+    m_Id: 
+    m_Asset: {fileID: 0}
+    m_Actions: []
+    m_Bindings: []
+  openInventoryAction:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 1d8229dd-05a8-401b-a08f-8a7c2be7c16a
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  dropItemAction:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 4a861c34-af5c-4c72-82a2-c33c8ae45a62
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  quickSlot1Action:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 6e9dce54-994c-4c53-8470-a19ff38a5b10
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  quickSlot2Action:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: 07cbf02f-a76a-45e7-bff7-a36411902214
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  quickSlot3Action:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: b80d58d7-84b5-44cb-9e80-5e353fa4ba04
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  quickSlot4Action:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: c17e06b4-78c2-4a05-8ae3-01ce15515b36
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  cancelAction:
+    m_Name: 
+    m_Type: 0
+    m_ExpectedControlType: 
+    m_Id: b9f89310-fc57-4abe-b0a6-d9676de94611
+    m_Processors: 
+    m_Interactions: 
+    m_SingletonActionBindings: []
+    m_Flags: 0
+  inputEnabled: 0
+  inventoryOpen: 0
 --- !u!4 &1619835828
 Transform:
   m_ObjectHideFlags: 0
@@ -15809,9 +15883,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2041070415}
-  - component: {fileID: 2041070426}
-  - component: {fileID: 2041070421}
-  - component: {fileID: 2041070419}
   - component: {fileID: 2041070418}
   m_Layer: 5
   m_Name: Controller
@@ -15852,57 +15923,6 @@ CanvasGroup:
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
---- !u!114 &2041070419
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2041070414}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 82610b06960042a8ae0ef22aa29229c0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  ghostImage: {fileID: 1881135252}
-  canvasGroup: {fileID: 2041070418}
-  ghostAlpha: 0.6
-  offset: {x: 10, y: -10}
---- !u!114 &2041070421
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2041070414}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 779e2566cf9649a1b0f16d255136a447, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  popupPanel: {fileID: 845087803}
-  amountSlider: {fileID: 795163151}
-  amountText: {fileID: 1005166772}
-  itemNameText: {fileID: 1372202566}
-  itemIcon: {fileID: 0}
-  cancelButton: {fileID: 1948644607}
-  dropAllButton: {fileID: 263390394}
-  dropAmountButton: {fileID: 107810205}
-  closeOnAction: 1
---- !u!114 &2041070426
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2041070414}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 39b76a0992db41bcb25968e582a81d08, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  allowDragCancel: 1
-  enableDebugLogs: 0
 --- !u!1 &2058419671
 GameObject:
   m_ObjectHideFlags: 0
@@ -15946,7 +15966,6 @@ GameObject:
   - component: {fileID: 2094744613}
   - component: {fileID: 2094744612}
   - component: {fileID: 2094744611}
-  - component: {fileID: 2094744614}
   m_Layer: 5
   m_Name: QuickSlot
   m_TagString: Untagged
@@ -16037,22 +16056,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2094744609}
   m_CullTransparentMesh: 1
---- !u!114 &2094744614
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2094744609}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 089fc6a4370ca2d4e81e79647944a114, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  slotContainer: {fileID: 2094744610}
-  slotPrefab: {fileID: 2877089845199193752, guid: 0441f802e02d80a489baf430b1b7e449, type: 3}
-  config: {fileID: 11400000, guid: 5752f758f35127d40a0e8ff532a85c80, type: 2}
-  enableDebugLogs: 0
 --- !u!1 &2095195695
 GameObject:
   m_ObjectHideFlags: 0
@@ -16111,9 +16114,31 @@ MonoBehaviour:
   itemIcon: {fileID: 1008963522}
   slotNameText: {fileID: 0}
   unequipButton: {fileID: 0}
-  emptyColor: {r: 0.2, g: 0.2, b: 0.2, a: 0.5}
-  occupiedColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-  hoverColor: {r: 0.4, g: 0.4, b: 0.4, a: 1}
+  emptyColor:
+    r: 0.2
+    g: 0.2
+    b: 0.2
+    a: 0.5
+  occupiedColor:
+    r: 0.3
+    g: 0.3
+    b: 0.3
+    a: 1
+  hoverColor:
+    r: 0.4
+    g: 0.4
+    b: 0.4
+    a: 1
+  currentItem:
+    InstanceId: 
+    Definition: {fileID: 0}
+    StackSize: 1
+    CurrentDurability: 0
+    CurrentAmmo: 0
+    AttachedItems: []
+  slotType: 0
+  parentPanel: {fileID: 0}
+  currentState: 0
 --- !u!114 &2095195698
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -16283,7 +16308,6 @@ GameObject:
   m_Component:
   - component: {fileID: 2099928717}
   - component: {fileID: 2099928718}
-  - component: {fileID: 2099928719}
   m_Layer: 5
   m_Name: GridLayout
   m_TagString: Untagged
@@ -16335,22 +16359,6 @@ MonoBehaviour:
   m_Spacing: {x: 16, y: 32}
   m_Constraint: 0
   m_ConstraintCount: 2
---- !u!114 &2099928719
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2099928716}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6ffdb5969bfe4a9fa1ce709563b611fc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  slotContainer: {fileID: 2099928717}
-  slotPrefab: {fileID: 2095195695}
-  config: {fileID: 11400000, guid: 52e4951583cb37a4db26017c4b9d97bf, type: 2}
-  enableDebugLogs: 0
 --- !u!1 &2114667418
 GameObject:
   m_ObjectHideFlags: 0
@@ -16360,8 +16368,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2114667420}
-  - component: {fileID: 2114667421}
-  - component: {fileID: 2114667422}
   m_Layer: 0
   m_Name: PlayerHUD
   m_TagString: Untagged
@@ -16389,41 +16395,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &2114667421
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2114667418}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9faeb3ab38a0b834fad167c49dc9a27c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  quickSlotContainer: {fileID: 1131508113}
-  quickSlotButtonPrefab: {fileID: 2877089845199193752, guid: 0441f802e02d80a489baf430b1b7e449, type: 3}
-  config: {fileID: 11400000, guid: 5752f758f35127d40a0e8ff532a85c80, type: 2}
-  quickSlotManager: {fileID: 0}
-  enableDebugLogs: 0
---- !u!114 &2114667422
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2114667418}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e880e1a3c8e549918a03e8fb669f1bd9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  promptPanel: {fileID: 1896585349}
-  iconImage: {fileID: 370513765}
-  promptText: {fileID: 1368074690}
-  progressBarFill: {fileID: 1282834320}
-  progressBarRoot: {fileID: 0}
-  enableDebugLogs: 0
 --- !u!1 &2144287633
 GameObject:
   m_ObjectHideFlags: 0
@@ -17038,7 +17009,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 211a9f6ec51ddc14f908f5acc0cd0423, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _playerPrefab: {fileID: 3090291657640884822, guid: 271db8c843e12284bb95c4b42ee69b93, type: 3}
+  _playerPrefab: {fileID: 3090291657640884822, guid: 57e50ab2ca6febf44962528f592d473b, type: 3}
   _addToDefaultScene: 1
   Spawns:
   - {fileID: 1484433501}

@@ -3,7 +3,9 @@ using FishNet.Object;
 using FishNet.Component.Transforming;
 using NightHunt.Data;
 using NightHunt.Gameplay.Character.Movement;
+using NightHunt.Gameplay.Character.Stats;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.Inventory.Stats;
 using Unity.Cinemachine;
 
 namespace NightHunt.Gameplay.Character

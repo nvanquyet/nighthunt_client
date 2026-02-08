@@ -35,8 +35,6 @@ namespace NightHunt.Gameplay.Character
         [SerializeField] protected float lockTurnSpeed = 18f;
 
         [Header("Camera Lock")]
-        [SerializeField]
-        protected CinemachineCamera cinemachineCamera;
 
         [SerializeField] protected bool allowCameraLockToggle = true;
         [SerializeField] protected bool startWithCameraLock = false;
@@ -50,6 +48,7 @@ namespace NightHunt.Gameplay.Character
         // Components
 
         // ===== INPUT (OWNER ONLY) =====
+        protected CinemachineCamera _cinemachineCamera;
         protected Vector2 _moveInput;
         protected bool _sprint;
         protected bool _crouch;
@@ -114,7 +113,7 @@ namespace NightHunt.Gameplay.Character
 
         private void Awake()
         {
-            cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
+            _cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
             InitializePhysicsComponents();
         }
 
@@ -135,6 +134,7 @@ namespace NightHunt.Gameplay.Character
             _verticalVelocity = -2f;
             _cameraLocked = startWithCameraLock;
 
+            _cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
 
             if (enableDebugLogs)
                 Debug.Log(
@@ -187,9 +187,9 @@ namespace NightHunt.Gameplay.Character
             }
 
             // Capture camera yaw
-            if (cinemachineCamera != null)
+            if (_cinemachineCamera != null)
             {
-                _yaw = cinemachineCamera.transform.eulerAngles.y;
+                _yaw = _cinemachineCamera.transform.eulerAngles.y;
             }
         }
 
@@ -500,7 +500,7 @@ namespace NightHunt.Gameplay.Character
                 Gizmos.DrawRay(transform.position + Vector3.up, transform.forward * 2f);
 
                 // Camera direction (yellow)
-                if (cinemachineCamera != null)
+                if (_cinemachineCamera != null)
                 {
                     Gizmos.color = Color.yellow;
                     Vector3 camForward = Quaternion.Euler(0, _yaw, 0) * Vector3.forward;

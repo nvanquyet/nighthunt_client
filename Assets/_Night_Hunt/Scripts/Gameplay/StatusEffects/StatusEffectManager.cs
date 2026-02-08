@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using NightHunt.Gameplay.Character;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.StatusEffects
 {

@@ -2,15 +2,18 @@
 {
     /// <summary>
     /// Defines weapon slot types.
+    /// Default: Primary + Secondary
+    /// Can be expanded to include Melee slot
     /// </summary>
     public enum WeaponSlotType
     {
-        /// <summary>Primary weapon (Rifle, Shotgun, etc.)</summary>
+        /// <summary>Primary weapon slot (rifle, shotgun, etc.)</summary>
         Primary,
         
-        /// <summary>Secondary weapon (Pistol)</summary>
-        Secondary
+        /// <summary>Secondary weapon slot (pistol, SMG)</summary>
+        Secondary,
         
-        // TODO: Melee weapon slot (knife, axe, etc.)
+        // /// <summary>Melee weapon slot (knife, axe) - future expansion</summary>
+        //Melee
     }
 }

@@ -1,6 +1,7 @@
 using UnityEngine;
 using NightHunt.Data;
 using System.Collections;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Character
 {

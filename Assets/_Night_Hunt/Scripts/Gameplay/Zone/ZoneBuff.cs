@@ -1,6 +1,5 @@
 using UnityEngine;
-using NightHunt.Gameplay.Character;
-using NightHunt.Gameplay.Character.Stats;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Zone
 {
@@ -12,7 +11,7 @@ namespace NightHunt.Gameplay.Zone
         [Header("Zone Buff Settings")]
         [SerializeField] private string statName;
         [SerializeField] private float value;
-        [SerializeField] private ModifierType modifierType = ModifierType.Multiply;
+        //[SerializeField] private ModifierType modifierType = ModifierType.Multiply;
         [SerializeField] private float radius = 10f;
 
         private void OnTriggerEnter(Collider other)
@@ -38,7 +37,7 @@ namespace NightHunt.Gameplay.Zone
         /// </summary>
         private void ApplyBuff(CharacterStats stats)
         {
-            var modifier = new StatModifier(statName, modifierType, value, $"Zone_{gameObject.GetInstanceID()}");
+            //var modifier = new StatModifier(statName, modifierType, value, $"Zone_{gameObject.GetInstanceID()}");
             // TODO: Apply through modifier stack
         }
 

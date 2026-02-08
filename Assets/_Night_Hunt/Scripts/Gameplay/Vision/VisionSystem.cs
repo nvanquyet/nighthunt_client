@@ -3,6 +3,7 @@ using NightHunt.Gameplay.Character;
 using NightHunt.Data;
 using System.Collections;
 using System.Collections.Generic;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Vision
 {

@@ -1,5 +1,7 @@
 using UnityEngine;
 using NightHunt.Gameplay.Character;
+using NightHunt.Gameplay.Character.Stats;
+using NightHunt.Inventory.Stats;
 using NightHunt.Networking;
 
 namespace NightHunt.Gameplay.Core.Networking.Reconnection
@@ -27,8 +29,8 @@ namespace NightHunt.Gameplay.Core.Networking.Reconnection
                 var stats = localPlayer.GetComponent<CharacterStats>();
                 if (stats != null)
                 {
-                    state.CurrentHP = stats.GetHP();
-                    state.CurrentStamina = stats.GetStamina();
+                    state.CurrentHP = stats.GetCurrentHP();
+                    state.CurrentStamina = stats.GetCurrentStamina();
                 }
 
                 // Get team ID

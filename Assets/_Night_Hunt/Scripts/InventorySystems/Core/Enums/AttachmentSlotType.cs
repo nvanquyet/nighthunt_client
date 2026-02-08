@@ -2,31 +2,51 @@
 {
     /// <summary>
     /// Defines attachment slot types for weapons and equipment.
+    /// Examples: Scope on weapon, Flashlight on helmet
     /// </summary>
     public enum AttachmentSlotType
     {
-        // === Weapon Attachments ===
+        /// <summary>No attachment slot</summary>
+        None,
         
-        /// <summary>Optical sight attachment</summary>
+        // === WEAPON ATTACHMENTS ===
+        
+        /// <summary>Optical sight slot (scopes, red dots)</summary>
         Scope,
         
-        /// <summary>Grip attachment for stability</summary>
+        /// <summary>Barrel attachment (suppressor, compensator)</summary>
+        Barrel,
+        
+        /// <summary>Grip/foregrip slot (reduces recoil)</summary>
         Grip,
         
-        /// <summary>Muzzle attachment (suppressor, compensator, etc.)</summary>
-        Muzzle,
-        
-        /// <summary>Magazine attachment (extended, fast, etc.)</summary>
+        /// <summary>Magazine slot (extended mags)</summary>
         Magazine,
         
-        // === Equipment Attachments (Helmet) ===
+        /// <summary>Stock attachment (stability)</summary>
+        Stock,
         
-        /// <summary>Flashlight attachment for helmet</summary>
+        /// <summary>Laser/flashlight rail</summary>
+        Rail,
+        
+        /// <summary>Underbarrel attachment (grenade launcher)</summary>
+        Underbarrel,
+        
+        // === EQUIPMENT ATTACHMENTS ===
+        
+        /// <summary>Flashlight (can attach to helmet or weapon)</summary>
         Flashlight,
         
-        /// <summary>Night Vision Goggle attachment</summary>
-        NVG
+        /// <summary>Night vision device (helmet)</summary>
+        NightVision,
         
-        // TODO: Stock, Camera, Laser, etc.
+        /// <summary>Armor plate (armor)</summary>
+        ArmorPlate,
+        
+        /// <summary>Pouch/bag attachment (armor/backpack - increases capacity)</summary>
+        Pouch,
+        
+        /// <summary>Trinket/charm slot (cosmetic or minor stat boost)</summary>
+        Trinket
     }
 }

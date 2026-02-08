@@ -1,5 +1,5 @@
 using System;
-using NightHunt.Gameplay.Character.Stats;
+using NightHunt.Inventory.Stats;
 using UnityEngine;
 
 namespace NightHunt.Gameplay.Zone
@@ -39,7 +39,7 @@ namespace NightHunt.Gameplay.Zone
     {
         public string StatName;
         public float Value;
-        public ModifierType Type;
+        //public ModifierType Type;
     }
 
     /// <summary>
@@ -50,7 +50,7 @@ namespace NightHunt.Gameplay.Zone
     {
         public string StatName;
         public float Value;
-        public ModifierType Type;
+        //public ModifierType Type;
     }
 }
 

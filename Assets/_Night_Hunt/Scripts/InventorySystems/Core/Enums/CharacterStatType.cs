@@ -12,7 +12,7 @@
         Armor,
         
         /// <summary>Stamina for sprinting/actions</summary>
-        Stamina,
+        MaxStamina,
         
         /// <summary>Movement speed</summary>
         MoveSpeed,

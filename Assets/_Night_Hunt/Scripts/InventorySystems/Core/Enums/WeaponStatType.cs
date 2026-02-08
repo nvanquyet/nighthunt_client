@@ -2,30 +2,38 @@
 {
     /// <summary>
     /// Defines weapon stat types that can be modified by attachments.
+    /// Example: Grip reduces Recoil, Scope increases Range/Accuracy
     /// </summary>
     public enum WeaponStatType
     {
         /// <summary>Damage per shot</summary>
         Damage,
         
-        /// <summary>Rate of fire (rounds per minute)</summary>
+        /// <summary>Fire rate (rounds per minute)</summary>
         FireRate,
         
-        /// <summary>Recoil strength</summary>
+        /// <summary>Recoil strength (lower is better)</summary>
         Recoil,
         
         /// <summary>Effective range in meters</summary>
         Range,
         
-        /// <summary>Accuracy/spread</summary>
+        /// <summary>Accuracy (0-1, where 1 is perfect accuracy)</summary>
         Accuracy,
         
         /// <summary>Magazine capacity</summary>
         MagazineSize,
         
-        /// <summary>Reload speed multiplier</summary>
-        ReloadSpeed
+        /// <summary>Reload speed multiplier (higher is faster)</summary>
+        ReloadSpeed,
         
-        // TODO: Penetration, HeadshotMultiplier, etc.
+        /// <summary>Aim down sights speed</summary>
+        ADSSpeed,
+        
+        /// <summary>Bullet velocity</summary>
+        BulletVelocity,
+        
+        /// <summary>Penetration power</summary>
+        Penetration
     }
 }

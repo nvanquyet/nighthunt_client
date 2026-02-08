@@ -1,6 +1,7 @@
 using UnityEngine;
 using NightHunt.Data;
 using System.Collections.Generic;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Zone
 {
@@ -155,7 +156,7 @@ namespace NightHunt.Gameplay.Zone
 
         private ZoneConfigData config;
         private float spawnTime;
-        private List<Gameplay.Character.CharacterStats> playersInZone = new List<Gameplay.Character.CharacterStats>();
+        private List<CharacterStats> playersInZone = new List<CharacterStats>();
 
         private void Start()
         {
@@ -200,11 +201,11 @@ namespace NightHunt.Gameplay.Zone
             // Find all players in radius
             Collider[] colliders = Physics.OverlapSphere(transform.position, radius);
             
-            List<Gameplay.Character.CharacterStats> currentPlayers = new List<Gameplay.Character.CharacterStats>();
+            List<CharacterStats> currentPlayers = new List<CharacterStats>();
 
             foreach (var collider in colliders)
             {
-                var characterStats = collider.GetComponent<Gameplay.Character.CharacterStats>();
+                var characterStats = collider.GetComponent<CharacterStats>();
                 if (characterStats != null && !currentPlayers.Contains(characterStats))
                 {
                     currentPlayers.Add(characterStats);
@@ -229,7 +230,7 @@ namespace NightHunt.Gameplay.Zone
             playersInZone = currentPlayers;
         }
 
-        private void OnPlayerEnter(Gameplay.Character.CharacterStats character)
+        private void OnPlayerEnter(CharacterStats character)
         {
             if (config == null) return;
 
@@ -237,7 +238,7 @@ namespace NightHunt.Gameplay.Zone
             ApplyZoneEffects(character, true);
         }
 
-        private void OnPlayerExit(Gameplay.Character.CharacterStats character)
+        private void OnPlayerExit(CharacterStats character)
         {
             if (config == null) return;
 
@@ -245,7 +246,7 @@ namespace NightHunt.Gameplay.Zone
             ApplyZoneEffects(character, false);
         }
 
-        private void ApplyZoneEffects(Gameplay.Character.CharacterStats character, bool entering)
+        private void ApplyZoneEffects(CharacterStats character, bool entering)
         {
             if (config == null) return;
 

@@ -22,11 +22,8 @@ namespace NightHunt.Networking
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
-        [SerializeField] private CharacterCombat combat;
         [SerializeField] private CinemachineCamera playerCamera;
 
-        // Synchronized variables
-        private IMovementController _movement;
         private readonly SyncVar<string> playerName = new SyncVar<string>();
         private readonly SyncVar<int> teamId = new SyncVar<int>();
 
@@ -41,14 +38,6 @@ namespace NightHunt.Networking
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-
-            // Initialize components
-            if (_movement == null)
-                _movement = GetComponent<IMovementController>();
-
-            if (combat == null)
-                combat = GetComponent<CharacterCombat>();
-
 
             // Subscribe to sync var changes
             playerName.OnChange += OnPlayerNameChanged;

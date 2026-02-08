@@ -4,6 +4,7 @@ using NightHunt.Gameplay.Core.Networking;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Networking;
 using FishNet.Object;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {

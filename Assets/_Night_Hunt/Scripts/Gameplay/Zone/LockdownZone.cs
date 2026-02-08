@@ -2,7 +2,8 @@ using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Match;
-using NightHunt.Gameplay.Character;
+using NightHunt.Inventory.Stats;
+
 using NightHunt.Networking;
 using System.Collections.Generic;
 

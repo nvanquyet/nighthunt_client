@@ -1,6 +1,7 @@
 using UnityEngine;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Character.Stats;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.PredatorPrey
 {
@@ -17,11 +18,11 @@ namespace NightHunt.Gameplay.PredatorPrey
             if (stats == null) return;
 
             // Slower stamina regen
-            var staminaModifier = new StatModifier("Stamina", ModifierType.Multiply, 0.8f, "PredatorRole");
+            //var staminaModifier = new StatModifier("Stamina", ModifierType.Multiply, 0.8f, "PredatorRole");
             // TODO: Apply through modifier stack
 
             // Louder footsteps (noise increase)
-            var noiseModifier = new StatModifier("Noise", ModifierType.Multiply, 1.3f, "PredatorRole");
+            // noiseModifier = new StatModifier("Noise", ModifierType.Multiply, 1.3f, "PredatorRole");
             // TODO: Apply through modifier stack
         }
 
@@ -36,7 +37,7 @@ namespace NightHunt.Gameplay.PredatorPrey
             // TODO: Implement revive speed modifier
 
             // Less noise
-            var noiseModifier = new StatModifier("Noise", ModifierType.Multiply, 0.8f, "PreyRole");
+            //var noiseModifier = new StatModifier("Noise", ModifierType.Multiply, 0.8f, "PreyRole");
             // TODO: Apply through modifier stack
         }
 

@@ -1,6 +1,7 @@
 using UnityEngine;
 using NightHunt.Gameplay.AI;
 using NightHunt.Gameplay.Character;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Objective
 {
@@ -47,7 +48,7 @@ namespace NightHunt.Gameplay.Objective
                 if (bossStats != null)
                 {
                     float maxHP = bossStats.GetMaxHP();
-                    float currentHP = bossStats.GetHP();
+                    float currentHP = bossStats.GetCurrentHP();
                     Progress = 1f - (currentHP / maxHP);
                 }
             }

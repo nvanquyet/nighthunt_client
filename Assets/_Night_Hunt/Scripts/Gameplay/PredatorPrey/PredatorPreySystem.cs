@@ -6,6 +6,7 @@ using NightHunt.Gameplay.Character;
 using NightHunt.Networking;
 using System.Collections.Generic;
 using FishNet;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.PredatorPrey
 {
@@ -182,7 +183,7 @@ namespace NightHunt.Gameplay.PredatorPrey
             if (stats != null)
             {
                 // Apply noise reduction
-                stats.ApplyStatusEffect("STATUS_SILENT", 999f); // Long duration
+                //stats.ApplyStatusEffect("STATUS_SILENT", 999f); // Long duration
             }
 
             // Radar ping (handled by vision system)
@@ -209,7 +210,7 @@ namespace NightHunt.Gameplay.PredatorPrey
 
             if (stats != null)
             {
-                stats.RemoveStatusEffect("STATUS_SILENT");
+                //stats.RemoveStatusEffect("STATUS_SILENT");
             }
         }
 

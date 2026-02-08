@@ -1,6 +1,7 @@
 using UnityEngine;
 using FOW;
 using NightHunt.Gameplay.Character;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Vision
 {

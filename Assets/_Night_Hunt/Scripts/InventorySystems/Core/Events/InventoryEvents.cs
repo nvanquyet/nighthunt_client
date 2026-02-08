@@ -1,86 +1,79 @@
 ﻿using System;
 using NightHunt.Inventory.Core.Data;
+using NightHunt.Inventory.Core.Enums;
 
 namespace NightHunt.Inventory.Core.Events
 {
     /// <summary>
-    /// Central event hub for inventory-related events.
-    /// Enables communication between Domain and UI layers.
+    /// Global events for InventorySystem.
+    /// Subscribe to these for UI updates and gameplay logic.
     /// </summary>
     public static class InventoryEvents
     {
-        // === UI Request Events (UI → Domain) ===
+        // === Item Added/Removed ===
+        /// <summary>Fired when item is added to inventory. Args: (item, slotIndex)</summary>
+        public static event Action<ItemInstance, int> OnItemAdded;
         
-        /// <summary>Fired when user requests to open inventory UI</summary>
-        public static event Action OnRequestOpenInventory;
+        /// <summary>Fired when item is removed from inventory. Args: (item, slotIndex)</summary>
+        public static event Action<ItemInstance, int> OnItemRemoved;
         
-        /// <summary>Fired when user requests to close inventory UI</summary>
-        public static event Action OnRequestCloseInventory;
+        /// <summary>Fired when item is moved. Args: (item, fromSlot, toSlot)</summary>
+        public static event Action<ItemInstance, int, int> OnItemMoved;
         
-        /// <summary>Fired when user requests to add item to inventory</summary>
-        public static event Action<ItemInstance> OnRequestAddItem;
+        /// <summary>Fired when items are swapped. Args: (itemA, slotA, itemB, slotB)</summary>
+        public static event Action<ItemInstance, int, ItemInstance, int> OnItemsSwapped;
         
-        /// <summary>Fired when user requests to remove item from inventory</summary>
-        public static event Action<string> OnRequestRemoveItem; // instanceId
+        // === Stack Operations ===
+        /// <summary>Fired when stack is split. Args: (originalItem, originalSlot, splitItem, newSlot, splitAmount)</summary>
+        public static event Action<ItemInstance, int, ItemInstance, int, int> OnStackSplit;
         
-        /// <summary>Fired when user requests to drop item stack</summary>
-        public static event Action<ItemInstance, int> OnRequestDropStack; // item, amount
+        /// <summary>Fired when stacks are merged. Args: (sourceItem, sourceSlot, targetItem, targetSlot, mergedAmount)</summary>
+        public static event Action<ItemInstance, int, ItemInstance, int, int> OnStacksMerged;
         
-        /// <summary>Fired when user requests to trash/destroy item</summary>
-        public static event Action<ItemInstance> OnRequestTrashItem;
+        // === Weight ===
+        /// <summary>Fired when total weight changes. Args: (currentWeight, maxWeight, isOverweight)</summary>
+        public static event Action<float, float, bool> OnWeightChanged;
         
-        /// <summary>Fired when user requests to transfer item to container</summary>
-        public static event Action<ItemInstance, object> OnRequestTransferToContainer; // item, container
+        // === Container State ===
+        /// <summary>Fired when inventory is cleared</summary>
+        public static event Action OnInventoryCleared;
         
-        /// <summary>Fired when user requests to transfer item from container</summary>
-        public static event Action<ItemInstance, object> OnRequestTransferFromContainer;
+        /// <summary>Fired when inventory size changes (e.g., backpack equipped). Args: (newSize)</summary>
+        public static event Action<int> OnInventorySizeChanged;
         
-        /// <summary>Fired when user requests to sort inventory</summary>
-        public static event Action OnRequestSortInventory;
+        // === Validation ===
+        /// <summary>Fired when operation fails. Args: (result, errorMessage)</summary>
+        public static event Action<OperationResult, string> OnOperationFailed;
         
-        /// <summary>Fired when user requests to auto-stack items</summary>
-        public static event Action OnRequestAutoStack;
+        // === Invoke Methods ===
+        public static void InvokeItemAdded(ItemInstance item, int slotIndex) 
+            => OnItemAdded?.Invoke(item, slotIndex);
         
-        // === State Change Events (Domain → UI) ===
+        public static void InvokeItemRemoved(ItemInstance item, int slotIndex) 
+            => OnItemRemoved?.Invoke(item, slotIndex);
         
-        /// <summary>Fired when inventory is opened</summary>
-        public static event Action OnInventoryOpened;
+        public static void InvokeItemMoved(ItemInstance item, int fromSlot, int toSlot) 
+            => OnItemMoved?.Invoke(item, fromSlot, toSlot);
         
-        /// <summary>Fired when inventory is closed</summary>
-        public static event Action OnInventoryClosed;
+        public static void InvokeItemsSwapped(ItemInstance itemA, int slotA, ItemInstance itemB, int slotB) 
+            => OnItemsSwapped?.Invoke(itemA, slotA, itemB, slotB);
         
-        /// <summary>Fired when inventory contents change</summary>
-        public static event Action<InventoryData> OnInventoryChanged;
+        public static void InvokeStackSplit(ItemInstance original, int originalSlot, ItemInstance split, int newSlot, int amount) 
+            => OnStackSplit?.Invoke(original, originalSlot, split, newSlot, amount);
         
-        /// <summary>Fired when item is added successfully</summary>
-        public static event Action<ItemInstance, int> OnItemAdded; // item, slotIndex
+        public static void InvokeStacksMerged(ItemInstance source, int sourceSlot, ItemInstance target, int targetSlot, int amount) 
+            => OnStacksMerged?.Invoke(source, sourceSlot, target, targetSlot, amount);
         
-        /// <summary>Fired when item is removed successfully</summary>
-        public static event Action<string, int> OnItemRemoved; // instanceId, slotIndex
+        public static void InvokeWeightChanged(float current, float max, bool isOverweight) 
+            => OnWeightChanged?.Invoke(current, max, isOverweight);
         
-        /// <summary>Fired when item stack size changes</summary>
-        public static event Action<ItemInstance> OnStackSizeChanged;
+        public static void InvokeInventoryCleared() 
+            => OnInventoryCleared?.Invoke();
         
-        /// <summary>Fired when inventory is full</summary>
-        public static event Action OnInventoryFull;
+        public static void InvokeInventorySizeChanged(int newSize) 
+            => OnInventorySizeChanged?.Invoke(newSize);
         
-        // === Invocation Methods ===
-        
-        public static void InvokeRequestOpenInventory() => OnRequestOpenInventory?.Invoke();
-        public static void InvokeRequestCloseInventory() => OnRequestCloseInventory?.Invoke();
-        public static void InvokeRequestAddItem(ItemInstance item) => OnRequestAddItem?.Invoke(item);
-        public static void InvokeRequestRemoveItem(string instanceId) => OnRequestRemoveItem?.Invoke(instanceId);
-        public static void InvokeRequestDropStack(ItemInstance item, int amount) => OnRequestDropStack?.Invoke(item, amount);
-        public static void InvokeRequestTrashItem(ItemInstance item) => OnRequestTrashItem?.Invoke(item);
-        public static void InvokeRequestSortInventory() => OnRequestSortInventory?.Invoke();
-        public static void InvokeRequestAutoStack() => OnRequestAutoStack?.Invoke();
-        
-        public static void InvokeInventoryOpened() => OnInventoryOpened?.Invoke();
-        public static void InvokeInventoryClosed() => OnInventoryClosed?.Invoke();
-        public static void InvokeInventoryChanged(InventoryData data) => OnInventoryChanged?.Invoke(data);
-        public static void InvokeItemAdded(ItemInstance item, int slotIndex) => OnItemAdded?.Invoke(item, slotIndex);
-        public static void InvokeItemRemoved(string instanceId, int slotIndex) => OnItemRemoved?.Invoke(instanceId, slotIndex);
-        public static void InvokeStackSizeChanged(ItemInstance item) => OnStackSizeChanged?.Invoke(item);
-        public static void InvokeInventoryFull() => OnInventoryFull?.Invoke();
+        public static void InvokeOperationFailed(OperationResult result, string message) 
+            => OnOperationFailed?.Invoke(result, message);
     }
 }

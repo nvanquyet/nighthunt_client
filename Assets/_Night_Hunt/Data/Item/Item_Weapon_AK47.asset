@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3057ebadd40b45189221eb55a843b9f7, type: 3}
+  m_Name: Item_Weapon_AK47
+  m_EditorClassIdentifier: 
+  ItemId: weapon_ak47
+  DisplayName: AK-47
+  Description: 
+  ItemType: 0
+  Icon: {fileID: 0}
+  Weight: 3.5
+  IsStackable: 0
+  MaxStackSize: 1
+  AllowedSlotLocations: 0000000002000000
+  EquipmentSlot: 0
+  AttachmentSlots: 010000000300000004000000
+  AttachmentType: 0
+  StatModifiers: []
+  MaxDurability: 100
+  DurabilityDegradationRate: 0.1
+  EventValue: 0
+  Rarity: 0
+  Requirements: []
+  WorldModelPrefab: {fileID: 0}
+  EquippedModelPrefab: {fileID: 0}
