@@ -21,7 +21,7 @@ namespace NightHunt.Inventory.World
         [SerializeField] private bool enableDebugLogs = false;
         
         // Synced item data
-        private FishNet.Object.Synchronizing.SyncVar<ItemInstanceData> syncedItemData = 
+        private readonly FishNet.Object.Synchronizing.SyncVar<ItemInstanceData> syncedItemData = 
             new FishNet.Object.Synchronizing.SyncVar<ItemInstanceData>();
         
         // === Lifecycle ===
@@ -107,15 +107,23 @@ namespace NightHunt.Inventory.World
         /// </summary>
         public void RequestPickup(PlayerInventoryController inventory)
         {
-            if (!IsOwner && !IsServer)
+            // Get NetworkObject from inventory's GameObject
+            var networkObject = inventory.GetComponent<NetworkObject>();
+            if (networkObject == null)
+            {
+                LogWarning("PlayerInventoryController GameObject does not have NetworkObject!");
+                return;
+            }
+            
+            if (!networkObject.IsOwner && !IsServer)
             {
                 // Call ServerRpc to request pickup
-                RequestPickup_ServerRpc(inventory.Owner);
+                RequestPickup_ServerRpc(networkObject.Owner);
             }
             else if (IsServer)
             {
                 // Server handles directly
-                ProcessPickup(inventory);
+                ProcessPickup(inventory, networkObject.Owner);
             }
         }
         
@@ -131,10 +139,10 @@ namespace NightHunt.Inventory.World
             if (inventory == null)
                 return;
             
-            ProcessPickup(inventory);
+            ProcessPickup(inventory, requester);
         }
         
-        private void ProcessPickup(PlayerInventoryController inventory)
+        private void ProcessPickup(PlayerInventoryController inventory, NetworkConnection conn)
         {
             if (!IsServer)
                 return;
@@ -150,7 +158,7 @@ namespace NightHunt.Inventory.World
             {
                 // Despawn drop
                 ServerManager.Despawn(gameObject);
-                Log($"[SERVER] Item picked up by {inventory.Owner.ClientId}");
+                Log($"[SERVER] Item picked up by client {conn.ClientId}");
             }
             else
             {

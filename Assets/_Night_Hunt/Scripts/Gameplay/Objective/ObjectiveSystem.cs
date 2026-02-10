@@ -16,7 +16,6 @@ namespace NightHunt.Gameplay.Objective
     {
         [Header("Objectives")]
         [SerializeField] private List<IObjective> activeObjectives = new List<IObjective>();
-        [SerializeField] private List<BossObjective> bossObjectives = new List<BossObjective>();
         [SerializeField] private List<CaptureZoneObjective> captureZoneObjectives = new List<CaptureZoneObjective>();
         [SerializeField] private List<RadarStationObjective> radarObjectives = new List<RadarStationObjective>();
         [SerializeField] private List<EMPNodeObjective> empObjectives = new List<EMPNodeObjective>();
@@ -64,7 +63,6 @@ namespace NightHunt.Gameplay.Objective
             activeObjectives.Clear();
             
             // Collect all objectives
-            activeObjectives.AddRange(bossObjectives);
             activeObjectives.AddRange(captureZoneObjectives);
             activeObjectives.AddRange(radarObjectives);
             activeObjectives.AddRange(empObjectives);
@@ -97,15 +95,6 @@ namespace NightHunt.Gameplay.Objective
         {
             // Activate capture zones
             foreach (var objective in captureZoneObjectives)
-            {
-                if (objective != null)
-                {
-                    objective.OnStart();
-                }
-            }
-
-            // Activate boss objectives
-            foreach (var objective in bossObjectives)
             {
                 if (objective != null)
                 {

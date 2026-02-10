@@ -135,7 +135,7 @@ namespace NightHunt.Gameplay.AntiCamping
             // Apply reveal effect
             RpcRevealPlayer(playerId, revealRadius);
 
-            Debug.Log($"[AntiCampingSystem] Player {player.PlayerName} is camping and has been revealed!");
+            Debug.Log($"[AntiCampingSystem] Player {player.DisplayName} is camping and has been revealed!");
         }
 
         /// <summary>

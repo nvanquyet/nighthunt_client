@@ -76,7 +76,7 @@ namespace NightHunt.Gameplay.AntiCamping
         /// </summary>
         private void OnPlayerCampingDetected(NetworkPlayer player)
         {
-            Debug.Log($"[CampingDetector] Player {player.PlayerName} is camping!");
+            Debug.Log($"[CampingDetector] Player {player.DisplayName} is camping!");
             // Notify anti-camping system
         }
 

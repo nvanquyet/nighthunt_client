@@ -6,13 +6,13 @@
     public enum CharacterStatType
     {
         /// <summary>Maximum health points</summary>
-        MaxHP,
+        Health,
         
         /// <summary>Armor/damage reduction</summary>
         Armor,
         
         /// <summary>Stamina for sprinting/actions</summary>
-        MaxStamina,
+        Stamina,
         
         /// <summary>Movement speed</summary>
         MoveSpeed,
@@ -22,9 +22,6 @@
         
         /// <summary>Vision/detection radius</summary>
         VisionRadius,
-        
-        /// <summary>Noise level (stealth)</summary>
-        NoiseLevel
         
         // TODO: CritChance, DodgeChance, Resistance, etc.
     }

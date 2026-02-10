@@ -1,6 +1,4 @@
 using UnityEngine;
-using NightHunt.Gameplay.Core.Events;
-using NightHunt.Gameplay.Core.Networking;
 
 namespace NightHunt.Gameplay.ClientEffects
 {

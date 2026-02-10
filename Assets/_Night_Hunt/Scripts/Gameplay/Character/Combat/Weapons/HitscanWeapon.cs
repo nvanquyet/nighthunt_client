@@ -1,6 +1,5 @@
 using UnityEngine;
 using NightHunt.Data;
-using NightHunt.Gameplay.Core.Networking;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.Utils;
 using NightHunt.Inventory.Stats;
@@ -45,7 +44,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         private void ProcessHit(RaycastHit hit)
         {
             // Check if hit a character
-            var hitCharacter = hit.collider.GetComponent<CharacterStats>();
+            var hitCharacter = hit.collider.GetComponent<PlayerStats>();
             if (hitCharacter != null)
             {
                 // Calculate damage

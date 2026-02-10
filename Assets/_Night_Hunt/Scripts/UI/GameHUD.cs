@@ -47,7 +47,7 @@ namespace NightHunt.UI
         [SerializeField] private float crosshairSpread = 10f;
 
         private NetworkPlayer localPlayer;
-        private CharacterStats characterStats;
+        private PlayerStats _playerStats;
         private CharacterCombat characterCombat;
         private CharacterPredictedMovement _characterPredictedMovement;
         
@@ -92,7 +92,7 @@ namespace NightHunt.UI
                 if (player.IsLocalPlayer)
                 {
                     localPlayer = player;
-                    characterStats = player.GetComponent<CharacterStats>();
+                    _playerStats = player.GetComponent<PlayerStats>();
                     characterCombat = player.GetComponent<CharacterCombat>();
                     _characterPredictedMovement = player.GetComponent<CharacterPredictedMovement>();
                     break;
@@ -105,10 +105,10 @@ namespace NightHunt.UI
         /// </summary>
         private void UpdateHealthBar()
         {
-            if (characterStats == null || healthBar == null) return;
+            if (_playerStats == null || healthBar == null) return;
 
-            float currentHP = characterStats.GetCurrentHP();
-            float maxHP = characterStats.GetCurrentStamina();
+            float currentHP = _playerStats.GetCurrentHealth();
+            float maxHP = _playerStats.GetCurrentStamina();
             float hpPercentage = maxHP > 0 ? currentHP / maxHP : 0f;
 
             healthBar.value = hpPercentage;
@@ -135,10 +135,10 @@ namespace NightHunt.UI
         /// </summary>
         private void UpdateStaminaBar()
         {
-            if (characterStats == null || staminaBar == null) return;
+            if (_playerStats == null || staminaBar == null) return;
 
-            float currentStamina = characterStats.GetCurrentStamina();
-            float maxStamina = characterStats.GetMaxStamina();
+            float currentStamina = _playerStats.GetCurrentStamina();
+            float maxStamina = _playerStats.GetMaxStamina();
             float staminaPercentage = maxStamina > 0 ? currentStamina / maxStamina : 0f;
 
             staminaBar.value = staminaPercentage;

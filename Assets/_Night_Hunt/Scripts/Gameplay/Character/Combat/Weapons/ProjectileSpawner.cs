@@ -1,6 +1,5 @@
 using UnityEngine;
 using NightHunt.Data;
-using NightHunt.Gameplay.Core.Networking;
 using FishNet.Object;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
@@ -14,12 +13,12 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         [Header("Projectile Settings")]
         [SerializeField] private GameObject projectilePrefab;
 
-        private LocalSpawnManager localSpawnManager;
+        //private LocalSpawnManager localSpawnManager;
         private uint nextProjectileId = 1;
 
         private void Awake()
         {
-            localSpawnManager = LocalSpawnManager.Instance;
+            //localSpawnManager = LocalSpawnManager.Instance;
         }
 
         /// <summary>
@@ -44,10 +43,10 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             }
 
             // Register with local spawn manager
-            if (localSpawnManager != null)
-            {
-                localSpawnManager.SpawnLocal(projectile, position, Quaternion.LookRotation(direction), nextProjectileId++);
-            }
+            // if (localSpawnManager != null)
+            // {
+            //     localSpawnManager.SpawnLocal(projectile, position, Quaternion.LookRotation(direction), nextProjectileId++);
+            // }
 
             // Send to server for validation and broadcast
             if (IsOwner)

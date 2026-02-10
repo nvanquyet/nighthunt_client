@@ -5,6 +5,7 @@ using NightHunt.Gameplay.Character.Stats;
 using NightHunt.Inventory.Stats;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Enums;
+using UnityEngine.Serialization;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -14,8 +15,9 @@ namespace NightHunt.Gameplay.Character
     /// </summary>
     public class CharacterStatsSync : NetworkBehaviour
     {
+        [FormerlySerializedAs("characterStats")]
         [Header("References")]
-        [SerializeField] private CharacterStats characterStats;
+        [SerializeField] private PlayerStats playerStats;
         
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
@@ -26,7 +28,6 @@ namespace NightHunt.Gameplay.Character
         private readonly SyncVar<float> networkMoveSpeed = new SyncVar<float>();
         private readonly SyncVar<float> networkWeightCapacity = new SyncVar<float>();
         private readonly SyncVar<float> networkVisionRadius = new SyncVar<float>();
-        private readonly SyncVar<float> networkNoiseLevel = new SyncVar<float>();
         
         public override void OnStartNetwork()
         {
@@ -38,7 +39,6 @@ namespace NightHunt.Gameplay.Character
             networkMoveSpeed.OnChange += (prev, next, asServer) => OnStatChanged("MoveSpeed", prev, next, asServer);
             networkWeightCapacity.OnChange += (prev, next, asServer) => OnStatChanged("WeightCapacity", prev, next, asServer);
             networkVisionRadius.OnChange += (prev, next, asServer) => OnStatChanged("VisionRadius", prev, next, asServer);
-            networkNoiseLevel.OnChange += (prev, next, asServer) => OnStatChanged("NoiseLevel", prev, next, asServer);
             
             // If server, subscribe to stat changes
             if (IsServer)
@@ -63,15 +63,14 @@ namespace NightHunt.Gameplay.Character
         {
             if (!IsServer) return;
             
-            if (characterStats == null) return;
+            if (playerStats == null) return;
             
             // Update all SyncVars
-            networkHP.Value = characterStats.GetCurrentHP();
-            networkStamina.Value = characterStats.GetCurrentStamina();
-            networkMoveSpeed.Value = characterStats.GetMoveSpeed();
-            networkWeightCapacity.Value = characterStats.GetWeightCapacity();
-            networkVisionRadius.Value = characterStats.GetVisionRadius();
-            networkNoiseLevel.Value = characterStats.GetNoiseLevel();
+            networkHP.Value = playerStats.GetCurrentHealth();
+            networkStamina.Value = playerStats.GetCurrentStamina();
+            networkMoveSpeed.Value = playerStats.GetMoveSpeed();
+            networkWeightCapacity.Value = playerStats.GetWeightCapacity();
+            networkVisionRadius.Value = playerStats.GetVisionRadius();
             
             Log($"[SERVER] Synced all stats");
         }
@@ -99,8 +98,6 @@ namespace NightHunt.Gameplay.Character
         public float GetNetworkMoveSpeed() => networkMoveSpeed.Value;
         public float GetNetworkWeightCapacity() => networkWeightCapacity.Value;
         public float GetNetworkVisionRadius() => networkVisionRadius.Value;
-        public float GetNetworkNoiseLevel() => networkNoiseLevel.Value;
-        
         #endregion
         
         void Log(string msg)

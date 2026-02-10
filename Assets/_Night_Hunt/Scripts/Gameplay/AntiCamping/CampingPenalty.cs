@@ -1,6 +1,5 @@
 using UnityEngine;
 using NightHunt.Networking;
-using NightHunt.Gameplay.Vision;
 
 namespace NightHunt.Gameplay.AntiCamping
 {
@@ -28,13 +27,13 @@ namespace NightHunt.Gameplay.AntiCamping
         /// </summary>
         private static void RevealPosition(NetworkPlayer player, float radius)
         {
-            // Create reveal effect for enemies
-            var visionSystem = player.GetComponent<Vision.VisionSystem>();
-            if (visionSystem != null)
-            {
-                // Increase vision radius temporarily (makes player visible)
-                // This would be handled by vision system
-            }
+            // // Create reveal effect for enemies
+            // var visionSystem = player.GetComponent<Vision.VisionSystem>();
+            // if (visionSystem != null)
+            // {
+            //     // Increase vision radius temporarily (makes player visible)
+            //     // This would be handled by vision system
+            // }
 
             // TODO: Show reveal indicator on minimap for enemies
         }

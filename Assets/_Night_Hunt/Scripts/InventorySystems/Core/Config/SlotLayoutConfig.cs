@@ -11,7 +11,7 @@ namespace NightHunt.Inventory.Core.Config
     ///          QuickSlots can be configured as 4, 6, or 8 slots
     /// </summary>
     [CreateAssetMenu(fileName = "SlotLayoutConfig", menuName = "NightHunt/Config/Slot Layout Config")]
-    public class SlotLayoutConfig : ScriptableObject
+    public class SlotLayoutConfig : ScriptableObject 
     {
         [Header("Equipment Slots Configuration")]
         [Tooltip("Defines all equipment slots available to player")]
@@ -23,7 +23,7 @@ namespace NightHunt.Inventory.Core.Config
             new EquipmentSlotDefinition { SlotType = EquipmentSlotType.Boots, DisplayName = "Boots", IsRequired = false }
             // Future: Ring1, Ring2, Trinket, etc.
         };
-        
+         
         [Header("Weapon Slots Configuration")]
         [Tooltip("Defines weapon slots (can be expanded for melee)")]
         public WeaponSlotDefinition[] WeaponSlots = new WeaponSlotDefinition[]
@@ -49,6 +49,76 @@ namespace NightHunt.Inventory.Core.Config
         [Tooltip("Max inventory slots after all expansions")]
         [Range(10, 200)]
         public int MaxInventorySlotCount = 50;
+        
+        [Header("Empty Slot Icons")]
+        [Tooltip("Icon for empty inventory slots")]
+        public Sprite inventoryEmptyIcon;
+        
+        [Tooltip("Icon for empty quick slots")]
+        public Sprite quickSlotEmptyIcon;
+        
+        [Header("Attachment Empty Icons")]
+        [Tooltip("Icons for each attachment slot type when empty (to show what can be attached)")]
+        public AttachmentSlotIcon[] attachmentEmptyIcons;
+        
+        // === Helper Methods ===
+        
+        /// <summary>
+        /// Get empty icon for equipment slot type.
+        /// </summary>
+        public Sprite GetEquipmentEmptyIcon(EquipmentSlotType slotType)
+        {
+            if (EquipmentSlots == null)
+                return inventoryEmptyIcon;
+            
+            foreach (var slotDef in EquipmentSlots)
+            {
+                if (slotDef.SlotType == slotType)
+                {
+                    // Use SlotIcon from definition if available, otherwise use inventoryEmptyIcon
+                    return slotDef.SlotIcon != null ? slotDef.SlotIcon : inventoryEmptyIcon;
+                }
+            }
+            
+            return inventoryEmptyIcon; // Fallback
+        }
+        
+        /// <summary>
+        /// Get empty icon for weapon slot type.
+        /// </summary>
+        public Sprite GetWeaponEmptyIcon(WeaponSlotType slotType)
+        {
+            if (WeaponSlots == null)
+                return inventoryEmptyIcon;
+            
+            foreach (var slotDef in WeaponSlots)
+            {
+                if (slotDef.SlotType == slotType)
+                {
+                    // Use SlotIcon from definition if available, otherwise use inventoryEmptyIcon
+                    return slotDef.SlotIcon != null ? slotDef.SlotIcon : inventoryEmptyIcon;
+                }
+            }
+            
+            return inventoryEmptyIcon; // Fallback
+        }
+        
+        /// <summary>
+        /// Get empty icon for attachment slot type.
+        /// </summary>
+        public Sprite GetAttachmentEmptyIcon(AttachmentSlotType slotType)
+        {
+            if (attachmentEmptyIcons == null)
+                return inventoryEmptyIcon;
+            
+            foreach (var icon in attachmentEmptyIcons)
+            {
+                if (icon.slotType == slotType)
+                    return icon.emptyIcon;
+            }
+            
+            return inventoryEmptyIcon; // Fallback
+        }
     }
     
     [Serializable]
@@ -67,5 +137,14 @@ namespace NightHunt.Inventory.Core.Config
         public string DisplayName;
         public ItemType[] AllowedTypes; // E.g., can allow Throwable in weapon slots
         public Sprite SlotIcon;
+    }
+    
+    [Serializable]
+    public class AttachmentSlotIcon
+    {
+        public AttachmentSlotType slotType;
+        public Sprite emptyIcon;
+        [Tooltip("Optional: Description of what this attachment slot is for")]
+        public string description;
     }
 }

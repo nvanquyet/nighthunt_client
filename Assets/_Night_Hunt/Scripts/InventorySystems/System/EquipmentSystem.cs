@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using _Night_Hunt.Scripts.InventorySystems.Core.Interfaces;
 using NightHunt.Inventory.Stats;
+using UnityEngine.Serialization;
 
 namespace NightHunt.Inventory.Systems
 {
@@ -21,8 +22,9 @@ namespace NightHunt.Inventory.Systems
         [SerializeField] private InventoryConfig config;
         [SerializeField] private SlotLayoutConfig slotLayout;
         
+        [FormerlySerializedAs("characterStats")]
         [Header("References")]
-        [SerializeField] private CharacterStats characterStats;
+        [SerializeField] private PlayerStats playerStats;
         [SerializeField] private InventorySystem inventorySystem; // Injected by PlayerInventoryController
         
         [Header("Debug")]
@@ -62,9 +64,9 @@ namespace NightHunt.Inventory.Systems
             inventorySystem = inventory;
         }
         
-        public void SetCharacterStats(CharacterStats stats)
+        public void SetCharacterStats(PlayerStats stats)
         {
-            characterStats = stats;
+            playerStats = stats;
         }
         
         // === IEquipmentSystem Implementation ===
@@ -249,7 +251,7 @@ namespace NightHunt.Inventory.Systems
         /// </summary>
         private void ApplyEquipmentModifiers(ItemInstance item)
         {
-            if (characterStats == null)
+            if (playerStats == null)
             {
                 LogError("CharacterStats not assigned!");
                 return;
@@ -280,7 +282,7 @@ namespace NightHunt.Inventory.Systems
         /// </summary>
         private void RemoveEquipmentModifiers(ItemInstance item)
         {
-            if (characterStats == null)
+            if (playerStats == null)
                 return;
             
             string sourceId = item.GetModifierSourceId();

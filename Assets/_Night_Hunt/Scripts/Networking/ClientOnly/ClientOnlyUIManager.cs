@@ -157,7 +157,7 @@ namespace NightHunt.Networking.ClientOnly
             hasLocalPlayer = true;
 
             if (enableDebugLogs)
-                Debug.Log($"[ClientOnlyUIManager] Local player set: {player.PlayerName}");
+                Debug.Log($"[ClientOnlyUIManager] Local player set: {player.DisplayName}");
 
             // Notify SpectateManager
             if (SpectateManager.Instance != null)

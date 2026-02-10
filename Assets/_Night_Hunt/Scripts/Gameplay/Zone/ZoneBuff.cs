@@ -16,7 +16,7 @@ namespace NightHunt.Gameplay.Zone
 
         private void OnTriggerEnter(Collider other)
         {
-            var characterStats = other.GetComponent<CharacterStats>();
+            var characterStats = other.GetComponent<PlayerStats>();
             if (characterStats != null)
             {
                 ApplyBuff(characterStats);
@@ -25,7 +25,7 @@ namespace NightHunt.Gameplay.Zone
 
         private void OnTriggerExit(Collider other)
         {
-            var characterStats = other.GetComponent<CharacterStats>();
+            var characterStats = other.GetComponent<PlayerStats>();
             if (characterStats != null)
             {
                 RemoveBuff(characterStats);
@@ -35,7 +35,7 @@ namespace NightHunt.Gameplay.Zone
         /// <summary>
         /// Apply buff to character
         /// </summary>
-        private void ApplyBuff(CharacterStats stats)
+        private void ApplyBuff(PlayerStats stats)
         {
             //var modifier = new StatModifier(statName, modifierType, value, $"Zone_{gameObject.GetInstanceID()}");
             // TODO: Apply through modifier stack
@@ -44,7 +44,7 @@ namespace NightHunt.Gameplay.Zone
         /// <summary>
         /// Remove buff from character
         /// </summary>
-        private void RemoveBuff(CharacterStats stats)
+        private void RemoveBuff(PlayerStats stats)
         {
             // TODO: Remove modifier by source ID
         }

@@ -21,7 +21,7 @@ namespace NightHunt.Gameplay.Character
         [SerializeField] private GameObject hitEffectPrefab;
 
         private WeaponConfigData currentWeapon;
-        private CharacterStats characterStats;
+        private PlayerStats _playerStats;
         private IMovementController _characterPredictedMovement;
 
         // Weapon state
@@ -37,7 +37,7 @@ namespace NightHunt.Gameplay.Character
 
         private void Awake()
         {
-            characterStats = GetComponent<CharacterStats>();
+            _playerStats = GetComponent<PlayerStats>();
             _characterPredictedMovement = GetComponent<IMovementController>();
 
             if (firePoint == null)
@@ -197,7 +197,7 @@ namespace NightHunt.Gameplay.Character
                 endPos = hit.point;
 
                 // Check if hit a character
-                var hitCharacter = hit.collider.GetComponent<CharacterStats>();
+                var hitCharacter = hit.collider.GetComponent<PlayerStats>();
                 if (hitCharacter != null)
                 {
                     // Calculate damage
@@ -305,7 +305,7 @@ namespace NightHunt.Gameplay.Character
         private void OnTriggerEnter(Collider other)
         {
             // Handle hit
-            var character = other.GetComponent<CharacterStats>();
+            var character = other.GetComponent<PlayerStats>();
             if (character != null)
             {
                 character.TakeDamage(weaponConfig.DamageBody);

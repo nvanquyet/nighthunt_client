@@ -46,8 +46,11 @@ namespace NightHunt.Inventory.Core.Events
         public static event Action<OperationResult, string> OnOperationFailed;
         
         // === Invoke Methods ===
-        public static void InvokeItemAdded(ItemInstance item, int slotIndex) 
-            => OnItemAdded?.Invoke(item, slotIndex);
+        public static void InvokeItemAdded(ItemInstance item, int slotIndex)
+        {
+            UnityEngine.Debug.Log($"[InventoryEvents] InvokeItemAdded: {item?.Definition?.DisplayName ?? "null"} at slot {slotIndex}, Subscribers: {OnItemAdded?.GetInvocationList()?.Length ?? 0}");
+            OnItemAdded?.Invoke(item, slotIndex);
+        }
         
         public static void InvokeItemRemoved(ItemInstance item, int slotIndex) 
             => OnItemRemoved?.Invoke(item, slotIndex);

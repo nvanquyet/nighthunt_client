@@ -156,7 +156,7 @@ namespace NightHunt.Gameplay.Zone
 
         private ZoneConfigData config;
         private float spawnTime;
-        private List<CharacterStats> playersInZone = new List<CharacterStats>();
+        private List<PlayerStats> playersInZone = new List<PlayerStats>();
 
         private void Start()
         {
@@ -201,11 +201,11 @@ namespace NightHunt.Gameplay.Zone
             // Find all players in radius
             Collider[] colliders = Physics.OverlapSphere(transform.position, radius);
             
-            List<CharacterStats> currentPlayers = new List<CharacterStats>();
+            List<PlayerStats> currentPlayers = new List<PlayerStats>();
 
             foreach (var collider in colliders)
             {
-                var characterStats = collider.GetComponent<CharacterStats>();
+                var characterStats = collider.GetComponent<PlayerStats>();
                 if (characterStats != null && !currentPlayers.Contains(characterStats))
                 {
                     currentPlayers.Add(characterStats);
@@ -230,23 +230,23 @@ namespace NightHunt.Gameplay.Zone
             playersInZone = currentPlayers;
         }
 
-        private void OnPlayerEnter(CharacterStats character)
+        private void OnPlayerEnter(PlayerStats player)
         {
             if (config == null) return;
 
             // Apply zone effects
-            ApplyZoneEffects(character, true);
+            ApplyZoneEffects(player, true);
         }
 
-        private void OnPlayerExit(CharacterStats character)
+        private void OnPlayerExit(PlayerStats player)
         {
             if (config == null) return;
 
             // Remove zone effects
-            ApplyZoneEffects(character, false);
+            ApplyZoneEffects(player, false);
         }
 
-        private void ApplyZoneEffects(CharacterStats character, bool entering)
+        private void ApplyZoneEffects(PlayerStats player, bool entering)
         {
             if (config == null) return;
 

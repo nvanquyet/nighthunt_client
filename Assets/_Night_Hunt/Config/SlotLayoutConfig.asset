@@ -16,29 +16,38 @@ MonoBehaviour:
   - SlotType: 0
     DisplayName: Helmet
     IsRequired: 0
-    SlotIcon: {fileID: 0}
+    SlotIcon: {fileID: 21300000, guid: e55e4ef66043a8747866894761ac06be, type: 3}
   - SlotType: 1
     DisplayName: Armor
     IsRequired: 0
-    SlotIcon: {fileID: 0}
+    SlotIcon: {fileID: 21300000, guid: ae081045687b08948a1b166f44643dee, type: 3}
   - SlotType: 2
     DisplayName: Backpack
     IsRequired: 0
-    SlotIcon: {fileID: 0}
+    SlotIcon: {fileID: 21300000, guid: 96fc5f977dbf5fb4db0aa05d8a7c193b, type: 3}
   - SlotType: 3
     DisplayName: Boots
     IsRequired: 0
-    SlotIcon: {fileID: 0}
+    SlotIcon: {fileID: 21300000, guid: b45a6b397eb4ae246a2f6d0ddc6ea5fa, type: 3}
   WeaponSlots:
   - SlotType: 0
     DisplayName: Primary Weapon
     AllowedTypes: 00000000
-    SlotIcon: {fileID: 0}
+    SlotIcon: {fileID: 21300000, guid: 6e54eaa482ea20d4fbe2b232ac925827, type: 3}
   - SlotType: 1
     DisplayName: Secondary Weapon
     AllowedTypes: 00000000
-    SlotIcon: {fileID: 0}
+    SlotIcon: {fileID: 21300000, guid: 9e09e2a2dc8f2864190a125cba002b62, type: 3}
   QuickSlotCount: 4
   MainInventorySlotCount: 20
   AllowDynamicInventoryExpansion: 1
   MaxInventorySlotCount: 50
+  inventoryEmptyIcon: {fileID: 21300000, guid: 87bab8761be522443bfb6327a272a9db, type: 3}
+  quickSlotEmptyIcon: {fileID: 21300000, guid: 28865e3766dc95c45b0a5720af378d53, type: 3}
+  attachmentEmptyIcons:
+  - slotType: 3
+    emptyIcon: {fileID: 21300000, guid: 8dcd5f373cd25944eb819fc6795f9dfa, type: 3}
+    description: 
+  - slotType: 1
+    emptyIcon: {fileID: 21300000, guid: 1e41e49e206bc2947b8943351eed53d3, type: 3}
+    description: 

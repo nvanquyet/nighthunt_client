@@ -5,6 +5,7 @@ using NightHunt.Inventory.Core.Enums;
 using NightHunt.Inventory.Core.Events;
 using NightHunt.Inventory.Core.Config;
 using NightHunt.Inventory.Stats;
+using UnityEngine.Serialization;
 
 namespace NightHunt.Inventory.Systems
 {
@@ -19,8 +20,9 @@ namespace NightHunt.Inventory.Systems
         [SerializeField] private InventoryConfig config;
         [SerializeField] private SlotLayoutConfig slotLayout;
 
+        [FormerlySerializedAs("characterStats")]
         [Header("References")]
-        [SerializeField] private CharacterStats characterStats;
+        [SerializeField] private PlayerStats playerStats;
 
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = true;
@@ -76,8 +78,8 @@ namespace NightHunt.Inventory.Systems
 
         public float GetMaxWeight()
         {
-            return characterStats != null
-                ? characterStats.GetWeightCapacity()
+            return playerStats != null
+                ? playerStats.GetWeightCapacity()
                 : config.DefaultWeightCapacity;
         }
 
@@ -96,6 +98,8 @@ namespace NightHunt.Inventory.Systems
         public OperationResult AddItem(ItemInstance item, out int assignedSlot)
         {
             assignedSlot = -1;
+
+            Log($"[InventorySystem] AddItem called: {item?.Definition?.DisplayName ?? "null"}, InstanceId={item?.InstanceId ?? "null"}");
 
             // Validate
             if (item == null || item.Definition == null)
@@ -130,7 +134,7 @@ namespace NightHunt.Inventory.Systems
                     }
                 }
             }
-            
+
             // Try auto-merge for stackable items
             if (config.AutoMergeStacks && item.Definition.IsStackable)
             {
@@ -140,17 +144,21 @@ namespace NightHunt.Inventory.Systems
             }
 
             // Add to first empty slot
+            Log($"[InventorySystem] Attempting to add item to container...");
             if (containerData.TryAddItem(item, out assignedSlot))
             {
                 item.IsEquipped = false;
                 item.EquippedLocation = SlotLocationType.Inventory;
 
+                Log($"[InventorySystem] Item added to slot {assignedSlot}, firing InventoryEvents.InvokeItemAdded...");
                 InventoryEvents.InvokeItemAdded(item, assignedSlot);
                 UpdateWeight();
 
                 Log($"Added item {item.Definition.DisplayName} to slot {assignedSlot}");
                 return OperationResult.Success;
             }
+
+            LogWarning($"[InventorySystem] Failed to add item - containerData.TryAddItem returned false");
 
             InventoryEvents.InvokeOperationFailed(OperationResult.InventoryFull, "Inventory is full");
             return OperationResult.InventoryFull;
@@ -479,6 +487,10 @@ namespace NightHunt.Inventory.Systems
         void LogError(string message)
         {
             Debug.LogError($"[InventorySystem] {message}");
+        }
+        void LogWarning(string message)
+        {
+            Debug.LogWarning($"[InventorySystem] {message}");
         }
     }
 }

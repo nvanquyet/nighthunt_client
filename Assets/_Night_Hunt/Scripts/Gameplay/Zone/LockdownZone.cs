@@ -115,7 +115,7 @@ namespace NightHunt.Gameplay.Zone
         [Server]
         private void DamagePlayer(NetworkPlayer player)
         {
-            var stats = player.GetComponent<CharacterStats>();
+            var stats = player.GetComponent<PlayerStats>();
             if (stats != null)
             {
                 stats.TakeDamage(damagePerSecond * Time.deltaTime);

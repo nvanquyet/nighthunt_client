@@ -4,10 +4,12 @@ using NightHunt.Inventory.Core.Enums;
 using NightHunt.Inventory.Core.Config;
 using NightHunt.Inventory.Stats;
 using System.Collections.Generic;
+using FishNet.Connection;
 using FishNet.Managing;
 using FishNet.Managing.Server;
 using FishNet.Object;
 using NightHunt.Inventory.World;
+using UnityEngine.Serialization;
 
 namespace NightHunt.Inventory.Systems
 {
@@ -31,8 +33,8 @@ namespace NightHunt.Inventory.Systems
         [SerializeField] private QuickSlotSystem quickSlotSystem;
         [SerializeField] private AttachmentSystem attachmentSystem;
 
-        [Header("Character References")] [SerializeField]
-        private CharacterStats characterStats;
+        [FormerlySerializedAs("characterStats")] [Header("Character References")] [SerializeField]
+        private PlayerStats playerStats;
 
         [Header("World Interaction")] [SerializeField]
         private Transform dropSpawnPoint; // Where dropped items spawn
@@ -50,7 +52,7 @@ namespace NightHunt.Inventory.Systems
         public WeaponSystem Weapons => weaponSystem;
         public QuickSlotSystem QuickSlots => quickSlotSystem;
         public AttachmentSystem Attachments => attachmentSystem;
-        public CharacterStats Stats => characterStats;
+        public PlayerStats Stats => playerStats;
 
         // === Lifecycle ===
 
@@ -81,8 +83,8 @@ namespace NightHunt.Inventory.Systems
             if (attachmentSystem == null)
                 attachmentSystem = GetComponentInChildren<AttachmentSystem>();
 
-            if (characterStats == null)
-                characterStats = GetComponent<CharacterStats>();
+            if (playerStats == null)
+                playerStats = GetComponent<PlayerStats>();
 
             Log("Auto-found systems");
         }
@@ -96,7 +98,7 @@ namespace NightHunt.Inventory.Systems
             if (equipmentSystem != null)
             {
                 equipmentSystem.SetInventorySystem(inventorySystem);
-                equipmentSystem.SetCharacterStats(characterStats);
+                equipmentSystem.SetCharacterStats(playerStats);
             }
 
             // Weapon system needs inventory
@@ -155,7 +157,7 @@ namespace NightHunt.Inventory.Systems
                 LogWarning("WeaponSystem not found - weapons disabled");
             }
 
-            if (characterStats == null)
+            if (playerStats == null)
             {
                 LogWarning("CharacterStats not found - stat modifiers will not work");
             }
