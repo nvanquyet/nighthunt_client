@@ -3,6 +3,7 @@ using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.Gameplay.Input.Handlers.Camera;
+using NightHunt.Gameplay.Input.Handlers.UI;
 
 namespace NightHunt.Gameplay.Input.Core
 {
@@ -19,6 +20,7 @@ namespace NightHunt.Gameplay.Input.Core
         [SerializeField] private MovementInputHandler movementHandler;
         [SerializeField] private CombatInputHandler combatHandler;
         [SerializeField] private CameraInputHandler cameraHandler;
+        [SerializeField] private UIInputHandler uiInputHandler;
 
         private bool isInitialized = false;
 
@@ -74,6 +76,11 @@ namespace NightHunt.Gameplay.Input.Core
             {
                 cameraHandler = gameObject.AddComponent<CameraInputHandler>();
             }
+            
+            if (uiInputHandler == null)
+            {
+                uiInputHandler = gameObject.AddComponent<UIInputHandler>();
+            }
 
             isInitialized = true;
             Debug.Log("[InputManager] Initialized");
@@ -98,6 +105,7 @@ namespace NightHunt.Gameplay.Input.Core
             movementHandler?.EnableInput();
             combatHandler?.EnableInput();
             cameraHandler?.EnableInput();
+            uiInputHandler?.EnableInput();
 
             // Transition to PlayerAlive state
             InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
@@ -114,6 +122,7 @@ namespace NightHunt.Gameplay.Input.Core
             movementHandler?.DisableInput();
             combatHandler?.DisableInput();
             cameraHandler?.DisableInput();
+            uiInputHandler?.DisableInput();
 
             Debug.Log("[InputManager] All input disabled");
         }
@@ -133,24 +142,34 @@ namespace NightHunt.Gameplay.Input.Core
         /// <summary>
         /// Disable movement and combat (for inventory)
         /// </summary>
+         
+        /// <summary>
+        /// Called when inventory is opened.
+        /// Disables movement/combat but keeps UI input enabled.
+        /// </summary>
         public void OnInventoryOpened()
         {
             movementHandler?.DisableInput();
             combatHandler?.DisableInput();
-            // Inventory handler stays enabled
-
+            // UI handler stays enabled
+            
             InputLayerManager.Instance?.TransitionToState(InputState.InventoryOpen);
+            
+            Debug.Log("[InputManager] Inventory opened - gameplay input disabled");
         }
-
+        
         /// <summary>
-        /// Re-enable gameplay input after inventory closes
+        /// Called when inventory is closed.
+        /// Re-enables movement/combat input.
         /// </summary>
         public void OnInventoryClosed()
         {
             movementHandler?.EnableInput();
             combatHandler?.EnableInput();
-
+            
             InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
+            
+            Debug.Log("[InputManager] Inventory closed - gameplay input enabled");
         }
 
         #endregion
@@ -160,7 +179,7 @@ namespace NightHunt.Gameplay.Input.Core
         public MovementInputHandler MovementHandler => movementHandler;
         public CombatInputHandler CombatHandler => combatHandler;
         public CameraInputHandler CameraHandler => cameraHandler;
-
+        public UIInputHandler UIHandler => uiInputHandler;
         public bool IsInitialized => isInitialized;
 
         #endregion

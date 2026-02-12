@@ -14,26 +14,11 @@
         
         /// <summary>Consumable items (health potions, food, buffs)</summary>
         Consumable,
-        
-        /// <summary>Throwable items (grenades, smoke bombs)</summary>
-        Throwable,
-        
-        /// <summary>Ammunition</summary>
-        Ammo,
-        
-        /// <summary>Crafting materials</summary>
-        Material,
-        
-        /// <summary>Quest items</summary>
-        Quest,
-        
+
         /// <summary>Attachments for weapons/equipment</summary>
         Attachment,
         
-        /// <summary>Key items (permanent unlocks)</summary>
-        Key,
-        
-        /// <summary>Miscellaneous items</summary>
-        Miscellaneous
+        //Event Items could be added in future expansions
+        Event,
     }
 }

@@ -1,8 +1,7 @@
 using System.Linq;
+using NightHunt.Inventory.Network;
 using UnityEngine;
 using NightHunt.Networking;
-using NightHunt.Inventory.Core.Utilities;
-using NightHunt.Inventory.Systems;
 using NightHunt.Networking.Player;
 
 namespace NightHunt.Inventory.Core
@@ -59,7 +58,7 @@ namespace NightHunt.Inventory.Core
         {
             if (player == null || !player.IsLocalPlayer)
             {
-                InventoryLogger.LogWarning("SpectateManager", "Attempted to set non-local player", enableDebugLogs);
+                LogWarning("Attempted to set non-local player");
                 return;
             }
 
@@ -70,7 +69,7 @@ namespace NightHunt.Inventory.Core
                 OnCurrentPlayerChanged?.Invoke(localPlayer);
             }
 
-            InventoryLogger.Log("SpectateManager", $"Local player set: {player.DisplayName}", enableDebugLogs);
+            Log($"Local player set: {player.DisplayName}");
         }
 
         public void StartSpectating(NetworkPlayer player)
@@ -91,7 +90,7 @@ namespace NightHunt.Inventory.Core
             isSpectating = true;
             OnCurrentPlayerChanged?.Invoke(player);
 
-            InventoryLogger.Log("SpectateManager", $"Started spectating {player.DisplayName}", enableDebugLogs);
+            Log($"Started spectating {player.DisplayName}");
         }
 
         public void StopSpectating()
@@ -104,8 +103,7 @@ namespace NightHunt.Inventory.Core
 
             OnCurrentPlayerChanged?.Invoke(localPlayer);
 
-            InventoryLogger.Log("SpectateManager", $"Stopped spectating {previousSpectated?.DisplayName}",
-                enableDebugLogs);
+            Log($"Stopped spectating {previousSpectated?.DisplayName}");
         }
 
         /// <summary>
@@ -118,7 +116,7 @@ namespace NightHunt.Inventory.Core
             // ✅ Get from Registry (O(1) access to list)
             if (PlayerPublicRegistry.Instance == null)
             {
-                Debug.LogWarning("[SpectateManager] PlayerPublicRegistry not available");
+                LogWarning("PlayerPublicRegistry not available");
                 return;
             }
 
@@ -152,43 +150,25 @@ namespace NightHunt.Inventory.Core
             StartSpectating(allPlayers[newIndex]);
         }
 
-        public PlayerInventoryController GetCurrentPlayerInventory()
+        public PlayerInventoryNetwork GetInventorySystem()
         {
             var currentPlayer = GetCurrentPlayer();
             if (currentPlayer == null)
                 return null;
 
-            return currentPlayer.GetComponent<PlayerInventoryController>();
+            return currentPlayer.Inventory;
         }
-
-        public InventorySystem GetCurrentInventory()
+        
+        
+        private void Log(string message)
         {
-            var inventoryController = GetCurrentPlayerInventory();
-            return inventoryController?.Inventory;
+            if (enableDebugLogs)
+                UnityEngine.Debug.Log($"[SpectateManager] {message}");
         }
-
-        public EquipmentSystem GetCurrentEquipment()
+        
+        private void LogWarning(string message)
         {
-            var inventoryController = GetCurrentPlayerInventory();
-            return inventoryController?.Equipment;
-        }
-
-        public WeaponSystem GetCurrentWeapons()
-        {
-            var inventoryController = GetCurrentPlayerInventory();
-            return inventoryController?.Weapons;
-        }
-
-        public QuickSlotSystem GetCurrentQuickSlots()
-        {
-            var inventoryController = GetCurrentPlayerInventory();
-            return inventoryController?.QuickSlots;
-        }
-
-        public AttachmentSystem GetCurrentAttachments()
-        {
-            var inventoryController = GetCurrentPlayerInventory();
-            return inventoryController?.Attachments;
+            if (enableDebugLogs) UnityEngine.Debug.LogWarning($"[SpectateManager] {message}");
         }
     }
 }

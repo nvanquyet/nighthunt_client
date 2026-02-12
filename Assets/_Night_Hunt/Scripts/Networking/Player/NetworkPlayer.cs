@@ -3,6 +3,8 @@ using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Player;
+using NightHunt.Inventory.Core;
+using NightHunt.Inventory.Network;
 using NightHunt.Networking.Player;
 using UnityEngine;
 using Unity.Cinemachine;
@@ -28,10 +30,12 @@ namespace NightHunt.Networking
         #region Serialized References
         [Header("Camera")]
         [SerializeField] private CinemachineCamera _playerCamera;
+        [SerializeField] private PlayerInventoryNetwork inventorySystem;
         #endregion
         
         #region Public Accessors
         
+        public PlayerInventoryNetwork Inventory => inventorySystem;
         public string DisplayName => PlayerData.DisplayName;
         public int TeamId => PlayerData.TeamId;
         public bool IsLocalPlayer => IsOwner;
@@ -71,11 +75,12 @@ namespace NightHunt.Networking
         public override void OnStartClient()
         {
             base.OnStartClient();
-            PlayerPublicRegistry.Instance?.Register(this.ObjectId, PlayerData, this);
+            PlayerPublicRegistry.Instance?.Register((int) this.ObjectId, PlayerData, this);
             // Owner-specific setup
             if (IsOwner)
             {
                 SetupOwnerSide();
+                SpectateManager.Instance.SetLocalPlayer(this);
             }
         }
         
@@ -93,7 +98,7 @@ namespace NightHunt.Networking
         public override void OnStopClient()
         {
             base.OnStopClient();
-            PlayerPublicRegistry.Instance.Unregister(this.ObjectId);
+            PlayerPublicRegistry.Instance.Unregister((int) this.ObjectId);
         }
         
 

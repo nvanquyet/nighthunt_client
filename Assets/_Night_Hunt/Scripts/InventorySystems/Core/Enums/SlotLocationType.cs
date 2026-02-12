@@ -26,8 +26,5 @@
         
         /// <summary>Trash slot (destroys items)</summary>
         Trash,
-        
-        /// <summary>Dropped in the world</summary>
-        WorldDrop
     }
 }

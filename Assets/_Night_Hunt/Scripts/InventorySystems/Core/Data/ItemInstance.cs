@@ -1,299 +1,321 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using NightHunt.Inventory.Core.Enums;
 using NightHunt.Inventory.Core.Interfaces;
+using System.Collections.Generic;
+using System.Linq;
+using NightHunt.Inventory.Database;
+using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Inventory.Core.Data
 {
     /// <summary>
     /// Runtime instance of an item.
-    /// Contains dynamic state that can change during gameplay.
-    /// Replicated over network.
-    /// REFACTORED: Implements IStatModifierProvider for stat application.
+    /// Represents a specific item in player's inventory with unique ID and state.
     /// </summary>
-    [Serializable]
-    public class ItemInstance : IStatModifierProvider
+    [System.Serializable]
+    public class ItemInstance
     {
         [Header("Identity")]
-        [Tooltip("Server-generated unique ID for this instance")]
         public string InstanceId;
-
-        [Tooltip("Reference to the static item definition")]
         public ItemDefinition Definition;
-
-        [Header("Runtime State")]
-        [Tooltip("Current stack count (1 for non-stackable)")]
+        
+        [Header("Stack & State")]
         public int StackSize = 1;
+        
+        [Header("Resource System")]
+        public float CurrentResource = 0f;
 
-        [Tooltip("Current durability (0-100%)")]
-        [Range(0f, 100f)]
-        public float CurrentDurability;
-
-        [Tooltip("Current ammo count for weapons")]
-        public int CurrentAmmo;
-
-        [Tooltip("Is this item currently equipped?")]
-        public bool IsEquipped;
-
-        [Tooltip("Where is this item equipped? (if IsEquipped)")]
-        public SlotLocationType EquippedLocation;
-
+        [Header("Location")]
+        public bool IsEquipped = false;
+        
+        // ✅ NEW: Index in inventory (position in UI)
+        public int InventoryIndex = -1; // -1 = not in inventory, >= 0 = slot position
+        
         [Header("Attachments")]
-        [Tooltip("Items attached to this item")]
-        public List<ItemInstance> AttachedItems;
-
-        // === Constructors ===
-
-        public ItemInstance()
-        {
-            AttachedItems = new List<ItemInstance>();
-        }
-
-        public ItemInstance(ItemDefinition definition, string instanceId)
+        public List<ItemInstance> AttachedItems { get; private set; }
+        
+        public ItemInstance(ItemDefinition definition, string instanceId = null)
         {
             Definition = definition;
-            InstanceId = instanceId;
+            InstanceId = instanceId ?? System.Guid.NewGuid().ToString();
             StackSize = 1;
-            CurrentDurability = definition.MaxDurability;
-            CurrentAmmo = 0;
-            IsEquipped = false;
+            CurrentResource = definition != null ? definition.MaxResource : 0f;
             AttachedItems = new List<ItemInstance>();
         }
-
-        // === IStatModifierProvider Implementation ===
-
-        /// <summary>
-        /// Get all stat modifiers from this item AND its attachments.
-        /// Example: Helmet + Flashlight attachment = both provide modifiers
-        /// </summary>
-        public List<StatModifierData> GetStatModifiers()
-        {
-            var modifiers = new List<StatModifierData>();
-
-            // Add this item's modifiers
-            if (Definition != null && Definition.StatModifiers != null)
-            {
-                modifiers.AddRange(Definition.GetStatModifiersData());
-            }
-
-            // Add attachment modifiers
-            foreach (var attachment in AttachedItems)
-            {
-                if (attachment?.Definition?.StatModifiers != null)
-                {
-                    modifiers.AddRange(attachment.Definition.GetStatModifiersData());
-                }
-            }
-
-            return modifiers;
-        }
-
-        /// <summary>
-        /// Get unique source ID for tracking modifiers.
-        /// Format: "Equip:{instanceId}" or "Attach:{instanceId}"
-        /// </summary>
-        public string GetModifierSourceId()
-        {
-            return IsEquipped ? $"Equip:{InstanceId}" : $"Attach:{InstanceId}";
-        }
-
-        // === Serialization ===
-
-        /// <summary>
-        /// Serializes this item instance for network sync and world drop persistence.
-        /// </summary>
-        public ItemInstanceData Serialize()
-        {
-            return new ItemInstanceData
-            {
-                InstanceId = this.InstanceId,
-                ItemId = this.Definition.ItemId,
-                StackSize = this.StackSize,
-                CurrentDurability = this.CurrentDurability,
-                CurrentAmmo = this.CurrentAmmo,
-                IsEquipped = this.IsEquipped,
-                EquippedLocation = this.EquippedLocation,
-                AttachedItemIds = this.AttachedItems.Select(a => a.InstanceId).ToArray()
-            };
-        }
-
-        /// <summary>
-        /// Deserializes item instance data.
-        /// Note: AttachedItems must be populated separately via network sync.
-        /// </summary>
-        public static ItemInstance Deserialize(ItemInstanceData data, ItemDefinition definition)
-        {
-            return new ItemInstance
-            {
-                InstanceId = data.InstanceId,
-                Definition = definition,
-                StackSize = data.StackSize,
-                CurrentDurability = data.CurrentDurability,
-                CurrentAmmo = data.CurrentAmmo,
-                IsEquipped = data.IsEquipped,
-                EquippedLocation = data.EquippedLocation,
-                AttachedItems = new List<ItemInstance>() // Populated separately
-            };
-        }
-
+        
         // === Weight Calculation ===
-
-        /// <summary>
-        /// Gets the total weight of this item including attachments.
-        /// </summary>
+        
         public float GetTotalWeight()
         {
             if (Definition == null)
-            {
-                Debug.LogError($"[ItemInstance] GetTotalWeight: Definition is null for InstanceId: {InstanceId}");
                 return 0f;
-            }
-
-            float weight = Definition.Weight * StackSize;
-
-            foreach (var attachment in AttachedItems)
-            {
-                if (attachment?.Definition != null)
-                {
-                    weight += attachment.Definition.Weight;
-                }
-            }
-
-            return weight;
+            
+            return Definition.WeightPerUnit * StackSize;
         }
-
-        // === Attachment System ===
-
-        /// <summary>
-        /// Checks if this item can accept the given attachment.
-        /// </summary>
-        public bool CanAcceptAttachment(ItemInstance attachment)
+        
+        // === Durability ===
+        
+        public void ModifyResource(float amount)
         {
-            if (attachment == null || attachment.Definition == null)
-                return false;
-
-            // Check if attachment type is in allowed slots
-            if (!Definition.AttachmentSlots.Contains(attachment.Definition.AttachmentType))
-                return false;
-
-            // Check if slot is already occupied
-            var existingAttachment = AttachedItems.Find(a =>
-                a.Definition.AttachmentType == attachment.Definition.AttachmentType);
-
-            return existingAttachment == null;
+            if (Definition == null || Definition.ResourceType == ItemResourceType.None)
+                return;
+            
+            CurrentResource = Mathf.Clamp(CurrentResource + amount, 0f, Definition.MaxResource);
         }
 
         /// <summary>
-        /// Get attachment in specific slot (null if none).
+        /// Convenience helper to decrease durability by a positive amount.
         /// </summary>
-        public ItemInstance GetAttachment(AttachmentSlotType slotType)
+        public void DecreaseResource(float amount)
         {
-            return AttachedItems.Find(a => a.Definition.AttachmentType == slotType);
-        }
+            if (amount <= 0f)
+                return;
 
+            ModifyResource(-Mathf.Abs(amount));
+        }
         /// <summary>
-        /// Check if this item has an attachment in the given slot.
+        /// Check if this item currently has an attachment in the given slot type.
         /// </summary>
         public bool HasAttachment(AttachmentSlotType slotType)
         {
             return GetAttachment(slotType) != null;
         }
 
-        /// <summary>
-        /// Add attachment to this item.
-        /// </summary>
-        public bool AddAttachment(ItemInstance attachment)
+        
+        public float GetResourcePercent()
         {
-            if (!CanAcceptAttachment(attachment))
-                return false;
+            if (Definition == null ||
+                Definition.ResourceType == ItemResourceType.None ||
+                Definition.MaxResource <= 0f)
+                return 100f;
 
-            AttachedItems.Add(attachment);
-            attachment.IsEquipped = true;
-            attachment.EquippedLocation = SlotLocationType.Attachment;
-            return true;
+            return (CurrentResource / Definition.MaxResource) * 100f;
         }
-
-        /// <summary>
-        /// Remove attachment from this item.
-        /// </summary>
-        public bool RemoveAttachment(AttachmentSlotType slotType, out ItemInstance removedAttachment)
+        
+        public bool IsResourceDepleted()
         {
-            var attachment = GetAttachment(slotType);
-            if (attachment == null)
+            return Definition != null && Definition.ResourceType != ItemResourceType.None && CurrentResource <= 0f;
+        }
+        
+        // === Serialization ===
+        
+        public ItemInstanceData Serialize()
+        {
+            return new ItemInstanceData
             {
-                removedAttachment = null;
-                return false;
-            }
-
-            AttachedItems.Remove(attachment);
-            attachment.IsEquipped = false;
-            attachment.EquippedLocation = SlotLocationType.Inventory;
-            removedAttachment = attachment;
-            return true;
-        }
-
-        // === Durability ===
-
-        /// <summary>
-        /// Reduce durability by specified amount.
-        /// </summary>
-        public void DecreaseDurability(float amount)
-        {
-            CurrentDurability = Mathf.Max(0f, CurrentDurability - amount);
-        }
-
-        /// <summary>
-        /// Check if item is broken (durability == 0).
-        /// </summary>
-        public bool IsBroken()
-        {
-            return CurrentDurability <= 0f;
-        }
-
-        /// <summary>
-        /// Repair item to full durability.
-        /// </summary>
-        public void Repair()
-        {
-            CurrentDurability = Definition.MaxDurability;
-        }
-
-        // === Utility ===
-
-        /// <summary>
-        /// Clone this item instance (new InstanceId).
-        /// Used for stack splitting.
-        /// </summary>
-        public ItemInstance Clone(string newInstanceId)
-        {
-            return new ItemInstance
-            {
-                InstanceId = newInstanceId,
-                Definition = this.Definition,
+                InstanceId = this.InstanceId,
+                ItemId = this.Definition?.ItemId ?? "",
                 StackSize = this.StackSize,
-                CurrentDurability = this.CurrentDurability,
-                CurrentAmmo = this.CurrentAmmo,
-                IsEquipped = false,
-                AttachedItems = new List<ItemInstance>() // Attachments not cloned
+                CurrentResource = this.CurrentResource,
+                IsEquipped = this.IsEquipped,
+                InventoryIndex = this.InventoryIndex, // ✅ Serialize index
+                Attachments = AttachedItems?
+                    .Select(a => a.Serialize())
+                    .ToList()
             };
         }
-    }
+        
+        public static ItemInstance Deserialize(ItemInstanceData data, ItemDefinition definition)
+        {
+            var item = new ItemInstance(definition, data.InstanceId)
+            {
+                StackSize = data.StackSize,
+                CurrentResource = data.CurrentResource,
+                IsEquipped = data.IsEquipped,
+                InventoryIndex = data.InventoryIndex
+            };
+            if (data.Attachments != null)
+            {
+                foreach (var attData in data.Attachments)
+                {
+                    var attDef = ItemDefinitionDatabase.Instance.GetDefinition(attData.ItemId);
+                    if (attDef == null)
+                    {
+                        UnityEngine.Debug.LogError($"Missing ItemDefinition for {attData.ItemId}");
+                        continue;
+                    }
+                    var attachment = Deserialize(attData, attDef);
+                    item.AttachedItems.Add(attachment);
+                }
+            }
+            return item;
+        }
+        
+        // === Cloning ===
+        public ItemInstance Clone(string newInstanceId = null)
+        {
+            var clone = new ItemInstance(Definition, newInstanceId ?? System.Guid.NewGuid().ToString())
+            {
+                StackSize = this.StackSize,
+                IsEquipped = this.IsEquipped,
+                InventoryIndex = -1, 
+                CurrentResource = this.CurrentResource,
+            };
+            
+            return clone;
+        }
+        
+        // === Attachments ===
 
-    /// <summary>
-    /// Serializable data structure for network transmission and persistence.
-    /// </summary>
-    [Serializable]
+        /// <summary>
+        /// Check if this item can accept the given attachment instance.
+        /// Only checks basic rules: definition slot and no duplicate slot type.
+        /// </summary>
+        public bool CanAcceptAttachment(ItemInstance attachment)
+        {
+            if (Definition == null || attachment == null || attachment.Definition == null)
+                return false;
+
+            var slotType = attachment.Definition.AttachmentType;
+
+            // Must have this slot type defined.
+            if (Definition.AttachmentSlots == null ||
+                !Definition.AttachmentSlots.Contains(slotType))
+                return false;
+            
+            // Must not already have an attachment of this slot type.
+            if (AttachedItems != null)
+            {
+                foreach (var att in AttachedItems)
+                {
+                    if (att?.Definition != null && att.Definition.AttachmentType == slotType)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Get a single attachment by slot type.
+        /// </summary>
+        public ItemInstance GetAttachment(AttachmentSlotType slotType)
+        {
+            if (AttachedItems == null)
+                return null;
+
+            return AttachedItems.Find(a => a != null &&
+                                           a.Definition != null &&
+                                           a.Definition.AttachmentType == slotType);
+        }
+
+        /// <summary>
+        /// Add an attachment to this item.
+        /// </summary>
+        public void AddAttachment(ItemInstance attachment)
+        {
+            if (attachment == null)
+                return;
+
+            if (AttachedItems == null)
+                AttachedItems = new List<ItemInstance>();
+
+            if (!AttachedItems.Contains(attachment))
+            {
+                AttachedItems.Add(attachment);
+                attachment.IsEquipped = true;
+            }
+        }
+
+        /// <summary>
+        /// Remove an attachment by slot type.
+        /// </summary>
+        public void RemoveAttachment(AttachmentSlotType slotType, out ItemInstance detached)
+        {
+            detached = null;
+
+            if (AttachedItems == null)
+                return;
+
+            int index = AttachedItems.FindIndex(a => a != null &&
+                                                     a.Definition != null &&
+                                                     a.Definition.AttachmentType == slotType);
+            if (index < 0)
+                return;
+
+            detached = AttachedItems[index];
+            AttachedItems.RemoveAt(index);
+
+            if (detached != null)
+            {
+                detached.IsEquipped = false;
+            }
+        }
+        
+        // === Validation ===
+        
+        public bool IsValid()
+        {
+            if (Definition == null)
+                return false;
+            
+            if (string.IsNullOrEmpty(InstanceId))
+                return false;
+            
+            if (StackSize <= 0)
+                return false;
+            
+            if (Definition.IsStackable && StackSize > Definition.MaxStackSize)
+                return false;
+            if (!Definition.IsStackable && StackSize > 1)
+                return false;
+            
+            return true;
+        }
+
+        // === Stat Modifier Provider (IStatModifierProvider) ===
+
+        /// <summary>
+        /// Collect stat modifiers from this item definition and its attachments.
+        /// </summary>
+        public List<StatModifierData> GetStatModifiers()
+        {
+            var result = new List<StatModifierData>();
+
+            // Base modifiers from own definition.
+            if (Definition != null && Definition.StatModifiers != null)
+            {
+                foreach (var def in Definition.StatModifiers)
+                {
+                    result.Add(def.ToStatModifierData());
+                }
+            }
+
+            // Modifiers from attachments (if they also provide modifiers).
+            // if (AttachedItems != null)
+            // {
+            //     foreach (var attachment in AttachedItems)
+            //     {
+            //         if (attachment is IStatModifierProvider provider)
+            //         {
+            //             result.AddRange(provider.GetStatModifiers());
+            //         }
+            //     }
+            // }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Unique source ID used for tracking modifiers coming from this item.
+        /// </summary>
+        public string GetModifierSourceId()
+        {
+            return $"Item:{InstanceId}";
+        }
+    }
+    
+    // === Network Sync Data Structure ===
+    
+    [System.Serializable]
     public struct ItemInstanceData
     {
         public string InstanceId;
         public string ItemId;
         public int StackSize;
-        public float CurrentDurability;
-        public int CurrentAmmo;
+        public float CurrentResource;
         public bool IsEquipped;
-        public SlotLocationType EquippedLocation;
-        public string[] AttachedItemIds;
+        public int InventoryIndex; // ✅ Sync index over network
+        public List<ItemInstanceData> Attachments;
     }
 }

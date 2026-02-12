@@ -18,8 +18,8 @@ MonoBehaviour:
   ItemType: 0
   Icon: {fileID: 21300000, guid: 4a4cdd1b816f2c14e8f99597ac619de1, type: 3}
   Weight: 3.5
-  IsStackable: 0
-  MaxStackSize: 1
+  IsStackable: 1
+  MaxStackSize: 2
   AllowedSlotLocations: 0000000002000000
   EquipmentSlot: 0
   AttachmentSlots: 010000000300000004000000

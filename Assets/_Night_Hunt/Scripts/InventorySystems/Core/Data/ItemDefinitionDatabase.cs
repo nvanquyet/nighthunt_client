@@ -222,12 +222,12 @@ namespace NightHunt.Inventory.Database
         void Log(string message)
         {
             if (enableDebugLogs)
-                Debug.Log($"[ItemDefinitionDatabase] {message}");
+                UnityEngine.Debug.Log($"[ItemDefinitionDatabase] {message}");
         }
         
         void LogWarning(string message)
         {
-            Debug.LogWarning($"[ItemDefinitionDatabase] {message}");
+            UnityEngine.Debug.LogWarning($"[ItemDefinitionDatabase] {message}");
         }
         
         #if UNITY_EDITOR
@@ -237,13 +237,13 @@ namespace NightHunt.Inventory.Database
             if (!isLoaded)
                 LoadAllDefinitions();
             
-            Debug.Log("=== ITEM DEFINITION DATABASE ===");
-            Debug.Log($"Total Items: {itemDatabase.Count}");
+            UnityEngine.Debug.Log("=== ITEM DEFINITION DATABASE ===");
+            UnityEngine.Debug.Log($"Total Items: {itemDatabase.Count}");
             
             foreach (var kvp in itemDatabase)
             {
                 var def = kvp.Value;
-                Debug.Log($"[{def.ItemType}] {def.DisplayName} ({def.ItemId}) - {def.Rarity}");
+                UnityEngine.Debug.Log($"[{def.ItemType}] {def.DisplayName} ({def.ItemId}) - {def.Rarity}");
             }
         }
         

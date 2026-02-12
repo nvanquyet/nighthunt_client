@@ -1,150 +1,136 @@
-﻿using UnityEngine;
-using NightHunt.Inventory.Core.Enums;
-using System;
+﻿using NightHunt.Inventory.Core.Data;
+using UnityEngine;
 
-namespace NightHunt.Inventory.Core.Config
+namespace NightHunt.Inventory.UI.Data
 {
     /// <summary>
-    /// Configures slot layouts for different container types.
-    /// Example: Equipment slots can be expanded from 4 to 10 (adding rings, trinkets, etc.)
-    ///          Weapon slots can go from 2 to 3 (Primary, Secondary, Melee)
-    ///          QuickSlots can be configured as 4, 6, or 8 slots
+    /// Configuration for inventory slot visuals and layout.
+    /// Used by ItemSlotUI components for consistent styling.
     /// </summary>
-    [CreateAssetMenu(fileName = "SlotLayoutConfig", menuName = "NightHunt/Config/Slot Layout Config")]
-    public class SlotLayoutConfig : ScriptableObject 
+    [CreateAssetMenu(fileName = "SlotLayoutConfig", menuName = "NightHunt/Inventory/Slot Layout Config")]
+    public class SlotLayoutConfig : ScriptableObject
     {
-        [Header("Equipment Slots Configuration")]
-        [Tooltip("Defines all equipment slots available to player")]
-        public EquipmentSlotDefinition[] EquipmentSlots = new EquipmentSlotDefinition[]
-        {
-            new EquipmentSlotDefinition { SlotType = EquipmentSlotType.Helmet, DisplayName = "Helmet", IsRequired = false },
-            new EquipmentSlotDefinition { SlotType = EquipmentSlotType.Armor, DisplayName = "Armor", IsRequired = false },
-            new EquipmentSlotDefinition { SlotType = EquipmentSlotType.Backpack, DisplayName = "Backpack", IsRequired = false },
-            new EquipmentSlotDefinition { SlotType = EquipmentSlotType.Boots, DisplayName = "Boots", IsRequired = false }
-            // Future: Ring1, Ring2, Trinket, etc.
-        };
-         
-        [Header("Weapon Slots Configuration")]
-        [Tooltip("Defines weapon slots (can be expanded for melee)")]
-        public WeaponSlotDefinition[] WeaponSlots = new WeaponSlotDefinition[]
-        {
-            new WeaponSlotDefinition { SlotType = WeaponSlotType.Primary, DisplayName = "Primary Weapon", AllowedTypes = new[] { ItemType.Weapon } },
-            new WeaponSlotDefinition { SlotType = WeaponSlotType.Secondary, DisplayName = "Secondary Weapon", AllowedTypes = new[] { ItemType.Weapon } }
-            // Future: Melee slot
-        };
+        [Header("Slot Visuals")]
+        [Tooltip("Icon shown when slot is empty")]
+        public Sprite EmptySlotIcon;
         
-        [Header("Quick Slot Configuration")]
-        [Tooltip("Number of quick access slots (default: 4, can expand to 6-8)")]
-        [Range(2, 10)]
-        public int QuickSlotCount = 4;
+        [Tooltip("Default slot background color")]
+        public Color DefaultSlotColor = new Color(0.2f, 0.2f, 0.2f, 0.8f);
         
-        [Header("Inventory Configuration")]
-        [Tooltip("Main inventory slot count")]
-        [Range(10, 100)]
-        public int MainInventorySlotCount = 20;
+        [Tooltip("Slot size in pixels (width & height)")]
+        public Vector2 SlotSize = new Vector2(64, 64);
         
-        [Tooltip("Can inventory size be expanded via backpacks?")]
-        public bool AllowDynamicInventoryExpansion = true;
+        [Tooltip("Spacing between slots")]
+        public float SlotSpacing = 4f;
         
-        [Tooltip("Max inventory slots after all expansions")]
-        [Range(10, 200)]
-        public int MaxInventorySlotCount = 50;
+        [Header("Drag & Drop Feedback")]
+        [Tooltip("Highlight color when valid drop target (green)")]
+        public Color ValidDropHighlightColor = new Color(0f, 1f, 0f, 0.4f);
         
-        [Header("Empty Slot Icons")]
-        [Tooltip("Icon for empty inventory slots")]
-        public Sprite inventoryEmptyIcon;
+        [Tooltip("Highlight color when invalid drop target (red)")]
+        public Color InvalidDropHighlightColor = new Color(1f, 0f, 0f, 0.4f);
         
-        [Tooltip("Icon for empty quick slots")]
-        public Sprite quickSlotEmptyIcon;
+        [Tooltip("Dragged item opacity while dragging")]
+        [Range(0f, 1f)]
+        public float DraggedItemOpacity = 0.6f;
         
-        [Header("Attachment Empty Icons")]
-        [Tooltip("Icons for each attachment slot type when empty (to show what can be attached)")]
-        public AttachmentSlotIcon[] attachmentEmptyIcons;
+        [Tooltip("Ghost icon scale multiplier while dragging")]
+        public float DragIconScale = 1.1f;
         
-        // === Helper Methods ===
+        [Header("Rarity Colors")]
+        [Tooltip("Common item border color")]
+        public Color CommonColor = Color.white;
+        
+        [Tooltip("Uncommon item border color")]
+        public Color UncommonColor = Color.green;
+        
+        [Tooltip("Rare item border color")]
+        public Color RareColor = Color.blue;
+        
+        [Tooltip("Epic item border color")]
+        public Color EpicColor = new Color(0.64f, 0.21f, 0.93f); // Purple
+        
+        [Tooltip("Legendary item border color")]
+        public Color LegendaryColor = new Color(1f, 0.65f, 0f); // Orange
+        
+        [Header("Resource Bar")]
+        [Tooltip("Resource bar fill color (durability/ammo)")]
+        public Color ResourceBarColor = new Color(0.2f, 0.8f, 1f);
+        
+        [Tooltip("Resource bar low threshold (show warning)")]
+        [Range(0f, 1f)]
+        public float ResourceLowThreshold = 0.25f;
+        
+        [Tooltip("Resource bar low color (warning)")]
+        public Color ResourceBarLowColor = Color.red;
+        
+        [Tooltip("Resource bar background color")]
+        public Color ResourceBarBackgroundColor = new Color(0.1f, 0.1f, 0.1f, 0.8f);
+        
+        [Header("Stack Size Display")]
+        [Tooltip("Font size for stack count text")]
+        public int StackCountFontSize = 14;
+        
+        [Tooltip("Stack count text color")]
+        public Color StackCountColor = Color.white;
+        
+        [Tooltip("Show stack count even if = 1?")]
+        public bool ShowStackCountWhenOne = false;
+        
+        [Header("Hover Tooltip")]
+        [Tooltip("Delay before showing tooltip (seconds)")]
+        public float TooltipDelay = 0.5f;
+        
+        [Tooltip("Tooltip background color")]
+        public Color TooltipBackgroundColor = new Color(0.1f, 0.1f, 0.1f, 0.95f);
+        
+        [Tooltip("Tooltip text color")]
+        public Color TooltipTextColor = Color.white;
+        
+        [Tooltip("Tooltip max width")]
+        public float TooltipMaxWidth = 300f;
+        
+        [Header("Animation")]
+        [Tooltip("Enable slot animations (pulse, shake, etc.)")]
+        public bool EnableAnimations = true;
+        
+        [Tooltip("Duration of add item animation (seconds)")]
+        public float AddItemAnimDuration = 0.2f;
+        
+        [Tooltip("Duration of remove item animation (seconds)")]
+        public float RemoveItemAnimDuration = 0.15f;
+        
+        [Header("QuickSlot Specific")]
+        [Tooltip("Show hotkey numbers on quickslots?")]
+        public bool ShowQuickSlotHotkeys = true;
+        
+        [Tooltip("Hotkey text color")]
+        public Color HotkeyTextColor = new Color(1f, 1f, 1f, 0.7f);
+        
+        [Tooltip("Hotkey font size")]
+        public int HotkeyFontSize = 12;
+        
+        [Header("Attachment Slot Visuals")]
+        [Tooltip("Attachment sub-slot size multiplier (relative to parent)")]
+        public float AttachmentSlotScale = 0.7f;
+        
+        [Tooltip("Show attachment slot even when empty?")]
+        public bool ShowEmptyAttachmentSlots = true;
         
         /// <summary>
-        /// Get empty icon for equipment slot type.
+        /// Get rarity color by ItemRarity enum.
         /// </summary>
-        public Sprite GetEquipmentEmptyIcon(EquipmentSlotType slotType)
+        public Color GetRarityColor(ItemRarity rarity)
         {
-            if (EquipmentSlots == null)
-                return inventoryEmptyIcon;
-            
-            foreach (var slotDef in EquipmentSlots)
+            return rarity switch
             {
-                if (slotDef.SlotType == slotType)
-                {
-                    // Use SlotIcon from definition if available, otherwise use inventoryEmptyIcon
-                    return slotDef.SlotIcon != null ? slotDef.SlotIcon : inventoryEmptyIcon;
-                }
-            }
-            
-            return inventoryEmptyIcon; // Fallback
+                ItemRarity.Common => CommonColor,
+                ItemRarity.Uncommon => UncommonColor,
+                ItemRarity.Rare => RareColor,
+                ItemRarity.Epic => EpicColor,
+                ItemRarity.Legendary => LegendaryColor,
+                _ => CommonColor
+            };
         }
-        
-        /// <summary>
-        /// Get empty icon for weapon slot type.
-        /// </summary>
-        public Sprite GetWeaponEmptyIcon(WeaponSlotType slotType)
-        {
-            if (WeaponSlots == null)
-                return inventoryEmptyIcon;
-            
-            foreach (var slotDef in WeaponSlots)
-            {
-                if (slotDef.SlotType == slotType)
-                {
-                    // Use SlotIcon from definition if available, otherwise use inventoryEmptyIcon
-                    return slotDef.SlotIcon != null ? slotDef.SlotIcon : inventoryEmptyIcon;
-                }
-            }
-            
-            return inventoryEmptyIcon; // Fallback
-        }
-        
-        /// <summary>
-        /// Get empty icon for attachment slot type.
-        /// </summary>
-        public Sprite GetAttachmentEmptyIcon(AttachmentSlotType slotType)
-        {
-            if (attachmentEmptyIcons == null)
-                return inventoryEmptyIcon;
-            
-            foreach (var icon in attachmentEmptyIcons)
-            {
-                if (icon.slotType == slotType)
-                    return icon.emptyIcon;
-            }
-            
-            return inventoryEmptyIcon; // Fallback
-        }
-    }
-    
-    [Serializable]
-    public struct EquipmentSlotDefinition
-    {
-        public EquipmentSlotType SlotType;
-        public string DisplayName;
-        public bool IsRequired; // If true, cannot be left empty
-        public Sprite SlotIcon; // Optional UI icon
-    }
-    
-    [Serializable]
-    public struct WeaponSlotDefinition
-    {
-        public WeaponSlotType SlotType;
-        public string DisplayName;
-        public ItemType[] AllowedTypes; // E.g., can allow Throwable in weapon slots
-        public Sprite SlotIcon;
-    }
-    
-    [Serializable]
-    public class AttachmentSlotIcon
-    {
-        public AttachmentSlotType slotType;
-        public Sprite emptyIcon;
-        [Tooltip("Optional: Description of what this attachment slot is for")]
-        public string description;
     }
 }

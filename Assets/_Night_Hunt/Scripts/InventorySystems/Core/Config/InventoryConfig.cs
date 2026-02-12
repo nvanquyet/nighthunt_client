@@ -1,73 +1,117 @@
-﻿using UnityEngine;
+using UnityEngine;
+using NightHunt.Inventory.Core.Enums;
 
 namespace NightHunt.Inventory.Core.Config
 {
     /// <summary>
-    /// Global inventory system configuration.
-    /// Create via: Assets > Create > NightHunt > Config > Inventory Config
+    /// Configuration for inventory system behavior.
+    /// Centralized settings for all inventory rules.
     /// </summary>
-    [CreateAssetMenu(fileName = "InventoryConfig", menuName = "NightHunt/Config/Inventory Config")]
+    [CreateAssetMenu(fileName = "InventoryConfig", menuName = "NightHunt/Inventory/Inventory Config")]
     public class InventoryConfig : ScriptableObject
     {
-        [Header("Weight System")]
-        [Tooltip("Enable weight-based inventory limits")]
-        public bool EnableWeightSystem = true;
+        [Header("Capacity Settings")]
+        [Tooltip("Number of weapon slots (default: 2 - Primary & Secondary)")]
+        public int WeaponSlotCount = 2;
         
-        [Tooltip("Default max weight capacity (kg) - can be modified by equipment")]
-        public float DefaultWeightCapacity = 50f;
+        [Tooltip("Number of quickslots (default: 4)")]
+        public int QuickSlotCount = 4;
         
-        [Tooltip("Movement speed penalty when overweight (0-1 multiplier)")]
-        [Range(0f, 1f)]
-        public float OverweightSpeedPenalty = 0.5f;
+        [Header("Weight Rules")]
+        [Tooltip("Does equipped equipment count towards total weight?")]
+        public bool EquipmentAddsWeight = false;
         
-        [Tooltip("Can player pickup items when overweight?")]
-        public bool AllowPickupWhenOverweight = false;
+        [Tooltip("Do weapons count towards total weight when equipped?")]
+        public bool WeaponsAddWeight = true;
         
-        [Header("Stacking")]
-        [Tooltip("Auto-merge stackable items when picking up")]
-        public bool AutoMergeStacks = true;
+        [Tooltip("Do items in quickslots count towards total weight?")]
+        public bool QuickSlotItemsAddWeight = true;
         
-        [Tooltip("Max stack size override (0 = use item definition)")]
-        public int GlobalMaxStackSize = 0;
+        [Header("Equip Behavior")]
+        [Tooltip("When equipping stackable items (e.g., health potions), equip full stack or just 1?")]
+        public EquipStackBehavior StackableEquipBehavior = EquipStackBehavior.EquipFullStack;
         
-        [Header("Durability")]
-        [Tooltip("Items break when durability reaches 0")]
-        public bool ItemsBreakAtZeroDurability = false;
+        [Tooltip("When equipping non-stackable items (e.g., weapons, armor), what happens to rest of stack?")]
+        public EquipStackBehavior NonStackableEquipBehavior = EquipStackBehavior.EquipOneReturnRest;
         
-        [Tooltip("Can broken items be repaired?")]
-        public bool AllowRepair = true;
+        [Header("Item Usage")]
+        [Tooltip("Can player use items while moving?")]
+        public bool CanUseItemsWhileMoving = true;
         
-        [Header("Drop Behavior")]
-        [Tooltip("Distance from player to spawn dropped items (meters)")]
-        public float DropDistance = 1.5f;
+        [Tooltip("Does using item interrupt other actions?")]
+        public bool ItemUsageInterruptsActions = true;
         
-        [Tooltip("Force applied to dropped items")]
-        public float DropForce = 2f;
-        
-        [Tooltip("Dropped items despawn after X seconds (0 = never)")]
-        public float DroppedItemDespawnTime = 300f; // 5 minutes
-        
-        [Header("Network Optimization")]
-        [Tooltip("Batch inventory updates to reduce RPC calls")]
-        public bool EnableBatchedUpdates = true;
-        
-        [Tooltip("Max updates per batch")]
-        [Range(1, 20)]
-        public int MaxBatchSize = 10;
-        
-        [Tooltip("Batch send interval (seconds)")]
-        [Range(0.05f, 1f)]
-        public float BatchInterval = 0.1f;
+        [Tooltip("Default usage time for consumables (seconds)")]
+        public float DefaultConsumableUsageTime = 3f;
         
         [Header("Validation")]
-        [Tooltip("Enable server-side validation for all operations")]
-        public bool EnableServerValidation = true;
+        [Tooltip("Allow adding items beyond weight capacity?")]
+        public bool AllowOverweight = false;
         
-        [Tooltip("Log validation failures for debugging")]
-        public bool LogValidationFailures = true;
+        [Tooltip("Warning threshold for weight (0.0 - 1.0, e.g., 0.9 = 90%)")]
+        [Range(0f, 1f)]
+        public float WeightWarningThreshold = 0.9f;
         
-        [Header("References")]
-        [Tooltip("Slot layout configuration")]
-        public SlotLayoutConfig SlotLayout;
+        [Header("Stacking")]
+        [Tooltip("Auto-stack items when adding to inventory?")]
+        public bool AutoStackOnAdd = true;
+        
+        [Header("Debug")]
+        [Tooltip("Enable verbose logging?")]
+        public bool EnableDebugLogs = false;
+        
+        // ===== HELPER METHODS =====
+        
+        /// <summary>
+        /// Get equip behavior for a specific item type.
+        /// </summary>
+        public EquipStackBehavior GetEquipBehavior(ItemType itemType)
+        {
+            // Consumables and stackable items use StackableEquipBehavior
+            if (itemType == ItemType.Consumable)
+            {
+                return StackableEquipBehavior;
+            }
+            
+            // Weapons, armor, etc. use NonStackableEquipBehavior
+            return NonStackableEquipBehavior;
+        }
+        
+        /// <summary>
+        /// Check if item type should add weight when equipped.
+        /// </summary>
+        public bool DoesEquippedItemAddWeight(SlotLocationType locationType)
+        {
+            switch (locationType)
+            {
+                case SlotLocationType.Equipment:
+                    return EquipmentAddsWeight;
+                
+                case SlotLocationType.Weapon:
+                    return WeaponsAddWeight;
+                
+                case SlotLocationType.QuickSlot:
+                    return QuickSlotItemsAddWeight;
+                
+                default:
+                    return true; // Inventory items always add weight
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Defines how stacks behave when equipping.
+    /// </summary>
+    public enum EquipStackBehavior
+    {
+        /// <summary>
+        /// Equip entire stack (e.g., health potions in quickslot).
+        /// </summary>
+        EquipFullStack,
+        
+        /// <summary>
+        /// Equip only 1, return rest to inventory (e.g., weapons).
+        /// </summary>
+        EquipOneReturnRest,
     }
 }

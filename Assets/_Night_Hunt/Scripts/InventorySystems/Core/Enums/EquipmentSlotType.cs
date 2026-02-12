@@ -6,6 +6,8 @@
     /// </summary>
     public enum EquipmentSlotType
     {
+        None,
+        
         /// <summary>Head protection slot</summary>
         Helmet,
         

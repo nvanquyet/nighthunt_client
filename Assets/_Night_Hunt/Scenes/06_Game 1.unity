@@ -2076,6 +2076,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   tooltipPanel: {fileID: 1169816153}
+  tooltipRect: {fileID: 0}
   itemNameText: {fileID: 164870780}
   itemDescriptionText: {fileID: 0}
   itemTypeText: {fileID: 1093148216}
@@ -2091,6 +2092,7 @@ MonoBehaviour:
   offsetY: 10
   followMouse: 1
   showDelay: 0.3
+  positionRoot: {fileID: 0}
   enableDebugLogs: 1
 --- !u!1 &677189525
 GameObject:
@@ -7227,6 +7229,14 @@ PrefabInstance:
       propertyPath: mainPanel
       value: 
       objectReference: {fileID: 1938647893}
+    - target: {fileID: 983871179257259442, guid: f1c6a3754ed784c468b1947773f2d898, type: 3}
+      propertyPath: tooltipUI
+      value: 
+      objectReference: {fileID: 665147892}
+    - target: {fileID: 983871179257259442, guid: f1c6a3754ed784c468b1947773f2d898, type: 3}
+      propertyPath: enableDebugLogs
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1156619060565889041, guid: f1c6a3754ed784c468b1947773f2d898, type: 3}
       propertyPath: enableDebugLogs
       value: 1
@@ -7463,6 +7473,10 @@ PrefabInstance:
       propertyPath: slotLayoutConfig
       value: 
       objectReference: {fileID: 11400000, guid: 618ff6cac36ca4e46819ec74f6dd80f4, type: 2}
+    - target: {fileID: 6817369035051218987, guid: f1c6a3754ed784c468b1947773f2d898, type: 3}
+      propertyPath: enableDebugLogs
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 7168340087646713796, guid: f1c6a3754ed784c468b1947773f2d898, type: 3}
       propertyPath: m_AnchorMax.y
       value: 0
@@ -7527,7 +7541,8 @@ PrefabInstance:
       propertyPath: m_AnchorMax.y
       value: 0
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 3530458542586367809, guid: f1c6a3754ed784c468b1947773f2d898, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 221111052809569801, guid: f1c6a3754ed784c468b1947773f2d898, type: 3}
