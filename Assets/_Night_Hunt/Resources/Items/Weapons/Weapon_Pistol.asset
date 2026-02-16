@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e51fac3969a4ffda71bcf342aeebc97, type: 3}
+  m_Name: Weapon_Pistol
+  m_EditorClassIdentifier: 
+  ItemID: weapon_pistol
+  DisplayName: 
+  Description: 
+  Icon: {fileID: 0}
+  IsStackable: 0
+  MaxStackSize: 1
+  Weight: 1
+  ModifyWeightWhenEquipped: 0
+  EquippedWeightModifier: 0
+  ResourceType: 2
+  MaxResource: 120
+  DefaultResource: 120
+  AttachmentSlots: 0200000004000000
+  CanAttachTo: 
+  ValidSlots: 0000000002000000
+  EquippedPrefab: {fileID: 0}
+  DroppedPrefab: {fileID: 0}
+  UsageDuration: 0
+  CanCancelUsage: 1
+  CanUseWhileMoving: 0
+  Stats:
+  - StatType: 0
+    Value: 20
+  - StatType: 1
+    Value: 300
+  - StatType: 4
+    Value: 60
+  - StatType: 2
+    Value: 15
+  - StatType: 5
+    Value: 50
+  MagazineSize: 12
+  MaxAmmo: 120
+  DefaultAmmo: 120
+  ReloadTime: 1.8
+  CanTacticalReload: 1
+  PlayerModifiers:
+  - StatType: 4
+    Value: -2
+    ModifierType: 1
+    Description: Pistol movement penalty

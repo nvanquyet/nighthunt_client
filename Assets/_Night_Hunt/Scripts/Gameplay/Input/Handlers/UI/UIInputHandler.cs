@@ -31,22 +31,22 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
         
         private void Awake()
         {
-            InitializeActions();
+            //InitializeActions();
         }
         
         private void OnEnable()
         {
-            RegisterWithManager();
-            EnableInput(); // UI input is always enabled
+            //RegisterWithManager();
+            //EnableInput(); // UI input is always enabled
         }
         
         private void OnDisable()
         {
-            DisableInput();
-            UnregisterFromManager();
+            //DisableInput();
+            //UnregisterFromManager();
         }
         
-        #endregion
+        #endregion  
         
         #region Initialization
         

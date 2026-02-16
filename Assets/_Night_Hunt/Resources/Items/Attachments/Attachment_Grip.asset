@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8587166cf7e93141b7b8538d1aab21f, type: 3}
+  m_Name: Attachment_Grip
+  m_EditorClassIdentifier: 
+  ItemID: attachment_grip
+  DisplayName: Vertical Grip
+  Description: Improves recoil control and stability
+  Icon: {fileID: 0}
+  IsStackable: 0
+  MaxStackSize: 1
+  Weight: 0.15
+  ModifyWeightWhenEquipped: 0
+  EquippedWeightModifier: 0
+  ResourceType: 0
+  MaxResource: 0
+  DefaultResource: 0
+  AttachmentSlots: 
+  CanAttachTo: 03000000
+  ValidSlots: 00000000
+  EquippedPrefab: {fileID: 0}
+  DroppedPrefab: {fileID: 0}
+  UsageDuration: 0
+  CanCancelUsage: 1
+  CanUseWhileMoving: 0
+  ItemModifiers:
+  - StatType: 2
+    Value: -25
+    ModifierType: 1
+    Description: Better recoil control
+  - StatType: 4
+    Value: 5
+    ModifierType: 0
+    Description: Improved stability
+  - StatType: 3
+    Value: -15
+    ModifierType: 1
+    Description: Tighter bullet spread

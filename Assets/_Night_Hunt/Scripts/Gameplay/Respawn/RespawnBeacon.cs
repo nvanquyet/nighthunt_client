@@ -15,14 +15,14 @@ namespace NightHunt.Gameplay.Respawn
     /// </summary>
     public class RespawnBeacon : NetworkBehaviour
     {
-        [Header("Beacon Settings")]
-        [SerializeField] private int maxHP = 500;
+        [Header("Beacon Settings")] [SerializeField]
+        private int maxHP = 500;
+
         [SerializeField] private float placeTime = 5f;
         [SerializeField] private float respawnDelay = 15f;
         [SerializeField] private float minDistanceFromOtherBeacons = 30f;
 
-        [Header("Visual")]
-        [SerializeField] private GameObject beaconModel;
+        [Header("Visual")] [SerializeField] private GameObject beaconModel;
         [SerializeField] private GameObject placementIndicator;
         [SerializeField] private ParticleSystem placementEffect;
 
@@ -50,6 +50,7 @@ namespace NightHunt.Gameplay.Respawn
             {
                 config = configData.RespawnConfig[0];
             }
+
             if (config != null)
             {
                 maxHP = config.BeaconHP;
@@ -70,8 +71,7 @@ namespace NightHunt.Gameplay.Respawn
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-            if (currentHP != null)
-                currentHP.OnChange -= OnHPChanged;
+            currentHP.OnChange -= OnHPChanged;
         }
 
         public override void OnStartServer()
@@ -119,7 +119,7 @@ namespace NightHunt.Gameplay.Respawn
         private IEnumerator PlacementCoroutine()
         {
             yield return new WaitForSeconds(placeTime);
-            
+
             if (!isPlaced.Value)
             {
                 isPlaced.Value = true;
@@ -133,7 +133,7 @@ namespace NightHunt.Gameplay.Respawn
         private bool IsValidPlacementLocation()
         {
             RespawnBeacon[] allBeacons = FindObjectsOfType<RespawnBeacon>();
-            
+
             foreach (var beacon in allBeacons)
             {
                 if (beacon == this || !beacon.isPlaced.Value) continue;
@@ -173,10 +173,10 @@ namespace NightHunt.Gameplay.Respawn
         {
             isActive.Value = false;
             Debug.Log($"[RespawnBeacon] Beacon destroyed (Team {ownerTeamId.Value})");
-            
+
             // Award score to destroyer
             // This would be handled by a scoring system
-            
+
             // Despawn after a delay
             Invoke(nameof(DespawnBeacon), 2f);
         }
@@ -241,4 +241,3 @@ namespace NightHunt.Gameplay.Respawn
         }
     }
 }
-

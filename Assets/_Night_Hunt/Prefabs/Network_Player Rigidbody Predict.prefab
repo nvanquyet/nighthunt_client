@@ -445,331 +445,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   zoomSpeed: 5
   playerCamera: {fileID: 6841952157177035837}
---- !u!1 &3583829767296933216
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 6268902580939306963}
-  - component: {fileID: 4545448532057667716}
-  - component: {fileID: 4622604740009343356}
-  - component: {fileID: 7146981141985031042}
-  - component: {fileID: 1038753584516840585}
-  - component: {fileID: 3788821198052888381}
-  - component: {fileID: 7384119833273073647}
-  m_Layer: 0
-  m_Name: System
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &6268902580939306963
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3583829767296933216}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 365407037612304046}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &4545448532057667716
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3583829767296933216}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 41218336e7c6461482cee89c08ca5fc2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  config: {fileID: 11400000, guid: 9cafb297ac9d4ed4882b515889ed1c74, type: 2}
-  slotLayout: {fileID: 11400000, guid: 618ff6cac36ca4e46819ec74f6dd80f4, type: 2}
-  inventorySystem: {fileID: 4622604740009343356}
-  equipmentSystem: {fileID: 7146981141985031042}
-  weaponSystem: {fileID: 1038753584516840585}
-  quickSlotSystem: {fileID: 3788821198052888381}
-  attachmentSystem: {fileID: 7384119833273073647}
-  playerStats: {fileID: 0}
-  dropSpawnPoint: {fileID: 5773566808572224128}
-  worldItemDropPrefab: {fileID: 7351798446941879668, guid: 9d90976061e7ffb40860b6dd3c26d4d0, type: 3}
-  networkObject: {fileID: 0}
-  enableDebugLogs: 1
---- !u!114 &4622604740009343356
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3583829767296933216}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5637c8b4f50545bda4ced228bcb83f2c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  config: {fileID: 11400000, guid: 9cafb297ac9d4ed4882b515889ed1c74, type: 2}
-  slotLayout: {fileID: 11400000, guid: 618ff6cac36ca4e46819ec74f6dd80f4, type: 2}
-  playerStats: {fileID: 0}
-  enableDebugLogs: 1
---- !u!114 &7146981141985031042
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3583829767296933216}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5ee0e62cb014bde91e247b038759d7f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  config: {fileID: 11400000, guid: 9cafb297ac9d4ed4882b515889ed1c74, type: 2}
-  slotLayout: {fileID: 11400000, guid: 618ff6cac36ca4e46819ec74f6dd80f4, type: 2}
-  playerStats: {fileID: 0}
-  inventorySystem: {fileID: 4622604740009343356}
-  enableDebugLogs: 1
---- !u!114 &1038753584516840585
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3583829767296933216}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c56d082d26f048d3903cc8999d670291, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  config: {fileID: 11400000, guid: 9cafb297ac9d4ed4882b515889ed1c74, type: 2}
-  slotLayout: {fileID: 11400000, guid: 618ff6cac36ca4e46819ec74f6dd80f4, type: 2}
-  inventorySystem: {fileID: 4622604740009343356}
-  weaponHolder: {fileID: 8514949301179040730}
-  enableDebugLogs: 1
---- !u!114 &3788821198052888381
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3583829767296933216}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f8b3887fb5344386888d566f67bff42a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  slotLayout: {fileID: 11400000, guid: 618ff6cac36ca4e46819ec74f6dd80f4, type: 2}
-  inventorySystem: {fileID: 4622604740009343356}
-  enableDebugLogs: 1
---- !u!114 &7384119833273073647
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3583829767296933216}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 18c0ba649abf4e8e93ccce18f8b2fa74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  inventorySystem: {fileID: 4622604740009343356}
-  enableDebugLogs: 1
---- !u!1 &5674431124644401417
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1262620997792909826}
-  - component: {fileID: 2945661592112630352}
-  - component: {fileID: 5081110844772175084}
-  - component: {fileID: 6339494220182866114}
-  - component: {fileID: 7072793302999653389}
-  - component: {fileID: 3437284848535473975}
-  - component: {fileID: 4750088703989618601}
-  m_Layer: 0
-  m_Name: NetworkSystem
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1262620997792909826
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5674431124644401417}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 365407037612304046}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2945661592112630352
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5674431124644401417}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8f6a2cae57e849cd8987a643cc8e1498, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 255
-  _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 0}
-  inventorySystem: {fileID: 4622604740009343356}
-  config: {fileID: 11400000, guid: 9cafb297ac9d4ed4882b515889ed1c74, type: 2}
-  equipmentSystem: {fileID: 7146981141985031042}
-  weaponSystem: {fileID: 1038753584516840585}
-  quickSlotSystem: {fileID: 3788821198052888381}
-  enableClientPrediction: 1
-  reconciliationTimeout: 2
-  enableValidation: 1
-  maxOperationsPerSecond: 20
-  logSuspiciousActivity: 1
-  enableDebugLogs: 1
---- !u!114 &5081110844772175084
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5674431124644401417}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 86d55f819d44471e974b76541b727859, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 255
-  _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 0}
-  equipmentSystem: {fileID: 7146981141985031042}
-  inventorySystem: {fileID: 4622604740009343356}
-  inventorySync: {fileID: 2945661592112630352}
-  enableClientPrediction: 1
-  reconciliationTimeout: 2
-  enableValidation: 1
-  maxOperationsPerSecond: 20
-  logSuspiciousActivity: 1
-  equipmentModelSlots: []
-  enableDebugLogs: 1
---- !u!114 &6339494220182866114
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5674431124644401417}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: adc71a03de2c422c91c297df90b5b436, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 255
-  _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 0}
-  weaponSystem: {fileID: 1038753584516840585}
-  inventorySystem: {fileID: 4622604740009343356}
-  inventorySync: {fileID: 2945661592112630352}
-  enableClientPrediction: 1
-  reconciliationTimeout: 2
-  enableValidation: 1
-  maxOperationsPerSecond: 20
-  logSuspiciousActivity: 1
-  weaponHolder: {fileID: 8514949301179040730}
-  enableDebugLogs: 1
---- !u!114 &7072793302999653389
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5674431124644401417}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1d15b49088bbf934e88d9df7fa3e46e8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 255
-  _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 0}
-  quickSlotSystem: {fileID: 3788821198052888381}
-  inventorySystem: {fileID: 4622604740009343356}
-  enableClientPrediction: 1
-  reconciliationTimeout: 2
-  enableValidation: 1
-  maxOperationsPerSecond: 20
-  logSuspiciousActivity: 1
-  enableDebugLogs: 1
---- !u!114 &3437284848535473975
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5674431124644401417}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca749a87befabc240b85ce932ddb31ac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 255
-  _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 0}
-  attachmentSystem: {fileID: 7384119833273073647}
-  inventorySystem: {fileID: 4622604740009343356}
-  equipmentSystem: {fileID: 7146981141985031042}
-  weaponSystem: {fileID: 1038753584516840585}
-  enableClientPrediction: 1
-  reconciliationTimeout: 2
-  enableValidation: 1
-  maxOperationsPerSecond: 20
-  logSuspiciousActivity: 1
-  enableDebugLogs: 1
---- !u!114 &4750088703989618601
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5674431124644401417}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1563e0881d5c4dfdb6bef2877255e173, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  inventorySync: {fileID: 2945661592112630352}
-  equipmentSync: {fileID: 5081110844772175084}
-  weaponSync: {fileID: 6339494220182866114}
-  attachmentSync: {fileID: 3437284848535473975}
-  quickSlotSync: {fileID: 7072793302999653389}
-  testHelmet: {fileID: 11400000, guid: 45e9a01dda63b4e4ab05a04fd6579dba, type: 2}
-  testVest: {fileID: 0}
-  testWeapon: {fileID: 11400000, guid: 7b3d5a5d4071f3c47a5f2bda6910c06f, type: 2}
-  testGrip: {fileID: 11400000, guid: 688e3e4be81cf014c9f7f5f8b8a839d0, type: 2}
-  testScope: {fileID: 0}
-  testAmmo: {fileID: 0}
-  enableDebugLogs: 1
 --- !u!1 &5733313791172204384
 GameObject:
   m_ObjectHideFlags: 0
@@ -784,8 +459,21 @@ GameObject:
   - component: {fileID: 3090291657640884822}
   - component: {fileID: 4330583532607214616}
   - component: {fileID: 3376014722093813731}
-  - component: {fileID: 2733228103831158577}
   - component: {fileID: 2440660883574391157}
+  - component: {fileID: -6095951801054734465}
+  - component: {fileID: 6940025206258515308}
+  - component: {fileID: -6716673660716036314}
+  - component: {fileID: -1202367897370487436}
+  - component: {fileID: 4927295247037199578}
+  - component: {fileID: -1184201093642448664}
+  - component: {fileID: 5014739352797802176}
+  - component: {fileID: -2489061036968278481}
+  - component: {fileID: 6071322255584973116}
+  - component: {fileID: -4990016127006308383}
+  - component: {fileID: -2718469247612560156}
+  - component: {fileID: 8140701547807156305}
+  - component: {fileID: 7316987836632284827}
+  - component: {fileID: 1496034668224238957}
   m_Layer: 0
   m_Name: Network_Player Rigidbody Predict
   m_TagString: Untagged
@@ -809,8 +497,6 @@ Transform:
   - {fileID: 8057181819084617967}
   - {fileID: 2556169889602699891}
   - {fileID: 8537845952925676866}
-  - {fileID: 6268902580939306963}
-  - {fileID: 1262620997792909826}
   - {fileID: 8514949301179040730}
   - {fileID: 5773566808572224128}
   m_Father: {fileID: 0}
@@ -885,7 +571,14 @@ MonoBehaviour:
   <PredictedOwner>k__BackingField: {fileID: 0}
   NetworkBehaviours:
   - {fileID: 4330583532607214616}
-  - {fileID: 0}
+  - {fileID: 3376014722093813731}
+  - {fileID: 2440660883574391157}
+  - {fileID: -6095951801054734465}
+  - {fileID: 6940025206258515308}
+  - {fileID: -6716673660716036314}
+  - {fileID: -1202367897370487436}
+  - {fileID: 4927295247037199578}
+  - {fileID: -1184201093642448664}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -910,7 +603,7 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 5
+  <PrefabId>k__BackingField: 2
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 4947417084512255207
   <SceneId>k__BackingField: 0
@@ -947,9 +640,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a4ab60d7b7e44d899da58ba7799055e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 1
   _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 3090291657640884822}
   _tickCallbacks: 6
   movementSettings: {fileID: 11400000, guid: 97e9a5103d216084e81c63f1fdf7b650, type: 2}
   tankTurnSpeed: 256
@@ -965,20 +658,6 @@ MonoBehaviour:
   maxFallSpeed: -40
   drag: 5
   angularDrag: 0.05
---- !u!114 &2733228103831158577
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5733313791172204384}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 97e7310c50204ca68059e624c4f4ef97, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  statData: {fileID: 11400000, guid: 5d3f71fa0405586418f2c07a114fe64a, type: 2}
-  enableDebugLogs: 0
 --- !u!114 &2440660883574391157
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -991,11 +670,280 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a9ddf7bb091e42d2bf3ebedcc29eb67d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 2
   _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 3090291657640884822}
   networkPlayer: {fileID: 4330583532607214616}
   fogOfWarRevealer3D: {fileID: 3082025093313579346}
+--- !u!114 &-6095951801054734465
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c47a5967566415fa6399c075d30c6d5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 3
+  _addedNetworkObject: {fileID: 3090291657640884822}
+  _networkObjectCache: {fileID: 3090291657640884822}
+  _statConfig: {fileID: 11400000, guid: 827cb49e13976624e969bcae7448f845, type: 2}
+  _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
+  _showDebugUI: 1
+--- !u!114 &6940025206258515308
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 650f626e92e042f1b9b39135fd9979a9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 4
+  _addedNetworkObject: {fileID: 3090291657640884822}
+  _networkObjectCache: {fileID: 3090291657640884822}
+  _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
+  _inventoryConfig: {fileID: 11400000, guid: 4101cba7ea899684591444975163093c, type: 2}
+  _statSystem: {fileID: -6095951801054734465}
+  _showDebugUI: 1
+  _enableDebugLogs: 0
+--- !u!114 &-6716673660716036314
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ff5803b4fb386144ac4b2cb73a6e23f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 5
+  _addedNetworkObject: {fileID: 3090291657640884822}
+  _networkObjectCache: {fileID: 3090291657640884822}
+  _inventoryConfig: {fileID: 11400000, guid: 4101cba7ea899684591444975163093c, type: 2}
+  _statSystem: {fileID: -6095951801054734465}
+  _inventorySystem: {fileID: 6940025206258515308}
+  _showDebugUI: 1
+  _enableDebugLogs: 0
+--- !u!114 &-1202367897370487436
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 92844d221d9eb31459042b845ff931cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 6
+  _addedNetworkObject: {fileID: 3090291657640884822}
+  _networkObjectCache: {fileID: 3090291657640884822}
+  _inventoryConfig: {fileID: 11400000, guid: 4101cba7ea899684591444975163093c, type: 2}
+  _statSystem: {fileID: -6095951801054734465}
+  _inventorySystem: {fileID: 6940025206258515308}
+  _showDebugUI: 1
+  _enableDebugLogs: 0
+--- !u!114 &4927295247037199578
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e66babfccc405884580569f3a5418682, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 7
+  _addedNetworkObject: {fileID: 3090291657640884822}
+  _networkObjectCache: {fileID: 3090291657640884822}
+  _inventoryConfig: {fileID: 11400000, guid: 4101cba7ea899684591444975163093c, type: 2}
+  _inventorySystem: {fileID: 6940025206258515308}
+  _showDebugUI: 1
+  _enableDebugLogs: 0
+--- !u!114 &-1184201093642448664
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c19eba99168c57e4c8ca0e97a8cae5f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 8
+  _addedNetworkObject: {fileID: 3090291657640884822}
+  _networkObjectCache: {fileID: 3090291657640884822}
+  _inventorySystem: {fileID: 6940025206258515308}
+  _enableDebugLogs: 0
+--- !u!114 &5014739352797802176
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed2e59f34e764406b5cd23eb21743f13, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _statSystem: {fileID: -6095951801054734465}
+  _runTestsOnStart: 0
+  _subscribeToEvents: 1
+  _testWeightToAdd: 50
+  _testArmorToAdd: 30
+--- !u!114 &-2489061036968278481
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3d346179bef4941b0db82647fb005cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _inventorySystem: {fileID: 6940025206258515308}
+  _testWeaponID: weapon_ak47
+  _testArmorID: armor_vest
+  _testConsumableID: consumable_medkit
+  _runTestsOnStart: 0
+  _subscribeToEvents: 1
+  _saveLogToFile: 1
+  _logFileName: InventorySystemTest_Results.txt
+--- !u!114 &6071322255584973116
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89328d80088240e8b9bfa9def292755f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _equipmentSystem: {fileID: -6716673660716036314}
+  _inventorySystem: {fileID: 6940025206258515308}
+  _testHelmetID: armor_helmet
+  _testVestID: armor_vest
+  _testBackpackID: armor_backpack
+  _runTestsOnStart: 0
+  _saveLogToFile: 1
+--- !u!114 &-4990016127006308383
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 412c037b8c954baa9634e6348998e1c1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _testWeaponID: weapon_ak47
+  _testScopeID: attachment_reddot
+  _testGripID: attachment_grip
+  _testSuppressorID: attachment_suppressor
+  _runTestsOnStart: 0
+  _inventorySystem: {fileID: 6940025206258515308}
+  _attachmentSystem: {fileID: -1184201093642448664}
+--- !u!114 &-2718469247612560156
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0f5883a0e7d41d7aa54959ce8fe9bcf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _statSystem: {fileID: -6095951801054734465}
+  _inventorySystem: {fileID: 6940025206258515308}
+  _equipmentSystem: {fileID: -6716673660716036314}
+  _weaponSystem: {fileID: -1202367897370487436}
+  _quickSlotSystem: {fileID: 4927295247037199578}
+  _weaponID: weapon_ak47
+  _armorID: armor_vest
+  _backpackID: armor_backpack
+  _consumableID: consumable_medkit
+  _runTestsOnStart: 0
+--- !u!114 &8140701547807156305
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f20f83efd70e4137bdabcea7be87185e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _quickSlotSystem: {fileID: 0}
+  _inventorySystem: {fileID: 0}
+  _testConsumableID: consumable_medkit
+  _testConsumable2ID: consumable_energydrink
+  _runTestsOnStart: 0
+  _saveLogToFile: 1
+--- !u!114 &7316987836632284827
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f7157f0ecc9245d9901c3a7adab4950b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _attachmentSystem: {fileID: 0}
+  _inventorySystem: {fileID: 0}
+  _testWeaponID: weapon_ak47
+  _testScopeID: attachment_reddot
+  _testGripID: attachment_grip
+  _testSuppressorID: attachment_suppressor
+  _runTestsOnStart: 0
+  _saveLogToFile: 1
+--- !u!114 &1496034668224238957
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85ba8868ef0449e3836ddb1e5029d854, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _toggleKey: 282
+  _startVisible: 0
+  _statSystem: {fileID: 0}
+  _inventorySystem: {fileID: 6940025206258515308}
+  _equipmentSystem: {fileID: -6716673660716036314}
+  _weaponSystem: {fileID: -1202367897370487436}
+  _quickSlotSystem: {fileID: 4927295247037199578}
+  _attachmentSystem: {fileID: -1184201093642448664}
 --- !u!1 &7515422132242615850
 GameObject:
   m_ObjectHideFlags: 0

@@ -3,8 +3,7 @@ using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Player;
-using NightHunt.Inventory.Core;
-using NightHunt.Inventory.Network;
+using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking.Player;
 using UnityEngine;
 using Unity.Cinemachine;
@@ -30,12 +29,12 @@ namespace NightHunt.Networking
         #region Serialized References
         [Header("Camera")]
         [SerializeField] private CinemachineCamera _playerCamera;
-        [SerializeField] private PlayerInventoryNetwork inventorySystem;
+        //[SerializeField] private PlayerInventoryNetwork inventorySystem;
         #endregion
         
         #region Public Accessors
         
-        public PlayerInventoryNetwork Inventory => inventorySystem;
+        //public PlayerInventoryNetwork Inventory => inventorySystem;
         public string DisplayName => PlayerData.DisplayName;
         public int TeamId => PlayerData.TeamId;
         public bool IsLocalPlayer => IsOwner;

@@ -3,7 +3,6 @@ using NightHunt.Data;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Networking;
 using FishNet.Object;
-using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
@@ -107,19 +106,19 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         /// </summary>
         private void ProcessHit(RaycastHit hit)
         {
-            var hitCharacter = hit.collider.GetComponent<PlayerStats>();
-            if (hitCharacter != null)
-            {
-                float damage = weaponConfig.DamageBody;
-                bool isHeadshot = hit.collider.CompareTag("Head");
-                if (isHeadshot)
-                {
-                    damage *= weaponConfig.DamageHeadMul;
-                }
-
-                // TODO: Send RPC to server for damage application
-                hitCharacter.TakeDamage(damage);
-            }
+            // var hitCharacter = hit.collider.GetComponent<PlayerStats>();
+            // if (hitCharacter != null)
+            // {
+            //     float damage = weaponConfig.DamageBody;
+            //     bool isHeadshot = hit.collider.CompareTag("Head");
+            //     if (isHeadshot)
+            //     {
+            //         damage *= weaponConfig.DamageHeadMul;
+            //     }
+            //
+            //     // TODO: Send RPC to server for damage application
+            //     hitCharacter.TakeDamage(damage);
+            // }
         }
 
         public override void Reload()

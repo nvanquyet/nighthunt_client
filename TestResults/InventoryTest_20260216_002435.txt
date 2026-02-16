@@ -1,0 +1,49 @@
+================================================================================
+INVENTORY SYSTEM TEST RESULTS
+================================================================================
+Test Session Started: 2026-02-16 00:24:35
+Unity Version: 6000.0.39f1
+Platform: WindowsEditor
+================================================================================
+
+
+                                                                               =
+TEST 1: Add Single Item
+Started: 00:24:35.393
+                                                                               =
+
+Result: ✓ PASSED
+Duration: 12.61ms
+Details: Successfully added single item to inventory
+
+Inventory State After Test:
+  Total Items: 1
+  Items:
+    [0]  x1
+  Weight: 1.0/100.0 (1 %)
+
+  Events Fired (2):
+    [Event] Inventory Cleared
+    [Event] Item Added:  x1 @ index 0
+
+
+
+================================================================================
+FINAL TEST SUMMARY
+================================================================================
+Total Tests: 1
+Passed: 1
+Failed: 0
+Success Rate: 100.0 %
+Total Duration: 12.61ms
+Average Duration: 12.61ms
+
+Detailed Results:
+Test  Name                           Status     Duration     Events  
+--------------------------------------------------------------------------------
+1     Add Single Item                ✓ PASSED   12.61ms 30      
+
+================================================================================
+Test Session Completed: 2026-02-16 00:24:35
+Session Duration: 0.06s
+================================================================================

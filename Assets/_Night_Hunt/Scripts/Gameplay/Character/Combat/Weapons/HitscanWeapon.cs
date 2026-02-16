@@ -2,8 +2,6 @@ using UnityEngine;
 using NightHunt.Data;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.Utils;
-using NightHunt.Inventory.Stats;
-
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
     /// <summary>
@@ -44,33 +42,33 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         private void ProcessHit(RaycastHit hit)
         {
             // Check if hit a character
-            var hitCharacter = hit.collider.GetComponent<PlayerStats>();
-            if (hitCharacter != null)
-            {
-                // Calculate damage
-                float damage = weaponConfig.DamageBody;
-                
-                // Check for headshot
-                bool isHeadshot = hit.collider.CompareTag("Head");
-                if (isHeadshot)
-                {
-                    damage *= weaponConfig.DamageHeadMul;
-                }
-
-                // Apply damage (server authority)
-                // TODO: Send RPC to server for damage application
-                hitCharacter.TakeDamage(damage);
-
-                // Publish damage event
-                var damageEvent = new DamageEffectEvent
-                {
-                    Damage = damage,
-                    HitPoint = hit.point,
-                    HitDirection = hit.normal,
-                    NetworkId = hitCharacter.GetInstanceID()
-                };
-                GameplayEventBus.Instance?.Publish(damageEvent);
-            }
+            // var hitCharacter = hit.collider.GetComponent<PlayerStats>();
+            // if (hitCharacter != null)
+            // {
+            //     // Calculate damage
+            //     float damage = weaponConfig.DamageBody;
+            //     
+            //     // Check for headshot
+            //     bool isHeadshot = hit.collider.CompareTag("Head");
+            //     if (isHeadshot)
+            //     {
+            //         damage *= weaponConfig.DamageHeadMul;
+            //     }
+            //
+            //     // Apply damage (server authority)
+            //     // TODO: Send RPC to server for damage application
+            //     hitCharacter.TakeDamage(damage);
+            //
+            //     // Publish damage event
+            //     var damageEvent = new DamageEffectEvent
+            //     {
+            //         Damage = damage,
+            //         HitPoint = hit.point,
+            //         HitDirection = hit.normal,
+            //         NetworkId = hitCharacter.GetInstanceID()
+            //     };
+            //     GameplayEventBus.Instance?.Publish(damageEvent);
+            // }
 
             // Spawn hit effect
             if (hitEffectPrefab != null)

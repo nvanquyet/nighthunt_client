@@ -6,7 +6,6 @@ using NightHunt.Gameplay.Character;
 using NightHunt.Networking;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Player;
-using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Respawn
 {
@@ -39,8 +38,7 @@ namespace NightHunt.Gameplay.Respawn
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-            if (networkRespawnDelay != null)
-                networkRespawnDelay.OnChange -= OnRespawnDelayChanged;
+            networkRespawnDelay.OnChange -= OnRespawnDelayChanged;
         }
 
         private void Update()
@@ -119,12 +117,12 @@ namespace NightHunt.Gameplay.Respawn
             player.transform.position = respawnPosition;
             
             // Restore player stats
-            var stats = player.GetComponent<PlayerStats>();
-            if (stats != null)
-            {
-                stats.RestoreHealthToFull();
-                stats.RestoreStaminaToFull();
-            }
+            // var stats = player.GetComponent<PlayerStats>();
+            // if (stats != null)
+            // {
+            //     stats.RestoreHealthToFull();
+            //     stats.RestoreStaminaToFull();
+            // }
 
             // Notify player respawned
             OnPlayerRespawned(player);
@@ -234,11 +232,11 @@ namespace NightHunt.Gameplay.Respawn
         /// </summary>
         private bool IsPlayerDead(NetworkPlayer player)
         {
-            var stats = player.GetComponent<PlayerStats>();
-            if (stats != null)
-            {
-                return !stats.IsAlive;
-            }
+            // var stats = player.GetComponent<PlayerStats>();
+            // if (stats != null)
+            // {
+            //     return !stats.IsAlive;
+            // }
             return false;
         }
 

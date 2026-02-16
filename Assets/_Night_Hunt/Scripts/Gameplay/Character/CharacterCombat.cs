@@ -1,7 +1,6 @@
 using UnityEngine;
 using NightHunt.Data;
 using System.Collections;
-using NightHunt.Inventory.Stats;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -21,7 +20,7 @@ namespace NightHunt.Gameplay.Character
         [SerializeField] private GameObject hitEffectPrefab;
 
         private WeaponConfigData currentWeapon;
-        private PlayerStats _playerStats;
+        //private PlayerStats _playerStats;
         private IMovementController _characterPredictedMovement;
 
         // Weapon state
@@ -37,7 +36,7 @@ namespace NightHunt.Gameplay.Character
 
         private void Awake()
         {
-            _playerStats = GetComponent<PlayerStats>();
+            //_playerStats = GetComponent<PlayerStats>();
             _characterPredictedMovement = GetComponent<IMovementController>();
 
             if (firePoint == null)
@@ -197,22 +196,23 @@ namespace NightHunt.Gameplay.Character
                 endPos = hit.point;
 
                 // Check if hit a character
-                var hitCharacter = hit.collider.GetComponent<PlayerStats>();
-                if (hitCharacter != null)
-                {
-                    // Calculate damage
-                    float damage = currentWeapon.DamageBody;
-                    
-                    // Check for headshot (simplified - check if hit upper body)
-                    bool isHeadshot = hit.collider.CompareTag("Head");
-                    if (isHeadshot)
-                    {
-                        damage *= currentWeapon.DamageHeadMul;
-                    }
-
-                    // Apply damage
-                    hitCharacter.TakeDamage(damage);
-                }
+                // var hitCharacter = nu
+                // //var hitCharacter = hit.collider.GetComponent<PlayerStats>();
+                // if (hitCharacter != null)
+                // {
+                //     // Calculate damage
+                //     float damage = currentWeapon.DamageBody;
+                //     
+                //     // Check for headshot (simplified - check if hit upper body)
+                //     bool isHeadshot = hit.collider.CompareTag("Head");
+                //     if (isHeadshot)
+                //     {
+                //         damage *= currentWeapon.DamageHeadMul;
+                //     }
+                //
+                //     // Apply damage
+                //     hitCharacter.TakeDamage(damage);
+                // }
 
                 // Hit effect
                 if (hitEffectPrefab != null)
@@ -305,11 +305,11 @@ namespace NightHunt.Gameplay.Character
         private void OnTriggerEnter(Collider other)
         {
             // Handle hit
-            var character = other.GetComponent<PlayerStats>();
-            if (character != null)
-            {
-                character.TakeDamage(weaponConfig.DamageBody);
-            }
+            //var character = other.GetComponent<PlayerStats>();
+            // if (character != null)
+            // {
+            //     character.TakeDamage(weaponConfig.DamageBody);
+            // }
 
             Destroy(gameObject);
         }

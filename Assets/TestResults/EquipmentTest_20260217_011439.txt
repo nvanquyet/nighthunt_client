@@ -1,0 +1,116 @@
+================================================================================
+EQUIPMENT SYSTEM TEST RESULTS
+================================================================================
+Test Session Started: 2026-02-17 01:14:39
+Unity Version: 6000.0.39f1
+Platform: WindowsEditor
+================================================================================
+
+
+                                                                               =
+TEST 1: Equip Item
+Started: 01:14:39.955
+                                                                               =
+Added helmet: armor_helmet, ID: 5aa78ef6-bf42-473b-b91a-3ade3a281eee
+
+Result: ✗ FAILED
+Duration: 5.08ms
+Details: Exception: Assertion failed: Helmet should be equipped
+  at GameplaySystems.Tests.EquipmentSystemTest.AssertNoThrow (System.Boolean condition, System.String message) [0x00014] in D:\Unity\NightHunt\nighthunt_client\Assets\_Night_Hunt\Scripts\Gameplay\GameplaySystems\Test\EquipmentSystemTest.cs:392 
+  at GameplaySystems.Tests.EquipmentSystemTest.Test1_EquipItem () [0x00095] in D:\Unity\NightHunt\nighthunt_client\Assets\_Night_Hunt\Scripts\Gameplay\GameplaySystems\Test\EquipmentSystemTest.cs:128 
+
+Equipment State After Test:
+  Equipped Items: 0
+  Stats: Armor=0.0, Weight=0.0
+
+                                                                               =
+TEST 2: Unequip Item
+Started: 01:14:39.962
+                                                                               =
+No helmet equipped, equipping one first
+
+Result: ✗ FAILED
+Duration: 2.60ms
+Details: Exception: Object reference not set to an instance of an object
+  at GameplaySystems.Tests.EquipmentSystemTest.Test2_UnequipItem () [0x00070] in D:\Unity\NightHunt\nighthunt_client\Assets\_Night_Hunt\Scripts\Gameplay\GameplaySystems\Test\EquipmentSystemTest.cs:158 
+
+Equipment State After Test:
+  Equipped Items: 0
+  Stats: Armor=0.0, Weight=0.0
+
+                                                                               =
+TEST 3: Swap Equipment
+Started: 01:14:39.966
+                                                                               =
+Helmet: e20be0e1-d872-4faa-91fd-1e3d33b21a4c, Vest: de58937d-5c21-4949-8f8f-eab6b25f5dbc
+
+Result: ✗ FAILED
+Duration: 0.90ms
+Details: Exception: Assertion failed: Both should be equipped
+  at GameplaySystems.Tests.EquipmentSystemTest.AssertNoThrow (System.Boolean condition, System.String message) [0x00014] in D:\Unity\NightHunt\nighthunt_client\Assets\_Night_Hunt\Scripts\Gameplay\GameplaySystems\Test\EquipmentSystemTest.cs:392 
+  at GameplaySystems.Tests.EquipmentSystemTest.Test3_SwapEquipment () [0x000c7] in D:\Unity\NightHunt\nighthunt_client\Assets\_Night_Hunt\Scripts\Gameplay\GameplaySystems\Test\EquipmentSystemTest.cs:208 
+
+Equipment State After Test:
+  Equipped Items: 0
+  Stats: Armor=0.0, Weight=0.0
+
+                                                                               =
+TEST 4: Stat Modifiers
+Started: 01:14:39.968
+                                                                               =
+Base armor: 0.0
+Armor after equip: 0.0
+
+Result: ✗ FAILED
+Duration: 1.00ms
+Details: Exception: Assertion failed: Armor should increase, but went from 0.0 to 0.0
+  at GameplaySystems.Tests.EquipmentSystemTest.AssertNoThrow (System.Boolean condition, System.String message) [0x00014] in D:\Unity\NightHunt\nighthunt_client\Assets\_Night_Hunt\Scripts\Gameplay\GameplaySystems\Test\EquipmentSystemTest.cs:392 
+  at GameplaySystems.Tests.EquipmentSystemTest.Test4_StatModifiers () [0x000cc] in D:\Unity\NightHunt\nighthunt_client\Assets\_Night_Hunt\Scripts\Gameplay\GameplaySystems\Test\EquipmentSystemTest.cs:277 
+
+Equipment State After Test:
+  Equipped Items: 0
+  Stats: Armor=0.0, Weight=0.0
+
+                                                                               =
+TEST 5: Weight Modification
+Started: 01:14:39.969
+                                                                               =
+Weight before: 0.0
+Weight after add to inventory: 0.0
+Backpack weight in inventory: 0.0
+Weight after equip: 0.0
+Weight difference when equipped: 0.0
+
+Result: ✓ PASSED
+Duration: 1.02ms
+Details: Weight system working. In inventory: 0.0, When equipped diff: 0.0
+
+Equipment State After Test:
+  Equipped Items: 0
+  Stats: Armor=0.0, Weight=0.0
+
+
+
+================================================================================
+FINAL TEST SUMMARY
+================================================================================
+Total Tests: 5
+Passed: 1
+Failed: 4
+Success Rate: 20.0 %
+Total Duration: 10.59ms
+Average Duration: 2.12ms
+
+Detailed Results:
+Test  Name                           Status     Duration    
+--------------------------------------------------------------------------------
+1     Equip Item                     ✗ FAILED   5.08ms
+2     Unequip Item                   ✗ FAILED   2.60ms
+3     Swap Equipment                 ✗ FAILED   0.90ms
+4     Stat Modifiers                 ✗ FAILED   1.00ms
+5     Weight Modification            ✓ PASSED   1.02ms
+
+================================================================================
+Test Session Completed: 2026-02-17 01:14:39
+Session Duration: 0.02s
+================================================================================

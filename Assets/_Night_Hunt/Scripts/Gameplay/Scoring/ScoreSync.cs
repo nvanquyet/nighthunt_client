@@ -27,8 +27,7 @@ namespace NightHunt.Gameplay.Scoring
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-            if (networkScoreData != null)
-                networkScoreData.OnChange -= OnScoreDataChanged;
+            networkScoreData.OnChange -= OnScoreDataChanged;
         }
 
         /// <summary>
@@ -52,4 +51,3 @@ namespace NightHunt.Gameplay.Scoring
         }
     }
 }
-

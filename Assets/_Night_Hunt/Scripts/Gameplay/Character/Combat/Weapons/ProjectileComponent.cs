@@ -1,7 +1,5 @@
 using UnityEngine;
 using NightHunt.Data;
-using NightHunt.Inventory.Stats;
-
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
     /// <summary>
@@ -66,19 +64,19 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             }
 
             // Collider-based collision
-            var character = other.GetComponent<PlayerStats>();
-            if (character != null)
-            {
-                float damage = weaponConfig.DamageBody;
-                bool isHeadshot = other.CompareTag("Head");
-                if (isHeadshot)
-                {
-                    damage *= weaponConfig.DamageHeadMul;
-                }
-
-                // TODO: Send RPC to server for damage application
-                character.TakeDamage(damage);
-            }
+            // var character = other.GetComponent<PlayerStats>();
+            // if (character != null)
+            // {
+            //     float damage = weaponConfig.DamageBody;
+            //     bool isHeadshot = other.CompareTag("Head");
+            //     if (isHeadshot)
+            //     {
+            //         damage *= weaponConfig.DamageHeadMul;
+            //     }
+            //
+            //     // TODO: Send RPC to server for damage application
+            //     character.TakeDamage(damage);
+            // }
 
             Destroy(gameObject);
         }

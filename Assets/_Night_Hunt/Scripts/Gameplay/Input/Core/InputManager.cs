@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.Gameplay.Input.Handlers.Camera;

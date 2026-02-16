@@ -16,8 +16,9 @@ namespace NightHunt.Gameplay.Match
     /// </summary>
     public class MatchPhaseManager : NetworkBehaviour
     {
-        [Header("Phase Settings")]
-        [SerializeField] private MatchPhaseState initialState = MatchPhaseState.Preparation;
+        [Header("Phase Settings")] [SerializeField]
+        private MatchPhaseState initialState = MatchPhaseState.Preparation;
+
         [SerializeField] private float phaseStartTime;
         [SerializeField] private float phaseDuration;
 
@@ -70,13 +71,13 @@ namespace NightHunt.Gameplay.Match
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-            
+
             if (!isInitialized)
             {
                 networkPhase.OnChange += OnNetworkPhaseChanged;
                 isInitialized = true;
             }
-            
+
             // Sync initial phase state for clients
             if (!IsServer && networkPhase.Value != 0)
             {
@@ -91,10 +92,8 @@ namespace NightHunt.Gameplay.Match
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-            if (networkPhase != null)
-                networkPhase.OnChange -= OnNetworkPhaseChanged;
-            if (phaseStateMachine != null)
-                phaseStateMachine.OnStateChanged -= OnPhaseStateChanged;
+            networkPhase.OnChange -= OnNetworkPhaseChanged;
+            phaseStateMachine.OnStateChanged -= OnPhaseStateChanged;
         }
 
         /// <summary>
@@ -103,7 +102,7 @@ namespace NightHunt.Gameplay.Match
         private void OnPhaseStateChanged(MatchPhaseState previousState, MatchPhaseState newState)
         {
             Debug.Log($"[MatchPhaseManager] Phase state changed: {previousState} -> {newState}");
-            
+
             // ✅ Trigger event cho subscribers (ServerGameManager, Bootstrap, etc.)
             OnPhaseTransitioned?.Invoke(previousState, newState);
         }
@@ -133,7 +132,8 @@ namespace NightHunt.Gameplay.Match
             // Validate server state
             if (!IsServerStarted || !IsSpawned)
             {
-                Debug.LogWarning($"[MatchPhaseManager] Cannot start phase {phase} - server not ready (IsServerStarted: {IsServerStarted}, IsSpawned: {IsSpawned})");
+                Debug.LogWarning(
+                    $"[MatchPhaseManager] Cannot start phase {phase} - server not ready (IsServerStarted: {IsServerStarted}, IsSpawned: {IsSpawned})");
                 return;
             }
 
@@ -146,7 +146,7 @@ namespace NightHunt.Gameplay.Match
             }
 
             currentPhaseConfig = config;
-            
+
             Debug.Log($"[MatchPhaseManager] Starting phase: {phaseName}");
 
             // Store old phase for event
@@ -161,7 +161,7 @@ namespace NightHunt.Gameplay.Match
             // Sync to network
             networkPhase.Value = (int)phase;
             networkPhaseStartTime.Value = Time.time;
-            
+
             // Random duration within min/max
             networkPhaseDuration.Value = UnityEngine.Random.Range(config.DurationMin, config.DurationMax) * 60f;
 
@@ -169,7 +169,7 @@ namespace NightHunt.Gameplay.Match
 
             // Apply phase-specific logic
             ApplyPhaseLogic(phase);
-            
+
             // Mark first phase as started
             hasStartedFirstPhase = true;
 
@@ -198,7 +198,7 @@ namespace NightHunt.Gameplay.Match
         private void Update()
         {
             if (!IsServerStarted) return;
-            
+
             // Only check transition if first phase has started
             if (!hasStartedFirstPhase) return;
 
@@ -216,14 +216,14 @@ namespace NightHunt.Gameplay.Match
         private void TransitionToNextPhase()
         {
             MatchPhaseState nextPhase = GetNextPhase(CurrentPhase);
-            
+
             // Avoid transition when already in final phase
             if (CurrentPhase == MatchPhaseState.Lockdown)
             {
                 Debug.Log("[MatchPhaseManager] Already in final phase (Lockdown)");
                 return;
             }
-            
+
             Debug.Log($"[MatchPhaseManager] Auto-transitioning from {CurrentPhase} to {nextPhase}");
             StartPhase(nextPhase);
         }
