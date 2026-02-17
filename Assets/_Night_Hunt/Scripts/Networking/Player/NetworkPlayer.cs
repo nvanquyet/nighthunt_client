@@ -1,8 +1,7 @@
 using FishNet.Object;
-using FishNet.Object.Synchronizing;
 using FishNet.Connection;
+using GameplaySystems.Core;
 using NightHunt.Gameplay.Input.Core;
-using NightHunt.Gameplay.Player;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking.Player;
 using UnityEngine;
@@ -32,6 +31,8 @@ namespace NightHunt.Networking
         //[SerializeField] private PlayerInventoryNetwork inventorySystem;
         #endregion
         
+        
+        
         #region Public Accessors
         
         //public PlayerInventoryNetwork Inventory => inventorySystem;
@@ -41,6 +42,7 @@ namespace NightHunt.Networking
         
         // Component accessors (for ServerGameManager and systems)
         public CinemachineCamera PlayerCamera => _playerCamera;
+        public IGameplayBridge GamePlaySystemBride { get; private set; } 
         
         
         private PlayerPublicData _playerData;
@@ -57,6 +59,7 @@ namespace NightHunt.Networking
         {
             if (_playerCamera == null)
                 _playerCamera = GetComponentInChildren<CinemachineCamera>();
+            GamePlaySystemBride = new GameplaySystemsBridge(this);
         }
         
         

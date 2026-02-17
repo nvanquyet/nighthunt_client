@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Weapon_Pistol
   m_EditorClassIdentifier: 
   ItemID: weapon_pistol
-  DisplayName: 
+  DisplayName: Pistol
   Description: 
   Icon: {fileID: 0}
   IsStackable: 0

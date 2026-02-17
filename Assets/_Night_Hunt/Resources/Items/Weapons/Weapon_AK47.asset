@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Weapon_AK47
   m_EditorClassIdentifier: 
   ItemID: weapon_ak47
-  DisplayName: 
+  DisplayName: AK_47
   Description: 
   Icon: {fileID: 0}
   IsStackable: 0

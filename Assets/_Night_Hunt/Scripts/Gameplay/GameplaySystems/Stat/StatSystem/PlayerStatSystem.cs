@@ -191,6 +191,48 @@ namespace GameplaySystems.Stat
             }
             return result;
         }
+
+        /// <summary>
+        /// Directly set the current value of a stat (server only).
+        /// Used by ItemUseSystem for consumable effects (heal, stamina restore, etc.).
+        /// Value is clamped to [MinValue, MaxValue] defined in PlayerStatConfig.
+        /// </summary>
+        public void SetCurrentStat(PlayerStatType type, float value)
+        {
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[PlayerStatSystem] SetCurrentStat can only be called on server!");
+                return;
+            }
+
+            if (!_statCache.TryGetValue(type, out var stat))
+            {
+                Debug.LogWarning($"[PlayerStatSystem] SetCurrentStat: stat not found: {type}");
+                return;
+            }
+
+            float clamped  = Mathf.Clamp(value, stat.MinValue, stat.MaxValue);
+            float oldValue = stat.CurrentValue;
+
+            if (Mathf.Abs(clamped - oldValue) <= 0.001f) return;
+
+            stat.CurrentValue = clamped;
+
+            int index = FindStatIndex(type);
+            if (index >= 0) _syncedStats[index] = stat;
+
+            _statCache[type] = stat;
+            OnStatChanged?.Invoke(type, oldValue, clamped);
+
+            if (type == PlayerStatType.CurrentWeight || type == PlayerStatType.WeightCapacity)
+            {
+                OnWeightChanged?.Invoke(GetCurrentWeight(), GetWeightCapacity());
+                CheckOverweightStatus();
+            }
+
+            if (_gameplayConfig != null && _gameplayConfig.EnableStatDebugLogs)
+                Debug.Log($"[PlayerStatSystem] SetCurrentStat {type}: {oldValue:F2} → {clamped:F2}");
+        }
         
         #endregion
         
@@ -536,47 +578,47 @@ namespace GameplaySystems.Stat
         
         #region Debug UI
         
-        // private void OnGUI()
-        // {
-        //     if (!_showDebugUI || !IsOwner)
-        //         return;
-        //     
-        //     GUILayout.BeginArea(new Rect(10, 100, 350, 700));
-        //     GUILayout.Label("=== PLAYER STATS ===");
-        //     
-        //     // Display all stats
-        //     foreach (var kvp in _statCache.OrderBy(k => k.Key))
-        //     {
-        //         var stat = kvp.Value;
-        //         var modifier = GetStatModifier(kvp.Key);
-        //         
-        //         string modStr = modifier != 0 ? $" ({modifier:+0.0;-0.0})" : "";
-        //         GUILayout.Label($"{kvp.Key}: {stat.CurrentValue:F1}{modStr} / {stat.MaxValue:F0}");
-        //     }
-        //     
-        //     GUILayout.Space(10);
-        //     
-        //     // Weight system info
-        //     float weightPercent = GetWeightPercent();
-        //     float speedMult = GetMovementSpeedMultiplier();
-        //     
-        //     GUILayout.Label($"Weight: {GetCurrentWeight():F1} / {GetWeightCapacity():F1} ({weightPercent:P0})");
-        //     GUILayout.Label($"Speed Multiplier: {speedMult:P0}");
-        //     
-        //     // Weight status with color
-        //     if (_gameplayConfig != null)
-        //     {
-        //         Color statusColor = _gameplayConfig.GetWeightStatusColor(weightPercent);
-        //         string statusText = _gameplayConfig.GetWeightStatusText(weightPercent);
-        //         
-        //         GUI.color = statusColor;
-        //         GUILayout.Label($"STATUS: {statusText}");
-        //         GUI.color = Color.white;
-        //     }
-        //     
-        //     GUILayout.EndArea();
-        // }
-        //
+        private void OnGUI()
+        {
+            if (!_showDebugUI || !IsOwner)
+                return;
+            
+            GUILayout.BeginArea(new Rect(10, 100, 350, 700));
+            GUILayout.Label("=== PLAYER STATS ===");
+            
+            // Display all stats
+            foreach (var kvp in _statCache.OrderBy(k => k.Key))
+            {
+                var stat = kvp.Value;
+                var modifier = GetStatModifier(kvp.Key);
+                
+                string modStr = modifier != 0 ? $" ({modifier:+0.0;-0.0})" : "";
+                GUILayout.Label($"{kvp.Key}: {stat.CurrentValue:F1}{modStr} / {stat.MaxValue:F0}");
+            }
+            
+            GUILayout.Space(10);
+            
+            // Weight system info
+            float weightPercent = GetWeightPercent();
+            float speedMult = GetMovementSpeedMultiplier();
+            
+            GUILayout.Label($"Weight: {GetCurrentWeight():F1} / {GetWeightCapacity():F1} ({weightPercent:P0})");
+            GUILayout.Label($"Speed Multiplier: {speedMult:P0}");
+            
+            // Weight status with color
+            if (_gameplayConfig != null)
+            {
+                Color statusColor = _gameplayConfig.GetWeightStatusColor(weightPercent);
+                string statusText = _gameplayConfig.GetWeightStatusText(weightPercent);
+                
+                GUI.color = statusColor;
+                GUILayout.Label($"STATUS: {statusText}");
+                GUI.color = Color.white;
+            }
+            
+            GUILayout.EndArea();
+        }
+        
         #endregion
         
         #region Context Menu Commands

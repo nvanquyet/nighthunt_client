@@ -23,6 +23,9 @@ namespace GameplaySystems.Inventory
         
         [Header("References")]
         [SerializeField] private InventorySystem _inventorySystem;
+
+        [Tooltip("Auto-resolved from same GameObject. Handles consumable/throwable logic.")]
+        [SerializeField] private ItemUseSystem _itemUseSystem;
         
         [Header("Debug")]
         [SerializeField] private bool _showDebugUI = false;
@@ -80,7 +83,9 @@ namespace GameplaySystems.Inventory
             if (_inventorySystem == null)
                 _inventorySystem = GetComponent<InventorySystem>();
 #endif
-            
+            if (_itemUseSystem == null)
+                _itemUseSystem = GetComponent<ItemUseSystem>();
+
             if (_inventoryConfig == null)
                 Debug.LogError("[QuickSlotSystem] InventoryConfig is null!");
             
@@ -304,37 +309,70 @@ namespace GameplaySystems.Inventory
                 Debug.LogWarning($"[QuickSlotSystem] Cannot use quick slot: {slotIndex}");
                 return;
             }
-            
+
             string instanceID = _quickSlots[slotIndex];
             var item = _inventorySystem.GetItemByInstanceID(instanceID);
-            
+
             if (item == null)
             {
                 Debug.LogWarning($"[QuickSlotSystem] Item not found: {instanceID}");
                 RemoveFromQuickSlotServer(slotIndex);
                 return;
             }
-            
-            // TODO: Apply consumable effects
-            // For now, just consume the item
-            
+
+            var def = ItemDatabase.GetDefinition(item.DefinitionID);
+
+            // ── Throwable: if already in throw-mode with this item, execute the throw ──
+            if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
+            {
+                bool sameItem = _itemUseSystem.CurrentItem?.InstanceID == instanceID;
+                if (sameItem && def is Core.Data.ThrowableDefinition)
+                {
+                    // Same slot pressed again while in throw-mode → cancel
+                    _itemUseSystem.CancelUse();
+                    if (_enableDebugLogs) Debug.Log($"[QuickSlotSystem] Cancelled throw for slot {slotIndex}");
+                }
+                else
+                {
+                    Debug.LogWarning("[QuickSlotSystem] Already using an item – ignoring");
+                }
+                return;
+            }
+
+            // ── Route consumable/throwable through ItemUseSystem ──
+            if (_itemUseSystem != null &&
+                (def is Core.Data.ConsumableDefinition || def is Core.Data.ThrowableDefinition))
+            {
+                bool started = _itemUseSystem.UseItem(item);
+                if (started)
+                {
+                    OnQuickSlotUsed?.Invoke(slotIndex, item);
+
+                    // Auto-remove slot reference once item is fully consumed (hooked via event)
+                    _itemUseSystem.OnItemUseCompleted += CleanUpSlotAfterUse;
+                    _itemUseSystem.OnItemUseCancelled += _ =>
+                        _itemUseSystem.OnItemUseCompleted -= CleanUpSlotAfterUse;
+                }
+                return;
+
+                void CleanUpSlotAfterUse(GameplaySystems.Inventory.ItemInstance usedItem)
+                {
+                    _itemUseSystem.OnItemUseCompleted -= CleanUpSlotAfterUse;
+                    // If stack is now empty, clear the slot
+                    var remaining = _inventorySystem.GetItemByInstanceID(instanceID);
+                    if (remaining == null) RemoveFromQuickSlotServer(slotIndex);
+                }
+            }
+
+            // ── Fallback: legacy direct consume (non-consumable/throwable types) ──
             OnQuickSlotUsed?.Invoke(slotIndex, item);
-            
-            // Remove 1 quantity
             _inventorySystem.RemoveItem(instanceID, 1);
-            
-            // If item is gone, clear slot
-            var updatedItem = _inventorySystem.GetItemByInstanceID(instanceID);
-            if (updatedItem == null)
-            {
-                RemoveFromQuickSlotServer(slotIndex);
-            }
-            
+
+            var updated = _inventorySystem.GetItemByInstanceID(instanceID);
+            if (updated == null) RemoveFromQuickSlotServer(slotIndex);
+
             if (_enableDebugLogs)
-            {
-                var def = ItemDatabase.GetDefinition(item.DefinitionID);
                 Debug.Log($"[QuickSlotSystem] Used {def?.DisplayName} from slot {slotIndex}");
-            }
         }
         
         public bool CanUseQuickSlot(int slotIndex)
