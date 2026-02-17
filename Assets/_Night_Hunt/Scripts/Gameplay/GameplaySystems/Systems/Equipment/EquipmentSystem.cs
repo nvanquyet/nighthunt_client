@@ -154,7 +154,7 @@ namespace GameplaySystems.Inventory
                 return false;
             
             // Must be armor/equipment type
-            if (!(itemDef is ArmorDefinition armorDef))
+            if (!(itemDef is EquipmentDefinition armorDef))
                 return false;
             
             // Check if item's designated slot matches
@@ -189,7 +189,7 @@ namespace GameplaySystems.Inventory
             
             // Get item definition
             var itemDef = ItemDatabase.GetDefinition(item.DefinitionID);
-            if (!(itemDef is ArmorDefinition armorDef))
+            if (!(itemDef is EquipmentDefinition armorDef))
             {
                 Debug.LogWarning($"[EquipmentSystem] Item is not equipment: {item.DefinitionID}");
                 return;
@@ -252,7 +252,7 @@ namespace GameplaySystems.Inventory
             }
             
             var itemDef = ItemDatabase.GetDefinition(item.DefinitionID);
-            if (!(itemDef is ArmorDefinition armorDef))
+            if (!(itemDef is EquipmentDefinition armorDef))
             {
                 Debug.LogWarning($"[EquipmentSystem] Item is not equipment: {item.DefinitionID}");
                 _equippedItems.Remove(slotType);
@@ -331,12 +331,12 @@ namespace GameplaySystems.Inventory
         #region Stat Modifiers
         
         [Server]
-        private void ApplyEquipmentModifiers(string instanceID, ArmorDefinition armorDef)
+        private void ApplyEquipmentModifiers(string instanceID, EquipmentDefinition equipmentDef)
         {
-            if (_statSystem == null || armorDef.PlayerModifiers == null)
+            if (_statSystem == null || equipmentDef.PlayerModifiers == null)
                 return;
             
-            foreach (var modifier in armorDef.PlayerModifiers)
+            foreach (var modifier in equipmentDef.PlayerModifiers)
             {
                 var statMod = new StatModifier
                 {
@@ -352,7 +352,7 @@ namespace GameplaySystems.Inventory
             
             if (_enableDebugLogs)
             {
-                Debug.Log($"[EquipmentSystem] Applied {armorDef.PlayerModifiers.Length} stat modifiers from {armorDef.DisplayName}");
+                Debug.Log($"[EquipmentSystem] Applied {equipmentDef.PlayerModifiers.Length} stat modifiers from {equipmentDef.DisplayName}");
             }
         }
         
@@ -371,18 +371,18 @@ namespace GameplaySystems.Inventory
         }
         
         [Server]
-        private void UpdateEquipmentWeight(string instanceID, ArmorDefinition armorDef, bool isEquipping)
+        private void UpdateEquipmentWeight(string instanceID, EquipmentDefinition equipmentDef, bool isEquipping)
         {
             if (_statSystem == null)
                 return;
             
-            float weightModifier = isEquipping ? armorDef.EquippedWeightModifier : -armorDef.EquippedWeightModifier;
+            float weightModifier = isEquipping ? equipmentDef.EquippedWeightModifier : -equipmentDef.EquippedWeightModifier;
             
             var statMod = StatModifier.CreateFlat(
                 $"{instanceID}_weight",
                 weightModifier,
                 priority: 0,
-                description: $"{armorDef.DisplayName} weight modifier"
+                description: $"{equipmentDef.DisplayName} weight modifier"
             );
             
             if (isEquipping)

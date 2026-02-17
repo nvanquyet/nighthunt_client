@@ -280,7 +280,7 @@ namespace GameplaySystems.Editor
             // Belt (custom)
             if (!AssetExists($"{ITEMS_PATH}/Armor/Armor_Belt.asset"))
             {
-                var belt = ScriptableObject.CreateInstance<ArmorDefinition>();
+                var belt = ScriptableObject.CreateInstance<EquipmentDefinition>();
                 belt.ItemID = "armor_belt";
                 belt.DisplayName = "Tactical Belt";
                 belt.Description = "Belt with extra pouches";
@@ -295,7 +295,7 @@ namespace GameplaySystems.Editor
             // Gloves (custom)
             if (!AssetExists($"{ITEMS_PATH}/Armor/Armor_Gloves.asset"))
             {
-                var gloves = ScriptableObject.CreateInstance<ArmorDefinition>();
+                var gloves = ScriptableObject.CreateInstance<EquipmentDefinition>();
                 gloves.ItemID = "armor_gloves";
                 gloves.DisplayName = "Tactical Gloves";
                 gloves.Description = "Improves grip and handling";
@@ -316,7 +316,7 @@ namespace GameplaySystems.Editor
             if (AssetExists(path))
                 return 0;
             
-            var armor = ScriptableObject.CreateInstance<ArmorDefinition>();
+            var armor = ScriptableObject.CreateInstance<EquipmentDefinition>();
             armor.ItemID = itemID;
             AssetDatabase.CreateAsset(armor, path);
             

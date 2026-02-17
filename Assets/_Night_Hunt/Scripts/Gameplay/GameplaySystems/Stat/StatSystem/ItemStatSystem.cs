@@ -201,7 +201,7 @@ namespace GameplaySystems.Core
             }
             
             // Check armor stats
-            if (itemDef is ArmorDefinition armorDef)
+            if (itemDef is EquipmentDefinition armorDef)
             {
                 return armorDef.GetStatValue(statType);
             }
@@ -300,7 +300,7 @@ namespace GameplaySystems.Core
                 }
             }
             
-            if (itemDef is ArmorDefinition armorDef && armorDef.Stats != null)
+            if (itemDef is EquipmentDefinition armorDef && armorDef.Stats != null)
             {
                 foreach (var stat in armorDef.Stats)
                 {

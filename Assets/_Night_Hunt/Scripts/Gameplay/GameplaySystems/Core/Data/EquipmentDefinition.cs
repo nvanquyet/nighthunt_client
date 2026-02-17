@@ -18,7 +18,7 @@ namespace GameplaySystems.Core.Data
     /// Each armor definition has its own Stats[] array
     /// </summary>
     [CreateAssetMenu(fileName = "Armor_", menuName = "GameplaySystems/Items/Armor Definition")]
-    public class ArmorDefinition : ItemDefinition
+    public class EquipmentDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Equipment;
         
