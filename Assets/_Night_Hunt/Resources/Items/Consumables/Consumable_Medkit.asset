@@ -15,9 +15,9 @@ MonoBehaviour:
   ItemID: consumable_medkit
   DisplayName: Medkit
   Description: Restores 50 health over 3 seconds
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: 3d8e34000614548ee8d762ab21af11f3, type: 3}
   IsStackable: 1
-  MaxStackSize: 5
+  MaxStackSize: 10
   Weight: 0.3
   ModifyWeightWhenEquipped: 0
   EquippedWeightModifier: 0
@@ -33,7 +33,10 @@ MonoBehaviour:
   CanCancelUsage: 1
   CanUseWhileMoving: 0
   Effects:
-  - StatType: 0
+  - EffectType: 0
+    StatType: 0
     Value: 50
+    Duration: 0
+    BuffID: 
     IsInstant: 0
     Description: Restore 50 health

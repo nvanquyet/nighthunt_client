@@ -16,7 +16,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [SerializeField] private Image _highlightFrame;
         [SerializeField] private TextMeshProUGUI _stackText;
         [SerializeField] private GameObject _stackObj; // GameObject chứa stack text và background
-        [SerializeField] private GameObject _newIcon; // GameObject chứa icon "new"
         [SerializeField] private CanvasGroup _canvasGroup;
 
         [Header("Config")]
@@ -92,12 +91,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _stackText.text = state.StackCount > 1 ? state.StackCount.ToString() : string.Empty;
             }
 
-            // Show/hide new icon dựa trên IsNew flag
-            if (_newIcon != null)
-            {
-                _newIcon.SetActive(state.IsNew);
-            }
-
             if (_highlightFrame != null)
             {
                 // Ưu tiên highlight khi là target drop hợp lệ
@@ -134,20 +127,33 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (_icon != null)
             {
-                // Force clear icon trước khi set default
-                _icon.sprite = null;
-                _icon.enabled = false;
-                
-                // Sau đó set default icon nếu có
-                if (defaultIcon != null)
+                // DropArea (trash slot): giữ nguyên icon đã set trong prefab, không clear
+                if (SlotId.Type == UISlotType.DropArea)
                 {
-                    _icon.sprite = defaultIcon;
-                    _icon.enabled = true;
-                    Debug.Log($"[ItemSlotView] SetEmptyState: Set icon to {defaultIcon.name}");
+                    // Chỉ enable icon nếu đã có sprite (set trong prefab)
+                    if (_icon.sprite != null)
+                    {
+                        _icon.enabled = true;
+                    }
+                    // Không clear icon cho trash slot
                 }
                 else
                 {
-                    Debug.Log($"[ItemSlotView] SetEmptyState: No default icon, icon disabled");
+                    // Các slot khác: clear icon và set default
+                    _icon.sprite = null;
+                    _icon.enabled = false;
+                    
+                    // Sau đó set default icon nếu có
+                    if (defaultIcon != null)
+                    {
+                        _icon.sprite = defaultIcon;
+                        _icon.enabled = true;
+                        Debug.Log($"[ItemSlotView] SetEmptyState: Set icon to {defaultIcon.name}");
+                    }
+                    else
+                    {
+                        Debug.Log($"[ItemSlotView] SetEmptyState: No default icon, icon disabled");
+                    }
                 }
             }
             else
@@ -170,12 +176,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 // Fallback: nếu không có stackObj thì chỉ clear text
                 _stackText.text = string.Empty;
-            }
-
-            // Ẩn new icon mặc định khi empty
-            if (_newIcon != null)
-            {
-                _newIcon.SetActive(false);
             }
 
             if (_highlightFrame != null)

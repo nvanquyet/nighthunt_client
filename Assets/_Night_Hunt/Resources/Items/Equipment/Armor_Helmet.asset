@@ -15,7 +15,7 @@ MonoBehaviour:
   ItemID: armor_helmet
   DisplayName: 
   Description: 
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: 292d1409190994faf8974ce6267f60c7, type: 3}
   IsStackable: 0
   MaxStackSize: 1
   Weight: 1.5

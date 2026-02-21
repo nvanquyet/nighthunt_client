@@ -57,7 +57,21 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 case UISlotType.Inventory:
                     if (targetState != null && targetState.Item != null)
                     {
-                        // Tạm thời: luôn swap khi target có item.
+                        // Check nếu có thể stack
+                        var sourceDef = ItemDatabase.GetDefinition(sourceState.Item.DefinitionID);
+                        var targetDef = ItemDatabase.GetDefinition(targetState.Item.DefinitionID);
+                        
+                        if (sourceDef != null && targetDef != null &&
+                            sourceDef.ItemID == targetDef.ItemID &&
+                            sourceDef.IsStackable &&
+                            targetState.Item.Quantity < sourceDef.MaxStackSize)
+                        {
+                            // Có thể merge/stack
+                            action.Type = DropActionType.Stack;
+                            return true;
+                        }
+                        
+                        // Không thể stack → swap
                         action.Type = DropActionType.Swap;
                     }
                     else

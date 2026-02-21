@@ -115,7 +115,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public bool IsLocked;
         public bool IsHighlight;
         public bool IsValidDropTarget;
-        public bool IsNew; // Flag để hiển thị icon "new" cho item mới
 
         // Visual metadata (usually derived from ItemDefinition)
         public UnityEngine.Sprite Icon;

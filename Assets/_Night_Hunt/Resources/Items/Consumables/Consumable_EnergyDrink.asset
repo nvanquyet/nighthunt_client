@@ -15,7 +15,7 @@ MonoBehaviour:
   ItemID: consumable_energydrink
   DisplayName: Energy Drink
   Description: Restores stamina
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: 155e1dda5a5e148d28643cbf1592fbdd, type: 3}
   IsStackable: 1
   MaxStackSize: 5
   Weight: 0.3

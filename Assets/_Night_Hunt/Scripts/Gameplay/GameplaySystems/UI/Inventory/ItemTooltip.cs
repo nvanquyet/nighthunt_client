@@ -51,7 +51,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _domainBridge = bridge;
         }
         
-        public void Show(ItemInstance item, Vector3 worldPosition)
+        public void Show(ItemInstance item, Vector3 screenPosition)
         {
             if (item == null)
             {
@@ -61,7 +61,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             
             _currentItem = item;
             BuildTooltip(item);
-            UpdatePosition(worldPosition);
+            UpdatePosition(screenPosition);
             
             if (_tooltipRoot != null)
                 _tooltipRoot.SetActive(true);
@@ -76,7 +76,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _currentItem = null;
         }
         
-        public void UpdatePosition(Vector3 worldPosition)
+        public void UpdatePosition(Vector3 screenPosition)
         {
             if (_tooltipRoot == null) return;
             
@@ -87,25 +87,33 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             
             if (targetCanvas == null)
             {
-                // Fallback: use world position directly
-                _tooltipRoot.transform.position = worldPosition + new Vector3(_offsetX, _offsetY, 0);
+                // Fallback: use screen position directly
+                _tooltipRoot.transform.position = screenPosition + new Vector3(_offsetX, _offsetY, 0);
                 return;
             }
             
+            var rectTransform = _tooltipRoot.GetComponent<RectTransform>();
+            if (rectTransform == null) return;
+            
+            // Handle different canvas render modes
+            Camera cam = null;
+            if (targetCanvas.renderMode == RenderMode.ScreenSpaceCamera || 
+                targetCanvas.renderMode == RenderMode.WorldSpace)
+            {
+                cam = targetCanvas.worldCamera ?? Camera.main;
+            }
+            // Screen Space - Overlay: cam = null
+            
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 targetCanvas.transform as RectTransform,
-                RectTransformUtility.WorldToScreenPoint(targetCanvas.worldCamera ?? Camera.main, worldPosition),
-                targetCanvas.worldCamera ?? Camera.main,
+                screenPosition,
+                cam,
                 out Vector2 localPoint);
             
-            var rectTransform = _tooltipRoot.GetComponent<RectTransform>();
-            if (rectTransform != null)
-            {
-                rectTransform.anchoredPosition = new Vector2(
-                    localPoint.x + _offsetX,
-                    localPoint.y + _offsetY
-                );
-            }
+            rectTransform.anchoredPosition = new Vector2(
+                localPoint.x + _offsetX,
+                localPoint.y + _offsetY
+            );
         }
         
         private void BuildTooltip(ItemInstance item)
@@ -217,6 +225,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     Destroy(go);
             }
             _statRows.Clear();
+        }
+
+        private void Update()
+        {
+            // Follow mouse khi tooltip đang hiển thị
+            if (_tooltipRoot != null && _tooltipRoot.activeSelf && _currentItem != null)
+            {
+                Vector3 mousePos = Input.mousePosition;
+                UpdatePosition(mousePos);
+            }
         }
     }
 }

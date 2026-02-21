@@ -4,6 +4,7 @@ using NightHunt.Gameplay.Spectator;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Inventory;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -94,7 +95,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _sourceStateSnapshot = CloneState(sourceView.State);
 
             SpawnGhost(sourceView, eventData);
-            sourceView.SetHiddenForDrag();
+            sourceView.SetEmptyState(); // Clear về empty state (có thể restore nếu cancel)
         }
 
         public void UpdateDrag(PointerEventData eventData)
@@ -221,10 +222,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             rt.localPosition = localPoint;
             UITweenUtil.ScaleInstant(rt, 1f);
 
-            _activeGhost.SetAlpha(0f);
-
+            // SetupFromSlot đã set alpha = 1f, không cần SetAlpha(0f) nữa
             var cg = _activeGhost.GetComponent<CanvasGroup>();
-            UITweenUtil.FadeCanvasGroupInstant(cg, 1f);
+            if (cg != null)
+            {
+                UITweenUtil.FadeCanvasGroupInstant(cg, 1f);
+            }
         }
 
         private IEnumerator AnimateCancelAndRestore()
@@ -232,14 +235,32 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_activeGhost != null && _sourceView != null)
             {
                 var rt = _activeGhost.RectTransform;
-                rt.position = _sourceView.transform.position;
+                if (rt != null && _sourceView.transform != null)
+                {
+                    rt.position = _sourceView.transform.position;
+                }
+                
                 var cg = _activeGhost.GetComponent<CanvasGroup>();
-                UITweenUtil.FadeCanvasGroupInstant(cg, 0f);
+                if (cg != null)
+                {
+                    UITweenUtil.FadeCanvasGroupInstant(cg, 0f);
+                }
+                
                 yield return null;
-                Destroy(_activeGhost.gameObject);
+                
+                // Check lại sau yield vì có thể bị destroy từ nơi khác
+                if (_activeGhost != null)
+                {
+                    Destroy(_activeGhost.gameObject);
+                }
             }
 
-            _sourceView?.SetState(_sourceStateSnapshot);
+            // Restore source view state nếu còn tồn tại
+            if (_sourceView != null && _sourceStateSnapshot != null)
+            {
+                _sourceView.SetState(_sourceStateSnapshot);
+            }
+            
             ClearState();
         }
 
@@ -250,7 +271,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 var rt = _activeGhost.RectTransform;
                 rt.position = targetWorldPos;
                 var cg = _activeGhost.GetComponent<CanvasGroup>();
-                UITweenUtil.FadeCanvasGroupInstant(cg, 0f);
+                if (cg != null)
+                {
+                    UITweenUtil.FadeCanvasGroupInstant(cg, 0f);
+                }
                 yield return null;
                 Destroy(_activeGhost.gameObject);
             }
@@ -289,6 +313,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     if (targetView != null) targetView.SetState(sourceState);
                     break;
 
+                case DropActionType.Stack:
+                    // Optimistic: Clear source, update target quantity
+                    if (sourceView != null) sourceView.SetEmptyState();
+                    if (targetView != null && targetState != null && sourceState != null)
+                    {
+                        var newState = CloneState(targetState);
+                        var sourceDef = ItemDatabase.GetDefinition(sourceState.Item.DefinitionID);
+                        if (sourceDef != null)
+                        {
+                            int availableSpace = sourceDef.MaxStackSize - targetState.Item.Quantity;
+                            int amountToStack = Mathf.Min(availableSpace, sourceState.Item.Quantity);
+                            newState.StackCount = targetState.Item.Quantity + amountToStack;
+                            targetView.SetState(newState);
+                        }
+                    }
+                    break;
+
                 case DropActionType.Equip:
                 case DropActionType.Unequip:
                 case DropActionType.AssignQuickSlot:
@@ -323,6 +364,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 case DropActionType.Move:
                     if (action.Target.Type == UISlotType.Inventory)
                         bridge.Inventory.MoveItem(item.InstanceID, action.Target.Index);
+                    break;
+
+                case DropActionType.Stack:
+                    // Stack items vào target
+                    if (action.Source.Type == UISlotType.Inventory &&
+                        action.Target.Type == UISlotType.Inventory &&
+                        targetState != null && targetState.Item != null)
+                    {
+                        bridge.Inventory.StackItems(targetState.Item.InstanceID, item.InstanceID);
+                    }
                     break;
 
                 case DropActionType.Swap:

@@ -38,7 +38,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (_canvasGroup != null)
             {
-                _canvasGroup.alpha = 0f;
+                _canvasGroup.alpha = 1f; // Set về 1 để hiển thị ghost
             }
         }
 

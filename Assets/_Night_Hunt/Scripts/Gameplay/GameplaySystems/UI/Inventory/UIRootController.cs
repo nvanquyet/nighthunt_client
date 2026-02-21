@@ -91,12 +91,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             bool wasActive = _inventoryRootObject.activeSelf;
             _inventoryRootObject.SetActive(!wasActive);
-            
-            // Khi mở inventory lần đầu → mark tất cả items là đã seen
-            if (!wasActive && _inventoryScreen != null)
-            {
-                _inventoryScreen.OnInventoryOpened();
-            }
         }
     }
 }

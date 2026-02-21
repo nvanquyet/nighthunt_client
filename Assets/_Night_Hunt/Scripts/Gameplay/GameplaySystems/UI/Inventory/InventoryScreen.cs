@@ -26,17 +26,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [SerializeField] private RectTransform _equipmentRoot;
         [SerializeField] private RectTransform _weaponRoot;
         [SerializeField] private RectTransform _quickSlotRoot;
+        [SerializeField] private RectTransform _trashSlotRoot;
+        
+        [Header("Trash Slot")]
+        [Tooltip("Prefab cho trash slot (setup thủ công trong Inspector)")]
+        [SerializeField] private GameObject _trashSlotPrefab;
 
         private readonly Dictionary<UISlotId, ItemSlotView> _slotViews = new Dictionary<UISlotId, ItemSlotView>();
         private UIDomainBridge _domainBridge;
         private bool _isLayoutBuilt = false; // Flag để track đã build layout chưa
-        
-        // Local tracking cho "new" items - chỉ UI, không liên quan backend
-        private readonly HashSet<string> _seenItemInstanceIDs = new HashSet<string>(); // Items đã được "seen" (đã mở inventory và thấy)
 
         [Header("Buttons")]
         [SerializeField] private UnityEngine.UI.Button _sortButton;
-        [SerializeField] private UnityEngine.UI.Button _dropAreaButton;
         
         [Header("Attachment Panel")]
         [SerializeField] private AttachmentPanel _attachmentPanel;
@@ -63,6 +64,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 {
                     _attachmentPanel.Initialize(_uiConfig, attachmentSystem, gameplayBridge);
                 }
+                else
+                {
+                    Debug.LogWarning("[InventoryScreen] AttachmentSystem or GameplayBridge not found - AttachmentPanel not initialized");
+                }
             }
             
             // Initialize ItemTooltip nếu có
@@ -87,9 +92,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (_sortButton != null)
                 _sortButton.onClick.AddListener(OnSortClicked);
-
-            if (_dropAreaButton != null)
-                _dropAreaButton.onClick.AddListener(OnDropAreaClicked);
         }
         
         /// <summary>
@@ -131,9 +133,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (_sortButton != null)
                 _sortButton.onClick.RemoveListener(OnSortClicked);
-
-            if (_dropAreaButton != null)
-                _dropAreaButton.onClick.RemoveListener(OnDropAreaClicked);
         }
 
         /// <summary>
@@ -251,6 +250,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
                 }
             }
+
+            // Trash Slot
+            if (_trashSlotRoot != null && _trashSlotPrefab != null)
+            {
+                var go = Instantiate(_trashSlotPrefab, _trashSlotRoot, false);
+                // Không gọi SetupSlotRectTransform() - giữ nguyên anchor/position từ prefab
+                
+                var view = go.GetComponent<ItemSlotView>();
+                if (view != null)
+                {
+                    var id = UISlotId.DropArea();
+                    view.Initialize(_uiConfig, id);
+                    view.SetEmptyState();
+                    _slotViews[id] = view;
+                    DragDropController.Instance?.RegisterSlotView(view);
+                }
+            }
             
             // Force rebuild layout sau khi spawn tất cả slots
             if (_inventoryGridRoot != null)
@@ -261,6 +277,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_weaponRoot);
             if (_quickSlotRoot != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_quickSlotRoot);
+            if (_trashSlotRoot != null)
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_trashSlotRoot);
             
             // Hook hover events sau khi spawn tất cả slots
             HookSlotHoverEvents(true);
@@ -379,32 +397,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void HandleInventorySlotChanged(UISlotId id, UISlotState state)
         {
-            // Cleanup: nếu slot trở thành empty, remove item cũ khỏi seen set
-            if (state == null || state.Item == null)
-            {
-                if (_slotViews.TryGetValue(id, out var oldView) && oldView != null && oldView.State != null && oldView.State.Item != null)
-                {
-                    string oldInstanceID = oldView.State.Item.InstanceID;
-                    if (!string.IsNullOrEmpty(oldInstanceID))
-                    {
-                        _seenItemInstanceIDs.Remove(oldInstanceID);
-                    }
-                }
-            }
-            
-            // Check xem item có phải là "new" không (chưa được seen)
-            if (state != null && state.Item != null && !string.IsNullOrEmpty(state.Item.InstanceID))
-            {
-                // Nếu item chưa được seen → đánh dấu là new
-                state.IsNew = !_seenItemInstanceIDs.Contains(state.Item.InstanceID);
-            }
-            else
-            {
-                // Empty slot → không phải new
-                if (state != null)
-                    state.IsNew = false;
-            }
-            
             UpdateSlot(id, state);
         }
 
@@ -434,63 +426,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private void OnSortClicked()
         {
             _domainBridge?.RequestSortInventory(InventorySortMode.Default);
-        }
-
-        private void OnDropAreaClicked()
-        {
-            if (_domainBridge == null || !_domainBridge.IsReady || _domainBridge.Bridge == null)
-                return;
-
-            var item = _hoveredSlot != null ? _hoveredSlot.State?.Item : null;
-            if (item == null)
-                return;
-
-            // Nếu không có dialog thì fallback drop all
-            if (_dropQuantityDialog == null)
-            {
-                _domainBridge.Bridge.DropItem(item.InstanceID, item.Quantity);
-                
-                // Khi drop item → remove khỏi seen set (nếu nhặt lại sẽ là new)
-                if (item != null && !string.IsNullOrEmpty(item.InstanceID))
-                {
-                    _seenItemInstanceIDs.Remove(item.InstanceID);
-                }
-                return;
-            }
-
-            // Show dialog để chọn số lượng
-            _dropQuantityDialog.Show(item);
-            _dropQuantityDialog.OnDropConfirmed += OnDropQuantityConfirmed;
-            _dropQuantityDialog.OnCanceled += OnDropQuantityCanceled;
-        }
-        
-        private void OnDropQuantityConfirmed(ItemInstance item, int quantity)
-        {
-            if (_domainBridge != null && _domainBridge.IsReady && _domainBridge.Bridge != null)
-            {
-                _domainBridge.Bridge.DropItem(item.InstanceID, quantity);
-                
-                // Khi drop item → remove khỏi seen set (nếu nhặt lại sẽ là new)
-                if (item != null && !string.IsNullOrEmpty(item.InstanceID))
-                {
-                    _seenItemInstanceIDs.Remove(item.InstanceID);
-                }
-            }
-            
-            if (_dropQuantityDialog != null)
-            {
-                _dropQuantityDialog.OnDropConfirmed -= OnDropQuantityConfirmed;
-                _dropQuantityDialog.OnCanceled -= OnDropQuantityCanceled;
-            }
-        }
-        
-        private void OnDropQuantityCanceled()
-        {
-            if (_dropQuantityDialog != null)
-            {
-                _dropQuantityDialog.OnDropConfirmed -= OnDropQuantityConfirmed;
-                _dropQuantityDialog.OnCanceled -= OnDropQuantityCanceled;
-            }
         }
         
         #region Attachment Panel Hover Logic
@@ -525,10 +460,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 var def = ItemDatabase.GetDefinition(slotView.State.Item.DefinitionID);
                 
-                // Show tooltip với Item Stats
+                // Show tooltip với Item Stats (sử dụng mouse position để tooltip follow mouse)
                 if (_itemTooltip != null)
                 {
-                    _itemTooltip.Show(slotView.State.Item, slotView.transform.position);
+                    Vector3 mousePos = Input.mousePosition;
+                    _itemTooltip.Show(slotView.State.Item, mousePos);
                 }
                 
                 // Show attachment panel nếu item có attachment slots
@@ -596,33 +532,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         
         #endregion
         
-        #region New Item Tracking
-        
-        /// <summary>
-        /// Được gọi khi inventory được mở lần đầu tiên
-        /// Mark tất cả items hiện tại là đã "seen" (không còn new nữa)
-        /// </summary>
-        public void OnInventoryOpened()
-        {
-            // Mark tất cả items hiện tại là đã seen
-            foreach (var kvp in _slotViews)
-            {
-                var view = kvp.Value;
-                if (view != null && view.State != null && view.State.Item != null && !string.IsNullOrEmpty(view.State.Item.InstanceID))
-                {
-                    _seenItemInstanceIDs.Add(view.State.Item.InstanceID);
-                    
-                    // Update state để remove "new" flag
-                    if (view.State.IsNew)
-                    {
-                        view.State.IsNew = false;
-                        view.SetState(view.State); // Refresh UI
-                    }
-                }
-            }
-        }
-        
-        #endregion
     }
 }
 
