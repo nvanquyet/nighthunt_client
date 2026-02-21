@@ -1,12 +1,13 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
-using GameplaySystems.Inventory;
-using GameplaySystems.Core.Interfaces;
-using GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.StatSystem.Core.Interfaces;
 
-namespace GameplaySystems.Tests
+namespace NightHunt.GameplaySystems.Test
 {
     /// <summary>
     /// Test script for InventorySystem
@@ -26,7 +27,7 @@ namespace GameplaySystems.Tests
     {
         [Header("References")]
         [SerializeField] private InventorySystem _inventorySystem;
-        [SerializeField] private IPlayerStat _statSystem;
+        [SerializeField] private IPlayerStatSystem _statSystem;
         
         [Header("Test Items")]
         [SerializeField] private string _testWeaponID = "weapon_ak47";
@@ -66,7 +67,7 @@ namespace GameplaySystems.Tests
                 _inventorySystem = GetComponent<InventorySystem>();
             
             if (_statSystem == null)
-                _statSystem = GetComponent<IPlayerStat>();
+                _statSystem = GetComponent<IPlayerStatSystem>();
             
             if (_inventorySystem == null)
             {
@@ -460,7 +461,9 @@ namespace GameplaySystems.Tests
                 float weightAfterAdd = _inventorySystem.CalculateTotalWeight();
                 AssertNoThrow(weightAfterAdd > 0f, $"Weight should increase after adding item, but is {weightAfterAdd}");
                 
-                var (current, capacity, percent) = _inventorySystem.GetWeightInfo();
+                float current = _inventorySystem.CalculateTotalWeight();
+                float capacity = _statSystem != null ? _statSystem.GetWeightCapacity() : 100f;
+                float percent = capacity > 0f ? current / capacity : 0f;
                 AppendLog($"Weight: {current:F1}/{capacity:F1} ({percent:P0})");
                 
                 AssertNoThrow(current == weightAfterAdd, "Weight info should match calculated weight");
@@ -596,7 +599,9 @@ namespace GameplaySystems.Tests
                 }
             }
             
-            var (weight, capacity, percent) = _inventorySystem.GetWeightInfo();
+            float weight = _inventorySystem.CalculateTotalWeight();
+            float capacity = _statSystem != null ? _statSystem.GetWeightCapacity() : 100f;
+            float percent = capacity > 0f ? weight / capacity : 0f;
             AppendLog($"  Weight: {weight:F1}/{capacity:F1} ({percent:P0})");
             
             if (_currentTest.Events.Count > 0)

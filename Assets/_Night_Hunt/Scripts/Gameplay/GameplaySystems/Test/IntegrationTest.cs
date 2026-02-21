@@ -1,10 +1,15 @@
-﻿using GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Data;
 using UnityEngine;
-using GameplaySystems.Inventory;
-using GameplaySystems.Core.Interfaces;
-using GameplaySystems.Stat;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.StatSystem.Systems;
+using NightHunt.StatSystem.Core.Types;
+using NightHunt.GameplaySystems.Equipment;
+using NightHunt.GameplaySystems.Weapon;
+using NightHunt.GameplaySystems.QuickSlot;
 
-namespace GameplaySystems.Tests
+namespace NightHunt.GameplaySystems.Test
 {
     /// <summary>
     /// Integration test for all gameplay systems
@@ -231,7 +236,9 @@ namespace GameplaySystems.Tests
             
             // Step 5: Check final stats
             Debug.Log("\n5. Final Stats:");
-            var (weight, capacity, percent) = _inventorySystem.GetWeightInfo();
+            float weight = _statSystem != null ? _statSystem.GetCurrentWeight() : _inventorySystem.CalculateTotalWeight();
+            float capacity = _statSystem != null ? _statSystem.GetWeightCapacity() : 100f;
+            float percent = capacity > 0f ? weight / capacity : 0f;
             //float armor = _statSystem.GetStat(PlayerStatType.Armor);
             float speed = _statSystem.GetMovementSpeedMultiplier();
             
@@ -330,7 +337,9 @@ namespace GameplaySystems.Tests
                 _inventorySystem.AddItem(_weaponID, 1);
             }
             
-            var (weight, capacity, percent) = _inventorySystem.GetWeightInfo();
+            float weight = _statSystem != null ? _statSystem.GetCurrentWeight() : _inventorySystem.CalculateTotalWeight();
+            float capacity = _statSystem != null ? _statSystem.GetWeightCapacity() : 100f;
+            float percent = capacity > 0f ? weight / capacity : 0f;
             float speed = _statSystem.GetMovementSpeedMultiplier();
             
             Debug.Log($"Weight: {weight:F1}/{capacity:F1} ({percent:P0})");

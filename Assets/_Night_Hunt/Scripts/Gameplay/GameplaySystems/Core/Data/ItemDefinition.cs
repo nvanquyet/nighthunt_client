@@ -1,7 +1,8 @@
-﻿using UnityEngine;
-using GameplaySystems.Stat;
+using UnityEngine;
+using NightHunt.StatSystem.Core.Types;
+using NightHunt.StatSystem.Core.Data;
     
-namespace GameplaySystems.Core.Data
+namespace NightHunt.GameplaySystems.Core.Data
 {
 /// <summary>
     /// Base class for all item definitions
@@ -291,7 +292,7 @@ namespace GameplaySystems.Core.Data
         Consumable,     // Food, medkits, potions
         Attachment,     // Scopes, suppressors, lights
         Material,       // Crafting materials, resources
-        Ammo,           // Ammunition (if separate from weapons)
+        // Ammo removed - weapons use ItemResourceType.Ammo for ammo management (no separate ammo items)
         Throwable,      // Grenades, flashbangs
         Quest,          // Quest items
         Misc            // Other items

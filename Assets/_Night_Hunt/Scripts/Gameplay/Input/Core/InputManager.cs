@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.Gameplay.Input.Handlers.Camera;
@@ -34,7 +35,6 @@ namespace NightHunt.Gameplay.Input.Core
                 return;
             }
             Instance = this;
-            DontDestroyOnLoad(gameObject);
 
             // Auto-create handlers if not assigned
             InitializeHandlers();
@@ -127,48 +127,101 @@ namespace NightHunt.Gameplay.Input.Core
         }
 
         /// <summary>
-        /// Enable only movement (for scout mode)
+        /// Enable scout mode (movement + camera, no combat).
+        /// DEPRECATED: Use InputLayerManager.TransitionToState(InputState.ScoutMode) instead.
+        /// Kept for backward compatibility.
         /// </summary>
+        [System.Obsolete("Use InputLayerManager.TransitionToState(InputState.ScoutMode) instead")]
         public void EnableScoutMode()
         {
-            movementHandler?.EnableInput();
-            combatHandler?.DisableInput(); 
             InputLayerManager.Instance?.TransitionToState(InputState.ScoutMode);
-
-            Debug.Log("[InputManager] Scout mode enabled");
+            Debug.Log("[InputManager] Scout mode enabled (via deprecated method)");
         }
 
+        #endregion
+
+        #region State Mode Methods (Called by InputLayerManager)
+
         /// <summary>
-        /// Disable movement and combat (for inventory)
+        /// Set input mode for PlayerAlive state.
+        /// Called by InputLayerManager when transitioning to PlayerAlive.
         /// </summary>
-         
-        /// <summary>
-        /// Called when inventory is opened.
-        /// Disables movement/combat but keeps UI input enabled.
-        /// </summary>
-        public void OnInventoryOpened()
-        {
-            movementHandler?.DisableInput();
-            combatHandler?.DisableInput();
-            // UI handler stays enabled
-            
-            InputLayerManager.Instance?.TransitionToState(InputState.InventoryOpen);
-            
-            Debug.Log("[InputManager] Inventory opened - gameplay input disabled");
-        }
-        
-        /// <summary>
-        /// Called when inventory is closed.
-        /// Re-enables movement/combat input.
-        /// </summary>
-        public void OnInventoryClosed()
+        public void SetPlayerAliveMode()
         {
             movementHandler?.EnableInput();
             combatHandler?.EnableInput();
-            
-            InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
-            
-            Debug.Log("[InputManager] Inventory closed - gameplay input enabled");
+            cameraHandler?.EnableInput();
+            uiInputHandler?.EnableInput();
+        }
+
+        /// <summary>
+        /// Set input mode for InventoryOpen state.
+        /// Called by InputLayerManager when transitioning to InventoryOpen.
+        /// </summary>
+        public void SetInventoryMode()
+        {
+            movementHandler?.DisableInput();
+            combatHandler?.DisableInput();
+            cameraHandler?.DisableInput(); // Tuỳ gameplay, có thể giữ hoặc tắt
+            uiInputHandler?.EnableInput();
+        }
+
+        /// <summary>
+        /// Set input mode for Spectating state.
+        /// Called by InputLayerManager when transitioning to Spectating.
+        /// </summary>
+        public void SetSpectatorMode()
+        {
+            movementHandler?.DisableInput();
+            combatHandler?.DisableInput();
+            cameraHandler?.EnableInput(); // Spectator camera
+            uiInputHandler?.EnableInput();
+        }
+
+        /// <summary>
+        /// Set input mode for Menu state.
+        /// Called by InputLayerManager when transitioning to MenuOpen.
+        /// </summary>
+        public void SetMenuMode()
+        {
+            movementHandler?.DisableInput();
+            combatHandler?.DisableInput();
+            cameraHandler?.DisableInput();
+            uiInputHandler?.EnableInput();
+        }
+
+        /// <summary>
+        /// Set input mode for Dead state.
+        /// Called by InputLayerManager when transitioning to PlayerDead.
+        /// </summary>
+        public void SetDeadMode()
+        {
+            SetSpectatorMode(); // Dead = spectator mode
+        }
+
+        /// <summary>
+        /// Set input mode for ScoutMode state.
+        /// Called by InputLayerManager when transitioning to ScoutMode.
+        /// </summary>
+        public void SetScoutMode()
+        {
+            movementHandler?.EnableInput();
+            combatHandler?.DisableInput(); // No combat in scout mode
+            cameraHandler?.EnableInput();
+            uiInputHandler?.EnableInput();
+        }
+
+        /// <summary>
+        /// Set input mode for UsingDevice state.
+        /// Called by InputLayerManager when transitioning to UsingDevice.
+        /// </summary>
+        public void SetUsingDeviceMode()
+        {
+            // Tuỳ device: ví dụ khoá di chuyển, chỉ device/camera
+            movementHandler?.DisableInput();
+            combatHandler?.DisableInput();
+            cameraHandler?.EnableInput();
+            uiInputHandler?.EnableInput();
         }
 
         #endregion

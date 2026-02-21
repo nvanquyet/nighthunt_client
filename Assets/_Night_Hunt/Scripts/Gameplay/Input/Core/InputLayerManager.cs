@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using NightHunt.Gameplay.Input;
 
 namespace NightHunt.Gameplay.Input.Core
 {
@@ -42,7 +43,6 @@ namespace NightHunt.Gameplay.Input.Core
                 return;
             }
             Instance = this;
-            DontDestroyOnLoad(gameObject);
 
             InitializeActionMaps();
         }
@@ -147,7 +147,7 @@ namespace NightHunt.Gameplay.Input.Core
 
         /// <summary>
         /// Transition to a new input state
-        /// Automatically enables/disables appropriate action maps
+        /// Automatically enables/disables appropriate action maps and calls InputManager mode methods
         /// </summary>
         public void TransitionToState(InputState newState)
         {
@@ -161,8 +161,58 @@ namespace NightHunt.Gameplay.Input.Core
             // Update state
             currentState = newState;
 
-            // Enable new state
+            // Enable new state (action maps)
             EnableStateInputs(newState);
+
+            // Update InputManager handlers based on state
+            UpdateInputManagerMode(newState);
+        }
+
+        /// <summary>
+        /// Update InputManager mode methods based on state
+        /// </summary>
+        private void UpdateInputManagerMode(InputState state)
+        {
+            var inputManager = InputManager.Instance;
+            if (inputManager == null) return;
+
+            switch (state)
+            {
+                case InputState.PlayerAlive:
+                    inputManager.SetPlayerAliveMode();
+                    break;
+
+                case InputState.InventoryOpen:
+                    inputManager.SetInventoryMode();
+                    break;
+
+                case InputState.Spectating:
+                    inputManager.SetSpectatorMode();
+                    break;
+
+                case InputState.MenuOpen:
+                case InputState.Paused:
+                    inputManager.SetMenuMode();
+                    break;
+
+                case InputState.PlayerDead:
+                    inputManager.SetDeadMode();
+                    break;
+
+                case InputState.ScoutMode:
+                    inputManager.SetScoutMode();
+                    break;
+
+                case InputState.Camera:
+                case InputState.InDialogue:
+                    // Tuỳ bạn: có thể tạo mode riêng hoặc dùng menu mode
+                    inputManager.SetMenuMode();
+                    break;
+
+                case InputState.None:
+                    inputManager.DisableAllInput();
+                    break;
+            }
         }
 
         /// <summary>

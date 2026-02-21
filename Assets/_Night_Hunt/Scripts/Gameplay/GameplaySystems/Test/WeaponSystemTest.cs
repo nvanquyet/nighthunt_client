@@ -1,13 +1,14 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
-using GameplaySystems.Core.Data;
-using GameplaySystems.Inventory;
-using GameplaySystems.Core.Interfaces;
-using GameplaySystems.Stat;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.GameplaySystems.Weapon;
 
-namespace GameplaySystems.Tests
+namespace NightHunt.GameplaySystems.Test
 {
     /// <summary>
     /// Test script for WeaponSystem with logging
@@ -19,7 +20,7 @@ namespace GameplaySystems.Tests
         [Header("References")]
         [SerializeField] private WeaponSystem _weaponSystem;
         [SerializeField] private InventorySystem _inventorySystem;
-        [SerializeField] private IPlayerStat _statSystem;
+        [SerializeField] private IPlayerStatSystem _statSystem;
         
         [Header("Test Items")]
         [SerializeField] private string _testWeaponID = "weapon_ak47";
@@ -57,7 +58,7 @@ namespace GameplaySystems.Tests
                 _inventorySystem = GetComponent<InventorySystem>();
             
             if (_statSystem == null)
-                _statSystem = GetComponent<IPlayerStat>();
+                _statSystem = GetComponent<IPlayerStatSystem>();
             
             _testLog = new StringBuilder();
             _testResults = new List<TestResult>();

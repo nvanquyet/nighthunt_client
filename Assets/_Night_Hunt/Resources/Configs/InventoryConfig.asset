@@ -12,60 +12,44 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 65354101ab80484bb9e8c7c07585dc03, type: 3}
   m_Name: InventoryConfig
   m_EditorClassIdentifier: 
-  QuickSlotCount: 4
-  WeaponSlotCount: 3
-  EquipmentSlots:
-  - SlotType: 0
-    DisplayName: Head
-    EmptySlotIcon: {fileID: 0}
-    UIPosition: {x: 1, y: 0}
-  - SlotType: 1
-    DisplayName: Face
-    EmptySlotIcon: {fileID: 0}
-    UIPosition: {x: 1, y: 1}
-  - SlotType: 2
-    DisplayName: Chest
-    EmptySlotIcon: {fileID: 0}
-    UIPosition: {x: 1, y: 2}
-  - SlotType: 3
-    DisplayName: Back
-    EmptySlotIcon: {fileID: 0}
-    UIPosition: {x: 0, y: 0}
-  - SlotType: 4
-    DisplayName: Belt
-    EmptySlotIcon: {fileID: 0}
-    UIPosition: {x: 1, y: 3}
-  - SlotType: 5
-    DisplayName: Legs
-    EmptySlotIcon: {fileID: 0}
-    UIPosition: {x: 1, y: 4}
-  - SlotType: 6
-    DisplayName: Feet
-    EmptySlotIcon: {fileID: 0}
-    UIPosition: {x: 1, y: 5}
-  - SlotType: 7
-    DisplayName: Hands
-    EmptySlotIcon: {fileID: 0}
-    UIPosition: {x: 2, y: 2}
-  WeaponSlots:
-  - SlotType: 0
-    DisplayName: Primary
-    EmptySlotIcon: {fileID: 0}
-    Hotkey: 1
-  - SlotType: 1
-    DisplayName: Secondary
-    EmptySlotIcon: {fileID: 0}
-    Hotkey: 2
-  - SlotType: 2
-    DisplayName: Melee
-    EmptySlotIcon: {fileID: 0}
-    Hotkey: 3
-  DefaultInventoryEmptyIcon: {fileID: 0}
-  DefaultQuickSlotEmptyIcon: {fileID: 0}
+  Inventory:
+    GridWidth: 5
+    GridHeight: 5
+    DefaultEmptyIcon: {fileID: 21300000, guid: 51308a105c1fd47adadaf1d59f9a85f7, type: 3}
+  EquipmentConfig:
+  - Type: 0
+    DefaultIcon: {fileID: 21300000, guid: 657ab9dd0875f489486e4c003b264667, type: 3}
+  - Type: 3
+    DefaultIcon: {fileID: 21300000, guid: 7036584bb0e2a4777bb13420856d5746, type: 3}
+  - Type: 2
+    DefaultIcon: {fileID: 21300000, guid: 074a3bca6f7414ed19430b7d56be2282, type: 3}
+  WeaponConfig:
+  - Type: 0
+    DefaultIcon: {fileID: 21300000, guid: 86ac6f413bd544030b03ff0880b0aa86, type: 3}
+  - Type: 1
+    DefaultIcon: {fileID: 21300000, guid: c2dc501fc87c24498aabe8110c81e57c, type: 3}
+  QuickSlotConfig:
+    SlotCount: 4
+    DefaultEmptyIcon: {fileID: 21300000, guid: 51308a105c1fd47adadaf1d59f9a85f7, type: 3}
+    AutoRemoveOnConsume: 1
+    AutoAssignNewItems: 1
+    AllowSlotSwapping: 1
+    AllowedTypes: 0200000006000000
+    ShowItemCount: 1
+    ShowCooldown: 1
+    PulseOnUse: 1
   AutoStackOnAdd: 1
   AutoMergeOnMove: 1
   DefaultExtraEmptySlots: 20
   MinimumEmptySlots: 10
   DropDistance: 2
   DropForce: 5
-  AllowedQuickSlotTypes: 0200000006000000
+  MaxCachedInstances: 100
+  MaxCachedDefinitionsByType: 50
+  BatchWeightUpdates: 1
+  PrewarmTypeLookup: 1
+  AutoCleanupInvalidItems: 1
+  WeightUpdateInterval: 0.1
+  CompressNetworkData: 1
+  EnablePerformanceLogging: 0
+  LogCacheStatistics: 0

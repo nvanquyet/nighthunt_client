@@ -1,13 +1,18 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using FishNet.Object;
-using GameplaySystems.Stat;
-using GameplaySystems.Inventory;
-using GameplaySystems.Core.Configs;
-using GameplaySystems.Tests;
+using NightHunt.StatSystem.Systems;
+using NightHunt.StatSystem.Configs;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.GameplaySystems.Equipment;
+using NightHunt.GameplaySystems.Weapon;
+using NightHunt.GameplaySystems.QuickSlot;
+using NightHunt.GameplaySystems.Attachment;
+using NightHunt.GameplaySystems.Test;
 
-namespace GameplaySystems.Editor
+namespace NightHunt.GameplaySystems.Editor
 {
     /// <summary>
     /// Tool to automatically setup player prefab with all required components

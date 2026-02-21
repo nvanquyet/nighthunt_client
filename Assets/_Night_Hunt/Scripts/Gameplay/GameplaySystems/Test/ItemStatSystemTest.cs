@@ -1,10 +1,11 @@
-﻿using UnityEngine;
-using GameplaySystems.Inventory;
-using GameplaySystems.Core;
-using GameplaySystems.Core.Data;
-using GameplaySystems.Stat;
+using UnityEngine;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.StatSystem.Systems;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.StatSystem.Core.Types;
+using NightHunt.GameplaySystems.Attachment;
 
-namespace GameplaySystems.Tests
+namespace NightHunt.GameplaySystems.Test
 {
     /// <summary>
     /// Test script for ItemStatSystem

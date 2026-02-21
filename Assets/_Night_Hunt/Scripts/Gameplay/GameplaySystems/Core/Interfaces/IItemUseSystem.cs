@@ -1,0 +1,91 @@
+using System;
+using NightHunt.GameplaySystems.Core.Data;
+
+namespace NightHunt.GameplaySystems.Core.Interfaces
+{
+    /// <summary>
+    /// Interface for item use system
+    /// 
+    /// RESPONSIBILITIES:
+    /// - Handle consumable item usage (medkits, food, etc.)
+    /// - Handle throwable item usage (grenades, etc.)
+    /// - Manage item use state and progress
+    /// - Coordinate with WeaponSystem for holster/restore
+    /// 
+    /// NETWORK ARCHITECTURE:
+    /// - Server-authoritative: All use operations on server
+    /// - Events sync to clients for UI updates
+    /// </summary>
+    public interface IItemUseSystem
+    {
+        /// <summary>
+        /// Whether an item is currently being used
+        /// </summary>
+        bool IsUsingItem { get; }
+        
+        /// <summary>
+        /// Currently active item being used
+        /// Returns null if no item in use
+        /// </summary>
+        ItemInstance CurrentItem { get; }
+        
+        /// <summary>
+        /// Start using an item
+        /// 
+        /// PARAMETERS:
+        /// - item: Item instance to use
+        /// 
+        /// RETURNS:
+        /// - True if use started successfully, false otherwise
+        /// 
+        /// NETWORK:
+        /// - Server-only operation
+        /// </summary>
+        bool UseItem(ItemInstance item);
+        
+        /// <summary>
+        /// Cancel in-progress item use
+        /// 
+        /// NETWORK:
+        /// - Server-only operation
+        /// </summary>
+        void CancelUse();
+        
+        /// <summary>
+        /// Execute throw (for throwable items)
+        /// Called when Fire pressed during throw-mode
+        /// 
+        /// NETWORK:
+        /// - Server-only operation
+        /// </summary>
+        void ExecuteThrow();
+        
+        #region Events
+        
+        /// <summary>
+        /// Event fired when item use started
+        /// Parameters: (item)
+        /// </summary>
+        event Action<ItemInstance> OnItemUseStarted;
+        
+        /// <summary>
+        /// Event fired when item use completed
+        /// Parameters: (item)
+        /// </summary>
+        event Action<ItemInstance> OnItemUseCompleted;
+        
+        /// <summary>
+        /// Event fired when item use cancelled
+        /// Parameters: (item)
+        /// </summary>
+        event Action<ItemInstance> OnItemUseCancelled;
+        
+        /// <summary>
+        /// Event fired during item use progress
+        /// Parameters: (item, progress) where progress is 0.0-1.0
+        /// </summary>
+        event Action<ItemInstance, float> OnItemUseProgress;
+        
+        #endregion
+    }
+}

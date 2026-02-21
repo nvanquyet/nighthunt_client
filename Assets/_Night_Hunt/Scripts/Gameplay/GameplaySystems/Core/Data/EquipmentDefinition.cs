@@ -1,8 +1,9 @@
-﻿using UnityEngine;
-using GameplaySystems.Stat;
-using GameplaySystems.Inventory;
+using UnityEngine;
+using NightHunt.StatSystem.Core.Types;
+using NightHunt.StatSystem.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
 
-namespace GameplaySystems.Core.Data
+namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>
     /// Armor/Equipment item definition

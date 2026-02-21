@@ -460,12 +460,15 @@ GameObject:
   - component: {fileID: 4330583532607214616}
   - component: {fileID: 3376014722093813731}
   - component: {fileID: 2440660883574391157}
-  - component: {fileID: -6095951801054734465}
   - component: {fileID: 6940025206258515308}
   - component: {fileID: -6716673660716036314}
   - component: {fileID: -1202367897370487436}
   - component: {fileID: 4927295247037199578}
   - component: {fileID: -1184201093642448664}
+  - component: {fileID: 252021565479658130}
+  - component: {fileID: 4733874854255083154}
+  - component: {fileID: 3381189282647970298}
+  - component: {fileID: 1262042194539756790}
   m_Layer: 0
   m_Name: Network_Player Rigidbody Predict
   m_TagString: Untagged
@@ -565,7 +568,7 @@ MonoBehaviour:
   - {fileID: 4330583532607214616}
   - {fileID: 3376014722093813731}
   - {fileID: 2440660883574391157}
-  - {fileID: -6095951801054734465}
+  - {fileID: 0}
   - {fileID: 6940025206258515308}
   - {fileID: -6716673660716036314}
   - {fileID: -1202367897370487436}
@@ -667,24 +670,6 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 3090291657640884822}
   networkPlayer: {fileID: 4330583532607214616}
   fogOfWarRevealer3D: {fileID: 3082025093313579346}
---- !u!114 &-6095951801054734465
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5733313791172204384}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4c47a5967566415fa6399c075d30c6d5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 3
-  _addedNetworkObject: {fileID: 3090291657640884822}
-  _networkObjectCache: {fileID: 3090291657640884822}
-  _statConfig: {fileID: 11400000, guid: 827cb49e13976624e969bcae7448f845, type: 2}
-  _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
-  _showDebugUI: 1
 --- !u!114 &6940025206258515308
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -701,9 +686,10 @@ MonoBehaviour:
   _addedNetworkObject: {fileID: 3090291657640884822}
   _networkObjectCache: {fileID: 3090291657640884822}
   _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
-  _inventoryConfig: {fileID: 11400000, guid: 4101cba7ea899684591444975163093c, type: 2}
-  _statSystem: {fileID: -6095951801054734465}
-  _showDebugUI: 1
+  _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
+  _statSystemComponent: {fileID: 252021565479658130}
+  _batchWeightUpdates: 1
+  _autoCleanupInvalidItems: 1
   _enableDebugLogs: 0
 --- !u!114 &-6716673660716036314
 MonoBehaviour:
@@ -720,10 +706,9 @@ MonoBehaviour:
   _componentIndexCache: 5
   _addedNetworkObject: {fileID: 3090291657640884822}
   _networkObjectCache: {fileID: 3090291657640884822}
-  _inventoryConfig: {fileID: 11400000, guid: 4101cba7ea899684591444975163093c, type: 2}
-  _statSystem: {fileID: -6095951801054734465}
-  _inventorySystem: {fileID: 6940025206258515308}
-  _showDebugUI: 1
+  _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
+  _statSystemComponent: {fileID: 252021565479658130}
+  _inventorySystemComponent: {fileID: 6940025206258515308}
   _enableDebugLogs: 0
 --- !u!114 &-1202367897370487436
 MonoBehaviour:
@@ -740,10 +725,10 @@ MonoBehaviour:
   _componentIndexCache: 6
   _addedNetworkObject: {fileID: 3090291657640884822}
   _networkObjectCache: {fileID: 3090291657640884822}
-  _inventoryConfig: {fileID: 11400000, guid: 4101cba7ea899684591444975163093c, type: 2}
-  _statSystem: {fileID: -6095951801054734465}
-  _inventorySystem: {fileID: 6940025206258515308}
-  _showDebugUI: 1
+  _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
+  _statSystemComponent: {fileID: 252021565479658130}
+  _inventorySystemComponent: {fileID: 6940025206258515308}
+  _slotPriority: 000000000100000002000000
   _enableDebugLogs: 0
 --- !u!114 &4927295247037199578
 MonoBehaviour:
@@ -760,10 +745,9 @@ MonoBehaviour:
   _componentIndexCache: 7
   _addedNetworkObject: {fileID: 3090291657640884822}
   _networkObjectCache: {fileID: 3090291657640884822}
-  _inventoryConfig: {fileID: 11400000, guid: 4101cba7ea899684591444975163093c, type: 2}
-  _inventorySystem: {fileID: 6940025206258515308}
-  _itemUseSystem: {fileID: 0}
-  _showDebugUI: 1
+  _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
+  _inventorySystemComponent: {fileID: 6940025206258515308}
+  _itemUseSystemComponent: {fileID: 4733874854255083154}
   _enableDebugLogs: 0
 --- !u!114 &-1184201093642448664
 MonoBehaviour:
@@ -781,7 +765,72 @@ MonoBehaviour:
   _addedNetworkObject: {fileID: 3090291657640884822}
   _networkObjectCache: {fileID: 3090291657640884822}
   _inventorySystem: {fileID: 6940025206258515308}
+  _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
+  _autoRecoverAttachments: 1
   _enableDebugLogs: 0
+--- !u!114 &252021565479658130
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b22edd4ee605d404f822c008af9b2c50, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 3090291657640884822}
+  _networkObjectCache: {fileID: 0}
+  _statConfig: {fileID: 11400000, guid: e362e068a90ca7745936d961e2c722cd, type: 2}
+  _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
+  _showDebugUI: 0
+--- !u!114 &4733874854255083154
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0da04b92ed19424aacecdade27d99665, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 3090291657640884822}
+  _networkObjectCache: {fileID: 0}
+  _weaponSystemComponent: {fileID: -1202367897370487436}
+  _statSystemComponent: {fileID: 252021565479658130}
+  _inventorySystemComponent: {fileID: 6940025206258515308}
+  _consumableHandler: {fileID: 3381189282647970298}
+  _throwableHandler: {fileID: 1262042194539756790}
+  _defaultUseTime: 3.5
+--- !u!114 &3381189282647970298
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 98e8049c2239433fa38cbdb378bd684f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &1262042194539756790
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5733313791172204384}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a12b40d455142678039db7e81acc164, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &7515422132242615850
 GameObject:
   m_ObjectHideFlags: 0

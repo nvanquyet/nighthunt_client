@@ -1,14 +1,22 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using GameplaySystems.Core.Data;
-using GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
 
-namespace GameplaySystems.Core.Interfaces
+namespace NightHunt.GameplaySystems.Core.Interfaces
 {
     /// <summary>
     /// Interface for attachment management system
-    /// Manages attachments on items (scopes, grips, lights, pouches)
-    /// Implemented by AttachmentSystem (NetworkBehaviour)
+    /// 
+    /// RESPONSIBILITIES:
+    /// - Manages attachments on items (scopes, grips, lights, pouches)
+    /// - Validates attachment compatibility
+    /// - Handles attachment stat modifiers
+    /// - Implemented by AttachmentSystem (NetworkBehaviour)
+    /// 
+    /// NETWORK ARCHITECTURE:
+    /// - Server-authoritative: All operations on server
+    /// - Attachment data stored in ItemInstance.AttachedItems array
     /// </summary>
     public interface IAttachmentSystem
     {

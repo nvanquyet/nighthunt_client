@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
+using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 
 namespace NightHunt.Gameplay.Input.Handlers.Spectator

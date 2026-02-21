@@ -1,27 +1,36 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using System;
 using UnityEngine;
-using GameplaySystems.Core.Interfaces;
-using GameplaySystems.Core.Data;
-using GameplaySystems.Core;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.StatSystem.Systems;
 
-namespace GameplaySystems.Inventory
+namespace NightHunt.GameplaySystems.Attachment
 {
     /// <summary>
-    /// Attachment system - NetworkBehaviour
-    /// Manages attachments on items (scopes, grips, lights, pouches)
+    /// PRODUCTION-OPTIMIZED Attachment System
     /// 
-    /// Design:
-    /// - Attachments stored directly in ItemInstance.AttachedItems array
-    /// - This system provides high-level operations
-    /// - Triggers stat recalculation when attachments change
+    /// Improvements:
+    /// ✓ Attachment recovery on parent drop/destroy
+    /// ✓ Validation improvements
+    /// ✓ Proper cache invalidation
+    /// 
+    /// CRITICAL FIX: Recovers attachments when parent item dropped
     /// </summary>
-    public class AttachmentSystem : NetworkBehaviour, IAttachmentSystem
+    public class AttachmentSystem : NetworkBehaviour, IAttachmentSystem, IDisposable
     {
         #region Serialized Fields
         
         [Header("References")]
         [SerializeField] private InventorySystem _inventorySystem;
+        
+        [Header("Configuration")]
+        [SerializeField] private InventoryConfig _inventoryConfig;
+        
+        [Tooltip("Auto-recover attachments when parent item dropped/destroyed")]
+        [SerializeField] private bool _autoRecoverAttachments = true;
         
         [Header("Debug")]
         [SerializeField] private bool _enableDebugLogs = false;
@@ -35,9 +44,14 @@ namespace GameplaySystems.Inventory
         
         #endregion
         
-        #region Initialization
+        #region Lifecycle
         
         private void Awake()
+        {
+            ValidateReferences();
+        }
+        
+        private void ValidateReferences()
         {
 #if UNITY_EDITOR
             if (_inventorySystem == null)
@@ -55,6 +69,40 @@ namespace GameplaySystems.Inventory
                 _inventorySystem = GetComponent<InventorySystem>();
         }
 #endif
+        
+        public override void OnStartNetwork()
+        {
+            base.OnStartNetwork();
+            
+            // Subscribe to inventory events for auto-recovery
+            if (_autoRecoverAttachments && _inventorySystem != null)
+            {
+                _inventorySystem.OnItemRemoved += OnParentItemRemoved;
+            }
+        }
+        
+        public override void OnStopNetwork()
+        {
+            base.OnStopNetwork();
+            
+            if (_inventorySystem != null)
+            {
+                _inventorySystem.OnItemRemoved -= OnParentItemRemoved;
+            }
+        }
+        
+        #endregion
+        
+        #region IDisposable Implementation
+        
+        public void Dispose()
+        {
+            // Unsubscribe from inventory events
+            if (_inventorySystem != null)
+            {
+                _inventorySystem.OnItemRemoved -= OnParentItemRemoved;
+            }
+        }
         
         #endregion
         
@@ -109,7 +157,9 @@ namespace GameplaySystems.Inventory
                 return false;
             
             // Check slot index valid
-            if (parentDef.AttachmentSlots == null || slotIndex < 0 || slotIndex >= parentDef.AttachmentSlots.Length)
+            if (parentDef.AttachmentSlots == null || 
+                slotIndex < 0 || 
+                slotIndex >= parentDef.AttachmentSlots.Length)
                 return false;
             
             // Check slot type compatibility
@@ -141,7 +191,7 @@ namespace GameplaySystems.Inventory
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[AttachmentSystem] AttachItem can only be called on server!");
+                Debug.LogWarning("[AttachmentSystem] AttachItem: server-only!");
                 return;
             }
             
@@ -162,9 +212,7 @@ namespace GameplaySystems.Inventory
             
             // If slot occupied, detach first
             if (parent.HasAttachment(slotIndex))
-            {
                 DetachItemServer(parentInstanceID, slotIndex);
-            }
             
             // Attach
             parent.SetAttachment(slotIndex, attachmentInstanceID);
@@ -177,13 +225,11 @@ namespace GameplaySystems.Inventory
             
             OnAttachmentAttached?.Invoke(parentInstanceID, slotIndex, attachment);
             
-            // TODO: Trigger stat recalculation
-            
             if (_enableDebugLogs)
             {
                 var attachDef = ItemDatabase.GetDefinition(attachment.DefinitionID);
                 var parentDef = ItemDatabase.GetDefinition(parent.DefinitionID);
-                Debug.Log($"[AttachmentSystem] Attached {attachDef?.DisplayName} to {parentDef?.DisplayName} slot {slotIndex}");
+                Debug.Log($"[AttachmentSystem] Attached {attachDef?.DisplayName} → {parentDef?.DisplayName}[{slotIndex}]");
             }
         }
         
@@ -191,7 +237,7 @@ namespace GameplaySystems.Inventory
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[AttachmentSystem] DetachItem can only be called on server!");
+                Debug.LogWarning("[AttachmentSystem] DetachItem: server-only!");
                 return;
             }
             
@@ -223,22 +269,18 @@ namespace GameplaySystems.Inventory
             // Clear slot
             parent.ClearAttachment(slotIndex);
             
-            // Invalidate item stat cache (attachments changed)
+            // Invalidate item stat cache
             ItemStatSystem.InvalidateCache(parentInstanceID);
             
-            // TODO: Trigger stat recalculation
-            
             if (_enableDebugLogs)
-            {
                 Debug.Log($"[AttachmentSystem] Detached attachment from slot {slotIndex}");
-            }
         }
         
         public void SwapAttachments(string parentID1, int slotIndex1, string parentID2, int slotIndex2)
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[AttachmentSystem] SwapAttachments can only be called on server!");
+                Debug.LogWarning("[AttachmentSystem] SwapAttachments: server-only!");
                 return;
             }
             
@@ -263,7 +305,7 @@ namespace GameplaySystems.Inventory
             parent1.SetAttachment(slotIndex1, attach2);
             parent2.SetAttachment(slotIndex2, attach1);
             
-            // Invalidate item stat cache for both items
+            // Invalidate both caches
             ItemStatSystem.InvalidateCache(parentID1);
             ItemStatSystem.InvalidateCache(parentID2);
         }
@@ -272,26 +314,92 @@ namespace GameplaySystems.Inventory
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[AttachmentSystem] DetachAllFromItem can only be called on server!");
+                Debug.LogWarning("[AttachmentSystem] DetachAllFromItem: server-only!");
                 return;
             }
             
-            DetachAllFromItemServer(parentInstanceID);
+            DetachAllFromItemServer(parentInstanceID, false);
         }
         
         [Server]
-        private void DetachAllFromItemServer(string parentInstanceID)
+        private void DetachAllFromItemServer(string parentInstanceID, bool dropWithItem = false)
         {
             var parent = _inventorySystem.GetItemByInstanceID(parentInstanceID);
             if (parent == null || parent.AttachedItems == null)
                 return;
             
+            bool returnToInventory = !dropWithItem && 
+                (_inventoryConfig == null || _inventoryConfig.ReturnAttachmentsToInventoryOnDrop);
+            
             for (int i = 0; i < parent.AttachedItems.Length; i++)
             {
                 if (parent.HasAttachment(i))
                 {
-                    DetachItemServer(parentInstanceID, i);
+                    if (returnToInventory)
+                    {
+                        DetachItemServer(parentInstanceID, i); // Return vào inventory
+                    }
+                    // Nếu dropWithItem = true, attachments sẽ drop cùng item (không gỡ)
                 }
+            }
+        }
+        
+        #endregion
+        
+        #region Auto-Recovery System - CRITICAL FIX
+        
+        /// <summary>
+        /// CRITICAL: Auto-recover attachments when parent item removed
+        /// Prevents attachment loss when dropping/destroying equipped items
+        /// Chỉ recover nếu config cho phép return vào inventory
+        /// </summary>
+        [Server]
+        private void OnParentItemRemoved(ItemInstance parentItem, int quantity)
+        {
+            if (!_autoRecoverAttachments)
+                return;
+            
+            if (parentItem == null || parentItem.AttachedItems == null)
+                return;
+            
+            // Only recover if item fully removed
+            var remaining = _inventorySystem.GetItemByInstanceID(parentItem.InstanceID);
+            if (remaining != null)
+                return;
+            
+            // Chỉ recover nếu config cho phép return vào inventory
+            // Nếu config = false, attachments sẽ drop cùng item (không recover)
+            bool shouldRecover = _inventoryConfig == null || _inventoryConfig.ReturnAttachmentsToInventoryOnDrop;
+            if (!shouldRecover)
+                return;
+            
+            // Recover all attachments
+            int recoveredCount = 0;
+            for (int i = 0; i < parentItem.AttachedItems.Length; i++)
+            {
+                string attachmentID = parentItem.AttachedItems[i];
+                if (string.IsNullOrEmpty(attachmentID))
+                    continue;
+                
+                // Get attachment definition to add back to inventory
+                var attachment = ItemDatabase.GetInstance(attachmentID);
+                if (attachment != null)
+                {
+                    _inventorySystem.AddItem(attachment.DefinitionID, 1);
+                    recoveredCount++;
+                    
+                    if (_enableDebugLogs)
+                    {
+                        var def = ItemDatabase.GetDefinition(attachment.DefinitionID);
+                        Debug.Log($"[AttachmentSystem] Recovered attachment: {def?.DisplayName}");
+                    }
+                }
+            }
+            
+            if (recoveredCount > 0 && _enableDebugLogs)
+            {
+                var parentDef = ItemDatabase.GetDefinition(parentItem.DefinitionID);
+                Debug.Log($"[AttachmentSystem] Recovered {recoveredCount} attachments from {parentDef?.DisplayName}");
             }
         }
         

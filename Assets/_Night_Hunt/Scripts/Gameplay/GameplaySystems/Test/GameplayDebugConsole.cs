@@ -1,13 +1,13 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using GameplaySystems.Core;
-using GameplaySystems.Core.Data;
-using GameplaySystems.Inventory;
-using GameplaySystems.Stat;
+using NightHunt.GameplaySystems.Core.Bridge;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.StatSystem.Core.Types;
 
-namespace GameplaySystems.Tests
+namespace NightHunt.GameplaySystems.Test
 {
     /// <summary>
     /// 3-tab runtime debug console.
@@ -167,8 +167,10 @@ namespace GameplaySystems.Tests
                           $" ×{i.Quantity}  [{i.InstanceID}]")));
             Btn("Log Weight", _bGray, () => {
                 if (b == null) return;
-                var w = b.GetWeightInfo();
-                Debug.Log($"[Weight] {w.current:F1} / {w.capacity:F1} ({w.percent:P0})");
+                float current = b.Stat.GetCurrentWeight();
+                float cap = b.Stat.GetWeightCapacity();
+                float pct = b.Stat.GetWeightPercent();
+                Debug.Log($"[Weight] {current:F1} / {cap:F1} ({pct:P0})");
             });
             GUILayout.EndHorizontal();
 
@@ -310,8 +312,10 @@ namespace GameplaySystems.Tests
             // INVENTORY
             GUILayout.BeginVertical(GUILayout.Width(col));
             Sec("📦 Inventory");
-            var wInf = b.GetWeightInfo();
-            GUILayout.Label($"Weight: {wInf.current:F1}/{wInf.capacity:F1}  ({wInf.percent:P0})", _sTiny);
+            float current = b.Stat.GetCurrentWeight();
+            float cap = b.Stat.GetWeightCapacity();
+            float pct = b.Stat.GetWeightPercent();
+            GUILayout.Label($"Weight: {current:F1}/{cap:F1}  ({pct:P0})", _sTiny);
             HLine();
             var items = b.GetAllItems();
             if (items.Count == 0) GUILayout.Label("  (empty)", _sTiny);
@@ -562,9 +566,9 @@ namespace GameplaySystems.Tests
                 var netPlayer = smType.GetMethod("GetLocalPlayer")?.Invoke(inst, null);
                 if (netPlayer == null) return null;
 
-                // NetworkPlayer.GameplayBridge  (property you add)
+                // NetworkPlayer.GamePlaySystemBridge  (property name)
                 return netPlayer.GetType()
-                    .GetProperty("GameplayBridge")
+                    .GetProperty("GamePlaySystemBridge")
                     ?.GetValue(netPlayer) as IGameplayBridge;
             }
             catch { return null; }

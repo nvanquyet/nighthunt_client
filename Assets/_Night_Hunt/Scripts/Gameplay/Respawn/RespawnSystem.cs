@@ -6,6 +6,8 @@ using NightHunt.Gameplay.Character;
 using NightHunt.Networking;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Player;
+using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.StatSystem.Core.Types;
 
 namespace NightHunt.Gameplay.Respawn
 {
@@ -116,13 +118,13 @@ namespace NightHunt.Gameplay.Respawn
             // Respawn player
             player.transform.position = respawnPosition;
             
-            // Restore player stats
-            // var stats = player.GetComponent<PlayerStats>();
-            // if (stats != null)
-            // {
-            //     stats.RestoreHealthToFull();
-            //     stats.RestoreStaminaToFull();
-            // }
+            // Restore player stats via PlayerStatSystem (health)
+            var statSystem = player.GetComponent<IPlayerStatSystem>();
+            if (statSystem is NightHunt.StatSystem.Systems.PlayerStatSystem concrete)
+            {
+                float maxHealth = concrete.GetStat(PlayerStatType.MaxHealth);
+                concrete.SetCurrentStat(PlayerStatType.Health, maxHealth);
+            }
 
             // Notify player respawned
             OnPlayerRespawned(player);
@@ -228,16 +230,19 @@ namespace NightHunt.Gameplay.Respawn
         }
 
         /// <summary>
-        /// Check if player is dead
+        /// Check if player is dead based on stat system (Health <= 0)
         /// </summary>
         private bool IsPlayerDead(NetworkPlayer player)
         {
-            // var stats = player.GetComponent<PlayerStats>();
-            // if (stats != null)
-            // {
-            //     return !stats.IsAlive;
-            // }
-            return false;
+            if (player == null)
+                return false;
+
+            var statSystem = player.GetComponent<IPlayerStatSystem>();
+            if (statSystem == null)
+                return false;
+
+            float health = statSystem.GetStat(PlayerStatType.Health);
+            return health <= 0f;
         }
 
         /// <summary>

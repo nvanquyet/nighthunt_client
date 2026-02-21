@@ -1,0 +1,628 @@
+using System.Collections.Generic;
+using UnityEngine;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Bridge;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.Gameplay.Spectator;
+
+namespace NightHunt.GameplaySystems.UI.Inventory
+{
+    /// <summary>
+    /// Màn hình Inventory chính: spawn các slot từ config
+    /// và bind với UIDomainBridge.
+    /// </summary>
+    public class InventoryScreen : MonoBehaviour
+    {
+        [Header("Configs")]
+        [SerializeField] private UISlotLayoutConfig _uiConfig;
+        
+        [Header("Slot Settings")]
+        [Tooltip("Kích thước mặc định cho các slot (Width x Height)")]
+        [SerializeField] private Vector2 _slotSize = new Vector2(100, 100);
+
+        [Header("Roots")]
+        [SerializeField] private RectTransform _inventoryGridRoot;
+        [SerializeField] private RectTransform _equipmentRoot;
+        [SerializeField] private RectTransform _weaponRoot;
+        [SerializeField] private RectTransform _quickSlotRoot;
+
+        private readonly Dictionary<UISlotId, ItemSlotView> _slotViews = new Dictionary<UISlotId, ItemSlotView>();
+        private UIDomainBridge _domainBridge;
+        private bool _isLayoutBuilt = false; // Flag để track đã build layout chưa
+        
+        // Local tracking cho "new" items - chỉ UI, không liên quan backend
+        private readonly HashSet<string> _seenItemInstanceIDs = new HashSet<string>(); // Items đã được "seen" (đã mở inventory và thấy)
+
+        [Header("Buttons")]
+        [SerializeField] private UnityEngine.UI.Button _sortButton;
+        [SerializeField] private UnityEngine.UI.Button _dropAreaButton;
+        
+        [Header("Attachment Panel")]
+        [SerializeField] private AttachmentPanel _attachmentPanel;
+        
+        [Header("Tooltip")]
+        [SerializeField] private ItemTooltip _itemTooltip;
+
+        [Header("Drop Quantity Dialog")]
+        [SerializeField] private DropQuantityDialog _dropQuantityDialog;
+        
+        private ItemSlotView _hoveredSlot;
+
+        public void Initialize(UIDomainBridge domainBridge)
+        {
+            _domainBridge = domainBridge;
+            
+            // Initialize AttachmentPanel nếu có
+            if (_attachmentPanel != null && _uiConfig != null)
+            {
+                var attachmentSystem = GetAttachmentSystem();
+                var gameplayBridge = GetGameplayBridge();
+                
+                if (attachmentSystem != null && gameplayBridge != null)
+                {
+                    _attachmentPanel.Initialize(_uiConfig, attachmentSystem, gameplayBridge);
+                }
+            }
+            
+            // Initialize ItemTooltip nếu có
+            if (_itemTooltip != null)
+            {
+                _itemTooltip.Initialize(_domainBridge);
+            }
+            
+            // Chỉ build layout lần đầu tiên
+            if (!_isLayoutBuilt)
+            {
+            BuildLayout();
+                _isLayoutBuilt = true;
+            }
+            else
+            {
+                // Đã có layout rồi → chỉ refresh state từ bridge
+                RefreshAllSlots();
+            }
+            
+            HookBridgeEvents(true);
+
+            if (_sortButton != null)
+                _sortButton.onClick.AddListener(OnSortClicked);
+
+            if (_dropAreaButton != null)
+                _dropAreaButton.onClick.AddListener(OnDropAreaClicked);
+        }
+        
+        /// <summary>
+        /// Refresh tất cả slots với state mới từ bridge (khi đổi player)
+        /// </summary>
+        public void RefreshForNewPlayer(UIDomainBridge domainBridge)
+        {
+            _domainBridge = domainBridge;
+            
+            // Update AttachmentPanel và Tooltip với bridge mới
+            if (_attachmentPanel != null && _uiConfig != null)
+            {
+                var attachmentSystem = GetAttachmentSystem();
+                var gameplayBridge = GetGameplayBridge();
+                
+                if (attachmentSystem != null && gameplayBridge != null)
+                {
+                    _attachmentPanel.Initialize(_uiConfig, attachmentSystem, gameplayBridge);
+                }
+            }
+            
+            if (_itemTooltip != null)
+            {
+                _itemTooltip.Initialize(_domainBridge);
+            }
+            
+            // Unhook events cũ trước khi hook events mới
+            HookBridgeEvents(false);
+            HookBridgeEvents(true);
+            
+            // Refresh tất cả slots với state mới
+            RefreshAllSlots();
+        }
+
+        private void OnDestroy()
+        {
+            HookBridgeEvents(false);
+            HookSlotHoverEvents(false);
+
+            if (_sortButton != null)
+                _sortButton.onClick.RemoveListener(OnSortClicked);
+
+            if (_dropAreaButton != null)
+                _dropAreaButton.onClick.RemoveListener(OnDropAreaClicked);
+        }
+
+        /// <summary>
+        /// Build layout - chỉ spawn slots lần đầu tiên
+        /// </summary>
+        private void BuildLayout()
+        {
+            // Đảm bảo không spawn lại nếu đã có slots
+            if (_slotViews.Count > 0)
+            {
+                Debug.LogWarning("[InventoryScreen] BuildLayout called but slots already exist. Skipping.");
+                return;
+            }
+            
+            _slotViews.Clear();
+
+            if (_uiConfig == null || _uiConfig.InventoryConfig == null) return;
+
+            // Inventory slots
+            if (_inventoryGridRoot != null)
+            {
+                var prefab = _uiConfig.GetSlotPrefab(UISlotType.Inventory);
+                if (prefab != null)
+                {
+                    for (int i = 0; i < _uiConfig.InventoryTotalSlots; i++)
+                {
+                        var go = Instantiate(prefab, _inventoryGridRoot, false);
+                        SetupSlotRectTransform(go);
+                    var view = go.GetComponent<ItemSlotView>();
+                        if (view != null)
+                        {
+                    var id = UISlotId.Inventory(i);
+                            view.Initialize(_uiConfig, id);
+                            // Force reset về empty state để đảm bảo icon được set đúng
+                            view.SetEmptyState();
+                            Debug.Log($"[InventoryScreen] Spawned Inventory slot {i}, Icon: {view.GetComponent<ItemSlotView>()?.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
+                    _slotViews[id] = view;
+                    DragDropController.Instance?.RegisterSlotView(view);
+                }
+            }
+                }
+            }
+
+            // Equipment slots - spawn vào _equipmentRoot (anchor được xử lý ở phần khác)
+            if (_equipmentRoot != null && _uiConfig.InventoryConfig.EquipmentConfig != null)
+            {
+                var prefab = _uiConfig.GetSlotPrefab(UISlotType.Equipment);
+                if (prefab != null)
+            {
+                    foreach (var equipmentSlot in _uiConfig.InventoryConfig.EquipmentConfig)
+                    {
+                        var go = Instantiate(prefab, _equipmentRoot, false);
+                        SetupSlotRectTransform(go);
+                        var view = go.GetComponent<ItemSlotView>();
+                        if (view != null)
+                        {
+                            var id = UISlotId.Equipment(equipmentSlot.Type);
+                            view.Initialize(_uiConfig, id);
+                            // Force reset về empty state để đảm bảo icon được set đúng
+                            view.SetEmptyState();
+                            Debug.Log($"[InventoryScreen] Spawned Equipment slot {equipmentSlot.Type}, Icon: {view.GetComponent<ItemSlotView>()?.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
+                            _slotViews[id] = view;
+                            DragDropController.Instance?.RegisterSlotView(view);
+                        }
+                    }
+                }
+            }
+
+            // Weapon slots
+            if (_weaponRoot != null && _uiConfig.InventoryConfig.WeaponConfig != null)
+            {
+                var prefab = _uiConfig.GetSlotPrefab(UISlotType.Weapon);
+                if (prefab != null)
+                {
+                    foreach (var weaponSlot in _uiConfig.InventoryConfig.WeaponConfig)
+                    {
+                        var go = Instantiate(prefab, _weaponRoot, false);
+                        SetupSlotRectTransform(go);
+                    var view = go.GetComponent<ItemSlotView>();
+                        if (view != null)
+                        {
+                            var id = UISlotId.Weapon(weaponSlot.Type);
+                            view.Initialize(_uiConfig, id);
+                            // Force reset về empty state để đảm bảo icon được set đúng
+                            view.SetEmptyState();
+                            Debug.Log($"[InventoryScreen] Spawned Weapon slot {weaponSlot.Type}, Icon: {view.GetComponent<ItemSlotView>()?.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
+                    _slotViews[id] = view;
+                    DragDropController.Instance?.RegisterSlotView(view);
+                }
+            }
+                }
+            }
+
+            // QuickSlot
+            if (_quickSlotRoot != null)
+            {
+                var prefab = _uiConfig.GetSlotPrefab(UISlotType.QuickSlot);
+                if (prefab != null)
+            {
+                    for (int i = 0; i < _uiConfig.QuickSlotCount; i++)
+                {
+                        var go = Instantiate(prefab, _quickSlotRoot, false);
+                        SetupSlotRectTransform(go);
+                    var view = go.GetComponent<ItemSlotView>();
+                        if (view != null)
+                        {
+                    var id = UISlotId.QuickSlot(i);
+                            view.Initialize(_uiConfig, id);
+                            // Force reset về empty state để đảm bảo icon được set đúng
+                            view.SetEmptyState();
+                            Debug.Log($"[InventoryScreen] Spawned QuickSlot {i}, Icon: {view.GetComponent<ItemSlotView>()?.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
+                    _slotViews[id] = view;
+                    DragDropController.Instance?.RegisterSlotView(view);
+                }
+            }
+                }
+            }
+            
+            // Force rebuild layout sau khi spawn tất cả slots
+            if (_inventoryGridRoot != null)
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_inventoryGridRoot);
+            if (_equipmentRoot != null)
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_equipmentRoot);
+            if (_weaponRoot != null)
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_weaponRoot);
+            if (_quickSlotRoot != null)
+                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_quickSlotRoot);
+            
+            // Hook hover events sau khi spawn tất cả slots
+            HookSlotHoverEvents(true);
+        }
+        
+        /// <summary>
+        /// Setup RectTransform cho slot để tránh bị collapse trong Layout Group
+        /// </summary>
+        private void SetupSlotRectTransform(GameObject slotGO)
+        {
+            var rectTransform = slotGO.GetComponent<RectTransform>();
+            if (rectTransform == null) return;
+            
+            // Đảm bảo GameObject active để RectTransform có thể được setup
+            if (!slotGO.activeSelf)
+            {
+                slotGO.SetActive(true);
+            }
+            
+            // Reset về identity transform
+            rectTransform.localScale = Vector3.one;
+            rectTransform.localRotation = Quaternion.identity;
+            rectTransform.localPosition = Vector3.zero;
+            
+            // Set anchor và pivot về center để dễ layout
+            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            
+            // LUÔN set sizeDelta trước (ngay cả khi có Layout Group)
+            // Vì một số Layout Group dùng sizeDelta làm base size
+            // Force set size ngay lập tức, không check điều kiện
+            rectTransform.sizeDelta = _slotSize;
+            
+            // Nếu parent có Layout Group, cần thêm LayoutElement
+            var parentLayoutGroup = rectTransform.parent?.GetComponent<UnityEngine.UI.LayoutGroup>();
+            if (parentLayoutGroup != null)
+            {
+                // Thêm LayoutElement với preferred size nếu chưa có
+                var layoutElement = slotGO.GetComponent<UnityEngine.UI.LayoutElement>();
+                if (layoutElement == null)
+                {
+                    layoutElement = slotGO.AddComponent<UnityEngine.UI.LayoutElement>();
+                }
+                
+                // LUÔN set preferred size (override để đảm bảo không bị 0)
+                // Layout Group sẽ dùng giá trị này để layout
+                layoutElement.preferredWidth = _slotSize.x;
+                layoutElement.preferredHeight = _slotSize.y;
+                
+                // Set min size để đảm bảo không collapse (50% của preferred size)
+                layoutElement.minWidth = _slotSize.x * 0.5f;
+                layoutElement.minHeight = _slotSize.y * 0.5f;
+                
+                // Nếu Layout Group có Child Force Expand, cũng set flexible
+                var horizontalLayout = parentLayoutGroup as UnityEngine.UI.HorizontalLayoutGroup;
+                var verticalLayout = parentLayoutGroup as UnityEngine.UI.VerticalLayoutGroup;
+                var gridLayout = parentLayoutGroup as UnityEngine.UI.GridLayoutGroup;
+                
+                if (horizontalLayout != null || verticalLayout != null)
+                {
+                    // Horizontal/Vertical Layout Group có thể dùng flexible size
+                    layoutElement.flexibleWidth = 0f; // Không expand
+                    layoutElement.flexibleHeight = 0f; // Không expand
+                }
+                else if (gridLayout != null)
+                {
+                    // Grid Layout Group dùng cell size, không cần flexible
+                    // Nhưng vẫn cần preferred size để tránh collapse
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Refresh tất cả slots với state mới từ bridge
+        /// Bridge sẽ tự động push snapshot qua events, nhưng ta cũng có thể force refresh ở đây
+        /// </summary>
+        private void RefreshAllSlots()
+        {
+            Debug.Log($"[InventoryScreen] RefreshAllSlots: Resetting {_slotViews.Count} slots to empty state");
+            
+            // Reset tất cả slots về empty state trước
+            foreach (var kvp in _slotViews)
+            {
+                if (kvp.Value != null)
+                {
+                    kvp.Value.SetEmptyState();
+                    Debug.Log($"[InventoryScreen] Refreshed slot {kvp.Key.Type} {kvp.Key.Index}, Icon: {kvp.Value.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
+                }
+            }
+            
+            // Bridge sẽ tự động push snapshot qua events (OnInventorySlotChanged, etc.)
+            // Nếu muốn force refresh ngay lập tức, có thể gọi:
+            // _domainBridge?.InitializeForCurrentPlayer(); // Sẽ trigger PushInitialSnapshot
+        }
+
+        private void HookBridgeEvents(bool subscribe)
+        {
+            if (_domainBridge == null) return;
+
+            if (subscribe)
+            {
+                _domainBridge.OnInventorySlotChanged += HandleInventorySlotChanged;
+                _domainBridge.OnEquipmentSlotChanged += HandleEquipmentSlotChanged;
+                _domainBridge.OnWeaponSlotChanged += HandleWeaponSlotChanged;
+                _domainBridge.OnQuickSlotChanged += HandleQuickSlotChanged;
+            }
+            else
+            {
+                _domainBridge.OnInventorySlotChanged -= HandleInventorySlotChanged;
+                _domainBridge.OnEquipmentSlotChanged -= HandleEquipmentSlotChanged;
+                _domainBridge.OnWeaponSlotChanged -= HandleWeaponSlotChanged;
+                _domainBridge.OnQuickSlotChanged -= HandleQuickSlotChanged;
+            }
+        }
+
+        private void HandleInventorySlotChanged(UISlotId id, UISlotState state)
+        {
+            // Cleanup: nếu slot trở thành empty, remove item cũ khỏi seen set
+            if (state == null || state.Item == null)
+            {
+                if (_slotViews.TryGetValue(id, out var oldView) && oldView != null && oldView.State != null && oldView.State.Item != null)
+                {
+                    string oldInstanceID = oldView.State.Item.InstanceID;
+                    if (!string.IsNullOrEmpty(oldInstanceID))
+                    {
+                        _seenItemInstanceIDs.Remove(oldInstanceID);
+                    }
+                }
+            }
+            
+            // Check xem item có phải là "new" không (chưa được seen)
+            if (state != null && state.Item != null && !string.IsNullOrEmpty(state.Item.InstanceID))
+            {
+                // Nếu item chưa được seen → đánh dấu là new
+                state.IsNew = !_seenItemInstanceIDs.Contains(state.Item.InstanceID);
+            }
+            else
+            {
+                // Empty slot → không phải new
+                if (state != null)
+                    state.IsNew = false;
+            }
+            
+            UpdateSlot(id, state);
+        }
+
+        private void HandleEquipmentSlotChanged(UISlotId id, UISlotState state)
+        {
+            UpdateSlot(id, state);
+        }
+
+        private void HandleWeaponSlotChanged(UISlotId id, UISlotState state)
+        {
+            UpdateSlot(id, state);
+        }
+
+        private void HandleQuickSlotChanged(UISlotId id, UISlotState state)
+        {
+            UpdateSlot(id, state);
+        }
+
+        private void UpdateSlot(UISlotId id, UISlotState state)
+        {
+            if (_slotViews.TryGetValue(id, out var view))
+            {
+                view.SetState(state);
+            }
+        }
+
+        private void OnSortClicked()
+        {
+            _domainBridge?.RequestSortInventory(InventorySortMode.Default);
+        }
+
+        private void OnDropAreaClicked()
+        {
+            if (_domainBridge == null || !_domainBridge.IsReady || _domainBridge.Bridge == null)
+                return;
+
+            var item = _hoveredSlot != null ? _hoveredSlot.State?.Item : null;
+            if (item == null)
+                return;
+
+            // Nếu không có dialog thì fallback drop all
+            if (_dropQuantityDialog == null)
+            {
+                _domainBridge.Bridge.DropItem(item.InstanceID, item.Quantity);
+                
+                // Khi drop item → remove khỏi seen set (nếu nhặt lại sẽ là new)
+                if (item != null && !string.IsNullOrEmpty(item.InstanceID))
+                {
+                    _seenItemInstanceIDs.Remove(item.InstanceID);
+                }
+                return;
+            }
+
+            // Show dialog để chọn số lượng
+            _dropQuantityDialog.Show(item);
+            _dropQuantityDialog.OnDropConfirmed += OnDropQuantityConfirmed;
+            _dropQuantityDialog.OnCanceled += OnDropQuantityCanceled;
+        }
+        
+        private void OnDropQuantityConfirmed(ItemInstance item, int quantity)
+        {
+            if (_domainBridge != null && _domainBridge.IsReady && _domainBridge.Bridge != null)
+            {
+                _domainBridge.Bridge.DropItem(item.InstanceID, quantity);
+                
+                // Khi drop item → remove khỏi seen set (nếu nhặt lại sẽ là new)
+                if (item != null && !string.IsNullOrEmpty(item.InstanceID))
+                {
+                    _seenItemInstanceIDs.Remove(item.InstanceID);
+                }
+            }
+            
+            if (_dropQuantityDialog != null)
+            {
+                _dropQuantityDialog.OnDropConfirmed -= OnDropQuantityConfirmed;
+                _dropQuantityDialog.OnCanceled -= OnDropQuantityCanceled;
+            }
+        }
+        
+        private void OnDropQuantityCanceled()
+        {
+            if (_dropQuantityDialog != null)
+            {
+                _dropQuantityDialog.OnDropConfirmed -= OnDropQuantityConfirmed;
+                _dropQuantityDialog.OnCanceled -= OnDropQuantityCanceled;
+            }
+        }
+        
+        #region Attachment Panel Hover Logic
+        
+        private void HookSlotHoverEvents(bool subscribe)
+        {
+            foreach (var kvp in _slotViews)
+            {
+                var input = kvp.Value.GetComponent<ItemSlotInput>();
+                if (input != null)
+                {
+                    if (subscribe)
+                    {
+                        input.OnSlotHoverEnter += OnSlotHoverEnter;
+                        input.OnSlotHoverExit += OnSlotHoverExit;
+                    }
+                    else
+                    {
+                        input.OnSlotHoverEnter -= OnSlotHoverEnter;
+                        input.OnSlotHoverExit -= OnSlotHoverExit;
+                    }
+                }
+            }
+        }
+        
+        private void OnSlotHoverEnter(ItemSlotView slotView)
+        {
+            _hoveredSlot = slotView;
+            
+            // Show tooltip và attachment panel nếu slot có item
+            if (slotView.State?.Item != null)
+            {
+                var def = ItemDatabase.GetDefinition(slotView.State.Item.DefinitionID);
+                
+                // Show tooltip với Item Stats
+                if (_itemTooltip != null)
+                {
+                    _itemTooltip.Show(slotView.State.Item, slotView.transform.position);
+                }
+                
+                // Show attachment panel nếu item có attachment slots
+                if (def != null && def.AttachmentSlots != null && def.AttachmentSlots.Length > 0)
+                {
+                    if (_attachmentPanel != null)
+                    {
+                        _attachmentPanel.Show(slotView.State.Item);
+                    }
+                }
+                else
+                {
+                    // Item không có attachment slots → hide panel
+                    if (_attachmentPanel != null)
+                        _attachmentPanel.Hide();
+                }
+            }
+            else
+            {
+                // Slot empty → hide tooltip và panel
+                if (_itemTooltip != null)
+                    _itemTooltip.Hide();
+                    
+                if (_attachmentPanel != null)
+                    _attachmentPanel.Hide();
+            }
+        }
+        
+        private void OnSlotHoverExit(ItemSlotView slotView)
+        {
+            if (_hoveredSlot == slotView)
+            {
+                _hoveredSlot = null;
+                
+                // Hide tooltip và attachment panel khi hover ra
+                if (_itemTooltip != null)
+                    _itemTooltip.Hide();
+                    
+                if (_attachmentPanel != null)
+                    _attachmentPanel.Hide();
+            }
+        }
+        
+        private IAttachmentSystem GetAttachmentSystem()
+        {
+            var spectate = SpectateManager.Instance;
+            if (spectate == null) return null;
+            
+            var currentPlayer = spectate.GetCurrentPlayer();
+            if (currentPlayer == null) return null;
+            
+            return currentPlayer.GetComponent<IAttachmentSystem>();
+        }
+        
+        private IGameplayBridge GetGameplayBridge()
+        {
+            var spectate = SpectateManager.Instance;
+            if (spectate == null) return null;
+            
+            var currentPlayer = spectate.GetCurrentPlayer();
+            if (currentPlayer == null) return null;
+            
+            return currentPlayer.GamePlaySystemBridge;
+        }
+        
+        #endregion
+        
+        #region New Item Tracking
+        
+        /// <summary>
+        /// Được gọi khi inventory được mở lần đầu tiên
+        /// Mark tất cả items hiện tại là đã "seen" (không còn new nữa)
+        /// </summary>
+        public void OnInventoryOpened()
+        {
+            // Mark tất cả items hiện tại là đã seen
+            foreach (var kvp in _slotViews)
+            {
+                var view = kvp.Value;
+                if (view != null && view.State != null && view.State.Item != null && !string.IsNullOrEmpty(view.State.Item.InstanceID))
+                {
+                    _seenItemInstanceIDs.Add(view.State.Item.InstanceID);
+                    
+                    // Update state để remove "new" flag
+                    if (view.State.IsNew)
+                    {
+                        view.State.IsNew = false;
+                        view.SetState(view.State); // Refresh UI
+                    }
+                }
+            }
+        }
+        
+        #endregion
+    }
+}
+

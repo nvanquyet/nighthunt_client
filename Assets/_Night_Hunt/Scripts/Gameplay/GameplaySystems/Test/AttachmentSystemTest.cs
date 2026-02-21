@@ -1,13 +1,15 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
-using GameplaySystems.Inventory;
-using GameplaySystems.Core;
-using GameplaySystems.Stat;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Bridge;
+using NightHunt.StatSystem.Core.Types;
+using NightHunt.StatSystem.Systems;
 using System.Linq;
+using NightHunt.GameplaySystems.Attachment;
 
-namespace GameplaySystems.Tests
+namespace NightHunt.GameplaySystems.Test
 {
     /// <summary>
     /// Test script for AttachmentSystem with logging
@@ -363,7 +365,7 @@ namespace GameplaySystems.Tests
             foreach (var item in weapons)
             {
                 var def = ItemDatabase.GetDefinition(item.DefinitionID);
-                if (def is GameplaySystems.Core.Data.WeaponDefinition)
+                if (def is NightHunt.GameplaySystems.Core.Data.WeaponDefinition)
                 {
                     var attachments = _attachmentSystem.GetAllAttachments(item.InstanceID).ToList();
                     if (attachments.Count > 0)

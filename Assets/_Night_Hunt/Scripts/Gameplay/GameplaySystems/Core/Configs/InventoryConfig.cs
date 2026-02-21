@@ -1,58 +1,59 @@
-﻿using GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Data;
 using UnityEngine;
-using GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.UI.Inventory;
 
-namespace GameplaySystems.Core.Configs
+namespace NightHunt.GameplaySystems.Core.Configs
 {
     /// <summary>
-    /// Configuration for inventory system
-    /// Defines slot counts, icons, and behavior settings
+    /// Unified configuration for inventory system
+    /// Contains all settings for inventory, equipment, weapons, quickslots, UI, and behavior
     /// </summary>
-    [CreateAssetMenu(fileName = "InventoryConfig", menuName = "GameplaySystems/Config/Inventory Config")]
+    [CreateAssetMenu(fileName = "InventoryConfig",
+        menuName = "GameplaySystems/Config/Inventory Config")]
     public class InventoryConfig : ScriptableObject
     {
-        #region Slot Counts
+        #region ========== INVENTORY CONFIG ==========
         
-        [Header("Slot Counts")]
-        [Tooltip("Số lượng QuickSlots (hotkey 1-4)")]
-        [Range(1, 10)]
-        public int QuickSlotCount = 4;
-        
-        [Tooltip("Số lượng Weapon slots")]
-        [Range(1, 4)]
-        public int WeaponSlotCount = 3; // Primary, Secondary, Melee
+        [Header("Inventory")]
+        public InventorySlotConfig Inventory;
         
         #endregion
         
-        #region Equipment Slots
+        #region ========== EQUIPMENT CONFIG ==========
         
-        [Header("Equipment Slots")]
-        [Tooltip("Định nghĩa các equipment slots")]
-        public EquipmentSlotConfig[] EquipmentSlots;
+        [Header("Equipment")]
+        [Tooltip("Định nghĩa các equipment slots với type và default icon")]
+        public EquipmentSlotConfigStruct[] EquipmentConfig;
         
-        #endregion
-        
-        #region Weapon Slots
-        
-        [Header("Weapon Slots")]
-        [Tooltip("Định nghĩa các weapon slots")]
-        public WeaponSlotConfig[] WeaponSlots;
+        /// <summary>
+        /// Get count of equipment slots
+        /// </summary>
+        public int EquipmentCount => EquipmentConfig != null ? EquipmentConfig.Length : 0;
         
         #endregion
         
-        #region UI Icons
+        #region ========== WEAPON CONFIG ==========
         
-        [Header("UI Icons - Inventory")]
-        [Tooltip("Icon mặc định cho inventory slot trống")]
-        public Sprite DefaultInventoryEmptyIcon;
+        [Header("Weapon")]
+        [Tooltip("Định nghĩa các weapon slots với type và default icon")]
+        public WeaponSlotConfigStruct[] WeaponConfig;
         
-        [Header("UI Icons - QuickSlot")]
-        [Tooltip("Icon mặc định cho quickslot trống")]
-        public Sprite DefaultQuickSlotEmptyIcon;
+        /// <summary>
+        /// Get count of weapon slots
+        /// </summary>
+        public int WeaponCount => WeaponConfig != null ? WeaponConfig.Length : 0;
         
         #endregion
         
-        #region Behavior Settings
+        #region ========== QUICKSLOT CONFIG ==========
+        
+        [Header("QuickSlot")]
+        public QuickSlotConfigStruct QuickSlotConfig;
+        
+        #endregion
+        
+        #region ========== BEHAVIOR SETTINGS ==========
         
         [Header("Behavior Settings")]
         [Tooltip("Tự động stack items khi add vào inventory")]
@@ -71,7 +72,7 @@ namespace GameplaySystems.Core.Configs
         
         #endregion
         
-        #region Drop Settings
+        #region ========== DROP SETTINGS ==========
         
         [Header("Drop Settings")]
         [Tooltip("Khoảng cách drop từ player (meters)")]
@@ -84,211 +85,309 @@ namespace GameplaySystems.Core.Configs
         
         #endregion
         
-        #region QuickSlot Settings
+        #region ========== PERFORMANCE SETTINGS ==========
         
-        [Header("QuickSlot Settings")]
-        [Tooltip("Item types được phép trong QuickSlot")]
-        public ItemType[] AllowedQuickSlotTypes = new ItemType[]
-        {
-            ItemType.Consumable,
-            ItemType.Throwable
-        };
+        [Header("Memory Management")]
+        [Tooltip("Max cached item instances (0 = unlimited). Recommended: 100 for mobile")]
+        [Range(0, 500)]
+        public int MaxCachedInstances = 100;
+
+        [Tooltip("Max cached item definitions by type (0 = unlimited)")]
+        [Range(0, 100)]
+        public int MaxCachedDefinitionsByType = 50;
+
+        [Header("Performance")]
+        [Tooltip("Batch weight updates to reduce stat recalculations")]
+        public bool BatchWeightUpdates = true;
+
+        [Tooltip("Pre-warm type lookup cache on init")]
+        public bool PrewarmTypeLookup = true;
+
+        [Tooltip("Auto-cleanup invalid items on sync")]
+        public bool AutoCleanupInvalidItems = true;
+
+        [Header("Network Optimization")]
+        [Tooltip("Min interval between weight updates (seconds)")]
+        [Range(0f, 1f)]
+        public float WeightUpdateInterval = 0.1f;
+
+        [Tooltip("Compress item data for network sync")]
+        public bool CompressNetworkData = true;
         
         #endregion
         
-        #region Helpers
+        #region ========== ATTACHMENT SETTINGS ==========
+        
+        [Header("Attachment Behavior")]
+        [Tooltip("Khi unequip equipment: gỡ attachments và return vào inventory")]
+        public bool DetachAttachmentsOnUnequip = true;
+        
+        [Tooltip("Khi drop item: gỡ attachments và return vào inventory (true) hoặc drop cùng item (false)")]
+        public bool ReturnAttachmentsToInventoryOnDrop = true;
+        
+        #endregion
+        
+        #region ========== DEBUG ==========
+
+        [Header("Debug")]
+        [Tooltip("Enable performance logging")]
+        public bool EnablePerformanceLogging = false;
+
+        [Tooltip("Log cache hits/misses")]
+        public bool LogCacheStatistics = false;
+        
+        #endregion
+        
+        #region ========== HELPER METHODS ==========
+        
+        /// <summary>
+        /// Get default empty icon for a specific slot type
+        /// </summary>
+        public Sprite GetDefaultEmptyIcon(UISlotType slotType, EquipmentSlotType? equipmentSlot = null, WeaponSlotType? weaponSlot = null)
+        {
+            switch (slotType)
+            {
+                case UISlotType.Inventory:
+                    return Inventory.DefaultEmptyIcon;
+                    
+                case UISlotType.Equipment:
+                    if (equipmentSlot.HasValue && EquipmentConfig != null)
+                    {
+                        foreach (var config in EquipmentConfig)
+                        {
+                            if (config.Type == equipmentSlot.Value)
+                                return config.DefaultIcon;
+                        }
+                    }
+                    break;
+                    
+                case UISlotType.Weapon:
+                    if (weaponSlot.HasValue && WeaponConfig != null)
+                    {
+                        foreach (var config in WeaponConfig)
+                        {
+                            if (config.Type == weaponSlot.Value)
+                                return config.DefaultIcon;
+                        }
+                    }
+                    break;
+                    
+                case UISlotType.QuickSlot:
+                    return QuickSlotConfig.DefaultEmptyIcon;
+            }
+            
+            return null;
+        }
         
         /// <summary>
         /// Get equipment slot config by type
         /// </summary>
-        public EquipmentSlotConfig GetEquipmentSlot(EquipmentSlotType type)
+        public EquipmentSlotConfigStruct? GetEquipmentSlot(EquipmentSlotType type)
         {
-            if (EquipmentSlots == null)
-                return default;
+            if (EquipmentConfig == null) return null;
             
-            foreach (var slot in EquipmentSlots)
+            foreach (var config in EquipmentConfig)
             {
-                if (slot.SlotType == type)
-                    return slot;
+                if (config.Type == type)
+                    return config;
             }
             
-            return default;
+            return null;
         }
         
         /// <summary>
         /// Get weapon slot config by type
         /// </summary>
-        public WeaponSlotConfig GetWeaponSlot(WeaponSlotType type)
+        public WeaponSlotConfigStruct? GetWeaponSlot(WeaponSlotType type)
         {
-            if (WeaponSlots == null)
-                return default;
+            if (WeaponConfig == null) return null;
             
-            foreach (var slot in WeaponSlots)
+            foreach (var config in WeaponConfig)
             {
-                if (slot.SlotType == type)
-                    return slot;
+                if (config.Type == type)
+                    return config;
             }
             
-            return default;
-        }
-        
-        /// <summary>
-        /// Check if item type allowed in QuickSlot
-        /// </summary>
-        public bool IsAllowedInQuickSlot(ItemType type)
-        {
-            if (AllowedQuickSlotTypes == null)
-                return false;
-            
-            foreach (var allowed in AllowedQuickSlotTypes)
-            {
-                if (allowed == type)
-                    return true;
-            }
-            
-            return false;
+            return null;
         }
         
         #endregion
         
-        #region Editor Setup
+        #region ========== EDITOR SETUP ==========
         
 #if UNITY_EDITOR
         [ContextMenu("Setup Default Equipment Slots")]
         private void SetupDefaultEquipmentSlots()
         {
-            EquipmentSlots = new EquipmentSlotConfig[]
+            EquipmentConfig = new EquipmentSlotConfigStruct[]
             {
-                new EquipmentSlotConfig
-                {
-                    SlotType = EquipmentSlotType.Head,
-                    DisplayName = "Head",
-                    EmptySlotIcon = null, // Assign manually
-                    UIPosition = new Vector2(1, 0)
-                },
-                new EquipmentSlotConfig
-                {
-                    SlotType = EquipmentSlotType.Face,
-                    DisplayName = "Face",
-                    EmptySlotIcon = null,
-                    UIPosition = new Vector2(1, 1)
-                },
-                new EquipmentSlotConfig
-                {
-                    SlotType = EquipmentSlotType.Chest,
-                    DisplayName = "Chest",
-                    EmptySlotIcon = null,
-                    UIPosition = new Vector2(1, 2)
-                },
-                new EquipmentSlotConfig
-                {
-                    SlotType = EquipmentSlotType.Back,
-                    DisplayName = "Back",
-                    EmptySlotIcon = null,
-                    UIPosition = new Vector2(0, 0)
-                },
-                new EquipmentSlotConfig
-                {
-                    SlotType = EquipmentSlotType.Belt,
-                    DisplayName = "Belt",
-                    EmptySlotIcon = null,
-                    UIPosition = new Vector2(1, 3)
-                },
-                new EquipmentSlotConfig
-                {
-                    SlotType = EquipmentSlotType.Legs,
-                    DisplayName = "Legs",
-                    EmptySlotIcon = null,
-                    UIPosition = new Vector2(1, 4)
-                },
-                new EquipmentSlotConfig
-                {
-                    SlotType = EquipmentSlotType.Feet,
-                    DisplayName = "Feet",
-                    EmptySlotIcon = null,
-                    UIPosition = new Vector2(1, 5)
-                },
-                new EquipmentSlotConfig
-                {
-                    SlotType = EquipmentSlotType.Hands,
-                    DisplayName = "Hands",
-                    EmptySlotIcon = null,
-                    UIPosition = new Vector2(2, 2)
-                }
+                new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Head,   DefaultIcon = null },
+                new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Face,   DefaultIcon = null },
+                new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Chest,  DefaultIcon = null },
+                new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Back,   DefaultIcon = null },
+                new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Belt,   DefaultIcon = null },
+                new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Legs,   DefaultIcon = null },
+                new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Feet,   DefaultIcon = null },
+                new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Hands,  DefaultIcon = null }
             };
             
             UnityEditor.EditorUtility.SetDirty(this);
-            Debug.Log("[InventoryConfig] Setup default equipment slots complete!");
+            Debug.Log("[InventoryConfig] Setup default equipment slots complete! Assign default icons in Inspector.");
         }
         
         [ContextMenu("Setup Default Weapon Slots")]
         private void SetupDefaultWeaponSlots()
         {
-            WeaponSlots = new WeaponSlotConfig[]
+            WeaponConfig = new WeaponSlotConfigStruct[]
             {
-                new WeaponSlotConfig
-                {
-                    SlotType = WeaponSlotType.Primary,
-                    DisplayName = "Primary",
-                    EmptySlotIcon = null, // Assign rifle icon
-                    Hotkey = "1"
-                },
-                new WeaponSlotConfig
-                {
-                    SlotType = WeaponSlotType.Secondary,
-                    DisplayName = "Secondary",
-                    EmptySlotIcon = null, // Assign pistol icon
-                    Hotkey = "2"
-                },
-                new WeaponSlotConfig
-                {
-                    SlotType = WeaponSlotType.Melee,
-                    DisplayName = "Melee",
-                    EmptySlotIcon = null, // Assign knife icon
-                    Hotkey = "3"
-                }
+                new WeaponSlotConfigStruct { Type = WeaponSlotType.Primary,   DefaultIcon = null },
+                new WeaponSlotConfigStruct { Type = WeaponSlotType.Secondary, DefaultIcon = null },
+                new WeaponSlotConfigStruct { Type = WeaponSlotType.Melee,     DefaultIcon = null }
             };
             
             UnityEditor.EditorUtility.SetDirty(this);
-            Debug.Log("[InventoryConfig] Setup default weapon slots complete!");
+            Debug.Log("[InventoryConfig] Setup default weapon slots complete! Assign default icons in Inspector.");
+        }
+        
+        [ContextMenu("Validate Config")]
+        private void ValidateConfig()
+        {
+            bool hasErrors = false;
+            
+            // Validate inventory
+            if (Inventory.GridWidth < 1 || Inventory.GridWidth > 20)
+            {
+                Debug.LogError($"[InventoryConfig] Inventory.GridWidth must be 1-20, current: {Inventory.GridWidth}");
+                hasErrors = true;
+            }
+            
+            if (Inventory.GridHeight < 1 || Inventory.GridHeight > 20)
+            {
+                Debug.LogError($"[InventoryConfig] Inventory.GridHeight must be 1-20, current: {Inventory.GridHeight}");
+                hasErrors = true;
+            }
+            
+            // Validate equipment
+            if (EquipmentConfig == null || EquipmentConfig.Length == 0)
+            {
+                Debug.LogWarning("[InventoryConfig] EquipmentConfig is empty. Use 'Setup Default Equipment Slots' context menu.");
+            }
+            
+            // Validate weapon
+            if (WeaponConfig == null || WeaponConfig.Length == 0)
+            {
+                Debug.LogWarning("[InventoryConfig] WeaponConfig is empty. Use 'Setup Default Weapon Slots' context menu.");
+            }
+            
+            // Validate quickslot
+            if (QuickSlotConfig.SlotCount < 1 || QuickSlotConfig.SlotCount > 10)
+            {
+                Debug.LogError($"[InventoryConfig] QuickSlotConfig.SlotCount must be 1-10, current: {QuickSlotConfig.SlotCount}");
+                hasErrors = true;
+            }
+            
+            if (!hasErrors)
+            {
+                Debug.Log("[InventoryConfig] Validation passed!");
+            }
         }
 #endif
         
         #endregion
     }
     
-    #region Supporting Types
+    #region ========== INVENTORY CONFIG STRUCT ==========
     
     [System.Serializable]
-    public struct EquipmentSlotConfig
+    public struct InventorySlotConfig
     {
-        [Tooltip("Loại equipment slot")]
-        public EquipmentSlotType SlotType;
+        [Header("Grid Size")]
+        [Tooltip("Number of columns in the inventory grid")]
+        [Range(1, 20)]
+        public int GridWidth;
         
-        [Tooltip("Tên hiển thị")]
-        public string DisplayName;
+        [Tooltip("Number of rows in the inventory grid")]
+        [Range(1, 20)]
+        public int GridHeight;
         
-        [Tooltip("Icon cho slot trống")]
-        public Sprite EmptySlotIcon;
+        [Header("UI")]
+        [Tooltip("Icon mặc định cho inventory slot trống (khi chưa có item)")]
+        public Sprite DefaultEmptyIcon;
         
-        [Tooltip("Vị trí trong UI (để layout)")]
-        public Vector2 UIPosition;
+        public int TotalSlots => GridWidth * GridHeight;
     }
     
+    #endregion
+    
+    #region ========== EQUIPMENT CONFIG STRUCT ==========
+    
     [System.Serializable]
-    public struct WeaponSlotConfig
+    public struct EquipmentSlotConfigStruct
     {
-        [Tooltip("Loại weapon slot")]
-        public WeaponSlotType SlotType;
+        [Tooltip("Equipment slot type")]
+        public EquipmentSlotType Type;
         
-        [Tooltip("Tên hiển thị")]
-        public string DisplayName;
+        [Tooltip("Icon mặc định cho slot này khi trống")]
+        public Sprite DefaultIcon;
+    }
+    
+    #endregion
+    
+    #region ========== WEAPON CONFIG STRUCT ==========
+    
+    [System.Serializable]
+    public struct WeaponSlotConfigStruct
+    {
+        [Tooltip("Weapon slot type")]
+        public WeaponSlotType Type;
         
-        [Tooltip("Icon cho slot trống")]
-        public Sprite EmptySlotIcon;
+        [Tooltip("Icon mặc định cho slot này khi trống")]
+        public Sprite DefaultIcon;
+    }
+    
+    #endregion
+    
+    #region ========== QUICKSLOT CONFIG STRUCT ==========
+    
+    [System.Serializable]
+    public struct QuickSlotConfigStruct
+    {
+        [Header("Slot Count")]
+        [Tooltip("Number of quick slots")]
+        [Range(1, 10)]
+        public int SlotCount;
         
-        [Tooltip("Hotkey (e.g., '1', '2', '3')")]
-        public string Hotkey;
+        [Header("UI")]
+        [Tooltip("Icon mặc định cho quickslot trống (khi chưa có item)")]
+        public Sprite DefaultEmptyIcon;
+        
+        [Header("Behavior")]
+        [Tooltip("Auto-remove slot when item consumed")]
+        public bool AutoRemoveOnConsume;
+        
+        [Tooltip("Auto-assign new items to empty slots")]
+        public bool AutoAssignNewItems;
+        
+        [Tooltip("Allow slot swapping via drag-drop")]
+        public bool AllowSlotSwapping;
+        
+        [Header("Restrictions")]
+        [Tooltip("Allowed item types in quick slots")]
+        public ItemType[] AllowedTypes;
+        
+        [Header("UI Display")]
+        [Tooltip("Show item count on slot")]
+        public bool ShowItemCount;
+        
+        [Tooltip("Show cooldown indicator")]
+        public bool ShowCooldown;
+        
+        [Tooltip("Pulse slot on use")]
+        public bool PulseOnUse;
+        
+        // NOTE: Hotkeys are configured in InputActionAsset (InputSystem)
+        // Action names: "QuickSlot1", "QuickSlot2", "QuickSlot3", "QuickSlot4"
+        // Managed by UIInputHandler via InputLayerManager
     }
     
     #endregion

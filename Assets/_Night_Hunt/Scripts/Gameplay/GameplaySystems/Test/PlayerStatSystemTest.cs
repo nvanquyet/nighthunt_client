@@ -1,9 +1,11 @@
-﻿using UnityEngine;
-using GameplaySystems.Stat;
-using GameplaySystems.Core.Interfaces;
-using GameplaySystems.Core.Configs;
+using UnityEngine;
+using NightHunt.StatSystem.Systems;
+using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.StatSystem.Core.Types;
+using NightHunt.StatSystem.Core.Data;
+using NightHunt.StatSystem.Configs;
 
-namespace GameplaySystems.Tests
+namespace NightHunt.GameplaySystems.Test
 {
     /// <summary>
     /// Test script for PlayerStatSystem

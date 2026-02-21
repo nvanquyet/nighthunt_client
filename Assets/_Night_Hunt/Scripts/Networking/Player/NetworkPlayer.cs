@@ -1,6 +1,8 @@
 using FishNet.Object;
 using FishNet.Connection;
-using GameplaySystems.Core;
+using NightHunt.GameplaySystems.Core.Bridge;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking.Player;
@@ -42,7 +44,7 @@ namespace NightHunt.Networking
         
         // Component accessors (for ServerGameManager and systems)
         public CinemachineCamera PlayerCamera => _playerCamera;
-        public IGameplayBridge GamePlaySystemBride { get; private set; } 
+        public IGameplayBridge GamePlaySystemBridge { get; private set; } 
         
         
         private PlayerPublicData _playerData;
@@ -59,7 +61,36 @@ namespace NightHunt.Networking
         {
             if (_playerCamera == null)
                 _playerCamera = GetComponentInChildren<CinemachineCamera>();
-            GamePlaySystemBride = new GameplaySystemsBridge(this);
+            
+            // Initialize GameplaySystemsBridge with Dependency Injection
+            // Get all system components
+            var inventory = GetComponent<IInventorySystem>();
+            var equipment = GetComponent<IEquipmentSystem>();
+            var weapon = GetComponent<IWeaponSystem>();
+            var quickSlot = GetComponent<IQuickSlotSystem>();
+            var statSystem = GetComponent<IPlayerStatSystem>();
+            var itemUse = GetComponent<IItemUseSystem>();
+            
+            // Create bridge with DI
+            if (inventory != null && equipment != null && weapon != null && 
+                quickSlot != null && statSystem != null && itemUse != null)
+            {
+                GamePlaySystemBridge = new GameplaySystemsBridge(
+                    inventory, equipment, weapon, quickSlot, statSystem, itemUse);
+            }
+            else
+            {
+                Debug.LogError("[NetworkPlayer] Failed to initialize GameplaySystemsBridge - missing required systems!");
+            }
+        }
+        
+        private void OnDestroy()
+        {
+            // Dispose bridge when player is destroyed
+            if (GamePlaySystemBridge is System.IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
         
         

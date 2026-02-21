@@ -1,7 +1,7 @@
-﻿using UnityEngine;
-using GameplaySystems.Inventory;
+using UnityEngine;
+using NightHunt.GameplaySystems.Inventory;
 
-namespace GameplaySystems.Core.Data
+namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>
     /// Throwable item definition (grenades, molotovs, flashbangs …)

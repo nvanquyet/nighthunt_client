@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 
@@ -224,6 +225,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnFirePerformed(InputAction.CallbackContext ctx)
         {
+            // If pointer is over UI, ignore fire input to avoid conflicts with UI clicks
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            {
+                return;
+            }
+
             isFiring = true;
             OnFire?.Invoke();
         }

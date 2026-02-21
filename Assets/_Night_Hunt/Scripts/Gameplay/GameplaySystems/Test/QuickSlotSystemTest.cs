@@ -1,11 +1,12 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
-using GameplaySystems.Inventory;
-using GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.QuickSlot;
 
-namespace GameplaySystems.Tests
+namespace NightHunt.GameplaySystems.Test
 {
     /// <summary>
     /// Test script for QuickSlotSystem with logging

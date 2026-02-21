@@ -1,0 +1,161 @@
+using System;
+using System.Collections.Generic;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.StatSystem.Core.Types;
+
+namespace NightHunt.GameplaySystems.Core.Bridge
+{
+    /// <summary>
+    /// Unified interface for all gameplay systems
+    /// 
+    /// RESPONSIBILITIES:
+    /// - Single entry point for all gameplay operations
+    /// - Re-publishes all system events for unified access
+    /// - Provides convenient wrapper methods for common operations
+    /// 
+    /// ARCHITECTURE:
+    /// - All systems communicate through interfaces only
+    /// - Bridge implements this interface and coordinates systems
+    /// - Used by UI, Console, AI, and other external systems
+    /// </summary>
+    public interface IGameplayBridge
+    {
+        /// <summary>
+        /// Whether bridge is ready and all systems initialized
+        /// </summary>
+        bool IsReady { get; }
+
+        #region System Accessors
+        
+        /// <summary>
+        /// Direct access to inventory system (read-only)
+        /// Use for advanced operations not covered by wrapper methods
+        /// </summary>
+        IInventorySystem Inventory { get; }
+        
+        /// <summary>
+        /// Direct access to equipment system (read-only)
+        /// </summary>
+        IEquipmentSystem Equipment { get; }
+        
+        /// <summary>
+        /// Direct access to weapon system (read-only)
+        /// </summary>
+        IWeaponSystem Weapon { get; }
+        
+        /// <summary>
+        /// Direct access to quick slot system (read-only)
+        /// </summary>
+        IQuickSlotSystem QuickSlot { get; }
+        
+        /// <summary>
+        /// Direct access to stat system (read-only)
+        /// </summary>
+        IPlayerStatSystem Stat { get; }
+        
+        /// <summary>
+        /// Direct access to item use system (read-only)
+        /// </summary>
+        IItemUseSystem ItemUse { get; }
+        
+        #endregion
+
+        #region Inventory Operations
+        
+        void AddItem(string defID, int qty = 1);
+        void RemoveItem(string instanceID, int qty = 1);
+        void RemoveItemByDef(string defID, int qty = 1);
+        void SwapItems(string id1, string id2);
+        void DropItem(string instanceID, int qty = 1);
+        void ClearInventory();
+        IReadOnlyList<ItemInstance> GetAllItems();
+        ItemInstance GetItemByInstanceID(string id);
+        List<ItemInstance> GetItemsByDef(string defID);
+        
+        #endregion
+
+        #region Equipment Operations
+        
+        void EquipItem(string instanceID);
+        void UnequipItem(EquipmentSlotType slot);
+        void UnequipAll();
+        void AddAndEquip(string defID);
+        Dictionary<EquipmentSlotType, ItemInstance> GetAllEquipped();
+        
+        #endregion
+
+        #region Weapon Operations
+        
+        void EquipWeapon(string instanceID);
+        void AddAndEquipWeapon(string defID, WeaponSlotType slot);
+        void UnequipWeapon(WeaponSlotType slot);
+        void SelectWeapon(WeaponSlotType slot);
+        void HolsterWeapon();
+        void Reload(WeaponSlotType slot);
+        Dictionary<WeaponSlotType, ItemInstance> GetAllWeapons();
+        WeaponSlotType? GetActiveSlot();
+        
+        #endregion
+
+        #region QuickSlot Operations
+        
+        void AssignToQuickSlot(string instanceID, int slotIndex);
+        void AddAndAssignQuickSlot(string defID, int slotIndex);
+        void RemoveFromQuickSlot(int slotIndex);
+        void UseQuickSlot(int slotIndex);
+        void CancelItemUse();
+        void ExecuteThrow();
+        ItemInstance[] GetAllQuickSlots();
+        
+        #endregion
+
+        #region Stat Operations
+        
+        float GetStat(PlayerStatType type);
+        float GetBaseStat(PlayerStatType type);
+        float GetStatModifier(PlayerStatType type);
+        Dictionary<PlayerStatType, float> GetAllStats();
+        float GetCurrentWeight();
+        float GetWeightCapacity();
+        float GetWeightPercent();
+        float GetMovementSpeedMultiplier();
+        
+        #endregion
+
+        #region Scenarios (Debug/Testing)
+        
+        void ScenarioFullLoadout();
+        void ScenarioOverweight();
+        
+        #endregion
+
+        #region Unified Events
+        
+        /// <summary>
+        /// All system events re-published here for unified access
+        /// </summary>
+        event Action<ItemInstance> OnItemAdded;
+        event Action<ItemInstance, int> OnItemRemoved;
+        event Action<ItemInstance, ItemInstance> OnItemsSwapped;
+        event Action OnInventoryCleared;
+        event Action<EquipmentSlotType, ItemInstance> OnItemEquipped;
+        event Action<EquipmentSlotType, ItemInstance> OnItemUnequipped;
+        event Action<WeaponSlotType, ItemInstance> OnWeaponEquipped;
+        event Action<WeaponSlotType, ItemInstance> OnWeaponUnequipped;
+        event Action<WeaponSlotType?, WeaponSlotType?> OnActiveWeaponChanged;
+        event Action<int, ItemInstance> OnQuickSlotAssigned;
+        event Action<int> OnQuickSlotRemoved;
+        event Action<int, ItemInstance> OnQuickSlotUsed;
+        event Action<PlayerStatType, float, float> OnStatChanged;
+        event Action<float, float> OnWeightChanged;
+        event Action<ItemInstance> OnItemUseStarted;
+        event Action<ItemInstance> OnItemUseCompleted;
+        event Action<ItemInstance> OnItemUseCancelled;
+        event Action<ItemInstance, float> OnItemUseProgress;
+        
+        #endregion
+    }
+}

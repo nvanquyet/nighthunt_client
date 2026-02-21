@@ -1,13 +1,22 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
 
-namespace GameplaySystems.Core.Interfaces
+namespace NightHunt.GameplaySystems.Core.Interfaces
 {
     /// <summary>
     /// Interface for inventory management system
-    /// Provides access to inventory operations
-    /// Implemented by InventorySystem (NetworkBehaviour)
+    /// 
+    /// RESPONSIBILITIES:
+    /// - Provides access to inventory operations
+    /// - Manages item storage, stacking, and organization
+    /// - Calculates inventory weight
+    /// - Implemented by InventorySystem (NetworkBehaviour)
+    /// 
+    /// NETWORK ARCHITECTURE:
+    /// - Server-authoritative: All operations on server
+    /// - Client receives updates via SyncList
     /// </summary>
     public interface IInventorySystem
     {
@@ -130,13 +139,9 @@ namespace GameplaySystems.Core.Interfaces
         
         /// <summary>
         /// Calculate total weight of all items in inventory
+        /// Used by PlayerStatSystem to update weight stat
         /// </summary>
         float CalculateTotalWeight();
-        
-        /// <summary>
-        /// Get weight info (current, capacity, percent)
-        /// </summary>
-        (float current, float capacity, float percent) GetWeightInfo();
         
         #endregion
         

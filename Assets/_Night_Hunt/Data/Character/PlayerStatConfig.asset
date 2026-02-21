@@ -1,0 +1,159 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0780f90e4a9f6648ac7674edab49bd9, type: 3}
+  m_Name: PlayerStatConfig
+  m_EditorClassIdentifier: 
+  Stats:
+  - Type: 0
+    DisplayName: Health
+    DefaultValue: 100
+    MinValue: 0
+    MaxValue: 1000
+    ShowInUI: 1
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.8, g: 0.2, b: 0.2, a: 1}
+    DisplayFormat: 0
+    DisplayType: 0
+    RelatedMaxStat: 1
+    ShowMaxValue: 1
+  - Type: 1
+    DisplayName: Max Health
+    DefaultValue: 100
+    MinValue: 1
+    MaxValue: 1000
+    ShowInUI: 0
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.8, g: 0.2, b: 0.2, a: 1}
+    DisplayFormat: 0
+    DisplayType: 2
+    RelatedMaxStat: 0
+    ShowMaxValue: 0
+  - Type: 2
+    DisplayName: Stamina
+    DefaultValue: 100
+    MinValue: 0
+    MaxValue: 500
+    ShowInUI: 1
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.2, g: 0.8, b: 0.2, a: 1}
+    DisplayFormat: 0
+    DisplayType: 0
+    RelatedMaxStat: 3
+    ShowMaxValue: 1
+  - Type: 3
+    DisplayName: Max Stamina
+    DefaultValue: 100
+    MinValue: 1
+    MaxValue: 500
+    ShowInUI: 0
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.2, g: 0.8, b: 0.2, a: 1}
+    DisplayFormat: 0
+    DisplayType: 2
+    RelatedMaxStat: 2
+    ShowMaxValue: 0
+  - Type: 4
+    DisplayName: Movement Speed
+    DefaultValue: 5
+    MinValue: 0
+    MaxValue: 20
+    ShowInUI: 1
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.2, g: 0.6, b: 1, a: 1}
+    DisplayFormat: 0.0
+    DisplayType: 1
+    RelatedMaxStat: 0
+    ShowMaxValue: 0
+  - Type: 5
+    DisplayName: Sprint Speed
+    DefaultValue: 8
+    MinValue: 0
+    MaxValue: 30
+    ShowInUI: 1
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.2, g: 0.6, b: 1, a: 1}
+    DisplayFormat: 0.0
+    DisplayType: 2
+    RelatedMaxStat: 0
+    ShowMaxValue: 0
+  - Type: 6
+    DisplayName: Weight Capacity
+    DefaultValue: 100
+    MinValue: 0
+    MaxValue: 500
+    ShowInUI: 0
+    Icon: {fileID: 0}
+    DisplayColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+    DisplayFormat: 0.0
+    DisplayType: 2
+    RelatedMaxStat: 7
+    ShowMaxValue: 0
+  - Type: 7
+    DisplayName: Current Weight
+    DefaultValue: 0
+    MinValue: 0
+    MaxValue: 1000
+    ShowInUI: 1
+    Icon: {fileID: 0}
+    DisplayColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+    DisplayFormat: 0.0
+    DisplayType: 3
+    RelatedMaxStat: 6
+    ShowMaxValue: 1
+  - Type: 8
+    DisplayName: Armor
+    DefaultValue: 0
+    MinValue: 0
+    MaxValue: 500
+    ShowInUI: 1
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.6, g: 0.6, b: 0.6, a: 1}
+    DisplayFormat: 0
+    DisplayType: 2
+    RelatedMaxStat: 0
+    ShowMaxValue: 0
+  - Type: 9
+    DisplayName: Magic Resist
+    DefaultValue: 0
+    MinValue: 0
+    MaxValue: 500
+    ShowInUI: 0
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.8, g: 0.4, b: 1, a: 1}
+    DisplayFormat: 0
+    DisplayType: 2
+    RelatedMaxStat: 0
+    ShowMaxValue: 0
+  - Type: 10
+    DisplayName: Vision Range
+    DefaultValue: 50
+    MinValue: 0
+    MaxValue: 200
+    ShowInUI: 0
+    Icon: {fileID: 0}
+    DisplayColor: {r: 1, g: 1, b: 1, a: 1}
+    DisplayFormat: 0.0
+    DisplayType: 2
+    RelatedMaxStat: 0
+    ShowMaxValue: 0
+  - Type: 11
+    DisplayName: Night Vision
+    DefaultValue: 0
+    MinValue: 0
+    MaxValue: 100
+    ShowInUI: 0
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.2, g: 1, b: 0.2, a: 1}
+    DisplayFormat: 0
+    DisplayType: 2
+    RelatedMaxStat: 0
+    ShowMaxValue: 0

@@ -1,14 +1,22 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Data;
 
-namespace GameplaySystems.Core.Interfaces
+namespace NightHunt.GameplaySystems.Core.Interfaces
 {
     /// <summary>
     /// Interface for quick slot management system
-    /// Manages quick access slots (hotkeys 1-4)
-    /// Only allows consumables and throwables
-    /// Implemented by QuickSlotSystem (NetworkBehaviour)
+    /// 
+    /// RESPONSIBILITIES:
+    /// - Manages quick access slots (hotkeys 1-4)
+    /// - Only allows consumables and throwables
+    /// - Coordinates with ItemUseSystem for item usage
+    /// - Implemented by QuickSlotSystem (NetworkBehaviour)
+    /// 
+    /// NETWORK ARCHITECTURE:
+    /// - Server-authoritative: All operations on server
+    /// - Client receives updates via SyncList
     /// </summary>
     public interface IQuickSlotSystem
     {

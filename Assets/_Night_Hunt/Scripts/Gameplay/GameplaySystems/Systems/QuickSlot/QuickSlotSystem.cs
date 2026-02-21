@@ -1,20 +1,27 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System;
+using System.Linq;
 using UnityEngine;
-using GameplaySystems.Core.Interfaces;
-using GameplaySystems.Core.Configs;
-using GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
 
-namespace GameplaySystems.Inventory
+namespace NightHunt.GameplaySystems.QuickSlot
 {
     /// <summary>
-    /// Quick slot system - NetworkBehaviour
-    /// Manages quick access slots (hotkeys 1-4)
-    /// Only allows consumables and throwables
-    /// Items stay in inventory, just referenced here
+    /// PRODUCTION-OPTIMIZED Quick Slot System
+    /// 
+    /// Improvements:
+    /// ✓ Auto-cleanup slots when items consumed
+    /// ✓ Proper event subscription cleanup
+    /// ✓ Validation before use
+    /// ✓ Config-driven slot count
+    /// 
+    /// CRITICAL FIX: Auto-removes slot reference when item fully consumed
     /// </summary>
-    public class QuickSlotSystem : NetworkBehaviour, IQuickSlotSystem
+    public class QuickSlotSystem : NetworkBehaviour, IQuickSlotSystem, IDisposable
     {
         #region Serialized Fields
         
@@ -22,25 +29,27 @@ namespace GameplaySystems.Inventory
         [SerializeField] private InventoryConfig _inventoryConfig;
         
         [Header("References")]
-        [SerializeField] private InventorySystem _inventorySystem;
-
-        [Tooltip("Auto-resolved from same GameObject. Handles consumable/throwable logic.")]
-        [SerializeField] private ItemUseSystem _itemUseSystem;
+        [SerializeField] private MonoBehaviour _inventorySystemComponent;
+        [SerializeField] private MonoBehaviour _itemUseSystemComponent;
+        private IInventorySystem _inventorySystem;
+        private IItemUseSystem _itemUseSystem;
         
         [Header("Debug")]
-        [SerializeField] private bool _showDebugUI = false;
         [SerializeField] private bool _enableDebugLogs = false;
         
         #endregion
         
         #region Network Synced Data
         
-        /// <summary>
-        /// Quick slot item instance IDs
-        /// Index corresponds to slot number (0-3)
-        /// Empty string = empty slot
-        /// </summary>
         private readonly SyncList<string> _quickSlots = new SyncList<string>();
+        
+        #endregion
+        
+        #region Tracked Subscriptions
+        
+        // CRITICAL: Track event subscriptions for proper cleanup
+        private System.Collections.Generic.Dictionary<int, Action<ItemInstance>> _activeCompletionHandlers = 
+            new System.Collections.Generic.Dictionary<int, Action<ItemInstance>>();
         
         #endregion
         
@@ -61,9 +70,7 @@ namespace GameplaySystems.Inventory
             _quickSlots.OnChange += OnQuickSlotsChanged;
             
             if (IsServerInitialized)
-            {
                 InitializeQuickSlots();
-            }
         }
         
         public override void OnStopNetwork()
@@ -71,6 +78,22 @@ namespace GameplaySystems.Inventory
             base.OnStopNetwork();
             
             _quickSlots.OnChange -= OnQuickSlotsChanged;
+            
+            // CRITICAL: Cleanup all event subscriptions
+            CleanupAllEventHandlers();
+        }
+        
+        #endregion
+        
+        #region IDisposable Implementation
+        
+        public void Dispose()
+        {
+            // Unsubscribe from network events
+            _quickSlots.OnChange -= OnQuickSlotsChanged;
+            
+            // Cleanup all event handlers
+            CleanupAllEventHandlers();
         }
         
         #endregion
@@ -79,38 +102,90 @@ namespace GameplaySystems.Inventory
         
         private void Awake()
         {
+            ValidateReferences();
+        }
+        
+        private void ValidateReferences()
+        {
+            // Get components and cast to interfaces
+            if (_inventorySystemComponent != null)
+                _inventorySystem = _inventorySystemComponent as IInventorySystem;
+            
+            if (_itemUseSystemComponent != null)
+                _itemUseSystem = _itemUseSystemComponent as IItemUseSystem;
+            
 #if UNITY_EDITOR
+            // Auto-find if not assigned
             if (_inventorySystem == null)
-                _inventorySystem = GetComponent<InventorySystem>();
-#endif
+            {
+                var invSys = GetComponent<IInventorySystem>();
+                if (invSys != null)
+                {
+                    _inventorySystemComponent = invSys as MonoBehaviour;
+                    _inventorySystem = invSys;
+                }
+            }
+            
             if (_itemUseSystem == null)
-                _itemUseSystem = GetComponent<ItemUseSystem>();
-
+            {
+                var itemUseSys = GetComponent<IItemUseSystem>();
+                if (itemUseSys != null)
+                {
+                    _itemUseSystemComponent = itemUseSys as MonoBehaviour;
+                    _itemUseSystem = itemUseSys;
+                }
+            }
+#endif
+            
             if (_inventoryConfig == null)
                 Debug.LogError("[QuickSlotSystem] InventoryConfig is null!");
             
             if (_inventorySystem == null)
-                Debug.LogError("[QuickSlotSystem] InventorySystem is null!");
+                Debug.LogError("[QuickSlotSystem] IInventorySystem is null!");
+            
+            if (_itemUseSystem == null)
+                Debug.LogWarning("[QuickSlotSystem] IItemUseSystem is null - item usage will not work!");
         }
         
 #if UNITY_EDITOR
         private void OnValidate()
         {
+            if (_inventorySystemComponent != null)
+                _inventorySystem = _inventorySystemComponent as IInventorySystem;
+            
+            if (_itemUseSystemComponent != null)
+                _itemUseSystem = _itemUseSystemComponent as IItemUseSystem;
+            
             if (_inventorySystem == null)
-                _inventorySystem = GetComponent<InventorySystem>();
+            {
+                var invSys = GetComponent<IInventorySystem>();
+                if (invSys != null)
+                {
+                    _inventorySystemComponent = invSys as MonoBehaviour;
+                    _inventorySystem = invSys;
+                }
+            }
+            
+            if (_itemUseSystem == null)
+            {
+                var itemUseSys = GetComponent<IItemUseSystem>();
+                if (itemUseSys != null)
+                {
+                    _itemUseSystemComponent = itemUseSys as MonoBehaviour;
+                    _itemUseSystem = itemUseSys;
+                }
+            }
         }
 #endif
         
         [Server]
         private void InitializeQuickSlots()
         {
-            int slotCount = _inventoryConfig != null ? _inventoryConfig.QuickSlotCount : 4;
+            int slotCount = _inventoryConfig != null ? _inventoryConfig.QuickSlotConfig.SlotCount : 4;
             
             _quickSlots.Clear();
             for (int i = 0; i < slotCount; i++)
-            {
                 _quickSlots.Add(string.Empty);
-            }
         }
         
         #endregion
@@ -134,9 +209,7 @@ namespace GameplaySystems.Inventory
             var slots = new ItemInstance[_quickSlots.Count];
             
             for (int i = 0; i < _quickSlots.Count; i++)
-            {
                 slots[i] = GetQuickSlotItem(i);
-            }
             
             return slots;
         }
@@ -158,7 +231,11 @@ namespace GameplaySystems.Inventory
             if (itemDef == null)
                 return false;
             
-            return _inventoryConfig.IsAllowedInQuickSlot(itemDef.Type);
+            var allowedTypes = _inventoryConfig.QuickSlotConfig.AllowedTypes;
+            if (allowedTypes == null || allowedTypes.Length == 0)
+                return false;
+            
+            return allowedTypes.Contains(itemDef.Type);
         }
         
         public int GetQuickSlotCount()
@@ -174,7 +251,7 @@ namespace GameplaySystems.Inventory
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[QuickSlotSystem] AssignToQuickSlot can only be called on server!");
+                Debug.LogWarning("[QuickSlotSystem] AssignToQuickSlot: server-only!");
                 return;
             }
             
@@ -200,23 +277,21 @@ namespace GameplaySystems.Inventory
             var itemDef = ItemDatabase.GetDefinition(item.DefinitionID);
             if (!CanPlaceInQuickSlot(item.DefinitionID))
             {
-                Debug.LogWarning($"[QuickSlotSystem] Item type not allowed in quick slot: {itemDef?.Type}");
+                Debug.LogWarning($"[QuickSlotSystem] Item type not allowed: {itemDef?.Type}");
                 return;
             }
             
             _quickSlots[slotIndex] = instanceID;
             
             if (_enableDebugLogs)
-            {
-                Debug.Log($"[QuickSlotSystem] Assigned {itemDef?.DisplayName} to slot {slotIndex}");
-            }
+                Debug.Log($"[QuickSlotSystem] Assigned {itemDef?.DisplayName} → slot {slotIndex}");
         }
         
         public void RemoveFromQuickSlot(int slotIndex)
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[QuickSlotSystem] RemoveFromQuickSlot can only be called on server!");
+                Debug.LogWarning("[QuickSlotSystem] RemoveFromQuickSlot: server-only!");
                 return;
             }
             
@@ -235,16 +310,14 @@ namespace GameplaySystems.Inventory
             _quickSlots[slotIndex] = string.Empty;
             
             if (_enableDebugLogs)
-            {
                 Debug.Log($"[QuickSlotSystem] Removed item from slot {slotIndex}");
-            }
         }
         
         public void SwapQuickSlots(int slotIndex1, int slotIndex2)
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[QuickSlotSystem] SwapQuickSlots can only be called on server!");
+                Debug.LogWarning("[QuickSlotSystem] SwapQuickSlots: server-only!");
                 return;
             }
             
@@ -270,7 +343,7 @@ namespace GameplaySystems.Inventory
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[QuickSlotSystem] ClearAllQuickSlots can only be called on server!");
+                Debug.LogWarning("[QuickSlotSystem] ClearAllQuickSlots: server-only!");
                 return;
             }
             
@@ -281,20 +354,21 @@ namespace GameplaySystems.Inventory
         private void ClearAllQuickSlotsServer()
         {
             for (int i = 0; i < _quickSlots.Count; i++)
-            {
                 _quickSlots[i] = string.Empty;
-            }
+            
+            // Cleanup all event handlers
+            CleanupAllEventHandlers();
         }
         
         #endregion
         
-        #region IQuickSlotSystem - Usage
+        #region IQuickSlotSystem - Usage (OPTIMIZED WITH AUTO-CLEANUP)
         
         public void UseQuickSlot(int slotIndex)
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[QuickSlotSystem] UseQuickSlot can only be called on server!");
+                Debug.LogWarning("[QuickSlotSystem] UseQuickSlot: server-only!");
                 return;
             }
             
@@ -306,71 +380,63 @@ namespace GameplaySystems.Inventory
         {
             if (!CanUseQuickSlot(slotIndex))
             {
-                Debug.LogWarning($"[QuickSlotSystem] Cannot use quick slot: {slotIndex}");
+                Debug.LogWarning($"[QuickSlotSystem] Cannot use slot: {slotIndex}");
                 return;
             }
-
+            
             string instanceID = _quickSlots[slotIndex];
             var item = _inventorySystem.GetItemByInstanceID(instanceID);
-
+            
             if (item == null)
             {
                 Debug.LogWarning($"[QuickSlotSystem] Item not found: {instanceID}");
                 RemoveFromQuickSlotServer(slotIndex);
                 return;
             }
-
+            
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
-
-            // ── Throwable: if already in throw-mode with this item, execute the throw ──
+            
+            // Handle throwable re-press logic
             if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
             {
                 bool sameItem = _itemUseSystem.CurrentItem?.InstanceID == instanceID;
-                if (sameItem && def is Core.Data.ThrowableDefinition)
+                if (sameItem && def is ThrowableDefinition)
                 {
                     // Same slot pressed again while in throw-mode → cancel
                     _itemUseSystem.CancelUse();
-                    if (_enableDebugLogs) Debug.Log($"[QuickSlotSystem] Cancelled throw for slot {slotIndex}");
+                    if (_enableDebugLogs)
+                        Debug.Log($"[QuickSlotSystem] Cancelled throw for slot {slotIndex}");
                 }
                 else
                 {
-                    Debug.LogWarning("[QuickSlotSystem] Already using an item – ignoring");
+                    Debug.LogWarning("[QuickSlotSystem] Already using an item");
                 }
                 return;
             }
-
-            // ── Route consumable/throwable through ItemUseSystem ──
+            
+            // Route through ItemUseSystem for consumables/throwables
             if (_itemUseSystem != null &&
-                (def is Core.Data.ConsumableDefinition || def is Core.Data.ThrowableDefinition))
+                (def is ConsumableDefinition || def is ThrowableDefinition))
             {
                 bool started = _itemUseSystem.UseItem(item);
                 if (started)
                 {
                     OnQuickSlotUsed?.Invoke(slotIndex, item);
-
-                    // Auto-remove slot reference once item is fully consumed (hooked via event)
-                    _itemUseSystem.OnItemUseCompleted += CleanUpSlotAfterUse;
-                    _itemUseSystem.OnItemUseCancelled += _ =>
-                        _itemUseSystem.OnItemUseCompleted -= CleanUpSlotAfterUse;
+                    
+                    // CRITICAL FIX: Auto-cleanup slot when item fully consumed
+                    RegisterAutoCleanupHandler(slotIndex, instanceID);
                 }
                 return;
-
-                void CleanUpSlotAfterUse(GameplaySystems.Inventory.ItemInstance usedItem)
-                {
-                    _itemUseSystem.OnItemUseCompleted -= CleanUpSlotAfterUse;
-                    // If stack is now empty, clear the slot
-                    var remaining = _inventorySystem.GetItemByInstanceID(instanceID);
-                    if (remaining == null) RemoveFromQuickSlotServer(slotIndex);
-                }
             }
-
-            // ── Fallback: legacy direct consume (non-consumable/throwable types) ──
+            
+            // Fallback: Direct consume (for legacy items)
             OnQuickSlotUsed?.Invoke(slotIndex, item);
             _inventorySystem.RemoveItem(instanceID, 1);
-
+            
             var updated = _inventorySystem.GetItemByInstanceID(instanceID);
-            if (updated == null) RemoveFromQuickSlotServer(slotIndex);
-
+            if (updated == null)
+                RemoveFromQuickSlotServer(slotIndex);
+            
             if (_enableDebugLogs)
                 Debug.Log($"[QuickSlotSystem] Used {def?.DisplayName} from slot {slotIndex}");
         }
@@ -390,6 +456,83 @@ namespace GameplaySystems.Inventory
         
         #endregion
         
+        #region Auto-Cleanup System - CRITICAL FIX
+        
+        /// <summary>
+        /// CRITICAL: Register handler to auto-remove slot when item consumed
+        /// This prevents ghost references to deleted items
+        /// </summary>
+        [Server]
+        private void RegisterAutoCleanupHandler(int slotIndex, string instanceID)
+        {
+            if (_itemUseSystem == null)
+                return;
+            
+            // Remove existing handler for this slot if any
+            if (_activeCompletionHandlers.ContainsKey(slotIndex))
+            {
+                _itemUseSystem.OnItemUseCompleted -= _activeCompletionHandlers[slotIndex];
+                _activeCompletionHandlers.Remove(slotIndex);
+            }
+            
+            // Create new cleanup handler
+            Action<ItemInstance> cleanupHandler = null;
+            cleanupHandler = (usedItem) =>
+            {
+                if (usedItem.InstanceID == instanceID)
+                {
+                    // Check if item still exists in inventory
+                    var remaining = _inventorySystem.GetItemByInstanceID(instanceID);
+                    if (remaining == null)
+                    {
+                        RemoveFromQuickSlotServer(slotIndex);
+                        
+                        if (_enableDebugLogs)
+                            Debug.Log($"[QuickSlotSystem] Auto-removed consumed item from slot {slotIndex}");
+                    }
+                    
+                    // Cleanup this handler
+                    _itemUseSystem.OnItemUseCompleted -= cleanupHandler;
+                    _activeCompletionHandlers.Remove(slotIndex);
+                }
+            };
+            
+            // Register handler
+            _itemUseSystem.OnItemUseCompleted += cleanupHandler;
+            _activeCompletionHandlers[slotIndex] = cleanupHandler;
+            
+            // Also handle cancellation
+            Action<ItemInstance> cancelHandler = null;
+            cancelHandler = (cancelledItem) =>
+            {
+                if (cancelledItem.InstanceID == instanceID)
+                {
+                    _itemUseSystem.OnItemUseCompleted -= cleanupHandler;
+                    _itemUseSystem.OnItemUseCancelled -= cancelHandler;
+                    _activeCompletionHandlers.Remove(slotIndex);
+                }
+            };
+            
+            _itemUseSystem.OnItemUseCancelled += cancelHandler;
+        }
+        
+        /// <summary>
+        /// Cleanup all active event handlers (called on stop/clear)
+        /// </summary>
+        [Server]
+        private void CleanupAllEventHandlers()
+        {
+            if (_itemUseSystem == null)
+                return;
+            
+            foreach (var handler in _activeCompletionHandlers.Values)
+                _itemUseSystem.OnItemUseCompleted -= handler;
+            
+            _activeCompletionHandlers.Clear();
+        }
+        
+        #endregion
+        
         #region Network Callbacks
         
         private void OnQuickSlotsChanged(SyncListOperation op, int index, string oldValue, string newValue, bool asServer)
@@ -404,9 +547,7 @@ namespace GameplaySystems.Inventory
                     {
                         var item = _inventorySystem?.GetItemByInstanceID(newValue);
                         if (item != null)
-                        {
                             OnQuickSlotAssigned?.Invoke(index, item);
-                        }
                     }
                     else
                     {
@@ -420,31 +561,26 @@ namespace GameplaySystems.Inventory
         
         #region Debug
         
-        private void OnGUI()
+        [ContextMenu("Log QuickSlot State")]
+        public void LogQuickSlotState()
         {
-            if (!_showDebugUI || !IsOwner)
-                return;
+            Debug.Log($"=== QuickSlots ({_quickSlots.Count}) ===");
             
-            GUILayout.BeginArea(new Rect(10, 810, 400, 100));
-            GUILayout.Label("=== QUICK SLOTS ===");
-            
-            string slotsStr = "";
             for (int i = 0; i < _quickSlots.Count; i++)
             {
                 var item = GetQuickSlotItem(i);
                 if (item != null)
                 {
                     var def = ItemDatabase.GetDefinition(item.DefinitionID);
-                    slotsStr += $"[{i+1}] {def?.DisplayName} x{item.Quantity}  ";
+                    Debug.Log($"  [{i}] {def?.DisplayName} x{item.Quantity}");
                 }
                 else
                 {
-                    slotsStr += $"[{i+1}] Empty  ";
+                    Debug.Log($"  [{i}] [Empty]");
                 }
             }
             
-            GUILayout.Label(slotsStr);
-            GUILayout.EndArea();
+            Debug.Log($"Active handlers: {_activeCompletionHandlers.Count}");
         }
         
         #endregion

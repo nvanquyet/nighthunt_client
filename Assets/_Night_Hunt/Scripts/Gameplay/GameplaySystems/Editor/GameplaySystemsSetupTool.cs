@@ -1,11 +1,12 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 using System.IO;
-using GameplaySystems.Core.Configs;
-using GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.StatSystem.Configs;
 
-namespace GameplaySystems.Editor
+namespace NightHunt.GameplaySystems.Editor
 {
     /// <summary>
     /// Editor utility for quickly creating all required ScriptableObjects

@@ -1,14 +1,22 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using GameplaySystems.Core.Data;
-using GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
 
-namespace GameplaySystems.Core.Interfaces
+namespace NightHunt.GameplaySystems.Core.Interfaces
 {
     /// <summary>
     /// Interface for weapon management system
-    /// Manages weapon slots (primary, secondary, melee)
-    /// Implemented by WeaponSystem (NetworkBehaviour)
+    /// 
+    /// RESPONSIBILITIES:
+    /// - Manages weapon slots (primary, secondary, melee)
+    /// - Handles weapon selection and holstering
+    /// - Manages weapon ammo and reloading
+    /// - Implemented by WeaponSystem (NetworkBehaviour)
+    /// 
+    /// NETWORK ARCHITECTURE:
+    /// - Server-authoritative: All operations on server
+    /// - Client receives updates via SyncDictionary and SyncVar
     /// </summary>
     public interface IWeaponSystem
     {

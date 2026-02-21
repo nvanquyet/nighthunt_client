@@ -1,14 +1,22 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using GameplaySystems.Core.Data;
-using GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Inventory;
 
-namespace GameplaySystems.Core.Interfaces
+namespace NightHunt.GameplaySystems.Core.Interfaces
 {
     /// <summary>
     /// Interface for equipment management system
-    /// Manages equipped items (head, chest, back, etc.)
-    /// Implemented by EquipmentSystem (NetworkBehaviour)
+    /// 
+    /// RESPONSIBILITIES:
+    /// - Manages equipped items (head, chest, back, etc.)
+    /// - Applies stat modifiers from equipment
+    /// - Handles equipment slot management
+    /// - Implemented by EquipmentSystem (NetworkBehaviour)
+    /// 
+    /// NETWORK ARCHITECTURE:
+    /// - Server-authoritative: All operations on server
+    /// - Client receives updates via SyncDictionary
     /// </summary>
     public interface IEquipmentSystem
     {

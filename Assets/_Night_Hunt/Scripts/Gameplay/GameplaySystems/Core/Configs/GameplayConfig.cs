@@ -1,4 +1,4 @@
-﻿namespace GameplaySystems.Core.Configs
+namespace NightHunt.GameplaySystems.Core.Configs
 {
     using UnityEngine;
     

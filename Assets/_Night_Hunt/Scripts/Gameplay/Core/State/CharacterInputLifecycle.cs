@@ -1,0 +1,62 @@
+using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Input;
+using NightHunt.Gameplay.Input.Core;
+using UnityEngine;
+
+namespace NightHunt.Gameplay.Core.State
+{
+    /// <summary>
+    /// Bật/tắt input dựa trên lifecycle event, không sửa code input hiện tại.
+    /// </summary>
+    [RequireComponent(typeof(CharacterLifecycleController))]
+    public sealed class CharacterInputLifecycle : MonoBehaviour
+    {
+        private CharacterLifecycleController _lifecycle;
+
+        private void Awake()
+        {
+            _lifecycle = GetComponent<CharacterLifecycleController>();
+        }
+
+        private void OnEnable()
+        {
+            if (_lifecycle == null)
+                return;
+
+            _lifecycle.OnDied += HandleDied;
+            _lifecycle.OnRespawned += HandleRespawned;
+        }
+
+        private void OnDisable()
+        {
+            if (_lifecycle == null)
+                return;
+
+            _lifecycle.OnDied -= HandleDied;
+            _lifecycle.OnRespawned -= HandleRespawned;
+        }
+
+        private void HandleDied()
+        {
+            var inputManager = InputManager.Instance;
+            if (inputManager != null)
+            {
+                inputManager.DisableAllInput();
+            }
+
+            InputLayerManager.Instance?.TransitionToState(InputState.PlayerDead);
+        }
+
+        private void HandleRespawned()
+        {
+            var inputManager = InputManager.Instance;
+            if (inputManager != null)
+            {
+                inputManager.EnableAllInput();
+            }
+
+            InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
+        }
+    }
+}
+
