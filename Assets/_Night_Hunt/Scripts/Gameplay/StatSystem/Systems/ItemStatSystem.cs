@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Core.Data;
+using NightHunt.StatSystem.Configs;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Core.Data;
 
@@ -168,15 +169,23 @@ namespace NightHunt.StatSystem.Systems
         {
             // Check weapon stats
             if (itemDef is WeaponDefinition weaponDef)
-            {
                 return weaponDef.GetStatValue(statType);
-            }
             
-            // Check armor stats
-            if (itemDef is EquipmentDefinition armorDef)
-            {
-                return armorDef.GetStatValue(statType);
-            }
+            // Check equipment stats
+            if (itemDef is EquipmentDefinition equipmentDef)
+                return equipmentDef.GetStatValue(statType);
+            
+            // Check attachment stats
+            if (itemDef is AttachmentDefinition attachmentDef)
+                return attachmentDef.GetStatValue(statType);
+            
+            // Check consumable stats
+            if (itemDef is ConsumableDefinition consumableDef)
+                return consumableDef.GetStatValue(statType);
+            
+            // Check throwable stats
+            if (itemDef is ThrowableDefinition throwableDef)
+                return throwableDef.GetStatValue(statType);
             
             // Check if it's a common stat (Weight, Durability, etc.)
             return GetCommonStatValue(itemDef, statType);
@@ -184,12 +193,40 @@ namespace NightHunt.StatSystem.Systems
         
         /// <summary>
         /// Get common stat values (Weight, Durability, etc.)
+        /// Weight is read from StatConfig if available, otherwise falls back to itemDef.Weight
         /// </summary>
         private static float GetCommonStatValue(ItemDefinition itemDef, ItemStatType statType)
         {
             switch (statType)
             {
                 case ItemStatType.Weight:
+                    // Try to get from StatConfig first (for all item types)
+                    if (itemDef is WeaponDefinition weaponDef && weaponDef.StatConfig != null)
+                    {
+                        float weight = weaponDef.StatConfig.GetStatValue(statType);
+                        if (weight > 0f) return weight;
+                    }
+                    if (itemDef is EquipmentDefinition equipmentDef && equipmentDef.StatConfig != null)
+                    {
+                        float weight = equipmentDef.StatConfig.GetStatValue(statType);
+                        if (weight > 0f) return weight;
+                    }
+                    if (itemDef is AttachmentDefinition attachmentDef && attachmentDef.StatConfig != null)
+                    {
+                        float weight = attachmentDef.StatConfig.GetStatValue(statType);
+                        if (weight > 0f) return weight;
+                    }
+                    if (itemDef is ConsumableDefinition consumableDef && consumableDef.StatConfig != null)
+                    {
+                        float weight = consumableDef.StatConfig.GetStatValue(statType);
+                        if (weight > 0f) return weight;
+                    }
+                    if (itemDef is ThrowableDefinition throwableDef && throwableDef.StatConfig != null)
+                    {
+                        float weight = throwableDef.StatConfig.GetStatValue(statType);
+                        if (weight > 0f) return weight;
+                    }
+                    // Fallback to itemDef.Weight
                     return itemDef.Weight;
                 
                 case ItemStatType.Durability:
@@ -214,26 +251,26 @@ namespace NightHunt.StatSystem.Systems
             float value = baseValue;
             var modifiers = new List<ItemStatModifier>();
             
-            // Collect all modifiers from attachments
+            // Collect all modifiers from attachments (AttachedItems stores instance IDs)
             for (int i = 0; i < item.AttachedItems.Length; i++)
             {
-                string attachmentID = item.AttachedItems[i];
-                if (string.IsNullOrEmpty(attachmentID))
+                string attachmentInstanceID = item.AttachedItems[i];
+                if (string.IsNullOrEmpty(attachmentInstanceID))
                     continue;
                 
-                // Get attachment definition
-                var attachmentDef = ItemDatabase.GetDefinition(attachmentID);
+                var attachmentInstance = ItemDatabase.GetInstance(attachmentInstanceID);
+                if (attachmentInstance == null) continue;
+                
+                var attachmentDef = ItemDatabase.GetDefinition(attachmentInstance.DefinitionID);
                 if (attachmentDef is AttachmentDefinition attachDef)
                 {
-                    // Find modifiers for this stat type
-                    if (attachDef.ItemModifiers != null)
+                    var itemMods = attachDef.GetItemModifiers();
+                    if (itemMods != null)
                     {
-                        foreach (var mod in attachDef.ItemModifiers)
+                        foreach (var mod in itemMods)
                         {
                             if (mod.StatType == statType)
-                            {
                                 modifiers.Add(mod);
-                            }
                         }
                     }
                 }
@@ -263,28 +300,38 @@ namespace NightHunt.StatSystem.Systems
         {
             var statTypes = new List<ItemStatType>();
             
-            if (itemDef is WeaponDefinition weaponDef && weaponDef.Stats != null)
+            // Get StatConfig from all item types
+            ItemStatConfig config = null;
+            if (itemDef is WeaponDefinition weaponDef && weaponDef.StatConfig != null)
+                config = weaponDef.StatConfig;
+            else if (itemDef is EquipmentDefinition equipmentDef && equipmentDef.StatConfig != null)
+                config = equipmentDef.StatConfig;
+            else if (itemDef is AttachmentDefinition attachmentDef && attachmentDef.StatConfig != null)
+                config = attachmentDef.StatConfig;
+            else if (itemDef is ConsumableDefinition consumableDef && consumableDef.StatConfig != null)
+                config = consumableDef.StatConfig;
+            else if (itemDef is ThrowableDefinition throwableDef && throwableDef.StatConfig != null)
+                config = throwableDef.StatConfig;
+            
+            // Add stats from StatConfig
+            if (config?.Stats != null)
             {
-                foreach (var stat in weaponDef.Stats)
+                foreach (var stat in config.Stats)
                 {
-                    if (!statTypes.Contains(stat.StatType))
-                        statTypes.Add(stat.StatType);
+                    if (!statTypes.Contains(stat.Type))
+                        statTypes.Add(stat.Type);
                 }
             }
             
-            if (itemDef is EquipmentDefinition armorDef && armorDef.Stats != null)
+            // Add Weight if not already in list (check StatConfig first, then fallback to itemDef.Weight)
+            if (!statTypes.Contains(ItemStatType.Weight))
             {
-                foreach (var stat in armorDef.Stats)
-                {
-                    if (!statTypes.Contains(stat.StatType))
-                        statTypes.Add(stat.StatType);
-                }
+                float weight = GetCommonStatValue(itemDef, ItemStatType.Weight);
+                if (weight > 0f)
+                    statTypes.Add(ItemStatType.Weight);
             }
             
-            // Add common stats
-            if (itemDef.Weight > 0 && !statTypes.Contains(ItemStatType.Weight))
-                statTypes.Add(ItemStatType.Weight);
-            
+            // Add Durability stats if applicable
             if (itemDef.ResourceType == ItemResourceType.Durability && !statTypes.Contains(ItemStatType.Durability))
             {
                 statTypes.Add(ItemStatType.Durability);

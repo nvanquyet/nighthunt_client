@@ -6,6 +6,8 @@ using NightHunt.Gameplay.Character.Movement;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking.Prediction.FishNet;
 using Unity.Cinemachine;
+using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.StatSystem.Core.Types;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -31,11 +33,11 @@ namespace NightHunt.Gameplay.Character
         [SerializeField]
         protected MovementSettings movementSettings;
 
-        [Header("Rotation")][SerializeField] protected float tankTurnSpeed = 10f;
+        [Header("Rotation")]
+        [SerializeField] protected float tankTurnSpeed = 10f;
         [SerializeField] protected float lockTurnSpeed = 18f;
 
         [Header("Camera Lock")]
-
         [SerializeField] protected bool allowCameraLockToggle = true;
         [SerializeField] protected bool startWithCameraLock = false;
 
@@ -43,7 +45,12 @@ namespace NightHunt.Gameplay.Character
         [SerializeField]
         protected float interpolationSpeed = 15f;
 
-        [Header("Debug")][SerializeField] protected bool enableDebugLogs = false;
+        [Header("Stamina Recovery (Advanced)")]
+        [SerializeField] protected float staminaRecoveryDelay = 1.5f;
+        [SerializeField] protected float slowMovementThreshold = 1.0f;
+
+        [Header("Debug")]
+        [SerializeField] protected bool enableDebugLogs = false;
 
         // Components
 
@@ -59,6 +66,12 @@ namespace NightHunt.Gameplay.Character
         protected Vector3 _velocity;
         protected float _verticalVelocity;
         protected float _stamina;
+
+        // ===== STAMINA RECOVERY =====
+        protected float _staminaRecoveryTimer = 0f;
+
+        // ===== STATS =====
+        protected IPlayerStatSystem _playerStatSystem;
 
         // ===== NON OWNER INTERPOLATION =====
         protected Vector3 _targetPosition;
@@ -114,6 +127,7 @@ namespace NightHunt.Gameplay.Character
         private void Awake()
         {
             _cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
+            _playerStatSystem = GetComponent<IPlayerStatSystem>();
             InitializePhysicsComponents();
         }
 
@@ -128,17 +142,24 @@ namespace NightHunt.Gameplay.Character
                 return;
             }
 
-            _stamina = movementSettings.maxStamina;
+            // Initialize stamina using PlayerStatSystem if available, otherwise fallback to MovementSettings
+            float maxStamina = GetMaxStamina();
+            float currentStamina = _playerStatSystem != null
+                ? _playerStatSystem.GetStat(PlayerStatType.Stamina)
+                : 0f;
+            _stamina = currentStamina > 0f ? currentStamina : maxStamina;
+
             _targetPosition = transform.position;
             _targetRotation = transform.rotation;
             _verticalVelocity = -2f;
             _cameraLocked = startWithCameraLock;
+            _staminaRecoveryTimer = 0f;
 
             _cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
 
             if (enableDebugLogs)
                 Debug.Log(
-                    $"[{GetType().Name}] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}");
+                    $"[{GetType().Name}] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}, MaxStamina={maxStamina}");
         }
 
         #endregion
@@ -272,26 +293,71 @@ namespace NightHunt.Gameplay.Character
 
             bool grounded = IsGrounded();
 
-            // ===== STAMINA =====
-            _stamina = Mathf.Min(
-                _stamina + movementSettings.staminaRegenRate * dt,
-                movementSettings.maxStamina
-            );
+            // ===== SPEED & STAMINA CONFIG FROM STATS / SETTINGS =====
+            float speed = GetBaseSpeed();
+            float maxStamina = GetMaxStamina();
+            float minStaminaToSprint = GetMinStaminaToSprint();
+            float drainRate = GetStaminaDrainRate();
+            float regenRate = GetStaminaRegenRate();
+            float sprintMultiplier = GetSprintSpeedMultiplier();
 
-            float speed = movementSettings.baseSpeed;
+            // ===== INPUT DIRECTION =====
+            Vector3 inputDir = new Vector3(data.Move.x, 0f, data.Move.y);
+            float inputMagnitude = inputDir.magnitude;
 
-            if (data.Sprint && _stamina > movementSettings.minStaminaToSprint)
+            bool canSprint = data.Sprint && _stamina > minStaminaToSprint;
+
+            if (canSprint)
             {
-                speed *= movementSettings.sprintMultiplier;
-                _stamina -= movementSettings.staminaDrainRate * dt;
+                speed *= sprintMultiplier;
             }
             else if (data.Crouch)
             {
                 speed *= movementSettings.crouchMultiplier;
             }
 
-            // ===== INPUT DIRECTION =====
-            Vector3 inputDir = new Vector3(data.Move.x, 0f, data.Move.y);
+            // ===== STAMINA ADVANCED LOGIC =====
+            if (data.Sprint && canSprint)
+            {
+                // Drain stamina while sprinting.
+                _stamina = Mathf.Max(0f, _stamina - drainRate * dt);
+                _staminaRecoveryTimer = 0f;
+            }
+            else
+            {
+                // Regenerate stamina when idle or moving slowly,
+                // OR when below sprint threshold (to recover enough to sprint again).
+                if (inputDir.sqrMagnitude > 1f)
+                    inputDir.Normalize();
+
+                float expectedSpeed = inputMagnitude * speed;
+                bool isIdle = inputMagnitude < 0.01f;
+                bool isMovingSlow = !isIdle && expectedSpeed <= slowMovementThreshold;
+                bool isIdleOrSlow = isIdle || isMovingSlow;
+                bool isBelowSprintThreshold = _stamina < minStaminaToSprint;
+
+                if (isIdleOrSlow || isBelowSprintThreshold)
+                {
+                    _staminaRecoveryTimer += dt;
+                    if (_staminaRecoveryTimer >= staminaRecoveryDelay)
+                    {
+                        _stamina = Mathf.Min(_stamina + regenRate * dt, maxStamina);
+                    }
+                }
+                else
+                {
+                    // Moving fast (not sprinting) -> no regen, reset timer.
+                    _staminaRecoveryTimer = 0f;
+                }
+            }
+
+            // ===== WRITE-BACK TO PLAYER STAT SYSTEM (SERVER ONLY) =====
+            if (IsServerStarted && _playerStatSystem != null)
+            {
+                _playerStatSystem.SetCurrentStat(PlayerStatType.Stamina, _stamina);
+            }
+
+            // ===== FINAL INPUT DIRECTION (NORMALIZED) =====
             if (inputDir.sqrMagnitude > 1f)
                 inputDir.Normalize();
 
@@ -366,6 +432,71 @@ namespace NightHunt.Gameplay.Character
 
             // Update velocity from physics component
             _velocity = GetCurrentVelocity();
+        }
+
+        #endregion
+
+        #region STAT HELPERS
+
+        /// <summary>
+        /// Get base movement speed from PlayerStatSystem (MovementSpeed) if available,
+        /// otherwise fallback to MovementSettings.baseSpeed.
+        /// </summary>
+        protected virtual float GetBaseSpeed()
+        {
+            if (_playerStatSystem != null)
+            {
+                float statSpeed = _playerStatSystem.GetStat(PlayerStatType.MovementSpeed);
+                if (statSpeed > 0f)
+                    return statSpeed;
+            }
+
+            return movementSettings != null ? movementSettings.baseSpeed : 5f;
+        }
+
+        /// <summary>
+        /// Get max stamina from PlayerStatSystem or fallback to MovementSettings.
+        /// </summary>
+        protected virtual float GetMaxStamina()
+        {
+            if (_playerStatSystem != null)
+            {
+                return _playerStatSystem.GetStat(PlayerStatType.MaxStamina);
+            }
+
+            return movementSettings != null ? movementSettings.maxStamina : 100f;
+        }
+
+        /// <summary>
+        /// Get stamina regeneration rate from MovementSettings.
+        /// </summary>
+        protected virtual float GetStaminaRegenRate()
+        {
+            return movementSettings != null ? movementSettings.staminaRegenRate : 15f;
+        }
+
+        /// <summary>
+        /// Get stamina drain rate from MovementSettings.
+        /// </summary>
+        protected virtual float GetStaminaDrainRate()
+        {
+            return movementSettings != null ? movementSettings.staminaDrainRate : 20f;
+        }
+
+        /// <summary>
+        /// Get minimum stamina required to sprint from MovementSettings.
+        /// </summary>
+        protected virtual float GetMinStaminaToSprint()
+        {
+            return movementSettings != null ? movementSettings.minStaminaToSprint : 10f;
+        }
+
+        /// <summary>
+        /// Get sprint speed multiplier from MovementSettings.
+        /// </summary>
+        protected virtual float GetSprintSpeedMultiplier()
+        {
+            return movementSettings != null ? movementSettings.sprintSpeedMultiplier : 1.6f;
         }
 
         #endregion

@@ -55,18 +55,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Tooltip("Prefab cho attachment slot")]
         public GameObject AttachmentSlotPrefab;
 
-        [Tooltip("Default icons cho từng attachment slot type")]
-        public AttachmentSlotIconConfig[] AttachmentSlotIcons;
-
-        [Tooltip("Default icon cho attachment slot không có icon riêng")]
-        public Sprite DefaultAttachmentSlotIcon;
-
-        [Tooltip("Show attachment panel khi hover equipment item")]
-        public bool ShowAttachmentPanelOnHover = true;
-
-        [Tooltip("Show attachment panel khi select equipment item")]
-        public bool ShowAttachmentPanelOnSelect = true;
-
         /// <summary>
         /// Get prefab cho slot type cụ thể
         /// </summary>
@@ -85,22 +73,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 default:
                     return DefaultSlotPrefab;
             }
-        }
-
-        /// <summary>
-        /// Get default icon cho attachment slot type
-        /// </summary>
-        public Sprite GetAttachmentSlotIcon(AttachmentSlotType slotType)
-        {
-            if (AttachmentSlotIcons == null) return DefaultAttachmentSlotIcon;
-            
-            foreach (var config in AttachmentSlotIcons)
-            {
-                if (config.SlotType == slotType)
-                    return config.Icon;
-            }
-            
-            return DefaultAttachmentSlotIcon;
         }
 
         /// <summary>

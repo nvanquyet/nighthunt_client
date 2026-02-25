@@ -1,5 +1,7 @@
 using UnityEngine;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.StatSystem.Configs;
+using NightHunt.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.Core.Data
 {
@@ -11,6 +13,10 @@ namespace NightHunt.GameplaySystems.Core.Data
     public class ThrowableDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Throwable;
+
+        [Header("Stat Configuration")]
+        [Tooltip("Optional stats-only config (typically Weight).")]
+        public ThrowableStatConfig StatConfig;
 
         [Header("Throw Settings")]
         [Tooltip("Prefab spawned at throw point. Must have Rigidbody + Projectile component.")]
@@ -50,31 +56,22 @@ namespace NightHunt.GameplaySystems.Core.Data
 
         [Tooltip("Sound played on impact or explosion.")]
         public AudioClip ImpactSound;
-
-        // ── Editor helpers ─────────────────────────────────────────────────────
-#if UNITY_EDITOR
-        [ContextMenu("Setup Default Frag Grenade")]
-        private void SetupFrag()
+        
+        /// <summary>
+        /// Get stat value from StatConfig
+        /// </summary>
+        public float GetStatValue(ItemStatType statType)
         {
-            DisplayName = "Frag Grenade"; Description = "Explosive grenade – 3 s fuse.";
-            IsStackable = true; MaxStackSize = 3; Weight = 0.4f;
-            CanUseWhileMoving = true;
-            ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.QuickSlot };
-            ThrowableType = ThrowableType.Grenade;
-            ThrowForce = 15f; ExplosionRadius = 5f; FuseTime = 3f; Damage = 100f; CanBounce = true;
-            UnityEditor.EditorUtility.SetDirty(this);
+            return StatConfig != null ? StatConfig.GetStatValue(statType) : 0f;
         }
-
-        [ContextMenu("Setup Default Smoke Grenade")]
-        private void SetupSmoke()
+        
+        /// <summary>
+        /// Check if item has specific stat
+        /// </summary>
+        public bool HasStat(ItemStatType statType)
         {
-            DisplayName = "Smoke Grenade"; Description = "Deploys smoke screen for 15 s.";
-            IsStackable = true; MaxStackSize = 3; Weight = 0.3f;
-            ThrowableType = ThrowableType.Smoke;
-            ThrowForce = 12f; ExplosionRadius = 8f; FuseTime = 2f; Damage = 0f; CanBounce = false;
-            UnityEditor.EditorUtility.SetDirty(this);
+            return StatConfig != null && StatConfig.HasStat(statType);
         }
-#endif
     }
 
     /// <summary>

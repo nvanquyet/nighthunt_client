@@ -32,16 +32,4 @@ MonoBehaviour:
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 0
-  ItemModifiers:
-  - StatType: 4
-    Value: 10
-    ModifierType: 0
-    Description: Red dot improves accuracy
-  - StatType: 13
-    Value: 20
-    ModifierType: 1
-    Description: Faster target acquisition
-  - StatType: 2
-    Value: -3
-    ModifierType: 0
-    Description: Better recoil control
+  StatConfig: {fileID: 0}

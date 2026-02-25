@@ -38,23 +38,14 @@ namespace NightHunt.Gameplay.Core.State
 
         private void HandleDied()
         {
-            var inputManager = InputManager.Instance;
-            if (inputManager != null)
-            {
-                inputManager.DisableAllInput();
-            }
-
+            // Single source of truth: chỉ gọi InputLayerManager
+            // InputLayerManager sẽ disable toàn bộ ActionMap phù hợp với PlayerDead preset
             InputLayerManager.Instance?.TransitionToState(InputState.PlayerDead);
         }
 
         private void HandleRespawned()
         {
-            var inputManager = InputManager.Instance;
-            if (inputManager != null)
-            {
-                inputManager.EnableAllInput();
-            }
-
+            // Single source of truth: chỉ gọi InputLayerManager
             InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
         }
     }

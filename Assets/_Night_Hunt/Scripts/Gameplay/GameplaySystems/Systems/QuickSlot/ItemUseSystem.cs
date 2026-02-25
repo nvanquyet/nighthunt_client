@@ -215,7 +215,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
             
             // Check if cancellation allowed
             var def = ItemDatabase.GetDefinition(_currentItem?.DefinitionID);
-            if (def is ConsumableDefinition cd && !cd.CanCancelUsage)
+            if (def != null && !def.CanCancelUsage)
             {
                 Debug.Log("[ItemUseSystem] This item cannot be cancelled");
                 return;

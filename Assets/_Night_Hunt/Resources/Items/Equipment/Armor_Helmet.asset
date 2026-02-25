@@ -32,17 +32,8 @@ MonoBehaviour:
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 0
-  Stats:
-  - StatType: 6
-    Value: 40
-  - StatType: 9
-    Value: 1
+  StatConfig: {fileID: 0}
   EquipmentSlot: 0
   MaxDurability: 100
   DefaultDurability: 100
   DurabilityLossRate: 1
-  PlayerModifiers:
-  - StatType: 8
-    Value: 40
-    ModifierType: 0
-    Description: Helmet protection

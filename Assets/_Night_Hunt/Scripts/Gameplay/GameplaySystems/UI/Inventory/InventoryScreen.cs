@@ -14,72 +14,90 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     /// </summary>
     public class InventoryScreen : MonoBehaviour
     {
-        [Header("Configs")]
-        [SerializeField] private UISlotLayoutConfig _uiConfig;
-        
-        [Header("Slot Settings")]
-        [Tooltip("Kích thước mặc định cho các slot (Width x Height)")]
-        [SerializeField] private Vector2 _slotSize = new Vector2(100, 100);
+        [Header("Configs")] [SerializeField] private UISlotLayoutConfig _uiConfig;
 
-        [Header("Roots")]
-        [SerializeField] private RectTransform _inventoryGridRoot;
+        [Header("Player Stats")] [SerializeField]
+        private PlayerStatUIPanel playerStatUIPanel;
+
+        [Header("Slot Settings")] [Tooltip("Kích thước mặc định cho các slot (Width x Height)")] [SerializeField]
+        private Vector2 _slotSize = new Vector2(100, 100);
+
+        [Header("Roots")] [SerializeField] private RectTransform _inventoryGridRoot;
         [SerializeField] private RectTransform _equipmentRoot;
         [SerializeField] private RectTransform _weaponRoot;
         [SerializeField] private RectTransform _quickSlotRoot;
         [SerializeField] private RectTransform _trashSlotRoot;
-        
-        [Header("Trash Slot")]
-        [Tooltip("Prefab cho trash slot (setup thủ công trong Inspector)")]
-        [SerializeField] private GameObject _trashSlotPrefab;
+
+        [Header("Trash Slot")] [Tooltip("Prefab cho trash slot (setup thủ công trong Inspector)")] [SerializeField]
+        private GameObject _trashSlotPrefab;
 
         private readonly Dictionary<UISlotId, ItemSlotView> _slotViews = new Dictionary<UISlotId, ItemSlotView>();
         private UIDomainBridge _domainBridge;
         private bool _isLayoutBuilt = false; // Flag để track đã build layout chưa
 
-        [Header("Buttons")]
-        [SerializeField] private UnityEngine.UI.Button _sortButton;
-        
-        [Header("Attachment Panel")]
-        [SerializeField] private AttachmentPanel _attachmentPanel;
-        
-        [Header("Tooltip")]
-        [SerializeField] private ItemTooltip _itemTooltip;
+        [Header("Buttons")] [SerializeField] private UnityEngine.UI.Button _sortButton;
 
-        [Header("Drop Quantity Dialog")]
-        [SerializeField] private DropQuantityDialog _dropQuantityDialog;
-        
+        [Header("Attachment Panel")] [SerializeField]
+        private AttachmentPanel _attachmentPanel;
+
+        [Header("Tooltip")] [SerializeField] private ItemTooltip _itemTooltip;
+
+        [Header("Drop Quantity Dialog")] [SerializeField]
+        private DropQuantityDialog _dropQuantityDialog;
+
         private ItemSlotView _hoveredSlot;
+
+
+
+        private PlayerStatUIPanel StatPanel
+        {
+            get
+            {
+                if (playerStatUIPanel == null)
+                {
+                    playerStatUIPanel = GetComponentInChildren<PlayerStatUIPanel>();
+                    if (playerStatUIPanel == null)
+                    {
+                        Debug.LogWarning("[InventoryScreen] PlayerStatUIPanel not found in children!");
+                    }
+                }
+
+                return playerStatUIPanel;
+            }
+        }
 
         public void Initialize(UIDomainBridge domainBridge)
         {
             _domainBridge = domainBridge;
-            
+
             // Initialize AttachmentPanel nếu có
             if (_attachmentPanel != null && _uiConfig != null)
             {
                 var attachmentSystem = GetAttachmentSystem();
                 var gameplayBridge = GetGameplayBridge();
-                
+
                 if (attachmentSystem != null && gameplayBridge != null)
                 {
                     _attachmentPanel.Initialize(_uiConfig, attachmentSystem, gameplayBridge);
                 }
                 else
                 {
-                    Debug.LogWarning("[InventoryScreen] AttachmentSystem or GameplayBridge not found - AttachmentPanel not initialized");
+                    Debug.LogWarning(
+                        "[InventoryScreen] AttachmentSystem or GameplayBridge not found - AttachmentPanel not initialized");
                 }
             }
-            
+
+            StatPanel?.Initialize(domainBridge);
             // Initialize ItemTooltip nếu có
             if (_itemTooltip != null)
             {
                 _itemTooltip.Initialize(_domainBridge);
             }
-            
+
             // Chỉ build layout lần đầu tiên
             if (!_isLayoutBuilt)
             {
-            BuildLayout();
+                BuildLayout();
                 _isLayoutBuilt = true;
             }
             else
@@ -87,41 +105,42 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 // Đã có layout rồi → chỉ refresh state từ bridge
                 RefreshAllSlots();
             }
-            
+
             HookBridgeEvents(true);
 
             if (_sortButton != null)
                 _sortButton.onClick.AddListener(OnSortClicked);
         }
-        
+
         /// <summary>
         /// Refresh tất cả slots với state mới từ bridge (khi đổi player)
         /// </summary>
         public void RefreshForNewPlayer(UIDomainBridge domainBridge)
         {
             _domainBridge = domainBridge;
-            
+
             // Update AttachmentPanel và Tooltip với bridge mới
             if (_attachmentPanel != null && _uiConfig != null)
             {
                 var attachmentSystem = GetAttachmentSystem();
                 var gameplayBridge = GetGameplayBridge();
-                
+
                 if (attachmentSystem != null && gameplayBridge != null)
                 {
                     _attachmentPanel.Initialize(_uiConfig, attachmentSystem, gameplayBridge);
                 }
             }
-            
+
+            StatPanel?.RefreshForNewPlayer(domainBridge);
             if (_itemTooltip != null)
             {
                 _itemTooltip.Initialize(_domainBridge);
             }
-            
+
             // Unhook events cũ trước khi hook events mới
             HookBridgeEvents(false);
             HookBridgeEvents(true);
-            
+
             // Refresh tất cả slots với state mới
             RefreshAllSlots();
         }
@@ -146,7 +165,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 Debug.LogWarning("[InventoryScreen] BuildLayout called but slots already exist. Skipping.");
                 return;
             }
-            
+
             _slotViews.Clear();
 
             if (_uiConfig == null || _uiConfig.InventoryConfig == null) return;
@@ -158,21 +177,20 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (prefab != null)
                 {
                     for (int i = 0; i < _uiConfig.InventoryTotalSlots; i++)
-                {
+                    {
                         var go = Instantiate(prefab, _inventoryGridRoot, false);
                         SetupSlotRectTransform(go);
-                    var view = go.GetComponent<ItemSlotView>();
+                        var view = go.GetComponent<ItemSlotView>();
                         if (view != null)
                         {
-                    var id = UISlotId.Inventory(i);
+                            var id = UISlotId.Inventory(i);
                             view.Initialize(_uiConfig, id);
                             // Force reset về empty state để đảm bảo icon được set đúng
                             view.SetEmptyState();
-                            Debug.Log($"[InventoryScreen] Spawned Inventory slot {i}, Icon: {view.GetComponent<ItemSlotView>()?.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
-                    _slotViews[id] = view;
-                    DragDropController.Instance?.RegisterSlotView(view);
-                }
-            }
+                            _slotViews[id] = view;
+                            DragDropController.Instance?.RegisterSlotView(view);
+                        }
+                    }
                 }
             }
 
@@ -181,7 +199,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 var prefab = _uiConfig.GetSlotPrefab(UISlotType.Equipment);
                 if (prefab != null)
-            {
+                {
                     foreach (var equipmentSlot in _uiConfig.InventoryConfig.EquipmentConfig)
                     {
                         var go = Instantiate(prefab, _equipmentRoot, false);
@@ -193,7 +211,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                             view.Initialize(_uiConfig, id);
                             // Force reset về empty state để đảm bảo icon được set đúng
                             view.SetEmptyState();
-                            Debug.Log($"[InventoryScreen] Spawned Equipment slot {equipmentSlot.Type}, Icon: {view.GetComponent<ItemSlotView>()?.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
                             _slotViews[id] = view;
                             DragDropController.Instance?.RegisterSlotView(view);
                         }
@@ -211,18 +228,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     {
                         var go = Instantiate(prefab, _weaponRoot, false);
                         SetupSlotRectTransform(go);
-                    var view = go.GetComponent<ItemSlotView>();
+                        var view = go.GetComponent<ItemSlotView>();
                         if (view != null)
                         {
                             var id = UISlotId.Weapon(weaponSlot.Type);
                             view.Initialize(_uiConfig, id);
                             // Force reset về empty state để đảm bảo icon được set đúng
                             view.SetEmptyState();
-                            Debug.Log($"[InventoryScreen] Spawned Weapon slot {weaponSlot.Type}, Icon: {view.GetComponent<ItemSlotView>()?.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
-                    _slotViews[id] = view;
-                    DragDropController.Instance?.RegisterSlotView(view);
-                }
-            }
+                            _slotViews[id] = view;
+                            DragDropController.Instance?.RegisterSlotView(view);
+                        }
+                    }
                 }
             }
 
@@ -231,23 +247,22 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 var prefab = _uiConfig.GetSlotPrefab(UISlotType.QuickSlot);
                 if (prefab != null)
-            {
-                    for (int i = 0; i < _uiConfig.QuickSlotCount; i++)
                 {
+                    for (int i = 0; i < _uiConfig.QuickSlotCount; i++)
+                    {
                         var go = Instantiate(prefab, _quickSlotRoot, false);
                         SetupSlotRectTransform(go);
-                    var view = go.GetComponent<ItemSlotView>();
+                        var view = go.GetComponent<ItemSlotView>();
                         if (view != null)
                         {
-                    var id = UISlotId.QuickSlot(i);
+                            var id = UISlotId.QuickSlot(i);
                             view.Initialize(_uiConfig, id);
                             // Force reset về empty state để đảm bảo icon được set đúng
                             view.SetEmptyState();
-                            Debug.Log($"[InventoryScreen] Spawned QuickSlot {i}, Icon: {view.GetComponent<ItemSlotView>()?.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
-                    _slotViews[id] = view;
-                    DragDropController.Instance?.RegisterSlotView(view);
-                }
-            }
+                            _slotViews[id] = view;
+                            DragDropController.Instance?.RegisterSlotView(view);
+                        }
+                    }
                 }
             }
 
@@ -256,7 +271,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 var go = Instantiate(_trashSlotPrefab, _trashSlotRoot, false);
                 // Không gọi SetupSlotRectTransform() - giữ nguyên anchor/position từ prefab
-                
+
                 var view = go.GetComponent<ItemSlotView>();
                 if (view != null)
                 {
@@ -267,7 +282,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     DragDropController.Instance?.RegisterSlotView(view);
                 }
             }
-            
+
             // Force rebuild layout sau khi spawn tất cả slots
             if (_inventoryGridRoot != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_inventoryGridRoot);
@@ -279,11 +294,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_quickSlotRoot);
             if (_trashSlotRoot != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_trashSlotRoot);
-            
+
             // Hook hover events sau khi spawn tất cả slots
             HookSlotHoverEvents(true);
         }
-        
+
         /// <summary>
         /// Setup RectTransform cho slot để tránh bị collapse trong Layout Group
         /// </summary>
@@ -291,28 +306,28 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             var rectTransform = slotGO.GetComponent<RectTransform>();
             if (rectTransform == null) return;
-            
+
             // Đảm bảo GameObject active để RectTransform có thể được setup
             if (!slotGO.activeSelf)
             {
                 slotGO.SetActive(true);
             }
-            
+
             // Reset về identity transform
             rectTransform.localScale = Vector3.one;
             rectTransform.localRotation = Quaternion.identity;
             rectTransform.localPosition = Vector3.zero;
-            
+
             // Set anchor và pivot về center để dễ layout
             rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
             rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            
+
             // LUÔN set sizeDelta trước (ngay cả khi có Layout Group)
             // Vì một số Layout Group dùng sizeDelta làm base size
             // Force set size ngay lập tức, không check điều kiện
             rectTransform.sizeDelta = _slotSize;
-            
+
             // Nếu parent có Layout Group, cần thêm LayoutElement
             var parentLayoutGroup = rectTransform.parent?.GetComponent<UnityEngine.UI.LayoutGroup>();
             if (parentLayoutGroup != null)
@@ -323,21 +338,21 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 {
                     layoutElement = slotGO.AddComponent<UnityEngine.UI.LayoutElement>();
                 }
-                
+
                 // LUÔN set preferred size (override để đảm bảo không bị 0)
                 // Layout Group sẽ dùng giá trị này để layout
                 layoutElement.preferredWidth = _slotSize.x;
                 layoutElement.preferredHeight = _slotSize.y;
-                
+
                 // Set min size để đảm bảo không collapse (50% của preferred size)
                 layoutElement.minWidth = _slotSize.x * 0.5f;
                 layoutElement.minHeight = _slotSize.y * 0.5f;
-                
+
                 // Nếu Layout Group có Child Force Expand, cũng set flexible
                 var horizontalLayout = parentLayoutGroup as UnityEngine.UI.HorizontalLayoutGroup;
                 var verticalLayout = parentLayoutGroup as UnityEngine.UI.VerticalLayoutGroup;
                 var gridLayout = parentLayoutGroup as UnityEngine.UI.GridLayoutGroup;
-                
+
                 if (horizontalLayout != null || verticalLayout != null)
                 {
                     // Horizontal/Vertical Layout Group có thể dùng flexible size
@@ -351,28 +366,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
             }
         }
-        
+
         /// <summary>
         /// Refresh tất cả slots với state mới từ bridge
         /// Bridge sẽ tự động push snapshot qua events, nhưng ta cũng có thể force refresh ở đây
         /// </summary>
         private void RefreshAllSlots()
         {
-            Debug.Log($"[InventoryScreen] RefreshAllSlots: Resetting {_slotViews.Count} slots to empty state");
-            
-            // Reset tất cả slots về empty state trước
+            // Clear all slot visuals first
             foreach (var kvp in _slotViews)
             {
                 if (kvp.Value != null)
-                {
                     kvp.Value.SetEmptyState();
-                    Debug.Log($"[InventoryScreen] Refreshed slot {kvp.Key.Type} {kvp.Key.Index}, Icon: {kvp.Value.GetComponentInChildren<UnityEngine.UI.Image>()?.sprite?.name ?? "null"}");
-                }
             }
-            
-            // Bridge sẽ tự động push snapshot qua events (OnInventorySlotChanged, etc.)
-            // Nếu muốn force refresh ngay lập tức, có thể gọi:
-            // _domainBridge?.InitializeForCurrentPlayer(); // Sẽ trigger PushInitialSnapshot
+
+            // ROOT CAUSE D FIX: Re-push current backend state to all slots.
+            // Events only fire on changes; a manual clear requires an explicit re-push.
+            _domainBridge?.Refresh();
         }
 
         private void HookBridgeEvents(bool subscribe)
@@ -427,9 +437,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             _domainBridge?.RequestSortInventory(InventorySortMode.Default);
         }
-        
+
         #region Attachment Panel Hover Logic
-        
+
         private void HookSlotHoverEvents(bool subscribe)
         {
             foreach (var kvp in _slotViews)
@@ -450,25 +460,30 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
             }
         }
-        
+
         private void OnSlotHoverEnter(ItemSlotView slotView)
         {
             _hoveredSlot = slotView;
-            
+
             // Show tooltip và attachment panel nếu slot có item
             if (slotView.State?.Item != null)
             {
                 var def = ItemDatabase.GetDefinition(slotView.State.Item.DefinitionID);
-                
+
                 // Show tooltip với Item Stats (sử dụng mouse position để tooltip follow mouse)
                 if (_itemTooltip != null)
                 {
                     Vector3 mousePos = Input.mousePosition;
                     _itemTooltip.Show(slotView.State.Item, mousePos);
                 }
-                
-                // Show attachment panel nếu item có attachment slots
-                if (def != null && def.AttachmentSlots != null && def.AttachmentSlots.Length > 0)
+
+                // Show attachment panel nếu item có attachment slots và config cho phép hover
+                bool allowHoverPanel =
+                    _uiConfig != null &&
+                    _uiConfig.InventoryConfig != null &&
+                    _uiConfig.InventoryConfig.AttachmentUI.ShowAttachmentPanelOnHover;
+
+                if (allowHoverPanel && def != null && def.AttachmentSlots != null && def.AttachmentSlots.Length > 0)
                 {
                     if (_attachmentPanel != null)
                     {
@@ -477,7 +492,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
                 else
                 {
-                    // Item không có attachment slots → hide panel
+                    // Item không có attachment slots hoặc hover bị tắt → hide panel
                     if (_attachmentPanel != null)
                         _attachmentPanel.Hide();
                 }
@@ -487,51 +502,50 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 // Slot empty → hide tooltip và panel
                 if (_itemTooltip != null)
                     _itemTooltip.Hide();
-                    
+
                 if (_attachmentPanel != null)
                     _attachmentPanel.Hide();
             }
         }
-        
+
         private void OnSlotHoverExit(ItemSlotView slotView)
         {
             if (_hoveredSlot == slotView)
             {
                 _hoveredSlot = null;
-                
-                // Hide tooltip và attachment panel khi hover ra
+
+                // Hide tooltip khi hover ra
                 if (_itemTooltip != null)
                     _itemTooltip.Hide();
-                    
-                if (_attachmentPanel != null)
+
+                // FIX: Chỉ hide attachment panel nếu không pinned
+                if (_attachmentPanel != null && !_attachmentPanel.IsPinned)
                     _attachmentPanel.Hide();
             }
         }
-        
+
         private IAttachmentSystem GetAttachmentSystem()
         {
             var spectate = SpectateManager.Instance;
             if (spectate == null) return null;
-            
+
             var currentPlayer = spectate.GetCurrentPlayer();
             if (currentPlayer == null) return null;
-            
+
             return currentPlayer.GetComponent<IAttachmentSystem>();
         }
-        
+
         private IGameplayBridge GetGameplayBridge()
         {
             var spectate = SpectateManager.Instance;
             if (spectate == null) return null;
-            
+
             var currentPlayer = spectate.GetCurrentPlayer();
             if (currentPlayer == null) return null;
-            
+
             return currentPlayer.GamePlaySystemBridge;
         }
-        
+
         #endregion
-        
     }
 }
-

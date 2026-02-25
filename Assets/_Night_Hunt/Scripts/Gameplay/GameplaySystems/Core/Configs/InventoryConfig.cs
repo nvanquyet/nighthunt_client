@@ -52,6 +52,14 @@ namespace NightHunt.GameplaySystems.Core.Configs
         public QuickSlotConfigStruct QuickSlotConfig;
         
         #endregion
+
+        #region ========== ATTACHMENT UI ==========
+        
+        [Header("Attachment UI")]
+        [Tooltip("UI config cho attachment slots (icon mặc định, behaviour panel).")]
+        public AttachmentUIConfigStruct AttachmentUI;
+        
+        #endregion
         
         #region ========== BEHAVIOR SETTINGS ==========
         
@@ -174,6 +182,9 @@ namespace NightHunt.GameplaySystems.Core.Configs
                     
                 case UISlotType.QuickSlot:
                     return QuickSlotConfig.DefaultEmptyIcon;
+                
+                case UISlotType.Attachment:
+                    return AttachmentUI.DefaultEmptyIcon;
             }
             
             return null;
@@ -390,5 +401,24 @@ namespace NightHunt.GameplaySystems.Core.Configs
         // Managed by UIInputHandler via InputLayerManager
     }
     
+    #endregion
+
+    #region ========== ATTACHMENT UI CONFIG STRUCT ==========
+
+    [System.Serializable]
+    public struct AttachmentUIConfigStruct
+    {
+        [Header("UI")]
+        [Tooltip("Icon mặc định cho attachment slot trống")]
+        public Sprite DefaultEmptyIcon;
+
+        [Header("Behaviour")]
+        [Tooltip("Show attachment panel khi hover equipment item")]
+        public bool ShowAttachmentPanelOnHover;
+
+        [Tooltip("Show attachment panel khi select/click equipment item")]
+        public bool ShowAttachmentPanelOnSelect;
+    }
+
     #endregion
 }

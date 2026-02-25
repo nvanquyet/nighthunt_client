@@ -100,25 +100,39 @@ namespace NightHunt.Gameplay.Input.Core
 
         /// <summary>
         /// Toggle inventory UI và input state.
-        /// Được gọi từ InputAction hoặc có thể gọi trực tiếp từ code khác.
+        /// <para>Dùng <see cref="InputLayerManager.PushContext"/> khi mở và
+        /// <see cref="InputLayerManager.PopContext"/> khi đóng để hỗ trợ nested context
+        /// (VD: mở map trong inventory → PopContext về inventory, PopContext về Gameplay).</para>
         /// </summary>
         public void ToggleInventory()
         {
             isInventoryOpen = !isInventoryOpen;
 
-            // 1. Update InputState thông qua InputLayerManager
-            if (inputLayerManager != null)
+            var ilm = inputLayerManager ?? InputLayerManager.Instance;
+
+            if (isInventoryOpen)
             {
-                inputLayerManager.TransitionToState(
-                    isInventoryOpen ? InputState.InventoryOpen : InputState.PlayerAlive
-                );
+                // Push InventoryOpen:
+                //   ❌ Combat OFF  → click chuột trái / E / F KHÔNG fire
+                //   ❌ Player OFF  → không di chuyển / interact
+                //   ✅ UI ON, Inventory ON, Camera ON
+                ilm?.PushContext(InputState.InventoryOpen);
+
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible   = true;
+            }
+            else
+            {
+                // Pop về context trước đó (thường là PlayerAlive)
+                ilm?.PopContext();
+
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible   = false;
             }
 
-            // 2. Show/Hide UI panel
+            // Show/Hide UI panel
             if (uiRootController != null)
-            {
                 uiRootController.ToggleInventory();
-            }
 
             Debug.Log($"[InventoryInputBridge] Inventory {(isInventoryOpen ? "OPENED" : "CLOSED")}");
         }

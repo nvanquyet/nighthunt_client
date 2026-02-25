@@ -9,6 +9,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Core.Data;
+using NightHunt.GameplaySystems.Loot;
 
 namespace NightHunt.GameplaySystems.Inventory
 {
@@ -83,6 +84,8 @@ namespace NightHunt.GameplaySystems.Inventory
         public event Action<ItemInstance, ItemInstance> OnItemsSwapped;
         public event Action<ItemInstance, ItemInstance, int> OnItemsStacked;
         public event Action OnInventoryCleared;
+        /// <summary>Fired client-side when an item moves out of the inventory grid (InventoryIndex -1).</summary>
+        public event Action<int> OnInventorySlotCleared;
         
         #endregion
         
@@ -280,6 +283,8 @@ namespace NightHunt.GameplaySystems.Inventory
                 return;
             }
             
+            int originalQuantity = quantity;
+            
             if (_enableDebugLogs)
                 Debug.Log($"[InventorySystem] Adding {quantity}x {itemDef.DisplayName}");
             
@@ -292,6 +297,11 @@ namespace NightHunt.GameplaySystems.Inventory
                 {
                     // Fully stacked - batch weight update
                     ScheduleWeightUpdate();
+                    if (_enableDebugLogs)
+                    {
+                        float itemWeight = itemDef.GetTotalWeight(originalQuantity);
+                        Debug.Log($"[InventorySystem] Added item {itemDefinitionID} (qty: {originalQuantity}, weight: {itemWeight:F2}kg) - fully stacked. Total weight: {CalculateTotalWeight():F2}kg");
+                    }
                     return;
                 }
             }
@@ -316,6 +326,12 @@ namespace NightHunt.GameplaySystems.Inventory
             }
             
             ScheduleWeightUpdate();
+            
+            if (_enableDebugLogs)
+            {
+                float itemWeight = itemDef.GetTotalWeight(originalQuantity);
+                Debug.Log($"[InventorySystem] Added item {itemDefinitionID} (qty: {originalQuantity}, weight: {itemWeight:F2}kg). Total weight: {CalculateTotalWeight():F2}kg");
+            }
         }
         
         #endregion
@@ -331,6 +347,21 @@ namespace NightHunt.GameplaySystems.Inventory
             }
             
             RemoveItemServer(instanceID, quantity);
+        }
+        
+        /// <summary>
+        /// Remove from inventory slots but keep in ItemDatabase (for attachments).
+        /// AttachmentSystem uses this when attaching - instance stays registered for ItemStatSystem.
+        /// </summary>
+        public void RemoveItemFromSlotsOnly(string instanceID)
+        {
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[InventorySystem] RemoveItemFromSlotsOnly: server-only!");
+                return;
+            }
+            
+            RemoveItemFromSlotsOnlyServer(instanceID);
         }
         
         [Server]
@@ -364,8 +395,101 @@ namespace NightHunt.GameplaySystems.Inventory
             }
             
             ScheduleWeightUpdate();
+            
+            if (_enableDebugLogs)
+                Debug.Log($"[InventorySystem] Removed {quantity} of {item?.DefinitionID ?? instanceID} (remaining: {item?.Quantity ?? 0})");
         }
         
+        /// <inheritdoc/>
+        public void RestoreItemToSlots(ItemInstance item)
+        {
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[InventorySystem] RestoreItemToSlots: server-only!");
+                return;
+            }
+
+            RestoreItemToSlotsServer(item);
+        }
+
+        [Server]
+        private void RestoreItemToSlotsServer(ItemInstance item)
+        {
+            if (item == null || string.IsNullOrEmpty(item.InstanceID))
+            {
+                Debug.LogWarning("[InventorySystem] RestoreItemToSlots: invalid item");
+                return;
+            }
+
+            if (_itemCache.ContainsKey(item.InstanceID))
+            {
+                // Already in slots – nothing to do
+                if (_enableDebugLogs)
+                    Debug.LogWarning($"[InventorySystem] RestoreItemToSlots: {item.InstanceID} is already in slots");
+                return;
+            }
+
+            // Assign next free index
+            item.InventoryIndex = GetNextAvailableIndex();
+
+            // Register in all local caches
+            AddToAllCaches(item);
+
+            // Push to SyncList (replicates to clients as SyncListOperation.Add)
+            // Note: item is already in ItemDatabase from the original AddItem call – do NOT re-register.
+            _items.Add(item.ToData());
+
+            ScheduleWeightUpdate();
+            OnItemAdded?.Invoke(item);
+
+            if (_enableDebugLogs)
+                Debug.Log($"[InventorySystem] RestoreItemToSlots: restored {item.DefinitionID} x{item.Quantity} at index {item.InventoryIndex}");
+        }
+
+        /// <inheritdoc/>
+        public void SyncItemState(string instanceID)
+        {
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[InventorySystem] SyncItemState: server-only!");
+                return;
+            }
+
+            if (!_itemCache.TryGetValue(instanceID, out var item))
+            {
+                if (_enableDebugLogs)
+                    Debug.LogWarning($"[InventorySystem] SyncItemState: item not found in cache: {instanceID}");
+                return;
+            }
+
+            // ROOT CAUSE B FIX: _itemsByIndex is not automatically updated when external systems
+            // (EquipmentSystem, WeaponSystem) change item.InventoryIndex directly.
+            // Scan for any stale entry pointing to this item and remove it first.
+            int staleKey = -1;
+            foreach (var kvp in _itemsByIndex)
+            {
+                if (kvp.Value.InstanceID == instanceID)
+                {
+                    staleKey = kvp.Key;
+                    break;
+                }
+            }
+            if (staleKey >= 0)
+                _itemsByIndex.Remove(staleKey);
+
+            // Re-insert at the correct (new) index if still in inventory grid.
+            if (item.InventoryIndex >= 0)
+                _itemsByIndex[item.InventoryIndex] = item;
+
+            UpdateItemDataOptimized(item);
+        }
+
+        /// <inheritdoc/>
+        public int GetNextFreeInventoryIndex()
+        {
+            return GetNextAvailableIndex();
+        }
+
         public void RemoveItemByDefinition(string itemDefinitionID, int quantity)
         {
             if (!IsServerInitialized)
@@ -426,11 +550,30 @@ namespace NightHunt.GameplaySystems.Inventory
                 return;
             }
             
+            DropItemServer(instanceID, quantity);
+        }
+        
+        [Server]
+        private void DropItemServer(string instanceID, int quantity)
+        {
+            var item = GetItemByInstanceID(instanceID);
+            if (item == null)
+            {
+                Debug.LogWarning($"[InventorySystem] DropItem: Item not found {instanceID}");
+                return;
+            }
+            
+            var def = ItemDatabase.GetDefinition(item.DefinitionID);
+            if (def == null)
+            {
+                Debug.LogWarning($"[InventorySystem] DropItem: Item definition not found {item.DefinitionID}");
+                return;
+            }
+            
             // Gỡ attachments trước khi drop nếu có config
             if (_inventoryConfig != null && _inventoryConfig.ReturnAttachmentsToInventoryOnDrop)
             {
-                var item = GetItemByInstanceID(instanceID);
-                if (item != null && item.AttachedItems != null && item.AttachedItems.Length > 0)
+                if (item.AttachedItems != null && item.AttachedItems.Length > 0)
                 {
                     var attachmentSystem = GetComponent<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>();
                     if (attachmentSystem == null)
@@ -442,12 +585,44 @@ namespace NightHunt.GameplaySystems.Inventory
                     {
                         // Gỡ attachments và return vào inventory
                         attachmentSystem.DetachAllFromItem(instanceID);
+                        
+                        // Refresh item reference sau khi detach
+                        item = GetItemByInstanceID(instanceID);
+                        if (item == null)
+                        {
+                            Debug.LogWarning("[InventorySystem] DropItem: Item removed after detach");
+                            return;
+                        }
                     }
                 }
             }
             
-            // TODO: Implement world item spawning
-            RemoveItemServer(instanceID, quantity);
+            // Calculate drop quantity
+            int dropQty = Mathf.Min(quantity, item.Quantity);
+            
+            // Create ItemInstanceData for dropped item (clone với quantity mới)
+            var dropInstance = item.Clone();
+            dropInstance.Quantity = dropQty;
+            var dropData = dropInstance.ToData();
+            
+            // Calculate drop position (trước mặt player)
+            Transform ownerTransform = transform; // InventorySystem thường gắn trên player
+            Vector3 dropPos = ownerTransform.position + ownerTransform.forward * (_inventoryConfig?.DropDistance ?? 2f);
+            dropPos.y = ownerTransform.position.y; // Keep same Y level
+            Quaternion dropRot = Quaternion.identity;
+            
+            // Spawn world pickup (server-only)
+            if (WorldDropManager.Instance != null)
+            {
+                WorldDropManager.Instance.SpawnWorldPickup(dropData, dropPos, dropRot);
+            }
+            else
+            {
+                Debug.LogError("[InventorySystem] DropItem: WorldDropManager.Instance is null!");
+            }
+            
+            // Remove from inventory (sau khi đã spawn world item)
+            RemoveItemServer(instanceID, dropQty);
         }
         
         public void ClearInventory()
@@ -579,9 +754,69 @@ namespace NightHunt.GameplaySystems.Inventory
             
             OnItemsSwapped?.Invoke(item1, item2);
         }
-        
+
         #endregion
-        
+
+        #region IInventorySystem - Batch Operations
+
+        /// <inheritdoc/>
+        public void BatchAssignIndices(Dictionary<string, int> assignments)
+        {
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[InventorySystem] BatchAssignIndices: server-only!");
+                return;
+            }
+
+            BatchAssignIndicesServer(assignments);
+        }
+
+        /// <summary>
+        /// Atomically reassign inventory indices for a set of items without any
+        /// cascading swaps. Steps:
+        ///   1. Clear all affected items from _itemsByIndex.
+        ///   2. Apply new indices to ItemInstance objects.
+        ///   3. Re-insert into _itemsByIndex.
+        ///   4. Push each update to the SyncList once, in order.
+        /// This avoids the MoveItemServer swap-cascade that corrupts order.
+        /// </summary>
+        [Server]
+        private void BatchAssignIndicesServer(Dictionary<string, int> assignments)
+        {
+            if (assignments == null || assignments.Count == 0)
+                return;
+
+            // Step 1: Collect ItemInstance references and clear old index slots.
+            var items = new List<ItemInstance>(assignments.Count);
+            foreach (var kvp in assignments)
+            {
+                if (!_itemCache.TryGetValue(kvp.Key, out var item))
+                {
+                    Debug.LogWarning($"[InventorySystem] BatchAssignIndices: item not found {kvp.Key}");
+                    continue;
+                }
+                _itemsByIndex.Remove(item.InventoryIndex);
+                items.Add(item);
+            }
+
+            // Step 2 & 3: Apply new indices and re-insert into index cache.
+            foreach (var item in items)
+            {
+                int newIndex = assignments[item.InstanceID];
+                item.InventoryIndex = newIndex;
+                _itemsByIndex[newIndex] = item;
+            }
+
+            // Step 4: Push all updates to SyncList (one Set per item).
+            foreach (var item in items)
+                UpdateItemDataOptimized(item);
+
+            if (_enableDebugLogs)
+                Debug.Log($"[InventorySystem] BatchAssignIndices: reassigned {items.Count} items");
+        }
+
+        #endregion
+
         #region IInventorySystem - Stack Operations (OPTIMIZED)
         
         public bool CanStackWith(ItemInstance item1, ItemInstance item2)
@@ -702,6 +937,8 @@ namespace NightHunt.GameplaySystems.Inventory
             
             ItemDatabase.RegisterInstance(newItem);
             OnItemAdded?.Invoke(newItem);
+            
+            ScheduleWeightUpdate();
         }
         
         #endregion
@@ -770,10 +1007,14 @@ namespace NightHunt.GameplaySystems.Inventory
                 
                 int availableSpace = itemDef.MaxStackSize - item.Quantity;
                 int amountToAdd = Mathf.Min(availableSpace, quantity);
-                
+
                 item.Quantity += amountToAdd;
                 UpdateItemDataOptimized(item);
-                
+
+                // Notify server-side subscribers (GameplaySystemsBridge, weight system...)
+                // The SyncList.Set will handle client-side notification via OnItemsChanged.
+                OnItemAdded?.Invoke(item);
+
                 quantity -= amountToAdd;
             }
             
@@ -807,6 +1048,30 @@ namespace NightHunt.GameplaySystems.Inventory
                 if (index >= 0 && index < _items.Count)
                     _items[index] = item.ToData();
             }
+        }
+        
+        [Server]
+        private void RemoveItemFromSlotsOnlyServer(string instanceID)
+        {
+            if (!_itemCache.TryGetValue(instanceID, out var item))
+            {
+                Debug.LogWarning($"[InventorySystem] Item not found for RemoveItemFromSlotsOnly: {instanceID}");
+                return;
+            }
+            
+            int removedQty = item.Quantity;
+            RemoveFromAllCaches(item);
+            
+            if (_syncIndexCache.TryGetValue(item.InstanceID, out int index))
+            {
+                if (index >= 0 && index < _items.Count)
+                    _items.RemoveAt(index);
+                RebuildSyncIndexCache();
+            }
+            
+            // Do NOT UnregisterInstance - attachment stays in ItemDatabase for ItemStatSystem
+            ScheduleWeightUpdate();
+            OnItemRemoved?.Invoke(item, removedQty);
         }
         
         [Server]
@@ -886,6 +1151,9 @@ namespace NightHunt.GameplaySystems.Inventory
             );
             
             _statSystem.AddModifier(PlayerStatType.CurrentWeight, weightMod);
+            
+            if (_enableDebugLogs)
+                Debug.Log($"[InventorySystem] Updated total weight: {totalWeight:F2}kg → PlayerStatSystem.CurrentWeight");
         }
         
         #endregion
@@ -934,6 +1202,10 @@ namespace NightHunt.GameplaySystems.Inventory
         
         /// <summary>
         /// PERFORMANCE: Full cache rebuild from SyncList
+        /// NOTE: Does NOT call AddToAllCaches because that method stores
+        /// _syncIndexCache[id] = _items.Count which is wrong during a full rebuild
+        /// (the SyncList is already fully populated, so _items.Count is always the max).
+        /// Instead we explicitly set each cache entry with the correct loop index.
         /// </summary>
         private void RebuildAllCaches()
         {
@@ -953,7 +1225,24 @@ namespace NightHunt.GameplaySystems.Inventory
                     }
                 }
                 
-                AddToAllCaches(item);
+                // Primary cache
+                _itemCache[item.InstanceID] = item;
+                
+                // Index cache (only for items in inventory grid)
+                if (item.InventoryIndex >= 0)
+                    _itemsByIndex[item.InventoryIndex] = item;
+                
+                // Definition cache
+                if (!_itemsByDefinition.TryGetValue(item.DefinitionID, out var defList))
+                {
+                    defList = new List<ItemInstance>();
+                    _itemsByDefinition[item.DefinitionID] = defList;
+                }
+                defList.Add(item);
+                
+                // CRITICAL: sync index = i (the actual position in the SyncList array)
+                _syncIndexCache[item.InstanceID] = i;
+                
                 ItemDatabase.RegisterInstance(item);
             }
         }
@@ -995,7 +1284,19 @@ namespace NightHunt.GameplaySystems.Inventory
                     var newItem = newValue.ToInstance();
                     if (!string.IsNullOrEmpty(newItem.InstanceID))
                     {
-                        AddToAllCaches(newItem);
+                        // FIX: Use the callback `index` (the actual SyncList position) for
+                        // _syncIndexCache instead of calling AddToAllCaches which uses
+                        // _items.Count and can be wrong when the list is already updated.
+                        _itemCache[newItem.InstanceID] = newItem;
+                        if (newItem.InventoryIndex >= 0)
+                            _itemsByIndex[newItem.InventoryIndex] = newItem;
+                        if (!_itemsByDefinition.TryGetValue(newItem.DefinitionID, out var addDefList))
+                        {
+                            addDefList = new List<ItemInstance>();
+                            _itemsByDefinition[newItem.DefinitionID] = addDefList;
+                        }
+                        addDefList.Add(newItem);
+                        _syncIndexCache[newItem.InstanceID] = index; // `index` is the correct SyncList position
                         ItemDatabase.RegisterInstance(newItem);
                         OnItemAdded?.Invoke(newItem);
                     }
@@ -1005,17 +1306,93 @@ namespace NightHunt.GameplaySystems.Inventory
                     var removedItem = oldValue.ToInstance();
                     if (!string.IsNullOrEmpty(removedItem.InstanceID))
                     {
+                        // BUG 1 FIX: Fire slot-cleared BEFORE removing from cache so the InventoryIndex
+                        // is still available. Without this the UI slot is never cleared when an item is
+                        // fully consumed / dropped.
+                        if (removedItem.InventoryIndex >= 0)
+                            OnInventorySlotCleared?.Invoke(removedItem.InventoryIndex);
+
                         RemoveFromAllCaches(removedItem);
                         ItemDatabase.UnregisterInstance(removedItem.InstanceID);
+                        // FIX: After a removal all subsequent SyncList entries shift down by 1.
+                        // Rebuild the sync index cache so subsequent Set callbacks use correct indices.
+                        RebuildSyncIndexCache();
                     }
                     break;
                 
                 case SyncListOperation.Set:
                     var updatedItem = newValue.ToInstance();
+                    var previousItem = oldValue.ToInstance();
                     if (!string.IsNullOrEmpty(updatedItem.InstanceID))
                     {
+                        // Update primary cache
                         _itemCache[updatedItem.InstanceID] = updatedItem;
-                        _itemsByIndex[updatedItem.InventoryIndex] = updatedItem;
+
+                        // FIX: Always sync the SyncList position cache using the authoritative
+                        // `index` supplied by FishNet's callback (not any cached value).
+                        _syncIndexCache[updatedItem.InstanceID] = index;
+
+                        if (updatedItem.InventoryIndex >= 0)
+                        {
+                            _itemsByIndex[updatedItem.InventoryIndex] = updatedItem;
+
+                            // BUG 2 FIX: Only clear the OLD slot when it STILL references THIS item.
+                            // During a batch sort, multiple Set callbacks arrive out of order.
+                            // A → slot 3, B → slot 0 (where A used to be).
+                            // If we blindly Remove(_itemsByIndex[previousItem.InventoryIndex]) we'd
+                            // also wipe out whatever item moved there in an earlier callback,
+                            // causing that item to vanish from the UI.
+                            if (previousItem.InventoryIndex >= 0 &&
+                                previousItem.InventoryIndex != updatedItem.InventoryIndex)
+                            {
+                                if (_itemsByIndex.TryGetValue(previousItem.InventoryIndex, out var itemAtOldSlot) &&
+                                    itemAtOldSlot.InstanceID == updatedItem.InstanceID)
+                                {
+                                    _itemsByIndex.Remove(previousItem.InventoryIndex);
+                                    OnInventorySlotCleared?.Invoke(previousItem.InventoryIndex);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Item transitioned out of inventory grid (equipped / attached).
+                            if (previousItem.InventoryIndex >= 0)
+                            {
+                                if (_itemsByIndex.TryGetValue(previousItem.InventoryIndex, out var itemAtOldSlot) &&
+                                    itemAtOldSlot.InstanceID == updatedItem.InstanceID)
+                                {
+                                    _itemsByIndex.Remove(previousItem.InventoryIndex);
+                                    OnInventorySlotCleared?.Invoke(previousItem.InventoryIndex);
+                                }
+                            }
+                        }
+
+                        // FIX Bug 1b: Update _itemsByDefinition cache.
+                        // This was missing: stale entries caused GetItemCount / GetItemsByDefinition
+                        // to return outdated quantities after a stack merge.
+                        if (!_itemsByDefinition.TryGetValue(updatedItem.DefinitionID, out var defList))
+                        {
+                            defList = new List<ItemInstance>();
+                            _itemsByDefinition[updatedItem.DefinitionID] = defList;
+                        }
+                        bool foundInDefList = false;
+                        for (int i = 0; i < defList.Count; i++)
+                        {
+                            if (defList[i].InstanceID == updatedItem.InstanceID)
+                            {
+                                defList[i] = updatedItem;
+                                foundInDefList = true;
+                                break;
+                            }
+                        }
+                        if (!foundInDefList)
+                            defList.Add(updatedItem);
+
+                        // Fire OnItemAdded only when the item is (or has become) part of the inventory
+                        // grid. Suppress when InventoryIndex=-1 to avoid spurious UI updates when items
+                        // leave the grid (equip/attach) – those paths have their own dedicated events.
+                        if (updatedItem.InventoryIndex >= 0)
+                            OnItemAdded?.Invoke(updatedItem);
                     }
                     break;
                 

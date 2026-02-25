@@ -29,6 +29,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private ItemInstance _currentItem;
         private readonly Dictionary<int, ItemSlotView> _attachmentSlots = new Dictionary<int, ItemSlotView>();
         
+        // Pin state để giữ panel mở khi hover ra
+        private bool _isPinned = false;
+        private ItemInstance _pinnedItem;
+        
         private void Awake()
         {
             if (_attachmentSystemComponent != null)
@@ -64,6 +68,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
             
             _currentItem = equipmentItem;
+            
+            // Nếu đang pinned với item khác, unpin
+            if (_isPinned && _pinnedItem != null && _pinnedItem.InstanceID != equipmentItem.InstanceID)
+            {
+                _isPinned = false;
+                _pinnedItem = null;
+            }
+            
             BuildAttachmentSlots(def, equipmentItem);
             
             if (_panelRoot != null)
@@ -71,16 +83,47 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
         
         /// <summary>
-        /// Hide attachment panel
+        /// Hide attachment panel (chỉ hide nếu không pinned)
         /// </summary>
         public void Hide()
         {
+            // Không hide nếu đang pinned
+            if (_isPinned) return;
+            
             if (_panelRoot != null)
                 _panelRoot.SetActive(false);
             
             ClearSlots();
             _currentItem = null;
         }
+        
+        /// <summary>
+        /// Toggle pin state - giữ panel mở khi hover ra
+        /// </summary>
+        public void TogglePin()
+        {
+            _isPinned = !_isPinned;
+            if (_isPinned)
+            {
+                _pinnedItem = _currentItem;
+            }
+            else
+            {
+                _pinnedItem = null;
+                // Auto hide nếu không còn hover
+                if (_currentItem == null)
+                {
+                    if (_panelRoot != null)
+                        _panelRoot.SetActive(false);
+                    ClearSlots();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Check if panel is pinned
+        /// </summary>
+        public bool IsPinned => _isPinned;
         
         /// <summary>
         /// Build attachment slots từ item definition
@@ -96,7 +139,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             
             for (int i = 0; i < itemDef.AttachmentSlots.Length; i++)
             {
-                var slotType = itemDef.AttachmentSlots[i];
                 var go = Instantiate(prefab, _slotsRoot);
                 var view = go.GetComponent<ItemSlotView>();
                 
@@ -105,11 +147,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     var id = UISlotId.Attachment(item.InstanceID, i);
                     view.Initialize(_uiConfig, id);
                     
-                    // Set default icon cho slot type khi empty
-                    var defaultIcon = _uiConfig.GetAttachmentSlotIcon(slotType);
-                    if (defaultIcon != null && view != null)
+                    // Set default icon khi empty (dùng AttachmentUI trong InventoryConfig)
+                    Sprite defaultIcon = null;
+                    if (_uiConfig != null && _uiConfig.InventoryConfig != null)
                     {
-                        // Set empty state với default icon
+                        defaultIcon = _uiConfig.InventoryConfig.GetDefaultEmptyIcon(UISlotType.Attachment);
+                    }
+                    if (defaultIcon != null)
+                    {
                         var emptyState = new UISlotState
                         {
                             Icon = defaultIcon,
@@ -143,9 +188,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 if (attachment == null)
                 {
-                    // Set empty state với default icon
-                    var slotType = GetSlotType(slotIndex);
-                    var defaultIcon = _uiConfig != null ? _uiConfig.GetAttachmentSlotIcon(slotType) : null;
+                    // Set empty state với default icon từ InventoryConfig.AttachmentUI
+                    Sprite defaultIcon = null;
+                    if (_uiConfig != null && _uiConfig.InventoryConfig != null)
+                    {
+                        defaultIcon = _uiConfig.InventoryConfig.GetDefaultEmptyIcon(UISlotType.Attachment);
+                    }
                     var emptyState = new UISlotState
                     {
                         Icon = defaultIcon,

@@ -106,6 +106,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
         {
             if (inputEnabled) return;
 
+            // Retry nếu Awake chạy trước khi InputLayerManager sẵn sàng
+            if (cameraActionMap == null) InitializeActions();
+            if (cameraActionMap == null)
+            {
+                Debug.LogError("[CameraInputHandler] cameraActionMap null – không thể EnableInput!");
+                return;
+            }
+
             inputEnabled = true;
 
             if (rotateLeftAction != null)

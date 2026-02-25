@@ -261,6 +261,50 @@ namespace NightHunt.GameplaySystems.Weapon
             
             EquipWeaponServer(instanceID);
         }
+
+        /// <inheritdoc/>
+        public void EquipWeaponToSlot(string instanceID, WeaponSlotType targetSlot)
+        {
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[WeaponSystem] EquipWeaponToSlot: server-only!");
+                return;
+            }
+
+            EquipWeaponToSlotServer(instanceID, targetSlot);
+        }
+
+        [Server]
+        private void EquipWeaponToSlotServer(string instanceID, WeaponSlotType targetSlot)
+        {
+            var item = _inventorySystem.GetItemByInstanceID(instanceID);
+            if (item == null)
+            {
+                Debug.LogWarning($"[WeaponSystem] EquipWeaponToSlot: item not found: {instanceID}");
+                return;
+            }
+
+            var itemDef = ItemDatabase.GetDefinition(item.DefinitionID);
+            if (!(itemDef is WeaponDefinition weaponDef))
+            {
+                Debug.LogWarning($"[WeaponSystem] EquipWeaponToSlot: not a weapon: {item.DefinitionID}");
+                return;
+            }
+
+            // If target slot is already occupied, unequip existing weapon first
+            if (_weapons.ContainsKey(targetSlot))
+                UnequipWeaponServer(targetSlot);
+
+            _weapons[targetSlot] = instanceID;
+            item.InventoryIndex = -1; // Mark as equipped
+            // BUG 7 FIX: Push the updated InventoryIndex to clients so UI can clear the old inventory slot.
+            _inventorySystem.SyncItemState(instanceID);
+
+            ApplyWeaponModifiers(instanceID, weaponDef);
+
+            if (_enableDebugLogs)
+                Debug.Log($"[WeaponSystem] EquipWeaponToSlot: {weaponDef.DisplayName} → {targetSlot} (explicit)");
+        }
         
         [Server]
         private void EquipWeaponServer(string instanceID)
@@ -289,6 +333,8 @@ namespace NightHunt.GameplaySystems.Weapon
             // Equip weapon
             _weapons[targetSlot] = instanceID;
             item.InventoryIndex = -1; // Mark as equipped
+            // BUG 7 FIX: Push the updated InventoryIndex to clients so UI can clear the old inventory slot.
+            _inventorySystem.SyncItemState(instanceID);
             
             // Apply stat modifiers
             ApplyWeaponModifiers(instanceID, weaponDef);
@@ -325,15 +371,29 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
             }
             
-            // If this weapon is active, holster it
+            // If this weapon is active, holster it first
             if (_activeSlot.Value == slotType)
                 HolsterWeaponServer();
-            
-            // Remove from weapons
+
+            // BUG 3 FIX: Detach all attachments before unequipping (mirrors EquipmentSystem behaviour).
+            // Only detach if config requires it; otherwise attachments stay on the weapon item.
+            if (_inventoryConfig != null && _inventoryConfig.DetachAttachmentsOnUnequip)
+            {
+                var attachmentSystem = GetComponent<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>()
+                                    ?? GetComponentInParent<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>();
+                if (attachmentSystem != null)
+                    attachmentSystem.DetachAllFromItem(instanceID);
+                else if (_enableDebugLogs)
+                    Debug.LogWarning($"[WeaponSystem] DetachAttachmentsOnUnequip=true but IAttachmentSystem not found on {gameObject.name}");
+            }
+
+            // Remove from weapon slots
             _weapons.Remove(slotType);
             
-            // Return to inventory
+            // Return to inventory (mark with a valid index so UIDomainBridge can show it)
             item.InventoryIndex = FindNextAvailableInventoryIndex();
+            // BUG 7 FIX: Push restored InventoryIndex to clients so UI can show item in inventory.
+            _inventorySystem.SyncItemState(instanceID);
             
             // Remove stat modifiers
             RemoveWeaponModifiers(instanceID);
@@ -341,7 +401,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_enableDebugLogs)
             {
                 var def = ItemDatabase.GetDefinition(item.DefinitionID);
-                Debug.Log($"[WeaponSystem] Unequipped {def?.DisplayName} from {slotType}");
+                Debug.Log($"[WeaponSystem] Unequipped {def?.DisplayName} from {slotType}, returned to inventory index {item.InventoryIndex}");
             }
         }
         
@@ -568,21 +628,35 @@ namespace NightHunt.GameplaySystems.Weapon
         [Server]
         private void ApplyWeaponModifiers(string instanceID, WeaponDefinition weaponDef)
         {
-            if (_statSystem == null || weaponDef.PlayerModifiers == null)
-                return;
+            if (_statSystem == null) return;
             
-            foreach (var modifier in weaponDef.PlayerModifiers)
+            var modifiers = weaponDef.GetPlayerModifiers();
+            if (modifiers != null)
             {
-                var statMod = new StatModifier
+                foreach (var modifier in modifiers)
                 {
-                    SourceID = instanceID,
-                    Type = modifier.ModifierType,
-                    Value = modifier.Value,
-                    Priority = 0,
-                    Description = modifier.Description
-                };
-                
-                _statSystem.AddModifier(modifier.StatType, statMod);
+                    var statMod = new StatModifier { SourceID = instanceID, Type = modifier.ModifierType, Value = modifier.Value, Priority = 0, Description = modifier.Description };
+                    _statSystem.AddModifier(modifier.StatType, statMod);
+                }
+            }
+            
+            // Apply attachment PlayerModifiers (e.g. flashlight VisionRange)
+            var weaponItem = _inventorySystem.GetItemByInstanceID(instanceID);
+            if (weaponItem?.AttachedItems != null)
+            {
+                foreach (var attachmentInstanceID in weaponItem.AttachedItems)
+                {
+                    if (string.IsNullOrEmpty(attachmentInstanceID)) continue;
+                    var attachInstance = ItemDatabase.GetInstance(attachmentInstanceID);
+                    if (attachInstance == null) continue;
+                    var attachDef = ItemDatabase.GetDefinition(attachInstance.DefinitionID) as AttachmentDefinition;
+                    if (attachDef?.StatConfig?.PlayerModifiers == null) continue;
+                    foreach (var mod in attachDef.StatConfig.PlayerModifiers)
+                    {
+                        var statMod = new StatModifier { SourceID = instanceID, Type = mod.ModifierType, Value = mod.Value, Priority = 0, Description = mod.Description };
+                        _statSystem.AddModifier(mod.StatType, statMod);
+                    }
+                }
             }
         }
         
@@ -617,11 +691,8 @@ namespace NightHunt.GameplaySystems.Weapon
         
         private int FindNextAvailableInventoryIndex()
         {
-            if (_inventorySystem == null)
-                return 0;
-            
-            int maxIndex = _inventorySystem.GetMaxIndex();
-            return maxIndex + 1;
+            // ROOT CAUSE A FIX: Use gap-finding (first free slot) instead of maxIndex+1.
+            return _inventorySystem?.GetNextFreeInventoryIndex() ?? 0;
         }
         
         private void RebuildWeaponCache()

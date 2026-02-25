@@ -191,10 +191,40 @@ namespace NightHunt.GameplaySystems.Core.Data
         
         /// <summary>
         /// Get total weight for a quantity
+        /// Reads Weight from StatConfig if available, otherwise uses base Weight field
         /// </summary>
         public virtual float GetTotalWeight(int quantity)
         {
-            return Weight * quantity;
+            float weight = Weight;
+            
+            // Try to get from StatConfig if available (for all item types)
+            if (this is WeaponDefinition weaponDef && weaponDef.StatConfig != null)
+            {
+                float configWeight = weaponDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
+                if (configWeight > 0f) weight = configWeight;
+            }
+            else if (this is EquipmentDefinition equipmentDef && equipmentDef.StatConfig != null)
+            {
+                float configWeight = equipmentDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
+                if (configWeight > 0f) weight = configWeight;
+            }
+            else if (this is AttachmentDefinition attachmentDef && attachmentDef.StatConfig != null)
+            {
+                float configWeight = attachmentDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
+                if (configWeight > 0f) weight = configWeight;
+            }
+            else if (this is ConsumableDefinition consumableDef && consumableDef.StatConfig != null)
+            {
+                float configWeight = consumableDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
+                if (configWeight > 0f) weight = configWeight;
+            }
+            else if (this is ThrowableDefinition throwableDef && throwableDef.StatConfig != null)
+            {
+                float configWeight = throwableDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
+                if (configWeight > 0f) weight = configWeight;
+            }
+            
+            return weight * quantity;
         }
         
         /// <summary>
@@ -249,7 +279,7 @@ namespace NightHunt.GameplaySystems.Core.Data
             // Auto-generate ItemID from asset name if empty
             if (string.IsNullOrEmpty(ItemID))
             {
-                ItemID = name;
+                ItemID = name.ToLower();
             }
             
             // Ensure stackable items have valid stack size

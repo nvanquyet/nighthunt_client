@@ -103,8 +103,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
             if (exitSpectatorAction != null)
                 exitSpectatorAction.performed += OnExitSpectatorPerformed;
 
-            // Transition to spectating state
-            InputLayerManager.Instance?.TransitionToState(InputState.Spectating);
+            // NOTE: Không gọi TransitionToState ở đây!
+            // Việc chuyển context là trách nhiệm của caller (CharacterInputLifecycle, v.v.)
+            // để tránh circular dependency.
 
             Debug.Log("[SpectatorInputHandler] Input enabled");
         }

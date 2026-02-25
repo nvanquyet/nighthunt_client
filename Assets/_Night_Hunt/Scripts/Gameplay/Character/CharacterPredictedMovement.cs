@@ -4,6 +4,8 @@ using FishNet.Transporting;
 using NightHunt.Gameplay.Character.Movement;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking.Prediction.FishNet;
+using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.StatSystem.Core.Types;
 using Unity.Cinemachine;
 
 namespace NightHunt.Gameplay.Character
@@ -27,12 +29,19 @@ namespace NightHunt.Gameplay.Character
         [Header("Network Interpolation")]
         [SerializeField] private float interpolationSpeed = 15f;
 
+        [Header("Stamina Recovery")]
+        [Tooltip("Thời gian delay (giây) trước khi bắt đầu hồi stamina khi đứng yên/di chuyển chậm")]
+        [SerializeField] private float staminaRecoveryDelay = 1.5f;
+        [Tooltip("Tốc độ di chuyển tối đa (m/s) để được coi là 'di chuyển chậm'")]
+        [SerializeField] private float slowMovementThreshold = 1.0f;
+
         [Header("Debug")]
         [SerializeField] private bool enableDebugLogs = false;
 
         // Components
         private CharacterController _cc;
         private CinemachineCamera _camera;
+        private IPlayerStatSystem _playerStatSystem;
 
         // ===== INPUT (OWNER ONLY) =====
         private Vector2 _moveInput;
@@ -45,6 +54,9 @@ namespace NightHunt.Gameplay.Character
         private Vector3 _velocity;
         private float _verticalVelocity;
         private float _stamina;
+        
+        // ===== STAMINA RECOVERY =====
+        private float _staminaRecoveryTimer = 0f; // Timer đếm thời gian đứng yên/chậm
 
         // ===== NON OWNER INTERPOLATION =====
         private Vector3 _targetPosition;
@@ -56,10 +68,16 @@ namespace NightHunt.Gameplay.Character
         {
             _cc = GetComponent<CharacterController>();
             _camera = GetComponentInChildren<CinemachineCamera>();
+            _playerStatSystem = GetComponent<IPlayerStatSystem>();
 
             if (_cc == null)
             {
                 Debug.LogError("[CharacterPredictedMovement] CharacterController NOT FOUND!");
+            }
+            
+            if (_playerStatSystem == null)
+            {
+                Debug.LogWarning("[CharacterPredictedMovement] IPlayerStatSystem NOT FOUND! Stamina will use MovementSettings fallback.");
             }
         }
 
@@ -67,16 +85,23 @@ namespace NightHunt.Gameplay.Character
         {
             base.OnStartNetwork();
 
-            _stamina = movementSettings.maxStamina;
+            // Initialize stamina: ưu tiên current value từ PlayerStatSystem (ví dụ sau respawn có thể không full)
+            // Fallback về maxStamina nếu stat system null hoặc chưa init (trả về 0)
+            float maxStamina = GetMaxStamina();
+            float currentStamina = _playerStatSystem != null
+                ? _playerStatSystem.GetStat(PlayerStatType.Stamina)
+                : 0f;
+            _stamina = currentStamina > 0f ? currentStamina : maxStamina;
             _targetPosition = transform.position;
             _targetRotation = transform.rotation;
             _verticalVelocity = -2f;
+            _staminaRecoveryTimer = 0f;
             
             // Initialize camera lock state
             _cameraLocked = startWithCameraLock;
 
             if (enableDebugLogs)
-                Debug.Log($"[CharacterPredictedMovement] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}, CameraLock={_cameraLocked}");
+                Debug.Log($"[CharacterPredictedMovement] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}, CameraLock={_cameraLocked}, MaxStamina={maxStamina}");
         }
 
         #endregion
@@ -180,9 +205,13 @@ namespace NightHunt.Gameplay.Character
 
             // Send to server (owner) or process locally (server)
             Replicate(replicateData, ReplicateState.Ticked, Channel.Unreliable);
-            
-            // REQUIRED: Create and send reconcile data
-            CreateReconcile();
+
+            // Server-only: tạo và gửi reconcile data về client
+            // Client KHÔNG gọi — chỉ nhận từ server
+            if (IsServerStarted)
+            {
+                CreateReconcile();
+            }
         }
 
         // ===================== REPLICATE =====================
@@ -210,26 +239,73 @@ namespace NightHunt.Gameplay.Character
 
             bool grounded = _cc.isGrounded;
 
-            // ===== STAMINA =====
-            _stamina = Mathf.Min(
-                _stamina + movementSettings.staminaRegenRate * dt,
-                movementSettings.maxStamina
-            );
+            // ===== CALCULATE SPEED FIRST (for stamina logic) =====
+            // Lấy baseSpeed từ PlayerStatSystem.MovementSpeed (có modifier từ item/buff)
+            // Fallback về movementSettings.baseSpeed nếu stat system null
+            float speed = GetBaseSpeed();
+            bool canSprint = data.Sprint && _stamina > GetMinStaminaToSprint();
 
-            float speed = movementSettings.baseSpeed;
-
-            if (data.Sprint && _stamina > movementSettings.minStaminaToSprint)
+            if (canSprint)
             {
-                speed *= movementSettings.sprintMultiplier;
-                _stamina -= movementSettings.staminaDrainRate * dt;
+                // Sử dụng SprintSpeedMultiplier từ GameConfigData, fallback về movementSettings
+                float sprintMultiplier = GetSprintSpeedMultiplier();
+                speed *= sprintMultiplier;
             }
             else if (data.Crouch)
             {
                 speed *= movementSettings.crouchMultiplier;
             }
 
-            // ===== INPUT DIRECTION =====
+            // ===== STAMINA LOGIC =====
+            // Movement LUÔN tự tính drain + regen dựa trên MovementSettings config.
+            // PlayerStatSystem chỉ là data-store/sync layer — không có logic regen riêng.
+            // Sau khi tính xong: nếu có stat system → write-back lên server để SyncList → UI/client.
+            // Nếu không có stat system → _stamina local tự đủ (fallback/standalone mode).
+            float maxStamina = GetMaxStamina();
             Vector3 inputDir = new Vector3(data.Move.x, 0f, data.Move.y);
+            float inputMagnitude = inputDir.magnitude;
+
+            // ── DRAIN khi sprint ─────────────────────────────────────────────
+            if (data.Sprint && canSprint)
+            {
+                float drainRate = GetStaminaDrainRate();
+                _stamina = Mathf.Max(0f, _stamina - drainRate * dt);
+            }
+            else
+            {
+                // ── REGEN khi đứng yên / di chuyển chậm / không sprint ───────
+                // Phải đợi staminaRecoveryDelay giây mới bắt đầu hồi
+                float expectedSpeed   = inputMagnitude * speed;
+                bool isIdle           = inputMagnitude < 0.01f;
+                bool isMovingSlowly   = !isIdle && expectedSpeed <= slowMovementThreshold;
+                bool isIdleOrSlow     = isIdle || isMovingSlowly;
+                bool isBelowThreshold = _stamina < GetMinStaminaToSprint(); // hồi kể cả khi dưới ngưỡng sprint
+
+                if (isIdleOrSlow || isBelowThreshold)
+                {
+                    _staminaRecoveryTimer += dt;
+                    if (_staminaRecoveryTimer >= staminaRecoveryDelay)
+                    {
+                        float regenRate = GetStaminaRegenRate();
+                        _stamina = Mathf.Min(_stamina + regenRate * dt, maxStamina);
+                    }
+                }
+                else
+                {
+                    // Đang di chuyển nhanh (không sprint) → reset timer
+                    _staminaRecoveryTimer = 0f;
+                }
+            }
+
+            // ── WRITE-BACK lên PlayerStatSystem (server only) ─────────────────
+            // PlayerStatSystem.SyncList tự broadcast về tất cả client → UI đọc đúng.
+            // Client KHÔNG ghi — giá trị đúng đến từ Reconcile mỗi tick.
+            if (IsServerStarted && _playerStatSystem != null)
+            {
+                _playerStatSystem.SetCurrentStat(PlayerStatType.Stamina, _stamina);
+            }
+
+            // ===== INPUT DIRECTION =====
             if (inputDir.sqrMagnitude > 1f)
                 inputDir.Normalize();
 
@@ -307,12 +383,76 @@ namespace NightHunt.Gameplay.Character
             _cc.Move(finalMove * dt);
             _velocity = finalMove;
         }
+        
+        // ===================== STAMINA HELPERS =====================
+        
+        /// <summary>
+        /// Lấy base movement speed từ PlayerStatSystem.MovementSpeed
+        /// Stat này có thể bị modify bởi items/buffs (ví dụ: boots tăng speed)
+        /// Fallback về movementSettings.baseSpeed nếu stat system null
+        /// </summary>
+        private float GetBaseSpeed()
+        {
+            if (_playerStatSystem != null)
+            {
+                float statSpeed = _playerStatSystem.GetStat(PlayerStatType.MovementSpeed);
+                // Chỉ dùng stat nếu hợp lệ (> 0), tránh trường hợp chưa init
+                if (statSpeed > 0f) return statSpeed;
+            }
+            return movementSettings != null ? movementSettings.baseSpeed : 5f;
+        }
+
+        /// <summary>
+        /// Lấy max stamina từ PlayerStatSystem hoặc fallback về MovementSettings
+        /// </summary>
+        private float GetMaxStamina()
+        {
+            if (_playerStatSystem != null)
+            {
+                return _playerStatSystem.GetStat(PlayerStatType.MaxStamina);
+            }
+            return movementSettings != null ? movementSettings.maxStamina : 100f;
+        }
+        
+        /// <summary>
+        /// Lấy tốc độ hồi stamina từ MovementSettings
+        /// </summary>
+        private float GetStaminaRegenRate()
+        {
+            return movementSettings != null ? movementSettings.staminaRegenRate : 15f;
+        }
+        
+        /// <summary>
+        /// Lấy tốc độ tiêu hao stamina từ MovementSettings
+        /// </summary>
+        private float GetStaminaDrainRate()
+        {
+            return movementSettings != null ? movementSettings.staminaDrainRate : 20f;
+        }
+        
+        /// <summary>
+        /// Lấy min stamina cần để sprint từ MovementSettings
+        /// </summary>
+        private float GetMinStaminaToSprint()
+        {
+            return movementSettings != null ? movementSettings.minStaminaToSprint : 10f;
+        }
+        
+        /// <summary>
+        /// Lấy sprint speed multiplier từ MovementSettings
+        /// </summary>
+        private float GetSprintSpeedMultiplier()
+        {
+            return movementSettings != null ? movementSettings.sprintSpeedMultiplier : 1.6f;
+        }
 
         // ===================== RECONCILE =====================
 
         public override void CreateReconcile()
         {
-            if (!IsSpawned) return;
+            // Chỉ server mới tạo và gửi reconcile data
+            // FishNet tự route về đúng owner client
+            if (!IsServerStarted || !IsSpawned) return;
 
             MovementReconcileData reconcileData = CreateReconcileData();
             Reconcile(reconcileData, Channel.Unreliable);
@@ -469,7 +609,8 @@ namespace NightHunt.Gameplay.Character
             GUILayout.Label($"Press [Tab] to toggle camera lock");
             GUILayout.Label($"Input: ({_moveInput.x:F2}, {_moveInput.y:F2})");
             GUILayout.Label($"Velocity: {_velocity.magnitude:F2} m/s");
-            GUILayout.Label($"Stamina: {_stamina:F0}");
+            GUILayout.Label($"Stamina: {_stamina:F0} / {GetMaxStamina():F0}");
+            GUILayout.Label($"Recovery Timer: {_staminaRecoveryTimer:F2}s / {staminaRecoveryDelay:F2}s");
             GUILayout.Label($"Sprint: {_sprint} | Crouch: {_crouch}");
             GUILayout.Label($"Camera Yaw: {_yaw:F1}°");
             GUILayout.Label($"TickDelta: {TickDelta:F4}s");

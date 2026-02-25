@@ -22,13 +22,14 @@ namespace NightHunt.GameplaySystems.QuickSlot
         
         public void ApplyEffects(ConsumableDefinition def)
         {
-            if (def.Effects == null || def.Effects.Length == 0)
+            var effects = def.GetEffects(); // Read from StatConfig
+            if (effects == null || effects.Length == 0)
             {
                 Debug.LogWarning($"[ConsumableHandler] '{def.DisplayName}' has no effects");
                 return;
             }
             
-            foreach (var effect in def.Effects)
+            foreach (var effect in effects)
                 ApplySingleEffect(effect);
         }
         

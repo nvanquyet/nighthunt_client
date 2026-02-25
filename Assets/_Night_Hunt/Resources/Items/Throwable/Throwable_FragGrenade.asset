@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f0d46f0ac038415e8cbc2f02e51dc6cb, type: 3}
+  m_Name: Throwable_FragGrenade
+  m_EditorClassIdentifier: 
+  ItemID: throwable_fraggrenade
+  DisplayName: Frag Grenade
+  Description: "Explosive grenade \u2013 3 s fuse. Deals AoE damage."
+  Icon: {fileID: 0}
+  IsStackable: 1
+  MaxStackSize: 3
+  Weight: 0.4
+  ModifyWeightWhenEquipped: 0
+  EquippedWeightModifier: 0
+  ResourceType: 0
+  MaxResource: 0
+  DefaultResource: 0
+  AttachmentSlots: 
+  CanAttachTo: 
+  ValidSlots: 0000000003000000
+  EquippedPrefab: {fileID: 0}
+  DroppedPrefab: {fileID: 0}
+  UsageDuration: 0
+  CanCancelUsage: 1
+  CanUseWhileMoving: 1
+  StatConfig: {fileID: 11400000, guid: db5ff78c6f456f0429f72830db9e43a0, type: 2}
+  ProjectilePrefab: {fileID: 0}
+  ThrowForce: 15
+  MaxRange: 30
+  PrepareTime: 0.5
+  ThrowableType: 0
+  Damage: 100
+  ExplosionRadius: 5
+  FuseTime: 3
+  CanBounce: 1
+  ExplosionEffectPrefab: {fileID: 0}
+  ThrowSound: {fileID: 0}
+  ImpactSound: {fileID: 0}

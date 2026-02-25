@@ -47,7 +47,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             State = state;
 
-            if (state == null || state.Item == null)
+            // Chỉ coi là empty nếu không có item và cũng không có icon
+            if (state == null || (state.Item == null && state.Icon == null))
             {
                 SetEmptyState();
                 return;
@@ -117,8 +118,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     SlotId.EquipmentSlot, 
                     SlotId.WeaponSlot
                 );
-                
-                Debug.Log($"[ItemSlotView] SetEmptyState: SlotType={SlotId.Type}, EquipmentSlot={SlotId.EquipmentSlot}, WeaponSlot={SlotId.WeaponSlot}, DefaultIcon={(defaultIcon != null ? defaultIcon.name : "null")}, Config={(_uiConfig != null ? "OK" : "NULL")}, InventoryConfig={(_uiConfig?.InventoryConfig != null ? "OK" : "NULL")}");
             }
             else
             {
@@ -139,7 +138,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
                 else
                 {
-                    // Các slot khác: clear icon và set default
+                    // Các slot khác (bao gồm Attachment): clear icon và set default
                     _icon.sprite = null;
                     _icon.enabled = false;
                     
@@ -148,11 +147,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     {
                         _icon.sprite = defaultIcon;
                         _icon.enabled = true;
-                        Debug.Log($"[ItemSlotView] SetEmptyState: Set icon to {defaultIcon.name}");
-                    }
-                    else
-                    {
-                        Debug.Log($"[ItemSlotView] SetEmptyState: No default icon, icon disabled");
                     }
                 }
             }

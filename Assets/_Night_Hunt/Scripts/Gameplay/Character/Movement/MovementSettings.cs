@@ -7,7 +7,7 @@ namespace NightHunt.Gameplay.Character.Movement
     {
         [Header("Speed")]
         [Min(0f)] public float baseSpeed = 5f;
-        [Min(0f)] public float sprintMultiplier = 1.5f;
+        [Min(0f)] public float sprintSpeedMultiplier = 1.6f;
         [Min(0f)] public float crouchMultiplier = 0.6f;
 
         [Header("Acceleration")]

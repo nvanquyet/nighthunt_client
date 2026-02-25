@@ -18,7 +18,6 @@ namespace NightHunt.StatSystem.Core.Types
         
         // === Movement ===
         MovementSpeed,      // Base movement speed (m/s)
-        SprintSpeed,        // Sprint speed (m/s)
         
         // === Weight System ===
         WeightCapacity,     // Maximum weight can carry (kg)
@@ -26,10 +25,8 @@ namespace NightHunt.StatSystem.Core.Types
         
         // === Combat - Defense ===
         Armor,              // Physical armor value (tổng từ equipment)
-        MagicResist,        // Magic resistance value (tổng từ equipment)
         
         // === Vision ===
-        VisionRange,        // Vision range (meters)
-        NightVision         // Night vision effectiveness (0-100)
+        VisionRange         // Vision range (meters) - cộng dồn từ LightRange items
     }
 }

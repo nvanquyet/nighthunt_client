@@ -32,12 +32,4 @@ MonoBehaviour:
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 0
-  ItemModifiers:
-  - StatType: 15
-    Value: 50
-    ModifierType: 1
-    Description: +50% magazine capacity
-  - StatType: 14
-    Value: -10
-    ModifierType: 1
-    Description: Slower reload
+  StatConfig: {fileID: 0}

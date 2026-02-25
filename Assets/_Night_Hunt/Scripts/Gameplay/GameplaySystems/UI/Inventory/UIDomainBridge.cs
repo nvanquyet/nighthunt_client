@@ -25,6 +25,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private NetworkPlayer _currentPlayer;
         private IGameplayBridge _bridge;
 
+        [UnityEngine.SerializeField]
+        private bool _enableDebugLogs = false;
+
         public bool IsReady => _bridge != null && _bridge.IsReady;
         public IGameplayBridge Bridge => _bridge;
 
@@ -82,6 +85,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _currentPlayer = null;
         }
 
+        /// <summary>
+        /// ROOT CAUSE D FIX: Re-push all current backend state to UI slots.
+        /// Call this after any operation that clears UI (e.g. RefreshAllSlots / sort reset)
+        /// because events only fire on CHANGES, not on demand.
+        /// </summary>
+        public void Refresh()
+        {
+            PushInitialInventorySnapshot();
+            PushInitialEquipmentSnapshot();
+            PushInitialWeaponSnapshot();
+            PushInitialQuickSlotSnapshot();
+        }
+
         #endregion
 
         #region Event Wiring
@@ -93,7 +109,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _bridge.OnItemAdded += HandleItemChangedInventory;
             _bridge.OnItemRemoved += HandleItemRemoved;
             _bridge.OnItemsSwapped += HandleItemsSwapped;
+            _bridge.OnItemMoved += HandleItemMoved;
             _bridge.OnInventoryCleared += HandleInventoryCleared;
+            _bridge.OnInventorySlotCleared += HandleInventorySlotCleared;
 
             _bridge.OnItemEquipped += HandleItemEquipped;
             _bridge.OnItemUnequipped += HandleItemUnequipped;
@@ -116,7 +134,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _bridge.OnItemAdded -= HandleItemChangedInventory;
             _bridge.OnItemRemoved -= HandleItemRemoved;
             _bridge.OnItemsSwapped -= HandleItemsSwapped;
+            _bridge.OnItemMoved -= HandleItemMoved;
             _bridge.OnInventoryCleared -= HandleInventoryCleared;
+            _bridge.OnInventorySlotCleared -= HandleInventorySlotCleared;
 
             _bridge.OnItemEquipped -= HandleItemEquipped;
             _bridge.OnItemUnequipped -= HandleItemUnequipped;
@@ -204,10 +224,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void PushInitialStatsSnapshot()
         {
-            if (_bridge == null || _bridge.Stat == null) return;
+            if (_bridge == null || _bridge.Stat == null)
+            {
+                if (_enableDebugLogs)
+                    UnityEngine.Debug.LogWarning("[UIDomainBridge] PushInitialStatsSnapshot: bridge or stat system is null");
+                return;
+            }
 
             var all = _bridge.GetAllStats();
-            if (all == null) return;
+            if (all == null)
+            {
+                if (_enableDebugLogs)
+                    UnityEngine.Debug.LogWarning("[UIDomainBridge] PushInitialStatsSnapshot: GetAllStats returned null");
+                return;
+            }
+
+            if (_enableDebugLogs)
+                UnityEngine.Debug.Log($"[UIDomainBridge] PushInitialStatsSnapshot: pushing {all.Count} stats");
 
             foreach (var kvp in all)
             {
@@ -216,6 +249,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             float currentWeight = _bridge.GetCurrentWeight();
             float capacity = _bridge.GetWeightCapacity();
+            if (_enableDebugLogs)
+                UnityEngine.Debug.Log($"[UIDomainBridge] PushInitialStatsSnapshot: Weight = {currentWeight:F1}/{capacity:F1}");
             OnWeightChanged?.Invoke(currentWeight, capacity);
         }
 
@@ -230,6 +265,30 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var id = UISlotId.Inventory(item.InventoryIndex);
             var state = BuildSlotStateFromItem(item);
             OnInventorySlotChanged?.Invoke(id, state);
+
+            // ROOT CAUSE E FIX: If this item is also referenced by a QuickSlot (as a link,
+            // not a copy), propagate the quantity change there too.
+            // This handles the case where stacking updates the item but QS shows stale qty.
+            RefreshQuickSlotsForItem(item);
+        }
+
+        /// <summary>Updates any QuickSlot views that reference the given item instance.</summary>
+        private void RefreshQuickSlotsForItem(ItemInstance item)
+        {
+            if (_bridge?.QuickSlot == null || item == null) return;
+
+            var slots = _bridge.GetAllQuickSlots();
+            if (slots == null) return;
+
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (slots[i] != null && slots[i].InstanceID == item.InstanceID)
+                {
+                    var qsId = UISlotId.QuickSlot(i);
+                    var qsState = BuildSlotStateFromItem(item);
+                    OnQuickSlotChanged?.Invoke(qsId, qsState);
+                }
+            }
         }
 
         private void HandleItemRemoved(ItemInstance item, int removedQty)
@@ -265,17 +324,51 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             // UI layer có thể tự clear tất cả cell khi nhận event này.
         }
 
+        /// <summary>
+        /// BUG 7 FIX: Clear inventory slot when item moves out of inventory grid
+        /// (equipped to Equipment/Weapon slot, or attached to another item).
+        /// </summary>
+        private void HandleInventorySlotCleared(int index)
+        {
+            var id = UISlotId.Inventory(index);
+            OnInventorySlotChanged?.Invoke(id, new UISlotState());
+        }
+
         private void HandleItemEquipped(EquipmentSlotType slot, ItemInstance item)
         {
             var id = UISlotId.Equipment(slot);
             var state = BuildSlotStateFromItem(item);
             OnEquipmentSlotChanged?.Invoke(id, state);
+
+            if (_enableDebugLogs)
+            {
+                UnityEngine.Debug.Log($"[UIDomainBridge] [Server→UI][ItemEquipped] " +
+                                      $"slot={slot}, item={item?.DefinitionID ?? "null"} ({item?.InstanceID ?? "null"})");
+            }
+
+            // TODO: Spawn/attach equipment model on character here
+            // e.g. CharacterAppearance.AttachEquipment(slot, item.DefinitionID);
         }
 
         private void HandleItemUnequipped(EquipmentSlotType slot, ItemInstance item)
         {
             var id = UISlotId.Equipment(slot);
             OnEquipmentSlotChanged?.Invoke(id, new UISlotState());
+
+            // FIX: Update inventory slot nếu item được add vào inventory
+            if (item != null && item.InventoryIndex >= 0)
+            {
+                HandleItemChangedInventory(item);
+            }
+
+            if (_enableDebugLogs)
+            {
+                UnityEngine.Debug.Log($"[UIDomainBridge] [Server→UI][ItemUnequipped] " +
+                                      $"slot={slot}, returnedToInventoryIndex={item?.InventoryIndex.ToString() ?? "null"} " +
+                                      $"item={item?.DefinitionID ?? "null"} ({item?.InstanceID ?? "null"})");
+            }
+
+            // TODO: Despawn/detach equipment model here
         }
 
         private void HandleWeaponEquipped(WeaponSlotType slot, ItemInstance item)
@@ -283,12 +376,35 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var id = UISlotId.Weapon(slot);
             var state = BuildSlotStateFromItem(item);
             OnWeaponSlotChanged?.Invoke(id, state);
+
+            if (_enableDebugLogs)
+            {
+                UnityEngine.Debug.Log($"[UIDomainBridge] [Server→UI][WeaponEquipped] " +
+                                      $"slot={slot}, item={item?.DefinitionID ?? "null"} ({item?.InstanceID ?? "null"})");
+            }
+
+            // TODO: Spawn weapon viewmodel / world model here
         }
 
         private void HandleWeaponUnequipped(WeaponSlotType slot, ItemInstance item)
         {
             var id = UISlotId.Weapon(slot);
             OnWeaponSlotChanged?.Invoke(id, new UISlotState());
+
+            // FIX: Update inventory slot nếu item được add vào inventory
+            if (item != null && item.InventoryIndex >= 0)
+            {
+                HandleItemChangedInventory(item);
+            }
+
+            if (_enableDebugLogs)
+            {
+                UnityEngine.Debug.Log($"[UIDomainBridge] [Server→UI][WeaponUnequipped] " +
+                                      $"slot={slot}, returnedToInventoryIndex={item?.InventoryIndex.ToString() ?? "null"} " +
+                                      $"item={item?.DefinitionID ?? "null"} ({item?.InstanceID ?? "null"})");
+            }
+
+            // TODO: Despawn weapon viewmodel / world model here
         }
 
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
@@ -324,10 +440,38 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             var id = UISlotId.QuickSlot(slotIndex);
             OnQuickSlotChanged?.Invoke(id, new UISlotState());
+
+            // FIX: Item được remove từ quickslot sẽ được add vào inventory
+            // Backend sẽ trigger OnItemAdded event, nhưng để đảm bảo, ta có thể check inventory
+            // Tuy nhiên, vì không có item reference ở đây, ta dựa vào backend event OnItemAdded
+        }
+
+        /// <summary>
+        /// Handle item moved event - update cả old và new slot
+        /// </summary>
+        private void HandleItemMoved(ItemInstance item, int oldIndex, int newIndex)
+        {
+            // Update old slot về empty
+            if (oldIndex >= 0)
+            {
+                var oldId = UISlotId.Inventory(oldIndex);
+                OnInventorySlotChanged?.Invoke(oldId, new UISlotState());
+            }
+
+            // Update new slot với item data
+            if (newIndex >= 0 && item != null)
+            {
+                HandleItemChangedInventory(item);
+            }
         }
 
         private void HandleStatChanged(PlayerStatType type, float oldValue, float newValue)
         {
+            if (_enableDebugLogs || type == PlayerStatType.CurrentWeight || type == PlayerStatType.WeightCapacity)
+            {
+                UnityEngine.Debug.Log($"[UIDomainBridge #{GetHashCode()}] HandleStatChanged: {type} {oldValue:F1} -> {newValue:F1}");
+            }
+
             OnStatChanged?.Invoke(type, oldValue, newValue);
         }
 
@@ -341,7 +485,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         #region Inventory Sorting
 
         /// <summary>
-        /// Yêu cầu sắp xếp inventory trên server bằng cách gọi MoveItem theo index mới.
+        /// Yêu cầu sắp xếp inventory trên server bằng BatchAssignIndices để tránh
+        /// cascading swap khi dùng MoveItem tuần tự.
         /// </summary>
         public void RequestSortInventory(InventorySortMode mode = InventorySortMode.Default)
         {
@@ -377,15 +522,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return string.Compare(idA, idB, StringComparison.Ordinal);
             });
 
-            // Gửi chuỗi MoveItem theo thứ tự mới
+            // Build assignment map: only include items that actually need to move.
+            // Using BatchAssignIndices avoids the cascade-swap problem of sequential MoveItem.
+            var assignments = new Dictionary<string, int>();
             for (int newIndex = 0; newIndex < list.Count; newIndex++)
             {
                 var item = list[newIndex];
-                if (item.InventoryIndex == newIndex)
-                    continue;
-
-                _bridge.Inventory.MoveItem(item.InstanceID, newIndex);
+                if (item.InventoryIndex != newIndex)
+                    assignments[item.InstanceID] = newIndex;
             }
+
+            if (assignments.Count > 0)
+                _bridge.Inventory.BatchAssignIndices(assignments);
         }
 
         #endregion

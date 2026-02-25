@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -5,383 +6,312 @@ using NightHunt.Gameplay.Input;
 
 namespace NightHunt.Gameplay.Input.Core
 {
+    // ──────────────────────────────────────────────────────────────────────────────
     /// <summary>
-    /// Centralized manager for input states and action map layering
-    /// Manages all input handlers and transitions between states
-    /// Singleton pattern for global access
+    /// SINGLE SOURCE OF TRUTH cho toàn bộ Input.
+    ///
+    /// Nguyên tắc:
+    ///   • Chỉ class này được Enable/Disable ActionMap.
+    ///   • Các handler KHÔNG tự gọi map.Enable() / map.Disable().
+    ///   • Dùng <see cref="PushContext"/> / <see cref="PopContext"/> để chuyển state,
+    ///     thay vì gọi <see cref="TransitionToState"/> trực tiếp từ nhiều nơi.
+    ///
+    /// Bảng preset Context → Layer:
+    /// <code>
+    ///  Context        | Player | Combat | Camera | Inventory | Team | UI | Spectator | Objectives | Devices
+    ///  ───────────────┼────────┼────────┼────────┼───────────┼──────┼────┼───────────┼────────────┼────────
+    ///  PlayerAlive    |   ✅   |   ✅   |   ✅   |     ✅    |  ✅  | ❌ |     ❌    |     ✅     |   ✅
+    ///  InventoryOpen  |   ❌   |   ❌   |   ✅   |     ✅    |  ❌  | ✅ |     ❌    |     ❌     |   ❌
+    ///  MapOpen        |   ❌   |   ❌   |   ✅   |     ❌    |  ❌  | ✅ |     ❌    |     ❌     |   ❌
+    ///  Paused         |   ❌   |   ❌   |   ❌   |     ❌    |  ❌  | ✅ |     ❌    |     ❌     |   ❌
+    ///  DroneControl   |   ❌   |   ❌   |   ✅   |     ❌    |  ❌  | ✅ |     ❌    |     ❌     |   ✅
+    ///  Spectating     |   ❌   |   ❌   |   ❌   |     ❌    |  ✅  | ✅ |     ✅    |     ❌     |   ❌
+    ///  PlayerDead     |   ❌   |   ❌   |   ❌   |     ❌    |  ✅  | ✅ |     ❌    |     ❌     |   ❌
+    ///  ScoutMode      |   ✅   |   ❌   |   ✅   |     ❌    |  ✅  | ❌ |     ❌    |     ❌     |   ❌
+    ///  Cinematic      |   ❌   |   ❌   |   ❌   |     ❌    |  ❌  | ❌ |     ❌    |     ❌     |   ❌
+    ///  InDialogue     |   ❌   |   ❌   |   ❌   |     ❌    |  ❌  | ✅ |     ❌    |     ❌     |   ❌
+    /// </code>
     /// </summary>
+    // ──────────────────────────────────────────────────────────────────────────────
     public class InputLayerManager : MonoBehaviour
     {
         public static InputLayerManager Instance { get; private set; }
 
+        // ── Inspector ─────────────────────────────────────────────────────────────
         [Header("Configuration")]
         [SerializeField] private InputConfig inputConfig;
 
-        // Action maps (cached from InputActionAsset)
-        private InputActionMap playerMap;
-        private InputActionMap combatMap;
-        private InputActionMap inventoryMap;
-        private InputActionMap cameraMap;
-        private InputActionMap uiMap;
-        private InputActionMap spectatorMap;
-        private InputActionMap teamMap;
+        // ── Context → Layer presets ───────────────────────────────────────────────
+        private static readonly Dictionary<InputState, InputLayer> ContextPresets
+            = new Dictionary<InputState, InputLayer>
+        {
+            {
+                InputState.PlayerAlive,
+                InputLayer.Player | InputLayer.Combat | InputLayer.Camera |
+                InputLayer.Inventory | InputLayer.Team | InputLayer.Objectives | InputLayer.Devices
+            },  
+            {
+                InputState.InventoryOpen,
+                // ❌ Combat OFF → click chuột trái / E / F KHÔNG fire
+                // ❌ Player OFF → không di chuyển / tương tác khi kéo item
+                InputLayer.UI | InputLayer.Inventory | InputLayer.Camera |  InputLayer.Player 
+            },
+            {
+                InputState.MapOpen,
+                InputLayer.UI | InputLayer.Camera
+            },
+            {
+                InputState.Paused,
+                InputLayer.UI
+            },
+            // {
+            //     InputState.DroneControl,
+            //     InputLayer.Devices | InputLayer.Camera | InputLayer.UI
+            // },
+            {
+                InputState.Spectating,
+                InputLayer.Spectator | InputLayer.UI | InputLayer.Team
+            },
+            {
+                InputState.PlayerDead,
+                InputLayer.UI | InputLayer.Team
+            },
+            {
+                InputState.ScoutMode,
+                // Di chuyển + Camera, KHÔNG combat
+                InputLayer.Player | InputLayer.Camera | InputLayer.Team
+            },
+            {
+                InputState.Cinematic,
+                InputLayer.None
+            },
+            {
+                InputState.InDialogue,
+                InputLayer.UI
+            },
+            {
+                InputState.None,
+                InputLayer.None
+            },
+            // Camera alias
+            {
+                InputState.Camera,
+                InputLayer.Camera
+            },
+        };
 
-        // Registered handlers (populated at runtime)
-        private readonly List<IInputHandler> registeredHandlers = new List<IInputHandler>();
+        // ── ActionMap name → Layer mapping ────────────────────────────────────────
+        private static readonly Dictionary<string, InputLayer> MapNameToLayer
+            = new Dictionary<string, InputLayer>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "Player",     InputLayer.Player },
+            { "Combat",     InputLayer.Combat },
+            { "Camera",     InputLayer.Camera },
+            { "Inventory",  InputLayer.Inventory },
+            { "Team",       InputLayer.Team },
+            { "UI",         InputLayer.UI },
+            { "Spectator",  InputLayer.Spectator },
+            { "Objectives", InputLayer.Objectives },
+            { "Devices",    InputLayer.Devices },
+            { "Debug",      InputLayer.Debug },
+        };
 
-        // Current state
-        private InputState currentState = InputState.None;
+        // ── Runtime state ─────────────────────────────────────────────────────────
+        /// <summary>Layer đang active hiện tại (bitwise OR).</summary>
+        public InputLayer ActiveLayers { get; private set; } = InputLayer.None;
 
-        #region Lifecycle
+        /// <summary>Context hiện tại.</summary>
+        public InputState CurrentState { get; private set; } = InputState.None;
+
+        /// <summary>Stack để hỗ trợ Push/Pop (ví dụ: mở map trong inventory → pop về inventory).</summary>
+        private readonly Stack<InputState> _contextStack = new Stack<InputState>();
+
+        // Events
+        /// <summary>Fired khi context thay đổi. (oldState, newState)</summary>
+        public event Action<InputState, InputState> OnContextChanged;
+        /// <summary>Fired khi các layer active thay đổi.</summary>
+        public event Action<InputLayer>             OnLayersChanged;
+
+        // Cache: Layer → ActionMap
+        private readonly Dictionary<InputLayer, InputActionMap> _layerToMap
+            = new Dictionary<InputLayer, InputActionMap>();
+
+        // ── Legacy cached refs (public accessors cho code cũ) ────────────────────
+        public InputActionMap PlayerMap     => GetMap(InputLayer.Player);
+        public InputActionMap CombatMap     => GetMap(InputLayer.Combat);
+        public InputActionMap InventoryMap  => GetMap(InputLayer.Inventory);
+        public InputActionMap CameraMap     => GetMap(InputLayer.Camera);
+        public InputActionMap UIMap         => GetMap(InputLayer.UI);
+        public InputActionMap SpectatorMap  => GetMap(InputLayer.Spectator);
+        public InputActionMap TeamMap       => GetMap(InputLayer.Team);
+        public InputActionMap ObjectivesMap => GetMap(InputLayer.Objectives);
+        public InputActionMap DevicesMap    => GetMap(InputLayer.Devices);
+        public InputActionMap DebugMap      => GetMap(InputLayer.Debug);
+
+        public InputConfig Config => inputConfig;
+
+        // ── Registered handlers (backward compat) ────────────────────────────────
+        private readonly List<IInputHandler> _registeredHandlers = new List<IInputHandler>();
+
+        // ─────────────────────────────────────────────────────────────────────────
+        #region Unity Lifecycle
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void Awake()
         {
-            // Singleton setup
             if (Instance != null && Instance != this)
             {
                 Destroy(gameObject);
                 return;
             }
             Instance = this;
-
-            InitializeActionMaps();
+            BuildLayerCache();
         }
 
         private void OnDestroy()
         {
-            if (Instance == this)
-            {
-                Instance = null;
-            }
+            if (Instance == this) Instance = null;
         }
 
         #endregion
 
+        // ─────────────────────────────────────────────────────────────────────────
         #region Initialization
+        // ─────────────────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Initialize and cache all action maps from InputActionAsset
-        /// </summary>
-        private void InitializeActionMaps()
+        private void BuildLayerCache()
         {
             if (inputConfig == null)
             {
-                Debug.LogError("[InputLayerManager] InputConfig is not assigned!");
+                Debug.LogError("[InputLayerManager] InputConfig chưa được assign!");
                 return;
             }
 
-            var inputActions = inputConfig.InputActionAsset;
-            if (inputActions == null)
+            var asset = inputConfig.InputActionAsset;
+            if (asset == null)
             {
-                Debug.LogError("[InputLayerManager] InputActionAsset is null in InputConfig!");
+                Debug.LogError("[InputLayerManager] InputActionAsset là null trong InputConfig!");
                 return;
             }
 
-            // Cache action maps
-            playerMap = inputActions.FindActionMap(inputConfig.PlayerMapName);
-            combatMap = inputActions.FindActionMap(inputConfig.CombatMapName);
-            inventoryMap = inputActions.FindActionMap(inputConfig.InventoryMapName);
-            cameraMap = inputActions.FindActionMap(inputConfig.CameraMapName);
-            uiMap = inputActions.FindActionMap(inputConfig.UIMapName);
-            spectatorMap = inputActions.FindActionMap(inputConfig.SpectatorMapName);
-            teamMap = inputActions.FindActionMap(inputConfig.TeamMapName);
+            _layerToMap.Clear();
 
-            // Validate
-            ValidateActionMaps();
+            foreach (var map in asset.actionMaps)
+            {
+                if (MapNameToLayer.TryGetValue(map.name, out var layer))
+                    _layerToMap[layer] = map;
+                else
+                    Debug.LogWarning($"[InputLayerManager] ActionMap '{map.name}' không có mapping → bỏ qua.");
+            }
 
-            Debug.Log("[InputLayerManager] Initialized successfully");
-        }
+            // Validate critical maps
+            foreach (var pair in MapNameToLayer)
+                if (!_layerToMap.ContainsKey(pair.Value))
+                    Debug.LogWarning($"[InputLayerManager] Không tìm thấy ActionMap '{pair.Key}' trong asset.");
 
-        /// <summary>
-        /// Validate that all action maps exist
-        /// </summary>
-        private void ValidateActionMaps()
-        {
-            if (playerMap == null) Debug.LogWarning("[InputLayerManager] 'Player' action map not found!");
-            if (combatMap == null) Debug.LogWarning("[InputLayerManager] 'Combat' action map not found!");
-            if (inventoryMap == null) Debug.LogWarning("[InputLayerManager] 'Inventory' action map not found!");
-            if (cameraMap == null) Debug.LogWarning("[InputLayerManager] 'Camera' action map not found!");
-            if (uiMap == null) Debug.LogWarning("[InputLayerManager] 'UI' action map not found!");
-            if (spectatorMap == null) Debug.LogWarning("[InputLayerManager] 'Spectator' action map not found!");
+            Debug.Log("[InputLayerManager] Initialized thành công.");
         }
 
         #endregion
 
-        #region Handler Registration
+        // ─────────────────────────────────────────────────────────────────────────
+        #region Context API – PushContext / PopContext / TransitionToState
+        // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Register an input handler with the manager
-        /// Called by handlers in their Awake/Start
-        /// </summary>
-        public void RegisterHandler(IInputHandler handler)
-        {
-            if (handler == null)
-            {
-                Debug.LogWarning("[InputLayerManager] Attempted to register null handler!");
-                return;
-            }
-
-            if (!registeredHandlers.Contains(handler))
-            {
-                registeredHandlers.Add(handler);
-                Debug.Log($"[InputLayerManager] Registered handler for action map: {handler.GetActionMap()?.name ?? "Unknown"}");
-            }
-        }
-
-        /// <summary>
-        /// Unregister an input handler
-        /// Called by handlers in their OnDestroy
-        /// </summary>
-        public void UnregisterHandler(IInputHandler handler)
-        {
-            if (handler != null && registeredHandlers.Contains(handler))
-            {
-                registeredHandlers.Remove(handler);
-                Debug.Log($"[InputLayerManager] Unregistered handler for action map: {handler.GetActionMap()?.name ?? "Unknown"}");
-            }
-        }
-
-        #endregion
-
-        #region State Management
-
-        /// <summary>
-        /// Transition to a new input state
-        /// Automatically enables/disables appropriate action maps and calls InputManager mode methods
+        /// Chuyển context, xóa toàn bộ stack history.
         /// </summary>
         public void TransitionToState(InputState newState)
         {
-            if (currentState == newState) return;
-
-            Debug.Log($"[InputLayerManager] State transition: {currentState} → {newState}");
-
-            // Disable current state
-            DisableStateInputs(currentState);
-
-            // Update state
-            currentState = newState;
-
-            // Enable new state (action maps)
-            EnableStateInputs(newState);
-
-            // Update InputManager handlers based on state
-            UpdateInputManagerMode(newState);
+            _contextStack.Clear();
+            ApplyContext(newState);
         }
 
         /// <summary>
-        /// Update InputManager mode methods based on state
+        /// Push context mới, lưu context cũ vào stack để <see cref="PopContext"/> khôi phục.
+        /// <para>Ví dụ: Gameplay → PushContext(InventoryOpen) → PopContext() → Gameplay.</para>
         /// </summary>
-        private void UpdateInputManagerMode(InputState state)
+        public void PushContext(InputState newState)
         {
-            var inputManager = InputManager.Instance;
-            if (inputManager == null) return;
-
-            switch (state)
-            {
-                case InputState.PlayerAlive:
-                    inputManager.SetPlayerAliveMode();
-                    break;
-
-                case InputState.InventoryOpen:
-                    inputManager.SetInventoryMode();
-                    break;
-
-                case InputState.Spectating:
-                    inputManager.SetSpectatorMode();
-                    break;
-
-                case InputState.MenuOpen:
-                case InputState.Paused:
-                    inputManager.SetMenuMode();
-                    break;
-
-                case InputState.PlayerDead:
-                    inputManager.SetDeadMode();
-                    break;
-
-                case InputState.ScoutMode:
-                    inputManager.SetScoutMode();
-                    break;
-
-                case InputState.Camera:
-                case InputState.InDialogue:
-                    // Tuỳ bạn: có thể tạo mode riêng hoặc dùng menu mode
-                    inputManager.SetMenuMode();
-                    break;
-
-                case InputState.None:
-                    inputManager.DisableAllInput();
-                    break;
-            }
+            _contextStack.Push(CurrentState);
+            ApplyContext(newState);
         }
 
         /// <summary>
-        /// Get current input state
+        /// Pop về context trước đó. Nếu stack rỗng → fallback <see cref="InputState.PlayerAlive"/>.
         /// </summary>
-        public InputState GetCurrentState() => currentState;
+        public void PopContext()
+        {
+            if (_contextStack.Count == 0)
+            {
+                Debug.LogWarning("[InputLayerManager] PopContext: stack rỗng → fallback PlayerAlive");
+                ApplyContext(InputState.PlayerAlive);
+                return;
+            }
+            ApplyContext(_contextStack.Pop());
+        }
 
         #endregion
 
-        #region Action Map Control
+        // ─────────────────────────────────────────────────────────────────────────
+        #region Layer API – thủ công fine-tune
+        // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Disable action maps for a specific state
+        /// Bật/tắt thủ công một layer ngoài preset context.
+        /// Dùng khi cần tweak (VD: tạm tắt Camera nhưng giữ nguyên context Gameplay).
         /// </summary>
-        private void DisableStateInputs(InputState state)
+        public void SetLayerEnabled(InputLayer layer, bool enabled)
         {
-            switch (state)
-            {
-                case InputState.None:
-                    // Nothing to disable
-                    break;
-
-                case InputState.PlayerAlive:
-                    playerMap?.Disable();
-                    combatMap?.Disable();
-                    inventoryMap?.Disable();
-                    cameraMap?.Disable();
-                    teamMap?.Disable();
-                    break;
-
-                case InputState.InventoryOpen:
-                    inventoryMap?.Disable();
-                    uiMap?.Disable();
-                    break;
-
-                case InputState.MenuOpen:
-                case InputState.Paused:
-                    uiMap?.Disable();
-                    break;
-
-                case InputState.PlayerDead:
-                    uiMap?.Disable();
-                    break;
-
-                case InputState.Spectating:
-                    spectatorMap?.Disable();
-                    cameraMap?.Disable();
-                    break;
-
-                case InputState.ScoutMode:
-                    playerMap?.Disable();
-                    cameraMap?.Disable();
-                    // Combat disabled in scout mode
-                    break;
-
-                case InputState.Camera:
-                    cameraMap?.Disable();
-                    break;
-
-                case InputState.InDialogue:
-                    uiMap?.Disable();
-                    break;
-            }
+            ApplyLayers(enabled ? (ActiveLayers | layer) : (ActiveLayers & ~layer));
         }
 
-        /// <summary>
-        /// Enable action maps for a specific state
-        /// </summary>
-        private void EnableStateInputs(InputState state)
-        {
-            switch (state)
-            {
-                case InputState.None:
-                    DisableAll();
-                    break;
+        /// <summary>Kiểm tra layer có đang active không.</summary>
+        public bool IsLayerActive(InputLayer layer) => (ActiveLayers & layer) != 0;
 
-                case InputState.PlayerAlive:
-                    // Full gameplay control
-                    playerMap?.Enable();
-                    combatMap?.Enable();
-                    inventoryMap?.Enable(); // Quick slots always active
-                    cameraMap?.Enable();
-                    teamMap?.Enable();
-                    break;
-
-                case InputState.InventoryOpen:
-                    // Only inventory + UI navigation
-                    inventoryMap?.Enable();
-                    uiMap?.Enable();
-                    // Player movement & combat disabled
-                    break;
-
-                case InputState.MenuOpen:
-                case InputState.Paused:
-                    // Only UI navigation
-                    uiMap?.Enable();
-                    break;
-
-                case InputState.PlayerDead:
-                    // Only UI for respawn menu
-                    uiMap?.Enable();
-                    break;
-
-                case InputState.Spectating:
-                    // Spectator controls + camera
-                    spectatorMap?.Enable();
-                    cameraMap?.Enable();
-                    break;
-
-                case InputState.ScoutMode:
-                    // Movement + Camera, NO combat
-                    playerMap?.Enable();
-                    cameraMap?.Enable();
-                    // Combat explicitly disabled
-                    combatMap?.Disable();
-                    break;
-
-                case InputState.Camera:
-                    // Only camera controls
-                    cameraMap?.Enable();
-                    break;
-
-                case InputState.InDialogue:
-                    // Only UI for dialogue choices
-                    uiMap?.Enable();
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// Disable all input
-        /// </summary>
+        /// <summary>Disable tất cả input (dùng cho Cinematic / Loading screen).</summary>
         public void DisableAll()
         {
-            playerMap?.Disable();
-            combatMap?.Disable();
-            inventoryMap?.Disable();
-            cameraMap?.Disable();
-            uiMap?.Disable();
-            spectatorMap?.Disable();
-            teamMap?.Disable();
-
-            Debug.Log("[InputLayerManager] All input disabled");
+            _contextStack.Clear();
+            ApplyContext(InputState.Cinematic);
         }
 
         #endregion
 
-        #region Action Map Access
+        // ─────────────────────────────────────────────────────────────────────────
+        #region Handler Registration (backward compat)
+        // ─────────────────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Get specific action map
-        /// </summary>
+        public void RegisterHandler(IInputHandler handler)
+        {
+            if (handler != null && !_registeredHandlers.Contains(handler))
+                _registeredHandlers.Add(handler);
+        }
+
+        public void UnregisterHandler(IInputHandler handler)
+        {
+            if (handler != null)
+                _registeredHandlers.Remove(handler);
+        }
+
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────────
+        #region Legacy API
+        // ─────────────────────────────────────────────────────────────────────────
+
+        /// <summary>Legacy: trả về state hiện tại.</summary>
+        public InputState GetCurrentState() => CurrentState;
+
+        /// <summary>Legacy: lấy ActionMap theo tên.</summary>
         public InputActionMap GetActionMap(string mapName)
-        {
-            return inputConfig.InputActionAsset?.FindActionMap(mapName);
-        }
+            => inputConfig?.InputActionAsset?.FindActionMap(mapName);
 
-        /// <summary>
-        /// Get action from a specific map
-        /// </summary>
+        /// <summary>Legacy: lấy Action theo tên map và tên action.</summary>
         public InputAction GetAction(string mapName, string actionName)
-        {
-            var map = GetActionMap(mapName);
-            return map?.FindAction(actionName);
-        }
+            => GetActionMap(mapName)?.FindAction(actionName);
 
-        /// <summary>
-        /// Check if specific action map is enabled
-        /// </summary>
+        /// <summary>Legacy: kiểm tra map có enabled không.</summary>
         public bool IsActionMapEnabled(string mapName)
         {
             var map = GetActionMap(mapName);
@@ -390,17 +320,79 @@ namespace NightHunt.Gameplay.Input.Core
 
         #endregion
 
-        #region Public Accessors
+        // ─────────────────────────────────────────────────────────────────────────
+        #region Internal
+        // ─────────────────────────────────────────────────────────────────────────
 
-        public InputActionMap PlayerMap => playerMap;
-        public InputActionMap CombatMap => combatMap;
-        public InputActionMap InventoryMap => inventoryMap;
-        public InputActionMap CameraMap => cameraMap;
-        public InputActionMap UIMap => uiMap;
-        public InputActionMap SpectatorMap => spectatorMap;
-        public InputActionMap TeamMap => teamMap;
+        private void ApplyContext(InputState state)
+        {
+            var oldState = CurrentState;
+            CurrentState = state;
 
-        public InputConfig Config => inputConfig;
+            if (!ContextPresets.TryGetValue(state, out var layers))
+            {
+                Debug.LogWarning($"[InputLayerManager] Không có preset cho state '{state}' → disable all");
+                layers = InputLayer.None;
+            }
+
+#if UNITY_EDITOR
+            // Luôn giữ Debug layer bật trong Editor
+            layers |= InputLayer.Debug;
+#endif
+
+            ApplyLayers(layers);
+            OnContextChanged?.Invoke(oldState, state);
+        }
+
+        private void ApplyLayers(InputLayer layers)
+        {
+            if (ActiveLayers == layers) return;
+
+            ActiveLayers = layers;
+
+            // 1️⃣ Enable/disable ActionMaps (Single Source of Truth)
+            foreach (var kvp in _layerToMap)
+            {
+                bool shouldEnable = (layers & kvp.Key) != 0;
+                if (shouldEnable) kvp.Value.Enable();
+                else              kvp.Value.Disable();
+            }
+
+            // 2️⃣ Sync registered handlers – gọi EnableInput/DisableInput khớp với ActionMap
+            foreach (var handler in _registeredHandlers)
+            {
+                if (handler == null) continue;
+                var map = handler.GetActionMap();
+                if (map == null) continue;
+
+                if (map.enabled && !handler.IsInputEnabled)
+                    handler.EnableInput();
+                else if (!map.enabled && handler.IsInputEnabled)
+                    handler.DisableInput();
+            }
+
+            OnLayersChanged?.Invoke(ActiveLayers);
+
+#if UNITY_EDITOR
+            LogActiveState();
+#endif
+        }
+
+        private InputActionMap GetMap(InputLayer layer)
+            => _layerToMap.TryGetValue(layer, out var m) ? m : null;
+
+#if UNITY_EDITOR
+        private void LogActiveState()
+        {
+            var sb = new System.Text.StringBuilder("[InputLayerManager] Active: ");
+            foreach (InputLayer layer in System.Enum.GetValues(typeof(InputLayer)))
+            {
+                if (layer == InputLayer.None) continue;
+                sb.Append((ActiveLayers & layer) != 0 ? $"✅{layer} " : $"❌{layer} ");
+            }
+            Debug.Log(sb.ToString());
+        }
+#endif
 
         #endregion
     }

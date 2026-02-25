@@ -26,7 +26,7 @@ MonoBehaviour:
   DefaultResource: 3600
   AttachmentSlots: 
   CanAttachTo: 0600000007000000
-  ValidSlots: 00000000
+  ValidSlots: 0000000004000000
   EquippedPrefab: {fileID: 0}
   DroppedPrefab: {fileID: 0}
   UsageDuration: 0
@@ -35,7 +35,7 @@ MonoBehaviour:
   ItemModifiers:
   - StatType: 11
     Value: 15
-    ModifierType: 0
+    ModifierType: 1
     Description: Illumination range
   - StatType: 12
     Value: 80

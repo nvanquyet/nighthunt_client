@@ -65,6 +65,14 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Server-side only
         /// </summary>
         void EquipWeapon(string instanceID);
+
+        /// <summary>
+        /// Equip weapon from inventory into a SPECIFIC slot.
+        /// If slot is already occupied the existing weapon is unequipped first.
+        /// Used by drag-and-drop when the player explicitly chooses a target slot.
+        /// Server-side only.
+        /// </summary>
+        void EquipWeaponToSlot(string instanceID, WeaponSlotType targetSlot);
         
         /// <summary>
         /// Unequip weapon from slot back to inventory

@@ -32,23 +32,8 @@ MonoBehaviour:
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 0
-  Stats:
-  - StatType: 6
-    Value: 80
-  - StatType: 9
-    Value: 10
-  - StatType: 8
-    Value: 5
+  StatConfig: {fileID: 0}
   EquipmentSlot: 2
   MaxDurability: 150
   DefaultDurability: 150
   DurabilityLossRate: 1
-  PlayerModifiers:
-  - StatType: 8
-    Value: 80
-    ModifierType: 0
-    Description: Vest armor protection
-  - StatType: 4
-    Value: -10
-    ModifierType: 1
-    Description: Heavy vest penalty

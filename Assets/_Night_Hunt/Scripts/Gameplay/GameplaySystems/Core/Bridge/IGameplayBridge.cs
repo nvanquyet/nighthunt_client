@@ -90,8 +90,11 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         #region Weapon Operations
         
         void EquipWeapon(string instanceID);
+        /// <summary>Equip weapon from inventory into a specific slot (used by drag-and-drop).</summary>
+        void EquipWeaponToSlot(string instanceID, WeaponSlotType targetSlot);
         void AddAndEquipWeapon(string defID, WeaponSlotType slot);
         void UnequipWeapon(WeaponSlotType slot);
+        void SwapWeapons(WeaponSlotType slot1, WeaponSlotType slot2);
         void SelectWeapon(WeaponSlotType slot);
         void HolsterWeapon();
         void Reload(WeaponSlotType slot);
@@ -105,6 +108,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         void AssignToQuickSlot(string instanceID, int slotIndex);
         void AddAndAssignQuickSlot(string defID, int slotIndex);
         void RemoveFromQuickSlot(int slotIndex);
+        void SwapQuickSlots(int slotIndex1, int slotIndex2);
         void UseQuickSlot(int slotIndex);
         void CancelItemUse();
         void ExecuteThrow();
@@ -140,7 +144,10 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         event Action<ItemInstance> OnItemAdded;
         event Action<ItemInstance, int> OnItemRemoved;
         event Action<ItemInstance, ItemInstance> OnItemsSwapped;
+        event Action<ItemInstance, int, int> OnItemMoved;
         event Action OnInventoryCleared;
+        /// <summary>Fired when a specific inventory slot is cleared because the item was equipped/attached.</summary>
+        event Action<int> OnInventorySlotCleared;
         event Action<EquipmentSlotType, ItemInstance> OnItemEquipped;
         event Action<EquipmentSlotType, ItemInstance> OnItemUnequipped;
         event Action<WeaponSlotType, ItemInstance> OnWeaponEquipped;

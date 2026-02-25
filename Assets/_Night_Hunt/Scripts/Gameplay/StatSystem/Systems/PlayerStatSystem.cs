@@ -248,7 +248,15 @@ namespace NightHunt.StatSystem.Systems
                 return;
             }
 
-            float clamped  = Mathf.Clamp(value, stat.MinValue, stat.MaxValue);
+            // Dynamic ceiling for IsCurrentValue stats
+            float clampMax = stat.MaxValue;
+            var relatedMax = _statConfig.GetRelatedMaxStat(type);
+            if (relatedMax.HasValue && _statCache.TryGetValue(relatedMax.Value, out var maxStat))
+            {
+                clampMax = maxStat.CurrentValue;
+            }
+
+            float clamped  = Mathf.Clamp(value, stat.MinValue, clampMax);
             float oldValue = stat.CurrentValue;
 
             if (Mathf.Abs(clamped - oldValue) <= 0.001f) return;
@@ -456,8 +464,16 @@ namespace NightHunt.StatSystem.Systems
             float oldValue = stat.CurrentValue;
             float newValue = CalculateStatValue(type, stat);
             
-            // Clamp to min/max
-            newValue = Mathf.Clamp(newValue, stat.MinValue, stat.MaxValue);
+            // Clamp: floor is always MinValue.
+            // For IsCurrentValue stats, ceiling is the current value of RelatedMaxStatType (dynamic).
+            // For flat stats, ceiling is stat.MaxValue (static from config).
+            float clampMax = stat.MaxValue;
+            var relatedMax = _statConfig.GetRelatedMaxStat(type);
+            if (relatedMax.HasValue && _statCache.TryGetValue(relatedMax.Value, out var maxStat))
+            {
+                clampMax = maxStat.CurrentValue;
+            }
+            newValue = Mathf.Clamp(newValue, stat.MinValue, clampMax);
             
             // Only update if changed significantly (avoid floating point noise)
             if (Mathf.Abs(newValue - oldValue) > 0.001f)

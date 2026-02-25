@@ -19,26 +19,27 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         
         public void SetItemStat(ItemStatDefinition statDef, float value)
         {
+            // TextColor fallback về DisplayColor nếu chưa set (alpha = 0)
+            Color textColor = statDef.TextColor.a > 0.01f
+                ? statDef.TextColor
+                : statDef.DisplayColor;
+
             if (_labelText != null)
             {
                 _labelText.text = statDef.DisplayName + ":";
-                _labelText.color = Color.white;
+                _labelText.color = textColor;
             }
             
             if (_valueText != null)
             {
                 _valueText.text = value.ToString(statDef.DisplayFormat);
-                
-                // Color code based on IsPositiveStat
-                if (statDef.IsPositiveStat)
-                    _valueText.color = new Color(0.4f, 1f, 0.4f); // Light green
-                else
-                    _valueText.color = new Color(1f, 0.6f, 0.6f); // Light red
+                _valueText.color = textColor;
             }
             
             if (_iconImage != null && statDef.Icon != null)
             {
                 _iconImage.sprite = statDef.Icon;
+                _iconImage.color = statDef.DisplayColor; // Icon dùng accent color
                 _iconImage.gameObject.SetActive(true);
             }
             else if (_iconImage != null)

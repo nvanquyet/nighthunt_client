@@ -206,11 +206,36 @@
 //
 //             _isGrounded = _characterController.isGrounded;
 //
-//             // Stamina
-//             _currentStamina = Mathf.Min(
-//                 _currentStamina + movementSettings.staminaRegenRate * deltaTime,
-//                 movementSettings.maxStamina
-//             );
+//             // ===== STAMINA LOGIC (Updated: Use PlayerStatSystem + Delay Recovery) =====
+//             // TODO: Uncomment và implement tương tự CharacterPredictedMovement
+//             // - Dùng PlayerStatSystem thay vì MovementSettings
+//             // - Thêm delay recovery (1-2 giây) khi đứng yên/di chuyển chậm
+//             // - Kiểm tra tốc độ di chuyển trước khi hồi stamina
+//             // 
+//             // float maxStamina = GetMaxStamina();
+//             // float currentSpeed = _currentMoveSpeed;
+//             // bool isMovingSlowly = currentSpeed <= slowMovementThreshold;
+//             // bool isIdleOrSlow = _moveInput.sqrMagnitude < 0.01f || isMovingSlowly;
+//             // 
+//             // if (isIdleOrSlow && !_sprintHeld)
+//             // {
+//             //     _staminaRecoveryTimer += deltaTime;
+//             //     if (_staminaRecoveryTimer >= staminaRecoveryDelay)
+//             //     {
+//             //         float regenRate = GetStaminaRegenRate();
+//             //         _currentStamina = Mathf.Min(_currentStamina + regenRate * deltaTime, maxStamina);
+//             //     }
+//             // }
+//             // else
+//             // {
+//             //     _staminaRecoveryTimer = 0f;
+//             // }
+//             //
+//             // OLD CODE (deprecated - dùng MovementSettings):
+//             // _currentStamina = Mathf.Min(
+//             //     _currentStamina + movementSettings.staminaRegenRate * deltaTime,
+//             //     movementSettings.maxStamina
+//             // );
 //
 //             // Speed calculation
 //             float finalSpeed = movementSettings.baseSpeed;

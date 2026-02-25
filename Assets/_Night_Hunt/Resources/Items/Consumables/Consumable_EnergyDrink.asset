@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Consumable_EnergyDrink
   m_EditorClassIdentifier: 
   ItemID: consumable_energydrink
-  DisplayName: Energy Drink
-  Description: Restores stamina
+  DisplayName: Medkit
+  Description: Restores 50 HP instantly + 20 HP over 10 s.
   Icon: {fileID: 21300000, guid: 155e1dda5a5e148d28643cbf1592fbdd, type: 3}
   IsStackable: 1
   MaxStackSize: 5
@@ -26,10 +26,10 @@ MonoBehaviour:
   DefaultResource: 0
   AttachmentSlots: 
   CanAttachTo: 
-  ValidSlots: 
+  ValidSlots: 0000000003000000
   EquippedPrefab: {fileID: 0}
   DroppedPrefab: {fileID: 0}
-  UsageDuration: 0
+  UsageDuration: 3.5
   CanCancelUsage: 1
   CanUseWhileMoving: 0
-  Effects: []
+  StatConfig: {fileID: 11400000, guid: 93241abe240291645aa9c14ba22e3ad8, type: 2}

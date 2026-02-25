@@ -22,6 +22,7 @@ namespace NightHunt.GameplaySystems.Editor
         private bool _createArmor = true;
         private bool _createConsumables = true;
         private bool _createAttachments = true;
+        private bool _createThrowables = true;
         
         [MenuItem("Tools/GameplaySystems/Setup Tool")]
         public static void ShowWindow()
@@ -53,6 +54,8 @@ namespace NightHunt.GameplaySystems.Editor
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.LabelField("• PlayerStatConfig", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("• PlayerStatUIConfig", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("• ItemStatUIConfig", EditorStyles.miniLabel);
                 EditorGUILayout.LabelField("• GameplayConfig", EditorStyles.miniLabel);
                 EditorGUILayout.LabelField("• InventoryConfig", EditorStyles.miniLabel);
                 EditorGUI.indentLevel--;
@@ -66,6 +69,7 @@ namespace NightHunt.GameplaySystems.Editor
             _createArmor = EditorGUILayout.Toggle("Create Armor (5)", _createArmor);
             _createConsumables = EditorGUILayout.Toggle("Create Consumables (2)", _createConsumables);
             _createAttachments = EditorGUILayout.Toggle("Create Attachments (6)", _createAttachments);
+            _createThrowables = EditorGUILayout.Toggle("Create Throwables (2)", _createThrowables);
             
             GUILayout.Space(20);
             
@@ -136,6 +140,11 @@ namespace NightHunt.GameplaySystems.Editor
                 created += CreateAttachments();
             }
             
+            if (_createThrowables)
+            {
+                created += CreateThrowables();
+            }
+            
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             
@@ -150,13 +159,12 @@ namespace NightHunt.GameplaySystems.Editor
             EnsureDirectory(CONFIG_PATH);
             int created = 0;
             
-            // PlayerStatConfig
+            // PlayerStatConfig (gameplay)
             if (!AssetExists($"{CONFIG_PATH}/PlayerStatConfig.asset"))
             {
                 var config = ScriptableObject.CreateInstance<PlayerStatConfig>();
                 AssetDatabase.CreateAsset(config, $"{CONFIG_PATH}/PlayerStatConfig.asset");
                 
-                // Setup default stats via SerializedObject to call the method
                 var so = new SerializedObject(config);
                 config.GetType().GetMethod("SetupDefaultStats", 
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
@@ -166,6 +174,40 @@ namespace NightHunt.GameplaySystems.Editor
                 
                 created++;
                 Debug.Log("Created: PlayerStatConfig");
+            }
+            
+            // PlayerStatUIConfig (UI display)
+            if (!AssetExists($"{CONFIG_PATH}/PlayerStatUIConfig.asset"))
+            {
+                var config = ScriptableObject.CreateInstance<PlayerStatUIConfig>();
+                AssetDatabase.CreateAsset(config, $"{CONFIG_PATH}/PlayerStatUIConfig.asset");
+                
+                var so = new SerializedObject(config);
+                config.GetType().GetMethod("SetupDefaultUIStats", 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    ?.Invoke(config, null);
+                so.ApplyModifiedProperties();
+                EditorUtility.SetDirty(config);
+                
+                created++;
+                Debug.Log("Created: PlayerStatUIConfig");
+            }
+            
+            // ItemStatUIConfig (item tooltip UI)
+            if (!AssetExists($"{CONFIG_PATH}/ItemStatUIConfig.asset"))
+            {
+                var config = ScriptableObject.CreateInstance<ItemStatUIConfig>();
+                AssetDatabase.CreateAsset(config, $"{CONFIG_PATH}/ItemStatUIConfig.asset");
+                
+                var so = new SerializedObject(config);
+                config.GetType().GetMethod("SetupDefaultItemStats", 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    ?.Invoke(config, null);
+                so.ApplyModifiedProperties();
+                EditorUtility.SetDirty(config);
+                
+                created++;
+                Debug.Log("Created: ItemStatUIConfig");
             }
             
             // GameplayConfig
@@ -228,12 +270,8 @@ namespace NightHunt.GameplaySystems.Editor
                 
                 AssetDatabase.CreateAsset(m4, $"{ITEMS_PATH}/Weapons/Weapon_M4.asset");
                 
-                // Setup via reflection
-                var so = new SerializedObject(m4);
-                m4.GetType().GetMethod("SetupDefaultRifleStats", 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    ?.Invoke(m4, null);
-                so.ApplyModifiedProperties();
+                // Setup via static helper from Editor class
+                WeaponDefinitionEditor.SetupHelpers.SetupDefaultRifleStats(m4);
                 EditorUtility.SetDirty(m4);
                 
                 created++;
@@ -253,11 +291,15 @@ namespace NightHunt.GameplaySystems.Editor
             weapon.ItemID = itemID;
             AssetDatabase.CreateAsset(weapon, path);
             
-            var so = new SerializedObject(weapon);
-            weapon.GetType().GetMethod(setupMethod, 
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                ?.Invoke(weapon, null);
-            so.ApplyModifiedProperties();
+            // Setup via static helper from Editor class
+            if (setupMethod == "SetupDefaultRifleStats")
+            {
+                WeaponDefinitionEditor.SetupHelpers.SetupDefaultRifleStats(weapon);
+            }
+            else if (setupMethod == "SetupDefaultPistolStats")
+            {
+                WeaponDefinitionEditor.SetupHelpers.SetupDefaultPistolStats(weapon);
+            }
             EditorUtility.SetDirty(weapon);
             
             Debug.Log($"Created: {fileName}");
@@ -285,10 +327,13 @@ namespace NightHunt.GameplaySystems.Editor
                 belt.ItemID = "armor_belt";
                 belt.DisplayName = "Tactical Belt";
                 belt.Description = "Belt with extra pouches";
-                belt.Weight = 1f;
                 
                 AssetDatabase.CreateAsset(belt, $"{ITEMS_PATH}/Armor/Armor_Belt.asset");
+                
+                // Setup via Editor helper
+                EquipmentDefinitionEditor.SetupHelpers.SetupDefaultBeltStats(belt);
                 EditorUtility.SetDirty(belt);
+                
                 created++;
                 Debug.Log("Created: Belt");
             }
@@ -300,10 +345,13 @@ namespace NightHunt.GameplaySystems.Editor
                 gloves.ItemID = "armor_gloves";
                 gloves.DisplayName = "Tactical Gloves";
                 gloves.Description = "Improves grip and handling";
-                gloves.Weight = 0.2f;
                 
                 AssetDatabase.CreateAsset(gloves, $"{ITEMS_PATH}/Armor/Armor_Gloves.asset");
+                
+                // Setup via Editor helper
+                EquipmentDefinitionEditor.SetupHelpers.SetupDefaultGlovesStats(gloves);
                 EditorUtility.SetDirty(gloves);
+                
                 created++;
                 Debug.Log("Created: Gloves");
             }
@@ -321,11 +369,19 @@ namespace NightHunt.GameplaySystems.Editor
             armor.ItemID = itemID;
             AssetDatabase.CreateAsset(armor, path);
             
-            var so = new SerializedObject(armor);
-            armor.GetType().GetMethod(setupMethod, 
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                ?.Invoke(armor, null);
-            so.ApplyModifiedProperties();
+            // Setup via static helper from Editor class
+            if (setupMethod == "SetupDefaultVestStats")
+            {
+                EquipmentDefinitionEditor.SetupHelpers.SetupDefaultVestStats(armor);
+            }
+            else if (setupMethod == "SetupDefaultBackpackStats")
+            {
+                EquipmentDefinitionEditor.SetupHelpers.SetupDefaultBackpackStats(armor);
+            }
+            else if (setupMethod == "SetupDefaultHelmetStats")
+            {
+                EquipmentDefinitionEditor.SetupHelpers.SetupDefaultHelmetStats(armor);
+            }
             EditorUtility.SetDirty(armor);
             
             Debug.Log($"Created: {fileName}");
@@ -345,12 +401,7 @@ namespace NightHunt.GameplaySystems.Editor
                 
                 AssetDatabase.CreateAsset(medkit, $"{ITEMS_PATH}/Consumables/Consumable_Medkit.asset");
                 
-                var so = new SerializedObject(medkit);
-                medkit.GetType().GetMethod("SetupDefaultMedkit", 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    ?.Invoke(medkit, null);
-                so.ApplyModifiedProperties();
-                EditorUtility.SetDirty(medkit);
+                ConsumableDefinitionEditor.SetupHelpers.SetupDefaultMedkit(medkit);
                 
                 created++;
                 Debug.Log("Created: Medkit");
@@ -361,14 +412,10 @@ namespace NightHunt.GameplaySystems.Editor
             {
                 var drink = ScriptableObject.CreateInstance<ConsumableDefinition>();
                 drink.ItemID = "consumable_energydrink";
-                drink.DisplayName = "Energy Drink";
-                drink.Description = "Restores stamina";
-                drink.IsStackable = true;
-                drink.MaxStackSize = 5;
-                drink.Weight = 0.3f;
                 
                 AssetDatabase.CreateAsset(drink, $"{ITEMS_PATH}/Consumables/Consumable_EnergyDrink.asset");
-                EditorUtility.SetDirty(drink);
+                
+                ConsumableDefinitionEditor.SetupHelpers.SetupDefaultEnergyDrink(drink);
                 
                 created++;
                 Debug.Log("Created: Energy Drink");
@@ -402,15 +449,68 @@ namespace NightHunt.GameplaySystems.Editor
                 attachmentDef.ItemID = attachment.itemID;
                 AssetDatabase.CreateAsset(attachmentDef, path);
                 
-                var so = new SerializedObject(attachmentDef);
-                attachmentDef.GetType().GetMethod(attachment.setupMethod, 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    ?.Invoke(attachmentDef, null);
-                so.ApplyModifiedProperties();
+                // Setup via static helper from Editor class
+                switch (attachment.setupMethod)
+                {
+                    case "SetupRedDotScope":
+                        AttachmentDefinitionEditor.SetupHelpers.SetupRedDotScope(attachmentDef);
+                        break;
+                    case "SetupSuppressor":
+                        AttachmentDefinitionEditor.SetupHelpers.SetupSuppressor(attachmentDef);
+                        break;
+                    case "SetupVerticalGrip":
+                        AttachmentDefinitionEditor.SetupHelpers.SetupVerticalGrip(attachmentDef);
+                        break;
+                    case "SetupExtendedMagazine":
+                        AttachmentDefinitionEditor.SetupHelpers.SetupExtendedMagazine(attachmentDef);
+                        break;
+                    case "SetupTacticalFlashlight":
+                        AttachmentDefinitionEditor.SetupHelpers.SetupTacticalFlashlight(attachmentDef);
+                        break;
+                    case "SetupStoragePouch":
+                        AttachmentDefinitionEditor.SetupHelpers.SetupStoragePouch(attachmentDef);
+                        break;
+                }
                 EditorUtility.SetDirty(attachmentDef);
                 
                 created++;
                 Debug.Log($"Created: {attachment.fileName}");
+            }
+            
+            return created;
+        }
+        
+        private int CreateThrowables()
+        {
+            EnsureDirectory($"{ITEMS_PATH}/Throwables");
+            int created = 0;
+            
+            // Frag Grenade
+            if (!AssetExists($"{ITEMS_PATH}/Throwables/Throwable_FragGrenade.asset"))
+            {
+                var frag = ScriptableObject.CreateInstance<ThrowableDefinition>();
+                frag.ItemID = "throwable_fraggrenade";
+                
+                AssetDatabase.CreateAsset(frag, $"{ITEMS_PATH}/Throwables/Throwable_FragGrenade.asset");
+                
+                ThrowableDefinitionEditor.SetupHelpers.SetupDefaultFragGrenade(frag);
+                
+                created++;
+                Debug.Log("Created: Frag Grenade");
+            }
+            
+            // Smoke Grenade
+            if (!AssetExists($"{ITEMS_PATH}/Throwables/Throwable_SmokeGrenade.asset"))
+            {
+                var smoke = ScriptableObject.CreateInstance<ThrowableDefinition>();
+                smoke.ItemID = "throwable_smokegrenade";
+                
+                AssetDatabase.CreateAsset(smoke, $"{ITEMS_PATH}/Throwables/Throwable_SmokeGrenade.asset");
+                
+                ThrowableDefinitionEditor.SetupHelpers.SetupDefaultSmokeGrenade(smoke);
+                
+                created++;
+                Debug.Log("Created: Smoke Grenade");
             }
             
             return created;

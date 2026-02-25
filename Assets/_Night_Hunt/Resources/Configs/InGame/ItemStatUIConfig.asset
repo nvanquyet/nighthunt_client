@@ -1,0 +1,99 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 60dbd34905cb6d949bb7726c96a614f6, type: 3}
+  m_Name: ItemStatUIConfig
+  m_EditorClassIdentifier: 
+  ItemStats:
+  - Type: 0
+    DisplayName: Damage
+    Icon: {fileID: 0}
+    DisplayColor: {r: 1, g: 0.3, b: 0.3, a: 1}
+    TextColor: {r: 1, g: 0.6, b: 0.6, a: 1}
+    DisplayFormat: 0
+    IsPositiveStat: 1
+  - Type: 1
+    DisplayName: Fire Rate
+    Icon: {fileID: 0}
+    DisplayColor: {r: 1, g: 0.6, b: 0.2, a: 1}
+    TextColor: {r: 1, g: 0.78, b: 0.55, a: 1}
+    DisplayFormat: 0
+    IsPositiveStat: 1
+  - Type: 2
+    DisplayName: Recoil
+    Icon: {fileID: 0}
+    DisplayColor: {r: 1, g: 0.4, b: 0.4, a: 1}
+    TextColor: {r: 1, g: 0.65, b: 0.65, a: 1}
+    DisplayFormat: 0.0
+    IsPositiveStat: 0
+  - Type: 3
+    DisplayName: Spread
+    Icon: {fileID: 0}
+    DisplayColor: {r: 1, g: 0.4, b: 0.4, a: 1}
+    TextColor: {r: 1, g: 0.65, b: 0.65, a: 1}
+    DisplayFormat: 0.0
+    IsPositiveStat: 0
+  - Type: 4
+    DisplayName: Accuracy
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.3, g: 1, b: 0.3, a: 1}
+    TextColor: {r: 0.6, g: 1, b: 0.6, a: 1}
+    DisplayFormat: 0
+    IsPositiveStat: 1
+  - Type: 5
+    DisplayName: Range
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.4, g: 0.8, b: 1, a: 1}
+    TextColor: {r: 0.65, g: 0.9, b: 1, a: 1}
+    DisplayFormat: 0
+    IsPositiveStat: 1
+  - Type: 6
+    DisplayName: Aim Speed
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.5, g: 0.8, b: 1, a: 1}
+    TextColor: {r: 0.75, g: 0.9, b: 1, a: 1}
+    DisplayFormat: 0.0
+    IsPositiveStat: 1
+  - Type: 7
+    DisplayName: Reload Speed
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.5, g: 0.8, b: 1, a: 1}
+    TextColor: {r: 0.75, g: 0.9, b: 1, a: 1}
+    DisplayFormat: 0.0
+    IsPositiveStat: 1
+  - Type: 8
+    DisplayName: Magazine
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.7, g: 0.5, b: 1, a: 1}
+    TextColor: {r: 0.85, g: 0.72, b: 1, a: 1}
+    DisplayFormat: 0
+    IsPositiveStat: 1
+  - Type: 9
+    DisplayName: Weight
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.8, g: 0.8, b: 0.5, a: 1}
+    TextColor: {r: 0.9, g: 0.9, b: 0.7, a: 1}
+    DisplayFormat: 0.0
+    IsPositiveStat: 0
+  - Type: 10
+    DisplayName: Max Durability
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.4, g: 0.9, b: 0.7, a: 1}
+    TextColor: {r: 0.65, g: 0.95, b: 0.82, a: 1}
+    DisplayFormat: 0
+    IsPositiveStat: 1
+  - Type: 11
+    DisplayName: Durability
+    Icon: {fileID: 0}
+    DisplayColor: {r: 0.4, g: 0.9, b: 0.7, a: 1}
+    TextColor: {r: 0.65, g: 0.95, b: 0.82, a: 1}
+    DisplayFormat: 0
+    IsPositiveStat: 1

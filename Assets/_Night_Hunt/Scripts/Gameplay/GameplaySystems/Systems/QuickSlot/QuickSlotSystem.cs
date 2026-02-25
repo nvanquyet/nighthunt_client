@@ -1,6 +1,7 @@
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System;
+using System.Collections;
 using System.Linq;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -229,6 +230,11 @@ namespace NightHunt.GameplaySystems.QuickSlot
             
             var itemDef = ItemDatabase.GetDefinition(itemDefinitionID);
             if (itemDef == null)
+                return false;
+
+            // Also require the item definition to explicitly allow QuickSlot placement.
+            // This keeps data consistent with ValidSlots in ItemDefinition assets.
+            if (!itemDef.CanPlaceInSlot(SlotLocationType.QuickSlot))
                 return false;
             
             var allowedTypes = _inventoryConfig.QuickSlotConfig.AllowedTypes;
@@ -547,7 +553,15 @@ namespace NightHunt.GameplaySystems.QuickSlot
                     {
                         var item = _inventorySystem?.GetItemByInstanceID(newValue);
                         if (item != null)
+                        {
                             OnQuickSlotAssigned?.Invoke(index, item);
+                        }
+                        else
+                        {
+                            // Item not yet in inventory cache (inventory SyncList update may arrive
+                            // in a later frame). Subscribe to OnItemAdded and fire QS event then.
+                            StartCoroutine(DeferredQuickSlotAssigned(index, newValue));
+                        }
                     }
                     else
                     {
@@ -555,6 +569,35 @@ namespace NightHunt.GameplaySystems.QuickSlot
                     }
                     break;
             }
+        }
+
+        /// <summary>
+        /// Wait up to a few frames for the inventory cache to populate this item,
+        /// then fire OnQuickSlotAssigned. Handles the race where the QS SyncList
+        /// callback arrives before the inventory SyncList callback.
+        /// </summary>
+        private System.Collections.IEnumerator DeferredQuickSlotAssigned(int slotIndex, string instanceID)
+        {
+            // Poll for up to 10 frames.
+            int maxFrames = 10;
+            for (int f = 0; f < maxFrames; f++)
+            {
+                yield return null; // wait one frame
+
+                // Verify the slot still maps to this instanceID (user may have changed it).
+                if (slotIndex >= _quickSlots.Count || _quickSlots[slotIndex] != instanceID)
+                    yield break;
+
+                var item = _inventorySystem?.GetItemByInstanceID(instanceID);
+                if (item != null)
+                {
+                    OnQuickSlotAssigned?.Invoke(slotIndex, item);
+                    yield break;
+                }
+            }
+
+            if (_enableDebugLogs)
+                Debug.LogWarning($"[QuickSlotSystem] DeferredQuickSlotAssigned: item {instanceID} never arrived in inventory cache");
         }
         
         #endregion

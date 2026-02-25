@@ -65,7 +65,9 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         public event Action<ItemInstance> OnItemAdded;
         public event Action<ItemInstance, int> OnItemRemoved;
         public event Action<ItemInstance, ItemInstance> OnItemsSwapped;
+        public event Action<ItemInstance, int, int> OnItemMoved;
         public event Action OnInventoryCleared;
+        public event Action<int> OnInventorySlotCleared;
         public event Action<EquipmentSlotType, ItemInstance> OnItemEquipped;
         public event Action<EquipmentSlotType, ItemInstance> OnItemUnequipped;
         public event Action<WeaponSlotType, ItemInstance> OnWeaponEquipped;
@@ -172,7 +174,9 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 _inventory.OnItemAdded += HandleItemAdded;
                 _inventory.OnItemRemoved += HandleItemRemoved;
                 _inventory.OnItemsSwapped += HandleItemsSwapped;
+                _inventory.OnItemMoved += HandleItemMoved;
                 _inventory.OnInventoryCleared += HandleInventoryCleared;
+                _inventory.OnInventorySlotCleared += HandleInventorySlotCleared;
             }
             
             // Equipment events
@@ -226,7 +230,9 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 _inventory.OnItemAdded -= HandleItemAdded;
                 _inventory.OnItemRemoved -= HandleItemRemoved;
                 _inventory.OnItemsSwapped -= HandleItemsSwapped;
+                _inventory.OnItemMoved -= HandleItemMoved;
                 _inventory.OnInventoryCleared -= HandleInventoryCleared;
+                _inventory.OnInventorySlotCleared -= HandleInventorySlotCleared;
             }
             
             // Equipment events
@@ -276,7 +282,9 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         private void HandleItemAdded(ItemInstance item) => OnItemAdded?.Invoke(item);
         private void HandleItemRemoved(ItemInstance item, int quantity) => OnItemRemoved?.Invoke(item, quantity);
         private void HandleItemsSwapped(ItemInstance item1, ItemInstance item2) => OnItemsSwapped?.Invoke(item1, item2);
+        private void HandleItemMoved(ItemInstance item, int oldIndex, int newIndex) => OnItemMoved?.Invoke(item, oldIndex, newIndex);
         private void HandleInventoryCleared() => OnInventoryCleared?.Invoke();
+        private void HandleInventorySlotCleared(int index) => OnInventorySlotCleared?.Invoke(index);
         private void HandleItemEquipped(EquipmentSlotType slot, ItemInstance item) => OnItemEquipped?.Invoke(slot, item);
         private void HandleItemUnequipped(EquipmentSlotType slot, ItemInstance item) => OnItemUnequipped?.Invoke(slot, item);
         private void HandleWeaponEquipped(WeaponSlotType slot, ItemInstance weapon) => OnWeaponEquipped?.Invoke(slot, weapon);
@@ -397,6 +405,13 @@ namespace NightHunt.GameplaySystems.Core.Bridge
             _weapon.EquipWeapon(instanceID);
         }
 
+        /// <inheritdoc/>
+        public void EquipWeaponToSlot(string instanceID, WeaponSlotType targetSlot)
+        {
+            if (!ValidateSystem(_weapon, "Weapon")) return;
+            _weapon.EquipWeaponToSlot(instanceID, targetSlot);
+        }
+
         public void AddAndEquipWeapon(string defID, WeaponSlotType slot)
         {
             AddItem(defID);
@@ -418,6 +433,12 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 return;
             }
             _weapon.UnequipWeapon(slot);
+        }
+
+        public void SwapWeapons(WeaponSlotType slot1, WeaponSlotType slot2)
+        {
+            if (!ValidateSystem(_weapon, "Weapon")) return;
+            _weapon.SwapWeapons(slot1, slot2);
         }
 
         public void SelectWeapon(WeaponSlotType slot)
@@ -485,6 +506,12 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 return;
             }
             _quickSlot.RemoveFromQuickSlot(slotIndex);
+        }
+
+        public void SwapQuickSlots(int slotIndex1, int slotIndex2)
+        {
+            if (!ValidateSystem(_quickSlot, "QuickSlot")) return;
+            _quickSlot.SwapQuickSlots(slotIndex1, slotIndex2);
         }
 
         public void UseQuickSlot(int slotIndex)

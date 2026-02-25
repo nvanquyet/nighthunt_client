@@ -18,13 +18,13 @@ MonoBehaviour:
   Icon: {fileID: 21300000, guid: 5317524218a3345329f6e541138c8d42, type: 3}
   IsStackable: 0
   MaxStackSize: 1
-  Weight: 1
+  Weight: 3.5
   ModifyWeightWhenEquipped: 0
   EquippedWeightModifier: 0
   ResourceType: 2
   MaxResource: 300
   DefaultResource: 300
-  AttachmentSlots: 01000000030000000400000002000000
+  AttachmentSlots: 0100000003000000040000000200000006000000
   CanAttachTo: 
   ValidSlots: 0000000002000000
   EquippedPrefab: {fileID: 0}
@@ -32,26 +32,9 @@ MonoBehaviour:
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 0
-  Stats:
-  - StatType: 0
-    Value: 30
-  - StatType: 1
-    Value: 600
-  - StatType: 4
-    Value: 70
-  - StatType: 2
-    Value: 25
-  - StatType: 3
-    Value: 0.5
-  - StatType: 5
-    Value: 150
+  StatConfig: {fileID: 11400000, guid: 9ad4e76a99505df44bc52015cd5e5590, type: 2}
   MagazineSize: 30
   MaxAmmo: 300
   DefaultAmmo: 300
   ReloadTime: 2.5
   CanTacticalReload: 1
-  PlayerModifiers:
-  - StatType: 4
-    Value: -5
-    ModifierType: 1
-    Description: Rifle movement penalty

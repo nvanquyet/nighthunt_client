@@ -4,13 +4,15 @@ using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.Gameplay.Input.Handlers.Camera;
 using NightHunt.Gameplay.Input.Handlers.UI;
+using NightHunt.Gameplay.Input.Handlers.Interaction;
 
 namespace NightHunt.Gameplay.Input.Core
 {
     /// <summary>
-    /// Centralized input manager for local player
-    /// Singleton pattern - manages all input handlers
-    /// Components read input values from here
+    /// Facade cung cấp tham chiếu nhanh tới các handler cụ thể.
+    /// <para><b>Quản lý state / enable-disable ActionMap:</b>
+    /// Dùng <see cref="InputLayerManager"/> – đây là Single Source of Truth.</para>
+    /// <para><b>Không bao giờ</b> gọi <c>map.Enable()</c> / <c>map.Disable()</c> từ đây.</para>
     /// </summary>
     public class InputManager : MonoBehaviour
     {
@@ -21,6 +23,7 @@ namespace NightHunt.Gameplay.Input.Core
         [SerializeField] private CombatInputHandler combatHandler;
         [SerializeField] private CameraInputHandler cameraHandler;
         [SerializeField] private UIInputHandler uiInputHandler;
+        [SerializeField] private InteractionInputHandler interactionHandler;
 
         private bool isInitialized = false;
 
@@ -28,30 +31,25 @@ namespace NightHunt.Gameplay.Input.Core
 
         private void Awake()
         {
-            // Singleton setup
             if (Instance != null && Instance != this)
             {
                 Destroy(gameObject);
                 return;
             }
             Instance = this;
-
-            // Auto-create handlers if not assigned
             InitializeHandlers();
         }
 
         private void Start()
         {
-            // Enable input when start
-            EnableAllInput();
+            // Bắt đầu ở PlayerAlive context khi scene load xong
+            InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
         }
 
         private void OnDestroy()
         {
             if (Instance == this)
-            {
                 Instance = null;
-            }
         }
 
         #endregion
@@ -60,26 +58,20 @@ namespace NightHunt.Gameplay.Input.Core
 
         private void InitializeHandlers()
         {
-            // Auto-create handlers if not assigned
             if (movementHandler == null)
-            {
                 movementHandler = gameObject.AddComponent<MovementInputHandler>();
-            }
 
             if (combatHandler == null)
-            {
                 combatHandler = gameObject.AddComponent<CombatInputHandler>();
-            }
 
             if (cameraHandler == null)
-            {
                 cameraHandler = gameObject.AddComponent<CameraInputHandler>();
-            }
-            
+
             if (uiInputHandler == null)
-            {
                 uiInputHandler = gameObject.AddComponent<UIInputHandler>();
-            }
+
+            if (interactionHandler == null)
+                interactionHandler = gameObject.AddComponent<InteractionInputHandler>();
 
             isInitialized = true;
             Debug.Log("[InputManager] Initialized");
@@ -87,11 +79,10 @@ namespace NightHunt.Gameplay.Input.Core
 
         #endregion
 
-        #region Input Control
+        #region Convenience Methods (delegate tới InputLayerManager)
 
         /// <summary>
-        /// Enable all gameplay input
-        /// Called when player spawns and is alive
+        /// Bật toàn bộ gameplay input (PlayerAlive context).
         /// </summary>
         public void EnableAllInput()
         {
@@ -100,128 +91,17 @@ namespace NightHunt.Gameplay.Input.Core
                 Debug.LogWarning("[InputManager] Cannot enable: Not initialized!");
                 return;
             }
-
-            movementHandler?.EnableInput();
-            combatHandler?.EnableInput();
-            cameraHandler?.EnableInput();
-            uiInputHandler?.EnableInput();
-
-            // Transition to PlayerAlive state
             InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
-
-            Debug.Log("[InputManager] All input enabled");
+            Debug.Log("[InputManager] All input enabled (PlayerAlive)");
         }
 
         /// <summary>
-        /// Disable all input
-        /// Called when player dies or game state changes
+        /// Tắt toàn bộ input (Cinematic context).
         /// </summary>
         public void DisableAllInput()
         {
-            movementHandler?.DisableInput();
-            combatHandler?.DisableInput();
-            cameraHandler?.DisableInput();
-            uiInputHandler?.DisableInput();
-
+            InputLayerManager.Instance?.DisableAll();
             Debug.Log("[InputManager] All input disabled");
-        }
-
-        /// <summary>
-        /// Enable scout mode (movement + camera, no combat).
-        /// DEPRECATED: Use InputLayerManager.TransitionToState(InputState.ScoutMode) instead.
-        /// Kept for backward compatibility.
-        /// </summary>
-        [System.Obsolete("Use InputLayerManager.TransitionToState(InputState.ScoutMode) instead")]
-        public void EnableScoutMode()
-        {
-            InputLayerManager.Instance?.TransitionToState(InputState.ScoutMode);
-            Debug.Log("[InputManager] Scout mode enabled (via deprecated method)");
-        }
-
-        #endregion
-
-        #region State Mode Methods (Called by InputLayerManager)
-
-        /// <summary>
-        /// Set input mode for PlayerAlive state.
-        /// Called by InputLayerManager when transitioning to PlayerAlive.
-        /// </summary>
-        public void SetPlayerAliveMode()
-        {
-            movementHandler?.EnableInput();
-            combatHandler?.EnableInput();
-            cameraHandler?.EnableInput();
-            uiInputHandler?.EnableInput();
-        }
-
-        /// <summary>
-        /// Set input mode for InventoryOpen state.
-        /// Called by InputLayerManager when transitioning to InventoryOpen.
-        /// </summary>
-        public void SetInventoryMode()
-        {
-            movementHandler?.DisableInput();
-            combatHandler?.DisableInput();
-            cameraHandler?.DisableInput(); // Tuỳ gameplay, có thể giữ hoặc tắt
-            uiInputHandler?.EnableInput();
-        }
-
-        /// <summary>
-        /// Set input mode for Spectating state.
-        /// Called by InputLayerManager when transitioning to Spectating.
-        /// </summary>
-        public void SetSpectatorMode()
-        {
-            movementHandler?.DisableInput();
-            combatHandler?.DisableInput();
-            cameraHandler?.EnableInput(); // Spectator camera
-            uiInputHandler?.EnableInput();
-        }
-
-        /// <summary>
-        /// Set input mode for Menu state.
-        /// Called by InputLayerManager when transitioning to MenuOpen.
-        /// </summary>
-        public void SetMenuMode()
-        {
-            movementHandler?.DisableInput();
-            combatHandler?.DisableInput();
-            cameraHandler?.DisableInput();
-            uiInputHandler?.EnableInput();
-        }
-
-        /// <summary>
-        /// Set input mode for Dead state.
-        /// Called by InputLayerManager when transitioning to PlayerDead.
-        /// </summary>
-        public void SetDeadMode()
-        {
-            SetSpectatorMode(); // Dead = spectator mode
-        }
-
-        /// <summary>
-        /// Set input mode for ScoutMode state.
-        /// Called by InputLayerManager when transitioning to ScoutMode.
-        /// </summary>
-        public void SetScoutMode()
-        {
-            movementHandler?.EnableInput();
-            combatHandler?.DisableInput(); // No combat in scout mode
-            cameraHandler?.EnableInput();
-            uiInputHandler?.EnableInput();
-        }
-
-        /// <summary>
-        /// Set input mode for UsingDevice state.
-        /// Called by InputLayerManager when transitioning to UsingDevice.
-        /// </summary>
-        public void SetUsingDeviceMode()
-        {
-            // Tuỳ device: ví dụ khoá di chuyển, chỉ device/camera
-            movementHandler?.DisableInput();
-            combatHandler?.DisableInput();
-            cameraHandler?.EnableInput();
-            uiInputHandler?.EnableInput();
         }
 
         #endregion
@@ -232,6 +112,7 @@ namespace NightHunt.Gameplay.Input.Core
         public CombatInputHandler CombatHandler => combatHandler;
         public CameraInputHandler CameraHandler => cameraHandler;
         public UIInputHandler UIHandler => uiInputHandler;
+        public InteractionInputHandler InteractionHandler => interactionHandler;
         public bool IsInitialized => isInitialized;
 
         #endregion

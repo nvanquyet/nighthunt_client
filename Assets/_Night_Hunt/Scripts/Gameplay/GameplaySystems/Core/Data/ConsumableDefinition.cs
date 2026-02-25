@@ -1,55 +1,46 @@
 using UnityEngine;
 using NightHunt.StatSystem.Core.Types;
+using NightHunt.StatSystem.Configs;
 using NightHunt.GameplaySystems.Inventory;
 
 namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>
     /// Consumable item definition (food, medkits, potions, drinks …)
-    /// Replaced original: added ConsumableEffectType enum + Duration/BuffID on ConsumableEffect.
+    /// Effects are now stored in ConsumableStatConfig.
     /// </summary>
     [CreateAssetMenu(fileName = "Consumable_", menuName = "GameplaySystems/Items/Consumable Definition")]
     public class ConsumableDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Consumable;
 
-        [Header("Usage Effects")]
-        [Tooltip("All effects applied when this item finishes being consumed.")]
-        public ConsumableEffect[] Effects;
+        [Header("Stat Configuration")]
+        [Tooltip("Stat config containing effects and base stats")]
+        public ConsumableStatConfig StatConfig;
 
-        // ── Editor helpers ─────────────────────────────────────────────────────
-#if UNITY_EDITOR
-        [ContextMenu("Setup Default Medkit")]
-        private void SetupDefaultMedkit()
+        /// <summary>
+        /// Get consumable effects from StatConfig
+        /// </summary>
+        public ConsumableEffect[] GetEffects()
         {
-            DisplayName = "Medkit";
-            Description = "Restores 50 HP instantly + 20 HP over 10 s.";
-            IsStackable = true; MaxStackSize = 5; Weight = 0.3f;
-            UsageDuration = 3.5f; CanCancelUsage = true; CanUseWhileMoving = false;
-            ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.QuickSlot };
-            Effects = new ConsumableEffect[]
-            {
-                new ConsumableEffect { EffectType = ConsumableEffectType.RestoreHealth,  StatType = PlayerStatType.Health, Value = 50f, IsInstant = false, Description = "Restore 50 HP" },
-                new ConsumableEffect { EffectType = ConsumableEffectType.HealOverTime,   StatType = PlayerStatType.Health, Value = 20f, Duration = 10f,   Description = "Heal 2 HP/s for 10 s" },
-            };
-            UnityEditor.EditorUtility.SetDirty(this);
+            return StatConfig?.Effects;
         }
-
-        [ContextMenu("Setup Default Energy Drink")]
-        private void SetupDefaultEnergyDrink()
+        
+        /// <summary>
+        /// Get stat value from StatConfig
+        /// </summary>
+        public float GetStatValue(ItemStatType statType)
         {
-            DisplayName = "Energy Drink";
-            Description = "Restores 100 stamina instantly.";
-            IsStackable = true; MaxStackSize = 3; Weight = 0.2f;
-            UsageDuration = 2f; CanCancelUsage = true; CanUseWhileMoving = true;
-            ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.QuickSlot };
-            Effects = new ConsumableEffect[]
-            {
-                new ConsumableEffect { EffectType = ConsumableEffectType.RestoreStamina, StatType = PlayerStatType.Stamina, Value = 100f, IsInstant = true, Description = "Restore 100 Stamina" },
-            };
-            UnityEditor.EditorUtility.SetDirty(this);
+            return StatConfig != null ? StatConfig.GetStatValue(statType) : 0f;
         }
-#endif
+        
+        /// <summary>
+        /// Check if item has specific stat
+        /// </summary>
+        public bool HasStat(ItemStatType statType)
+        {
+            return StatConfig != null && StatConfig.HasStat(statType);
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────

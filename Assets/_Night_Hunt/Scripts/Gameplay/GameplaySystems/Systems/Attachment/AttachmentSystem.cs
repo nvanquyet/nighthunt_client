@@ -217,8 +217,8 @@ namespace NightHunt.GameplaySystems.Attachment
             // Attach
             parent.SetAttachment(slotIndex, attachmentInstanceID);
             
-            // Remove attachment from inventory (it's now on the item)
-            _inventorySystem.RemoveItem(attachmentInstanceID, 1);
+            // Remove from inventory slots but keep in ItemDatabase (for ItemStatSystem modifier lookup)
+            _inventorySystem.RemoveItemFromSlotsOnly(attachmentInstanceID);
             
             // Invalidate item stat cache (attachments changed)
             ItemStatSystem.InvalidateCache(parentInstanceID);
@@ -250,30 +250,38 @@ namespace NightHunt.GameplaySystems.Attachment
             var parent = _inventorySystem.GetItemByInstanceID(parentInstanceID);
             if (parent == null || !parent.HasAttachment(slotIndex))
             {
-                Debug.LogWarning("[AttachmentSystem] No attachment to detach");
+                Debug.LogWarning("[AttachmentSystem] DetachItemServer: no attachment to detach");
                 return;
             }
-            
+
             string attachmentID = parent.GetAttachment(slotIndex);
-            var attachment = _inventorySystem.GetItemByInstanceID(attachmentID);
-            
+
+            // Get instance: may not be in inventory slots (was moved out via RemoveItemFromSlotsOnly)
+            // Fall back to ItemDatabase which keeps all registered instances regardless of slot state.
+            var attachment = _inventorySystem.GetItemByInstanceID(attachmentID)
+                          ?? ItemDatabase.GetInstance(attachmentID);
+
+            // Clear the attachment slot BEFORE restoring to inventory to avoid any circular reference
+            parent.ClearAttachment(slotIndex);
+
             if (attachment != null)
             {
-                // Return to inventory
-                var attachDef = ItemDatabase.GetDefinition(attachment.DefinitionID);
-                _inventorySystem.AddItem(attachment.DefinitionID, 1);
-                
+                // BUG 6 FIX: Restore the ORIGINAL instance with all its state data
+                // (CurrentResource, CurrentMagazine, CustomData, etc.) instead of
+                // creating a new item via AddItem(definitionID, 1) which loses all that data.
+                _inventorySystem.RestoreItemToSlots(attachment);
                 OnAttachmentDetached?.Invoke(parentInstanceID, slotIndex, attachment);
             }
-            
-            // Clear slot
-            parent.ClearAttachment(slotIndex);
-            
-            // Invalidate item stat cache
+            else
+            {
+                Debug.LogWarning($"[AttachmentSystem] DetachItemServer: attachment instance not found: {attachmentID}");
+            }
+
+            // Invalidate item stat cache so modifiers from this attachment are removed
             ItemStatSystem.InvalidateCache(parentInstanceID);
-            
+
             if (_enableDebugLogs)
-                Debug.Log($"[AttachmentSystem] Detached attachment from slot {slotIndex}");
+                Debug.Log($"[AttachmentSystem] Detached attachment from {parentInstanceID}[{slotIndex}]");
         }
         
         public void SwapAttachments(string parentID1, int slotIndex1, string parentID2, int slotIndex2)
@@ -292,22 +300,53 @@ namespace NightHunt.GameplaySystems.Attachment
         {
             var parent1 = _inventorySystem.GetItemByInstanceID(parentID1);
             var parent2 = _inventorySystem.GetItemByInstanceID(parentID2);
-            
+
             if (parent1 == null || parent2 == null)
             {
-                Debug.LogWarning("[AttachmentSystem] Invalid parent items");
+                Debug.LogWarning("[AttachmentSystem] SwapAttachments: invalid parent items");
                 return;
             }
-            
+
             string attach1 = parent1.GetAttachment(slotIndex1);
             string attach2 = parent2.GetAttachment(slotIndex2);
-            
+
+            // BUG 6 FIX: validate compatibility before swapping to prevent illegal attachment states.
+            // Each attachment must be compatible with its new target slot.
+            if (!string.IsNullOrEmpty(attach1) && !string.IsNullOrEmpty(attach2))
+            {
+                // Both slots occupied – validate cross-compatibility
+                if (!CanAttach(attach1, parentID2, slotIndex2) || !CanAttach(attach2, parentID1, slotIndex1))
+                {
+                    Debug.LogWarning("[AttachmentSystem] SwapAttachments: incompatible attachment types for swap");
+                    return;
+                }
+            }
+            else if (!string.IsNullOrEmpty(attach1))
+            {
+                if (!CanAttach(attach1, parentID2, slotIndex2))
+                {
+                    Debug.LogWarning("[AttachmentSystem] SwapAttachments: attach1 incompatible with target slot");
+                    return;
+                }
+            }
+            else if (!string.IsNullOrEmpty(attach2))
+            {
+                if (!CanAttach(attach2, parentID1, slotIndex1))
+                {
+                    Debug.LogWarning("[AttachmentSystem] SwapAttachments: attach2 incompatible with target slot");
+                    return;
+                }
+            }
+
             parent1.SetAttachment(slotIndex1, attach2);
             parent2.SetAttachment(slotIndex2, attach1);
-            
-            // Invalidate both caches
+
+            // Invalidate stat caches for both parents
             ItemStatSystem.InvalidateCache(parentID1);
             ItemStatSystem.InvalidateCache(parentID2);
+
+            if (_enableDebugLogs)
+                Debug.Log($"[AttachmentSystem] Swapped {parentID1}[{slotIndex1}] ↔ {parentID2}[{slotIndex2}]");
         }
         
         public void DetachAllFromItem(string parentInstanceID)
@@ -386,6 +425,7 @@ namespace NightHunt.GameplaySystems.Attachment
                 if (attachment != null)
                 {
                     _inventorySystem.AddItem(attachment.DefinitionID, 1);
+                    ItemDatabase.UnregisterInstance(attachmentID);
                     recoveredCount++;
                     
                     if (_enableDebugLogs)

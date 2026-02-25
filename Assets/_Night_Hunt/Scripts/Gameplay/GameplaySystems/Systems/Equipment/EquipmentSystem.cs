@@ -251,6 +251,8 @@ namespace NightHunt.GameplaySystems.Equipment
             // Equip new item
             _equippedItems[slotType] = instanceID;
             item.InventoryIndex = -1; // Mark as equipped
+            // BUG 7 FIX: Push the updated InventoryIndex to clients so UI can clear the old inventory slot.
+            _inventorySystem.SyncItemState(instanceID);
             
             // OPTIMIZED: Batch apply modifiers
             ApplyEquipmentModifiersOptimized(instanceID, equipmentDef);
@@ -316,12 +318,17 @@ namespace NightHunt.GameplaySystems.Equipment
             
             // Return to inventory
             item.InventoryIndex = FindNextAvailableInventoryIndex();
+            // BUG 7 FIX: Push restored InventoryIndex to clients so UI can show item in inventory.
+            _inventorySystem.SyncItemState(instanceID);
             
             // Remove modifiers
             RemoveEquipmentModifiers(instanceID);
             
             if (_enableDebugLogs)
+            {
                 Debug.Log($"[EquipmentSystem] Unequipped {equipmentDef.DisplayName} from {slotType}");
+                Debug.Log($"[EquipmentSystem] Item {item.DefinitionID} successfully moved to inventory at index {item.InventoryIndex}");
+            }
         }
         
         public void SwapEquipment(EquipmentSlotType slot1, EquipmentSlotType slot2)
@@ -381,10 +388,11 @@ namespace NightHunt.GameplaySystems.Equipment
             if (_statSystem == null)
                 return;
             
-            // Apply player stat modifiers
-            if (equipmentDef.PlayerModifiers != null)
+            // Apply player stat modifiers from StatConfig
+            var playerModifiers = equipmentDef.GetPlayerModifiers();
+            if (playerModifiers != null)
             {
-                foreach (var modifier in equipmentDef.PlayerModifiers)
+                foreach (var modifier in playerModifiers)
                 {
                     var statMod = new StatModifier
                     {
@@ -412,9 +420,28 @@ namespace NightHunt.GameplaySystems.Equipment
                 _statSystem.AddModifier(PlayerStatType.CurrentWeight, weightMod);
             }
             
+            // Apply attachment PlayerModifiers (e.g. flashlight VisionRange)
+            var equipmentItem = _inventorySystem.GetItemByInstanceID(instanceID);
+            if (equipmentItem?.AttachedItems != null)
+            {
+                foreach (var attachmentInstanceID in equipmentItem.AttachedItems)
+                {
+                    if (string.IsNullOrEmpty(attachmentInstanceID)) continue;
+                    var attachInstance = ItemDatabase.GetInstance(attachmentInstanceID);
+                    if (attachInstance == null) continue;
+                    var attachDef = ItemDatabase.GetDefinition(attachInstance.DefinitionID) as AttachmentDefinition;
+                    if (attachDef?.StatConfig?.PlayerModifiers == null) continue;
+                    foreach (var mod in attachDef.StatConfig.PlayerModifiers)
+                    {
+                        var statMod = new StatModifier { SourceID = instanceID, Type = mod.ModifierType, Value = mod.Value, Priority = 0, Description = mod.Description };
+                        _statSystem.AddModifier(mod.StatType, statMod);
+                    }
+                }
+            }
+            
             if (_enableDebugLogs)
             {
-                int modCount = (equipmentDef.PlayerModifiers?.Length ?? 0) + 
+                int modCount = (equipmentDef.GetPlayerModifiers()?.Length ?? 0) + 
                               (equipmentDef.ModifyWeightWhenEquipped ? 1 : 0);
                 Debug.Log($"[EquipmentSystem] Applied {modCount} modifiers from {equipmentDef.DisplayName}");
             }
@@ -442,11 +469,10 @@ namespace NightHunt.GameplaySystems.Equipment
         
         private int FindNextAvailableInventoryIndex()
         {
-            if (_inventorySystem == null)
-                return 0;
-            
-            int maxIndex = _inventorySystem.GetMaxIndex();
-            return maxIndex + 1;
+            // ROOT CAUSE A FIX: Use gap-finding (first free slot) instead of maxIndex+1.
+            // maxIndex+1 always appended items beyond the last used slot even when earlier
+            // slots were freed by equipping – causing items to appear in unexpected positions.
+            return _inventorySystem?.GetNextFreeInventoryIndex() ?? 0;
         }
         
         private void RebuildEquipmentCache()

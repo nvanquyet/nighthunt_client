@@ -80,6 +80,36 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         void RemoveItem(string instanceID, int quantity);
         
         /// <summary>
+        /// Remove item from inventory slots only (for attachment).
+        /// Keeps instance in ItemDatabase so ItemStatSystem can resolve modifiers.
+        /// </summary>
+        void RemoveItemFromSlotsOnly(string instanceID);
+
+        /// <summary>
+        /// Restore an item instance back to inventory slots.
+        /// Reverse of RemoveItemFromSlotsOnly – used by AttachmentSystem on detach.
+        /// The instance must already exist in ItemDatabase.
+        /// Server-side only.
+        /// </summary>
+        void RestoreItemToSlots(ItemInstance item);
+
+        /// <summary>
+        /// Force-push the current in-memory state of an item to the SyncList so clients
+        /// receive the update (e.g. after InventoryIndex changes due to equip/unequip).
+        /// Also keeps the server-side _itemsByIndex cache in sync.
+        /// Server-side only.
+        /// </summary>
+        void SyncItemState(string instanceID);
+
+        /// <summary>
+        /// Returns the first free (gap) inventory grid index.
+        /// Used by EquipmentSystem/WeaponSystem to restore items to the correct slot
+        /// on unequip rather than always appending beyond the highest used index.
+        /// Server-side only.
+        /// </summary>
+        int GetNextFreeInventoryIndex();
+        
+        /// <summary>
         /// Remove items by definition ID
         /// Removes oldest stacks first
         /// </summary>
@@ -111,6 +141,16 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Swap two items' positions
         /// </summary>
         void SwapItems(string instanceID1, string instanceID2);
+
+        /// <summary>
+        /// Batch-reassign inventory indices for multiple items atomically.
+        /// The dictionary maps instanceID → desired new inventory index.
+        /// All assignments happen server-side in one pass with no cascading swaps.
+        /// Used by the sort feature to avoid the collision/cascade problem that occurs
+        /// when sequential MoveItem calls trigger accidental swaps.
+        /// Server-side only.
+        /// </summary>
+        void BatchAssignIndices(Dictionary<string, int> assignments);
         
         #endregion
         
@@ -181,6 +221,14 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Event fired when inventory cleared
         /// </summary>
         event Action OnInventoryCleared;
+
+        /// <summary>
+        /// Event fired when a specific inventory slot is cleared because the item moved out
+        /// of inventory (e.g., equipped to Equipment/Weapon slot or attached to another item).
+        /// Subscribers should clear the corresponding UI slot.
+        /// Parameters: (inventoryIndex)
+        /// </summary>
+        event Action<int> OnInventorySlotCleared;
         
         #endregion
     }

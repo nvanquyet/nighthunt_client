@@ -36,6 +36,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     return ValidateFromInventory(source, target, sourceState, targetState, ref action);
                 case UISlotType.Equipment:
                     return ValidateFromEquipment(source, target, sourceState, targetState, ref action);
+                case UISlotType.Weapon:
+                    return ValidateFromWeapon(source, target, sourceState, targetState, ref action);
                 case UISlotType.QuickSlot:
                     return ValidateFromQuickSlot(source, target, sourceState, targetState, ref action);
                 case UISlotType.Attachment:
@@ -104,6 +106,20 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     }
                     return false;
 
+                case UISlotType.Weapon:
+                    // Check xem item có phải weapon type không
+                    var weaponDef = ItemDatabase.GetDefinition(sourceState.Item.DefinitionID);
+                    if (weaponDef != null && weaponDef.Type == ItemType.Weapon)
+                    {
+                        action.Type = DropActionType.EquipWeapon;
+                        return true;
+                    }
+                    return false;
+
+                case UISlotType.Trash:
+                    action.Type = DropActionType.Trash;
+                    return true;
+
                 default:
                     return false;
             }
@@ -123,6 +139,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     return true;
                 case UISlotType.Equipment:
                     action.Type = DropActionType.Swap;
+                    return true;
+                // BUG 4 FIX: allow drop from equipment directly to world via DropArea
+                case UISlotType.DropArea:
+                    action.Type = DropActionType.DropToWorld;
+                    return true;
+                case UISlotType.Trash:
+                    action.Type = DropActionType.Trash;
                     return true;
                 default:
                     return false;
@@ -144,6 +167,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 case UISlotType.QuickSlot:
                     action.Type = DropActionType.Swap;
                     return true;
+                // BUG 4 FIX: drop item via QuickSlot shortcut directly to world
+                case UISlotType.DropArea:
+                    action.Type = DropActionType.DropToWorld;
+                    return true;
+                case UISlotType.Trash:
+                    action.Type = DropActionType.Trash;
+                    return true;
                 default:
                     return false;
             }
@@ -159,20 +189,64 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             switch (target.Type)
             {
                 case UISlotType.Inventory:
-                    // Detach attachment về inventory
+                    // Detach attachment back to inventory
                     action.Type = DropActionType.Detach;
                     return true;
-                    
+
                 case UISlotType.Attachment:
-                    // Swap attachments giữa 2 items
-                    // Chỉ cho phép nếu cùng parent item
+                    // Swap attachments between two slots of the SAME parent item
                     if (source.ParentInstanceID == target.ParentInstanceID)
                     {
                         action.Type = DropActionType.Swap;
                         return true;
                     }
                     return false;
-                    
+
+                // BUG 4 FIX: detach attachment then drop to world
+                case UISlotType.DropArea:
+                    action.Type = DropActionType.DropToWorld;
+                    return true;
+
+                case UISlotType.Trash:
+                    action.Type = DropActionType.Trash;
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        private bool ValidateFromWeapon(
+            UISlotId source,
+            UISlotId target,
+            UISlotState sourceState,
+            UISlotState targetState,
+            ref DropAction action)
+        {
+            switch (target.Type)
+            {
+                case UISlotType.Inventory:
+                    action.Type = DropActionType.UnequipWeapon;
+                    return true;
+
+                case UISlotType.Weapon:
+                    // Swap weapons between two slots (Primary ↔ Secondary, etc.)
+                    if (source.WeaponSlot.HasValue && target.WeaponSlot.HasValue)
+                    {
+                        action.Type = DropActionType.Swap;
+                        return true;
+                    }
+                    return false;
+
+                // BUG 4 FIX: drop weapon directly to world
+                case UISlotType.DropArea:
+                    action.Type = DropActionType.DropToWorld;
+                    return true;
+
+                case UISlotType.Trash:
+                    action.Type = DropActionType.Trash;
+                    return true;
+
                 default:
                     return false;
             }

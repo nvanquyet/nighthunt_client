@@ -6,288 +6,247 @@ using NightHunt.Gameplay.Input.Core;
 namespace NightHunt.Gameplay.Input.Handlers.Combat
 {
     /// <summary>
-    /// Handles ONLY combat input (Attack, Aim, Reload, Weapon Switch)
-    /// Separated from movement and interaction for clean architecture
-    /// Components read input values from this handler via InputManager
+    /// Handles ONLY combat input (Fire, Aim, Reload, WeaponSlots, Grenade).
+    /// <para>Action map "Combat" được <see cref="InputLayerManager"/> bật/tắt theo context.
+    /// Handler chỉ subscribe/unsubscribe callbacks.</para>
+    ///
+    /// <b>Quan trọng:</b> Khi <see cref="InputState.InventoryOpen"/> hoặc bất kỳ UI context
+    /// nào được active, InputLayerManager sẽ disable ActionMap "Combat" → các action
+    /// KHÔNG bao giờ fire, kể cả click chuột trái.
     /// </summary>
     public class CombatInputHandler : MonoBehaviour, IInputHandler
     {
-        private InputActionMap combatActionMap;
-        private InputAction fireAction;
-        private InputAction aimAction;
-        private InputAction reloadAction;
-        private InputAction weaponSlot1Action;
-        private InputAction weaponSlot2Action;
-        private InputAction weaponSlot3Action;
-        private InputAction throwGrenadeAction;
+        // ── Cached actions ────────────────────────────────────────────────────────
+        private InputActionMap _combatActionMap;
+        private InputAction _fireAction;
+        private InputAction _aimAction;
+        private InputAction _reloadAction;
+        private InputAction _weaponSlot1Action;
+        private InputAction _weaponSlot2Action;
+        private InputAction _weaponSlot3Action;
+        private InputAction _throwGrenadeAction;
+        private InputAction _switchWeaponAction; // scroll wheel switch
 
-        // Current state
-        private bool isFiring;
-        private bool isAiming;
-        private bool isReloading;
-        private int currentWeaponSlot = 0;
+        // ── Delegate fields (để unsubscribe đúng, tránh lambda leak) ─────────────
+        private System.Action<InputAction.CallbackContext> _onSlot1;
+        private System.Action<InputAction.CallbackContext> _onSlot2;
+        private System.Action<InputAction.CallbackContext> _onSlot3;
 
-        // Camera for aim direction
-        private UnityEngine.Camera playerCamera;
-        private Vector3 aimDirection;
+        // ── State ─────────────────────────────────────────────────────────────────
+        private bool _isFiring;
+        private bool _isAiming;
+        private bool _isReloading;
+        private int  _currentWeaponSlot = 0;
+        private UnityEngine.Camera _playerCamera;
+        private Vector3 _aimDirection;
+        private bool _inputEnabled = false;
 
-        private bool inputEnabled = false;
+        // ── Events ────────────────────────────────────────────────────────────────
+        public event System.Action          OnFire;
+        public event System.Action          OnFireStop;
+        public event System.Action          OnAimStart;
+        public event System.Action          OnAimStop;
+        public event System.Action          OnReload;
+        public event System.Action<int>     OnWeaponSlotChanged;
+        public event System.Action          OnThrowGrenade;
 
-        // Events
-        public event System.Action OnFire;
-        public event System.Action OnFireStop;
-        public event System.Action OnAimStart;
-        public event System.Action OnAimStop;
-        public event System.Action OnReload;
-        public event System.Action<int> OnWeaponSlotChanged;
-        public event System.Action OnThrowGrenade;
+        // ── IInputHandler ─────────────────────────────────────────────────────────
+        public bool IsInputEnabled  => _inputEnabled;
+        public InputActionMap GetActionMap() => _combatActionMap;
 
-        #region Lifecycle
+        // ── Lifecycle ─────────────────────────────────────────────────────────────
 
         private void Awake()
         {
+            _playerCamera = UnityEngine.Camera.main;
+            // Tạo delegate references cho weapon slots để unsubscribe đúng
+            _onSlot1 = _ => SwitchToWeaponSlot(0);
+            _onSlot2 = _ => SwitchToWeaponSlot(1);
+            _onSlot3 = _ => SwitchToWeaponSlot(2);
             InitializeActions();
-            playerCamera = UnityEngine.Camera.main;
         }
 
         private void OnEnable()
         {
-            RegisterWithManager();
+            InputLayerManager.Instance?.RegisterHandler(this);
         }
 
         private void OnDisable()
         {
             DisableInput();
-            UnregisterFromManager();
+            InputLayerManager.Instance?.UnregisterHandler(this);
         }
 
         private void Update()
         {
-            if (!inputEnabled) return;
-
+            if (!_inputEnabled) return;
             UpdateAimDirection();
         }
 
-        #endregion
-
-        #region Initialization
+        // ── Initialization ────────────────────────────────────────────────────────
 
         private void InitializeActions()
         {
             if (InputLayerManager.Instance == null)
             {
-                Debug.LogError("[CombatInputHandler] InputLayerManager.Instance is null!");
+                Debug.LogError("[CombatInputHandler] InputLayerManager.Instance là null!");
                 return;
             }
 
-            combatActionMap = InputLayerManager.Instance.CombatMap;
+            _combatActionMap = InputLayerManager.Instance.CombatMap;
 
-            if (combatActionMap != null)
+            if (_combatActionMap != null)
             {
-                fireAction = combatActionMap.FindAction("Fire");
-                aimAction = combatActionMap.FindAction("AimDownSights");
-                reloadAction = combatActionMap.FindAction("Reload");
-                weaponSlot1Action = combatActionMap.FindAction("WeaponSlot1");
-                weaponSlot2Action = combatActionMap.FindAction("WeaponSlot2");
-                weaponSlot3Action = combatActionMap.FindAction("WeaponSlot3");
-                throwGrenadeAction = combatActionMap.FindAction("ThrowGrenade");
+                _fireAction          = _combatActionMap.FindAction("Fire");
+                _aimAction           = _combatActionMap.FindAction("AimDownSights");
+                _reloadAction        = _combatActionMap.FindAction("Reload");
+                _weaponSlot1Action   = _combatActionMap.FindAction("WeaponSlot1");
+                _weaponSlot2Action   = _combatActionMap.FindAction("WeaponSlot2");
+                _weaponSlot3Action   = _combatActionMap.FindAction("WeaponSlot3");
+                _throwGrenadeAction  = _combatActionMap.FindAction("ThrowGrenade");
+                _switchWeaponAction  = _combatActionMap.FindAction("SwitchWeapon");
             }
             else
             {
-                Debug.LogError("[CombatInputHandler] 'Combat' action map not found!");
+                Debug.LogError("[CombatInputHandler] 'Combat' action map không tìm thấy!");
             }
         }
 
-        private void RegisterWithManager()
-        {
-            InputLayerManager.Instance?.RegisterHandler(this);
-        }
-
-        private void UnregisterFromManager()
-        {
-            InputLayerManager.Instance?.UnregisterHandler(this);
-        }
-
-        #endregion
-
-        #region IInputHandler Implementation
-
-        public bool IsInputEnabled => inputEnabled;
-
-        public InputActionMap GetActionMap() => combatActionMap;
+        // ── IInputHandler Implementation ──────────────────────────────────────────
 
         public void EnableInput()
         {
-            if (inputEnabled) return;
+            if (_inputEnabled) return;
+            if (_combatActionMap == null) InitializeActions();
+            if (_combatActionMap == null) return;
 
-            inputEnabled = true;
+            _inputEnabled = true;
 
-            // Subscribe to events
-            if (fireAction != null)
+            if (_fireAction != null)
             {
-                fireAction.performed += OnFirePerformed;
-                fireAction.canceled += OnFireCanceled;
+                _fireAction.performed += OnFirePerformed;
+                _fireAction.canceled  += OnFireCanceled;
             }
-
-            if (aimAction != null)
+            if (_aimAction != null)
             {
-                aimAction.performed += OnAimPerformed;
-                aimAction.canceled += OnAimCanceled;
+                _aimAction.performed += OnAimPerformed;
+                _aimAction.canceled  += OnAimCanceled;
             }
-
-            if (reloadAction != null)
-            {
-                reloadAction.performed += OnReloadPerformed;
-            }
-
-            if (weaponSlot1Action != null)
-                weaponSlot1Action.performed += ctx => SwitchToWeaponSlot(0);
-
-            if (weaponSlot2Action != null)
-                weaponSlot2Action.performed += ctx => SwitchToWeaponSlot(1);
-
-            if (weaponSlot3Action != null)
-                weaponSlot3Action.performed += ctx => SwitchToWeaponSlot(2);
-
-            if (throwGrenadeAction != null)
-                throwGrenadeAction.performed += OnThrowGrenadePerformed;
+            if (_reloadAction       != null) _reloadAction.performed       += OnReloadPerformed;
+            if (_weaponSlot1Action  != null) _weaponSlot1Action.performed  += _onSlot1;
+            if (_weaponSlot2Action  != null) _weaponSlot2Action.performed  += _onSlot2;
+            if (_weaponSlot3Action  != null) _weaponSlot3Action.performed  += _onSlot3;
+            if (_throwGrenadeAction != null) _throwGrenadeAction.performed += OnThrowGrenadePerformed;
+            if (_switchWeaponAction != null) _switchWeaponAction.performed += OnSwitchWeaponPerformed;
 
             Debug.Log("[CombatInputHandler] Input enabled");
         }
 
         public void DisableInput()
         {
-            if (!inputEnabled) return;
+            if (!_inputEnabled) return;
+            _inputEnabled = false;
 
-            inputEnabled = false;
-
-            // Unsubscribe
-            if (fireAction != null)
+            if (_fireAction != null)
             {
-                fireAction.performed -= OnFirePerformed;
-                fireAction.canceled -= OnFireCanceled;
+                _fireAction.performed -= OnFirePerformed;
+                _fireAction.canceled  -= OnFireCanceled;
             }
-
-            if (aimAction != null)
+            if (_aimAction != null)
             {
-                aimAction.performed -= OnAimPerformed;
-                aimAction.canceled -= OnAimCanceled;
+                _aimAction.performed -= OnAimPerformed;
+                _aimAction.canceled  -= OnAimCanceled;
             }
+            if (_reloadAction       != null) _reloadAction.performed       -= OnReloadPerformed;
+            if (_weaponSlot1Action  != null) _weaponSlot1Action.performed  -= _onSlot1;
+            if (_weaponSlot2Action  != null) _weaponSlot2Action.performed  -= _onSlot2;
+            if (_weaponSlot3Action  != null) _weaponSlot3Action.performed  -= _onSlot3;
+            if (_throwGrenadeAction != null) _throwGrenadeAction.performed -= OnThrowGrenadePerformed;
+            if (_switchWeaponAction != null) _switchWeaponAction.performed -= OnSwitchWeaponPerformed;
 
-            if (reloadAction != null)
-            {
-                reloadAction.performed -= OnReloadPerformed;
-            }
-
-            if (weaponSlot1Action != null)
-                weaponSlot1Action.performed -= ctx => SwitchToWeaponSlot(0);
-
-            if (weaponSlot2Action != null)
-                weaponSlot2Action.performed -= ctx => SwitchToWeaponSlot(1);
-
-            if (weaponSlot3Action != null)
-                weaponSlot3Action.performed -= ctx => SwitchToWeaponSlot(2);
-
-            if (throwGrenadeAction != null)
-                throwGrenadeAction.performed -= OnThrowGrenadePerformed;
-
-            // Reset state
-            isFiring = false;
-            isAiming = false;
-            isReloading = false;
+            // Reset transient state
+            _isFiring   = false;
+            _isAiming   = false;
+            _isReloading = false;
 
             Debug.Log("[CombatInputHandler] Input disabled");
         }
 
-        #endregion
-
-        #region Aim Direction
+        // ── Aim Direction ─────────────────────────────────────────────────────────
 
         private void UpdateAimDirection()
         {
-            if (playerCamera == null) return;
+            if (_playerCamera == null) return;
 
-            // For top-down: aim at mouse world position
-            Ray ray = playerCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            Ray ray = _playerCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
             Plane groundPlane = new Plane(Vector3.up, transform.position);
 
             if (groundPlane.Raycast(ray, out float distance))
             {
                 Vector3 hitPoint = ray.GetPoint(distance);
-                aimDirection = (hitPoint - transform.position).normalized;
-                aimDirection.y = 0; // Keep horizontal
+                _aimDirection = (hitPoint - transform.position).normalized;
+                _aimDirection.y = 0f;
             }
         }
 
-        #endregion
-
-        #region Input Event Handlers
+        // ── Callbacks ─────────────────────────────────────────────────────────────
 
         private void OnFirePerformed(InputAction.CallbackContext ctx)
         {
-            // If pointer is over UI, ignore fire input to avoid conflicts with UI clicks
+            // Nếu pointer đang ở trên UI element → bỏ qua
+            // (phòng thủ thứ 2 – phòng thủ chính là Combat ActionMap đã bị disable)
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
-            {
                 return;
-            }
 
-            isFiring = true;
+            _isFiring = true;
             OnFire?.Invoke();
         }
 
         private void OnFireCanceled(InputAction.CallbackContext ctx)
         {
-            isFiring = false;
+            _isFiring = false;
             OnFireStop?.Invoke();
         }
 
-        private void OnAimPerformed(InputAction.CallbackContext ctx)
-        {
-            isAiming = true;
-            OnAimStart?.Invoke();
-        }
-
-        private void OnAimCanceled(InputAction.CallbackContext ctx)
-        {
-            isAiming = false;
-            OnAimStop?.Invoke();
-        }
+        private void OnAimPerformed(InputAction.CallbackContext ctx)  { _isAiming = true;  OnAimStart?.Invoke(); }
+        private void OnAimCanceled(InputAction.CallbackContext ctx)   { _isAiming = false; OnAimStop?.Invoke();  }
 
         private void OnReloadPerformed(InputAction.CallbackContext ctx)
         {
-            if (!isReloading)
+            if (!_isReloading)
             {
-                isReloading = true;
+                _isReloading = true;
                 OnReload?.Invoke();
             }
         }
 
         private void SwitchToWeaponSlot(int slot)
         {
-            if (currentWeaponSlot != slot)
+            if (_currentWeaponSlot != slot)
             {
-                currentWeaponSlot = slot;
+                _currentWeaponSlot = slot;
                 OnWeaponSlotChanged?.Invoke(slot);
             }
         }
 
-        private void OnThrowGrenadePerformed(InputAction.CallbackContext ctx)
+        private void OnSwitchWeaponPerformed(InputAction.CallbackContext ctx)
         {
-            OnThrowGrenade?.Invoke();
+            float scroll = ctx.ReadValue<float>();
+            if (scroll > 0f)
+                SwitchToWeaponSlot((_currentWeaponSlot + 1) % 3);
+            else if (scroll < 0f)
+                SwitchToWeaponSlot((_currentWeaponSlot + 2) % 3); // wrap back
         }
 
-        #endregion
+        private void OnThrowGrenadePerformed(InputAction.CallbackContext ctx) => OnThrowGrenade?.Invoke();
 
-        #region Public API
+        // ── Public API ────────────────────────────────────────────────────────────
 
-        public bool IsFiring() => isFiring;
-        public bool IsAiming() => isAiming;
-        public bool IsReloading() => isReloading;
-        public Vector3 GetAimDirection() => aimDirection;
-        public int GetCurrentWeaponSlot() => currentWeaponSlot;
-
-        public void SetReloading(bool reloading) => isReloading = reloading;
-
-        #endregion
+        public bool IsFiring()          => _isFiring;
+        public bool IsAiming()          => _isAiming;
+        public bool IsReloading()       => _isReloading;
+        public Vector3 GetAimDirection() => _aimDirection;
+        public int GetCurrentWeaponSlot() => _currentWeaponSlot;
+        public void SetReloading(bool v)  => _isReloading = v;
     }
 }
