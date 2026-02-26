@@ -1,4 +1,4 @@
-using FishNet.Object;
+﻿using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using UnityEngine;
@@ -10,52 +10,45 @@ using NightHunt.Networking;
 namespace NightHunt.GameplaySystems.Loot
 {
     /// <summary>
-    /// World pickup item — item dropped on the ground that a player can pick up.
-    ///
-    /// DESIGN (SRP / ISP):
-    ///   Implements IPickupable (which extends IInteractable) so that
-    ///   RaycastDetector, ProximityInteractScanner, and InteractionInputHandler
-    ///   work through the interface and never need to know this concrete type.
-    ///
-    /// NETWORK: Server-authoritative.  Client calls Interact() → ServerRpc fires.
+    /// Item rơi trên đất — player có thể pickup.
+    /// NETWORK: Server-authoritative. Client calls Interact() → ServerRpc fires.
     /// </summary>
-    public class WorldPickup : NetworkBehaviour, IPickupable
+    public class WorldItem : NetworkBehaviour, IPickupable
     {
+        /// <summary>Fired server-side khi WorldItem bị despawn (pickup hoặc expired).</summary>
+        public event System.Action OnDespawned;
+
         [Header("Settings")]
-        [Tooltip("Maximum distance to pickup (meters)")]
+        [Tooltip("Maximum distance to pickup — fallback khi không có LootableConfig.")]
         [SerializeField] private float maxPickupDistance = 3f;
 
-        [Tooltip("Lootable config (optional - for future use)")]
-        [SerializeField] private NightHunt.GameplaySystems.Core.Configs.LootableConfig lootConfig;
+        // Runtime config — inject từ WorldSpawnManager khi spawn (không gán trên prefab).
+        private NightHunt.GameplaySystems.Core.Configs.LootableConfig _lootableConfig;
+
+        // Source spawn point (nếu được spawn từ WorldItemSpawnPoint)
+        private NightHunt.GameplaySystems.World.WorldItemSpawnPoint _sourcePoint;
 
         // SYNC: Item data (server-authoritative)
         private readonly SyncVar<ItemInstanceData> syncItemData = new SyncVar<ItemInstanceData>();
 
         // Local cache
         private ItemInstanceData itemData;
-        private GameObject modelInstance; // Spawned prefab model
+        private GameObject modelInstance;
         private bool _initialized;
 
-        /// <summary>True once <see cref="Initialize"/> has been called on the server.</summary>
         private bool IsObjectInitialized => _initialized || !string.IsNullOrEmpty(itemData.DefinitionID);
 
         public ItemInstanceData ItemData => itemData;
-        public bool IsLootable => true; // Future: can add locked/quest items
+        public bool IsLootable => true;
 
         // ── IPickupable ──────────────────────────────────────────────────────────
 
-        /// <inheritdoc/>
         public string ItemDefinitionID => itemData.DefinitionID;
-
-        /// <inheritdoc/>
         public int Quantity => itemData.Quantity;
-
-        /// <inheritdoc/>
         public bool IsPickedUp { get; private set; }
 
         // ── IInteractable ────────────────────────────────────────────────────────
 
-        /// <inheritdoc/>
         public string InteractLabel
         {
             get
@@ -66,36 +59,19 @@ namespace NightHunt.GameplaySystems.Loot
             }
         }
 
-        /// <inheritdoc/>
+        private float GetInteractDistance() => _lootableConfig?.MaxInteractDistance ?? maxPickupDistance;
+
         public bool CanInteract(GameObject interactor)
         {
             if (IsPickedUp) return false;
             if (!IsObjectInitialized) return false;
-            float dist = Vector3.Distance(transform.position, interactor.transform.position);
-            return dist <= maxPickupDistance;
+            return Vector3.Distance(transform.position, interactor.transform.position) <= GetInteractDistance();
         }
 
-        /// <inheritdoc/>
-        /// <remarks>
-        /// Called client-side.  Fires <see cref="RequestPickup"/> as a ServerRpc.
-        /// FishNet automatically fills the <c>conn</c> parameter with the caller's connection.
-        /// </remarks>
-        public void Interact(GameObject interactor)
-        {
-            RequestPickup();
-        }
+        public void Interact(GameObject interactor) => RequestPickup();
 
-        /// <inheritdoc/>
-        public void OnHoverEnter(GameObject interactor)
-        {
-            // TODO: enable outline / highlight renderer effect here
-        }
-
-        /// <inheritdoc/>
-        public void OnHoverExit(GameObject interactor)
-        {
-            // TODO: disable outline / highlight renderer effect here
-        }
+        public void OnHoverEnter(GameObject interactor) { /* TODO: outline effect */ }
+        public void OnHoverExit(GameObject interactor)  { /* TODO: outline effect */ }
 
         public override void OnStartNetwork()
         {
@@ -109,18 +85,13 @@ namespace NightHunt.GameplaySystems.Loot
             syncItemData.OnChange -= OnItemDataChanged;
         }
 
-        /// <summary>
-        /// Initialize world pickup with item data
-        /// Server-only: Called when spawning
-        /// </summary>
         [Server]
-        public void Initialize(ItemInstanceData data)
+        public void Initialize(ItemInstanceData data, NightHunt.GameplaySystems.Core.Configs.LootableConfig lootableConfig = null)
         {
             itemData = data;
+            _lootableConfig = lootableConfig;
             _initialized = true;
-            syncItemData.Value = data; // Broadcast to all clients
-
-            // Spawn model (server spawns, clients see via network)
+            syncItemData.Value = data;
             SpawnModel();
         }
 
@@ -130,124 +101,81 @@ namespace NightHunt.GameplaySystems.Loot
             var def = ItemDatabase.GetDefinition(itemData.DefinitionID);
             if (def == null || def.DroppedPrefab == null)
             {
-                Debug.LogWarning($"[WorldPickup] No DroppedPrefab for {itemData.DefinitionID}");
+                Debug.LogWarning($"[WorldItem] No DroppedPrefab for {itemData.DefinitionID}");
                 return;
             }
 
-            // Spawn model as child
             modelInstance = Instantiate(def.DroppedPrefab, transform.position, transform.rotation, transform);
-            
-            // If model has NetworkObject, spawn it too
             var modelNetObj = modelInstance.GetComponent<NetworkObject>();
             if (modelNetObj != null)
-            {
                 ServerManager.Spawn(modelNetObj);
-            }
         }
 
-        /// <summary>
-        /// CLIENT: Receive sync data
-        /// </summary>
         private void OnItemDataChanged(ItemInstanceData oldData, ItemInstanceData newData, bool asServer)
         {
             if (asServer) return;
-            
             itemData = newData;
-            // Update visual if needed (e.g., quantity display)
         }
 
-        /// <summary>
-        /// SERVER: Pickup request from client.
-        /// <para>
-        /// <c>conn</c> is optional — when called without arguments (e.g. from
-        /// <see cref="Interact"/>) FishNet auto-fills it with the sender's connection.
-        /// The explicit overload is kept for backward compatibility with
-        /// InteractionInputHandler.
-        /// </para>
-        /// </summary>
         [ServerRpc(RequireOwnership = false)]
         public void RequestPickup(NetworkConnection conn = null)
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[WorldPickup] RequestPickup: server-only!");
+                Debug.LogWarning("[WorldItem] RequestPickup: server-only!");
                 return;
             }
 
-            // Validate distance - get player from connection
             var player = conn.FirstObject?.GetComponent<NetworkPlayer>();
             if (player == null)
             {
-                // Try alternative: get from connection's identity
                 var identity = conn.FirstObject;
-                if (identity == null)
-                {
-                    Debug.LogWarning("[WorldPickup] RequestPickup: Player not found");
-                    return;
-                }
+                if (identity == null) { Debug.LogWarning("[WorldItem] RequestPickup: Player not found"); return; }
                 player = identity.GetComponent<NetworkPlayer>();
-                if (player == null)
-                {
-                    Debug.LogWarning("[WorldPickup] RequestPickup: NetworkPlayer component not found");
-                    return;
-                }
+                if (player == null) { Debug.LogWarning("[WorldItem] RequestPickup: NetworkPlayer not found"); return; }
             }
 
             float dist = Vector3.Distance(transform.position, player.transform.position);
-            if (dist > maxPickupDistance)
+            float maxDist = GetInteractDistance();
+            if (dist > maxDist)
             {
-                Debug.LogWarning($"[WorldPickup] RequestPickup: Too far ({dist:F2}m > {maxPickupDistance}m)");
+                Debug.LogWarning($"[WorldItem] RequestPickup: Too far ({dist:F2}m > {maxDist}m)");
                 return;
             }
 
-            // Get inventory system
             var inventory = player.GetComponent<IInventorySystem>();
             if (inventory == null)
             {
-                Debug.LogWarning("[WorldPickup] RequestPickup: IInventorySystem not found on player");
+                Debug.LogWarning("[WorldItem] RequestPickup: IInventorySystem not found on player");
                 return;
             }
 
-            // Add to inventory
             inventory.AddItem(itemData.DefinitionID, itemData.Quantity);
-
             IsPickedUp = true;
-            Debug.Log($"[WorldPickup] ✓ Picked up: {itemData.DefinitionID} ×{itemData.Quantity} " +
-                      $"by client {conn?.ClientId}");
-
-            // Despawn (broadcast to all clients)
+            Debug.Log($"[WorldItem] ✓ Picked up: {itemData.DefinitionID} ×{itemData.Quantity} by client {conn?.ClientId}");
             DespawnPickup();
         }
 
         [Server]
         private void DespawnPickup()
         {
-            // Despawn model if it has NetworkObject
             if (modelInstance != null)
             {
                 var modelNetObj = modelInstance.GetComponent<NetworkObject>();
                 if (modelNetObj != null && modelNetObj.IsSpawned)
-                {
                     ServerManager.Despawn(modelNetObj);
-                }
                 else
-                {
                     Destroy(modelInstance);
-                }
             }
 
-            // Despawn this NetworkObject (all clients will see it disappear)
+            OnDespawned?.Invoke();
             base.Despawn();
         }
-
-        #region Debug
 
         private void OnDrawGizmos()
         {
             Gizmos.color = Color.green;
             Gizmos.DrawWireSphere(transform.position, maxPickupDistance);
         }
-
-        #endregion
     }
 }

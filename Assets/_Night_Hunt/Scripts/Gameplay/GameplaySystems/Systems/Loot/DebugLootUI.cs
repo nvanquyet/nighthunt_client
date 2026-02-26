@@ -18,24 +18,24 @@ namespace NightHunt.GameplaySystems.Loot
         [Header("Settings")]
         [SerializeField] private bool showDebugUI = true;
 
-        private ContainerLootSource currentContainer;
-        private CorpseLootSource currentCorpse;
+        private WorldContainer currentContainer;
+        private WorldCorpse currentCorpse;
         private Vector2 scrollPosition;
 
         private void OnEnable()
         {
             // Subscribe to events
-            ContainerLootSource.OnContainerOpened += OnContainerOpened;
-            CorpseLootSource.OnCorpseOpened += OnCorpseOpened;
+            WorldContainer.OnContainerOpened += OnContainerOpened;
+            WorldCorpse.OnCorpseOpened += OnCorpseOpened;
         }
 
         private void OnDisable()
         {
-            ContainerLootSource.OnContainerOpened -= OnContainerOpened;
-            CorpseLootSource.OnCorpseOpened -= OnCorpseOpened;
+            WorldContainer.OnContainerOpened -= OnContainerOpened;
+            WorldCorpse.OnCorpseOpened -= OnCorpseOpened;
         }
 
-        private void OnContainerOpened(ContainerLootSource container, NetworkConnection viewer)
+        private void OnContainerOpened(WorldContainer container, NetworkConnection viewer)
         {
             // Only show for local client
             var localConn = GetLocalConnection();
@@ -54,7 +54,7 @@ namespace NightHunt.GameplaySystems.Loot
             }
         }
 
-        private void OnCorpseOpened(CorpseLootSource corpse, NetworkConnection viewer)
+        private void OnCorpseOpened(WorldCorpse corpse, NetworkConnection viewer)
         {
             // Only show for local client
             var localConn = GetLocalConnection();

@@ -611,14 +611,14 @@ namespace NightHunt.GameplaySystems.Inventory
             dropPos.y = ownerTransform.position.y; // Keep same Y level
             Quaternion dropRot = Quaternion.identity;
             
-            // Spawn world pickup (server-only)
-            if (WorldDropManager.Instance != null)
+            // Spawn WorldItem (server-only)
+            if (WorldSpawnManager.Instance != null)
             {
-                WorldDropManager.Instance.SpawnWorldPickup(dropData, dropPos, dropRot);
+                WorldSpawnManager.Instance.SpawnWorldItem(dropData, dropPos, dropRot);
             }
             else
             {
-                Debug.LogError("[InventorySystem] DropItem: WorldDropManager.Instance is null!");
+                Debug.LogError("[InventorySystem] DropItem: WorldSpawnManager.Instance is null!");
             }
             
             // Remove from inventory (sau khi đã spawn world item)

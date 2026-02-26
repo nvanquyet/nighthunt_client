@@ -8,7 +8,7 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
     /// Contract for spawning items as world pickups.
     ///
     /// DESIGN (SRP / DIP):
-    ///   - InventorySystem.DropItemServer depends on this interface, not on WorldDropManager.
+    ///   - InventorySystem.DropItemServer depends on this interface, not on WorldSpawnManager.
     ///   - Swap implementation in tests or extend without touching InventorySystem.
     /// </summary>
     public interface IDropHandler

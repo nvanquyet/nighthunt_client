@@ -10,7 +10,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
     /// DESIGN (SRP):
     ///   - Owns only the raycast and target resolution.
     ///   - Exposes <see cref="CurrentInteractable"/> (IInteractable) as the primary API.
-    ///   - Typed properties (CurrentWorldPickup etc.) are kept for backward compatibility
+    ///   - Typed properties (CurrentWorldItem etc.) are kept for backward compatibility
     ///     but callers should prefer <see cref="CurrentInteractable"/>.
     ///   - Fires <see cref="IInteractable.OnHoverEnter"/> / <see cref="IInteractable.OnHoverExit"/>
     ///     automatically as the target changes.
@@ -36,9 +36,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         // ── Backward-compatible typed properties ─────────────────────────────────
 
-        public WorldPickup CurrentWorldPickup       => CurrentInteractable as WorldPickup;
-        public ContainerLootSource CurrentContainer => CurrentInteractable as ContainerLootSource;
-        public CorpseLootSource CurrentCorpse       => CurrentInteractable as CorpseLootSource;
+        public WorldItem            CurrentWorldItem  => CurrentInteractable as WorldItem;
+        public WorldContainer       CurrentContainer  => CurrentInteractable as WorldContainer;
+        public WorldCorpse          CurrentCorpse     => CurrentInteractable as WorldCorpse;
+
+        // Backward compat
+        [System.Obsolete("Use CurrentWorldItem instead.")]
+        public WorldItem            CurrentWorldPickup => CurrentWorldItem;
 
         // ── Private ──────────────────────────────────────────────────────────────
 

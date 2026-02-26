@@ -23,7 +23,7 @@ namespace NightHunt.GameplaySystems.Loot
         [SerializeField] private MonoBehaviour attachmentSystemComponent;
 
         [Header("Prefab")]
-        [Tooltip("Corpse prefab with CorpseLootSource component")]
+        [Tooltip("Corpse prefab with WorldCorpse component")]
         [SerializeField] private GameObject corpsePrefab;
 
         private IInventorySystem inventorySystem;
@@ -209,10 +209,10 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            var corpse = go.GetComponent<CorpseLootSource>();
+            var corpse = go.GetComponent<WorldCorpse>();
             if (corpse == null)
             {
-                Debug.LogError("[CorpseDropOnDeath] Corpse prefab must have CorpseLootSource component!");
+                Debug.LogError("[CorpseDropOnDeath] Corpse prefab must have WorldCorpse component!");
                 Destroy(go);
                 return;
             }

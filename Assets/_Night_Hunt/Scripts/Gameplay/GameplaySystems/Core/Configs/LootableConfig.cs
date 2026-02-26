@@ -13,7 +13,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
 
     /// <summary>
     /// Configuration for lootable/interactable objects
-    /// Defines how players interact with WorldPickup, Container, Corpse, etc.
+    /// Defines how players interact with WorldItem, WorldContainer, WorldCorpse, etc.
     /// </summary>
     [CreateAssetMenu(fileName = "LootableConfig", menuName = "GameplaySystems/Config/Lootable Config")]
     public class LootableConfig : ScriptableObject
@@ -27,7 +27,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
         public float HoldDuration = 1.0f;
 
         [Header("Auto Loot")]
-        [Tooltip("Cho phép auto loot (chỉ áp dụng cho WorldPickup với Instant mode)")]
+        [Tooltip("Cho phép auto loot (chỉ áp dụng cho WorldItem với Instant mode)")]
         public bool AllowAutoLoot = true;
 
         [Header("UI Settings")]
