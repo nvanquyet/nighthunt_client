@@ -1,4 +1,5 @@
 using UnityEngine;
+using FishNet.Object;
 using FishNet.Object.Prediction;
 using FishNet.Transporting;
 using NightHunt.Gameplay.Character.Movement;
@@ -41,6 +42,7 @@ namespace NightHunt.Gameplay.Character
         // Components
         private CharacterController _cc;
         private CinemachineCamera _camera;
+        private UnityEngine.Camera _mainCamera;   // The actual Unity Camera driven by CinemachineBrain
         private IPlayerStatSystem _playerStatSystem;
 
         // ===== INPUT (OWNER ONLY) =====
@@ -69,6 +71,9 @@ namespace NightHunt.Gameplay.Character
             _cc = GetComponent<CharacterController>();
             _camera = GetComponentInChildren<CinemachineCamera>();
             _playerStatSystem = GetComponent<IPlayerStatSystem>();
+            // Cache Camera.main at startup; re-checked lazily in GatherInput in case it
+            // is not yet initialised when Awake runs (e.g. loading screens).
+            _mainCamera = UnityEngine.Camera.main;
 
             if (_cc == null)
             {
@@ -92,6 +97,17 @@ namespace NightHunt.Gameplay.Character
                 ? _playerStatSystem.GetStat(PlayerStatType.Stamina)
                 : 0f;
             _stamina = currentStamina > 0f ? currentStamina : maxStamina;
+
+            // SPAWN POSITION FIX:
+            // FishNet sets transform.position from the server spawn packet BEFORE OnStartNetwork fires.
+            // Toggling the CharacterController off/on syncs its internal capsule to that transform,
+            // preventing the CC from snapping back to origin on the first FixedUpdate.
+            if (_cc != null)
+            {
+                _cc.enabled = false;
+                _cc.enabled = true;
+            }
+
             _targetPosition = transform.position;
             _targetRotation = transform.rotation;
             _verticalVelocity = -2f;
@@ -101,7 +117,7 @@ namespace NightHunt.Gameplay.Character
             _cameraLocked = startWithCameraLock;
 
             if (enableDebugLogs)
-                Debug.Log($"[CharacterPredictedMovement] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}, CameraLock={_cameraLocked}, MaxStamina={maxStamina}");
+                Debug.Log($"[CharacterPredictedMovement] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}, CameraLock={_cameraLocked}, MaxStamina={maxStamina}, StartPos={transform.position}");
         }
 
         #endregion
@@ -149,11 +165,19 @@ namespace NightHunt.Gameplay.Character
                 }
             }
 
-            // Capture camera yaw
-            if (_camera != null)
-            {
-                _yaw = _camera.transform.eulerAngles.y;
-            }
+            // Capture camera yaw.
+            // IMPORTANT: the CinemachineCamera virtual-camera GO never rotates on its own –
+            // Cinemachine stores orbital axes internally and only writes the final rotation
+            // onto the real Unity Camera via CinemachineBrain.  Reading _camera.transform
+            // always returned the initial spawn yaw, causing movement to ignore where the
+            // player is actually looking.  Camera.main.transform is correct here.
+            if (_mainCamera == null)
+                _mainCamera = UnityEngine.Camera.main;   // lazy re-fetch if missed in Awake
+
+            if (_mainCamera != null)
+                _yaw = _mainCamera.transform.eulerAngles.y;
+            else if (_camera != null)
+                _yaw = _camera.transform.eulerAngles.y;  // fallback: editor / headless
 
             if (enableDebugLogs && _moveInput.sqrMagnitude > 0.01f)
             {
@@ -476,15 +500,52 @@ namespace NightHunt.Gameplay.Character
             if (IsOwner)
             {
                 transform.position = data.Position;
-                transform.rotation = data.Rotation;
+                // ROTATION ARCHITECTURE:
+                // Rotation is CLIENT-AUTHORITATIVE for the owner.
+                // The character body yaw is computed locally inside SimulateMovement
+                // using the client's own camera yaw (replicated as data.Yaw).
+                // We must NOT overwrite transform.rotation here — doing so would:
+                //   1. Introduce a visible snap every reconcile tick.
+                //   2. Incorrectly drive body rotation from a server roundtrip.
+                // The rotation is already correct because both client and server replay
+                // identical SimulateMovement() calls with the same Yaw data.
                 _velocity = data.Velocity;
                 _stamina = data.Stamina;
             }
             else if (!IsServerStarted)
             {
+                // Non-owner remote clients: interpolate towards server values (both pos and rot).
                 _targetPosition = data.Position;
                 _targetRotation = data.Rotation;
             }
+        }
+
+        // ===================== TELEPORT =====================
+
+        /// <summary>
+        /// Server: Teleport the character to a new position/rotation.
+        /// Properly disables and re-enables the CharacterController so its internal
+        /// capsule position is synced; resets velocity to avoid momentum carry-over.
+        /// The server's next CreateReconcile() tick will push the corrected state
+        /// to all clients through the prediction pipeline.
+        /// </summary>
+        [Server]
+        public void Teleport(Vector3 position, Quaternion rotation)
+        {
+            // Disable CC first so Unity does not fight the direct transform write.
+            if (_cc != null) _cc.enabled = false;
+
+            transform.position = position;
+            transform.rotation = rotation;
+
+            if (_cc != null) _cc.enabled = true;
+
+            // Clear any carried momentum so the player starts fresh.
+            _velocity        = Vector3.zero;
+            _verticalVelocity = -2f;
+
+            if (enableDebugLogs)
+                Debug.Log($"[CharacterPredictedMovement] Teleport → pos={position}, rot={rotation.eulerAngles}");
         }
 
         // ===================== NON OWNER INTERPOLATION =====================
@@ -534,6 +595,11 @@ namespace NightHunt.Gameplay.Character
             transform.rotation = state.Rotation;
             _velocity = state.Velocity;
         }
+
+        // IMovementController.Teleport — delegates to the Server-only Teleport method above.
+        // [Server] guard inside prevents non-server execution.
+        void IMovementController.Teleport(Vector3 position, Quaternion rotation)
+            => Teleport(position, rotation);
 
         // ===================== DEBUG ======================
 

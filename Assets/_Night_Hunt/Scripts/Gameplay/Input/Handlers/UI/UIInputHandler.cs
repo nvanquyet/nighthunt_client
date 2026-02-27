@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 using System;
@@ -18,10 +18,6 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
     {
         // ── Cached actions ────────────────────────────────────────────────────────
         private InputActionMap _uiActionMap;
-        private InputAction _quickSlot1Action;
-        private InputAction _quickSlot2Action;
-        private InputAction _quickSlot3Action;
-        private InputAction _quickSlot4Action;
         private InputAction _cancelAction;
         private InputAction _openMenuAction;
         private InputAction _toggleMapAction;
@@ -29,14 +25,18 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
         private bool _inputEnabled = false;
 
         // ── Events ────────────────────────────────────────────────────────────────
-        public event Action<int> OnQuickSlotPressed; // slot index 0-3
         public event Action      OnCancelPressed;
         public event Action      OnOpenMenuPressed;
         public event Action      OnToggleMapPressed;
 
         // ── IInputHandler ─────────────────────────────────────────────────────────
         public bool IsInputEnabled  => _inputEnabled;
-        public InputActionMap GetActionMap() => _uiActionMap;
+        public InputActionMap GetActionMap()
+        {
+            if (_uiActionMap == null && InputLayerManager.Instance != null)
+                _uiActionMap = InputLayerManager.Instance.UIMap;
+            return _uiActionMap;
+        }
 
         // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -75,10 +75,6 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
                 return;
             }
 
-            _quickSlot1Action = _uiActionMap.FindAction("QuickSlot1");
-            _quickSlot2Action = _uiActionMap.FindAction("QuickSlot2");
-            _quickSlot3Action = _uiActionMap.FindAction("QuickSlot3");
-            _quickSlot4Action = _uiActionMap.FindAction("QuickSlot4");
             _cancelAction     = _uiActionMap.FindAction("Cancel");
             _openMenuAction   = _uiActionMap.FindAction("OpenMenu");
             _toggleMapAction  = _uiActionMap.FindAction("ToggleMap");
@@ -100,10 +96,6 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
 
             _inputEnabled = true;
 
-            if (_quickSlot1Action != null) _quickSlot1Action.performed += OnQuickSlot1;
-            if (_quickSlot2Action != null) _quickSlot2Action.performed += OnQuickSlot2;
-            if (_quickSlot3Action != null) _quickSlot3Action.performed += OnQuickSlot3;
-            if (_quickSlot4Action != null) _quickSlot4Action.performed += OnQuickSlot4;
             if (_cancelAction    != null) _cancelAction.performed    += OnCancel;
             if (_openMenuAction  != null) _openMenuAction.performed  += OnOpenMenu;
             if (_toggleMapAction != null) _toggleMapAction.performed += OnToggleMap;
@@ -116,10 +108,6 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
             if (!_inputEnabled) return;
             _inputEnabled = false;
 
-            if (_quickSlot1Action != null) _quickSlot1Action.performed -= OnQuickSlot1;
-            if (_quickSlot2Action != null) _quickSlot2Action.performed -= OnQuickSlot2;
-            if (_quickSlot3Action != null) _quickSlot3Action.performed -= OnQuickSlot3;
-            if (_quickSlot4Action != null) _quickSlot4Action.performed -= OnQuickSlot4;
             if (_cancelAction    != null) _cancelAction.performed    -= OnCancel;
             if (_openMenuAction  != null) _openMenuAction.performed  -= OnOpenMenu;
             if (_toggleMapAction != null) _toggleMapAction.performed -= OnToggleMap;
@@ -128,11 +116,6 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
         }
 
         // ── Callbacks ─────────────────────────────────────────────────────────────
-
-        private void OnQuickSlot1(InputAction.CallbackContext ctx) => OnQuickSlotPressed?.Invoke(0);
-        private void OnQuickSlot2(InputAction.CallbackContext ctx) => OnQuickSlotPressed?.Invoke(1);
-        private void OnQuickSlot3(InputAction.CallbackContext ctx) => OnQuickSlotPressed?.Invoke(2);
-        private void OnQuickSlot4(InputAction.CallbackContext ctx) => OnQuickSlotPressed?.Invoke(3);
 
         private void OnCancel(InputAction.CallbackContext ctx)
         {

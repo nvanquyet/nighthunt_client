@@ -57,13 +57,22 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         public bool IsInputEnabled => inputEnabled;
 
-        public InputActionMap GetActionMap() => playerMap;
+        public InputActionMap GetActionMap()
+        {
+            // IMPORTANT:
+            // InputLayerManager uses GetActionMap().enabled to decide whether to call EnableInput().
+            // If we return null here, the handler will never be enabled → E/F events won't fire.
+            if (playerMap == null && InputLayerManager.Instance != null)
+                playerMap = InputLayerManager.Instance.PlayerMap;
+
+            return playerMap;
+        }
 
         public void EnableInput()
         {
             if (inputEnabled) return;
 
-            // Lazy init – lấy map nếu chưa có
+            // Ensure we have the action map (InputLayerManager is the source of truth)
             if (playerMap == null)
             {
                 if (InputLayerManager.Instance == null)
@@ -78,11 +87,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
                     Debug.LogWarning("[InteractionInputHandler] Player action map not found!");
                     return;
                 }
-
-                interactAction  = playerMap.FindAction("Interact");
-                pickupAction    = playerMap.FindAction("Pickup");
-                logNearbyAction = playerMap.FindAction("LogNearby");
             }
+
+            // IMPORTANT:
+            // playerMap may be pre-populated via GetActionMap() before EnableInput() runs.
+            // Always resolve actions if they're missing so callbacks are wired.
+            if (interactAction == null)  interactAction  = playerMap.FindAction("Interact");
+            if (pickupAction == null)    pickupAction    = playerMap.FindAction("Pickup");
+            if (logNearbyAction == null) logNearbyAction = playerMap.FindAction("LogNearby");
 
             // Chỉ set true sau khi đảm bảo có map
             inputEnabled = true;
@@ -92,12 +104,22 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
                 interactAction.performed += OnInteractPerformed;
                 interactAction.canceled  += OnInteractCanceled;
             }
+            else
+            {
+                Debug.LogWarning("[InteractionInputHandler] Action 'Interact' not found in Player map.");
+            }
 
             if (pickupAction != null)
                 pickupAction.performed += OnPickupPerformed;
+            else
+                Debug.LogWarning("[InteractionInputHandler] Action 'Pickup' not found in Player map.");
 
             if (logNearbyAction != null)
                 logNearbyAction.performed += OnLogNearbyPerformed;
+            else
+                Debug.LogWarning("[InteractionInputHandler] Action 'LogNearby' not found in Player map.");
+
+            Debug.Log("[InteractionInputHandler] Input enabled (Player/Interact, Player/Pickup, Player/LogNearby)");
         }
 
         public void DisableInput()
@@ -122,21 +144,25 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         private void OnInteractPerformed(InputAction.CallbackContext ctx)
         {
+            Debug.Log("[Input][Player] Interact (E) performed");
             InteractPerformed?.Invoke();
         }
 
         private void OnInteractCanceled(InputAction.CallbackContext ctx)
         {
+            Debug.Log("[Input][Player] Interact (E) canceled");
             InteractCanceled?.Invoke();
         }
 
         private void OnPickupPerformed(InputAction.CallbackContext ctx)
         {
+            Debug.Log("[Input][Player] Pickup (F) performed");
             PickupPerformed?.Invoke();
         }
 
         private void OnLogNearbyPerformed(InputAction.CallbackContext ctx)
         {
+            Debug.Log("[Input][Player] LogNearby (F6) performed");
             LogNearbyPerformed?.Invoke();
         }
 

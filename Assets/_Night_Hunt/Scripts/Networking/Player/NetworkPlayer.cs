@@ -1,5 +1,6 @@
 using FishNet.Object;
 using FishNet.Connection;
+using FishNet.Object.Synchronizing;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.StatSystem.Core.Interfaces;
@@ -27,6 +28,12 @@ namespace NightHunt.Networking
     /// </summary>
     public class NetworkPlayer : NetworkBehaviour
     {
+        /// <summary>
+        /// Fired on the owning client when this NetworkPlayer has completed owner-side setup
+        /// (camera + input). Used by gameplay systems (e.g. PlayerInteractionSystem) to
+        /// safely subscribe to input after Network is ready.
+        /// </summary>
+        public static event System.Action<NetworkPlayer> OnOwnerReady;
         #region Serialized References
         [Header("Camera")]
         [SerializeField] private CinemachineCamera _playerCamera;
@@ -47,11 +54,23 @@ namespace NightHunt.Networking
         public IGameplayBridge GamePlaySystemBridge { get; private set; } 
         
         
-        private PlayerPublicData _playerData;
-        private PlayerPublicData PlayerData => _playerData;
+        // ── PUBLIC PLAYER DATA ────────────────────────────────────────────────
+        // SyncVar ensures FishNet includes the current value in every spawn packet
+        // (including late-joiners / reconnects) AND broadcasts changes to all
+        // connected clients whenever SetPublicData() is called on the server.
+        // Using a plain C# field here would mean every client receives an empty
+        // struct — no name, no team — because FishNet never serialises it.
+        private readonly SyncVar<PlayerPublicData> _playerData = new SyncVar<PlayerPublicData>();
+
+        private PlayerPublicData PlayerData => _playerData.Value;
+
+        /// <summary>
+        /// Server: Set / update the publicly-visible player data.
+        /// The SyncVar broadcasts the new value to all observers automatically.
+        /// </summary>
         public void SetPublicData(PlayerPublicData data)
         {
-            _playerData = data;
+            _playerData.Value = data;
         }
         #endregion
         
@@ -108,7 +127,17 @@ namespace NightHunt.Networking
         public override void OnStartClient()
         {
             base.OnStartClient();
-            PlayerPublicRegistry.Instance?.Register((int) this.ObjectId, PlayerData, this);
+
+            // Register with the local registry using the SyncVar value.
+            // For the owning client this fires after the spawn packet is processed,
+            // so _playerData.Value already holds the server-assigned data.
+            // For late-joining clients all existing NetworkObjects are spawned with
+            // their current SyncVar snapshot, so this also sees the correct data.
+            PlayerPublicRegistry.Instance?.Register((int)this.ObjectId, PlayerData, this);
+
+            // Listen for future data changes (name / team updates mid-game).
+            _playerData.OnChange += OnPlayerDataChanged;
+
             // Owner-specific setup
             if (IsOwner)
             {
@@ -131,7 +160,17 @@ namespace NightHunt.Networking
         public override void OnStopClient()
         {
             base.OnStopClient();
-            PlayerPublicRegistry.Instance.Unregister((int) this.ObjectId);
+            _playerData.OnChange -= OnPlayerDataChanged;
+            PlayerPublicRegistry.Instance.Unregister((int)this.ObjectId);
+        }
+
+        /// <summary>
+        /// Called on all clients whenever the server changes _playerData (e.g. team
+        /// reassignment, name update).  Keeps PlayerPublicRegistry in sync.
+        /// </summary>
+        private void OnPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next, bool asServer)
+        {
+            PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
         }
         
 
@@ -144,6 +183,9 @@ namespace NightHunt.Networking
             // Owner only: Enable camera and input
             SetupCamera();
             EnableInput();
+
+            // Notify listeners that this NetworkPlayer is fully ready on the owning client
+            OnOwnerReady?.Invoke(this);
         }
         
         private void SetupCamera()

@@ -1,8 +1,9 @@
-﻿using UnityEngine;
+using UnityEngine;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.Gameplay.Input.Handlers.Camera;
+using NightHunt.Gameplay.Input.Handlers.Inventory;
 using NightHunt.Gameplay.Input.Handlers.UI;
 using NightHunt.Gameplay.Input.Handlers.Interaction;
 
@@ -22,6 +23,7 @@ namespace NightHunt.Gameplay.Input.Core
         [SerializeField] private MovementInputHandler movementHandler;
         [SerializeField] private CombatInputHandler combatHandler;
         [SerializeField] private CameraInputHandler cameraHandler;
+        [SerializeField] private InventoryInputHandler inventoryHandler;
         [SerializeField] private UIInputHandler uiInputHandler;
         [SerializeField] private InteractionInputHandler interactionHandler;
 
@@ -67,6 +69,9 @@ namespace NightHunt.Gameplay.Input.Core
             if (cameraHandler == null)
                 cameraHandler = gameObject.AddComponent<CameraInputHandler>();
 
+            if (inventoryHandler == null)
+                inventoryHandler = gameObject.AddComponent<InventoryInputHandler>();
+
             if (uiInputHandler == null)
                 uiInputHandler = gameObject.AddComponent<UIInputHandler>();
 
@@ -111,6 +116,7 @@ namespace NightHunt.Gameplay.Input.Core
         public MovementInputHandler MovementHandler => movementHandler;
         public CombatInputHandler CombatHandler => combatHandler;
         public CameraInputHandler CameraHandler => cameraHandler;
+        public InventoryInputHandler InventoryHandler => inventoryHandler;
         public UIInputHandler UIHandler => uiInputHandler;
         public InteractionInputHandler InteractionHandler => interactionHandler;
         public bool IsInitialized => isInitialized;

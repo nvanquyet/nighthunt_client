@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Data;
 
 namespace NightHunt.Gameplay.Input.Handlers.Interaction
 {
@@ -42,6 +43,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         [Tooltip("Draw wire-sphere gizmo in scene view.")]
         [SerializeField] private bool drawGizmos = true;
 
+        [Tooltip("Show a simple OnGUI overlay listing nearby interactables (editor/debug only).")]
+        [SerializeField] private bool showDebugUI = false;
+
         // ── Public API ───────────────────────────────────────────────────────────
 
         /// <summary>Adjust at runtime if needed (e.g. perk system increases range).</summary>
@@ -57,6 +61,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         /// <summary>The closest IInteractable, or null when none is in range.</summary>
         public IInteractable ClosestInteractable => _nearby.Count > 0 ? _nearby[0] : null;
 
+        /// <summary>
+        /// Tất cả ILootable (rương / xác) hợp lệ trong bán kính, sắp xếp theo khoảng cách.
+        /// Mỗi phần tử đã implements GetStorage() → có thể đọc items ngay không cần cast.
+        /// </summary>
+        public IReadOnlyList<ILootable> NearbyLootables => _nearbyLootables;
+
         // ── Events ───────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -70,9 +80,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         /// </summary>
         public event Action<IInteractable> OnClosestChanged;
 
+        /// <summary>
+        /// Fired khi danh sách lootable gần đây thay đổi (rương / xác lịt vào hoặc ra khỏi tầm).
+        /// Truy cập GetStorage() trực tiếp từ mỗi ILootable trong list để lấy danh sách item bên trong.
+        /// </summary>
+        public event Action<IReadOnlyList<ILootable>> OnNearbyLootablesChanged;
+
         // ── Private ──────────────────────────────────────────────────────────────
 
         private readonly List<IInteractable> _nearby = new List<IInteractable>();
+        private readonly List<ILootable> _nearbyLootables = new List<ILootable>();
         private Collider[] _overlapBuffer;
         private float _nextScanTime;
         private IInteractable _previousClosest;
@@ -130,6 +147,21 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             _nearby.AddRange(found);
             OnNearbyListChanged?.Invoke(_nearby);
 
+            // Cập nhật danh sách lootable riêng (rương / xác)
+            var lootables = new List<ILootable>();
+            foreach (var item in _nearby)
+            {
+                if (item is ILootable lootable)
+                    lootables.Add(lootable);
+            }
+            bool lootChanged = HasLootableListChanged(lootables);
+            if (lootChanged)
+            {
+                _nearbyLootables.Clear();
+                _nearbyLootables.AddRange(lootables);
+                OnNearbyLootablesChanged?.Invoke(_nearbyLootables);
+            }
+
             if (logOnChange)
                 LogNearby();
 
@@ -147,11 +179,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         /// </summary>
         public void ClearAll()
         {
-            if (_nearby.Count == 0) return;
+            if (_nearby.Count == 0 && _nearbyLootables.Count == 0) return;
             _nearby.Clear();
+            _nearbyLootables.Clear();
             _previousClosest = null;
             OnNearbyListChanged?.Invoke(_nearby);
             OnClosestChanged?.Invoke(null);
+            OnNearbyLootablesChanged?.Invoke(_nearbyLootables);
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────────
@@ -168,6 +202,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             if (newList.Count != _nearby.Count) return true;
             for (int i = 0; i < newList.Count; i++)
                 if (!ReferenceEquals(newList[i], _nearby[i])) return true;
+            return false;
+        }
+
+        private bool HasLootableListChanged(List<ILootable> newList)
+        {
+            if (newList.Count != _nearbyLootables.Count) return true;
+            for (int i = 0; i < newList.Count; i++)
+                if (!ReferenceEquals(newList[i], _nearbyLootables[i])) return true;
             return false;
         }
 
@@ -189,12 +231,79 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             for (int i = 0; i < _nearby.Count; i++)
             {
                 float dist = Mathf.Sqrt(SqrDistanceTo(_nearby[i]));
-                sb.AppendLine($"  [{i}] {_nearby[i].InteractLabel}  ({dist:F1} m)");
+                sb.Append($"  [{i}] {_nearby[i].InteractLabel}  ({dist:F1} m)");
+
+                // Nếu là lootable thì log thêm số item bên trong
+                if (_nearby[i] is ILootable lootable)
+                {
+                    var storage = lootable.GetStorage();
+                    sb.Append($"  | IsOpen={lootable.IsOpen}, Items={storage.Count}");
+                    foreach (var item in storage)
+                        sb.Append($" [{item.DefinitionID}×{item.Quantity}]");
+                }
+
+                sb.AppendLine();
             }
             Debug.Log(sb.ToString());
         }
 
         // ── Gizmos ───────────────────────────────────────────────────────────────
+
+        private void OnGUI()
+        {
+            if (!showDebugUI || !Application.isPlaying)
+                return;
+
+            const float width = 320f;
+            const float lineHeight = 20f;
+
+            float x = 10f;
+            float y = 10f;
+
+            // Đếm trước tổng số dòng cần hiển thị (có thể có sub-lines cho lootable)
+            int totalLines = Mathf.Max(1, _nearby.Count);
+            foreach (var it in _nearby)
+            {
+                if (it is ILootable l && l.GetStorage().Count > 0)
+                    totalLines += l.GetStorage().Count;
+            }
+
+            float boxHeight = lineHeight + totalLines * lineHeight;
+            GUI.Box(new Rect(x, y, width, boxHeight), "Nearby Interactables");
+            y += lineHeight;
+
+            if (_nearby.Count == 0)
+            {
+                GUI.Label(new Rect(x + 5f, y, width - 10f, lineHeight), "(none)");
+                return;
+            }
+
+            for (int i = 0; i < _nearby.Count; i++)
+            {
+                var it = _nearby[i];
+                string label = it?.InteractLabel ?? "<null>";
+                float dist = Mathf.Sqrt(SqrDistanceTo(it));
+
+                string suffix = "";
+                if (it is ILootable loot)
+                    suffix = $"  [{(loot.IsOpen ? "OPEN" : "CLOSED")} {loot.GetStorage().Count} items]";
+
+                GUI.Label(new Rect(x + 5f, y, width - 10f, lineHeight),
+                    $"[{i}] {label} ({dist:F1} m){suffix}");
+                y += lineHeight;
+
+                // Sub-lines: hiển thị từng item bên trong lootable
+                if (it is ILootable lootable && lootable.GetStorage().Count > 0)
+                {
+                    foreach (var item in lootable.GetStorage())
+                    {
+                        GUI.Label(new Rect(x + 20f, y, width - 25f, lineHeight),
+                            $"  • {item.DefinitionID} ×{item.Quantity}");
+                        y += lineHeight;
+                    }
+                }
+            }
+        }
 
         private void OnDrawGizmosSelected()
         {

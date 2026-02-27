@@ -60,9 +60,9 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "Reload",
+                    "name": "LogNearby",
                     "type": "Button",
-                    "id": "f6a7b8c9-d0e1-4f5a-3b4c-5d6e7f8a9b0c",
+                    "id": "a0f86b1c-5c6d-4a27-9aab-7b7d1a7f0c5b",
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "Press",
@@ -194,11 +194,11 @@
                 {
                     "name": "",
                     "id": "e7f8a9b0-c1d2-4e5f-4a5b-6c7d8e9f0a1b",
-                    "path": "<Keyboard>/r",
+                    "path": "<Keyboard>/f6",
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "Reload",
+                    "action": "LogNearby",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }
@@ -224,6 +224,15 @@
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "Press(behavior=2)",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Reload",
+                    "type": "Button",
+                    "id": "f6a7b8c9-d0e1-4f5a-3b4c-5d6e7f8a9b0c",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "Press",
                     "initialStateCheck": false
                 },
                 {
@@ -301,6 +310,17 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "AimDownSights",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "e7f8a9b0-c1d2-4e5f-4a5b-6c7d8e9f0a1b",
+                    "path": "<Keyboard>/r",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Reload",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

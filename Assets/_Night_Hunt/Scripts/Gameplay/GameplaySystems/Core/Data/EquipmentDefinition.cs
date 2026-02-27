@@ -33,35 +33,26 @@ namespace NightHunt.GameplaySystems.Core.Data
         #region Durability
         
         [Header("Durability")]
-        [Tooltip("Max durability")]
-        [Min(0f)]
-        public float MaxDurability = 100f;
-        
-        [Tooltip("Default durability when spawned")]
-        [Min(0f)]
-        public float DefaultDurability = 100f;
-        
-        [Tooltip("Durability loss per damage taken")]
+        [Tooltip("Durability loss per damage taken (multiplier applied to incoming damage)")]
         [Min(0f)]
         public float DurabilityLossRate = 1f;
-        
+        // MaxDurability / DefaultDurability → StatConfig.Stats[ItemStatType.MaxDurability]
+        // Start value set by InventorySystem via GetDefaultCurrentValue()
+        // instance.CurrentResource = runtime current durability
+
         #endregion
-        
+
         #region Override Methods
-        
-        public override float GetMaxResource()
-        {
-            // Armor uses Durability as resource (clothing may use None)
-            return ResourceType == ItemResourceType.Durability ? MaxDurability : 0f;
-        }
-        
-        public override float GetDefaultResource()
-        {
-            return ResourceType == ItemResourceType.Durability ? DefaultDurability : 0f;
-        }
-        
+
+        /// <summary>
+        /// Returns StatConfig[MaxDurability] as the starting CurrentResource value.
+        /// InventorySystem.CreateItemInstance() calls this to initialize instance.CurrentResource.
+        /// </summary>
+        public override float GetDefaultCurrentValue()
+            => StatConfig != null ? StatConfig.GetStatValue(ItemStatType.MaxDurability) : 0f;
+
         #endregion
-        
+
         #region Stat Helpers
         
         public float GetStatValue(ItemStatType statType)

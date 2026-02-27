@@ -1,5 +1,4 @@
 ﻿using FishNet.Object;
-using FishNet.Object.Synchronizing;
 using NightHunt.Networking.Player;
 using UnityEngine;
 
@@ -11,38 +10,23 @@ namespace NightHunt.Networking
     public class ClientNetworkHandler : NetworkBehaviour
     {
         // ===== CLIENT SENDS DATA TO SERVER =====
-        private readonly SyncVar<PlayerRegistryData> _clientPlayerData = new SyncVar<PlayerRegistryData>(
-            new SyncTypeSettings(WritePermission.ClientUnsynchronized)
-        );
+        // Cache the data locally so the server can query it after receiving via RPC
+        private PlayerRegistryData _cachedPlayerData;
 
-        public PlayerPublicData GetPublicPlayerData() => PlayerPublicData.FromRegistryData(_clientPlayerData.Value);
+        public PlayerPublicData GetPublicPlayerData() => PlayerPublicData.FromRegistryData(_cachedPlayerData);
 
         public override void OnStartClient()
         {
             base.OnStartClient();
             if (!IsOwner) return;
             Debug.Log($"Setting up ClientNetworkHandler for local player.");
-            // Client gửi data lên server
+            // Client gửi data lên server qua ServerRpc
             SendPlayerDataToServer();
         }
 
-        public override void OnStartServer()
-        {
-            base.OnStartServer();
-
-            // Server listen khi client update data
-            _clientPlayerData.OnChange += OnClientDataReceived;
-        }
-
-        public override void OnStopServer()
-        {
-            base.OnStopServer();
-
-            _clientPlayerData.OnChange -= OnClientDataReceived;
-        }
-
         /// <summary>
-        /// Client: Gửi data lên server
+        /// Client: Gửi data lên server bằng ServerRpc
+        /// SyncVar với ClientUnsynchronized KHÔNG truyền dữ liệu lên server - phải dùng ServerRpc
         /// </summary>
         [Client]
         private void SendPlayerDataToServer()
@@ -52,26 +36,26 @@ namespace NightHunt.Networking
             Debug.Log(
                 $"[Client] Sending data to server - Backend ID: {data.BackendPlayerId}, Name: {data.DisplayName}");
 
-            // Set value → tự động gửi lên server
-            _clientPlayerData.Value = data;
+            // Gửi lên server bằng ServerRpc
+            RpcSendPlayerData(data);
         }
 
         /// <summary>
-        /// Server: Nhận data từ client
+        /// ServerRpc: Chạy trên server, được gọi bởi client owner
         /// </summary>
-        [Server]
-        private void OnClientDataReceived(PlayerRegistryData prev, PlayerRegistryData next, bool asServer)
+        [ServerRpc]
+        private void RpcSendPlayerData(PlayerRegistryData data)
         {
-            if (!asServer) return;
+            _cachedPlayerData = data;
 
-            Debug.Log($"[Server] Received client data - Backend ID: {next.BackendPlayerId}, Name: {next.DisplayName}");
+            Debug.Log($"[Server] Received client data - Backend ID: {data.BackendPlayerId}, Name: {data.DisplayName}");
 
             // TODO: Validate data
-            // bool valid = ValidatePlayerData(next);
+            // bool valid = ValidatePlayerData(data);
             // if (!valid) { Owner.Disconnect(); return; }
 
             // Notify ServerGameManager
-            ServerGameManager.Instance.OnClientDataReceived(Owner, next);
+            ServerGameManager.Instance.OnClientDataReceived(Owner, data);
         }
 
         /// <summary>

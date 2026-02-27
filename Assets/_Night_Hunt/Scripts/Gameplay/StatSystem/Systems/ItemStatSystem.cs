@@ -192,52 +192,13 @@ namespace NightHunt.StatSystem.Systems
         }
         
         /// <summary>
-        /// Get common stat values (Weight, Durability, etc.)
-        /// Weight is read from StatConfig if available, otherwise falls back to itemDef.Weight
+        /// Fallback for stat types not defined in StatConfig.Stats[].
+        /// All resource-style stats (MaxAmmo, MaxDurability, BatteryCapacity) now live in
+        /// StatConfig.Stats[] and are handled by the main CalculateItemStat path above.
         /// </summary>
         private static float GetCommonStatValue(ItemDefinition itemDef, ItemStatType statType)
         {
-            switch (statType)
-            {
-                case ItemStatType.Weight:
-                    // Try to get from StatConfig first (for all item types)
-                    if (itemDef is WeaponDefinition weaponDef && weaponDef.StatConfig != null)
-                    {
-                        float weight = weaponDef.StatConfig.GetStatValue(statType);
-                        if (weight > 0f) return weight;
-                    }
-                    if (itemDef is EquipmentDefinition equipmentDef && equipmentDef.StatConfig != null)
-                    {
-                        float weight = equipmentDef.StatConfig.GetStatValue(statType);
-                        if (weight > 0f) return weight;
-                    }
-                    if (itemDef is AttachmentDefinition attachmentDef && attachmentDef.StatConfig != null)
-                    {
-                        float weight = attachmentDef.StatConfig.GetStatValue(statType);
-                        if (weight > 0f) return weight;
-                    }
-                    if (itemDef is ConsumableDefinition consumableDef && consumableDef.StatConfig != null)
-                    {
-                        float weight = consumableDef.StatConfig.GetStatValue(statType);
-                        if (weight > 0f) return weight;
-                    }
-                    if (itemDef is ThrowableDefinition throwableDef && throwableDef.StatConfig != null)
-                    {
-                        float weight = throwableDef.StatConfig.GetStatValue(statType);
-                        if (weight > 0f) return weight;
-                    }
-                    // Fallback to itemDef.Weight
-                    return itemDef.Weight;
-                
-                case ItemStatType.Durability:
-                case ItemStatType.MaxDurability:
-                    if (itemDef.ResourceType == ItemResourceType.Durability)
-                        return itemDef.MaxResource;
-                    return 0f;
-                
-                default:
-                    return 0f;
-            }
+            return 0f;
         }
         
         /// <summary>
@@ -323,21 +284,9 @@ namespace NightHunt.StatSystem.Systems
                 }
             }
             
-            // Add Weight if not already in list (check StatConfig first, then fallback to itemDef.Weight)
-            if (!statTypes.Contains(ItemStatType.Weight))
-            {
-                float weight = GetCommonStatValue(itemDef, ItemStatType.Weight);
-                if (weight > 0f)
-                    statTypes.Add(ItemStatType.Weight);
-            }
-            
-            // Add Durability stats if applicable
-            if (itemDef.ResourceType == ItemResourceType.Durability && !statTypes.Contains(ItemStatType.Durability))
-            {
-                statTypes.Add(ItemStatType.Durability);
-                statTypes.Add(ItemStatType.MaxDurability);
-            }
-            
+            // NOTE: MaxAmmo/MaxDurability/BatteryCapacity are in StatConfig.Stats[] now.
+            // They are added automatically in the loop above when present in config.
+
             return statTypes;
         }
         

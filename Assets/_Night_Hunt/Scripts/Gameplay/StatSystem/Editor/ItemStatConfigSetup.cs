@@ -20,9 +20,13 @@ namespace NightHunt.StatSystem.Editor
 
         public static void SetupVest(EquipmentStatConfig config)
         {
+            // ArmorValue  : inspectable + buffable by Plate attachment.
+            // MaxDurability: armor HP; instance.CurrentResource = current durability.
+            // PlayerModifiers.Armor: pushed to PlayerStatType when equipped.
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 8f, MinValue = 0, MaxValue = 100 }
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.ArmorValue,    DefaultValue = 80,  MinValue = 0, MaxValue = 500  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.MaxDurability, DefaultValue = 150, MinValue = 0, MaxValue = 1000 },
             };
             config.PlayerModifiers = new PlayerStatModifier[]
             {
@@ -35,7 +39,6 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 2f, MinValue = 0, MaxValue = 50 }
             };
             config.PlayerModifiers = new PlayerStatModifier[]
             {
@@ -47,7 +50,8 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 1.5f, MinValue = 0, MaxValue = 20 }
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.ArmorValue,    DefaultValue = 40,  MinValue = 0, MaxValue = 200 },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.MaxDurability, DefaultValue = 100, MinValue = 0, MaxValue = 500 },
             };
             config.PlayerModifiers = new PlayerStatModifier[]
             {
@@ -59,7 +63,6 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 1f, MinValue = 0, MaxValue = 10 }
             };
             config.PlayerModifiers = new PlayerStatModifier[0];
         }
@@ -68,7 +71,6 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.2f, MinValue = 0, MaxValue = 5 }
             };
             config.PlayerModifiers = new PlayerStatModifier[0];
         }
@@ -81,15 +83,15 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Damage, DefaultValue = 30, MinValue = 0, MaxValue = 200 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.FireRate, DefaultValue = 600, MinValue = 0, MaxValue = 1200 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Accuracy, DefaultValue = 70, MinValue = 0, MaxValue = 100 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Recoil, DefaultValue = 25, MinValue = 0, MaxValue = 100 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Spread, DefaultValue = 0.5f, MinValue = 0, MaxValue = 10 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Range, DefaultValue = 150, MinValue = 0, MaxValue = 500 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.AimSpeed, DefaultValue = 1.2f, MinValue = 0, MaxValue = 5 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.ReloadSpeed, DefaultValue = 2.5f, MinValue = 0, MaxValue = 10 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 3.5f, MinValue = 0, MaxValue = 20 }
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Damage,        DefaultValue = 30,   MinValue = 0,    MaxValue = 200  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.FireRate,       DefaultValue = 600,  MinValue = 0,    MaxValue = 1200 },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Accuracy,       DefaultValue = 70,   MinValue = 0,    MaxValue = 100  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.SpreadPenalty,  DefaultValue = 25,   MinValue = 0,    MaxValue = 100  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.SpreadBase,     DefaultValue = 0.5f, MinValue = 0,    MaxValue = 10   },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.DrawSpeed,      DefaultValue = 1.2f, MinValue = 0,    MaxValue = 5    },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.ReloadSpeed,    DefaultValue = 2.5f, MinValue = 0,    MaxValue = 10   },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.MagazineSize,   DefaultValue = 30,   MinValue = 1,    MaxValue = 200  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.MaxAmmo,        DefaultValue = 300,  MinValue = 0,    MaxValue = 2000 },
             };
             config.PlayerModifiers = new PlayerStatModifier[]
             {
@@ -101,14 +103,14 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Damage, DefaultValue = 20, MinValue = 0, MaxValue = 100 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.FireRate, DefaultValue = 300, MinValue = 0, MaxValue = 600 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Accuracy, DefaultValue = 60, MinValue = 0, MaxValue = 100 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Recoil, DefaultValue = 15, MinValue = 0, MaxValue = 100 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Range, DefaultValue = 50, MinValue = 0, MaxValue = 200 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.AimSpeed, DefaultValue = 0.8f, MinValue = 0, MaxValue = 5 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.ReloadSpeed, DefaultValue = 1.8f, MinValue = 0, MaxValue = 10 },
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 1.2f, MinValue = 0, MaxValue = 10 }
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Damage,        DefaultValue = 20,   MinValue = 0,    MaxValue = 100  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.FireRate,       DefaultValue = 300,  MinValue = 0,    MaxValue = 600  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Accuracy,       DefaultValue = 60,   MinValue = 0,    MaxValue = 100  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.SpreadPenalty,  DefaultValue = 15,   MinValue = 0,    MaxValue = 100  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.DrawSpeed,      DefaultValue = 0.8f, MinValue = 0,    MaxValue = 5    },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.ReloadSpeed,    DefaultValue = 1.8f, MinValue = 0,    MaxValue = 10   },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.MagazineSize,   DefaultValue = 12,   MinValue = 1,    MaxValue = 100  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.MaxAmmo,        DefaultValue = 120,  MinValue = 0,    MaxValue = 600  },
             };
             config.PlayerModifiers = new PlayerStatModifier[]
             {
@@ -124,13 +126,12 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.2f, MinValue = 0, MaxValue = 5 }
             };
             config.ItemModifiers = new ItemStatModifier[]
             {
                 ItemStatModifier.CreateFlat(ItemStatType.Accuracy, 10f, "Red dot accuracy"),
-                ItemStatModifier.CreatePercentage(ItemStatType.AimSpeed, 20f, "Faster aim"),
-                ItemStatModifier.CreateFlat(ItemStatType.Recoil, -3f, "Recoil control")
+                ItemStatModifier.CreatePercentage(ItemStatType.DrawSpeed, 20f, "Faster aim"),
+                ItemStatModifier.CreateFlat(ItemStatType.SpreadPenalty, -3f, "Recoil control")
             };
         }
 
@@ -138,12 +139,10 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.4f, MinValue = 0, MaxValue = 5 }
             };
             config.ItemModifiers = new ItemStatModifier[]
             {
-                ItemStatModifier.CreatePercentage(ItemStatType.Recoil, -30f, "Suppressor recoil"),
-                ItemStatModifier.CreatePercentage(ItemStatType.Range, -10f, "Reduced range"),
+                ItemStatModifier.CreatePercentage(ItemStatType.SpreadPenalty, -30f, "Suppressor recoil"),
                 ItemStatModifier.CreateFlat(ItemStatType.Damage, -2f, "Minor damage reduction")
             };
         }
@@ -152,13 +151,12 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.15f, MinValue = 0, MaxValue = 2 }
             };
             config.ItemModifiers = new ItemStatModifier[]
             {
-                ItemStatModifier.CreatePercentage(ItemStatType.Recoil, -25f, "Recoil control"),
+                ItemStatModifier.CreatePercentage(ItemStatType.SpreadPenalty, -25f, "Recoil control"),
                 ItemStatModifier.CreateFlat(ItemStatType.Accuracy, 5f, "Stability"),
-                ItemStatModifier.CreatePercentage(ItemStatType.Spread, -15f, "Tighter spread")
+                ItemStatModifier.CreatePercentage(ItemStatType.SpreadBase, -15f, "Tighter spread")
             };
         }
 
@@ -166,7 +164,6 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.3f, MinValue = 0, MaxValue = 2 }
             };
             config.ItemModifiers = new ItemStatModifier[]
             {
@@ -179,7 +176,8 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.1f, MinValue = 0, MaxValue = 2 }
+                // BatteryCapacity: 1 hour at 1 unit/s. instance.CurrentResource = remaining battery.
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.BatteryCapacity, DefaultValue = 3600, MinValue = 0, MaxValue = 36000 },
             };
             config.PlayerModifiers = new PlayerStatModifier[]
             {
@@ -191,11 +189,9 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.2f, MinValue = 0, MaxValue = 2 }
             };
             config.ItemModifiers = new ItemStatModifier[]
             {
-                ItemStatModifier.CreateFlat(ItemStatType.Weight, -5f, "Extra capacity (negative weight)")
             };
         }
 
@@ -203,14 +199,12 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.5f, MinValue = 0, MaxValue = 5 }
             };
             config.ItemModifiers = new ItemStatModifier[]
             {
                 ItemStatModifier.CreateFlat(ItemStatType.Accuracy, 25f, "Long-range accuracy"),
-                ItemStatModifier.CreatePercentage(ItemStatType.Range, 30f, "Extended range"),
-                ItemStatModifier.CreatePercentage(ItemStatType.AimSpeed, -15f, "Slower aim"),
-                ItemStatModifier.CreateFlat(ItemStatType.Recoil, -5f, "Recoil control")
+                ItemStatModifier.CreatePercentage(ItemStatType.DrawSpeed, -15f, "Slower aim"),
+                ItemStatModifier.CreateFlat(ItemStatType.SpreadPenalty, -5f, "Recoil control")
             };
         }
 
@@ -218,14 +212,12 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.8f, MinValue = 0, MaxValue = 5 }
             };
             config.ItemModifiers = new ItemStatModifier[]
             {
                 ItemStatModifier.CreateFlat(ItemStatType.Accuracy, 40f, "Sniper accuracy"),
-                ItemStatModifier.CreatePercentage(ItemStatType.Range, 50f, "Max range"),
-                ItemStatModifier.CreatePercentage(ItemStatType.AimSpeed, -30f, "Much slower aim"),
-                ItemStatModifier.CreateFlat(ItemStatType.Recoil, -8f, "Recoil reduction")
+                ItemStatModifier.CreatePercentage(ItemStatType.DrawSpeed, -30f, "Much slower aim"),
+                ItemStatModifier.CreateFlat(ItemStatType.SpreadPenalty, -8f, "Recoil reduction")
             };
         }
 
@@ -237,7 +229,6 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.3f, MinValue = 0, MaxValue = 10 }
             };
             
             config.Effects = new GameplaySystems.Core.Data.ConsumableEffect[]
@@ -265,7 +256,6 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.2f, MinValue = 0, MaxValue = 5 }
             };
             
             config.Effects = new GameplaySystems.Core.Data.ConsumableEffect[]
@@ -289,7 +279,6 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.4f, MinValue = 0, MaxValue = 10 }
             };
 
             // Stats-only config. Intentionally leave modifiers empty.
@@ -301,7 +290,6 @@ namespace NightHunt.StatSystem.Editor
         {
             config.Stats = new ItemStatConfig.ItemStatDefinition[]
             {
-                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Weight, DefaultValue = 0.3f, MinValue = 0, MaxValue = 10 }
             };
 
             // Stats-only config. Intentionally leave modifiers empty.

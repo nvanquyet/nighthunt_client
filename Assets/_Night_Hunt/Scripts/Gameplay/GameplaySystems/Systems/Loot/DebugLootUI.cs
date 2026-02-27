@@ -6,6 +6,7 @@ using NightHunt.Networking;
 using FishNet.Managing;
 using FishNet.Managing.Client;
 using FishNet.Connection;
+using FishNet.Object;
 
 namespace NightHunt.GameplaySystems.Loot
 {
@@ -119,16 +120,16 @@ namespace NightHunt.GameplaySystems.Loot
 
                     if (GUILayout.Button("Take All", GUILayout.Width(80)))
                     {
-                        var conn = GetLocalConnection();
-                        if (conn != null)
-                            currentContainer.RequestTakeItem(conn, i, item.Quantity);
+                        var playerNob = GetLocalPlayerNob();
+                        if (playerNob != null)
+                            currentContainer.RequestTakeItem(playerNob, i, item.Quantity);
                     }
 
                     if (item.Quantity > 1 && GUILayout.Button("Take 1", GUILayout.Width(60)))
                     {
-                        var conn = GetLocalConnection();
-                        if (conn != null)
-                            currentContainer.RequestTakeItem(conn, i, 1);
+                        var playerNob = GetLocalPlayerNob();
+                        if (playerNob != null)
+                            currentContainer.RequestTakeItem(playerNob, i, 1);
                     }
 
                     GUILayout.EndHorizontal();
@@ -185,16 +186,16 @@ namespace NightHunt.GameplaySystems.Loot
 
                     if (GUILayout.Button("Take All", GUILayout.Width(80)))
                     {
-                        var conn = GetLocalConnection();
-                        if (conn != null)
-                            currentCorpse.RequestTakeItem(conn, i, item.Quantity);
+                        var playerNob = GetLocalPlayerNob();
+                        if (playerNob != null)
+                            currentCorpse.RequestTakeItem(playerNob, i, item.Quantity);
                     }
 
                     if (item.Quantity > 1 && GUILayout.Button("Take 1", GUILayout.Width(60)))
                     {
-                        var conn = GetLocalConnection();
-                        if (conn != null)
-                            currentCorpse.RequestTakeItem(conn, i, 1);
+                        var playerNob = GetLocalPlayerNob();
+                        if (playerNob != null)
+                            currentCorpse.RequestTakeItem(playerNob, i, 1);
                     }
 
                     GUILayout.EndHorizontal();
@@ -217,6 +218,19 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             GUILayout.EndArea();
+        }
+
+        /// <summary>
+        /// Lấy NetworkObject của local player — dùng để thầy cho RPC thay vì conn.Objects loop.
+        /// </summary>
+        private NetworkObject GetLocalPlayerNob()
+        {
+            foreach (var np in Object.FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None))
+            {
+                if (np.IsOwner) return np.GetComponent<NetworkObject>();
+            }
+            Debug.LogWarning("[DebugLootUI] Không tìm thấy local player NetworkObject!");
+            return null;
         }
 
         /// <summary>

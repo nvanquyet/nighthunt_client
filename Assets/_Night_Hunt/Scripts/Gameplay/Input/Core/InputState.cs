@@ -12,8 +12,8 @@ namespace NightHunt.Gameplay.Input
     public enum InputLayer
     {
         None        = 0,
-        Player      = 1 << 0,   // Move, Sprint, Crouch, Interact, Pickup, Reload
-        Combat      = 1 << 1,   // Fire, AimDownSights, SwitchWeapon, WeaponSlots, Grenade
+        Player      = 1 << 0,   // Move, Sprint, Crouch, Interact, Pickup, LogNearby
+        Combat      = 1 << 1,   // Fire, AimDownSights, Reload, SwitchWeapon, WeaponSlots, Grenade
         Camera      = 1 << 2,   // RotateLeft/Right, Look, Zoom
         Inventory   = 1 << 3,   // OpenInventory, DropItem, QuickSlots, UseConsumable
         Team        = 1 << 4,   // Ping, RequestHelp, Revive, VoiceChat, Scoreboard

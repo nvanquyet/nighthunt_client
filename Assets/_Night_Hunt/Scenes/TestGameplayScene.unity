@@ -1319,7 +1319,8 @@ MonoBehaviour:
   <ComponentIndex>k__BackingField: 0
   <PredictedSpawn>k__BackingField: {fileID: 0}
   <PredictedOwner>k__BackingField: {fileID: 0}
-  NetworkBehaviours: []
+  NetworkBehaviours:
+  - {fileID: 1999823139}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -1362,16 +1363,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 1999823137}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3fe7d58601da41d42837ca094332009f, type: 3}
+  m_Script: {fileID: 11500000, guid: 5174691f24164e0f881dad90edb74ca4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 0
   _addedNetworkObject: {fileID: 1999823138}
   _networkObjectCache: {fileID: 0}
-  spawnPoints: []
-  spawnInterval: 30
-  maxLootPerSpawn: 3
-  lootTiers: []
+  worldItemPrefab: {fileID: 8570669976395137726, guid: 6efc974d81c5b7b498c86be63bb34743,
+    type: 3}
+  worldContainerPrefab: {fileID: 7434460933690696675, guid: d3939c82c86273e4bbbfd887ad996840,
+    type: 3}
+  enableDebugLogs: 0
 --- !u!4 &1999823140
 Transform:
   m_ObjectHideFlags: 0

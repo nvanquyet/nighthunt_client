@@ -307,10 +307,11 @@ MonoBehaviour:
   playerCamera: {fileID: 0}
   interactableLayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
-  maxDistance: 5
+    m_Bits: 768
+  maxDistance: 50
   ignorePlayerLayer: 1
-  showDebugRay: 0
+  showDebugRay: 1
+  logTargetChanges: 1
 --- !u!114 &3049921616504246169
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -323,14 +324,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6a904f7097a99674c9bc0332cf26f98e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scanRadius: 4
+  scanRadius: 2.5
   scanInterval: 0.15
   interactableLayerMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 768
   maxResults: 16
-  logOnChange: 0
+  logOnChange: 1
   drawGizmos: 1
+  showDebugUI: 1
 --- !u!1 &824882692673830954
 GameObject:
   m_ObjectHideFlags: 0

@@ -21,7 +21,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Header("Ghost")]
         [SerializeField] private DragDropGhost _ghostPrefab;
         [SerializeField] private Canvas _dragCanvas;
-
+        
+        [Header("Dialogs")]
+        [SerializeField] private DropQuantityDialog _dropQuantityDialog;
+        
         [Header("Debug")]
         [SerializeField] private bool _enableDebugLogs;
 
@@ -53,6 +56,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             Instance = this;
+        }
+
+        private DropQuantityDialog GetDropQuantityDialog()
+        {
+            if (_dropQuantityDialog == null)
+            {
+                _dropQuantityDialog = FindObjectOfType<DropQuantityDialog>(true);
+            }
+
+            return _dropQuantityDialog;
         }
 
         public void RegisterSlotView(ItemSlotView view)
@@ -594,49 +607,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     break;
 
                 case DropActionType.DropToWorld:
-                    // BUG 4 FIX: support drop-to-world from any source slot.
-                    // For non-inventory sources, unequip/detach first then drop.
-                    switch (action.Source.Type)
+                    // Nếu stack đủ lớn (>=3), mở dialog chọn số lượng drop thay vì luôn drop full stack.
+                    if (item.Quantity > 2 && TryShowDropQuantityDialog(item, qty =>
+                        ExecuteDropToWorld(bridge, action.Source, item, qty)))
                     {
-                        case UISlotType.Inventory:
-                            bridge.DropItem(item.InstanceID, item.Quantity);
-                            break;
-
-                        case UISlotType.Equipment:
-                            if (action.Source.EquipmentSlot.HasValue)
-                            {
-                                // Unequip (detaches attachments) then drop from inventory
-                                bridge.UnequipItem(action.Source.EquipmentSlot.Value);
-                                bridge.DropItem(item.InstanceID, item.Quantity);
-                            }
-                            break;
-
-                        case UISlotType.Weapon:
-                            if (action.Source.WeaponSlot.HasValue)
-                            {
-                                bridge.UnequipWeapon(action.Source.WeaponSlot.Value);
-                                bridge.DropItem(item.InstanceID, item.Quantity);
-                            }
-                            break;
-
-                        case UISlotType.QuickSlot:
-                            // QuickSlot is a reference; item lives in inventory – just drop it
-                            bridge.RemoveFromQuickSlot(action.Source.Index);
-                            bridge.DropItem(item.InstanceID, item.Quantity);
-                            break;
-
-                        case UISlotType.Attachment:
-                            // Detach to inventory first, then drop
-                            var attachSys = GetAttachmentSystem();
-                            if (attachSys != null && !string.IsNullOrEmpty(action.Source.ParentInstanceID))
-                                attachSys.DetachItem(action.Source.ParentInstanceID, action.Source.Index);
-                            bridge.DropItem(item.InstanceID, item.Quantity);
-                            break;
-
-                        default:
-                            Log($"[DropToWorld] Unhandled source type={action.Source.Type}");
-                            break;
+                        return;
                     }
+
+                    ExecuteDropToWorld(bridge, action.Source, item, item.Quantity);
                     break;
 
                 case DropActionType.Attach:
@@ -669,99 +647,205 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     break;
 
                 case DropActionType.Trash:
-                    // Trash cần xử lý khác nhau tuỳ nguồn:
-                    // - Inventory: xoá trực tiếp khỏi inventory.
-                    // - Equipment / Weapon: unequip trước rồi xoá khỏi inventory.
-                    // - QuickSlot: xoá khỏi inventory + clear quickslot reference.
-                    // - Attachment: detach về inventory (nếu có system) – user có thể trash tiếp từ inventory.
-                    switch (action.Source.Type)
+                    // Khi trash stack lớn (>=3), cho phép người chơi chọn số lượng xoá.
+                    if (item.Quantity > 2 && TryShowDropQuantityDialog(item, qty =>
+                        ExecuteTrash(bridge, action.Source, item, qty)))
                     {
-                        case UISlotType.Inventory:
-                            if (_enableDebugLogs)
-                            {
-                                Debug.Log($"[DragDropController] [UI→Server][Trash Inventory] " +
-                                          $"item={item.DefinitionID} ({item.InstanceID}) " +
-                                          $"from={action.Source} qty={item.Quantity}");
-                            }
-                            bridge.RemoveItem(item.InstanceID, item.Quantity);
-                            break;
+                        return;
+                    }
 
-                        case UISlotType.Equipment:
-                            if (action.Source.EquipmentSlot.HasValue)
-                            {
-                                var slot = action.Source.EquipmentSlot.Value;
-                                if (_enableDebugLogs)
-                                {
-                                    Debug.Log($"[DragDropController] [UI→Server][Trash Equipment] " +
-                                              $"slot={slot}, item={item.DefinitionID} ({item.InstanceID}) " +
-                                              $"from={action.Source}");
-                                }
+                    ExecuteTrash(bridge, action.Source, item, item.Quantity);
+                    break;
+            }
+        }
 
-                                // 1) Unequip để trả item về inventory.
-                                bridge.UnequipItem(slot);
-                                // 2) Xoá instance khỏi inventory.
-                                bridge.RemoveItem(item.InstanceID, item.Quantity);
-                            }
-                            break;
+        /// <summary>
+        /// Hiển thị DropQuantityDialog (nếu có) và thực thi callback khi người chơi confirm.
+        /// Trả về true nếu dialog đã được hiển thị, false nếu không có dialog.
+        /// </summary>
+        private bool TryShowDropQuantityDialog(ItemInstance item, System.Action<int> onConfirmed)
+        {
+            var dialog = GetDropQuantityDialog();
+            if (dialog == null || item == null || onConfirmed == null)
+                return false;
 
-                        case UISlotType.Weapon:
-                            if (action.Source.WeaponSlot.HasValue)
-                            {
-                                var slot = action.Source.WeaponSlot.Value;
-                                if (_enableDebugLogs)
-                                {
-                                    Debug.Log($"[DragDropController] [UI→Server][Trash Weapon] " +
-                                              $"slot={slot}, item={item.DefinitionID} ({item.InstanceID}) " +
-                                              $"from={action.Source}");
-                                }
+            void HandleConfirmed(ItemInstance confirmedItem, int quantity)
+            {
+                dialog.OnDropConfirmed -= HandleConfirmed;
+                dialog.OnCanceled -= HandleCanceled;
 
-                                // 1) Unequip weapon để trả về inventory.
-                                bridge.UnequipWeapon(slot);
-                                // 2) Xoá instance khỏi inventory.
-                                bridge.RemoveItem(item.InstanceID, item.Quantity);
-                            }
-                            break;
+                // Chỉ xử lý nếu đúng instance.
+                if (confirmedItem != null && confirmedItem.InstanceID == item.InstanceID)
+                {
+                    onConfirmed.Invoke(quantity);
+                }
+            }
 
-                        case UISlotType.QuickSlot:
-                            // QuickSlot chỉ giữ reference → cần xoá item khỏi inventory + clear quickslot.
-                            if (_enableDebugLogs)
-                            {
-                                Debug.Log($"[DragDropController] [UI→Server][Trash QuickSlot] " +
-                                          $"QS[{action.Source.Index}], item={item.DefinitionID} ({item.InstanceID}) " +
-                                          $"from={action.Source}");
-                            }
+            void HandleCanceled()
+            {
+                dialog.OnDropConfirmed -= HandleConfirmed;
+                dialog.OnCanceled -= HandleCanceled;
+            }
 
-                            bridge.RemoveItem(item.InstanceID, item.Quantity);
-                            bridge.RemoveFromQuickSlot(action.Source.Index);
-                            break;
+            dialog.OnDropConfirmed += HandleConfirmed;
+            dialog.OnCanceled += HandleCanceled;
+            dialog.Show(item);
 
-                        case UISlotType.Attachment:
-                            // Đơn giản hoá: detach attachment về inventory,
-                            // sau đó player có thể trash tiếp từ inventory nếu muốn.
-                            var attachmentSystem = GetAttachmentSystem();
-                            if (attachmentSystem != null &&
-                                !string.IsNullOrEmpty(action.Source.ParentInstanceID))
-                            {
-                                if (_enableDebugLogs)
-                                {
-                                    Debug.Log($"[DragDropController] [UI→Server][Trash Attachment → Detach] " +
-                                              $"parent={action.Source.ParentInstanceID}, slotIndex={action.Source.Index}, " +
-                                              $"attachmentItem={item.DefinitionID} ({item.InstanceID})");
-                                }
+            return true;
+        }
 
-                                attachmentSystem.DetachItem(
-                                    action.Source.ParentInstanceID,
-                                    action.Source.Index);
-                            }
-                            break;
+        /// <summary>
+        /// Thực thi logic DropToWorld cho một lượng cụ thể.
+        /// </summary>
+        private void ExecuteDropToWorld(IGameplayBridge bridge, UISlotId source, ItemInstance item, int quantity)
+        {
+            if (bridge == null || item == null || quantity <= 0)
+                return;
 
-                        default:
-                            if (_enableDebugLogs)
-                            {
-                                Debug.Log($"[DragDropController] [UI→Server][Trash] Unsupported source type={action.Source.Type} " +
-                                          $"item={item.DefinitionID} ({item.InstanceID}) from={action.Source}");
-                            }
-                            break;
+            // BUG 4 FIX: support drop-to-world from any source slot.
+            // For non-inventory sources, unequip/detach first then drop.
+            switch (source.Type)
+            {
+                case UISlotType.Inventory:
+                    bridge.DropItem(item.InstanceID, quantity);
+                    break;
+
+                case UISlotType.Equipment:
+                    if (source.EquipmentSlot.HasValue)
+                    {
+                        // Unequip (detaches attachments) then drop from inventory
+                        bridge.UnequipItem(source.EquipmentSlot.Value);
+                        bridge.DropItem(item.InstanceID, quantity);
+                    }
+                    break;
+
+                case UISlotType.Weapon:
+                    if (source.WeaponSlot.HasValue)
+                    {
+                        bridge.UnequipWeapon(source.WeaponSlot.Value);
+                        bridge.DropItem(item.InstanceID, quantity);
+                    }
+                    break;
+
+                case UISlotType.QuickSlot:
+                    // QuickSlot is a reference; item lives in inventory – just drop it
+                    bridge.RemoveFromQuickSlot(source.Index);
+                    bridge.DropItem(item.InstanceID, quantity);
+                    break;
+
+                case UISlotType.Attachment:
+                    // Detach to inventory first, then drop
+                    var attachSys = GetAttachmentSystem();
+                    if (attachSys != null && !string.IsNullOrEmpty(source.ParentInstanceID))
+                        attachSys.DetachItem(source.ParentInstanceID, source.Index);
+                    bridge.DropItem(item.InstanceID, quantity);
+                    break;
+
+                default:
+                    Log($"[DropToWorld] Unhandled source type={source.Type}");
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Thực thi logic Trash cho một lượng cụ thể.
+        /// </summary>
+        private void ExecuteTrash(IGameplayBridge bridge, UISlotId source, ItemInstance item, int quantity)
+        {
+            if (bridge == null || item == null || quantity <= 0)
+                return;
+
+            // Trash cần xử lý khác nhau tuỳ nguồn:
+            // - Inventory: xoá trực tiếp khỏi inventory.
+            // - Equipment / Weapon: unequip trước rồi xoá khỏi inventory.
+            // - QuickSlot: xoá khỏi inventory + clear quickslot reference.
+            // - Attachment: detach về inventory (nếu có system) – user có thể trash tiếp từ inventory.
+            switch (source.Type)
+            {
+                case UISlotType.Inventory:
+                    if (_enableDebugLogs)
+                    {
+                        Debug.Log($"[DragDropController] [UI→Server][Trash Inventory] " +
+                                  $"item={item.DefinitionID} ({item.InstanceID}) " +
+                                  $"from={source} qty={quantity}");
+                    }
+                    bridge.RemoveItem(item.InstanceID, quantity);
+                    break;
+
+                case UISlotType.Equipment:
+                    if (source.EquipmentSlot.HasValue)
+                    {
+                        var slot = source.EquipmentSlot.Value;
+                        if (_enableDebugLogs)
+                        {
+                            Debug.Log($"[DragDropController] [UI→Server][Trash Equipment] " +
+                                      $"slot={slot}, item={item.DefinitionID} ({item.InstanceID}) " +
+                                      $"from={source} qty={quantity}");
+                        }
+
+                        // 1) Unequip để trả item về inventory.
+                        bridge.UnequipItem(slot);
+                        // 2) Xoá instance khỏi inventory.
+                        bridge.RemoveItem(item.InstanceID, quantity);
+                    }
+                    break;
+
+                case UISlotType.Weapon:
+                    if (source.WeaponSlot.HasValue)
+                    {
+                        var slot = source.WeaponSlot.Value;
+                        if (_enableDebugLogs)
+                        {
+                            Debug.Log($"[DragDropController] [UI→Server][Trash Weapon] " +
+                                      $"slot={slot}, item={item.DefinitionID} ({item.InstanceID}) " +
+                                      $"from={source} qty={quantity}");
+                        }
+
+                        // 1) Unequip weapon để trả về inventory.
+                        bridge.UnequipWeapon(slot);
+                        // 2) Xoá instance khỏi inventory.
+                        bridge.RemoveItem(item.InstanceID, quantity);
+                    }
+                    break;
+
+                case UISlotType.QuickSlot:
+                    // QuickSlot chỉ giữ reference → cần xoá item khỏi inventory + clear quickslot.
+                    if (_enableDebugLogs)
+                    {
+                        Debug.Log($"[DragDropController] [UI→Server][Trash QuickSlot] " +
+                                  $"QS[{source.Index}], item={item.DefinitionID} ({item.InstanceID}) " +
+                                  $"from={source} qty={quantity}");
+                    }
+
+                    bridge.RemoveItem(item.InstanceID, quantity);
+                    bridge.RemoveFromQuickSlot(source.Index);
+                    break;
+
+                case UISlotType.Attachment:
+                    // Đơn giản hoá: detach attachment về inventory,
+                    // sau đó player có thể trash tiếp từ inventory nếu muốn.
+                    var attachmentSystem = GetAttachmentSystem();
+                    if (attachmentSystem != null &&
+                        !string.IsNullOrEmpty(source.ParentInstanceID))
+                    {
+                        if (_enableDebugLogs)
+                        {
+                            Debug.Log($"[DragDropController] [UI→Server][Trash Attachment → Detach] " +
+                                      $"parent={source.ParentInstanceID}, slotIndex={source.Index}, " +
+                                      $"attachmentItem={item.DefinitionID} ({item.InstanceID})");
+                        }
+
+                        attachmentSystem.DetachItem(
+                            source.ParentInstanceID,
+                            source.Index);
+                    }
+                    break;
+
+                default:
+                    if (_enableDebugLogs)
+                    {
+                        Debug.Log($"[DragDropController] [UI→Server][Trash] Unsupported source type={source.Type} " +
+                                  $"item={item.DefinitionID} ({item.InstanceID}) from={source} qty={quantity}");
                     }
                     break;
             }

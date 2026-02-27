@@ -546,10 +546,21 @@ namespace NightHunt.GameplaySystems.Inventory
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[InventorySystem] DropItem: server-only!");
+                // Client-side: gửi lên server qua ServerRpc thay vì silently fail.
+                RequestDropRpc(instanceID, quantity);
                 return;
             }
             
+            DropItemServer(instanceID, quantity);
+        }
+
+        /// <summary>
+        /// Client gọi để yêu cầu drop item. InventorySystem thuộc sở hữu client này nên
+        /// RequireOwnership = true (default) — chỉ chính chủ sở hữu mới gửi được.
+        /// </summary>
+        [ServerRpc]
+        private void RequestDropRpc(string instanceID, int quantity)
+        {
             DropItemServer(instanceID, quantity);
         }
         
@@ -969,10 +980,10 @@ namespace NightHunt.GameplaySystems.Inventory
         {
             var newItem = new ItemInstance(itemDef.ItemID, quantity, GetNextAvailableIndex());
             
-            newItem.CurrentResource = itemDef.GetDefaultResource();
+            newItem.CurrentResource = itemDef.GetDefaultCurrentValue();
             
             if (itemDef is WeaponDefinition weaponDef)
-                newItem.CurrentMagazine = weaponDef.MagazineSize;
+                newItem.CurrentMagazine = Mathf.RoundToInt(weaponDef.GetStatValue(NightHunt.StatSystem.Core.Types.ItemStatType.MagazineSize));
             
             if (itemDef.AttachmentSlots != null && itemDef.AttachmentSlots.Length > 0)
                 newItem.AttachedItems = new string[itemDef.AttachmentSlots.Length];

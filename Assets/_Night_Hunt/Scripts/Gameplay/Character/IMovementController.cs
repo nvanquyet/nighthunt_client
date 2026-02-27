@@ -71,5 +71,12 @@ namespace NightHunt.Gameplay.Character
         /// Set movement state (for teleport/respawn)
         /// </summary>
         void SetState(MovementState state);
+
+        /// <summary>
+        /// Server: Teleport the character to position/rotation.
+        /// Properly resets the CharacterController internal state and clears velocity.
+        /// The server's next reconcile tick broadcasts the new position to all clients.
+        /// </summary>
+        void Teleport(Vector3 position, Quaternion rotation);
     }
 }

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 
@@ -75,8 +75,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
             {
                 rotateLeftAction = cameraActionMap.FindAction("RotateLeft");
                 rotateRightAction = cameraActionMap.FindAction("RotateRight");
-                lookAction = cameraActionMap.FindAction("Look");
-                zoomAction = cameraActionMap.FindAction("Zoom");
+                // InputSystem_Actions uses "MouseDelta" + "ZoomInOut" in Camera map.
+                lookAction = cameraActionMap.FindAction("MouseDelta");
+                zoomAction = cameraActionMap.FindAction("ZoomInOut");
             }
             else
             {
@@ -100,7 +101,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
 
         public bool IsInputEnabled => inputEnabled;
 
-        public InputActionMap GetActionMap() => cameraActionMap;
+        public InputActionMap GetActionMap()
+        {
+            if (cameraActionMap == null && InputLayerManager.Instance != null)
+                cameraActionMap = InputLayerManager.Instance.CameraMap;
+            return cameraActionMap;
+        }
 
         public void EnableInput()
         {
@@ -176,7 +182,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
 
         private void OnZoomPerformed(InputAction.CallbackContext context)
         {
-            float scrollValue = context.ReadValue<Vector2>().y;
+            // ZoomInOut is an Axis (float)
+            float scrollValue = context.ReadValue<float>();
             OnZoom?.Invoke(scrollValue);
         }
 

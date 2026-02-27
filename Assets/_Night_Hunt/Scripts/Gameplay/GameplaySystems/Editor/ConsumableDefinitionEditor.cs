@@ -36,7 +36,6 @@ namespace NightHunt.GameplaySystems.Editor
             consumable.Description = "Restores 50 HP instantly + 20 HP over 10 s.";
             consumable.IsStackable = true;
             consumable.MaxStackSize = 5;
-            consumable.Weight = config.GetStatValue(ItemStatType.Weight);
             consumable.UsageDuration = 3.5f;
             consumable.CanCancelUsage = true;
             consumable.CanUseWhileMoving = false;
@@ -55,7 +54,6 @@ namespace NightHunt.GameplaySystems.Editor
             consumable.Description = "Restores 100 stamina instantly.";
             consumable.IsStackable = true;
             consumable.MaxStackSize = 3;
-            consumable.Weight = config.GetStatValue(ItemStatType.Weight);
             consumable.UsageDuration = 2f;
             consumable.CanCancelUsage = true;
             consumable.CanUseWhileMoving = true;
@@ -76,7 +74,6 @@ namespace NightHunt.GameplaySystems.Editor
                 consumable.Description = "Restores 50 HP instantly + 20 HP over 10 s.";
                 consumable.IsStackable = true;
                 consumable.MaxStackSize = 5;
-                consumable.Weight = config.GetStatValue(ItemStatType.Weight);
                 consumable.UsageDuration = 3.5f;
                 consumable.CanCancelUsage = true;
                 consumable.CanUseWhileMoving = false;
@@ -94,7 +91,6 @@ namespace NightHunt.GameplaySystems.Editor
                 consumable.Description = "Restores 100 stamina instantly.";
                 consumable.IsStackable = true;
                 consumable.MaxStackSize = 3;
-                consumable.Weight = config.GetStatValue(ItemStatType.Weight);
                 consumable.UsageDuration = 2f;
                 consumable.CanCancelUsage = true;
                 consumable.CanUseWhileMoving = true;

@@ -172,17 +172,25 @@ namespace NightHunt.Networking
             Debug.Log($"[ServerGameManager] Step 1: Prefab instantiated");
             
             // STEP 2: SpawnSystem xử lý (assign team, position)
-            PlayerRegistryData serverData = _spawnSystem.ProcessSpawn(playerObj, conn, clientData);
+            PlayerRegistryData serverData;
+            if (_spawnSystem != null)
+            {
+                serverData = _spawnSystem.ProcessSpawn(playerObj, conn, clientData);
+                Debug.Log($"[ServerGameManager] Step 2: SpawnSystem processed - Team: {serverData.TeamId}");
+            }
+            else
+            {
+                Debug.LogWarning("[ServerGameManager] _spawnSystem is null – spawning at origin. Assign SpawnSystem in Inspector.");
+                serverData = clientData;
+                playerObj.transform.position = Vector3.zero;
+            }
             
-            Debug.Log($"[ServerGameManager] Step 2: SpawnSystem processed - Team: {serverData.TeamId}");
-            
-            // STEP 3: Set PUBLIC data vào NetworkPlayer (sync to clients)
-            PlayerPublicData publicData = PlayerPublicData.FromRegistryData(serverData);
-            networkPlayer.SetPublicData(publicData);
-            
-            Debug.Log($"[ServerGameManager] Step 3: Public data set");
-            
-            // STEP 4: Network spawn
+            // STEP 3: Network spawn FIRST — FishNet includes the current SyncVar
+            // values in the spawn packet it sends to all observers.  If we call
+            // SetPublicData BEFORE Spawn(), the SyncVar write happens on an
+            // unspawned object and FishNet may not pick it up, meaning every
+            // client (especially late-joiners whose spawn packet is sent during
+            // FishNet's initial-state reconciliation) receives an empty struct.
             NetworkObject netObj = playerObj.GetComponent<NetworkObject>();
             
             if (netObj == null)
@@ -194,7 +202,18 @@ namespace NightHunt.Networking
             
             _networkManager.ServerManager.Spawn(netObj, conn);
             
-            Debug.Log($"[ServerGameManager] Step 4: Network spawned");
+            Debug.Log($"[ServerGameManager] Step 3: Network spawned");
+            
+            // STEP 4: Set PUBLIC data AFTER spawn so the SyncVar change is
+            // broadcast via the normal dirty-sync channel to all current observers,
+            // AND will be included in the spawn packet for any client that connects
+            // while this object is alive (FishNet re-serialises all SyncVars into
+            // every new observer's spawn packet using the current value at the time
+            // of connection).
+            PlayerPublicData publicData = PlayerPublicData.FromRegistryData(serverData);
+            networkPlayer.SetPublicData(publicData);
+            
+            Debug.Log($"[ServerGameManager] Step 4: Public data set");
             
             // STEP 5: Register với RegistryService (lưu PRIVATE data)
             _registryService.RegisterPlayer(networkPlayer, serverData);
@@ -239,7 +258,8 @@ namespace NightHunt.Networking
             _registryService.UnregisterPlayer(networkPlayer);
             
             // SpawnSystem cleanup
-            _spawnSystem.OnPlayerDisconnected(fishnetClientId);
+            if (_spawnSystem != null)
+                _spawnSystem.OnPlayerDisconnected(fishnetClientId);
             
             // Despawn
             _networkManager.ServerManager.Despawn(playerObj);

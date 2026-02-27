@@ -119,10 +119,11 @@ namespace NightHunt.Gameplay.Spawn
         }
         
         // ===== SPAWN POINT SELECTION =====
-        
+
         [Server]
         private SpawnPoint GetSpawnPoint(int teamId)
         {
+            // Team-specific first, then neutral (-1) as fallback.
             if (_teamSpawnPoints.TryGetValue(teamId, out List<SpawnPoint> teamPoints) && teamPoints.Count > 0)
             {
                 return teamPoints[Random.Range(0, teamPoints.Count)];
@@ -135,6 +136,16 @@ namespace NightHunt.Gameplay.Spawn
             }
             
             return null;
+        }
+
+        /// <summary>
+        /// Public accessor used by RespawnSystem and other systems.
+        /// Pass teamId = -1 to get a neutral spawn point.
+        /// Returns null if no matching spawn point exists.
+        /// </summary>
+        public SpawnPoint GetRandomSpawnPointForTeam(int teamId)
+        {
+            return GetSpawnPoint(teamId);
         }
     }
 }

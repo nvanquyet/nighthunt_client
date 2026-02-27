@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
@@ -52,7 +52,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         // ── IInputHandler ─────────────────────────────────────────────────────────
         public bool IsInputEnabled  => _inputEnabled;
-        public InputActionMap GetActionMap() => _combatActionMap;
+        public InputActionMap GetActionMap()
+        {
+            if (_combatActionMap == null && InputLayerManager.Instance != null)
+                _combatActionMap = InputLayerManager.Instance.CombatMap;
+            return _combatActionMap;
+        }
 
         // ── Lifecycle ─────────────────────────────────────────────────────────────
 

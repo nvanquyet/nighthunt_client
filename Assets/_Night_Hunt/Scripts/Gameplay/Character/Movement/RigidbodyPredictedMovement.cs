@@ -32,12 +32,31 @@ namespace NightHunt.Gameplay.Character
         [SerializeField] private float maxFallSpeed = -40f;
 
         [Header("Physics Tuning")]
-        [SerializeField] private float drag = 5f;
+        // Keep drag at 0 when using MovePosition — direct position control does NOT need
+        // velocity damping, and a non-zero linearDamping fights PhysX's internally
+        // computed velocity (from position delta), causing client/server divergence.
+        [SerializeField] private float drag = 0f;
         [SerializeField] private float angularDrag = 0.05f;
+
+        [Header("Wall Prevention")]
+        // Extra distance beyond the capsule radius checked ahead of movement each tick.
+        // Increase if tunneling happens at high speed; decrease if movement feels sluggish near walls.
+        [SerializeField] private float wallCheckSkinWidth = 0.08f;
 
         private Rigidbody _rigidbody;
         private CapsuleCollider _capsule;
         private bool _isGroundedCached;
+
+        // Stores the movement vector last passed to ApplyMovement so GetCurrentVelocity()
+        // returns the *intended* velocity, not the physics-derived linearVelocity.
+        // Using linearVelocity after MovePosition is unreliable: wall collisions produce
+        // depenetration responses (potentially with positive Y) that would fly the player up.
+        private Vector3 _lastAppliedMovement;
+
+        // Target for non-owner kinematic interpolation (set by Reconcile in base class).
+        // We shadow the base _targetPosition/_targetRotation via FixedUpdate MovePosition
+        // so the kinematic Rigidbody's interpolation buffer is kept current.
+        private bool _isNonOwnerKinematic;
 
         #region INITIALIZATION
 
@@ -58,18 +77,63 @@ namespace NightHunt.Gameplay.Character
                 return;
             }
 
-            // Configure Rigidbody for character movement
-            // _rigidbody.isKinematic = false;
-            // _rigidbody.useGravity = true; // We handle gravity manually
-            // _rigidbody.interpolation = RigidbodyInterpolation.None; // Prediction handles smoothing
-            // _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-            // _rigidbody.constraints = RigidbodyConstraints.FreezeRotation; // Prevent physics rotation
-            // _rigidbody.linearDamping = drag;
-            // _rigidbody.angularDamping = angularDrag;
+            // ── Gravity ──────────────────────────────────────────────────────────
+            // We manage vertical velocity manually inside SimulateMovement via
+            // _verticalVelocity + Physics.gravity.y accumulation.
+            // Leaving useGravity = true lets Unity ALSO apply gravity every
+            // FixedUpdate, causing double-gravity and jitter especially at sprint.
+            _rigidbody.useGravity = false;
 
-            _rigidbody.useGravity = true; // We handle gravity manually
+            // ── Visual smoothing ─────────────────────────────────────────────────
+            // Physics runs at 50 Hz (tickRate); render runs at 60-120+ Hz.
+            // Interpolate makes Unity sub-step the visual position between
+            // FixedUpdate calls so movement appears smooth at any frame rate.
+            _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+
+            // ── Collision detection ──────────────────────────────────────────────
+            // ContinuousDynamic prevents tunneling at sprint / high velocity.
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+
+            // ── Rotation ────────────────────────────────────────────────────────
+            // All rotation is managed by SimulateMovement (LookRotation / RotateTowards).
+            // Freezing here prevents physics from tumbling the capsule on impact.
+            _rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
+
+            // ── Damping ──────────────────────────────────────────────────────────
+            // Keep low drag so we control speed fully via velocity assignment.
+            _rigidbody.linearDamping  = drag;
+            _rigidbody.angularDamping = angularDrag;
+
             if (enableDebugLogs)
-                Debug.Log($"[RigidbodyPredictedMovement] Rigidbody configured - mass={_rigidbody.mass}");
+                Debug.Log($"[RigidbodyPredictedMovement] Rigidbody configured - mass={_rigidbody.mass}, interpolation={_rigidbody.interpolation}, gravity={_rigidbody.useGravity}");
+
+            // Ownership-based kinematic setup runs in OnStartNetwork once IsOwner is known.
+        }
+
+        public override void OnStartNetwork()
+        {
+            base.OnStartNetwork();
+
+            if (_rigidbody == null) return;
+
+            // ── Owner / Server: active physics simulation ────────────────────────
+            // ── Non-owner observer: kinematic so that our FixedUpdate MovePosition
+            //    drives the visual position without the physics engine fighting it.
+            //
+            // Non-kinematic Rigidbody + direct transform.position writes (Lerp in
+            // Update) cause the physics engine to override the result every step,
+            // producing visible jitter for remote players seen by the local client.
+            _isNonOwnerKinematic = !base.Owner.IsLocalClient && !IsServerStarted;
+            _rigidbody.isKinematic = _isNonOwnerKinematic;
+
+            if (_isNonOwnerKinematic)
+            {
+                // Kinematic objects must use Interpolate to get sub-FixedUpdate
+                // visual smoothing when MovePosition is called each physics step.
+                _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+                if (enableDebugLogs)
+                    Debug.Log("[RigidbodyPredictedMovement] Non-owner → kinematic mode");
+            }
         }
 
         protected override string GetPhysicsComponentName()
@@ -85,69 +149,179 @@ namespace NightHunt.Gameplay.Character
         {
             if (_capsule == null) return false;
 
-            // Raycast from capsule bottom
-            Vector3 origin = transform.position + Vector3.up * (_capsule.height * 0.5f);
-            float distance = _capsule.height * 0.5f + groundCheckDistance;
+            // ── Correct bottom-sphere ground check ───────────────────────────────
+            // Previous code cast from the TOP of the capsule (transform.position +
+            // up * height/2) downward by height/2+offset, which only reached the
+            // centre of the capsule — never the feet.  This caused IsGrounded() to
+            // return false on nearly every tick, making _verticalVelocity oscillate
+            // between accumulated gravity and the -2f reset, producing a visible
+            // micro-bounce/jitter especially during sprint.
+            //
+            // Fix: CheckSphere at the centre of the bottom hemisphere of the capsule
+            // (transform.position + capsule.center - up * (height/2 - radius)).
+            // A sphere of the same radius plus a small skin detects the ground
+            // reliably without false positives from side-walls.
+            Vector3 capsuleWorldCenter = transform.position + _capsule.center;
+            Vector3 bottomSphereCenter = capsuleWorldCenter
+                                         - Vector3.up * (_capsule.height * 0.5f - _capsule.radius);
 
-            _isGroundedCached = Physics.Raycast(origin, Vector3.down, distance, groundLayer, QueryTriggerInteraction.Ignore);
+            _isGroundedCached = Physics.CheckSphere(
+                bottomSphereCenter,
+                _capsule.radius + groundCheckDistance,
+                groundLayer,
+                QueryTriggerInteraction.Ignore
+            );
 
             return _isGroundedCached;
         }
 
         protected override void ApplyMovement(Vector3 movement, float dt)
         {
-            if (_rigidbody == null) return;
+            if (_rigidbody == null || _isNonOwnerKinematic) return;
 
-            // METHOD 1: Direct velocity assignment (more responsive, less physics-y)
-            // _rigidbody.velocity = movement;
+            // ── Look-ahead wall check ─────────────────────────────────────────────
+            // Before committing the position delta to MovePosition, cast the capsule
+            // in the horizontal movement direction over the intended displacement.
+            // If it would hit a wall, zero the horizontal component so the player
+            // stops cleanly against the surface instead of generating a depenetration
+            // response (which can have a positive Y component → player flies up).
+            //
+            // Vertical movement (gravity / jump) is always preserved so the player
+            // continues to fall / land correctly even while hugging a wall.
+            Vector3 horizontal = new Vector3(movement.x, 0f, movement.z);
+            Vector3 vertical   = new Vector3(0f, movement.y, 0f);
 
-            // METHOD 2: MovePosition (kinematic-like, but with physics)
-            // Vector3 targetPosition = _rigidbody.position + movement * dt;
-            // _rigidbody.MovePosition(targetPosition);
-
-            // METHOD 3: AddForce (most physics-realistic, but can feel floaty)
-            // Vector3 desiredVelocity = movement;
-            // Vector3 velocityChange = desiredVelocity - _rigidbody.velocity;
-            // _rigidbody.AddForce(velocityChange, ForceMode.VelocityChange);
-
-            // RECOMMENDED: Hybrid approach - direct velocity for horizontal, addForce for vertical
-            Vector3 currentVelocity = _rigidbody.linearVelocity;
-
-            // Set horizontal velocity directly for responsive movement
-            currentVelocity.x = movement.x;
-            currentVelocity.z = movement.z;
-
-            // Apply vertical movement (gravity)
-            currentVelocity.y = Mathf.Max(movement.y, maxFallSpeed);
-
-            _rigidbody.linearVelocity = currentVelocity;
-
-            if (enableDebugLogs && movement.sqrMagnitude > 0.01f)
+            if (horizontal.sqrMagnitude > 0.0001f)
             {
-                Debug.Log($"[RigidbodyPredictedMovement] Velocity set to: {_rigidbody.linearVelocity}");
+                float   moveDistance = horizontal.magnitude * dt;
+                Vector3 moveDir      = horizontal.normalized;
+
+                if (IsBlockedHorizontally(moveDir, moveDistance))
+                {
+                    // Wall ahead — cancel horizontal, keep gravity/vertical.
+                    horizontal = Vector3.zero;
+                    if (enableDebugLogs)
+                        Debug.Log($"[RigidbodyPredictedMovement] Wall look-ahead blocked in dir={moveDir}");
+                }
             }
+
+            // Cache the resolved (possibly wall-blocked) movement so GetCurrentVelocity()
+            // returns it deterministically — no collision-induced linearVelocity noise.
+            Vector3 resolvedMovement = horizontal + vertical;
+            _lastAppliedMovement = resolvedMovement;
+
+            // Owner / Server: drive movement via MovePosition.
+            //
+            // Why MovePosition instead of linearVelocity assignment?
+            //   • MovePosition commits an exact world-space displacement each physics
+            //     step and feeds the Rigidbody's interpolation buffer, so the visual
+            //     position is sub-stepped smoothly between 50 Hz ticks at any FPS.
+            //   • Directly setting linearVelocity leaves the actual move to the
+            //     physics integrator; any sub-tick timing difference between the
+            //     FishNet tick and FixedUpdate produces a 1-frame offset that
+            //     manifests as jitter at sprint speed.
+            //   • Because we call MovePosition once per tick (50 Hz) the displacement
+            //     per call is resolvedMovement * dt  (same as velocity * fixedDeltaTime).
+            Vector3 newPosition = _rigidbody.position + resolvedMovement * dt;
+            _rigidbody.MovePosition(newPosition);
+
+            if (enableDebugLogs && resolvedMovement.sqrMagnitude > 0.01f)
+                Debug.Log($"[RigidbodyPredictedMovement] MovePosition delta={(resolvedMovement * dt).magnitude:F4}");
+        }
+
+        /// <summary>
+        /// CapsuleCast in the horizontal direction to check whether the player
+        /// would hit a wall within the intended displacement this tick.
+        /// Uses wallCheckSkinWidth as extra look-ahead beyond the move distance
+        /// to catch high-speed face-into-wall spam reliably.
+        /// </summary>
+        private bool IsBlockedHorizontally(Vector3 direction, float moveDistance)
+        {
+            if (_capsule == null) return false;
+
+            // Build the two sphere centres of the capsule in world space.
+            Vector3 worldCenter = transform.position + _capsule.center;
+            float   innerHalf   = Mathf.Max(0f, _capsule.height * 0.5f - _capsule.radius);
+            Vector3 sphereTop   = worldCenter + Vector3.up * innerHalf;
+            Vector3 sphereBot   = worldCenter - Vector3.up * innerHalf;
+
+            // Cast slightly shorter than the full radius so the capsule
+            // can already be flush against a wall without false-positives.
+            float castRadius = _capsule.radius * 0.99f;
+
+            return Physics.CapsuleCast(
+                sphereBot,
+                sphereTop,
+                castRadius,
+                direction,
+                moveDistance + wallCheckSkinWidth,
+                groundLayer,
+                QueryTriggerInteraction.Ignore
+            );
         }
 
         protected override Vector3 GetCurrentVelocity()
         {
-            // Rigidbody stores its own velocity
-            return _rigidbody != null ? _rigidbody.linearVelocity : Vector3.zero;
+            // Return the INTENDED movement vector from the last ApplyMovement call,
+            // NOT _rigidbody.linearVelocity.
+            //
+            // Why: after MovePosition hits a wall, PhysX resolves the collision and may
+            // produce a depenetration velocity with a positive Y component. If we return
+            // linearVelocity, Reconcile packs that upward spike into data.Velocity.y,
+            // which the client then restores as _verticalVelocity → player flies up.
+            // The cached intended movement always carries the correct _verticalVelocity
+            // that SimulateMovement computed, so Reconcile restores it faithfully.
+            return _lastAppliedMovement;
         }
 
         protected override void ResetPhysicsState()
         {
             if (_rigidbody == null) return;
 
-            // Reset velocities during reconciliation
-            if (IsGrounded() && _rigidbody.linearVelocity.y < 0f)
+            // ── Sync Rigidbody transform to current transform ────────────────────
+            _rigidbody.position = transform.position;
+            _rigidbody.rotation = transform.rotation;
+
+            if (!_isNonOwnerKinematic)
             {
-                Vector3 vel = _rigidbody.linearVelocity;
-                vel.y = -2f;
-                _rigidbody.linearVelocity = vel;
+                // Owner/Server: restore authoritative velocity so MovePosition
+                // continues from the correct speed without a 1-tick zero-spike.
+                _rigidbody.linearVelocity  = _velocity;
+                _rigidbody.angularVelocity = Vector3.zero;
             }
 
-            // Reset angular velocity
-            _rigidbody.angularVelocity = Vector3.zero;
+            // NOTE: Do NOT reset _verticalVelocity here.
+            // When called from Reconcile, the base class has ALREADY set
+            // _verticalVelocity = data.Velocity.y (the server-authoritative fall speed).
+            // Clamping it to -2f here would wipe that value every reconcile tick,
+            // causing the player to perpetually restart falling from near-zero speed
+            // rather than continuing at the correct velocity → float / bounce near walls.
+            // Initialization sets _verticalVelocity = -2f explicitly in OnStartNetwork,
+            // so no special handling is needed here.
+        }
+
+        /// <summary>
+        /// Override base Teleport: set Rigidbody position/rotation DIRECTLY (bypasses physics
+        /// interpolation that would otherwise delay the move by one frame), then zero velocities.
+        /// The server's next reconcile tick broadcasts the corrected state to all clients.
+        /// </summary>
+        public override void Teleport(Vector3 position, Quaternion rotation)
+        {
+            transform.position = position;
+            transform.rotation = rotation;
+            _velocity          = Vector3.zero;
+            _verticalVelocity  = -2f;
+
+            if (_rigidbody != null)
+            {
+                _rigidbody.position           = position;
+                _rigidbody.rotation           = rotation;
+                _rigidbody.linearVelocity  = Vector3.zero;
+                _rigidbody.angularVelocity = Vector3.zero;
+            }
+
+            if (enableDebugLogs)
+                Debug.Log($"[RigidbodyPredictedMovement] Teleport → pos={position}, rot={rotation.eulerAngles}");
         }
 
         #endregion
@@ -175,6 +349,39 @@ namespace NightHunt.Gameplay.Character
 
         #endregion
 
+        // ── Non-owner kinematic interpolation ─────────────────────────────────
+        // MovePosition on a kinematic Rigidbody must be called from FixedUpdate
+        // (not Update) so that Rigidbody.interpolation can sub-step between physics
+        // frames and the visual position is smooth at any render frame rate.
+        //
+        // We override Update() from the base class to suppress its direct
+        // transform.position Lerp for the kinematic path; the base Update still
+        // runs for the non-Rigidbody fallback (server / non-spawned).
+        protected override void Update()
+        {
+            if (_isNonOwnerKinematic) return; // FixedUpdate handles this path
+            base.Update();
+        }
+
+        private void FixedUpdate()
+        {
+            if (!_isNonOwnerKinematic || _rigidbody == null) return;
+
+            // Smooth kinematic follow towards server-authoritative target.
+            // _targetPosition / _targetRotation are set by Reconcile() in base class
+            // each time a server snapshot arrives (50 Hz).
+            Vector3    newPos = Vector3.Lerp(
+                _rigidbody.position, _targetPosition,
+                Time.fixedDeltaTime * interpolationSpeed);
+
+            Quaternion newRot = Quaternion.Slerp(
+                _rigidbody.rotation, _targetRotation,
+                Time.fixedDeltaTime * interpolationSpeed);
+
+            _rigidbody.MovePosition(newPos);
+            _rigidbody.MoveRotation(newRot);
+        }
+
         #region DEBUG
 
         protected override void OnDrawGizmos()
@@ -183,13 +390,13 @@ namespace NightHunt.Gameplay.Character
 
             if (!Application.isPlaying || _capsule == null) return;
 
-            // Draw ground check raycast
-            Vector3 origin = transform.position + Vector3.up * (_capsule.radius + 0.01f);
-            float distance = _capsule.radius + groundCheckDistance;
+            // Draw the corrected ground-check sphere at the capsule bottom
+            Vector3 capsuleWorldCenter = transform.position + _capsule.center;
+            Vector3 bottomSphereCenter = capsuleWorldCenter
+                                         - Vector3.up * (_capsule.height * 0.5f - _capsule.radius);
 
             Gizmos.color = _isGroundedCached ? Color.green : Color.red;
-            Gizmos.DrawRay(origin, Vector3.down * distance);
-            Gizmos.DrawWireSphere(origin + Vector3.down * distance, 0.1f);
+            Gizmos.DrawWireSphere(bottomSphereCenter, _capsule.radius + groundCheckDistance);
         }
 
         protected override void OnGUI()

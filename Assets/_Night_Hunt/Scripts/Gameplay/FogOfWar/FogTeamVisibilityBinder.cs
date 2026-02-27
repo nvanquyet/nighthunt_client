@@ -29,21 +29,49 @@ namespace NightHunt.Gameplay.FogOfWar
 
         private void Start()
         {
-            // Chỉ cần quyết định 1 lần khi spawn (team không đổi trong match bình thường).
+            // Try to apply team visibility immediately.
+            // If the local player isn't registered yet (late-join scenario where this
+            // remote player's NetworkObject arrives before our own), subscribe to
+            // SpectateManager.OnLocalPlayerSet and retry once it fires.
+            if (!RefreshVisibilityForLocalTeam())
+            {
+                if (SpectateManager.Instance != null)
+                    SpectateManager.Instance.OnLocalPlayerSet += OnLocalPlayerAvailable;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (SpectateManager.Instance != null)
+                SpectateManager.Instance.OnLocalPlayerSet -= OnLocalPlayerAvailable;
+        }
+
+        private void OnLocalPlayerAvailable(NightHunt.Networking.NetworkPlayer _)
+        {
+            // Unsubscribe first so we only refresh once.
+            if (SpectateManager.Instance != null)
+                SpectateManager.Instance.OnLocalPlayerSet -= OnLocalPlayerAvailable;
+
             RefreshVisibilityForLocalTeam();
         }
 
         /// <summary>
-        /// Có thể gọi lại nếu logic team thay đổi (rare).
+        /// Áp dụng / gỡ FogOfWarHider dựa theo team của local player.
+        /// Returns true if the local team was resolved; false if the local player
+        /// is not yet registered (caller should retry via OnLocalPlayerSet event).
         /// </summary>
-        public void RefreshVisibilityForLocalTeam()
+        public bool RefreshVisibilityForLocalTeam()
         {
             int localTeamId;
             if (!TryGetLocalTeamId(out localTeamId))
             {
-                // Nếu chưa có local player / spectate manager → fallback: không gắn hider (tránh lỗi).
-                Log("No local team available, skipping fog visibility binding.");
-                return;
+                // Local player not registered yet.
+                // Default to VISIBLE so no player is accidentally hidden while waiting.
+                // OnLocalPlayerAvailable() will re-run this method once the local
+                // player spawns and registers with SpectateManager.
+                Log("No local team available — defaulting to visible and waiting for OnLocalPlayerSet.");
+                RemoveHiderIfExists();
+                return false;
             }
 
             int objectTeamId;
@@ -52,7 +80,7 @@ namespace NightHunt.Gameplay.FogOfWar
                 // Nếu object không có team (neutral) → tuỳ design, ở đây cho luôn visible.
                 Log("No object team detected, treating as neutral (visible).");
                 RemoveHiderIfExists();
-                return;
+                return true; // resolved: neutral objects are always visible
             }
 
             bool isEnemyToLocal = objectTeamId != localTeamId;
@@ -67,6 +95,8 @@ namespace NightHunt.Gameplay.FogOfWar
                 RemoveHiderIfExists();
                 Log($"Object is ally (localTeam={localTeamId}, objectTeam={objectTeamId}) → FogOfWarHider DISABLED.");
             }
+
+            return true;
         }
 
         private bool TryGetLocalTeamId(out int teamId)

@@ -65,6 +65,9 @@ namespace NightHunt.GameplaySystems.Loot
 
         private float GetInteractDistance() => _lootableConfig?.MaxInteractDistance ?? 3f;
 
+        // Pending flag: block spam giữa Interact() và server confirm syncIsOpen=true.
+        private bool _isOpenPending;
+
         // ── IHoldInteractable ────────────────────────────────────────────────────
 
         /// <summary>Giây giữ nút để mở — từ LootableConfig nếu có, fallback về holdDuration field.</summary>
@@ -73,10 +76,18 @@ namespace NightHunt.GameplaySystems.Loot
         public bool CanInteract(GameObject interactor)
         {
             if (isLocked) return false;
+            if (IsOpen || _isOpenPending) return false; // Đã mở hoặc đang chờ server confirm
             return Vector3.Distance(transform.position, interactor.transform.position) <= GetInteractDistance();
         }
 
-        public void Interact(GameObject interactor) => RequestOpen();
+        public void Interact(GameObject interactor)
+        {
+            if (_isOpenPending) return;
+            var playerNob = interactor?.GetComponent<FishNet.Object.NetworkObject>();
+            if (playerNob == null) return;
+            _isOpenPending = true;
+            RequestOpen(playerNob);
+        }
 
         public void OnHoverEnter(GameObject interactor) { /* TODO: outline */ }
         public void OnHoverExit(GameObject interactor)  { /* TODO: outline */ }
@@ -99,6 +110,7 @@ namespace NightHunt.GameplaySystems.Loot
             syncIsLocked.OnChange -= OnLockedChanged;
             syncHasRolled.OnChange -= OnRolledChanged;
             syncIsOpen.OnChange   -= OnOpenChanged;
+            _isOpenPending = false;
         }
 
         [Server]
@@ -117,16 +129,18 @@ namespace NightHunt.GameplaySystems.Loot
         }
 
         [ServerRpc(RequireOwnership = false)]
-        public void RequestOpen(NetworkConnection conn = null)
+        public void RequestOpen(NetworkObject playerNob, NetworkConnection conn = null)
         {
             if (!IsServerInitialized) { Debug.LogWarning("[WorldContainer] RequestOpen: server-only!"); return; }
+            if (playerNob == null) { Debug.LogWarning("[WorldContainer] RequestOpen: playerNob là NULL."); return; }
+            if (playerNob.Owner != conn) { Debug.LogWarning($"[WorldContainer] RequestOpen: ownership mismatch (ClientId={conn?.ClientId})."); return; }
 
-            var player = GetPlayerFromConnection(conn);
-            if (player == null) return;
+            var player = playerNob.GetComponent<NetworkPlayer>();
+            if (player == null) { Debug.LogWarning("[WorldContainer] RequestOpen: không tìm thấy NetworkPlayer."); return; }
 
             float dist = Vector3.Distance(transform.position, player.transform.position);
             float maxDist = GetInteractDistance();
-            if (dist > maxDist) { Debug.LogWarning($"[WorldContainer] RequestOpen: Too far ({dist:F2}m)"); return; }
+            if (dist > maxDist) { Debug.LogWarning($"[WorldContainer] RequestOpen: Quá xa ({dist:F2}m)"); return; }
 
             if (isLocked) { Debug.LogWarning("[WorldContainer] RequestOpen: Container is locked"); return; }
 
@@ -165,16 +179,17 @@ namespace NightHunt.GameplaySystems.Loot
         }
 
         [ServerRpc(RequireOwnership = false)]
-        public void RequestTakeItem(NetworkConnection conn, int storageIndex, int quantity)
+        public void RequestTakeItem(NetworkObject playerNob, int storageIndex, int quantity, NetworkConnection conn = null)
         {
             if (!IsServerInitialized) { Debug.LogWarning("[WorldContainer] RequestTakeItem: server-only!"); return; }
+            if (playerNob == null) { Debug.LogWarning("[WorldContainer] RequestTakeItem: playerNob là NULL."); return; }
+            if (playerNob.Owner != conn) { Debug.LogWarning($"[WorldContainer] RequestTakeItem: ownership mismatch (ClientId={conn?.ClientId})."); return; }
             if (storageIndex < 0 || storageIndex >= storage.Count) { Debug.LogWarning($"[WorldContainer] RequestTakeItem: Invalid index {storageIndex}"); return; }
 
             var itemData = storage[storageIndex];
             int takeQty  = Mathf.Min(quantity, itemData.Quantity);
 
-            var player    = GetPlayerFromConnection(conn);
-            var inventory = player?.GetComponent<IInventorySystem>();
+            var inventory = playerNob.GetComponent<IInventorySystem>();
             if (inventory == null) { Debug.LogWarning("[WorldContainer] RequestTakeItem: IInventorySystem not found"); return; }
 
             inventory.AddItem(itemData.DefinitionID, takeQty);
@@ -213,7 +228,7 @@ namespace NightHunt.GameplaySystems.Loot
 
         private void OnLockedChanged(bool o, bool n, bool s)  { if (!s) isLocked   = n; }
         private void OnRolledChanged(bool o, bool n, bool s)  { if (!s) hasRolled  = n; }
-        private void OnOpenChanged(bool o, bool n, bool s)    { /* UI reacts */ }
+        private void OnOpenChanged(bool o, bool n, bool s)    { if (!s) _isOpenPending = false; } // Server confirm → reset pending
 
         // ── Auto Reset ────────────────────────────────────────────────────
 
@@ -242,11 +257,6 @@ namespace NightHunt.GameplaySystems.Loot
 
         public IReadOnlyList<ItemInstanceData> GetStorage() => storage;
 
-        private NetworkPlayer GetPlayerFromConnection(NetworkConnection conn)
-        {
-            var identity = conn.FirstObject;
-            if (identity == null) return null;
-            return identity.GetComponent<NetworkPlayer>();
-        }
+
     }
 }

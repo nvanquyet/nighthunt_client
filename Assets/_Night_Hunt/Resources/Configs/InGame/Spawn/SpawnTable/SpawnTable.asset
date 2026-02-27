@@ -14,10 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Mode: 0
   FixedEntries: []
-  RandomEntries: []
-  MinRandomCount: 0
-  MaxRandomCount: 2
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: 786df328601f91d49a2a2c282e927fcf, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  MinRandomCount: 1
+  MaxRandomCount: 1
   RollOnOpen: 1
   DropToWorldOnOpen: 0
   MinTotalItems: 1
-  MaxTotalItems: 3
+  MaxTotalItems: 1

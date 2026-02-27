@@ -80,11 +80,37 @@ namespace NightHunt.Gameplay.Character
 
         protected override void ResetPhysicsState()
         {
-            // Reset vertical velocity when grounded during reconciliation
-            if (IsGrounded() && _verticalVelocity < 0f)
+            // Sync the CharacterController's internal capsule to the current transform.
+            // FishNet reconcile (and spawn) sets transform.position directly; without this
+            // toggle the CC's cached position is stale and fights the change on the next Move().
+            if (_controller != null && _controller.enabled)
             {
-                _verticalVelocity = -2f;
+                _controller.enabled = false;
+                _controller.enabled = true;
             }
+
+            // Reset vertical velocity so gravity restarts cleanly.
+            if (_verticalVelocity < 0f)
+                _verticalVelocity = -2f;
+        }
+
+        /// <summary>
+        /// Override base Teleport to disable CharacterController BEFORE setting the
+        /// position so it cannot resist the transform write.
+        /// </summary>
+        public override void Teleport(Vector3 position, Quaternion rotation)
+        {
+            if (_controller != null) _controller.enabled = false;
+
+            transform.position = position;
+            transform.rotation = rotation;
+            _velocity         = Vector3.zero;
+            _verticalVelocity = -2f;
+
+            if (_controller != null) _controller.enabled = true;
+
+            if (enableDebugLogs)
+                Debug.Log($"[CharacterControllerPredictedMovement] Teleport → pos={position}, rot={rotation.eulerAngles}");
         }
 
         #endregion

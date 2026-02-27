@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using NightHunt.GameplaySystems.Core.Data;
+
 namespace NightHunt.GameplaySystems.Core.Interfaces
 {
     /// <summary>
@@ -13,5 +16,11 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
 
         /// <summary>True once the container has been opened at least once.</summary>
         bool IsOpen { get; }
+
+        /// <summary>
+        /// Read-only snapshot of items currently inside.
+        /// Client-side: reflects latest synced state (SyncList).
+        /// </summary>
+        IReadOnlyList<ItemInstanceData> GetStorage();
     }
 }

@@ -69,7 +69,27 @@ namespace NightHunt.GameplaySystems.Weapon
         public event Action<WeaponSlotType, ItemInstance> OnWeaponUnequipped;
         public event Action<WeaponSlotType?, WeaponSlotType?> OnActiveWeaponChanged;
         public event Action<WeaponSlotType, int> OnWeaponReloaded;
+
+        // ── Combat events (HUD + Camera) ──────────────────────────────────────
+        /// <inheritdoc cref="IWeaponSystem.OnAmmoChanged"/>
+        public event Action<int, int, int> OnAmmoChanged;
+        /// <inheritdoc cref="IWeaponSystem.OnReloadStateChanged"/>
+        public event Action<bool> OnReloadStateChanged;
+        /// <inheritdoc cref="IWeaponSystem.OnWeaponDepleted"/>
+        public event Action<WeaponSlotType> OnWeaponDepleted;
         
+        #endregion
+
+        #region Local Fire State (owner-client + server)
+
+        // Fire mode per slot — persisted to PlayerPrefs key "firemode_{slotIndex}"
+        private readonly Dictionary<WeaponSlotType, FireMode> _fireModes =
+            new Dictionary<WeaponSlotType, FireMode>();
+
+        private bool _isFiring;
+        private bool _isReloading;
+        private Coroutine _autoFireCoroutine;
+
         #endregion
         
         #region NetworkBehaviour Lifecycle
@@ -109,6 +129,171 @@ namespace NightHunt.GameplaySystems.Weapon
             _weaponCache.Clear();
         }
         
+        #endregion
+
+        #region IWeaponSystem — Combat (Fire / Reload / FireMode)
+
+        /// <summary>Start firing. Spawns auto-fire coroutine if FireMode.Auto.</summary>
+        public void StartFire()
+        {
+            if (_isFiring) return;
+            _isFiring = true;
+
+            var mode = GetCurrentFireMode();
+            if (mode == FireMode.Auto)
+            {
+                if (_autoFireCoroutine != null) StopCoroutine(_autoFireCoroutine);
+                _autoFireCoroutine = StartCoroutine(AutoFireCoroutine());
+            }
+            else
+            {
+                // Single: fire once immediately
+                TryFireOnce();
+            }
+        }
+
+        /// <summary>Release fire input — stop auto-fire.</summary>
+        public void StopFire()
+        {
+            _isFiring = false;
+            if (_autoFireCoroutine != null)
+            {
+                StopCoroutine(_autoFireCoroutine);
+                _autoFireCoroutine = null;
+            }
+        }
+
+        /// <summary>Request reload for the currently active weapon.</summary>
+        public void RequestReload()
+        {
+            var slot = _activeSlot.Value;
+            if (slot == null || _isReloading) return;
+            if (_weaponCache.TryGetValue(slot.Value, out var inst))
+                StartCoroutine(ReloadCoroutine(slot.Value, inst));
+        }
+
+        /// <summary>Toggle or set fire mode for the active weapon.</summary>
+        public void SetFireMode(FireMode mode)
+        {
+            var slot = _activeSlot.Value;
+            if (slot == null) return;
+            _fireModes[slot.Value] = mode;
+            UnityEngine.PlayerPrefs.SetInt($"firemode_{(int)slot.Value}", (int)mode);
+        }
+
+        /// <summary>Get current fire mode of active weapon (reads PlayerPrefs default from definition).</summary>
+        public FireMode GetCurrentFireMode()
+        {
+            var slot = _activeSlot.Value;
+            if (slot == null) return FireMode.Auto;
+
+            if (_fireModes.TryGetValue(slot.Value, out var mode)) return mode;
+
+            // Read from PlayerPrefs, fallback to weapon definition default
+            int saved = UnityEngine.PlayerPrefs.GetInt($"firemode_{(int)slot.Value}", -1);
+            if (saved >= 0) { _fireModes[slot.Value] = (FireMode)saved; return (FireMode)saved; }
+
+            if (_weaponCache.TryGetValue(slot.Value, out var inst))
+            {
+                var def = ItemDatabase
+                    .GetDefinition(inst.DefinitionID) as WeaponDefinition;
+                if (def != null) { _fireModes[slot.Value] = def.DefaultFireMode; return def.DefaultFireMode; }
+            }
+
+            return FireMode.Auto;
+        }
+
+        // ── Private fire helpers ─────────────────────────────────────────────
+
+        private System.Collections.IEnumerator AutoFireCoroutine()
+        {
+            while (_isFiring)
+            {
+                TryFireOnce();
+
+                // Compute delay from ComputedStats.FireRate (rounds/min)
+                float delay = GetCurrentFireDelay();
+                yield return new WaitForSeconds(delay);
+            }
+            _autoFireCoroutine = null;
+        }
+
+        private float GetCurrentFireDelay()
+        {
+            var slot = _activeSlot.Value;
+            if (slot == null) return 0.1f;
+            if (_weaponCache.TryGetValue(slot.Value, out var inst))
+            {
+                float rpm = inst.GetComputedStat(ItemStatType.FireRate);
+                if (rpm > 0f) return 60f / rpm;
+            }
+            return 0.1f;
+        }
+
+        private void TryFireOnce()
+        {
+            var slot = _activeSlot.Value;
+            if (slot == null || _isReloading) return;
+            if (!_weaponCache.TryGetValue(slot.Value, out var inst)) return;
+
+            int currentMag = (int)inst.GetCurrentValue(ItemStatType.MagazineSize);
+            if (currentMag <= 0)
+            {
+                // Auto-reload if reserve available
+                float totalAmmo = inst.GetCurrentValue(ItemStatType.MaxAmmo);
+                if (totalAmmo > 0)
+                    StartCoroutine(ReloadCoroutine(slot.Value, inst));
+                else
+                    OnWeaponDepleted?.Invoke(slot.Value);
+                return;
+            }
+
+            inst.AdjustCurrentValue(ItemStatType.MagazineSize, -1f);
+            float mag  = inst.GetComputedStat(ItemStatType.MagazineSize);
+            OnAmmoChanged?.Invoke(
+                (int)inst.GetCurrentValue(ItemStatType.MagazineSize),
+                (int)inst.GetCurrentValue(ItemStatType.MaxAmmo),
+                (int)mag);
+            // TODO: BallisticExecutor.Execute(inst, aimSystem.FinalAimDir)
+        }
+
+        private System.Collections.IEnumerator ReloadCoroutine(WeaponSlotType slot, ItemInstance inst)
+        {
+            if (_isReloading) yield break;
+
+            var def = ItemDatabase
+                .GetDefinition(inst.DefinitionID) as WeaponDefinition;
+            if (def == null) yield break;
+
+            float magCap     = inst.GetComputedStat(ItemStatType.MagazineSize);
+            float reloadTime = inst.GetComputedStat(ItemStatType.ReloadSpeed);
+            if (reloadTime <= 0f) reloadTime = 2.5f;
+
+            int currentMag = (int)inst.GetCurrentValue(ItemStatType.MagazineSize);
+            int needed = (int)magCap - currentMag;
+            if (needed <= 0) yield break;
+
+            _isReloading = true;
+            OnReloadStateChanged?.Invoke(true);
+
+            yield return new WaitForSeconds(reloadTime);
+
+            int reserve = (int)inst.GetCurrentValue(ItemStatType.MaxAmmo);
+            int actual  = Mathf.Min(needed, reserve);
+            inst.AdjustCurrentValue(ItemStatType.MagazineSize, actual);
+            inst.AdjustCurrentValue(ItemStatType.MaxAmmo, -actual);
+
+            int newMag = (int)inst.GetCurrentValue(ItemStatType.MagazineSize);
+            OnWeaponReloaded?.Invoke(slot, newMag);
+            OnAmmoChanged?.Invoke(
+                newMag,
+                (int)inst.GetCurrentValue(ItemStatType.MaxAmmo),
+                (int)magCap);
+
+            _isReloading = false;
+            OnReloadStateChanged?.Invoke(false);
+        }
+
         #endregion
         
         #region Initialization
@@ -519,13 +704,13 @@ namespace NightHunt.GameplaySystems.Weapon
         public int GetCurrentMagazine(WeaponSlotType slotType)
         {
             var weapon = GetWeapon(slotType);
-            return weapon?.CurrentMagazine ?? 0;
+            return weapon != null ? (int)weapon.GetCurrentValue(ItemStatType.MagazineSize) : 0;
         }
         
         public float GetTotalAmmo(WeaponSlotType slotType)
         {
             var weapon = GetWeapon(slotType);
-            return weapon?.CurrentResource ?? 0f;
+            return weapon?.GetCurrentValue(ItemStatType.MaxAmmo) ?? 0f;
         }
         
         public void Reload(WeaponSlotType slotType)
@@ -563,13 +748,18 @@ namespace NightHunt.GameplaySystems.Weapon
             }
             
             // Validation
-            if (weapon.CurrentResource <= 0)
+            float reserveAmmo = weapon.GetCurrentValue(ItemStatType.MaxAmmo);
+            if (reserveAmmo <= 0f)
             {
                 Debug.LogWarning("[WeaponSystem] No ammo remaining");
                 return;
             }
             
-            if (weapon.CurrentMagazine >= weaponDef.MagazineSize)
+            int magSize = Mathf.RoundToInt(weaponDef.GetStatValue(ItemStatType.MagazineSize));
+            if (magSize <= 0) magSize = 30; // fallback
+
+            int currentMag = (int)weapon.GetCurrentValue(ItemStatType.MagazineSize);
+            if (currentMag >= magSize)
             {
                 if (!weaponDef.CanTacticalReload)
                 {
@@ -579,21 +769,23 @@ namespace NightHunt.GameplaySystems.Weapon
             }
             
             // Calculate reload amount
-            int ammoNeeded = weaponDef.MagazineSize - weapon.CurrentMagazine;
-            int ammoAvailable = Mathf.FloorToInt(weapon.CurrentResource);
-            int ammoToReload = Mathf.Min(ammoNeeded, ammoAvailable);
+            int ammoNeeded   = magSize - currentMag;
+            int ammoAvailable = Mathf.FloorToInt(reserveAmmo);
+            int ammoToReload  = Mathf.Min(ammoNeeded, ammoAvailable);
             
             // Reload
-            weapon.CurrentMagazine += ammoToReload;
-            weapon.CurrentResource -= ammoToReload;
+            weapon.AdjustCurrentValue(ItemStatType.MagazineSize, ammoToReload);
+            weapon.AdjustCurrentValue(ItemStatType.MaxAmmo, -ammoToReload);
             
-            OnWeaponReloaded?.Invoke(slotType, weapon.CurrentMagazine);
+            int newMag      = (int)weapon.GetCurrentValue(ItemStatType.MagazineSize);
+            float newReserve = weapon.GetCurrentValue(ItemStatType.MaxAmmo);
+            OnWeaponReloaded?.Invoke(slotType, newMag);
             
             if (_enableDebugLogs)
             {
                 Debug.Log($"[WeaponSystem] Reloaded {ammoToReload} rounds. " +
-                         $"Magazine: {weapon.CurrentMagazine}/{weaponDef.MagazineSize}, " +
-                         $"Total: {weapon.CurrentResource:F0}");
+                         $"Magazine: {newMag}/{magSize}, " +
+                         $"Total: {newReserve:F0}");
             }
         }
         
@@ -611,11 +803,13 @@ namespace NightHunt.GameplaySystems.Weapon
                 return false;
             
             // Has ammo
-            if (weapon.CurrentResource <= 0)
+            if (weapon.GetCurrentValue(ItemStatType.MaxAmmo) <= 0f)
                 return false;
             
             // Magazine not full or can tactical reload
-            if (weapon.CurrentMagazine >= weaponDef.MagazineSize && !weaponDef.CanTacticalReload)
+            int magSize = Mathf.RoundToInt(weaponDef.GetStatValue(ItemStatType.MagazineSize));
+            if (magSize <= 0) magSize = 30;
+            if ((int)weapon.GetCurrentValue(ItemStatType.MagazineSize) >= magSize && !weaponDef.CanTacticalReload)
                 return false;
             
             return true;

@@ -154,9 +154,9 @@ namespace NightHunt.GameplaySystems.Test
             _inventorySystem.AddItem(_testWeaponID, 1);
             var weapon = _inventorySystem.GetItemsByDefinition(_testWeaponID)[0];
             
-            float baseRecoil = ItemStatSystem.GetBaseItemStat(_testWeaponID, ItemStatType.Recoil);
+            float baseSpread = ItemStatSystem.GetBaseItemStat(_testWeaponID, ItemStatType.SpreadPenalty);
             
-            Debug.Log($"Base Recoil: {baseRecoil}");
+            Debug.Log($"Base SpreadPenalty: {baseSpread}");
             
             // Add suppressor (should have percentage reduction)
             if (ItemDatabase.HasDefinition(_testSuppressorID))
@@ -168,15 +168,15 @@ namespace NightHunt.GameplaySystems.Test
                 int barrelSlotIndex = 3; // Assuming barrel is slot 3
                 _attachmentSystem.AttachItem(suppressor.InstanceID, weapon.InstanceID, barrelSlotIndex);
                 
-                float modifiedRecoil = ItemStatSystem.CalculateItemStat(weapon, ItemStatType.Recoil);
+                float modifiedSpread = ItemStatSystem.CalculateItemStat(weapon, ItemStatType.SpreadPenalty);
                 
-                Debug.Log($"Modified Recoil (with suppressor): {modifiedRecoil}");
-                Debug.Assert(modifiedRecoil < baseRecoil, "Suppressor should reduce recoil");
+                Debug.Log($"Modified SpreadPenalty (with suppressor): {modifiedSpread}");
+                Debug.Assert(modifiedSpread < baseSpread, "Suppressor should reduce spread penalty");
                 
-                // Suppressor gives -30% recoil
-                float expected = baseRecoil * 0.7f;
-                Debug.Assert(Mathf.Approximately(modifiedRecoil, expected), 
-                    "Should have -30% recoil from suppressor");
+                // Suppressor gives -30% spread penalty
+                float expected = baseSpread * 0.7f;
+                Debug.Assert(Mathf.Approximately(modifiedSpread, expected), 
+                    "Should have -30% spread penalty from suppressor");
             }
             
             Debug.Log("✓ Test 3 PASSED");

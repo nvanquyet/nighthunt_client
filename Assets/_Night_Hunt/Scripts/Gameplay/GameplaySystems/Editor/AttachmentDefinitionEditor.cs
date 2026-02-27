@@ -46,7 +46,6 @@ namespace NightHunt.GameplaySystems.Editor
             attachment.StatConfig = config;
             attachment.DisplayName = "Red Dot Sight";
             attachment.Description = "Improves accuracy and aim speed at close-medium range";
-            attachment.Weight = config.GetStatValue(ItemStatType.Weight);
             attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Optic };
             attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
@@ -60,7 +59,6 @@ namespace NightHunt.GameplaySystems.Editor
             attachment.StatConfig = config;
             attachment.DisplayName = "Suppressor";
             attachment.Description = "Reduces weapon noise and recoil but decreases range";
-            attachment.Weight = config.GetStatValue(ItemStatType.Weight);
             attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Barrel };
             attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
@@ -74,7 +72,6 @@ namespace NightHunt.GameplaySystems.Editor
             attachment.StatConfig = config;
             attachment.DisplayName = "Vertical Grip";
             attachment.Description = "Improves recoil control and stability";
-            attachment.Weight = config.GetStatValue(ItemStatType.Weight);
             attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Grip };
             attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
@@ -88,7 +85,6 @@ namespace NightHunt.GameplaySystems.Editor
             attachment.StatConfig = config;
             attachment.DisplayName = "Extended Magazine";
             attachment.Description = "Increases magazine capacity but adds weight";
-            attachment.Weight = config.GetStatValue(ItemStatType.Weight);
             attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Magazine };
             attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
@@ -102,10 +98,6 @@ namespace NightHunt.GameplaySystems.Editor
             attachment.StatConfig = config;
             attachment.DisplayName = "Tactical Flashlight";
             attachment.Description = "Provides illumination in dark areas";
-            attachment.Weight = config.GetStatValue(ItemStatType.Weight);
-            attachment.ResourceType = ItemResourceType.Energy;
-            attachment.MaxResource = 3600f;
-            attachment.DefaultResource = 3600f;
             attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.UnderBarrel, AttachmentSlotType.Light };
             attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
@@ -119,7 +111,6 @@ namespace NightHunt.GameplaySystems.Editor
             attachment.StatConfig = config;
             attachment.DisplayName = "Storage Pouch";
             attachment.Description = "Increases weight capacity when attached";
-            attachment.Weight = config.GetStatValue(ItemStatType.Weight);
             attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Pouch };
             attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
@@ -133,7 +124,6 @@ namespace NightHunt.GameplaySystems.Editor
             attachment.StatConfig = config;
             attachment.DisplayName = "4x ACOG Scope";
             attachment.Description = "Medium range scope";
-            attachment.Weight = config.GetStatValue(ItemStatType.Weight);
             attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Optic };
             attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
@@ -147,7 +137,6 @@ namespace NightHunt.GameplaySystems.Editor
             attachment.StatConfig = config;
             attachment.DisplayName = "8x Sniper Scope";
             attachment.Description = "Long range scope for snipers";
-            attachment.Weight = config.GetStatValue(ItemStatType.Weight);
             attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Optic };
             attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
@@ -163,7 +152,6 @@ namespace NightHunt.GameplaySystems.Editor
                 attachment.StatConfig = config;
                 attachment.DisplayName = "Red Dot Sight";
                 attachment.Description = "Improves accuracy and aim speed";
-                attachment.Weight = config.GetStatValue(ItemStatType.Weight);
                 attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Optic };
                 attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
@@ -176,7 +164,6 @@ namespace NightHunt.GameplaySystems.Editor
                 attachment.StatConfig = config;
                 attachment.DisplayName = "Suppressor";
                 attachment.Description = "Reduces recoil, decreases range";
-                attachment.Weight = config.GetStatValue(ItemStatType.Weight);
                 attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Barrel };
                 attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
@@ -189,7 +176,6 @@ namespace NightHunt.GameplaySystems.Editor
                 attachment.StatConfig = config;
                 attachment.DisplayName = "Vertical Grip";
                 attachment.Description = "Improves recoil control";
-                attachment.Weight = config.GetStatValue(ItemStatType.Weight);
                 attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Grip };
                 attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
@@ -202,7 +188,6 @@ namespace NightHunt.GameplaySystems.Editor
                 attachment.StatConfig = config;
                 attachment.DisplayName = "Extended Magazine";
                 attachment.Description = "+50% magazine capacity";
-                attachment.Weight = config.GetStatValue(ItemStatType.Weight);
                 attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Magazine };
                 attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
@@ -215,10 +200,6 @@ namespace NightHunt.GameplaySystems.Editor
                 attachment.StatConfig = config;
                 attachment.DisplayName = "Tactical Flashlight";
                 attachment.Description = "Provides illumination";
-                attachment.Weight = config.GetStatValue(ItemStatType.Weight);
-                attachment.ResourceType = ItemResourceType.Energy;
-                attachment.MaxResource = 3600f;
-                attachment.DefaultResource = 3600f;
                 attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.UnderBarrel, AttachmentSlotType.Light };
                 attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
@@ -231,7 +212,6 @@ namespace NightHunt.GameplaySystems.Editor
                 attachment.StatConfig = config;
                 attachment.DisplayName = "Storage Pouch";
                 attachment.Description = "Increases weight capacity";
-                attachment.Weight = config.GetStatValue(ItemStatType.Weight);
                 attachment.CanAttachTo = new AttachmentSlotType[] { AttachmentSlotType.Pouch };
                 attachment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);

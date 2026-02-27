@@ -1,0 +1,221 @@
+using System;
+using UnityEngine;
+using Unity.Cinemachine;
+using NightHunt.Gameplay.Input.Handlers.Movement;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Data;
+
+namespace NightHunt.Gameplay.Camera
+{
+    /// <summary>
+    /// Manages the three gameplay camera states:
+    ///   Free       – default, CinemachineInputAxisController active (free rotation).
+    ///   Locked     – X-key toggle; camera rotation frozen at current orientation.
+    ///   WeaponAim  – automatically entered when a weapon is drawn; exits back to
+    ///                the previous state (Free or Locked) when holstered.
+    ///
+    /// WIRING:
+    ///   1. Assign _virtualCamera + _inputAxisController (the CinemachineCamera child component).
+    ///   2. Assign _movementInput (MovementInputHandler on this player).
+    ///   3. Assign _weaponSystemMB (WeaponSystem MonoBehaviour on this player).
+    /// </summary>
+    [DefaultExecutionOrder(-50)]
+    public class CameraStateManager : MonoBehaviour
+    {
+        // ─────────────────────────────────────────────────────────────────────
+        //  Inspector
+        // ─────────────────────────────────────────────────────────────────────
+
+        [Header("Cinemachine")]
+        [Tooltip("The player CinemachineCamera (virtual camera).")]
+        [SerializeField] private CinemachineCamera _virtualCamera;
+
+        [Tooltip("CinemachineInputAxisController on the virtual camera – disabling it freezes rotation.")]
+        [SerializeField] private CinemachineInputAxisController _inputAxisController;
+
+        [Header("Input")]
+        [SerializeField] private MovementInputHandler _movementInput;
+
+        [Header("Weapon System")]
+        [Tooltip("MonoBehaviour that implements IWeaponSystem (typically WeaponSystem on this GameObject).")]
+        [SerializeField] private MonoBehaviour _weaponSystemMB;
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  State
+        // ─────────────────────────────────────────────────────────────────────
+
+        private IWeaponSystem _weaponSystem;
+
+        private CameraState _currentState   = CameraState.Free;
+        private CameraState _previousState  = CameraState.Free; // restored when WeaponAim exits
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Public API
+        // ─────────────────────────────────────────────────────────────────────
+
+        public CameraState CurrentState => _currentState;
+
+        /// <summary>Fired on every state transition. (from, to)</summary>
+        public event Action<CameraState, CameraState> OnStateChanged;
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Unity Lifecycle
+        // ─────────────────────────────────────────────────────────────────────
+
+        private void Awake()
+        {
+            _weaponSystem = _weaponSystemMB as IWeaponSystem;
+
+            if (_weaponSystemMB != null && _weaponSystem == null)
+                Debug.LogError("[CameraStateManager] _weaponSystemMB does not implement IWeaponSystem!", this);
+        }
+
+        private void OnEnable()
+        {
+            if (_movementInput != null)
+                _movementInput.OnCameraLockToggled += HandleLockToggled;
+
+            if (_weaponSystem != null)
+                _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
+        }
+
+        private void OnDisable()
+        {
+            if (_movementInput != null)
+                _movementInput.OnCameraLockToggled -= HandleLockToggled;
+
+            if (_weaponSystem != null)
+                _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Event Handlers
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Called when the player presses the ToggleCameraLock key (default X).
+        /// Ignored while in WeaponAim — the weapon controls the camera mode.
+        /// </summary>
+        private void HandleLockToggled(bool isLocked)
+        {
+            // WeaponAim takes priority; ignore manual lock while aiming
+            if (_currentState == CameraState.WeaponAim)
+                return;
+
+            TransitionTo(isLocked ? CameraState.Locked : CameraState.Free);
+        }
+
+        /// <summary>
+        /// Called when the active weapon slot changes.
+        /// newSlot != null  → enter WeaponAim.
+        /// newSlot == null  → exit WeaponAim, restore previous state.
+        /// </summary>
+        private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
+        {
+            if (newSlot.HasValue)
+            {
+                EnterWeaponAim();
+            }
+            else
+            {
+                ExitWeaponAim();
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  State Transitions
+        // ─────────────────────────────────────────────────────────────────────
+
+        private void EnterWeaponAim()
+        {
+            if (_currentState == CameraState.WeaponAim)
+                return;
+
+            // Remember where we came from so we can restore on holster
+            _previousState = _currentState;
+            TransitionTo(CameraState.WeaponAim);
+        }
+
+        private void ExitWeaponAim()
+        {
+            if (_currentState != CameraState.WeaponAim)
+                return;
+
+            TransitionTo(_previousState);
+        }
+
+        private void TransitionTo(CameraState newState)
+        {
+            if (newState == _currentState)
+                return;
+
+            CameraState from = _currentState;
+            _currentState    = newState;
+
+            ApplyStateSettings(newState);
+            OnStateChanged?.Invoke(from, newState);
+
+            if (Debug.isDebugBuild)
+                Debug.Log($"[CameraStateManager] {from} → {newState}");
+        }
+
+        /// <summary>
+        /// Applies visual / input side-effects for each state.
+        /// </summary>
+        private void ApplyStateSettings(CameraState state)
+        {
+            switch (state)
+            {
+                case CameraState.Free:
+                    SetCinemachineInput(enabled: true);
+                    break;
+
+                case CameraState.Locked:
+                    // Freeze the rotation at its current value by disabling the axis controller
+                    SetCinemachineInput(enabled: false);
+                    break;
+
+                case CameraState.WeaponAim:
+                    // Keep rotation locked while weapon is drawn; character facing drives aim
+                    SetCinemachineInput(enabled: false);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Enables or disables the Cinemachine axis input controller so the
+        /// camera rotation either tracks mouse input or stays frozen.
+        /// </summary>
+        private void SetCinemachineInput(bool enabled)
+        {
+            if (_inputAxisController != null)
+                _inputAxisController.enabled = enabled;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Public Helpers
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>Returns true while the camera is locked (Locked or WeaponAim).</summary>
+        public bool IsRotationLocked() => _currentState != CameraState.Free;
+
+        /// <summary>Force-transition to a state (for external systems, e.g. cutscenes).</summary>
+        public void ForceState(CameraState state) => TransitionTo(state);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Enum
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public enum CameraState
+    {
+        /// <summary>Free camera rotation via mouse / controller.</summary>
+        Free,
+
+        /// <summary>Camera rotation frozen; character strafes relative to locked angle.</summary>
+        Locked,
+
+        /// <summary>Camera frozen while a weapon is drawn; exits automatically on holster.</summary>
+        WeaponAim
+    }
+}

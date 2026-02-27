@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 
@@ -96,7 +97,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
 
         public bool IsInputEnabled => inputEnabled;
 
-        public InputActionMap GetActionMap() => playerActionMap;
+        public InputActionMap GetActionMap()
+        {
+            if (playerActionMap == null && InputLayerManager.Instance != null)
+                playerActionMap = InputLayerManager.Instance.PlayerMap;
+            return playerActionMap;
+        }
 
         /// <summary>
         /// Enable movement input
@@ -218,6 +224,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         {
             isCameraLocked = !isCameraLocked; // Toggle
             Debug.Log($"[MovementInputHandler] Camera Lock: {(isCameraLocked ? "ON (Strafe)" : "OFF (Tank)")}");
+            OnCameraLockToggled?.Invoke(isCameraLocked);
         }
 
         #endregion
@@ -228,6 +235,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         public bool IsSprinting() => isSprinting;
         public bool IsCrouching() => isCrouching;
         public bool IsCameraLocked() => isCameraLocked; // ✅ NEW
+
+        #endregion
+
+        #region Events
+
+        /// <summary>
+        /// Fired when the X key toggles the camera lock state.
+        /// bool = new locked state (true = Locked, false = Free).
+        /// </summary>
+        public event Action<bool> OnCameraLockToggled;
 
         #endregion
     }

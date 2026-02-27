@@ -2,118 +2,121 @@ using UnityEngine;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Core.Data;
 using NightHunt.StatSystem.Configs;
-using NightHunt.GameplaySystems.Inventory;
 
 namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>
-    /// Weapon item definition. Stats + PlayerModifiers from StatConfig.
+    /// Weapon item definition.
+    ///
+    /// AMMO MODEL:
+    /// - StatConfig[ItemStatType.MaxAmmo]      = total ammo reserve capacity (e.g. 300). Attachment-buffable.
+    /// - StatConfig[ItemStatType.MagazineSize] = magazine capacity (e.g. 30). Attachment-buffable.
+    /// - instance.CurrentResource              = current reserve ammo remaining (runtime, decreases on reload)
+    /// - instance.CurrentMagazine             = rounds currently in chamber (runtime)
+    ///
+    /// REMOVED FIELDS (do not re-add):
+    /// - MaxAmmo / DefaultAmmo  → use StatConfig[ItemStatType.MaxAmmo]
+    /// - MagazineSize field     → use StatConfig[ItemStatType.MagazineSize] (attachment-buffable)
+    /// - ReloadTime field       → use StatConfig[ItemStatType.ReloadSpeed]
+    /// - ResourceType / MaxResource / DefaultResource → removed from ItemDefinition entirely
     /// </summary>
     [CreateAssetMenu(fileName = "Weapon_", menuName = "GameplaySystems/Items/Weapon Definition")]
     public class WeaponDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Weapon;
-        
-        #region Stat Config
-        
+
+        // ── Stat Config ───────────────────────────────────────────────────────
         [Header("Stat Config")]
-        [Tooltip("Kéo thả WeaponStatConfig vào đây")]
+        [Tooltip("WeaponStatConfig containing Damage/FireRate/Accuracy/Spread/MagazineSize/DrawSpeed/ReloadSpeed + PlayerModifiers")]
         public WeaponStatConfig StatConfig;
-        
-        #endregion
-        
-        #region Ammo System
-        
-        [Header("Ammo System")]
-        [Tooltip("Magazine size (số đạn trong băng)")]
-        [Min(1)]
-        public int MagazineSize = 30;
-        
-        [Tooltip("Total ammo capacity (tổng đạn súng có thể mang)")]
-        [Min(1)]
-        public int MaxAmmo = 300;
-        
-        [Tooltip("Default ammo when spawned (usually = MaxAmmo)")]
-        [Min(0)]
-        public int DefaultAmmo = 300;
-        
-        #endregion
-        
-        #region Reload
-        
+
+        // ── Weapon Identity ───────────────────────────────────────────────────
+        [Header("Weapon Identity")]
+        [Tooltip("Weapon class for attachment compatibility and UI grouping")]
+        public WeaponClass WeaponClass = WeaponClass.Rifle;
+
+        [Tooltip("How damage is applied: instant raycast or spawned projectile")]
+        public BallisticType BallisticType = BallisticType.Hitscan;
+
+        [Tooltip("Default fire mode. Player can toggle on HUD if AllowFireModeToggle = true")]
+        public FireMode DefaultFireMode = FireMode.Auto;
+
+        [Tooltip("Allow player to toggle between Auto and Single on HUD")]
+        public bool AllowFireModeToggle = true;
+
+        // ── Reload ────────────────────────────────────────────────────────────
         [Header("Reload")]
-        [Tooltip("Reload time (seconds)")]
-        [Min(0.1f)]
-        public float ReloadTime = 2.5f;
-        
-        [Tooltip("Can reload when magazine not empty (tactical reload)")]
+        [Tooltip("Can reload when magazine still has ammo (tactical reload)")]
         public bool CanTacticalReload = true;
-        
-        #endregion
-        
-        #region Override Methods
-        
-        public override float GetMaxResource()
-        {
-            // Weapon uses Ammo as resource
-            return MaxAmmo;
-        }
-        
-        public override float GetDefaultResource()
-        {
-            return DefaultAmmo;
-        }
-        
-        #endregion
-        
-        #region Stat Helpers
-        
+
+        // ── Stat Helpers ──────────────────────────────────────────────────────
+        /// <summary>Read a stat from StatConfig (base value before attachments).</summary>
         public float GetStatValue(ItemStatType statType)
-        {
-            return StatConfig != null ? StatConfig.GetStatValue(statType) : 0f;
-        }
-        
+            => StatConfig != null ? StatConfig.GetStatValue(statType) : 0f;
+
         public bool HasStat(ItemStatType statType)
-        {
-            return StatConfig != null && StatConfig.HasStat(statType);
-        }
-        
+            => StatConfig != null && StatConfig.HasStat(statType);
+
+        /// <summary>PlayerModifiers applied to the PLAYER when this weapon is SELECTED (not just equipped).</summary>
         public PlayerStatModifier[] GetPlayerModifiers()
-        {
-            return StatConfig?.PlayerModifiers;
-        }
-        
-        #endregion
-        
-        #region Validation
-        
+            => StatConfig?.PlayerModifiers;
+
+        // ── Validation ────────────────────────────────────────────────────────
         public override bool IsValid(out string error)
         {
-            if (!base.IsValid(out error))
-                return false;
-            
-            if (MagazineSize < 1)
+            if (!base.IsValid(out error)) return false;
+
+            if (StatConfig == null)
             {
-                error = "MagazineSize must be >= 1";
+                error = "[WeaponDefinition] StatConfig is required";
                 return false;
             }
-            
-            if (MaxAmmo < MagazineSize)
+
+            float mag = StatConfig.GetStatValue(ItemStatType.MagazineSize);
+            if (mag < 1f)
             {
-                error = "MaxAmmo must be >= MagazineSize";
+                error = "[WeaponDefinition] StatConfig[MagazineSize] must be >= 1";
                 return false;
             }
-            
-            if (DefaultAmmo > MaxAmmo)
+
+            float maxAmmo = StatConfig.GetStatValue(ItemStatType.MaxAmmo);
+            if (maxAmmo > 0f && maxAmmo < mag)
             {
-                error = "DefaultAmmo cannot exceed MaxAmmo";
+                error = "[WeaponDefinition] StatConfig[MaxAmmo] must be >= MagazineSize (or 0 for infinite ammo)";
                 return false;
             }
-            
+
             error = null;
             return true;
         }
-        
-        #endregion
+    }
+
+    // ── Supporting Enums ──────────────────────────────────────────────────────
+
+    /// <summary>Weapon class for grouping and attachment compatibility.</summary>
+    public enum WeaponClass
+    {
+        Pistol,
+        SMG,
+        Rifle,
+        Shotgun,
+        Sniper,
+        Melee
+    }
+
+    /// <summary>How damage is applied.</summary>
+    public enum BallisticType
+    {
+        /// <summary>Instant raycast — also spawns a visual-only bullet trail from pool.</summary>
+        Hitscan,
+        /// <summary>Physical projectile spawned from pool, deactivated when travel > VisionRange.</summary>
+        Projectile
+    }
+
+    /// <summary>Fire mode: hold = continuous shots (Auto) or tap-per-shot (Single).</summary>
+    public enum FireMode
+    {
+        Auto,
+        Single
     }
 }

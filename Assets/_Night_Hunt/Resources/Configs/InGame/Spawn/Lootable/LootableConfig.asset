@@ -17,4 +17,4 @@ MonoBehaviour:
   AllowAutoLoot: 1
   ShowPrompt: 1
   PromptText: Press E to Interact
-  MaxInteractDistance: 3
+  MaxInteractDistance: 4

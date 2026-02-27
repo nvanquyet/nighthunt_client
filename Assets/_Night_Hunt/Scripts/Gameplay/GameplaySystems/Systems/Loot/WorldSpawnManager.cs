@@ -149,6 +149,13 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             ServerManager.Spawn(netObj);
+
+            // DEBUG: Log which connections are observers for this world item.
+            Debug.Log($"[WorldSpawnManager] SpawnWorldItem: spawned NetId={netObj.ObjectId}, Observers={netObj.Observers.Count}");
+            foreach (var observerConn in netObj.Observers)
+            {
+                Debug.Log($"[WorldSpawnManager]   → Observer connection ClientId={observerConn.ClientId}");
+            }
             worldItem.Initialize(data, lootableConfig);
 
             if (sourcePoint != null)
@@ -188,6 +195,13 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             ServerManager.Spawn(netObj);
+
+            // DEBUG: Log which connections are observers for this world container.
+            Debug.Log($"[WorldSpawnManager] SpawnWorldContainer: spawned NetId={netObj.ObjectId}, Observers={netObj.Observers.Count}");
+            foreach (var observerConn in netObj.Observers)
+            {
+                Debug.Log($"[WorldSpawnManager]   → Observer connection ClientId={observerConn.ClientId}");
+            }
             container.Initialize(config.SpawnTable, config.SpawnLocked, config.LootableConfig,
                                   config.ContainerAutoReset, config.ContainerResetDelay);
 

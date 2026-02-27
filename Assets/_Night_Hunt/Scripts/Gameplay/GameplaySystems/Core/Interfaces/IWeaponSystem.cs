@@ -126,33 +126,70 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         
         #endregion
         
+        #region Combat (Fire / Reload / FireMode)
+
+        /// <summary>Begin continuous firing (Auto) or single shot (Single mode). Call from input handler or HUD.</summary>
+        void StartFire();
+
+        /// <summary>Release fire input — stops auto-fire coroutine.</summary>
+        void StopFire();
+
+        /// <summary>Request reload for the active weapon slot.</summary>
+        void RequestReload();
+
+        /// <summary>Set fire mode override for the active weapon. Saved to PlayerPrefs.</summary>
+        void SetFireMode(FireMode mode);
+
+        /// <summary>Get current fire mode of active weapon.</summary>
+        FireMode GetCurrentFireMode();
+
+        #endregion
+
         #region Events
-        
+
         /// <summary>
         /// Event fired when weapon equipped
         /// Parameters: (slotType, weapon)
         /// </summary>
         event Action<WeaponSlotType, ItemInstance> OnWeaponEquipped;
-        
+
         /// <summary>
         /// Event fired when weapon unequipped
         /// Parameters: (slotType, weapon)
         /// </summary>
         event Action<WeaponSlotType, ItemInstance> OnWeaponUnequipped;
-        
+
         /// <summary>
         /// Event fired when active weapon changed
-        /// Parameters: (oldSlot, newSlot)
-        /// null = holstered
+        /// Parameters: (oldSlot, newSlot) — null = holstered
         /// </summary>
         event Action<WeaponSlotType?, WeaponSlotType?> OnActiveWeaponChanged;
-        
+
         /// <summary>
         /// Event fired when weapon reloaded
         /// Parameters: (slotType, newMagazineAmmo)
         /// </summary>
         event Action<WeaponSlotType, int> OnWeaponReloaded;
-        
+
+        /// <summary>
+        /// Fired each time ammo state changes (fire or reload complete).
+        /// Parameters: (currentMagazine, totalAmmoLeft, magazineCapacity)
+        /// Used by HUD ammo display.
+        /// </summary>
+        event Action<int, int, int> OnAmmoChanged;
+
+        /// <summary>
+        /// Fired when reload starts (true) or ends (false).
+        /// Used by HUD reload cooldown ring.
+        /// </summary>
+        event Action<bool> OnReloadStateChanged;
+
+        /// <summary>
+        /// Fired when total + magazine ammo = 0.
+        /// Hook: force switch, show pickup prompt, disable fire button.
+        /// </summary>
+        event Action<WeaponSlotType> OnWeaponDepleted;
+
         #endregion
     }
 }

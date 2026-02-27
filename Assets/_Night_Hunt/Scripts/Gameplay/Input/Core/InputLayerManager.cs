@@ -52,9 +52,10 @@ namespace NightHunt.Gameplay.Input.Core
             },  
             {
                 InputState.InventoryOpen,
-                // ❌ Combat OFF → click chuột trái / E / F KHÔNG fire
-                // ❌ Player OFF → không di chuyển / tương tác khi kéo item
-                InputLayer.UI | InputLayer.Inventory | InputLayer.Camera |  InputLayer.Player 
+                // ✅ UI + Inventory (hotkeys) + Camera
+                // ❌ Combat OFF → click chuột trái không bắn
+                // ❌ Player OFF → không di chuyển / tương tác world khi đang mở inventory
+                InputLayer.UI | InputLayer.Inventory | InputLayer.Camera
             },
             {
                 InputState.MapOpen,

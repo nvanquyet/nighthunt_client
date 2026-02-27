@@ -1,4 +1,6 @@
 using NightHunt.Gameplay.Spectator;
+using NightHunt.Gameplay.Input;
+using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking;
 using UnityEngine;
 
@@ -19,6 +21,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [SerializeField] private GameObject _inventoryRootObject;
 
         private UIDomainBridge _domainBridge;
+        private bool _inventoryVisible;
 
         private void Awake()
         {
@@ -26,6 +29,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (_inventoryRootObject != null)
                 _inventoryRootObject.SetActive(false);
+
+            _inventoryVisible = false;
         }
 
         private void OnEnable()
@@ -34,6 +39,21 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 SpectateManager.Instance.OnCurrentPlayerChanged += OnCurrentPlayerChanged;
             }
+
+            // Inventory hotkey: listen via InputManager → InventoryInputHandler
+            var input = InputManager.Instance;
+            if (input != null && input.InventoryHandler != null)
+            {
+                input.InventoryHandler.OpenInventoryPerformed += HandleOpenInventoryPerformed;
+            }
+
+            // Keep UI in sync even when contexts are changed elsewhere (Escape PopContext, etc.)
+            if (InputLayerManager.Instance != null)
+            {
+                InputLayerManager.Instance.OnContextChanged += HandleContextChanged;
+                // Initial sync (in case we're enabled after context already applied)
+                HandleContextChanged(InputLayerManager.Instance.CurrentState, InputLayerManager.Instance.CurrentState);
+            }
         }
 
         private void OnDisable()
@@ -41,6 +61,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (SpectateManager.Instance != null)
             {
                 SpectateManager.Instance.OnCurrentPlayerChanged -= OnCurrentPlayerChanged;
+            }
+
+            var input = InputManager.Instance;
+            if (input != null && input.InventoryHandler != null)
+            {
+                input.InventoryHandler.OpenInventoryPerformed -= HandleOpenInventoryPerformed;
+            }
+
+            if (InputLayerManager.Instance != null)
+            {
+                InputLayerManager.Instance.OnContextChanged -= HandleContextChanged;
             }
         }
 
@@ -91,6 +122,49 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             bool wasActive = _inventoryRootObject.activeSelf;
             _inventoryRootObject.SetActive(!wasActive);
+        }
+
+        private void HandleOpenInventoryPerformed()
+        {
+            var ilm = InputLayerManager.Instance;
+            if (ilm == null) return;
+
+            // Single source of truth: context drives which maps are enabled.
+            // UI visibility is synced in HandleContextChanged.
+            if (ilm.CurrentState == InputState.InventoryOpen)
+                ilm.PopContext();
+            else
+                ilm.PushContext(InputState.InventoryOpen);
+        }
+
+        private void HandleContextChanged(InputState oldState, InputState newState)
+        {
+            if (_inventoryRootObject == null) return;
+
+            // Only react to transitions to/from InventoryOpen to avoid fighting other systems.
+            if (newState == InputState.InventoryOpen)
+                SetInventoryVisible(true);
+            else if (oldState == InputState.InventoryOpen && newState != InputState.InventoryOpen)
+                SetInventoryVisible(false);
+        }
+
+        private void SetInventoryVisible(bool visible)
+        {
+            if (_inventoryVisible == visible) return;
+            _inventoryVisible = visible;
+
+            _inventoryRootObject.SetActive(visible);
+
+            if (visible)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            else
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
         }
     }
 }

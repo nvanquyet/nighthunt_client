@@ -1,5 +1,6 @@
 using FishNet.Connection;
 using FishNet.Managing;
+using FishNet.Object;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Interaction;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -32,6 +33,9 @@ namespace NightHunt.GameplaySystems.Interaction
                  "Toggle at runtime with TogglePickupAllMode().")]
         [SerializeField] private bool pickupAllMode = false;
 
+        [Header("Debug")]
+        [SerializeField] private bool debugInputLogs = true;
+
         // ── Hold state ─────────────────────────────────────────────────────────────
 
         private bool _isHolding;
@@ -41,6 +45,7 @@ namespace NightHunt.GameplaySystems.Interaction
 
         // Networking
         private NetworkPlayer _networkPlayer;
+        private bool _inputSubscribed;
 
         private bool IsLocalPlayer
         {
@@ -62,44 +67,20 @@ namespace NightHunt.GameplaySystems.Interaction
                 proximityScanner = GetComponent<ProximityInteractScanner>();
 
             _networkPlayer = GetComponent<NetworkPlayer>();
+
+            // In case Network/ownership is not ready yet when this component enables,
+            // listen for NetworkPlayer owner-ready callback to safely subscribe input.
+            NetworkPlayer.OnOwnerReady += HandleOwnerReady;
         }
 
         private void OnEnable()
         {
-            if (!IsLocalPlayer)
-                return;
-
-            var inputManager = InputManager.Instance;
-            if (inputManager == null)
-                return;
-
-            var handler = inputManager.InteractionHandler;
-            if (handler == null)
-                return;
-
-            handler.InteractPerformed  += HandleInteractPerformed;
-            handler.InteractCanceled   += HandleInteractCanceled;
-            handler.PickupPerformed    += HandlePickupPerformed;
-            handler.LogNearbyPerformed += HandleLogNearbyPerformed;
+            TrySubscribeInput();
         }
 
         private void OnDisable()
         {
-            if (!IsLocalPlayer)
-                return;
-
-            var inputManager = InputManager.Instance;
-            if (inputManager != null)
-            {
-                var handler = inputManager.InteractionHandler;
-                if (handler != null)
-                {
-                    handler.InteractPerformed  -= HandleInteractPerformed;
-                    handler.InteractCanceled   -= HandleInteractCanceled;
-                    handler.PickupPerformed    -= HandlePickupPerformed;
-                    handler.LogNearbyPerformed -= HandleLogNearbyPerformed;
-                }
-            }
+            UnsubscribeInput();
 
             // Reset local hold state
             _isHolding = false;
@@ -119,6 +100,9 @@ namespace NightHunt.GameplaySystems.Interaction
 
         public void HandleInteractPerformed()
         {
+            if (debugInputLogs)
+                Debug.Log("[PlayerInteractionSystem] InteractPerformed received.");
+
             // Primary path: use IInteractable from RaycastDetector
             var target = raycastDetector?.CurrentInteractable;
             if (target != null && target.CanInteract(gameObject))
@@ -139,6 +123,44 @@ namespace NightHunt.GameplaySystems.Interaction
                 return;
             }
 
+            // No valid interact (for debugging: distinguish between no target vs blocked)
+            if (target == null)
+            {
+                Debug.Log("[Interact] InteractPerformed received but no interactable under crosshair.");
+            }
+            else
+            {
+                float dist = float.NaN;
+                float maxDist = float.NaN;
+
+                if (target is Component c)
+                {
+                    dist = Vector3.Distance(c.transform.position, transform.position);
+
+                    // If this is a WorldItem, try to read its maxPickupDistance for better context
+                    if (target is NightHunt.GameplaySystems.Loot.WorldItem worldItem)
+                    {
+                        var field = typeof(NightHunt.GameplaySystems.Loot.WorldItem)
+                            .GetField("maxPickupDistance",
+                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (field != null)
+                            maxDist = (float)field.GetValue(worldItem);
+                    }
+                }
+
+                if (!float.IsNaN(dist))
+                {
+                    if (!float.IsNaN(maxDist))
+                        Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m, max={maxDist:F2}m)");
+                    else
+                        Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m)");
+                }
+                else
+                {
+                    Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel}");
+                }
+            }
+
             // Legacy fallback for any target not yet implementing IInteractable
             HandleLegacyInteract();
         }
@@ -156,6 +178,9 @@ namespace NightHunt.GameplaySystems.Interaction
 
         public void HandlePickupPerformed()
         {
+            if (debugInputLogs)
+                Debug.Log("[PlayerInteractionSystem] PickupPerformed received.");
+
             if (pickupAllMode && proximityScanner != null)
                 PickupAllNearby();
             else
@@ -164,6 +189,9 @@ namespace NightHunt.GameplaySystems.Interaction
 
         public void HandleLogNearbyPerformed()
         {
+            if (debugInputLogs)
+                Debug.Log("[PlayerInteractionSystem] LogNearbyPerformed received.");
+
             if (proximityScanner != null)
                 proximityScanner.LogNearby();
             else
@@ -212,15 +240,47 @@ namespace NightHunt.GameplaySystems.Interaction
                 return;
             }
 
+            if (target != null && !target.CanInteract(gameObject))
+            {
+                float dist = float.NaN;
+                float maxDist = float.NaN;
+
+                if (target is Component c)
+                {
+                    dist = Vector3.Distance(c.transform.position, transform.position);
+
+                    if (target is NightHunt.GameplaySystems.Loot.WorldItem worldItem)
+                    {
+                        var field = typeof(NightHunt.GameplaySystems.Loot.WorldItem)
+                            .GetField("maxPickupDistance",
+                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (field != null)
+                            maxDist = (float)field.GetValue(worldItem);
+                    }
+                }
+
+                if (!float.IsNaN(dist))
+                {
+                    if (!float.IsNaN(maxDist))
+                        Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m, max={maxDist:F2}m)");
+                    else
+                        Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m)");
+                }
+                else
+                {
+                    Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel}");
+                }
+            }
+
             // Legacy: direct WorldItem path
             var pickup = raycastDetector?.CurrentWorldItem;
             if (pickup != null)
             {
-                var conn = GetLocalConnection();
-                if (conn != null)
+                var playerNob = GetLocalPlayerNob();
+                if (playerNob != null)
                 {
                     Debug.Log($"[Pickup] Legacy path: {pickup.ItemDefinitionID} x{pickup.Quantity}");
-                    pickup.RequestPickup(conn);
+                    pickup.RequestPickup(playerNob);
                 }
             }
         }
@@ -268,20 +328,23 @@ namespace NightHunt.GameplaySystems.Interaction
             var container = raycastDetector.CurrentContainer;
             if (container != null)
             {
-                var conn = GetLocalConnection();
-                if (conn != null) container.RequestOpen(conn);
+                var playerNob = GetLocalPlayerNob();
+                if (playerNob != null) container.RequestOpen(playerNob);
                 return;
             }
 
             var corpse = raycastDetector.CurrentCorpse;
             if (corpse != null)
             {
-                var conn = GetLocalConnection();
-                if (conn != null) corpse.RequestOpen(conn);
+                var playerNob = GetLocalPlayerNob();
+                if (playerNob != null) corpse.RequestOpen(playerNob);
             }
         }
 
         // ── Helper ───────────────────────────────────────────────────────────────
+
+        // PlayerInteractionSystem luôn nằm trên player GameObject — GetComponent<NetworkObject>() là chính xác.
+        private NetworkObject GetLocalPlayerNob() => GetComponent<NetworkObject>();
 
         private NetworkConnection GetLocalConnection()
         {
@@ -298,6 +361,71 @@ namespace NightHunt.GameplaySystems.Interaction
 
             Debug.LogWarning("[PlayerInteractionSystem] Could not find NetworkManager!");
             return null;
+        }
+
+        // ── Input subscription helpers ──────────────────────────────────────────
+
+        private void HandleOwnerReady(NetworkPlayer player)
+        {
+            if (player == _networkPlayer)
+            {
+                if (debugInputLogs)
+                    Debug.Log("[PlayerInteractionSystem] NetworkPlayer owner ready → trying to subscribe input.");
+                TrySubscribeInput();
+            }
+        }
+
+        private void TrySubscribeInput()
+        {
+            if (_inputSubscribed)
+                return;
+
+            if (!IsLocalPlayer)
+                return;
+
+            var inputManager = InputManager.Instance;
+            if (inputManager == null)
+                return;
+
+            var handler = inputManager.InteractionHandler;
+            if (handler == null)
+                return;
+
+            handler.InteractPerformed  += HandleInteractPerformed;
+            handler.InteractCanceled   += HandleInteractCanceled;
+            handler.PickupPerformed    += HandlePickupPerformed;
+            handler.LogNearbyPerformed += HandleLogNearbyPerformed;
+
+            _inputSubscribed = true;
+
+            if (debugInputLogs)
+                Debug.Log("[PlayerInteractionSystem] Subscribed to InteractionInputHandler events (local player).");
+        }
+
+        private void UnsubscribeInput()
+        {
+            NetworkPlayer.OnOwnerReady -= HandleOwnerReady;
+
+            if (!_inputSubscribed)
+                return;
+
+            var inputManager = InputManager.Instance;
+            if (inputManager != null)
+            {
+                var handler = inputManager.InteractionHandler;
+                if (handler != null)
+                {
+                    handler.InteractPerformed  -= HandleInteractPerformed;
+                    handler.InteractCanceled   -= HandleInteractCanceled;
+                    handler.PickupPerformed    -= HandlePickupPerformed;
+                    handler.LogNearbyPerformed -= HandleLogNearbyPerformed;
+                }
+            }
+
+            _inputSubscribed = false;
+
+            if (debugInputLogs)
+                Debug.Log("[PlayerInteractionSystem] Unsubscribed from InteractionInputHandler events.");
         }
     }
 }

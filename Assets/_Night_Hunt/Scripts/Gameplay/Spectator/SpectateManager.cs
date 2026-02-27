@@ -22,6 +22,13 @@ namespace NightHunt.Gameplay.Spectator
 
         public event System.Action<NetworkPlayer> OnCurrentPlayerChanged;
 
+        /// <summary>
+        /// Fired once when the local player is registered for the first time.
+        /// FogTeamVisibilityBinder (and any other component that needs the local
+        /// player's team) subscribes here and refreshes its state on this callback.
+        /// </summary>
+        public event System.Action<NetworkPlayer> OnLocalPlayerSet;
+
         void Awake()
         {
             if (Instance != null && Instance != this)
@@ -62,6 +69,9 @@ namespace NightHunt.Gameplay.Spectator
             }
 
             localPlayer = player;
+
+            // Notify fog and any other late-init systems that need the local team.
+            OnLocalPlayerSet?.Invoke(localPlayer);
 
             if (!isSpectating)
             {

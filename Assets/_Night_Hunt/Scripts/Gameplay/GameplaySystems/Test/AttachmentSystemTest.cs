@@ -205,9 +205,9 @@ namespace NightHunt.GameplaySystems.Test
                 var suppressor = _inventorySystem.GetItemsByDefinition(_testSuppressorID)[0];
                 
                 float baseAccuracy = ItemStatSystem.CalculateItemStat(weapon, ItemStatType.Accuracy);
-                float baseRecoil = ItemStatSystem.CalculateItemStat(weapon, ItemStatType.Recoil);
+                float baseSpread = ItemStatSystem.CalculateItemStat(weapon, ItemStatType.SpreadPenalty);
                 
-                AppendLog($"Base stats - Accuracy: {baseAccuracy:F1}, Recoil: {baseRecoil:F1}");
+                AppendLog($"Base stats - Accuracy: {baseAccuracy:F1}, SpreadPenalty: {baseSpread:F1}");
                 
                 _attachmentSystem.AttachItem(scope.InstanceID, weapon.InstanceID, 0);
                 _attachmentSystem.AttachItem(grip.InstanceID, weapon.InstanceID, 1);
@@ -219,14 +219,14 @@ namespace NightHunt.GameplaySystems.Test
                 AppendLog($"Attached {allAttachments.Count} items");
                 
                 float modifiedAccuracy = ItemStatSystem.CalculateItemStat(weapon, ItemStatType.Accuracy);
-                float modifiedRecoil = ItemStatSystem.CalculateItemStat(weapon, ItemStatType.Recoil);
+                float modifiedSpread = ItemStatSystem.CalculateItemStat(weapon, ItemStatType.SpreadPenalty);
                 
-                AppendLog($"Modified stats - Accuracy: {modifiedAccuracy:F1}, Recoil: {modifiedRecoil:F1}");
+                AppendLog($"Modified stats - Accuracy: {modifiedAccuracy:F1}, SpreadPenalty: {modifiedSpread:F1}");
                 
                 AssertNoThrow(modifiedAccuracy > baseAccuracy, "Accuracy should increase");
-                AssertNoThrow(modifiedRecoil < baseRecoil, "Recoil should decrease");
+                AssertNoThrow(modifiedSpread < baseSpread, "SpreadPenalty should decrease");
                 
-                EndTest(true, $"Multiple attachments working. Accuracy: {baseAccuracy:F1}→{modifiedAccuracy:F1}, Recoil: {baseRecoil:F1}→{modifiedRecoil:F1}");
+                EndTest(true, $"Multiple attachments working. Accuracy: {baseAccuracy:F1}→{modifiedAccuracy:F1}, SpreadPenalty: {baseSpread:F1}→{modifiedSpread:F1}");
             }
             catch (System.Exception ex)
             {

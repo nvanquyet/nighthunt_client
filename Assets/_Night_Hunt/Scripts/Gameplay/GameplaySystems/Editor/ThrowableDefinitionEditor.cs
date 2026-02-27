@@ -46,7 +46,6 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.Description = "Explosive grenade – 3 s fuse. Deals AoE damage.";
             throwable.IsStackable = true;
             throwable.MaxStackSize = 3;
-            throwable.Weight = config.GetStatValue(ItemStatType.Weight);
             
             // Usage System fields (QUAN TRỌNG cho QuickSlot)
             throwable.ValidSlots = new SlotLocationType[] { 
@@ -85,7 +84,6 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.Description = "Deploys smoke screen for 15 s. No damage.";
             throwable.IsStackable = true;
             throwable.MaxStackSize = 3;
-            throwable.Weight = config.GetStatValue(ItemStatType.Weight);
             
             // Usage System fields
             throwable.ValidSlots = new SlotLocationType[] { 
@@ -268,7 +266,6 @@ namespace NightHunt.GameplaySystems.Editor
                 throwable.Description = "Explosive grenade – 3 s fuse. Deals AoE damage.";
                 throwable.IsStackable = true;
                 throwable.MaxStackSize = 3;
-                throwable.Weight = config.GetStatValue(ItemStatType.Weight);
                 throwable.ValidSlots = new SlotLocationType[] { 
                     SlotLocationType.Inventory, 
                     SlotLocationType.QuickSlot 
@@ -298,7 +295,6 @@ namespace NightHunt.GameplaySystems.Editor
                 throwable.Description = "Deploys smoke screen for 15 s. No damage.";
                 throwable.IsStackable = true;
                 throwable.MaxStackSize = 3;
-                throwable.Weight = config.GetStatValue(ItemStatType.Weight);
                 throwable.ValidSlots = new SlotLocationType[] { 
                     SlotLocationType.Inventory, 
                     SlotLocationType.QuickSlot 

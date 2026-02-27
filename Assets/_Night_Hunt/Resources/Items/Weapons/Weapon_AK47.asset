@@ -21,20 +21,17 @@ MonoBehaviour:
   Weight: 3.5
   ModifyWeightWhenEquipped: 0
   EquippedWeightModifier: 0
-  ResourceType: 2
-  MaxResource: 300
-  DefaultResource: 300
   AttachmentSlots: 0100000003000000040000000200000006000000
   CanAttachTo: 
   ValidSlots: 0000000002000000
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
+  EquippedPrefab: {fileID: 5417513897872433537, guid: d282706988ecc844e92e0b68ae72d776, type: 3}
+  DroppedPrefab: {fileID: 5417513897872433537, guid: d282706988ecc844e92e0b68ae72d776, type: 3}
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 0
   StatConfig: {fileID: 11400000, guid: 9ad4e76a99505df44bc52015cd5e5590, type: 2}
-  MagazineSize: 30
-  MaxAmmo: 300
-  DefaultAmmo: 300
-  ReloadTime: 2.5
+  WeaponClass: 2
+  BallisticType: 0
+  DefaultFireMode: 0
+  AllowFireModeToggle: 1
   CanTacticalReload: 1

@@ -56,6 +56,9 @@ namespace NightHunt.Gameplay.Character
 
         // ===== INPUT (OWNER ONLY) =====
         protected CinemachineCamera _cinemachineCamera;
+        // The real Unity Camera driven by CinemachineBrain — used to read the live yaw.
+        // CinemachineCamera's own transform never rotates; the Brain writes the result here.
+        protected UnityEngine.Camera _mainCamera;
         protected Vector2 _moveInput;
         protected bool _sprint;
         protected bool _crouch;
@@ -149,6 +152,12 @@ namespace NightHunt.Gameplay.Character
                 : 0f;
             _stamina = currentStamina > 0f ? currentStamina : maxStamina;
 
+            // SPAWN POSITION FIX:
+            // FishNet sets transform.position from the spawn packet BEFORE OnStartNetwork fires.
+            // Calling ResetPhysicsState() syncs the physics component (e.g. CharacterController)
+            // to that transform so it does not snap back to origin on the first FixedUpdate.
+            ResetPhysicsState();
+
             _targetPosition = transform.position;
             _targetRotation = transform.rotation;
             _verticalVelocity = -2f;
@@ -156,10 +165,11 @@ namespace NightHunt.Gameplay.Character
             _staminaRecoveryTimer = 0f;
 
             _cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
+            _mainCamera         ??= UnityEngine.Camera.main;
 
             if (enableDebugLogs)
                 Debug.Log(
-                    $"[{GetType().Name}] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}, MaxStamina={maxStamina}");
+                    $"[{GetType().Name}] OnStartNetwork - IsOwner={base.Owner.IsLocalClient}, IsServer={IsServerStarted}, MaxStamina={maxStamina}, StartPos={transform.position}");
         }
 
         #endregion
@@ -207,11 +217,17 @@ namespace NightHunt.Gameplay.Character
                 }
             }
 
-            // Capture camera yaw
-            if (_cinemachineCamera != null)
-            {
-                _yaw = _cinemachineCamera.transform.eulerAngles.y;
-            }
+            // Capture camera yaw.
+            // IMPORTANT: CinemachineCamera's own transform never rotates — Cinemachine
+            // stores orbital axes internally and writes the final rotation onto the
+            // actual Unity Camera via CinemachineBrain.  _mainCamera is that Camera.
+            if (_mainCamera == null)
+                _mainCamera = UnityEngine.Camera.main;   // lazy re-fetch
+
+            if (_mainCamera != null)
+                _yaw = _mainCamera.transform.eulerAngles.y;
+            else if (_cinemachineCamera != null)
+                _yaw = _cinemachineCamera.transform.eulerAngles.y; // headless/editor fallback
         }
 
         #endregion
@@ -536,11 +552,26 @@ namespace NightHunt.Gameplay.Character
             if (IsOwner)
             {
                 transform.position = data.Position;
-                transform.rotation = data.Rotation;
+                // ROTATION ARCHITECTURE — CLIENT AUTHORITATIVE:
+                // The character body yaw is computed locally in SimulateMovement from
+                // data.Yaw (camera yaw replicated from client).  Both client and server
+                // run identical simulations, so rotation converges without a server push.
+                // Overwriting transform.rotation here would:
+                //   1. Introduce a visible snap each reconcile tick.
+                //   2. Drive rotation from a server roundtrip instead of local camera input.
                 _velocity = data.Velocity;
-                _stamina = data.Stamina;
+                _stamina  = data.Stamina;
 
-                // Reset physics state
+                // Restore vertical velocity from reconcile data.
+                // _verticalVelocity is a separate accumulator used by SimulateMovement for
+                // gravity; it is NOT part of MovementReconcileData, but it equals
+                // _rigidbody.linearVelocity.y (set there by ApplyMovement every tick).
+                // data.Velocity.y therefore carries the authoritative vertical speed.
+                // Without this, every reconcile resets _verticalVelocity to -2f causing
+                // the player to snap upward (losing fall speed) mid-air.
+                _verticalVelocity = data.Velocity.y;
+
+                // Sync physics component position & restore velocity.
                 ResetPhysicsState();
             }
             else if (!IsServerStarted)
@@ -611,6 +642,28 @@ namespace NightHunt.Gameplay.Character
             transform.rotation = state.Rotation;
             _velocity = state.Velocity;
         }
+
+        /// <summary>
+        /// Server: Teleport the character to a new position/rotation.
+        /// Resets velocity and delegates physics-component sync to derived classes
+        /// via ResetPhysicsState (e.g. CharacterController disable/re-enable).
+        /// The server's next reconcile tick will broadcast the corrected state.
+        /// </summary>
+        public virtual void Teleport(Vector3 position, Quaternion rotation)
+        {
+            transform.position = position;
+            transform.rotation = rotation;
+            _velocity         = Vector3.zero;
+            _verticalVelocity = -2f;
+            ResetPhysicsState();
+
+            if (enableDebugLogs)
+                Debug.Log($"[{GetType().Name}] Teleport → pos={position}, rot={rotation.eulerAngles}");
+        }
+
+        // IMovementController.Teleport bridge
+        void IMovementController.Teleport(Vector3 position, Quaternion rotation)
+            => Teleport(position, rotation);
 
         #endregion
 

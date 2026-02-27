@@ -2,91 +2,83 @@ using UnityEngine;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Core.Data;
 using NightHunt.StatSystem.Configs;
-using NightHunt.GameplaySystems.Inventory;
 
 namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>
-    /// Attachment item definition. Stats + ItemModifiers from StatConfig.
+    /// Attachment item definition.
+    ///
+    /// DUAL MODIFIER MODEL:
+    /// - ItemStatModifiers  (StatConfig.ItemModifiers):
+    ///     Modify the HOST item's own stats (Damage, MagazineSize, Armor…).
+    ///     Generic — works for both Weapon and Equipment hosts.
+    ///
+    /// - PlayerStatModifiers (StatConfig.PlayerModifiers):
+    ///     Modify PLAYER stats. Follow HOST apply-rule:
+    ///       • Host = Equipment → applied immediately when equipment is equipped.
+    ///       • Host = Weapon    → applied only when weapon is SELECTED (drawn).
+    ///
+    /// COMPATIBILITY:
+    ///     CanAttachTo[]  on base ItemDefinition specifies which AttachmentSlotTypes
+    ///     this attachment can go into (e.g. Optic, Barrel, Plate…).
     /// </summary>
     [CreateAssetMenu(fileName = "Attachment_", menuName = "GameplaySystems/Items/Attachment Definition")]
     public class AttachmentDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Attachment;
-        
-        #region Stat Config
-        
+
+        // ── Stat Config ──────────────────────────────────────────────────────────
         [Header("Stat Config")]
-        [Tooltip("Kéo thả AttachmentStatConfig vào đây")]
+        [Tooltip("AttachmentStatConfig: ItemModifiers (host item stats) + PlayerModifiers (player stats)")]
         public AttachmentStatConfig StatConfig;
-        
-        #endregion
-        
-        #region Helpers
-        
-        public ItemStatModifier? GetModifier(ItemStatType statType)
-        {
-            if (StatConfig?.ItemModifiers == null) return null;
-            foreach (var mod in StatConfig.ItemModifiers)
-            {
-                if (mod.StatType == statType) return mod;
-            }
-            return null;
-        }
-        
-        public bool ModifiesStat(ItemStatType statType)
-        {
-            return GetModifier(statType).HasValue;
-        }
-        
+
+        // ── Helpers ──────────────────────────────────────────────────────────────
+
+        /// <summary>All modifiers that change the HOST item's own stats (Damage, MagazineSize, ArmorValue…).</summary>
         public ItemStatModifier[] GetItemModifiers()
-        {
-            return StatConfig?.ItemModifiers;
-        }
-        
+            => StatConfig?.ItemModifiers;
+
         /// <summary>
-        /// Get stat value from StatConfig
+        /// Player stat modifiers — applied according to HOST item's rule
+        /// (Equipment = on equip, Weapon = on select).
         /// </summary>
+        public PlayerStatModifier[] GetPlayerModifiers()
+            => StatConfig?.PlayerModifiers;
+
+        /// <summary>Check if this attachment modifies a specific item stat.</summary>
+        public bool ModifiesItemStat(ItemStatType statType)
+        {
+            if (StatConfig?.ItemModifiers == null) return false;
+            foreach (var m in StatConfig.ItemModifiers)
+                if (m.StatType == statType) return true;
+            return false;
+        }
+
         public float GetStatValue(ItemStatType statType)
-        {
-            return StatConfig != null ? StatConfig.GetStatValue(statType) : 0f;
-        }
-        
-        /// <summary>
-        /// Check if item has specific stat
-        /// </summary>
+            => StatConfig != null ? StatConfig.GetStatValue(statType) : 0f;
+
         public bool HasStat(ItemStatType statType)
-        {
-            return StatConfig != null && StatConfig.HasStat(statType);
-        }
-        
-        #endregion
-        
-        #region Validation
-        
+            => StatConfig != null && StatConfig.HasStat(statType);
+
+        // ── Validation ───────────────────────────────────────────────────────────
         public override bool IsValid(out string error)
         {
-            if (!base.IsValid(out error))
-                return false;
-            
-            // Attachments must be able to attach to something
+            if (!base.IsValid(out error)) return false;
+
             if (CanAttachTo == null || CanAttachTo.Length == 0)
             {
-                error = "Attachment must specify CanAttachTo slot types";
+                error = "[AttachmentDefinition] CanAttachTo must define at least one slot type";
                 return false;
             }
-            
-            // Attachments should not be stackable
+
             if (IsStackable)
             {
-                error = "Attachments should not be stackable";
+                error = "[AttachmentDefinition] Attachments must not be stackable";
                 return false;
             }
-            
+
             error = null;
             return true;
         }
-        
-        #endregion
     }
 }

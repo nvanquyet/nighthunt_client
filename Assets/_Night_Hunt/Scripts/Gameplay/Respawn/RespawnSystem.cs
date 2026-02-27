@@ -3,6 +3,7 @@ using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Character;
+using NightHunt.Gameplay.Spawn;
 using NightHunt.Networking;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Player;
@@ -19,6 +20,10 @@ namespace NightHunt.Gameplay.Respawn
         [Header("Respawn Settings")]
         [SerializeField] private float respawnDelay = 5f;
         [SerializeField] private float phase3RespawnDelay = 3f;
+
+        [Header("Dependencies")]
+        [Tooltip("Reference to SpawnSystem for team-based fallback spawn points.")]
+        [SerializeField] private SpawnSystem _spawnSystem;
 
         // Synchronized state
         private readonly SyncVar<float> networkRespawnDelay = new SyncVar<float>();
@@ -114,10 +119,22 @@ namespace NightHunt.Gameplay.Respawn
 
             // Find respawn location
             Vector3 respawnPosition = GetRespawnPosition(player);
-            
-            // Respawn player
-            player.transform.position = respawnPosition;
-            
+            Quaternion respawnRotation = player.transform.rotation;
+
+            // Use the movement controller's Teleport to properly reset CharacterController
+            // and the prediction pipeline.  Direct transform.position assignment would
+            // be overwritten by CharacterController on the next FixedUpdate.
+            var movement = player.GetComponent<IMovementController>();
+            if (movement != null)
+            {
+                movement.Teleport(respawnPosition, respawnRotation);
+            }
+            else
+            {
+                // Fallback for objects that don't use IMovementController
+                player.transform.position = respawnPosition;
+            }
+
             // Restore player stats via PlayerStatSystem (health)
             var statSystem = player.GetComponent<IPlayerStatSystem>();
             if (statSystem is NightHunt.StatSystem.Systems.PlayerStatSystem concrete)
@@ -184,11 +201,22 @@ namespace NightHunt.Gameplay.Respawn
         }
 
         /// <summary>
-        /// Get default spawn position
+        /// Get default spawn position — delegates to SpawnSystem if available
         /// </summary>
         private Vector3 GetDefaultSpawnPosition()
         {
-            // TODO: Get from spawn system
+            // Prefer SpawnSystem so the player goes to a real team spawn point
+            if (_spawnSystem == null)
+                _spawnSystem = SpawnSystem.Instance;
+
+            if (_spawnSystem != null)
+            {
+                SpawnPoint sp = _spawnSystem.GetRandomSpawnPointForTeam(-1); // neutral fallback
+                if (sp != null)
+                    return sp.GetSpawnPosition();
+            }
+
+            Debug.LogWarning("[RespawnSystem] No SpawnSystem or spawn points found — using Vector3.zero!");
             return Vector3.zero;
         }
 

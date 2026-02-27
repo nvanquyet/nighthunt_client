@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
@@ -60,9 +60,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
 
             if (spectatorActionMap != null)
             {
-                nextPlayerAction = spectatorActionMap.FindAction("Next");
-                previousPlayerAction = spectatorActionMap.FindAction("Previous");
-                exitSpectatorAction = spectatorActionMap.FindAction("Exit");
+                // InputSystem_Actions uses "NextPlayer", "PreviousPlayer", "FreeCamera" in Spectator map.
+                nextPlayerAction = spectatorActionMap.FindAction("NextPlayer");
+                previousPlayerAction = spectatorActionMap.FindAction("PreviousPlayer");
+                exitSpectatorAction = spectatorActionMap.FindAction("FreeCamera");
             }
             else
             {
@@ -86,7 +87,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
 
         public bool IsInputEnabled => inputEnabled;
 
-        public InputActionMap GetActionMap() => spectatorActionMap;
+        public InputActionMap GetActionMap()
+        {
+            if (spectatorActionMap == null && InputLayerManager.Instance != null)
+                spectatorActionMap = InputLayerManager.Instance.SpectatorMap;
+            return spectatorActionMap;
+        }
 
         public void EnableInput()
         {

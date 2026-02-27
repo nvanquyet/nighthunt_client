@@ -127,15 +127,15 @@ namespace NightHunt.StatSystem.Configs
                         def.IsPositiveStat = true;
                         break;
 
-                    case ItemStatType.Recoil:
-                        def.DisplayName = "Recoil";
+                    case ItemStatType.SpreadPenalty:
+                        def.DisplayName = "Spread Penalty";
                         def.DisplayColor = new Color(1f, 0.4f, 0.4f);
                         def.TextColor = new Color(1f, 0.65f, 0.65f);
                         def.DisplayFormat = "0.0";
                         def.IsPositiveStat = false;
                         break;
 
-                    case ItemStatType.Spread:
+                    case ItemStatType.SpreadBase:
                         def.DisplayName = "Spread";
                         def.DisplayColor = new Color(1f, 0.4f, 0.4f);
                         def.TextColor = new Color(1f, 0.65f, 0.65f);
@@ -143,16 +143,16 @@ namespace NightHunt.StatSystem.Configs
                         def.IsPositiveStat = false;
                         break;
 
-                    case ItemStatType.Range:
-                        def.DisplayName = "Range";
+                    case ItemStatType.SpreadRecovery:
+                        def.DisplayName = "Spread Recovery";
                         def.DisplayColor = new Color(0.4f, 0.8f, 1f);
                         def.TextColor = new Color(0.65f, 0.9f, 1f);
-                        def.DisplayFormat = "0";
+                        def.DisplayFormat = "0.0";
                         def.IsPositiveStat = true;
                         break;
 
-                    case ItemStatType.AimSpeed:
-                        def.DisplayName = "Aim Speed";
+                    case ItemStatType.DrawSpeed:
+                        def.DisplayName = "Draw Speed";
                         def.DisplayColor = new Color(0.5f, 0.8f, 1f);
                         def.TextColor = new Color(0.75f, 0.9f, 1f);
                         def.DisplayFormat = "0.0";
@@ -175,27 +175,34 @@ namespace NightHunt.StatSystem.Configs
                         def.IsPositiveStat = true;
                         break;
 
-                    // General Item Stats
-                    case ItemStatType.Weight:
-                        def.DisplayName = "Weight";
-                        def.DisplayColor = new Color(0.8f, 0.8f, 0.5f);
-                        def.TextColor = new Color(0.9f, 0.9f, 0.7f);
-                        def.DisplayFormat = "0.0";
-                        def.IsPositiveStat = false;
-                        break;
-
-                    case ItemStatType.MaxDurability:
-                        def.DisplayName = "Max Durability";
-                        def.DisplayColor = new Color(0.4f, 0.9f, 0.7f);
-                        def.TextColor = new Color(0.65f, 0.95f, 0.82f);
+                    case ItemStatType.ArmorValue:
+                        def.DisplayName = "Armor";
+                        def.DisplayColor = new Color(0.4f, 0.8f, 0.6f);
+                        def.TextColor = new Color(0.65f, 0.95f, 0.78f);
                         def.DisplayFormat = "0";
                         def.IsPositiveStat = true;
                         break;
 
-                    case ItemStatType.Durability:
+                    case ItemStatType.MaxDurability:
                         def.DisplayName = "Durability";
-                        def.DisplayColor = new Color(0.4f, 0.9f, 0.7f);
-                        def.TextColor = new Color(0.65f, 0.95f, 0.82f);
+                        def.DisplayColor = new Color(0.4f, 0.85f, 0.65f);
+                        def.TextColor = new Color(0.6f, 0.92f, 0.75f);
+                        def.DisplayFormat = "0";
+                        def.IsPositiveStat = true;
+                        break;
+
+                    case ItemStatType.MaxAmmo:
+                        def.DisplayName = "Max Ammo";
+                        def.DisplayColor = new Color(0.9f, 0.6f, 0.2f);
+                        def.TextColor = new Color(1f, 0.78f, 0.4f);
+                        def.DisplayFormat = "0";
+                        def.IsPositiveStat = true;
+                        break;
+
+                    case ItemStatType.BatteryCapacity:
+                        def.DisplayName = "Battery";
+                        def.DisplayColor = new Color(0.9f, 0.9f, 0.3f);
+                        def.TextColor = new Color(1f, 1f, 0.55f);
                         def.DisplayFormat = "0";
                         def.IsPositiveStat = true;
                         break;

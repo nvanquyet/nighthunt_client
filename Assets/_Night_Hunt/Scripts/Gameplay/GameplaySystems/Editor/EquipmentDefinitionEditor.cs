@@ -91,13 +91,7 @@ namespace NightHunt.GameplaySystems.Editor
         private void ApplyVestFields(EquipmentDefinition equipment, EquipmentStatConfig config)
         {
             equipment.EquipmentSlot = EquipmentSlotType.Chest;
-            equipment.MaxDurability = 150f;
-            equipment.DefaultDurability = 150f;
             equipment.DurabilityLossRate = 1f;
-            equipment.ResourceType = ItemResourceType.Durability;
-            equipment.MaxResource = equipment.MaxDurability;
-            equipment.DefaultResource = equipment.DefaultDurability;
-            equipment.Weight = config.GetStatValue(ItemStatType.Weight);
             equipment.ModifyWeightWhenEquipped = true;
             equipment.EquippedWeightModifier = -3f;
             equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
@@ -107,10 +101,6 @@ namespace NightHunt.GameplaySystems.Editor
         private void ApplyBackpackFields(EquipmentDefinition equipment, EquipmentStatConfig config)
         {
             equipment.EquipmentSlot = EquipmentSlotType.Back;
-            equipment.ResourceType = ItemResourceType.None;
-            equipment.MaxResource = 0f;
-            equipment.DefaultResource = 0f;
-            equipment.Weight = config.GetStatValue(ItemStatType.Weight);
             equipment.ModifyWeightWhenEquipped = true;
             equipment.EquippedWeightModifier = -1f;
             equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
@@ -120,13 +110,7 @@ namespace NightHunt.GameplaySystems.Editor
         private void ApplyHelmetFields(EquipmentDefinition equipment, EquipmentStatConfig config)
         {
             equipment.EquipmentSlot = EquipmentSlotType.Head;
-            equipment.MaxDurability = 100f;
-            equipment.DefaultDurability = 100f;
             equipment.DurabilityLossRate = 1f;
-            equipment.ResourceType = ItemResourceType.Durability;
-            equipment.MaxResource = equipment.MaxDurability;
-            equipment.DefaultResource = equipment.DefaultDurability;
-            equipment.Weight = config.GetStatValue(ItemStatType.Weight);
             equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
             equipment.AttachmentSlots = new AttachmentSlotType[] { AttachmentSlotType.Light };
         }
@@ -134,10 +118,6 @@ namespace NightHunt.GameplaySystems.Editor
         private void ApplyBeltFields(EquipmentDefinition equipment, EquipmentStatConfig config)
         {
             equipment.EquipmentSlot = EquipmentSlotType.Belt;
-            equipment.ResourceType = ItemResourceType.None;
-            equipment.MaxResource = 0f;
-            equipment.DefaultResource = 0f;
-            equipment.Weight = config.GetStatValue(ItemStatType.Weight);
             equipment.ModifyWeightWhenEquipped = false;
             equipment.EquippedWeightModifier = 0f;
             equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
@@ -147,10 +127,6 @@ namespace NightHunt.GameplaySystems.Editor
         private void ApplyGlovesFields(EquipmentDefinition equipment, EquipmentStatConfig config)
         {
             equipment.EquipmentSlot = EquipmentSlotType.Hands;
-            equipment.ResourceType = ItemResourceType.None;
-            equipment.MaxResource = 0f;
-            equipment.DefaultResource = 0f;
-            equipment.Weight = config.GetStatValue(ItemStatType.Weight);
             equipment.ModifyWeightWhenEquipped = false;
             equipment.EquippedWeightModifier = 0f;
             equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
@@ -165,13 +141,7 @@ namespace NightHunt.GameplaySystems.Editor
                 ItemStatConfigSetup.SetupVest(config);
                 equipment.StatConfig = config;
                 equipment.EquipmentSlot = EquipmentSlotType.Chest;
-                equipment.MaxDurability = 150f;
-                equipment.DefaultDurability = 150f;
                 equipment.DurabilityLossRate = 1f;
-                equipment.ResourceType = ItemResourceType.Durability;
-                equipment.MaxResource = equipment.MaxDurability;
-                equipment.DefaultResource = equipment.DefaultDurability;
-                equipment.Weight = config.GetStatValue(ItemStatType.Weight);
                 equipment.ModifyWeightWhenEquipped = true;
                 equipment.EquippedWeightModifier = -3f;
                 equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
@@ -185,10 +155,6 @@ namespace NightHunt.GameplaySystems.Editor
                 ItemStatConfigSetup.SetupBackpack(config);
                 equipment.StatConfig = config;
                 equipment.EquipmentSlot = EquipmentSlotType.Back;
-                equipment.ResourceType = ItemResourceType.None;
-                equipment.MaxResource = 0f;
-                equipment.DefaultResource = 0f;
-                equipment.Weight = config.GetStatValue(ItemStatType.Weight);
                 equipment.ModifyWeightWhenEquipped = true;
                 equipment.EquippedWeightModifier = -1f;
                 equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
@@ -202,13 +168,7 @@ namespace NightHunt.GameplaySystems.Editor
                 ItemStatConfigSetup.SetupHelmet(config);
                 equipment.StatConfig = config;
                 equipment.EquipmentSlot = EquipmentSlotType.Head;
-                equipment.MaxDurability = 100f;
-                equipment.DefaultDurability = 100f;
                 equipment.DurabilityLossRate = 1f;
-                equipment.ResourceType = ItemResourceType.Durability;
-                equipment.MaxResource = equipment.MaxDurability;
-                equipment.DefaultResource = equipment.DefaultDurability;
-                equipment.Weight = config.GetStatValue(ItemStatType.Weight);
                 equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
                 equipment.AttachmentSlots = new AttachmentSlotType[] { AttachmentSlotType.Light };
                 EditorUtility.SetDirty(config);
@@ -220,10 +180,6 @@ namespace NightHunt.GameplaySystems.Editor
                 ItemStatConfigSetup.SetupBelt(config);
                 equipment.StatConfig = config;
                 equipment.EquipmentSlot = EquipmentSlotType.Belt;
-                equipment.ResourceType = ItemResourceType.None;
-                equipment.MaxResource = 0f;
-                equipment.DefaultResource = 0f;
-                equipment.Weight = config.GetStatValue(ItemStatType.Weight);
                 equipment.ModifyWeightWhenEquipped = false;
                 equipment.EquippedWeightModifier = 0f;
                 equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };
@@ -237,10 +193,6 @@ namespace NightHunt.GameplaySystems.Editor
                 ItemStatConfigSetup.SetupGloves(config);
                 equipment.StatConfig = config;
                 equipment.EquipmentSlot = EquipmentSlotType.Hands;
-                equipment.ResourceType = ItemResourceType.None;
-                equipment.MaxResource = 0f;
-                equipment.DefaultResource = 0f;
-                equipment.Weight = config.GetStatValue(ItemStatType.Weight);
                 equipment.ModifyWeightWhenEquipped = false;
                 equipment.EquippedWeightModifier = 0f;
                 equipment.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Equipment };

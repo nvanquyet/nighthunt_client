@@ -60,25 +60,9 @@ namespace NightHunt.GameplaySystems.Core.Data
         public float EquippedWeightModifier = 0f;
         
         #endregion
-        
-        #region Resource System
-        
-        [Header("Resource System")]
-        [Tooltip("Loại resource chính của item này")]
-        public ItemResourceType ResourceType = ItemResourceType.None;
-        
-        [Tooltip("Giá trị resource tối đa")]
-        [Min(0f)]
-        public float MaxResource = 0f;
-        
-        [Tooltip("Giá trị resource mặc định khi spawn")]
-        [Min(0f)]
-        public float DefaultResource = 0f;
-        
-        #endregion
-        
+
         #region Attachments
-        
+
         [Header("Attachments")]
         [Tooltip("Các attachment slot mà item này có")]
         public AttachmentSlotType[] AttachmentSlots;
@@ -122,25 +106,15 @@ namespace NightHunt.GameplaySystems.Core.Data
         
         #endregion
         
-        #region Abstract Methods
-        
+#region Stat / Resource Helpers
+
         /// <summary>
-        /// Get maximum resource value
-        /// Override in derived classes if needed (e.g., weapon may use different resource)
+        /// Returns the starting CurrentResource value when this item is first created.
+        /// Override in WeaponDefinition (→ MaxAmmo), EquipmentDefinition (→ MaxDurability),
+        /// AttachmentDefinition with battery (→ BatteryCapacity).
+        /// Default = 0 (consumables, throwables, pouches, etc. have no current resource).
         /// </summary>
-        public virtual float GetMaxResource()
-        {
-            return MaxResource;
-        }
-        
-        /// <summary>
-        /// Get default resource value when item spawned
-        /// Override in derived classes if needed
-        /// </summary>
-        public virtual float GetDefaultResource()
-        {
-            return DefaultResource;
-        }
+        public virtual float GetDefaultCurrentValue() => 0f;
         
         #endregion
         
@@ -174,13 +148,7 @@ namespace NightHunt.GameplaySystems.Core.Data
                 error = "MaxStackSize must be >= 1 for stackable items";
                 return false;
             }
-            
-            if (ResourceType != ItemResourceType.None && MaxResource <= 0)
-            {
-                error = $"MaxResource must be > 0 when ResourceType is {ResourceType}";
-                return false;
-            }
-            
+
             error = null;
             return true;
         }
@@ -195,36 +163,8 @@ namespace NightHunt.GameplaySystems.Core.Data
         /// </summary>
         public virtual float GetTotalWeight(int quantity)
         {
-            float weight = Weight;
-            
-            // Try to get from StatConfig if available (for all item types)
-            if (this is WeaponDefinition weaponDef && weaponDef.StatConfig != null)
-            {
-                float configWeight = weaponDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
-                if (configWeight > 0f) weight = configWeight;
-            }
-            else if (this is EquipmentDefinition equipmentDef && equipmentDef.StatConfig != null)
-            {
-                float configWeight = equipmentDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
-                if (configWeight > 0f) weight = configWeight;
-            }
-            else if (this is AttachmentDefinition attachmentDef && attachmentDef.StatConfig != null)
-            {
-                float configWeight = attachmentDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
-                if (configWeight > 0f) weight = configWeight;
-            }
-            else if (this is ConsumableDefinition consumableDef && consumableDef.StatConfig != null)
-            {
-                float configWeight = consumableDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
-                if (configWeight > 0f) weight = configWeight;
-            }
-            else if (this is ThrowableDefinition throwableDef && throwableDef.StatConfig != null)
-            {
-                float configWeight = throwableDef.StatConfig.GetStatValue(StatSystem.Core.Types.ItemStatType.Weight);
-                if (configWeight > 0f) weight = configWeight;
-            }
-            
-            return weight * quantity;
+            // Weight is a direct field on ItemDefinition; not part of ItemStatType enum.
+            return Weight * quantity;
         }
         
         /// <summary>
@@ -294,12 +234,6 @@ namespace NightHunt.GameplaySystems.Core.Data
                 MaxStackSize = 1;
             }
             
-            // DefaultResource cannot exceed MaxResource
-            if (DefaultResource > MaxResource)
-            {
-                DefaultResource = MaxResource;
-            }
-            
             // UsageDuration cannot be negative
             if (UsageDuration < 0f)
             {
@@ -322,7 +256,7 @@ namespace NightHunt.GameplaySystems.Core.Data
         Consumable,     // Food, medkits, potions
         Attachment,     // Scopes, suppressors, lights
         Material,       // Crafting materials, resources
-        // Ammo removed - weapons use ItemResourceType.Ammo for ammo management (no separate ammo items)
+        // Ammo: weapons manage ammo via ItemStatType.MaxAmmo in StatConfig (no separate ammo items)
         Throwable,      // Grenades, flashbangs
         Quest,          // Quest items
         Misc            // Other items
@@ -394,52 +328,6 @@ namespace NightHunt.GameplaySystems.Core.Data
         Accessory1,
         Accessory2,
         Accessory3
-    }
-    /// <summary>
-    /// Defines primary resource type for items
-    /// Determines what resource the item uses/tracks
-    /// </summary>
-    public enum ItemResourceType
-    {
-        /// <summary>
-        /// No resource (e.g., clothing, backpack)
-        /// Item doesn't degrade or consume anything
-        /// </summary>
-        None,
-        
-        /// <summary>
-        /// Durability - reduces with use/damage
-        /// When reaches 0, item becomes broken/unusable
-        /// Used by: Armor, melee weapons, tools
-        /// </summary>
-        Durability,
-        
-        /// <summary>
-        /// Ammo - consumed when shooting
-        /// When reaches 0, weapon cannot fire
-        /// Used by: Weapons
-        /// Note: Weapon có separate magazine tracking
-        /// </summary>
-        Ammo,
-        
-        /// <summary>
-        /// Energy/Battery - depletes over time when active
-        /// When reaches 0, item stops functioning
-        /// Used by: Flashlights, night vision goggles
-        /// </summary>
-        Energy,
-        
-        /// <summary>
-        /// Fuel - consumed over time
-        /// Used by: Vehicles, generators (future)
-        /// </summary>
-        Fuel,
-        
-        /// <summary>
-        /// Charge - can be recharged
-        /// Used by: Electronic devices (future)
-        /// </summary>
-        Charge
     }
     #endregion
 }
