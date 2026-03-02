@@ -10,13 +10,10 @@ namespace NightHunt.Networking.Player
     public struct PlayerRegistryData
     {
         public string BackendPlayerId;           // PRIVATE - Backend database ID
-        public string DisplayName;               
-        public int TeamId;                       
-        public PlayerConnectionStatus Status;        
-        
-        // TODO: Add backend fields
-        // public int Level;
-        // public PlayerStats Stats;
+        public string DisplayName;
+        public int TeamId;
+        public PlayerConnectionStatus Status;
+        // Extended fields (ELO, level, etc.) added here when matchmaking data is surfaced to DS.
         
         public static PlayerRegistryData GetData()
         {
@@ -39,10 +36,8 @@ namespace NightHunt.Networking.Player
     {
         public string DisplayName;      // Public - mọi người thấy được
         public int TeamId;              // Public - team hiện tại
-        public PlayerConnectionStatus Status;    
-        // TODO: Add public fields
-        // public int Level;
-        // public string AvatarIcon;
+        public PlayerConnectionStatus Status;
+        // Extended public fields (level, avatar) added when inventory/profile is surfaced.
         
         /// <summary>
         /// Convert từ private data → public data

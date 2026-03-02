@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using UnityEngine;
 using NightHunt.Data;
+using NightHunt.Gameplay.Core.Events;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet;
@@ -37,6 +38,7 @@ namespace NightHunt.Gameplay.Match
         private MatchPhaseConfigData currentPhaseConfig;
         private bool isInitialized = false;
         private bool hasStartedFirstPhase = false;
+        private bool _warningSent = false;   // reset each time a new phase starts
 
         public MatchPhaseState CurrentPhase => phaseStateMachine?.CurrentState ?? initialState;
         public string CurrentPhaseName => GetPhaseName(CurrentPhase);
@@ -146,6 +148,7 @@ namespace NightHunt.Gameplay.Match
             }
 
             currentPhaseConfig = config;
+            _warningSent = false;
 
             Debug.Log($"[MatchPhaseManager] Starting phase: {phaseName}");
 
@@ -198,15 +201,41 @@ namespace NightHunt.Gameplay.Match
         private void Update()
         {
             if (!IsServerStarted) return;
-
-            // Only check transition if first phase has started
             if (!hasStartedFirstPhase) return;
 
+            float remaining = PhaseRemainingTime;
+
+            // Phase warning (only for transitioning phases, not final Lockdown)
+            if (!_warningSent && CurrentPhase != MatchPhaseState.Lockdown)
+            {
+                float warningTime = currentPhaseConfig?.WarningTime > 0
+                    ? currentPhaseConfig.WarningTime
+                    : 30f;
+
+                if (remaining <= warningTime)
+                {
+                    _warningSent = true;
+                    Debug.Log($"[MatchPhaseManager] ⚠ Phase warning: {CurrentPhase} ends in {remaining:F0}s");
+                    RpcPhaseWarning(CurrentPhase, remaining);
+                }
+            }
+
             // Check if phase should transition
-            if (PhaseElapsedTime >= networkPhaseDuration.Value)
+            if (remaining <= 0f)
             {
                 TransitionToNextPhase();
             }
+        }
+
+        /// <summary>Broadcast phase-warning to all clients so HUD can show countdown.</summary>
+        [ObserversRpc]
+        private void RpcPhaseWarning(MatchPhaseState phase, float secondsRemaining)
+        {
+            GameplayEventBus.Instance?.Publish(new PhaseWarningEvent
+            {
+                CurrentPhase    = phase,
+                SecondsRemaining = secondsRemaining
+            });
         }
 
         /// <summary>

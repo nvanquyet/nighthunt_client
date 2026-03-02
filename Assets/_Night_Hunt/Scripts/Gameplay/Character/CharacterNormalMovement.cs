@@ -207,7 +207,7 @@
 //             _isGrounded = _characterController.isGrounded;
 //
 //             // ===== STAMINA LOGIC (Updated: Use PlayerStatSystem + Delay Recovery) =====
-//             // TODO: Uncomment và implement tương tự CharacterPredictedMovement
+//             // Uncomment and implement analogous to CharacterPredictedMovement when ready.
 //             // - Dùng PlayerStatSystem thay vì MovementSettings
 //             // - Thêm delay recovery (1-2 giây) khi đứng yên/di chuyển chậm
 //             // - Kiểm tra tốc độ di chuyển trước khi hồi stamina

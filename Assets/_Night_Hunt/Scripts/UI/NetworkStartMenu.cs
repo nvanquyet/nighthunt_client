@@ -6,10 +6,9 @@ using NightHunt.Networking;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Network Start Menu - UI với 3 nút
-    /// 1. Start Server - Tạo dedicated server (hiện tại có UI, sau này sẽ headless)
-    /// 2. Start Client Local - Test local (kết nối localhost)
-    /// 3. Start Client - Kết nối server thật (sẽ phát triển sau)
+    /// [DEV TOOL ONLY] Network Start Menu — manual FishNet connection helper for editor testing.
+    /// Not part of the production scene flow; do not reference from game scenes.
+    /// Buttons: StartServer / StartClientLocal / StartClient.
     /// </summary>
     public class NetworkStartMenu : MonoBehaviour
     {

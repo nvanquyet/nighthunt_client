@@ -254,7 +254,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 (int)inst.GetCurrentValue(ItemStatType.MagazineSize),
                 (int)inst.GetCurrentValue(ItemStatType.MaxAmmo),
                 (int)mag);
-            // TODO: BallisticExecutor.Execute(inst, aimSystem.FinalAimDir)
+            // Fire via BallisticExecutor once that subsystem is integrated:
+            // BallisticExecutor.Execute(inst, aimSystem.FinalAimDir)
         }
 
         private System.Collections.IEnumerator ReloadCoroutine(WeaponSlotType slot, ItemInstance inst)

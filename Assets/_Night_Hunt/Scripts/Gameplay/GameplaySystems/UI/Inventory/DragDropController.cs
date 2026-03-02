@@ -79,9 +79,24 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         /// </summary>
         public void ResetAll()
         {
+            // Destroy active ghost immediately
             if (_activeGhost != null)
-            {
                 Destroy(_activeGhost.gameObject);
+
+            // Restore source slot if a drag was in progress
+            // (e.g. player switches spectate target mid-drag – don't leave the slot blank)
+            if (_sourceView != null && _sourceStateSnapshot != null)
+                _sourceView.SetState(_sourceStateSnapshot);
+
+            // Clear hover highlight so the last-hovered slot doesn't stay highlighted
+            if (_currentHoverView != null)
+            {
+                var clearState = CloneState(_currentHoverView.State);
+                if (clearState != null)
+                {
+                    clearState.IsValidDropTarget = false;
+                    _currentHoverView.SetState(clearState);
+                }
             }
 
             _activeGhost = null;
@@ -89,6 +104,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _sourceId = default;
             _sourceStateSnapshot = null;
             _targetStateSnapshot = null;
+            _dropHandled = false;
+            _currentHoverView = null;
         }
 
         #region Drag Flow
@@ -311,12 +328,24 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void ClearState()
         {
+            // Clear IsValidDropTarget highlight on the last hovered slot BEFORE nulling the reference.
+            // Without this the slot keeps its green highlight after drag ends (cancel or success).
+            if (_currentHoverView != null)
+            {
+                var clearState = CloneState(_currentHoverView.State);
+                if (clearState != null)
+                {
+                    clearState.IsValidDropTarget = false;
+                    _currentHoverView.SetState(clearState);
+                }
+                _currentHoverView = null;
+            }
+
             _activeGhost = null;
             _sourceView = null;
             _sourceStateSnapshot = null;
             _targetStateSnapshot = null;
             _dropHandled = false;  // FIX Bug 5: always reset for next drag cycle
-            _currentHoverView = null;
         }
 
         #endregion
@@ -360,14 +389,41 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     break;
 
                 case DropActionType.Equip:
+                    // Optimistic: clear inventory source, immediately preview item in equipment slot.
+                    // Server OnItemEquipped confirms and may override if validation fails.
+                    if (sourceView != null) sourceView.SetEmptyState();
+                    if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
+                    break;
+
                 case DropActionType.EquipWeapon:
+                    // Optimistic: clear inventory source, immediately preview weapon in weapon slot.
+                    // If slot was already occupied, OnWeaponUnequipped(old) will fire and restore displaced weapon.
+                    if (sourceView != null) sourceView.SetEmptyState();
+                    if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
+                    break;
+
                 case DropActionType.Unequip:
+                    // Optimistic: clear equipment source, show item in target inventory slot.
+                    if (sourceView != null) sourceView.SetEmptyState();
+                    if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
+                    break;
+
                 case DropActionType.UnequipWeapon:
-                case DropActionType.DropToWorld:
-                case DropActionType.Attach:
+                    // Optimistic: clear weapon slot source, show weapon in target inventory slot.
+                    if (sourceView != null) sourceView.SetEmptyState();
+                    if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
+                    break;
+
                 case DropActionType.Detach:
+                    // Optimistic: clear attachment slot source, preview item in target inventory slot.
+                    if (sourceView != null) sourceView.SetEmptyState();
+                    if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
+                    break;
+
+                case DropActionType.Attach:
+                case DropActionType.DropToWorld:
                 case DropActionType.Trash:
-                    // Backend events drive the final state.
+                    // Backend events fully drive these states (world spawn, item deletion).
                     // Only clear source so the item feels like it has left.
                     if (sourceView != null) sourceView.SetEmptyState();
                     break;

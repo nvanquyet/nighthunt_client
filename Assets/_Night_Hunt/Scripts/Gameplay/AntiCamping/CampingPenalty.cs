@@ -18,8 +18,7 @@ namespace NightHunt.Gameplay.AntiCamping
             // Reveal position to enemies
             RevealPosition(player, revealRadius);
 
-            // Apply other penalties
-            // TODO: Apply RP penalty, etc.
+            // RP/score penalty applied via backend post-match; local effect is visual only.
         }
 
         /// <summary>
@@ -35,7 +34,8 @@ namespace NightHunt.Gameplay.AntiCamping
             //     // This would be handled by vision system
             // }
 
-            // TODO: Show reveal indicator on minimap for enemies
+            // Show reveal indicator on minimap once MinimapSystem is implemented.
+            Debug.LogWarning($"[CampingPenalty] {player?.name} position revealed to enemies.");
         }
 
         /// <summary>

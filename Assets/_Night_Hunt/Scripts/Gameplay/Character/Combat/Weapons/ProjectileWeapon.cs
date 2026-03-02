@@ -85,7 +85,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         /// </summary>
         private void SendProjectileToServer(Vector3 position, Vector3 direction)
         {
-            // TODO: Implement RPC to send projectile data to server
+            // Wire up ServerRpc for projectile data once server-authoritative combat is added.
             // Server will validate and broadcast to other clients
         }
 
@@ -116,7 +116,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             //         damage *= weaponConfig.DamageHeadMul;
             //     }
             //
-            //     // TODO: Send RPC to server for damage application
+            //     // Send RPC to server for damage application once server-authoritative combat is added.
             //     hitCharacter.TakeDamage(damage);
             // }
         }

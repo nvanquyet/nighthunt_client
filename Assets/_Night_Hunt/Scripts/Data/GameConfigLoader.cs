@@ -211,6 +211,98 @@ namespace NightHunt.Data
 
             return false;
         }
+
+        // ── Beacon ────────────────────────────────────────────────────────────
+
+        /// <summary>Returns beacon config, or sensible defaults if not configured.</summary>
+        public BeaconConfigData GetBeaconConfig()
+        {
+            if (ConfigData?.BeaconConfig != null) return ConfigData.BeaconConfig;
+            // Fallback defaults
+            return new BeaconConfigData
+            {
+                MaxActivePerTeam = 3,
+                BeaconHealth = 150f,
+                PlaceTime = 2f,
+                LootSpawnWeight = 0.15f
+            };
+        }
+
+        // ── Boss ──────────────────────────────────────────────────────────────
+
+        /// <summary>Returns all boss spawn configs.</summary>
+        public System.Collections.Generic.List<BossSpawnConfigData> GetAllBossConfigs()
+            => ConfigData?.BossSpawnConfig;
+
+        /// <summary>Returns boss config by BossId.</summary>
+        public BossSpawnConfigData GetBossConfig(string bossId)
+        {
+            if (ConfigData?.BossSpawnConfig == null) return null;
+            return ConfigData.BossSpawnConfig.Find(b => b.BossId == bossId);
+        }
+
+        // ── Match End ─────────────────────────────────────────────────────────
+
+        /// <summary>Returns match-end config, or sensible defaults.</summary>
+        public MatchEndConfigData GetMatchEndConfig()
+        {
+            if (ConfigData?.MatchEndConfig != null) return ConfigData.MatchEndConfig;
+            return new MatchEndConfigData
+            {
+                ResultsDisplayDuration = 10f,
+                PostMatchCountdown = 15f,
+                CaptureZoneScorePerSecond = 5f,
+                CaptureZoneMinPlayers = 1
+            };
+        }
+
+        /// <summary>Phase 3 respawn delay from phase config (fallback 10 s).</summary>
+        public float GetPhase3RespawnDelay()
+        {
+            var cfg = GetMatchPhaseConfig("Phase3_FinalLockdown");
+            return cfg != null && cfg.Phase3RespawnDelay > 0 ? cfg.Phase3RespawnDelay : 10f;
+        }
+
+        /// <summary>Warning time before phase ends (fallback 30 s).</summary>
+        public float GetPhaseWarningTime(string phaseName)
+        {
+            var cfg = GetMatchPhaseConfig(phaseName);
+            return cfg != null && cfg.WarningTime > 0 ? cfg.WarningTime : 30f;
+        }
+
+        // ── Rank ──────────────────────────────────────────────────────────────
+
+        /// <summary>Returns all rank tier configs.</summary>
+        public System.Collections.Generic.List<RankTierConfigData> GetAllRankTiers()
+            => ConfigData?.RankTierConfig;
+
+        /// <summary>Returns tier config for a given ELO value.</summary>
+        public RankTierConfigData GetRankTierForElo(int elo)
+        {
+            if (ConfigData?.RankTierConfig == null) return null;
+            // Find highest tier whose MinElo <= elo
+            RankTierConfigData result = null;
+            foreach (var tier in ConfigData.RankTierConfig)
+            {
+                if (elo >= tier.MinElo)
+                    result = tier;
+            }
+            return result;
+        }
+
+        /// <summary>Returns matchmaking config, or sensible defaults.</summary>
+        public RankMatchmakingConfigData GetRankMatchmakingConfig()
+        {
+            if (ConfigData?.RankMatchmakingConfig != null) return ConfigData.RankMatchmakingConfig;
+            return new RankMatchmakingConfigData
+            {
+                InitialEloDelta = 300,
+                EloDeltaExpandAmount = 200,
+                EloDeltaExpandInterval = 15f,
+                MaxEloDelta = 1500,
+                QueueTimeout = 120f
+            };
+        }
     }
 }
 

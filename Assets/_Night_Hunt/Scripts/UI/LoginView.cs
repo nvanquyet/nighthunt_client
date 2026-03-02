@@ -10,15 +10,28 @@ namespace NightHunt.UI
 {
     public class LoginView : MonoBehaviour
     {
-        [Header("UI References")]
-        [SerializeField] private TMP_InputField usernameInput;
-        [SerializeField] private TMP_InputField emailInput;
+        [Header("Panels")]
+        [SerializeField] private GameObject loginPanel;
+        [SerializeField] private GameObject registerPanel;
+
+        [Header("Panel Switch Buttons")]
+        [SerializeField] private Button goToRegisterButton;
+        [SerializeField] private Button backToLoginButton;
+
+        [Header("Login Form")]
+        [SerializeField] private TMP_InputField usernameInput;   // shared: identifier for login
         [SerializeField] private TMP_InputField passwordInput;
-        [SerializeField] private TMP_InputField confirmPasswordInput;
         [SerializeField] private Button loginButton;
-        [SerializeField] private Button registerButton;
         [SerializeField] private TextMeshProUGUI errorText;
-        
+
+        [Header("Register Form")]
+        [SerializeField] private TMP_InputField regUsernameInput;
+        [SerializeField] private TMP_InputField emailInput;
+        [SerializeField] private TMP_InputField regPasswordInput;
+        [SerializeField] private TMP_InputField confirmPasswordInput;
+        [SerializeField] private Button registerButton;
+        [SerializeField] private TextMeshProUGUI regErrorText;
+
         [Header("Service References (Optional - will auto-find if not assigned)")]
         [SerializeField] private AuthService authService;
         
@@ -44,13 +57,35 @@ namespace NightHunt.UI
             }
 
             if (loginButton != null)
-            {
                 loginButton.onClick.AddListener(OnLoginClicked);
-            }
+
             if (registerButton != null)
-            {
                 registerButton.onClick.AddListener(OnRegisterClicked);
-            }
+
+            if (goToRegisterButton != null)
+                goToRegisterButton.onClick.AddListener(ShowRegisterPanel);
+
+            if (backToLoginButton != null)
+                backToLoginButton.onClick.AddListener(ShowLoginPanel);
+
+            // Start on login panel
+            ShowLoginPanel();
+        }
+
+        // ─── Panel switching ────────────────────────────────────────────────────
+
+        public void ShowLoginPanel()
+        {
+            if (loginPanel != null)    loginPanel.SetActive(true);
+            if (registerPanel != null) registerPanel.SetActive(false);
+            if (errorText != null)     errorText.gameObject.SetActive(false);
+        }
+
+        public void ShowRegisterPanel()
+        {
+            if (loginPanel != null)    loginPanel.SetActive(false);
+            if (registerPanel != null) registerPanel.SetActive(true);
+            if (regErrorText != null)  regErrorText.gameObject.SetActive(false);
         }
 
         private void Start()
@@ -110,9 +145,9 @@ namespace NightHunt.UI
         {
             if (authService == null) return;
 
-            string username = usernameInput != null ? usernameInput.text : "";
+            string username = regUsernameInput != null ? regUsernameInput.text : "";
             string email = emailInput != null ? emailInput.text : "";
-            string password = passwordInput != null ? passwordInput.text : "";
+            string password = regPasswordInput != null ? regPasswordInput.text : "";
             string confirmPassword = confirmPasswordInput != null ? confirmPasswordInput.text : "";
 
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(email) || 
@@ -146,23 +181,18 @@ namespace NightHunt.UI
 
             if (result.Success)
             {
-                // Show success message and ask user to login
                 ShowSuccessViaNotice("Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.", () =>
                 {
-                    // Clear password fields after successful registration
-                    if (passwordInput != null) passwordInput.text = "";
+                    // Clear register fields and switch to login panel
+                    if (regUsernameInput != null) regUsernameInput.text = "";
+                    if (regPasswordInput != null) regPasswordInput.text = "";
                     if (confirmPasswordInput != null) confirmPasswordInput.text = "";
-                    
-                    // Focus on username/email field for login
-                    if (usernameInput != null)
-                    {
-                        usernameInput.Select();
-                    }
+                    ShowLoginPanel();
+                    if (usernameInput != null) usernameInput.Select();
                 });
             }
             else
             {
-                // Show error via notice popup instead of error text
                 ShowErrorViaNotice(result.Message ?? "Đăng ký thất bại", result.ErrorCode);
             }
         }
@@ -175,10 +205,13 @@ namespace NightHunt.UI
 
         private void ShowError(string message)
         {
-            if (errorText != null)
+            // Show error on whichever panel is currently visible
+            bool loginVisible = loginPanel != null && loginPanel.activeSelf;
+            var target = loginVisible ? errorText : regErrorText;
+            if (target != null)
             {
-                errorText.text = message;
-                errorText.gameObject.SetActive(true);
+                target.text = message;
+                target.gameObject.SetActive(true);
             }
         }
         
@@ -227,8 +260,10 @@ namespace NightHunt.UI
 
         private void SetButtonsInteractable(bool interactable)
         {
-            if (loginButton != null) loginButton.interactable = interactable;
+            if (loginButton != null)    loginButton.interactable    = interactable;
             if (registerButton != null) registerButton.interactable = interactable;
+            if (goToRegisterButton != null)  goToRegisterButton.interactable  = interactable;
+            if (backToLoginButton != null)   backToLoginButton.interactable   = interactable;
         }
 
 #if UNITY_EDITOR

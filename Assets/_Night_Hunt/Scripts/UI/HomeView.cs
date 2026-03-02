@@ -1,6 +1,11 @@
+using System;
 using System.Threading.Tasks;
 using NightHunt.Core;
+using NightHunt.Networking;
+using NightHunt.Common;
+using NightHunt.Data.DTOs;
 using NightHunt.Services.Auth;
+using NightHunt.Services.Game;
 using NightHunt.Services.Room;
 using NightHunt.State;
 using TMPro;
@@ -10,348 +15,315 @@ using UnityEngine.UI;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Home View - Main menu after login
-    /// Shows user info, Create Lobby, Join Lobby buttons
+    /// Home View — PUBG-style main menu.
+    ///
+    /// Layout:
+    ///   • User info panel (top)
+    ///   • [CUSTOM GAME] button → loads CustomLobby scene
+    ///   • [RANKED] section:
+    ///       Idle      → "Find Ranked Match" button
+    ///       Searching → "Searching…" label + elapsed time + "Cancel" button
+    ///       MatchFound→ "Match Found!" + accept countdown + "Accept" / "Decline" buttons
     /// </summary>
     public class HomeView : MonoBehaviour
     {
+        // ── User Info ─────────────────────────────────────────────────────────
         [Header("User Info")]
         [SerializeField] private TextMeshProUGUI usernameText;
         [SerializeField] private TextMeshProUGUI emailText;
         [SerializeField] private TextMeshProUGUI userIdText;
+        [SerializeField] private TextMeshProUGUI rankTierText;
 
-        [Header("Main Buttons")]
-        [SerializeField] private Button createLobbyButton; // Button to open create lobby panel
-        [SerializeField] private Button joinLobbyButton; // Button to open join lobby panel
-        [SerializeField] private Button quickPlayButton;
+        // ── Navigation Buttons ────────────────────────────────────────────────
+        [Header("Navigation")]
+        [SerializeField] private Button customGameButton;
         [SerializeField] private Button logoutButton;
 
-        [Header("Join Lobby Panel")]
-        [SerializeField] private GameObject joinLobbyPanel;
-        [SerializeField] private TMP_InputField roomCodeInput;
-        [SerializeField] private Button joinConfirmButton; // Button inside panel to confirm join
-        [SerializeField] private Button cancelJoinButton;
+        // ── Ranked Queue Panel ────────────────────────────────────────────────
+        [Header("Ranked Queue")]
+        [SerializeField] private GameObject rankedIdlePanel;
+        [SerializeField] private Button     findMatchButton;
 
-        [Header("Create Lobby Panel")]
-        [SerializeField] private GameObject createLobbyPanel;
-        [SerializeField] private TMP_Dropdown modeDropdown;
-        [SerializeField] private Toggle isPublicToggle;
-        [SerializeField] private Toggle isLockedToggle;
-        [SerializeField] private TMP_InputField passwordInput;
-        [SerializeField] private Button createConfirmButton; // Button inside panel to confirm create
-        [SerializeField] private Button cancelCreateButton;
+        [SerializeField] private GameObject rankedSearchingPanel;
+        [SerializeField] private TextMeshProUGUI searchTimeText;
+        [SerializeField] private Button     cancelSearchButton;
 
-        [Header("Password Popup")]
-        [SerializeField] private PasswordPopup passwordPopup;
+        [SerializeField] private GameObject rankedMatchFoundPanel;
+        [SerializeField] private TextMeshProUGUI matchFoundCountdownText;
+        [SerializeField] private Button     acceptMatchButton;
+        [SerializeField] private Button     declineMatchButton;
 
-        private AuthService authService;
-        private RoomService roomService;
-        private SessionState sessionState;
-        private RoomState roomState;
+        // ── Services ──────────────────────────────────────────────────────────
+        private AuthService   _authService;
+        private RoomService   _roomService;
+        private SessionState  _sessionState;
+        private RoomState     _roomState;
+
+        // ── Ranked Queue State ────────────────────────────────────────────────
+        private RankedQueueState _queueState = RankedQueueState.Idle;
+        private float _searchElapsed;
+        private float _acceptCountdown;
+        private const float AcceptWindow = 15f;
+        private string _pendingLobbyToken;
+        private string _pendingGameMode = Constants.MODE_2V2;
+
+        // ──────────────────────────────────────────────────────────────────────
+        #region Unity Lifecycle
 
         private void Awake()
         {
-            // Get services from GameManager
             if (GameManager.Instance != null)
             {
-                authService = GameManager.Instance.AuthService;
-                roomService = GameManager.Instance.RoomService;
-                sessionState = GameManager.Instance.SessionState;
+                _authService  = GameManager.Instance.AuthService;
+                _roomService  = GameManager.Instance.RoomService;
+                _sessionState = GameManager.Instance.SessionState;
             }
-            
-            // Get RoomState
-            roomState = RoomState.Instance;
+            _roomState = RoomState.Instance;
 
-            // Setup buttons
-            if (createLobbyButton != null)
-                createLobbyButton.onClick.AddListener(OnCreateLobbyClicked);
-            
-            if (joinLobbyButton != null)
-                joinLobbyButton.onClick.AddListener(OnJoinLobbyClicked);
-            
-            if (quickPlayButton != null)
-                quickPlayButton.onClick.AddListener(OnQuickPlayClicked);
-            
-            if (logoutButton != null)
-                logoutButton.onClick.AddListener(OnLogoutClicked);
-
-            if (joinConfirmButton != null)
-                joinConfirmButton.onClick.AddListener(OnJoinConfirmClicked);
-            
-            if (cancelJoinButton != null)
-                cancelJoinButton.onClick.AddListener(OnCancelJoinClicked);
-
-            if (createConfirmButton != null)
-                createConfirmButton.onClick.AddListener(OnCreateConfirmClicked);
-            
-            if (cancelCreateButton != null)
-                cancelCreateButton.onClick.AddListener(OnCancelCreateClicked);
-
-            // Hide panels
-            if (joinLobbyPanel != null)
-                joinLobbyPanel.SetActive(false);
-            
-            if (createLobbyPanel != null)
-                createLobbyPanel.SetActive(false);
-
-            // Setup mode dropdown
-            if (modeDropdown != null)
-            {
-                modeDropdown.ClearOptions();
-                modeDropdown.AddOptions(new System.Collections.Generic.List<string> { "2v2", "3v3", "5v5" });
-            }
-
-            // Setup password input visibility
-            if (isLockedToggle != null && passwordInput != null)
-            {
-                isLockedToggle.onValueChanged.AddListener((value) => {
-                    passwordInput.gameObject.SetActive(value);
-                });
-                passwordInput.gameObject.SetActive(false);
-            }
+            // Buttons
+            if (customGameButton  != null) customGameButton.onClick.AddListener(OnCustomGameClicked);
+            if (logoutButton      != null) logoutButton.onClick.AddListener(OnLogoutClicked);
+            if (findMatchButton   != null) findMatchButton.onClick.AddListener(OnFindMatchClicked);
+            if (cancelSearchButton!= null) cancelSearchButton.onClick.AddListener(OnCancelSearchClicked);
+            if (acceptMatchButton != null) acceptMatchButton.onClick.AddListener(OnAcceptMatchClicked);
+            if (declineMatchButton!= null) declineMatchButton.onClick.AddListener(OnDeclineMatchClicked);
         }
 
         private async void Start()
         {
             UpdateUserInfo();
-            
-            // Ensure loading is hidden when Home scene is ready
-            var loading = PersistentUICanvas.Instance != null ? PersistentUICanvas.Instance.LoadingManager : null;
-            if (loading != null && loading.IsShowing())
+            SetQueueState(RankedQueueState.Idle);
+
+            // Subscribe to matchmaking WS events
+            var ws = GameWebSocketService.Instance;
+            if (ws != null)
             {
-                loading.Hide();
+                ws.OnMatchFound     += HandleMatchFound;
+                ws.OnMatchReady     += HandleMatchReady;
+                ws.OnMatchCancelled += HandleMatchCancelled;
             }
-            
-            // Check if player was in a room before (reconnect check)
+
+            // Hide global loading overlay if present
+            var loading = PersistentUICanvas.Instance != null
+                ? PersistentUICanvas.Instance.LoadingManager : null;
+            if (loading != null && loading.IsShowing())
+                loading.Hide();
+
             await CheckAndShowReconnectPopup();
         }
-        
-        /// <summary>
-        /// Check if player was in a room and show reconnect popup if needed
-        /// </summary>
-        private async System.Threading.Tasks.Task CheckAndShowReconnectPopup()
+
+        private void OnDestroy()
         {
-            if (roomState == null || !roomState.IsInRoom || roomService == null)
+            var ws = GameWebSocketService.Instance;
+            if (ws != null)
             {
-                return;
+                ws.OnMatchFound     -= HandleMatchFound;
+                ws.OnMatchReady     -= HandleMatchReady;
+                ws.OnMatchCancelled -= HandleMatchCancelled;
             }
-            
-            // Player was in a room - check if room still exists
-            var reconnectPopup = PersistentUICanvas.Instance != null ? PersistentUICanvas.Instance.ReconnectPopup : null;
-            if (reconnectPopup == null)
+        }
+
+        private void Update()
+        {
+            switch (_queueState)
             {
-                Debug.LogWarning("[HomeView] ReconnectPopup not found in PersistentUICanvas");
-                return;
+                case RankedQueueState.Searching:
+                    _searchElapsed += Time.deltaTime;
+                    if (searchTimeText != null)
+                        searchTimeText.text = FormatTime(_searchElapsed);
+                    break;
+
+                case RankedQueueState.MatchFound:
+                    _acceptCountdown -= Time.deltaTime;
+                    if (matchFoundCountdownText != null)
+                        matchFoundCountdownText.text = $"{Mathf.CeilToInt(_acceptCountdown)}s";
+                    if (_acceptCountdown <= 0f)
+                        OnDeclineMatchClicked();   // auto-decline on timeout
+                    break;
             }
-            
-            // Try to reconnect to check if room still exists
-            var result = await roomService.Reconnect(roomState.RoomId);
-            
-            if (result.Success && result.Data != null)
+        }
+
+        #endregion
+
+        // ──────────────────────────────────────────────────────────────────────
+        #region Queue state machine
+
+        private void SetQueueState(RankedQueueState newState)
+        {
+            _queueState = newState;
+
+            if (rankedIdlePanel       != null) rankedIdlePanel.SetActive(newState == RankedQueueState.Idle);
+            if (rankedSearchingPanel  != null) rankedSearchingPanel.SetActive(newState == RankedQueueState.Searching);
+            if (rankedMatchFoundPanel != null) rankedMatchFoundPanel.SetActive(newState == RankedQueueState.MatchFound);
+        }
+
+        private async void OnFindMatchClicked()
+        {
+            SetQueueState(RankedQueueState.Searching);
+            _searchElapsed = 0f;
+
+            var result = await GameManager.Instance.BackendClient.PostAsync<object>(
+                Constants.API_MATCHMAKING_QUEUE,
+                new MatchmakingQueueRequest { gameMode = _pendingGameMode });
+
+            if (!result.Success)
             {
-                // Room still exists - show reconnect popup
-                reconnectPopup.Show(
-                    message: $"Bạn đang ở trong phòng {result.Data.roomCode}. Bạn có muốn quay lại không?",
-                    onReconnectCallback: () =>
-                    {
-                        // Reconnect successful, go to waiting room
-                        SceneLoader.LoadWaiting();
-                    },
-                    onLeaveCallback: () =>
-                    {
-                        // User chose to leave - clear room state
-                        roomState.ClearRoom();
-                    }
-                );
+                Debug.LogError($"[HomeView] Queue join failed: {result.Message}");
+                SetQueueState(RankedQueueState.Idle);
             }
             else
             {
-                // Room no longer exists - clear room state
-                Debug.Log($"[HomeView] Room {roomState.RoomId} no longer exists. Clearing room state.");
-                roomState.ClearRoom();
+                Debug.Log($"[HomeView] Ranked matchmaking queue started (mode={_pendingGameMode}).");
             }
         }
 
-        private void UpdateUserInfo()
+        private async void OnCancelSearchClicked()
         {
-            if (sessionState == null) return;
-
-            if (usernameText != null)
-                usernameText.text = $"Username: {sessionState.Username}";
-            
-            if (emailText != null)
-                emailText.text = $"Email: {sessionState.Email}";
-            
-            if (userIdText != null)
-                userIdText.text = $"User ID: {sessionState.UserId}";
+            await GameManager.Instance.BackendClient.DeleteAsync<object>(Constants.API_MATCHMAKING_QUEUE);
+            _pendingLobbyToken = null;
+            SetQueueState(RankedQueueState.Idle);
         }
 
         /// <summary>
-        /// Called when user clicks "Create Lobby" main button
-        /// Opens the create lobby panel
+        /// Called externally (by WS event handler) when the backend sends MATCH_FOUND.
         /// </summary>
-        private void OnCreateLobbyClicked()
+        public void ShowMatchFound()
         {
-            if (createLobbyPanel != null)
-            {
-                createLobbyPanel.SetActive(true);
-            }
+            _acceptCountdown = AcceptWindow;
+            SetQueueState(RankedQueueState.MatchFound);
         }
 
-        /// <summary>
-        /// Called when user clicks "Join Lobby" main button
-        /// Opens the join lobby panel
-        /// </summary>
-        private void OnJoinLobbyClicked()
+        private async void OnAcceptMatchClicked()
         {
-            if (joinLobbyPanel != null)
+            if (string.IsNullOrEmpty(_pendingLobbyToken)) return;
+
+            var result = await GameManager.Instance.BackendClient.PostAsync<object>(
+                Constants.API_MATCHMAKING_ACCEPT,
+                new MatchmakingAcceptRequest { lobbyToken = _pendingLobbyToken });
+
+            if (!result.Success)
             {
-                joinLobbyPanel.SetActive(true);
+                Debug.LogError($"[HomeView] Accept failed: {result.Message}");
+                SetQueueState(RankedQueueState.Idle);
             }
+            // Stay in MatchFound state — navigate only on match_ready WS event
         }
 
-        private async void OnQuickPlayClicked()
+        private async void OnDeclineMatchClicked()
         {
-            if (roomService == null) return;
-
-            // Quick play with default mode (2v2)
-            var result = await roomService.QuickPlay("2v2");
-            
-            if (result.Success && result.Data != null)
+            if (!string.IsNullOrEmpty(_pendingLobbyToken))
             {
-                // Join successful, go to waiting room
-                SceneLoader.LoadWaiting();
+                await GameManager.Instance.BackendClient.PostAsync<object>(
+                    Constants.API_MATCHMAKING_DECLINE,
+                    new MatchmakingDeclineRequest { lobbyToken = _pendingLobbyToken });
             }
-            else
-            {
-                Debug.LogError($"Quick play failed: {result.Message}");
-                // Show error message
-            }
+            _pendingLobbyToken = null;
+            SetQueueState(RankedQueueState.Idle);
         }
 
-        /// <summary>
-        /// Called when user clicks "Join" button inside join lobby panel
-        /// Actually performs the join operation
-        /// </summary>
-        private async void OnJoinConfirmClicked()
+        #endregion
+
+        // ──────────────────────────────────────────────────────────────────────
+        #region Matchmaking WS handlers
+
+        private void HandleMatchFound(GameWebSocketService.MatchFoundEvent evt)
         {
-            if (roomService == null || roomCodeInput == null) return;
-
-            string roomCode = roomCodeInput.text.Trim();
-            if (string.IsNullOrEmpty(roomCode))
-            {
-                Debug.LogWarning("Room code is empty");
-                return;
-            }
-
-            // First, get room info to check if password is required
-            // For now, we'll try to join and handle password requirement in the response
-            // Try to join without password first
-            var result = await roomService.JoinByCode(roomCode, "");
-            
-            if (!result.Success && result.Message != null && result.Message.Contains("password"))
-            {
-                // Show password popup
-                if (passwordPopup != null)
-                {
-                    passwordPopup.Show(roomCode, async (password) => {
-                        var retryResult = await roomService.JoinByCode(roomCode, password);
-                        if (retryResult.Success)
-                        {
-                            SceneLoader.LoadWaiting();
-                        }
-                        else
-                        {
-                            Debug.LogError($"Join failed: {retryResult.Message}");
-                        }
-                    });
-                }
-            }
-            else if (result.Success)
-            {
-                // Join successful, go to waiting room
-                SceneLoader.LoadWaiting();
-            }
-            else
-            {
-                Debug.LogError($"Join failed: {result.Message}");
-            }
+            _pendingLobbyToken = evt.lobbyToken;
+            _pendingGameMode   = !string.IsNullOrEmpty(evt.gameMode) ? evt.gameMode : _pendingGameMode;
+            ShowMatchFound();
         }
 
-        private void OnCancelJoinClicked()
+        private void HandleMatchReady(GameWebSocketService.MatchReadyEvent evt)
         {
-            if (joinLobbyPanel != null)
-            {
-                joinLobbyPanel.SetActive(false);
-            }
-            if (roomCodeInput != null)
-            {
-                roomCodeInput.text = "";
-            }
+            _pendingLobbyToken = null;
+            // RoomState.SetDedicatedServer already called inside GameWebSocketService
+            Debug.Log($"[HomeView] Match ready! room={evt.roomCode}, ds={evt.dsIp}:{evt.dsPort}");
+            SetQueueState(RankedQueueState.Idle);
+            SceneLoader.LoadMatchLoading();
         }
 
-        /// <summary>
-        /// Called when user clicks "Create" button inside create lobby panel
-        /// Actually performs the create room operation
-        /// </summary>
-        private async void OnCreateConfirmClicked()
+        private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent evt)
         {
-            if (roomService == null) return;
-
-            string mode = modeDropdown != null ? modeDropdown.options[modeDropdown.value].text : "2v2";
-            bool isPublic = isPublicToggle != null ? isPublicToggle.isOn : true;
-            bool isLocked = isLockedToggle != null ? isLockedToggle.isOn : false;
-            string password = isLocked && passwordInput != null ? passwordInput.text : null;
-
-            var result = await roomService.CreateRoom(mode, isPublic, isLocked, password);
-            
-            if (result.Success && result.Data != null)
-            {
-                // Create successful, go to waiting room
-                SceneLoader.LoadWaiting();
-            }
-            else
-            {
-                Debug.LogError($"Create room failed: {result.Message}");
-            }
+            _pendingLobbyToken = null;
+            SetQueueState(RankedQueueState.Idle);
+            Debug.Log($"[HomeView] Match cancelled: {evt.reason}");
         }
 
-        private void OnCancelCreateClicked()
+        #endregion
+
+        // ──────────────────────────────────────────────────────────────────────
+        #region Navigation
+
+        private void OnCustomGameClicked()
         {
-            if (createLobbyPanel != null)
-            {
-                createLobbyPanel.SetActive(false);
-            }
-            if (passwordInput != null)
-            {
-                passwordInput.text = "";
-            }
+            SceneLoader.LoadCustomLobby();
         }
 
         private void OnLogoutClicked()
         {
-            if (authService != null)
-            {
-                authService.Logout();
-            }
+            _authService?.Logout();
             SceneLoader.LoadLogin();
         }
 
-#if UNITY_EDITOR
-        private void OnValidate()
+        #endregion
+
+        // ──────────────────────────────────────────────────────────────────────
+        #region User info
+
+        private void UpdateUserInfo()
         {
-            // Auto-assign references in editor
-            if (GameManager.Instance != null)
+            if (_sessionState == null) return;
+            if (usernameText != null) usernameText.text = $"Username: {_sessionState.Username}";
+            if (emailText    != null) emailText.text    = $"Email: {_sessionState.Email}";
+            if (userIdText   != null) userIdText.text   = $"ID: {_sessionState.UserId}";
+
+            // Rank tier — will be populated after BE-29 adds ELO to SessionState
+            if (rankTierText != null) rankTierText.text = "Rank: ---";
+        }
+
+        #endregion
+
+        // ──────────────────────────────────────────────────────────────────────
+        #region Reconnect check
+
+        private async Task CheckAndShowReconnectPopup()
+        {
+            if (_roomState == null || !_roomState.IsInRoom || _roomService == null)
+                return;
+
+            var reconnectPopup = PersistentUICanvas.Instance != null
+                ? PersistentUICanvas.Instance.ReconnectPopup : null;
+            if (reconnectPopup == null) return;
+
+            var result = await _roomService.Reconnect(_roomState.RoomId);
+            if (result.Success && result.Data != null)
             {
-                if (authService == null)
-                    authService = GameManager.Instance.AuthService;
-                if (roomService == null)
-                    roomService = GameManager.Instance.RoomService;
-                if (sessionState == null)
-                    sessionState = GameManager.Instance.SessionState;
+                reconnectPopup.Show(
+                    message: $"You are still in room {result.Data.roomCode}. Reconnect?",
+                    onReconnectCallback: SceneLoader.LoadCustomLobby,
+                    onLeaveCallback: _roomState.ClearRoom
+                );
+            }
+            else
+            {
+                _roomState.ClearRoom();
             }
         }
-#endif
-    }
-}
 
+        #endregion
+
+        // ──────────────────────────────────────────────────────────────────────
+        #region Helpers
+
+        private static string FormatTime(float seconds)
+        {
+            int m = (int)(seconds / 60f);
+            int s = (int)(seconds % 60f);
+            return m > 0 ? $"{m}:{s:D2}" : $"{s}s";
+        }
+
+        #endregion
+    }
+
+    public enum RankedQueueState { Idle, Searching, MatchFound }
+}

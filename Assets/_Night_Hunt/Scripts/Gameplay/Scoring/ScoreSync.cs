@@ -1,6 +1,7 @@
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System.Collections.Generic;
+using NightHunt.Gameplay.Core.Events;
 
 namespace NightHunt.Gameplay.Scoring
 {
@@ -43,10 +44,9 @@ namespace NightHunt.Gameplay.Scoring
 
         private void OnScoreDataChanged(string oldData, string newData, bool asServer)
         {
-            if (!asServer)
+            if (!asServer && !string.IsNullOrEmpty(newData))
             {
-                // Client: Update score display
-                // TODO: Update UI with new score data
+                GameplayEventBus.Instance?.Publish(new ScoreDataSyncedEvent { ScoreDataJson = newData });
             }
         }
     }

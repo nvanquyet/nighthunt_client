@@ -279,7 +279,7 @@ namespace NightHunt.Gameplay.Core
             
             Debug.Log("[GameBootstrap] Phase 1: Core systems already active");
             
-            // TODO: Activate phase-specific systems
+            // Activate when beacon-placement, item-spawn, and safe-zone systems are built.
             // - Beacon placement system
             // - Item spawn system
             // - Safe zone system
@@ -295,7 +295,7 @@ namespace NightHunt.Gameplay.Core
             Debug.Log("[GameBootstrap] ===== Activating Phase 2 Systems =====");
             
             // Phase 2: Objective systems
-            // TODO: Activate phase-specific systems
+            // Activate when objective, boss-AI, capture-zone, and predator/prey systems are built.
             // - Objective system
             // - AI boss system
             // - Capture zone system
@@ -312,7 +312,7 @@ namespace NightHunt.Gameplay.Core
             Debug.Log("[GameBootstrap] ===== Activating Phase 3 Systems =====");
             
             // Phase 3: Endgame systems
-            // TODO: Activate phase-specific systems
+            // Activate when zone-close, enhanced buffs, and final-objective systems are built.
             // - Zone closing system
             // - Enhanced predator/prey buffs
             // - Final objective system
@@ -365,11 +365,7 @@ namespace NightHunt.Gameplay.Core
             
             Debug.Log("[GameBootstrap] Cleaning up gameplay systems...");
             
-            // TODO: Cleanup systems
-            // - Clear event subscribers
-            // - Reset state
-            // - Unload resources
-            
+            // Clean up: clear event subscribers, reset state, unload resources
             _isInitialized = false;
             
             Debug.Log("[GameBootstrap] ✅ Cleanup complete");

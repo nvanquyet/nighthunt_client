@@ -34,16 +34,8 @@ namespace NightHunt.Gameplay.Team
         {
             Debug.Log($"[TeamAssignmentSystem] Assigning team - FishNet ID: {fishnetClientId}, Backend ID: {backendPlayerId}");
             
-            // TODO: Query backend để lấy saved team
-            // int savedTeam = await BackendAPI.GetPlayerTeam(backendPlayerId);
-            // if (savedTeam >= 0 && savedTeam < _maxTeams)
-            // {
-            //     _playerTeamMap[fishnetClientId] = savedTeam;
-            //     TeamService.Instance?.OnPlayerAssignedToTeam(fishnetClientId, savedTeam);
-            //     return savedTeam;
-            // }
-            
-            // Default: Balance by player count
+            // Team assignment uses load-balancing by default.
+            // If persistent team preferences are added in future, query backend here.
             int teamId = GetSmallestTeam();
             _playerTeamMap[fishnetClientId] = teamId;
             
@@ -98,10 +90,6 @@ namespace NightHunt.Gameplay.Team
             Debug.Log($"[TeamAssignmentSystem] Switching - FishNet ID: {fishnetClientId}, {oldTeam} → {newTeam}");
             
             _playerTeamMap[fishnetClientId] = newTeam;
-            
-            // TODO: Save to backend
-            // string backendId = RegistryService.Instance.GetBackendIdByFishNetId(fishnetClientId);
-            // await BackendAPI.SavePlayerTeam(backendId, newTeam);
             
             // Notify TeamService
             TeamService.Instance?.OnPlayerSwitchedTeam(fishnetClientId, oldTeam, newTeam);

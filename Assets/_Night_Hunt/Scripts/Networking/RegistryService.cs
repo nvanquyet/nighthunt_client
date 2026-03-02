@@ -234,6 +234,30 @@ namespace NightHunt.Networking
             _allPlayers.RemoveAll(p => p == null);
             return _allPlayers.Count;
         }
+
+        /// <summary>Returns how many players on teamId are currently alive.</summary>
+        public int GetAliveCount(int teamId)
+        {
+            int count = 0;
+            foreach (var player in _allPlayers)
+            {
+                if (player != null && player.TeamId == teamId && player.IsAlive)
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>Returns only alive NetworkPlayers on teamId.</summary>
+        public NetworkPlayer[] GetAlivePlayersByTeam(int teamId)
+        {
+            var list = new List<NetworkPlayer>();
+            foreach (var player in _allPlayers)
+            {
+                if (player != null && player.TeamId == teamId && player.IsAlive)
+                    list.Add(player);
+            }
+            return list.ToArray();
+        }
         
         // ===== RECONNECT SUPPORT =====
         

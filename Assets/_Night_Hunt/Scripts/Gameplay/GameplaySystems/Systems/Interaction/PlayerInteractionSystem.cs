@@ -206,6 +206,23 @@ namespace NightHunt.GameplaySystems.Interaction
 
         public bool IsPickupAllMode => pickupAllMode;
 
+        /// <summary>True while a hold-interaction is in progress.</summary>
+        public bool IsHolding => _isHolding;
+
+        /// <summary>
+        /// Normalised progress [0..1] of the current hold interaction.
+        /// Returns 0 when no hold is active.
+        /// </summary>
+        public float HoldProgress
+        {
+            get
+            {
+                if (!_isHolding || _holdingInteractable == null || _holdingInteractable.HoldDuration <= 0f)
+                    return 0f;
+                return Mathf.Clamp01(_holdTimer / _holdingInteractable.HoldDuration);
+            }
+        }
+
         // ── Hold interact ────────────────────────────────────────────────────────
 
         private void HandleHoldInteract(float deltaTime)

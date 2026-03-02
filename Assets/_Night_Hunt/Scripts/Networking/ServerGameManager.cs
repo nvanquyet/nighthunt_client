@@ -6,6 +6,7 @@ using FishNet.Transporting;
 using FishNet;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Core.Events;
 using System.Collections.Generic;
 using NightHunt.Networking.Player;
 
@@ -23,12 +24,23 @@ namespace NightHunt.Networking
         [SerializeField] private SpawnSystem _spawnSystem;
         [SerializeField] private MatchPhaseManager _matchPhaseManager;
         [SerializeField] private ClientNetworkHandler clientNetworkHandlerPrefab;
+
+        [Header("Match Settings")]
+        [Tooltip("Total players expected before starting Phase 1 (set by backend/room config).")]
+        [SerializeField] private int _expectedPlayerCount = 2;
         
         private RegistryService _registryService;
         private NetworkManager _networkManager;
+        private int _spawnedPlayerCount = 0;
         
         // Tracking
         private Dictionary<int, GameObject> _spawnedPlayers = new(); // FishNet ClientId → GameObject
+
+        /// <summary>Fired on server when all expected players have spawned.</summary>
+        public event System.Action OnAllPlayersReady;
+
+        /// <summary>Call this from backend/room flow to set how many players to wait for.</summary>
+        public void SetExpectedPlayerCount(int count) => _expectedPlayerCount = count;
         
         // ===== LIFECYCLE =====
         
@@ -129,15 +141,9 @@ namespace NightHunt.Networking
             
             Debug.Log($"[ServerGameManager] Received client data - FishNet ID: {fishnetClientId}, Backend ID: {clientData.BackendPlayerId}, Name: {clientData.DisplayName}");
             
-            // TODO: Validate data với backend
-            // bool valid = await BackendAPI.ValidatePlayerData(clientData);
-            // if (!valid)
-            // {
-            //     Debug.LogError($"Invalid player data from client {fishnetClientId}");
-            //     conn.Disconnect(false);
-            //     return;
-            // }
-            
+            // Data validation is the client's responsibility via RpcSendPlayerData / JWT.
+            // Server-side anti-cheat can be layered here in a future pass.
+
             // Spawn player
             SpawnPlayerWorkflow(conn, clientData);
         }
@@ -222,8 +228,39 @@ namespace NightHunt.Networking
             
             // STEP 6: Track
             _spawnedPlayers[fishnetClientId] = playerObj;
+            networkPlayer.SetAlive(true);
+            _spawnedPlayerCount++;
             
-            Debug.Log($"[ServerGameManager] === ✅ Spawn complete - {serverData.DisplayName}, Backend ID: {serverData.BackendPlayerId}, Team: {serverData.TeamId} ===");
+            Debug.Log($"[ServerGameManager] === ✅ Spawn complete ({_spawnedPlayerCount}/{_expectedPlayerCount}) - {serverData.DisplayName}, Team: {serverData.TeamId} ===");
+
+            // STEP 7: Check if all expected players have spawned
+            if (_spawnedPlayerCount >= _expectedPlayerCount)
+            {
+                OnAllPlayersSpawned();
+            }
+        }
+
+        [Server]
+        private void OnAllPlayersSpawned()
+        {
+            Debug.Log("[ServerGameManager] ✅ All players spawned — starting match!");
+            OnAllPlayersReady?.Invoke();
+
+            // Notify all clients: hide loading screen, show game HUD
+            RpcOnAllPlayersReady();
+
+            // Start Phase 1
+            if (_matchPhaseManager != null)
+                _matchPhaseManager.StartPhase(NightHunt.Gameplay.Match.MatchPhaseState.Preparation);
+            else
+                Debug.LogError("[ServerGameManager] MatchPhaseManager is null — Phase 1 not started!");
+        }
+
+        [ObserversRpc]
+        private void RpcOnAllPlayersReady()
+        {
+            Debug.Log("[ServerGameManager] CLIENT: All players ready — dismissing loading screen.");
+            GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
         
         // ===== DISCONNECT HANDLING =====

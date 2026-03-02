@@ -21,6 +21,8 @@ namespace NightHunt.UI
         [SerializeField] private ReconnectPopup reconnectPopup;
         [SerializeField] private PingDisplay pingDisplay;
         [SerializeField] private NoticePopup noticePopup;
+        [SerializeField] private ToastService toastService;
+        [SerializeField] private UINotificationService notificationService;
 
         // Public accessors
         public new static PersistentUICanvas Instance => (PersistentUICanvas)PersistentObject.Instance;
@@ -29,6 +31,8 @@ namespace NightHunt.UI
         public ReconnectPopup ReconnectPopup => reconnectPopup;
         public PingDisplay PingDisplay => pingDisplay;
         public NoticePopup NoticePopup => noticePopup;
+        public ToastService ToastService => toastService;
+        public UINotificationService NotificationService => notificationService;
 
         protected override void OnPersistentAwake()
         {
@@ -103,6 +107,17 @@ namespace NightHunt.UI
                 noticePopup.Hide();
             }
 
+            // Wire UINotificationService with all notification backends
+            if (notificationService == null)
+                notificationService = GetComponentInChildren<UINotificationService>(true);
+            if (notificationService == null)
+            {
+                var go = new GameObject("UINotificationService");
+                go.transform.SetParent(transform, false);
+                notificationService = go.AddComponent<UINotificationService>();
+            }
+            notificationService.Configure(toastService, noticePopup, loadingManager);
+
             // PingDisplay sẽ tự động start trong Start()
         }
 
@@ -162,6 +177,14 @@ namespace NightHunt.UI
                 noticeGO.transform.SetParent(transform, false);
                 noticePopup = noticeGO.AddComponent<NoticePopup>();
             }
+
+            // Tạo UINotificationService
+            if (notificationService == null)
+            {
+                GameObject notifGO = new GameObject("UINotificationService");
+                notifGO.transform.SetParent(transform, false);
+                notificationService = notifGO.AddComponent<UINotificationService>();
+            }
         }
 
 #if UNITY_EDITOR
@@ -201,6 +224,11 @@ namespace NightHunt.UI
             if (noticePopup == null)
             {
                 noticePopup = GetComponentInChildren<NoticePopup>();
+            }
+
+            if (notificationService == null)
+            {
+                notificationService = GetComponentInChildren<UINotificationService>(true);
             }
         }
 #endif

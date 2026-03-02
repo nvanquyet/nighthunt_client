@@ -1,5 +1,4 @@
 using System;
-using NightHunt.Lobby;
 using NightHunt.Networking;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;
@@ -24,7 +23,6 @@ namespace NightHunt.Core
         [SerializeField] private AuthService authService;
         [SerializeField] private RoomService roomService;
         // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager thay thế
-        [SerializeField] private LobbyController lobbyController;
         [SerializeField] private GameWebSocketService gameWebSocketService;
         
         [Header("Config")]
@@ -39,7 +37,6 @@ namespace NightHunt.Core
         public AuthService AuthService => authService;
         public RoomService RoomService => roomService;
         // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager.Instance thay thế
-        public LobbyController LobbyController => lobbyController;
         public GameWebSocketService GameWebSocket => gameWebSocketService;
         public SessionState SessionState => sessionState;
         public RoomState RoomState => roomState;
@@ -139,15 +136,6 @@ namespace NightHunt.Core
 
             // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager thay thế
             // NetworkGameManager là singleton và tự quản lý
-
-            if (lobbyController == null)
-            {
-                lobbyController = GetComponent<LobbyController>();
-                if (lobbyController == null)
-                {
-                    lobbyController = gameObject.AddComponent<LobbyController>();
-                }
-            }
 
             if (sessionState == null)
             {
@@ -348,12 +336,12 @@ namespace NightHunt.Core
                             {
                                 Debug.Log("[GameManager] Room data refreshed successfully");
                                 
-                                // Trigger LobbyView refresh if it exists
-                                var lobbyView = FindFirstObjectByType<UI.LobbyView>();
+                                // Trigger CustomLobbyView refresh if it exists
+                                var lobbyView = FindFirstObjectByType<UI.CustomLobbyView>();
                                 if (lobbyView != null)
                                 {
-                                    lobbyView.RefreshLobby();
-                                    Debug.Log("[GameManager] LobbyView refresh triggered");
+                                    lobbyView.RefreshPlayerList();
+                                    Debug.Log("[GameManager] CustomLobbyView refresh triggered");
                                 }
                             }
                             else

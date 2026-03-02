@@ -1,11 +1,15 @@
+using System.Collections;
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Core.Events;
 
 namespace NightHunt.UI
 {
     /// <summary>
     /// Match UI showing phase, timer, score, etc.
+    /// Also shows a full-screen phase warning banner when <see cref="PhaseWarningEvent"/> fires.
     /// </summary>
     public class MatchUI : MonoBehaviour
     {
@@ -25,9 +29,37 @@ namespace NightHunt.UI
         [SerializeField] private Transform teamListParent;
         [SerializeField] private GameObject teamMemberPrefab;
 
+        // ── Phase Warning Banner ──────────────────────────────────────────────
+        [Header("Phase Warning Banner")]
+        [Tooltip("Root panel — shown briefly when a phase is about to end.")]
+        [SerializeField] private GameObject  warningPanel;
+        [Tooltip("e.g. 'PHASE 2 ENDING IN 30s'")]
+        [SerializeField] private TextMeshProUGUI warningText;
+        [Tooltip("Optional background image — its alpha is faded in/out.")]
+        [SerializeField] private Image       warningBackground;
+        [Tooltip("How many seconds the banner stays fully visible at its peak.")]
+        [SerializeField] private float       warningHoldDuration = 3f;
+        [Tooltip("Fade in/out duration (each way).")]
+        [SerializeField] private float       warningFadeDuration = 0.4f;
+        // ──────────────────────────────────────────────────────────────────────
+
         private MatchPhaseManager phaseManager;
         private float updateInterval = 0.1f;
         private float lastUpdateTime;
+        private Coroutine _warningCoroutine;
+
+        private void Awake()
+        {
+            if (warningPanel != null)
+                warningPanel.SetActive(false);
+
+            GameplayEventBus.Instance?.Subscribe<PhaseWarningEvent>(OnPhaseWarning);
+        }
+
+        private void OnDestroy()
+        {
+            GameplayEventBus.Instance?.Unsubscribe<PhaseWarningEvent>(OnPhaseWarning);
+        }
 
         private void Start()
         {
@@ -158,6 +190,57 @@ namespace NightHunt.UI
                 default:
                     return "";
             }
+        }
+
+        // ── Phase Warning ──────────────────────────────────────────────────────
+
+        private void OnPhaseWarning(PhaseWarningEvent evt)
+        {
+            if (_warningCoroutine != null)
+                StopCoroutine(_warningCoroutine);
+
+            string phaseName = FormatPhaseName(evt.CurrentPhase.ToString());
+            string msg       = $"{phaseName}\nENDING IN {Mathf.CeilToInt(evt.SecondsRemaining):F0}s";
+
+            _warningCoroutine = StartCoroutine(ShowWarningBanner(msg, evt.SecondsRemaining));
+        }
+
+        private IEnumerator ShowWarningBanner(string message, float displaySeconds)
+        {
+            if (warningPanel == null) yield break;
+
+            if (warningText != null) warningText.text = message;
+            warningPanel.SetActive(true);
+
+            // Fade in
+            yield return StartCoroutine(FadeWarning(0f, 1f, warningFadeDuration));
+
+            // Hold for the lesser of warningHoldDuration or remaining time
+            float hold = Mathf.Min(warningHoldDuration, displaySeconds);
+            yield return new WaitForSeconds(hold);
+
+            // Fade out
+            yield return StartCoroutine(FadeWarning(1f, 0f, warningFadeDuration));
+
+            warningPanel.SetActive(false);
+            _warningCoroutine = null;
+        }
+
+        private IEnumerator FadeWarning(float from, float to, float duration)
+        {
+            if (warningBackground == null) yield break;
+
+            float elapsed = 0f;
+            Color c = warningBackground.color;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                c.a = Mathf.Lerp(from, to, elapsed / duration);
+                warningBackground.color = c;
+                yield return null;
+            }
+            c.a = to;
+            warningBackground.color = c;
         }
     }
 }

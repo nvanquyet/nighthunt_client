@@ -28,6 +28,11 @@ namespace NightHunt.Common
         public const string API_ROOMS_UPDATE_SETTINGS = "/rooms/{0}/update-settings";
         public const string API_ROOMS_TRANSFER_OWNER = "/rooms/{0}/transfer-owner";
 
+        // Matchmaking
+        public const string API_MATCHMAKING_QUEUE   = "/api/matchmaking/queue";
+        public const string API_MATCHMAKING_ACCEPT  = "/api/matchmaking/accept";
+        public const string API_MATCHMAKING_DECLINE = "/api/matchmaking/decline";
+
         // Game Modes
         public const string MODE_2V2 = "2v2";
         public const string MODE_3V3 = "3v3";

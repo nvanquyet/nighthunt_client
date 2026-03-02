@@ -1,0 +1,186 @@
+name: "Build & Deploy Dedicated Server"
+
+# ── Trigger ───────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "Assets/**"
+      - "Packages/**"
+      - "ProjectSettings/**"
+      - "docker/dedicated-server/**"
+      - ".github/workflows/build-dedicated-server.yml"
+
+  # Build thủ công
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Force rebuild (bỏ qua cache)"
+        type: boolean
+        default: false
+
+# ── Environment ───────────────────────────────────────────────────────────────
+env:
+  # ⚠️ Thay đúng Unity version của project
+  UNITY_VERSION: "2022.3.20f1"
+
+  # Docker image sẽ được push lên GitHub Container Registry
+  REGISTRY:   ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/nighthunt-ds
+
+# ── Jobs ──────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ── Job 1: Build Unity Dedicated Server (Linux x64) ─────────────────────────
+  build-unity:
+    name: "Unity Linux Server Build"
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.gen-version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true        # Git LFS cho asset lớn
+          fetch-depth: 0
+
+      # Version tag: YYYYMMDD-<short-sha>
+      - name: Generate version
+        id: gen-version
+        run: |
+          VERSION="$(date +%Y%m%d)-$(git rev-parse --short HEAD)"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
+
+      # Cache thư mục Library (Unity cache - tăng tốc build đáng kể)
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key:  unity-lib-${{ env.UNITY_VERSION }}-${{ hashFiles('Assets/**', 'Packages/manifest.json') }}
+          restore-keys: |
+            unity-lib-${{ env.UNITY_VERSION }}-
+
+      # Build Unity DS bằng GameCI
+      # Docs: https://game.ci/docs/github/builder
+      - name: Build Unity Dedicated Server
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE:  ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL:    ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion:     ${{ env.UNITY_VERSION }}
+          targetPlatform:   StandaloneLinux64
+          buildName:        NightHuntServer
+          buildsPath:       Builds
+          # Dedicated Server mode + chạy BuildScript.BuildDedicatedServer
+          customParameters: >-
+            -standaloneBuildSubtarget Server
+            -executeMethod BuildScript.BuildDedicatedServer
+
+      - name: Verify build output
+        run: |
+          echo "=== Build output ==="
+          ls -lah Builds/DedicatedServer/
+          # Đảm bảo binary tồn tại và có quyền execute
+          test -f Builds/DedicatedServer/NightHuntServer || (echo "❌ Binary not found!" && exit 1)
+          chmod +x Builds/DedicatedServer/NightHuntServer
+          echo "✅ Binary verified"
+
+      # Upload artifact để job build-docker dùng
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name:           ds-build-${{ steps.gen-version.outputs.version }}
+          path:           Builds/DedicatedServer/
+          retention-days: 7
+
+  # ── Job 2: Build & Push Docker Image ────────────────────────────────────────
+  build-docker:
+    name: "Docker Build & Push"
+    runs-on: ubuntu-latest
+    needs: build-unity
+    permissions:
+      contents: read
+      packages: write   # Cần để push lên GHCR
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Download Unity build từ job trước
+      - name: Download DS build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ds-build-${{ needs.build-unity.outputs.version }}
+          # Download đúng vào Docker build context
+          path: docker/dedicated-server/build/
+
+      - name: Prepare Docker context
+        run: |
+          echo "=== Docker context ==="
+          ls -lah docker/dedicated-server/build/
+          chmod +x docker/dedicated-server/build/NightHuntServer
+          echo "✅ Context ready"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.build-unity.outputs.version }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context:     docker/dedicated-server
+          file:        docker/dedicated-server/Dockerfile
+          push:        true
+          tags:        ${{ steps.meta.outputs.tags }}
+          labels:      ${{ steps.meta.outputs.labels }}
+          platforms:   linux/amd64
+          cache-from:  type=gha
+          cache-to:    type=gha,mode=max
+
+      - name: Job Summary
+        run: |
+          echo "## ✅ DS Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ needs.build-unity.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\` |" >> $GITHUB_STEP_SUMMARY
+
+  # ── Job 3: Notify Backend về image mới ──────────────────────────────────────
+  notify-backend:
+    name: "Notify Backend"
+    runs-on: ubuntu-latest
+    needs: [ build-unity, build-docker ]
+    # Chỉ notify khi có VPS URL được config
+    if: ${{ vars.VPS_BACKEND_URL != '' }}
+
+    steps:
+      - name: Notify backend - new image available
+        run: |
+          curl -s -f -X POST "${{ vars.VPS_BACKEND_URL }}/api/admin/ds/update-image" \
+            -H "Authorization: Bearer ${{ secrets.BACKEND_ADMIN_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "version":  "${{ needs.build-unity.outputs.version }}",
+              "imageRef": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-unity.outputs.version }}"
+            }' \
+          && echo "✅ Backend notified" \
+          || echo "⚠️ Backend notify failed (non-fatal)"

@@ -56,7 +56,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             //     }
             //
             //     // Apply damage (server authority)
-            //     // TODO: Send RPC to server for damage application
+            //     // Send RPC to server for damage application once server-authoritative combat is added.
             //     hitCharacter.TakeDamage(damage);
             //
             //     // Publish damage event

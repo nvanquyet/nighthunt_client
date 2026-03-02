@@ -74,7 +74,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             //         damage *= weaponConfig.DamageHeadMul;
             //     }
             //
-            //     // TODO: Send RPC to server for damage application
+            //     // Send RPC to server for damage application once server-authoritative combat is added.
             //     character.TakeDamage(damage);
             // }
 

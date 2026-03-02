@@ -117,6 +117,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         /// </summary>
         public void RefreshForNewPlayer(UIDomainBridge domainBridge)
         {
+            // FIX: Unsubscribe from the OLD bridge BEFORE replacing the reference.
+            // Previously _domainBridge was replaced first, so HookBridgeEvents(false) silently
+            // unsubscribed from the NEW bridge (a no-op) while old subscriptions were leaked.
+            HookBridgeEvents(false);
+
             _domainBridge = domainBridge;
 
             // Update AttachmentPanel và Tooltip với bridge mới
@@ -137,8 +142,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _itemTooltip.Initialize(_domainBridge);
             }
 
-            // Unhook events cũ trước khi hook events mới
-            HookBridgeEvents(false);
+            // Subscribe to new bridge events
             HookBridgeEvents(true);
 
             // Refresh tất cả slots với state mới

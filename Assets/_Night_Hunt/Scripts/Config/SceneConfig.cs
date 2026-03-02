@@ -21,9 +21,15 @@ namespace NightHunt.Config
         
         [Tooltip("Scene name: 04_Waiting")]
         public string waitingScene = "04_Waiting";
+
+        [Tooltip("Scene name: 05_CustomLobby")]
+        public string customLobbyScene = "05_CustomLobby";
+
+        [Tooltip("Scene name: 06_MatchLoading")]
+        public string matchLoadingScene = "06_MatchLoading";
         
-        [Tooltip("Scene name: 05_Game")]
-        public string gameScene = "05_Game";
+        [Tooltip("Scene name: 07_Game")]
+        public string gameScene = "07_Game";
         
         // Singleton instance (set trong Unity Editor)
         private static SceneConfig instance;
@@ -71,12 +77,14 @@ namespace NightHunt.Config
         {
             return sceneType switch
             {
-                SceneType.FirstLoading => Instance.firstLoadingScene,
-                SceneType.Login => Instance.loginScene,
-                SceneType.Home => Instance.homeScene,
-                SceneType.Waiting => Instance.waitingScene,
-                SceneType.Game => Instance.gameScene,
-                _ => Instance.loginScene
+                SceneType.FirstLoading  => Instance.firstLoadingScene,
+                SceneType.Login         => Instance.loginScene,
+                SceneType.Home          => Instance.homeScene,
+                SceneType.Waiting       => Instance.waitingScene,
+                SceneType.CustomLobby   => Instance.customLobbyScene,
+                SceneType.MatchLoading  => Instance.matchLoadingScene,
+                SceneType.Game          => Instance.gameScene,
+                _                       => Instance.loginScene
             };
         }
     }
@@ -90,6 +98,8 @@ namespace NightHunt.Config
         Login,
         Home,
         Waiting,
+        CustomLobby,   // Custom / friend mode lobby
+        MatchLoading,  // Pre-game loading screen (team info + progress)
         Game
     }
 }

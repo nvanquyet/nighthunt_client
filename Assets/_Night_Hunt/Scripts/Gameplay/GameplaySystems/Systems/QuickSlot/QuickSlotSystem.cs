@@ -434,6 +434,18 @@ namespace NightHunt.GameplaySystems.QuickSlot
                 }
                 return;
             }
+
+            // Deployable items (beacons, traps, etc.):
+            // Do NOT consume the item here. Instead tell the owning client to
+            // start the placement preview flow via IDeployableHandler.
+            // The item is consumed server-side only after the placement ServerRpc
+            // succeeds (see BeaconPlaceable.CmdRequestPlaceBeacon).
+            if (def != null && def.Type == ItemType.Deployable)
+            {
+                OnQuickSlotUsed?.Invoke(slotIndex, item);   // update HUD immediately
+                RpcBeginDeployment(Owner, item.InstanceID, item.DefinitionID);
+                return;
+            }
             
             // Fallback: Direct consume (for legacy items)
             OnQuickSlotUsed?.Invoke(slotIndex, item);
@@ -459,7 +471,38 @@ namespace NightHunt.GameplaySystems.QuickSlot
             var item = _inventorySystem?.GetItemByInstanceID(instanceID);
             return item != null && item.Quantity > 0;
         }
-        
+
+        /// <summary>
+        /// Fires on the OWNING CLIENT to start a deployable item placement flow.
+        /// Resolves <see cref="IDeployableHandler"/> from the same GameObject
+        /// (e.g. <see cref="NightHunt.Gameplay.Beacon.BeaconPlaceable"/>).
+        /// </summary>
+        [TargetRpc]
+        private void RpcBeginDeployment(
+            FishNet.Connection.NetworkConnection conn,
+            string instanceId,
+            string definitionId)
+        {
+            if (!IsOwner) return;   // extra safety: only the owner acts
+
+            var item = _inventorySystem?.GetItemByInstanceID(instanceId);
+            var def  = ItemDatabase.GetDefinition(definitionId);
+            if (item == null || def == null)
+            {
+                Debug.LogWarning($"[QuickSlotSystem] RpcBeginDeployment: item or def not found ({instanceId}/{definitionId})");
+                return;
+            }
+
+            var handler = GetComponent<IDeployableHandler>();
+            if (handler == null)
+            {
+                Debug.LogWarning("[QuickSlotSystem] No IDeployableHandler found on player GO.");
+                return;
+            }
+
+            handler.BeginDeploy(item, def);
+        }
+
         #endregion
         
         #region Auto-Cleanup System - CRITICAL FIX

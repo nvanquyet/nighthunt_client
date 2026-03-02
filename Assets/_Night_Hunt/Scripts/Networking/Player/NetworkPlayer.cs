@@ -62,15 +62,23 @@ namespace NightHunt.Networking
         // struct — no name, no team — because FishNet never serialises it.
         private readonly SyncVar<PlayerPublicData> _playerData = new SyncVar<PlayerPublicData>();
 
+        // Alive state — server-authoritative, replicated to all clients
+        private readonly SyncVar<bool> _isAlive = new SyncVar<bool>(true, new SyncTypeSettings());
+        /// <summary>True while the player is alive (false during death / waiting for respawn).</summary>
+        public bool IsAlive => _isAlive.Value;
+
         private PlayerPublicData PlayerData => _playerData.Value;
 
-        /// <summary>
-        /// Server: Set / update the publicly-visible player data.
-        /// The SyncVar broadcasts the new value to all observers automatically.
-        /// </summary>
+        /// <summary>Server: Set / update the publicly-visible player data.</summary>
         public void SetPublicData(PlayerPublicData data)
         {
             _playerData.Value = data;
+        }
+
+        /// <summary>Server: Mark player as dead or alive.</summary>
+        public void SetAlive(bool alive)
+        {
+            _isAlive.Value = alive;
         }
         #endregion
         

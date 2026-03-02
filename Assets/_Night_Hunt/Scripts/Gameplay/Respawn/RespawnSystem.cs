@@ -1,6 +1,7 @@
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
+using NightHunt.Data;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Spawn;
@@ -15,15 +16,17 @@ namespace NightHunt.Gameplay.Respawn
     /// <summary>
     /// Respawn system with phase-based rules
     /// </summary>
-    public class RespawnSystem : NetworkBehaviour
+    public class RespawnSystem : NetworkBehaviour, IRespawnProvider
     {
         [Header("Respawn Settings")]
         [SerializeField] private float respawnDelay = 5f;
-        [SerializeField] private float phase3RespawnDelay = 3f;
+        /// <summary>Fallback; overridden at runtime by GameConfigLoader.</summary>
+        [SerializeField] private float phase3RespawnDelay = 10f;
 
         [Header("Dependencies")]
         [Tooltip("Reference to SpawnSystem for team-based fallback spawn points.")]
         [SerializeField] private SpawnSystem _spawnSystem;
+        [SerializeField] private MatchEndManager _matchEndManager;
 
         // Synchronized state
         private readonly SyncVar<float> networkRespawnDelay = new SyncVar<float>();
@@ -31,15 +34,41 @@ namespace NightHunt.Gameplay.Respawn
         private MatchPhaseManager phaseManager;
         private Dictionary<NetworkPlayer, float> respawnTimers = new Dictionary<NetworkPlayer, float>();
 
+        // ── IRespawnProvider ───────────────────────────────────────────────
+        /// <summary>True if any player on the given team is waiting for a respawn timer.</summary>
+        public bool HasPendingRespawn(int teamId)
+        {
+            foreach (var kvp in respawnTimers)
+            {
+                if (kvp.Key != null && kvp.Key.TeamId == teamId && kvp.Value > 0f)
+                    return true;
+            }
+            return false;
+        }
+
         private void Awake()
         {
             phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+
+            // Override Phase-3 delay from live config (falls back to SerializeField default)
+            float configDelay = GameConfigLoader.Instance?.GetPhase3RespawnDelay() ?? phase3RespawnDelay;
+            if (configDelay > 0f)
+                phase3RespawnDelay = configDelay;
         }
 
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
             networkRespawnDelay.OnChange += OnRespawnDelayChanged;
+        }
+
+        public override void OnStartServer()
+        {
+            base.OnStartServer();
+            // Self-register as respawn provider with MatchEndManager
+            if (_matchEndManager == null)
+                _matchEndManager = FindFirstObjectByType<MatchEndManager>();
+            _matchEndManager?.RegisterRespawnProvider(this);
         }
 
         public override void OnStopNetwork()
@@ -196,7 +225,9 @@ namespace NightHunt.Gameplay.Respawn
         /// </summary>
         private Vector3 GetSafeZonePosition()
         {
-            // TODO: Get position from zone system
+            // ZoneSystem is not yet active — fall back to map center.
+            // When LockdownZone is implemented it should provide a center point here.
+            Debug.LogWarning("[RespawnSystem] Zone system not yet active — using map center for Phase-3 respawn.");
             return Vector3.zero;
         }
 
@@ -279,7 +310,12 @@ namespace NightHunt.Gameplay.Respawn
         private void OnPlayerRespawned(NetworkPlayer player)
         {
             Debug.Log($"[RespawnSystem] Player respawned: {player.DisplayName}");
-            // Notify other systems
+
+            // Mark alive via NetworkPlayer so RegistryService.GetAliveCount is accurate
+            player.SetAlive(true);
+
+            // Ask MatchEndManager to re-evaluate the player's team (Phase 3 guard)
+            _matchEndManager?.RecheckEliminationForTeam(player.TeamId);
         }
 
         private void OnRespawnDelayChanged(float oldDelay, float newDelay, bool asServer)

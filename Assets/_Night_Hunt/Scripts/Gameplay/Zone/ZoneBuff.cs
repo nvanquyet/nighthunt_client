@@ -38,7 +38,7 @@
 //         private void ApplyBuff(PlayerStats stats)
 //         {
 //             //var modifier = new StatModifier(statName, modifierType, value, $"Zone_{gameObject.GetInstanceID()}");
-//             // TODO: Apply through modifier stack
+//             // Apply through modifier stack when ZoneSystem is enabled.
 //         }
 //
 //         /// <summary>
@@ -46,7 +46,7 @@
 //         /// </summary>
 //         private void RemoveBuff(PlayerStats stats)
 //         {
-//             // TODO: Remove modifier by source ID
+//             // Remove modifier by source ID when ZoneSystem is enabled.
 //         }
 //
 //         private void OnDrawGizmosSelected()

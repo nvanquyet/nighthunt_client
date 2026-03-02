@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
@@ -39,6 +40,9 @@ namespace NightHunt.Gameplay.Respawn
         public int OwnerTeamId => ownerTeamId.Value;
         public bool IsPlaced => isPlaced.Value;
         public bool IsActive => isActive.Value;
+
+        /// <summary>Fired on the server when this beacon's HP reaches zero.</summary>
+        public event Action Destroyed;
 
         public override void OnStartNetwork()
         {
@@ -173,6 +177,9 @@ namespace NightHunt.Gameplay.Respawn
         {
             isActive.Value = false;
             Debug.Log($"[RespawnBeacon] Beacon destroyed (Team {ownerTeamId.Value})");
+
+            // Notify external systems (e.g. BeaconManager)
+            Destroyed?.Invoke();
 
             // Award score to destroyer
             // This would be handled by a scoring system

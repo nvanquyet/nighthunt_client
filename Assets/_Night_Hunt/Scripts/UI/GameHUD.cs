@@ -1,20 +1,136 @@
-// using UnityEngine;
-// using UnityEngine.UI;
-// using TMPro;
-// using NightHunt.Gameplay.Character;
-// using NightHunt.Inventory.Stats;
-// using NightHunt.Networking;
-//
-// namespace NightHunt.UI
-// {
-//     /// <summary>
-//     /// Main HUD for gameplay
-//     /// Displays health, stamina, ammo, minimap, etc.
-//     /// </summary>
-//     public class GameHUD : MonoBehaviour
-//     {
-//         [Header("Health Bar")]
-//         [SerializeField] private Slider healthBar;
+using UnityEngine;
+using NightHunt.GameplaySystems.UI;
+using NightHunt.GameplaySystems.UI.Inventory;
+using NightHunt.GameplaySystems.UI.Combat;
+using NightHunt.GameplaySystems.UI.Interaction;
+using NightHunt.Networking;
+
+namespace NightHunt.UI
+{
+    /// <summary>
+    /// GameHUD — thin orchestrator for all in-game UI panels.
+    ///
+    /// Responsibilities:
+    ///   • Holds serialized references to every HUD sub-panel.
+    ///   • Calls Initialize(localPlayer) distributing the player to sub-systems.
+    ///   • Provides Show/Hide helpers usable from GameplayBootstrap or similar.
+    ///
+    /// All actual stat display logic lives in the individual sub-panels
+    /// (PlayerHUDPanel, CombatHUDPanel, etc.) — this class stays dumb on purpose.
+    /// </summary>
+    public class GameHUD : MonoBehaviour
+    {
+        // ── Core HUD sub-panels ───────────────────────────────────────────────
+
+        [Header("Core HUD Panels")]
+        [Tooltip("Stats panel: HP / Stamina / Armor / Speed / Weight sliders")]
+        [SerializeField] private PlayerHUDPanel playerHUDPanel;
+
+        [Tooltip("Combat panel: weapon slots, quick slots, ammo label")]
+        [SerializeField] private CombatHUDPanel combatHUDPanel;
+
+        [Tooltip("UIRootController owns InventoryScreen + PlayerHUDPanel bridge")]
+        [SerializeField] private UIRootController uiRootController;
+
+        // ── Contextual / overlay panels ───────────────────────────────────────
+
+        [Header("Match / Score")]
+        [SerializeField] private MatchUI matchUI;
+        [SerializeField] private KillFeedUI killFeedUI;
+
+        [Header("Crosshair")]
+        [SerializeField] private CrosshairUI crosshairUI;
+
+        [Header("Interaction")]
+        [SerializeField] private InteractionPromptUI interactionPromptUI;
+
+        [Header("Minimap")]
+        [SerializeField] private MinimapUI minimapUI;
+
+        [Header("Death Screen")]
+        [SerializeField] private DeathScreen deathScreen;
+
+        [Header("World / Loot")]
+        [SerializeField] private LootContainerUI lootContainerUI;
+
+        [Header("Feedback")]
+        [SerializeField] private Gameplay.Feedback.DamageFeedbackSystem damageFeedback;
+
+        // ── Public accessors (for external systems that need a sub-panel ref) ─
+
+        public PlayerHUDPanel     PlayerHUDPanel    => playerHUDPanel;
+        public CombatHUDPanel     CombatHUDPanel    => combatHUDPanel;
+        public KillFeedUI         KillFeed          => killFeedUI;
+        public CrosshairUI        Crosshair         => crosshairUI;
+        public InteractionPromptUI InteractionPrompt => interactionPromptUI;
+        public MinimapUI          Minimap           => minimapUI;
+        public DeathScreen        DeathScreen       => deathScreen;
+        public LootContainerUI    LootContainerUI   => lootContainerUI;
+
+        // ── Lifecycle ─────────────────────────────────────────────────────────
+
+        private void Awake()
+        {
+            // Death screen starts hidden
+            if (deathScreen != null) deathScreen.Hide();
+            // Loot container starts hidden
+            if (lootContainerUI != null) lootContainerUI.Hide();
+        }
+
+        /// <summary>
+        /// Call once the local NetworkPlayer is ready.
+        /// Distributes the player reference to all sub-panels that need it.
+        /// </summary>
+        public void Initialize(NetworkPlayer localPlayer)
+        {
+            if (localPlayer == null)
+            {
+                Debug.LogWarning("[GameHUD] Initialize called with null localPlayer.");
+                return;
+            }
+
+            if (minimapUI != null)  minimapUI.SetLocalPlayer(localPlayer);
+            if (deathScreen != null) deathScreen.RegisterPlayer(localPlayer);
+        }
+
+        // ── Visibility helpers ────────────────────────────────────────────────
+
+        public void SetVisible(bool visible)
+        {
+            gameObject.SetActive(visible);
+        }
+
+        public void ShowDeathScreen(string killerName = "")
+        {
+            if (deathScreen != null) deathScreen.Show(killerName);
+        }
+
+        public void HideDeathScreen()
+        {
+            if (deathScreen != null) deathScreen.Hide();
+        }
+
+        // ── Debug helper ──────────────────────────────────────────────────────
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            if (playerHUDPanel == null)  playerHUDPanel  = GetComponentInChildren<PlayerHUDPanel>(true);
+            if (combatHUDPanel == null)  combatHUDPanel  = GetComponentInChildren<CombatHUDPanel>(true);
+            if (uiRootController == null) uiRootController = GetComponentInChildren<UIRootController>(true);
+            if (matchUI == null)         matchUI         = GetComponentInChildren<MatchUI>(true);
+            if (killFeedUI == null)      killFeedUI      = GetComponentInChildren<KillFeedUI>(true);
+            if (crosshairUI == null)     crosshairUI     = GetComponentInChildren<CrosshairUI>(true);
+            if (interactionPromptUI == null) interactionPromptUI = GetComponentInChildren<InteractionPromptUI>(true);
+            if (minimapUI == null)       minimapUI       = GetComponentInChildren<MinimapUI>(true);
+            if (deathScreen == null)     deathScreen     = GetComponentInChildren<DeathScreen>(true);
+            if (lootContainerUI == null) lootContainerUI = GetComponentInChildren<LootContainerUI>(true);
+            if (damageFeedback == null)  damageFeedback  = GetComponentInChildren<Gameplay.Feedback.DamageFeedbackSystem>(true);
+        }
+#endif
+    }
+}
+
 //         [SerializeField] private TextMeshProUGUI healthText;
 //         [SerializeField] private Image healthBarFill;
 //

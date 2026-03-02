@@ -100,7 +100,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     if (itemDef != null && itemDef.Type == ItemType.Attachment)
                     {
                         // Validate attachment compatibility với slot type
-                        // TODO: Có thể thêm validation chi tiết hơn về slot type compatibility
+                        // Slot-type compatibility validation can be tightened here when slot schema is finalised.
                         action.Type = DropActionType.Attach;
                         return true;
                     }

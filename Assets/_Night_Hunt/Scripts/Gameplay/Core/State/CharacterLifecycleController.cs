@@ -38,6 +38,21 @@ namespace NightHunt.Gameplay.Core.State
 
         public bool IsDead { get; private set; }
 
+        /// <summary>
+        /// Name of the player/entity that dealt the killing blow.
+        /// Set via <see cref="SetKillerInfo"/> before the death event fires.
+        /// </summary>
+        public string LastKillerName { get; private set; } = string.Empty;
+
+        /// <summary>
+        /// Call this (e.g. from CharacterCombat or damage RPC) before health
+        /// reaches zero so the DeathScreen can display the killer's name.
+        /// </summary>
+        public void SetKillerInfo(string killerName)
+        {
+            LastKillerName = killerName ?? string.Empty;
+        }
+
         private IPlayerStatSystem _statSystem;
 
         #region Unity Lifecycle
@@ -165,6 +180,9 @@ namespace NightHunt.Gameplay.Core.State
             }
 
             OnDied?.Invoke();
+
+            // Reset killer name after firing so it doesn't linger
+            LastKillerName = string.Empty;
 
             if (!IsServer)
                 return;

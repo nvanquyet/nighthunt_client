@@ -346,7 +346,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"slot={slot}, item={item?.DefinitionID ?? "null"} ({item?.InstanceID ?? "null"})");
             }
 
-            // TODO: Spawn/attach equipment model on character here
+            // Spawn / attach equipment model on character when character model system is ready.
             // e.g. CharacterAppearance.AttachEquipment(slot, item.DefinitionID);
         }
 
@@ -368,7 +368,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"item={item?.DefinitionID ?? "null"} ({item?.InstanceID ?? "null"})");
             }
 
-            // TODO: Despawn/detach equipment model here
+            // Despawn / detach equipment model when character model system is ready.
         }
 
         private void HandleWeaponEquipped(WeaponSlotType slot, ItemInstance item)
@@ -383,7 +383,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"slot={slot}, item={item?.DefinitionID ?? "null"} ({item?.InstanceID ?? "null"})");
             }
 
-            // TODO: Spawn weapon viewmodel / world model here
+            // Spawn weapon viewmodel / world model when weapon visual system is ready.
         }
 
         private void HandleWeaponUnequipped(WeaponSlotType slot, ItemInstance item)
@@ -404,16 +404,29 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"item={item?.DefinitionID ?? "null"} ({item?.InstanceID ?? "null"})");
             }
 
-            // TODO: Despawn weapon viewmodel / world model here
+            // Despawn weapon viewmodel / world model when weapon visual system is ready.
         }
 
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
         {
-            // UI có thể highlight weapon đang active – ở đây chỉ phát lại state hiện có.
+            // Re-broadcast old slot WITHOUT highlight – do NOT send new UISlotState() which erases the item.
             if (oldSlot.HasValue)
             {
                 var id = UISlotId.Weapon(oldSlot.Value);
-                OnWeaponSlotChanged?.Invoke(id, new UISlotState());
+                var allWeapons = _bridge?.GetAllWeapons();
+                UISlotState oldState;
+                if (allWeapons != null && allWeapons.TryGetValue(oldSlot.Value, out var oldItem) && oldItem != null)
+                {
+                    // Keep the weapon visible, just remove the active highlight.
+                    oldState = BuildSlotStateFromItem(oldItem);
+                    oldState.IsHighlight = false;
+                }
+                else
+                {
+                    // Slot is genuinely empty now.
+                    oldState = new UISlotState();
+                }
+                OnWeaponSlotChanged?.Invoke(id, oldState);
             }
 
             if (newSlot.HasValue && _bridge != null && _bridge.Weapon != null)

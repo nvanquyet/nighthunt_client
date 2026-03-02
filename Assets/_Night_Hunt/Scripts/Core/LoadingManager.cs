@@ -294,15 +294,19 @@ namespace NightHunt.Core
         }
 
         /// <summary>
-        /// Public API to show loading panel (for target scenes to reuse)
+        /// Public API to show loading panel (for target scenes to reuse).
+        /// Optionally override the loading label text.
         /// </summary>
-        public void Show()
+        public void Show(string message = null)
         {
             if (loadingPanel != null)
             {
                 loadingPanel.SetActive(true);
                 isShowing = true;
             }
+
+            if (!string.IsNullOrEmpty(message) && loadingText != null)
+                loadingText.text = message;
         }
 
         /// <summary>

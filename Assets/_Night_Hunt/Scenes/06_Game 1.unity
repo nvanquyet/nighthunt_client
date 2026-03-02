@@ -8713,6 +8713,72 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 503916902}
   m_CullTransparentMesh: 0
+--- !u!1 &508755763
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 508755766}
+  - component: {fileID: 508755765}
+  - component: {fileID: 508755764}
+  m_Layer: 11
+  m_Name: Bullet
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!65 &508755764
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 508755763}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &508755765
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 508755763}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a91246c5def40af478c3b1e91de67c79, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!4 &508755766
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 508755763}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 4.07, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!224 &515347849 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 7226207501236463874, guid: 2ee7a0eac02bb0a42b38134eda7c451d, type: 3}
@@ -31409,6 +31475,7 @@ MonoBehaviour:
   _spawnSystem: {fileID: 1543334102}
   _matchPhaseManager: {fileID: 860521859}
   clientNetworkHandlerPrefab: {fileID: 5359618603319872427, guid: 23374191f5ee8534bb98f97a4336e8b9, type: 3}
+  _expectedPlayerCount: 2
 --- !u!4 &1703404089
 Transform:
   m_ObjectHideFlags: 0
@@ -55618,3 +55685,4 @@ SceneRoots:
   - {fileID: 473668316}
   - {fileID: 572291417}
   - {fileID: 1437131972}
+  - {fileID: 508755766}

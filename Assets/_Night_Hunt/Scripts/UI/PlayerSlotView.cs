@@ -132,6 +132,32 @@ namespace NightHunt.UI
             }
         }
 
+        /// <summary>
+        /// Lightweight display-only bind — used by CustomLobbyView when only
+        /// basic info (name, ready, host flag) is available without full slot indices.
+        /// </summary>
+        public void SetData(string displayName, bool isReady, bool isHost)
+        {
+            if (usernameText != null)
+            {
+                usernameText.gameObject.SetActive(true);
+                usernameText.text = displayName;
+            }
+            if (slotText != null)
+                slotText.text = string.Empty;
+            if (readyIndicator != null)
+            {
+                readyIndicator.gameObject.SetActive(true);
+                readyIndicator.color = isReady ? Color.green : Color.red;
+            }
+            if (emptySlotIndicator != null)
+                emptySlotIndicator.SetActive(false);
+            if (kickButton != null)
+                kickButton.gameObject.SetActive(false);
+            if (transferOwnerButton != null)
+                transferOwnerButton.gameObject.SetActive(isHost);
+        }
+
         public bool IsEmpty => player == null;
         public RoomPlayerResponse Player => player;
         public int Team => team;

@@ -87,8 +87,8 @@ namespace NightHunt.GameplaySystems.Loot
             RequestPickup(playerNob);
         }
 
-        public void OnHoverEnter(GameObject interactor) { /* TODO: outline effect */ }
-        public void OnHoverExit(GameObject interactor)  { /* TODO: outline effect */ }
+        public void OnHoverEnter(GameObject interactor) { /* outline effect wired up when highlight system is ready */ }
+        public void OnHoverExit(GameObject interactor)  { /* outline effect wired up when highlight system is ready */ }
 
         public override void OnStartNetwork()
         {

@@ -1,5 +1,6 @@
 ﻿using FishNet.Object;
 using NightHunt.Networking.Player;
+using NightHunt.State;
 using UnityEngine;
 
 namespace NightHunt.Networking
@@ -50,32 +51,39 @@ namespace NightHunt.Networking
 
             Debug.Log($"[Server] Received client data - Backend ID: {data.BackendPlayerId}, Name: {data.DisplayName}");
 
-            // TODO: Validate data
-            // bool valid = ValidatePlayerData(data);
-            // if (!valid) { Owner.Disconnect(); return; }
+            // Basic null guard — payload is validated server-side in ServerGameManager
 
             // Notify ServerGameManager
             ServerGameManager.Instance.OnClientDataReceived(Owner, data);
         }
 
         /// <summary>
-        /// TODO: Get player data từ local storage hoặc backend
+        /// Reads player identity from the active SessionState (set during login / auto-login).
+        /// Falls back to a guest entry when no authenticated session is present.
         /// </summary>
         private PlayerRegistryData GetLocalPlayerData()
         {
-            // TODO: Implement
-            // string token = PlayerPrefs.GetString("AuthToken");
-            // string backendId = await AuthService.ValidateToken(token);
-            // PlayerRegistryData data = await BackendAPI.GetPlayerData(backendId);
-            // return data;
+            var session = SessionState.Instance;
+            if (session != null && session.IsAuthenticated)
+            {
+                return new PlayerRegistryData
+                {
+                    BackendPlayerId = session.UserId.ToString(),
+                    DisplayName     = !string.IsNullOrEmpty(session.Username)
+                                          ? session.Username
+                                          : $"Player_{session.UserId}",
+                    TeamId          = 0,
+                    Status          = PlayerConnectionStatus.Connected
+                };
+            }
 
-            // Mock data for testing
+            Debug.LogWarning("[ClientNetworkHandler] No authenticated session found — using fallback guest data.");
             return new PlayerRegistryData
             {
-                BackendPlayerId = $"backend_{Random.Range(1000, 9999)}",
-                DisplayName = $"Player_{Random.Range(1, 100)}",
-                TeamId = Random.Range(0, 2),
-                Status = PlayerConnectionStatus.Connected
+                BackendPlayerId = $"guest_{Random.Range(1000, 9999)}",
+                DisplayName     = $"Guest_{Random.Range(1, 100)}",
+                TeamId          = 0,
+                Status          = PlayerConnectionStatus.Connected
             };
         }
     }

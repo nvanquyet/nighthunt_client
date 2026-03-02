@@ -52,6 +52,11 @@ namespace NightHunt.Services.Game
         public event Action<RoomStatusChangedEvent> OnRoomStatusChanged;
         public event Action<SwapRequestEvent> OnSwapRequest;
         public event Action<SwapRequestStatusEvent> OnSwapRequestStatus;
+
+        // Matchmaking Events
+        public event Action<MatchFoundEvent>     OnMatchFound;
+        public event Action<MatchReadyEvent>     OnMatchReady;
+        public event Action<MatchCancelledEvent> OnMatchCancelled;
         
         // Connection Events
         public event Action OnDisconnected;
@@ -405,6 +410,31 @@ namespace NightHunt.Services.Game
                             OnSwapRequestStatus?.Invoke(swapRequestStatus);
                         break;
 
+                    // Matchmaking Events
+                    case "match_found":
+                        var matchFound = JsonUtility.FromJson<MatchFoundEvent>(messageData.data);
+                        if (matchFound != null)
+                            OnMatchFound?.Invoke(matchFound);
+                        break;
+
+                    case "match_ready":
+                        var matchReady = JsonUtility.FromJson<MatchReadyEvent>(messageData.data);
+                        if (matchReady != null)
+                        {
+                            // Store DS info in RoomState immediately
+                            if (RoomState.Instance != null && !string.IsNullOrEmpty(matchReady.dsIp))
+                                RoomState.Instance.SetDedicatedServer(
+                                    matchReady.dsIp, (ushort)matchReady.dsPort, matchReady.matchId);
+                            OnMatchReady?.Invoke(matchReady);
+                        }
+                        break;
+
+                    case "match_cancelled":
+                        var matchCancelled = JsonUtility.FromJson<MatchCancelledEvent>(messageData.data);
+                        if (matchCancelled != null)
+                            OnMatchCancelled?.Invoke(matchCancelled);
+                        break;
+
                     default:
                         Debug.LogWarning($"[GameWebSocketService] Unknown message type: {messageData.type}");
                         break;
@@ -569,6 +599,36 @@ namespace NightHunt.Services.Game
             public long requestId;
             public string status; // "ACCEPTED" or "REJECTED"
             public RoomResponse room; // Updated room state
+        }
+
+        // ── Matchmaking event data ───────────────────────────────────────────
+
+        [Serializable]
+        public class MatchFoundEvent
+        {
+            public string lobbyToken;
+            public string gameMode;
+            public long[] playerIds;
+        }
+
+        [Serializable]
+        public class MatchReadyEvent
+        {
+            public string lobbyToken;
+            public string gameMode;
+            public string roomCode;
+            public long   roomId;
+            public string matchId;
+            public string dsIp;
+            public int    dsPort;
+            public string sessionToken;
+        }
+
+        [Serializable]
+        public class MatchCancelledEvent
+        {
+            public string lobbyToken;
+            public string reason;
         }
     }
 }

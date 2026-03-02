@@ -22,6 +22,12 @@ namespace NightHunt.Data
         public List<RankingSystemData> RankingSystem;
         public List<CharacterConfigData> CharacterConfig;
         public List<StatusEffectConfigData> StatusEffectConfig;
+        // New systems
+        public BeaconConfigData BeaconConfig;
+        public List<BossSpawnConfigData> BossSpawnConfig;
+        public MatchEndConfigData MatchEndConfig;
+        public List<RankTierConfigData> RankTierConfig;
+        public RankMatchmakingConfigData RankMatchmakingConfig;
     }
 
     [Serializable]
@@ -112,6 +118,10 @@ namespace NightHunt.Data
         public float SurvivalMultiplier;
         public string BuffForLosingTeam;
         public string NerfForWinningTeam;
+        // Phase transition warning
+        public float WarningTime;        // seconds before phase ends to show warning (default 30)
+        // Phase 3 respawn
+        public float Phase3RespawnDelay; // seconds delay before respawn in Phase 3 (default 10)
     }
 
     [Serializable]
@@ -193,6 +203,94 @@ namespace NightHunt.Data
         public float Duration;
         public bool Stackable;
         public string Description;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // BEACON CONFIG
+    // ─────────────────────────────────────────────────────────────
+    [Serializable]
+    public class BeaconConfigData
+    {
+        /// <summary>Max beacons a team can have active simultaneously</summary>
+        public int MaxActivePerTeam;
+        /// <summary>HP of a placed beacon</summary>
+        public float BeaconHealth;
+        /// <summary>Time (sec) to place a beacon</summary>
+        public float PlaceTime;
+        /// <summary>Relative weight of BeaconItem spawning in loot pool</summary>
+        public float LootSpawnWeight;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // BOSS CONFIG
+    // ─────────────────────────────────────────────────────────────
+    [Serializable]
+    public class BossSpawnConfigData
+    {
+        public string BossId;
+        public string BossType;          // "Elite", "Champion", etc.
+        public string SpawnPointTag;     // Tag used to find spawn Transform in scene
+        public float MaxHP;
+        public float MoveSpeed;
+        public bool RespawnAfterKill;
+        public float RespawnDelay;       // seconds before boss respawns (0 = no respawn)
+        public List<BossDropEntryData> DropTable;
+    }
+
+    [Serializable]
+    public class BossDropEntryData
+    {
+        public string ItemId;
+        public bool IsFixed;             // true = always drops, false = roll by weight
+        public float Weight;             // 0-1, used when IsFixed = false
+        public int MinQuantity;
+        public int MaxQuantity;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // MATCH END CONFIG
+    // ─────────────────────────────────────────────────────────────
+    [Serializable]
+    public class MatchEndConfigData
+    {
+        /// <summary>Seconds to show results screen before auto-navigate</summary>
+        public float ResultsDisplayDuration;
+        /// <summary>Countdown seconds after match end before results auto-dismiss</summary>
+        public float PostMatchCountdown;
+        /// <summary>Score per second holding a capture zone (base, before phase multiplier)</summary>
+        public float CaptureZoneScorePerSecond;
+        /// <summary>Minimum players needed inside zone to count as holding</summary>
+        public int CaptureZoneMinPlayers;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // RANK + ELO CONFIG
+    // ─────────────────────────────────────────────────────────────
+    [Serializable]
+    public class RankTierConfigData
+    {
+        public string Tier;              // "Bronze", "Silver", "Gold", "Platinum", "Diamond"
+        public int MinElo;
+        public int MaxElo;
+        public int PointsPerWin;
+        public int PointsPerLoss;
+        public int PointsPerDraw;
+        public string IconKey;           // Resource key for rank badge sprite
+    }
+
+    [Serializable]
+    public class RankMatchmakingConfigData
+    {
+        /// <summary>Initial ELO delta allowed when searching</summary>
+        public int InitialEloDelta;
+        /// <summary>How much to expand delta per expand interval</summary>
+        public int EloDeltaExpandAmount;
+        /// <summary>Seconds between each expansion step</summary>
+        public float EloDeltaExpandInterval;
+        /// <summary>Max ELO delta allowed (upper cap)</summary>
+        public int MaxEloDelta;
+        /// <summary>Seconds before auto-cancel matchmaking queue</summary>
+        public float QueueTimeout;
     }
 }
 

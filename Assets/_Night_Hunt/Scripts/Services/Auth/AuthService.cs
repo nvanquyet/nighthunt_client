@@ -1,11 +1,13 @@
 using System;
 using System.Threading.Tasks;
 using NightHunt.Common;
+using NightHunt.Data;
 using NightHunt.Data.DTOs;
 using NightHunt.Services.Backend;
 using NightHunt.State;
 using NightHunt.Core;
 using NightHunt.Utils;
+using NightHunt.UI;
 using UnityEngine;
 
 namespace NightHunt.Services.Auth
@@ -75,12 +77,14 @@ namespace NightHunt.Services.Auth
                     result.Data.username,
                     result.Data.email
                 );
-                backendClient.SetAuthToken(result.Data.accessToken);
-                
+
                 // Connect to Game WebSocket (replaces polling)
                 if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
                 {
-                    _ = GameManager.Instance.GameWebSocket.Connect(); // Fire and forget
+                    GameManager.Instance.GameWebSocket.Connect().ContinueWith(t => {
+                        if (t.IsFaulted || (t.IsCompleted && !t.Result))
+                            Debug.LogWarning("[AuthService] WebSocket connect failed after login");
+                    });
                 }
             }
             else
@@ -117,12 +121,14 @@ namespace NightHunt.Services.Auth
                     result.Data.username,
                     result.Data.email
                 );
-                backendClient.SetAuthToken(result.Data.accessToken);
-                
+
                 // Connect to Game WebSocket (replaces polling)
                 if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
                 {
-                    _ = GameManager.Instance.GameWebSocket.Connect(); // Fire and forget
+                    GameManager.Instance.GameWebSocket.Connect().ContinueWith(t => {
+                        if (t.IsFaulted || (t.IsCompleted && !t.Result))
+                            Debug.LogWarning("[AuthService] WebSocket connect failed after login");
+                    });
                 }
             }
             else
@@ -132,7 +138,7 @@ namespace NightHunt.Services.Auth
                 
                 // Check if auto-login failed due to AUTH_FORCE_LOGOUT (stale session)
                 // This happens when user closes app and reopens - old session still exists in backend
-                bool isForceLogout = result.ErrorCode == "AUTH_008" || result.ErrorCode == "AUTH_FORCE_LOGOUT";
+                bool isForceLogout = result.ErrorCode == ErrorCodes.AUTH_FORCE_LOGOUT;
                 
                 if (isForceLogout)
                 {
@@ -148,7 +154,6 @@ namespace NightHunt.Services.Auth
                 
                 // Auto-login failed, clear session immediately
                 sessionState.ClearSession();
-                backendClient.ClearAuthToken();
                 
                 // Disconnect Game WebSocket
                 if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
@@ -175,7 +180,6 @@ namespace NightHunt.Services.Auth
             {
                 // Password changed successfully, session will be invalidated
                 sessionState.ClearSession();
-                backendClient.ClearAuthToken();
             }
 
             return result.Success ? ApiResult.Ok() : ApiResult.Error(result.Message);
@@ -201,8 +205,7 @@ namespace NightHunt.Services.Auth
             
             // Clear client-side session regardless of backend result
             sessionState.ClearSession();
-            backendClient.ClearAuthToken();
-            
+
             // Disconnect Game WebSocket on logout
             if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
             {
@@ -223,16 +226,15 @@ namespace NightHunt.Services.Auth
             }
             
             // Check if it's a ban error
-            bool isBanError = result.ErrorCode == "AUTH_010" || // AUTH_ACCOUNT_BANNED
-                             result.ErrorCode == "AUTH_011" || // AUTH_IP_BANNED
-                             result.ErrorCode == "AUTH_012";   // AUTH_DEVICE_BANNED
+            bool isBanError = result.ErrorCode == ErrorCodes.AUTH_ACCOUNT_BANNED ||
+                             result.ErrorCode == ErrorCodes.AUTH_IP_BANNED ||
+                             result.ErrorCode == ErrorCodes.AUTH_DEVICE_BANNED;
             
             if (isBanError)
             {
                 // Force logout
                 sessionState.ClearSession();
-                backendClient.ClearAuthToken();
-                
+
                 // Disconnect Game WebSocket
                 if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
                 {
@@ -249,12 +251,10 @@ namespace NightHunt.Services.Auth
         /// </summary>
         private void ShowBanNotification(string message)
         {
-            // TODO: Show UI notification/popup
-            // For now, just log
             Debug.LogError($"[AuthService] Account/Device Banned: {message}");
-            
-            // Can integrate with UI system to show popup
-            // Example: NotificationManager.ShowError(message);
+            var notif = UINotificationService.Instance;
+            if (notif != null)
+                notif.Notice("Tài khoản bị khóa", message);
         }
     }
 }

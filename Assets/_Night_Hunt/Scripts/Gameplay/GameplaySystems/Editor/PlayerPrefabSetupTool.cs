@@ -10,7 +10,6 @@ using NightHunt.GameplaySystems.Equipment;
 using NightHunt.GameplaySystems.Weapon;
 using NightHunt.GameplaySystems.QuickSlot;
 using NightHunt.GameplaySystems.Attachment;
-using NightHunt.GameplaySystems.Test;
 
 namespace NightHunt.GameplaySystems.Editor
 {
@@ -21,7 +20,6 @@ namespace NightHunt.GameplaySystems.Editor
     public class PlayerPrefabSetupTool : EditorWindow
     {
         private GameObject _selectedPrefab;
-        private bool _addTestScripts = true;
         private bool _enableDebugUI = true;
         
         [MenuItem("Tools/GameplaySystems/Setup Player Prefab")]
@@ -68,7 +66,6 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Options
             GUILayout.Label("Options", EditorStyles.boldLabel);
-            _addTestScripts = EditorGUILayout.Toggle("Add Test Scripts", _addTestScripts);
             _enableDebugUI = EditorGUILayout.Toggle("Enable Debug UI", _enableDebugUI);
             
             GUILayout.Space(10);
@@ -152,12 +149,6 @@ namespace NightHunt.GameplaySystems.Editor
             componentsAdded += SetupWeaponSystem(inventoryConfig);
             componentsAdded += SetupQuickSlotSystem(inventoryConfig);
             componentsAdded += SetupAttachmentSystem();
-            
-            // Add test scripts if enabled
-            if (_addTestScripts)
-            {
-                componentsAdded += AddTestScripts();
-            }
             
             // Mark as dirty
             EditorUtility.SetDirty(_selectedPrefab);
@@ -292,82 +283,6 @@ namespace NightHunt.GameplaySystems.Editor
             return 1;
         }
         
-        private int AddTestScripts()
-        {
-            int added = 0;
-            
-            // PlayerStatSystemTest
-            if (_selectedPrefab.GetComponent<PlayerStatSystemTest>() == null)
-            {
-                var test = _selectedPrefab.AddComponent<PlayerStatSystemTest>();
-                var so = new SerializedObject(test);
-                so.FindProperty("_runTestsOnStart").boolValue = false; // User can enable manually
-                so.ApplyModifiedProperties();
-                added++;
-            }
-            
-            // InventorySystemTest
-            if (_selectedPrefab.GetComponent<InventorySystemTest>() == null)
-            {
-                var test = _selectedPrefab.AddComponent<InventorySystemTest>();
-                var so = new SerializedObject(test);
-                so.FindProperty("_testWeaponID").stringValue = "weapon_ak47";
-                so.FindProperty("_testArmorID").stringValue = "armor_vest";
-                so.FindProperty("_testConsumableID").stringValue = "consumable_medkit";
-                so.FindProperty("_runTestsOnStart").boolValue = false;
-                so.ApplyModifiedProperties();
-                added++;
-            }
-            
-            // EquipmentSystemTest
-            if (_selectedPrefab.GetComponent<EquipmentSystemTest>() == null)
-            {
-                var test = _selectedPrefab.AddComponent<EquipmentSystemTest>();
-                var so = new SerializedObject(test);
-                so.FindProperty("_testHelmetID").stringValue = "armor_helmet";
-                so.FindProperty("_testVestID").stringValue = "armor_vest";
-                so.FindProperty("_testBackpackID").stringValue = "armor_backpack";
-                so.FindProperty("_runTestsOnStart").boolValue = false;
-                so.ApplyModifiedProperties();
-                added++;
-            }
-            
-            // ItemStatSystemTest
-            if (_selectedPrefab.GetComponent<ItemStatSystemTest>() == null)
-            {
-                var test = _selectedPrefab.AddComponent<ItemStatSystemTest>();
-                var so = new SerializedObject(test);
-                so.FindProperty("_testWeaponID").stringValue = "weapon_ak47";
-                so.FindProperty("_testScopeID").stringValue = "attachment_reddot";
-                so.FindProperty("_testGripID").stringValue = "attachment_grip";
-                so.FindProperty("_testSuppressorID").stringValue = "attachment_suppressor";
-                so.FindProperty("_runTestsOnStart").boolValue = false;
-                so.ApplyModifiedProperties();
-                added++;
-            }
-            
-            // IntegrationTest
-            if (_selectedPrefab.GetComponent<IntegrationTest>() == null)
-            {
-                var test = _selectedPrefab.AddComponent<IntegrationTest>();
-                var so = new SerializedObject(test);
-                so.FindProperty("_weaponID").stringValue = "weapon_ak47";
-                so.FindProperty("_armorID").stringValue = "armor_vest";
-                so.FindProperty("_backpackID").stringValue = "armor_backpack";
-                so.FindProperty("_consumableID").stringValue = "consumable_medkit";
-                so.FindProperty("_runTestsOnStart").boolValue = false;
-                so.ApplyModifiedProperties();
-                added++;
-            }
-            
-            if (added > 0)
-            {
-                Debug.Log($"Added {added} test scripts");
-            }
-            
-            return added;
-        }
-        
         #endregion
         
         private void ShowManualGuide()
@@ -416,14 +331,7 @@ QuickSlotSystem:
 AttachmentSystem:
    - Inventory System → (auto-assigned)
 
-3. OPTIONAL - ADD TEST SCRIPTS:
-   - PlayerStatSystemTest
-   - InventorySystemTest
-   - EquipmentSystemTest
-   - ItemStatSystemTest
-   - IntegrationTest
-
-4. CREATE ITEMDATABASE IN SCENE:
+3. CREATE ITEMDATABASE IN SCENE:
    - Create empty GameObject
    - Name it '[ItemDatabase]'
    - Add ItemDatabase component
@@ -431,11 +339,10 @@ AttachmentSystem:
    - Resources Path: 'Items'
    - Check 'Track Instances'
 
-5. TEST:
+4. TEST:
    - Play scene
    - Check console for 'Initialized X stats' messages
    - Check debug UIs (if enabled)
-   - Run tests via context menus
 ";
             
             EditorUtility.DisplayDialog("Manual Setup Guide", guide, "OK");

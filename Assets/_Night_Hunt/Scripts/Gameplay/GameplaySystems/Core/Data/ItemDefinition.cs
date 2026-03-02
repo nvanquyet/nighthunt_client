@@ -259,6 +259,7 @@ namespace NightHunt.GameplaySystems.Core.Data
         // Ammo: weapons manage ammo via ItemStatType.MaxAmmo in StatConfig (no separate ammo items)
         Throwable,      // Grenades, flashbangs
         Quest,          // Quest items
+        Deployable,     // Placeable objects (beacons, traps, etc.)
         Misc            // Other items
     }
     

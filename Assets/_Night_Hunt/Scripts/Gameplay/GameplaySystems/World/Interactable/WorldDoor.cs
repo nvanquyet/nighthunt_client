@@ -83,8 +83,8 @@ namespace NightHunt.GameplaySystems.World
         /// <summary>Client calls this → fires ToggleDoor ServerRpc.</summary>
         public void Interact(GameObject interactor) => ToggleDoor();
 
-        public void OnHoverEnter(GameObject interactor) { /* TODO: outline */ }
-        public void OnHoverExit(GameObject interactor)  { /* TODO: outline */ }
+        public void OnHoverEnter(GameObject interactor) { /* outline effect wired up when highlight system is ready */ }
+        public void OnHoverExit(GameObject interactor)  { /* outline effect wired up when highlight system is ready */ }
 
         // ── Network lifecycle ────────────────────────────────────────────────────
 
