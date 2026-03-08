@@ -4,6 +4,7 @@ using Unity.Cinemachine;
 using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.Networking;
 
 namespace NightHunt.Gameplay.Camera
 {
@@ -25,7 +26,6 @@ namespace NightHunt.Gameplay.Camera
         // ─────────────────────────────────────────────────────────────────────
         //  Inspector
         // ─────────────────────────────────────────────────────────────────────
-
         [Header("Cinemachine")]
         [Tooltip("The player CinemachineCamera (virtual camera).")]
         [SerializeField] private CinemachineCamera _virtualCamera;
@@ -72,12 +72,21 @@ namespace NightHunt.Gameplay.Camera
 
         private void OnEnable()
         {
+            // Auto-discover from InputManager if not assigned in Inspector.
+            // This is required for network-spawned player prefabs which cannot
+            // reference the scene-level InputManager singleton via SerializeField.
+            if (_movementInput == null)
+                _movementInput = NightHunt.Gameplay.Input.Core.InputManager.Instance?.MovementHandler;
+
             if (_movementInput != null)
                 _movementInput.OnCameraLockToggled += HandleLockToggled;
 
             if (_weaponSystem != null)
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
+            
+            NetworkPlayer.OnOwnerReady += HandleOwnerReady;
         }
+        
 
         private void OnDisable()
         {
@@ -86,8 +95,15 @@ namespace NightHunt.Gameplay.Camera
 
             if (_weaponSystem != null)
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
+            NetworkPlayer.OnOwnerReady -= HandleOwnerReady;
         }
 
+        
+        private void HandleOwnerReady(NetworkPlayer player)
+        {
+            _virtualCamera.gameObject.SetActive(player != null && player.IsLocalPlayer);
+        }
+        
         // ─────────────────────────────────────────────────────────────────────
         //  Event Handlers
         // ─────────────────────────────────────────────────────────────────────

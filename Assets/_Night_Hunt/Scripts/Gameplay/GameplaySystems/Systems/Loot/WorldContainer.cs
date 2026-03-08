@@ -131,8 +131,10 @@ namespace NightHunt.GameplaySystems.Loot
         [ServerRpc(RequireOwnership = false)]
         public void RequestOpen(NetworkObject playerNob, NetworkConnection conn = null)
         {
+            if (conn == null) conn = playerNob?.Owner;
             if (!IsServerInitialized) { Debug.LogWarning("[WorldContainer] RequestOpen: server-only!"); return; }
             if (playerNob == null) { Debug.LogWarning("[WorldContainer] RequestOpen: playerNob là NULL."); return; }
+            if (conn == null) { Debug.LogWarning("[WorldContainer] RequestOpen: conn là NULL."); return; }
             if (playerNob.Owner != conn) { Debug.LogWarning($"[WorldContainer] RequestOpen: ownership mismatch (ClientId={conn?.ClientId})."); return; }
 
             var player = playerNob.GetComponent<NetworkPlayer>();
@@ -181,8 +183,10 @@ namespace NightHunt.GameplaySystems.Loot
         [ServerRpc(RequireOwnership = false)]
         public void RequestTakeItem(NetworkObject playerNob, int storageIndex, int quantity, NetworkConnection conn = null)
         {
+            if (conn == null) conn = playerNob?.Owner;
             if (!IsServerInitialized) { Debug.LogWarning("[WorldContainer] RequestTakeItem: server-only!"); return; }
             if (playerNob == null) { Debug.LogWarning("[WorldContainer] RequestTakeItem: playerNob là NULL."); return; }
+            if (conn == null) { Debug.LogWarning("[WorldContainer] RequestTakeItem: conn là NULL."); return; }
             if (playerNob.Owner != conn) { Debug.LogWarning($"[WorldContainer] RequestTakeItem: ownership mismatch (ClientId={conn?.ClientId})."); return; }
             if (storageIndex < 0 || storageIndex >= storage.Count) { Debug.LogWarning($"[WorldContainer] RequestTakeItem: Invalid index {storageIndex}"); return; }
 

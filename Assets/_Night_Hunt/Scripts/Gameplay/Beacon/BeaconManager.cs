@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using FishNet;
 using FishNet.Connection;
 using FishNet.Object;
-using NightHunt.Data;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Respawn;
@@ -16,7 +15,7 @@ namespace NightHunt.Gameplay.Beacon
     /// Server-authoritative manager for all active <see cref="RespawnBeacon"/>s.
     ///
     /// Responsibilities:
-    ///   • Enforce max-active-beacon-per-team limit (from GameConfigLoader).
+    ///   • Enforce max-active-beacon-per-team limit (from <see cref="maxActivePerTeam"/>).
     ///   • Spawn beacon NetworkObjects when players request placement; resolves
     ///     the prefab from <see cref="BeaconDefinition.BeaconPrefab"/> (via
     ///     ItemDatabase) if a definitionId is supplied, otherwise falls back to
@@ -71,10 +70,7 @@ namespace NightHunt.Gameplay.Beacon
         {
             base.OnStartServer();
 
-            var beaconCfg = GameConfigLoader.Instance?.GetBeaconConfig();
-            _maxActivePerTeam = beaconCfg?.MaxActivePerTeam > 0
-                ? beaconCfg.MaxActivePerTeam
-                : _maxActivePerTeamFallback;
+            _maxActivePerTeam = _maxActivePerTeamFallback;
 
             _matchEndManager?.RegisterBeaconProvider(this);
         }

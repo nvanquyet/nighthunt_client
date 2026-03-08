@@ -95,9 +95,15 @@ namespace NightHunt.Gameplay.Character
             _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
             // ── Rotation ────────────────────────────────────────────────────────
-            // All rotation is managed by SimulateMovement (LookRotation / RotateTowards).
-            // Freezing here prevents physics from tumbling the capsule on impact.
-            _rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
+            // FreezeRotationX/Z prevents the capsule from tipping on contact.
+            // We deliberately do NOT freeze Y (yaw) — MoveRotation controls yaw
+            // every tick and requires the Y axis to be free in the physics solver.
+            // (FreezeRotation = freeze all three axes; that also blocks MoveRotation
+            // which works through angular velocity that the solver would then zero.)
+            // Angular velocity is zeroed manually in ApplyMovement every tick so
+            // physics forces can never accumulate an unintended yaw spin.
+            _rigidbody.constraints = RigidbodyConstraints.FreezeRotationX
+                                   | RigidbodyConstraints.FreezeRotationZ;
 
             // ── Damping ──────────────────────────────────────────────────────────
             // Keep low drag so we control speed fully via velocity assignment.
@@ -179,6 +185,17 @@ namespace NightHunt.Gameplay.Character
         {
             if (_rigidbody == null || _isNonOwnerKinematic) return;
 
+            // ── Sync rigidbody rotation ────────────────────────────────────────────
+            // SimulateMovement already wrote transform.rotation via RotateTowards.
+            // MoveRotation feeds the Rigidbody interpolation buffer so the visual
+            // rotation is sub-stepped smoothly between 50 Hz ticks at any FPS.
+            // This works because we only freeze X/Z in the constraints, leaving
+            // yaw (Y) free for the physics solver to accept the MoveRotation target.
+            _rigidbody.MoveRotation(transform.rotation);
+            // Zero any residual angular velocity so physics forces (collisions, etc.)
+            // cannot introduce an unintended spin between ticks.
+            _rigidbody.angularVelocity = Vector3.zero;
+
             // ── Look-ahead wall check ─────────────────────────────────────────────
             // Before committing the position delta to MovePosition, cast the capsule
             // in the horizontal movement direction over the intended displacement.
@@ -224,6 +241,11 @@ namespace NightHunt.Gameplay.Character
             //     per call is resolvedMovement * dt  (same as velocity * fixedDeltaTime).
             Vector3 newPosition = _rigidbody.position + resolvedMovement * dt;
             _rigidbody.MovePosition(newPosition);
+            // Zero residual velocity so PhysX does not apply it again between ticks.
+            // MovePosition commits the exact intended displacement; any leftover
+            // linearVelocity from contact responses (especially positive-Y depenetration)
+            // would fly the character upward in the next physics step.
+            _rigidbody.linearVelocity = Vector3.zero;
 
             if (enableDebugLogs && resolvedMovement.sqrMagnitude > 0.01f)
                 Debug.Log($"[RigidbodyPredictedMovement] MovePosition delta={(resolvedMovement * dt).magnitude:F4}");
@@ -284,9 +306,10 @@ namespace NightHunt.Gameplay.Character
 
             if (!_isNonOwnerKinematic)
             {
-                // Owner/Server: restore authoritative velocity so MovePosition
-                // continues from the correct speed without a 1-tick zero-spike.
-                _rigidbody.linearVelocity  = _velocity;
+                // Zero both velocities.  We use MovePosition for displacement, not
+                // linearVelocity; any non-zero value here would be applied by PhysX
+                // as an extra unwanted impulse on the first post-reconcile FixedUpdate.
+                _rigidbody.linearVelocity  = Vector3.zero;
                 _rigidbody.angularVelocity = Vector3.zero;
             }
 

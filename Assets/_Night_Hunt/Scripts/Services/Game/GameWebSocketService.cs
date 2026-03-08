@@ -7,6 +7,7 @@ using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Services.Backend;
 using NightHunt.Data.DTOs;
+using NightHunt.Networking;
 using NightHunt.State;
 using UnityEngine;
 
@@ -388,7 +389,34 @@ namespace NightHunt.Services.Game
                     case "room_status_changed":
                         var roomStatusChanged = JsonUtility.FromJson<RoomStatusChangedEvent>(messageData.data);
                         if (roomStatusChanged != null)
+                        {
+                            // When a custom room game starts, the backend includes relay
+                            // serverIp/serverPort in the room payload (IN_GAME status).
+                            // Store it in RoomState now so MatchNetworkConnector can use it.
+                            // NOTE: Do NOT gate on CurrentGameMode here — it starts as None and is
+                            //       only set to Custom_Relay by SetRelaySession() below.
+                            //       Presence of serverIp is the correct signal.
+                            if (roomStatusChanged.newStatus == "IN_GAME"
+                                && roomStatusChanged.room != null
+                                && !string.IsNullOrEmpty(roomStatusChanged.room.serverIp)
+                                && roomStatusChanged.room.serverPort > 0
+                                && RoomState.Instance != null)
+                            {
+                                long localUserId = NightHunt.State.SessionState.Instance != null
+                                    ? NightHunt.State.SessionState.Instance.UserId
+                                    : 0L;
+                                bool isHost = roomStatusChanged.room.ownerId == localUserId;
+                                string sessionId = roomStatusChanged.room.matchId ?? "";
+                                RoomState.Instance.SetRelaySession(
+                                    sessionId,
+                                    roomStatusChanged.room.serverIp,
+                                    (ushort)roomStatusChanged.room.serverPort,
+                                    isHost);
+                                Debug.Log($"[GameWebSocketService] Relay session stored: host={isHost} " +
+                                          $"{roomStatusChanged.room.serverIp}:{roomStatusChanged.room.serverPort}");
+                            }
                             OnRoomStatusChanged?.Invoke(roomStatusChanged);
+                        }
                         break;
 
                     case "swap_request":

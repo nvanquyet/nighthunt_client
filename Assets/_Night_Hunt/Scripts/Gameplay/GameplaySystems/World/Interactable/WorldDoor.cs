@@ -81,7 +81,11 @@ namespace NightHunt.GameplaySystems.World
         }
 
         /// <summary>Client calls this → fires ToggleDoor ServerRpc.</summary>
-        public void Interact(GameObject interactor) => ToggleDoor();
+        public void Interact(GameObject interactor)
+        {
+            var playerNob = interactor?.GetComponent<FishNet.Object.NetworkObject>();
+            ToggleDoor(playerNob);
+        }
 
         public void OnHoverEnter(GameObject interactor) { /* outline effect wired up when highlight system is ready */ }
         public void OnHoverExit(GameObject interactor)  { /* outline effect wired up when highlight system is ready */ }
@@ -112,9 +116,36 @@ namespace NightHunt.GameplaySystems.World
         // ── Server-side toggle ───────────────────────────────────────────────────
 
         [ServerRpc(RequireOwnership = false)]
-        private void ToggleDoor()
+        private void ToggleDoor(FishNet.Object.NetworkObject playerNob, FishNet.Connection.NetworkConnection conn = null)
         {
             if (!IsServerInitialized) return;
+
+            // Host fallback: conn not injected for local ServerRpc calls.
+            if (conn == null) conn = playerNob?.Owner;
+
+            // Ownership check — prevent remote clients triggering door for someone else.
+            if (playerNob != null && conn != null && playerNob.Owner != conn)
+            {
+                Debug.LogWarning($"[WorldDoor] ToggleDoor: ownership mismatch (ClientId={conn.ClientId}).");
+                return;
+            }
+
+            // Distance check — server-side re-validation.
+            if (playerNob != null)
+            {
+                var player = playerNob.GetComponent<NightHunt.Networking.NetworkPlayer>();
+                if (player != null)
+                {
+                    float dist    = Vector3.Distance(transform.position, player.transform.position);
+                    float maxDist = _config?.MaxInteractDistance ?? 3f;
+                    if (dist > maxDist)
+                    {
+                        Debug.LogWarning($"[WorldDoor] ToggleDoor: Quá xa ({dist:F2}m > {maxDist}m).");
+                        return;
+                    }
+                }
+            }
+
             if (_isLocked) { Debug.LogWarning("[WorldDoor] ToggleDoor: door is locked."); return; }
 
             if (_config?.OneTimeUse == true && _isOpen)

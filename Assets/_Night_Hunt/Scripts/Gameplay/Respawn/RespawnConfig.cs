@@ -5,7 +5,7 @@ namespace NightHunt.Gameplay.Respawn
     /// <summary>
     /// Respawn configuration
     /// </summary>
-    [CreateAssetMenu(fileName = "RespawnConfig", menuName = "Night Hunt/Respawn/Respawn Config")]
+    [CreateAssetMenu(fileName = "RespawnConfig", menuName = "NightHunt/Gameplay/Respawn Config")]
     public class RespawnConfig : ScriptableObject
     {
         [Header("Respawn Delays")]

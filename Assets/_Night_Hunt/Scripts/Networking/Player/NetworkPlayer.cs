@@ -34,26 +34,24 @@ namespace NightHunt.Networking
         /// safely subscribe to input after Network is ready.
         /// </summary>
         public static event System.Action<NetworkPlayer> OnOwnerReady;
+
         #region Serialized References
-        [Header("Camera")]
-        [SerializeField] private CinemachineCamera _playerCamera;
+
         //[SerializeField] private PlayerInventoryNetwork inventorySystem;
+
         #endregion
-        
-        
-        
+
+
         #region Public Accessors
-        
+
         //public PlayerInventoryNetwork Inventory => inventorySystem;
         public string DisplayName => PlayerData.DisplayName;
         public int TeamId => PlayerData.TeamId;
         public bool IsLocalPlayer => IsOwner;
-        
-        // Component accessors (for ServerGameManager and systems)
-        public CinemachineCamera PlayerCamera => _playerCamera;
-        public IGameplayBridge GamePlaySystemBridge { get; private set; } 
-        
-        
+
+        public IGameplayBridge GamePlaySystemBridge { get; private set; }
+
+
         // ── PUBLIC PLAYER DATA ────────────────────────────────────────────────
         // SyncVar ensures FishNet includes the current value in every spawn packet
         // (including late-joiners / reconnects) AND broadcasts changes to all
@@ -64,6 +62,7 @@ namespace NightHunt.Networking
 
         // Alive state — server-authoritative, replicated to all clients
         private readonly SyncVar<bool> _isAlive = new SyncVar<bool>(true, new SyncTypeSettings());
+
         /// <summary>True while the player is alive (false during death / waiting for respawn).</summary>
         public bool IsAlive => _isAlive.Value;
 
@@ -80,15 +79,13 @@ namespace NightHunt.Networking
         {
             _isAlive.Value = alive;
         }
+
         #endregion
-        
+
         #region Lifecycle
-        
+
         private void Awake()
         {
-            if (_playerCamera == null)
-                _playerCamera = GetComponentInChildren<CinemachineCamera>();
-            
             // Initialize GameplaySystemsBridge with Dependency Injection
             // Get all system components
             var inventory = GetComponent<IInventorySystem>();
@@ -97,9 +94,9 @@ namespace NightHunt.Networking
             var quickSlot = GetComponent<IQuickSlotSystem>();
             var statSystem = GetComponent<IPlayerStatSystem>();
             var itemUse = GetComponent<IItemUseSystem>();
-            
+
             // Create bridge with DI
-            if (inventory != null && equipment != null && weapon != null && 
+            if (inventory != null && equipment != null && weapon != null &&
                 quickSlot != null && statSystem != null && itemUse != null)
             {
                 GamePlaySystemBridge = new GameplaySystemsBridge(
@@ -107,10 +104,11 @@ namespace NightHunt.Networking
             }
             else
             {
-                Debug.LogError("[NetworkPlayer] Failed to initialize GameplaySystemsBridge - missing required systems!");
+                Debug.LogError(
+                    "[NetworkPlayer] Failed to initialize GameplaySystemsBridge - missing required systems!");
             }
         }
-        
+
         private void OnDestroy()
         {
             // Dispose bridge when player is destroyed
@@ -119,19 +117,18 @@ namespace NightHunt.Networking
                 disposable.Dispose();
             }
         }
-        
-        
+
+
         public override void OnStartServer()
         {
             base.OnStartServer();
-            
-            // Server: Disable camera (dedicated server or host)
-            if (_playerCamera != null)
-            {
-                _playerCamera.gameObject.SetActive(false);
-            }
+
+            // On DEDICATED SERVER only: disable camera.
+            // In HOST mode (IsClientInitialized == true) the client-side setup (SetupCamera)
+            // will enable the camera for the owning player — do NOT disable it here.
+            bool isDedicatedServer = !IsClientInitialized;
         }
-        
+
         public override void OnStartClient()
         {
             base.OnStartClient();
@@ -153,18 +150,18 @@ namespace NightHunt.Networking
                 SpectateManager.Instance.SetLocalPlayer(this);
             }
         }
-        
+
         public override void OnOwnershipClient(NetworkConnection prevOwner)
         {
             base.OnOwnershipClient(prevOwner);
-            
+
             // Handle ownership transfer
             if (IsOwner)
             {
                 SetupOwnerSide();
             }
         }
-        
+
         public override void OnStopClient()
         {
             base.OnStopClient();
@@ -180,66 +177,51 @@ namespace NightHunt.Networking
         {
             PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
         }
-        
 
         #endregion
-        
+
         #region Client Setup
-        
+
         private void SetupOwnerSide()
         {
             // Owner only: Enable camera and input
-            SetupCamera();
             EnableInput();
 
             // Notify listeners that this NetworkPlayer is fully ready on the owning client
             OnOwnerReady?.Invoke(this);
         }
-        
-        private void SetupCamera()
-        {
-            if (_playerCamera == null) return;
-            
-            // Only enable for owner and not on dedicated server
-            bool shouldEnableCamera = IsOwner && !IsServerInitialized;
-            
-            _playerCamera.gameObject.SetActive(shouldEnableCamera);
-            
-            if (shouldEnableCamera)
-            {
-                // Set as main camera if none exists
-                Camera cam = _playerCamera.GetComponent<Camera>();
-                if (cam != null && Camera.main == null)
-                {
-                    cam.tag = "MainCamera";
-                }
-            }
-        }
-        
+
+
         private void EnableInput()
         {
-            // Enable input for owner
             var inputManager = FindFirstObjectByType<InputManager>();
-            if (inputManager != null)
+            if (inputManager == null)
             {
-                inputManager.EnableAllInput();
+                Debug.LogWarning("[NetworkPlayer] EnableInput: InputManager not found!");
+                return;
             }
+
+            inputManager.EnableAllInput();
+
+            // Lấy các refs cần thiết cho BindCombatSystems
+            var weaponSystem = GetComponent<NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem>();
+
+            // CameraStateManager nằm trên player prefab (hoặc child)
+            var cameraStateManager = GetComponentInChildren<NightHunt.Gameplay.Camera.CameraStateManager>();
+
+            if (cameraStateManager == null)
+                Debug.LogWarning("[NetworkPlayer] EnableInput: CameraStateManager not found on player prefab! " +
+                                 "Camera will not freeze during fire.");
+
+            // Bind tất cả refs vào CombatHandler
+            inputManager.CombatHandler?.BindCombatSystems(
+                inputManager.MovementHandler,
+                weaponSystem,
+                transform,
+                cameraStateManager // ← NEW: truyền vào để BeginFire/EndFire có thể freeze camera
+            );
         }
-        
-        #endregion
-        
-        
-        #region Validation (Editor Only)
-        
-#if UNITY_EDITOR
-        protected override void OnValidate()
-        {
-            base.OnValidate();
-            if (_playerCamera == null)
-                _playerCamera = GetComponentInChildren<CinemachineCamera>();
-        }
-#endif
-        
+
         #endregion
     }
 }

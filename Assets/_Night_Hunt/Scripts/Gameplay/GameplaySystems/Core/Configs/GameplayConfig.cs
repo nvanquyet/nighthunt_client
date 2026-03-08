@@ -7,7 +7,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
     /// Controls weight system, movement penalties, and other gameplay parameters
     /// Create via: Assets → Create → GameplaySystems/Config/Gameplay Config
     /// </summary>
-    [CreateAssetMenu(fileName = "GameplayConfig", menuName = "GameplaySystems/Config/Gameplay Config")]
+    [CreateAssetMenu(fileName = "GameplayConfig", menuName = "NightHunt/Gameplay/Gameplay Config")]
     public class GameplayConfig : ScriptableObject
     {
         #region Weight System

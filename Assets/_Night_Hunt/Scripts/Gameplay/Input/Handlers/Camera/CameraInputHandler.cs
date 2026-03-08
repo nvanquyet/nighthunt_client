@@ -119,6 +119,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
                 Debug.LogError("[CameraInputHandler] cameraActionMap null – không thể EnableInput!");
                 return;
             }
+            else
+            {
+                Debug.Log("[CameraInputHandler] Enabling input with action map: " + cameraActionMap.name);
+            }
 
             inputEnabled = true;
 

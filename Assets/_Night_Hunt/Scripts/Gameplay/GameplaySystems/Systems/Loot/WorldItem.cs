@@ -181,10 +181,14 @@ namespace NightHunt.GameplaySystems.Loot
         [ServerRpc(RequireOwnership = false)]
         public void RequestPickup(NetworkObject playerNob, NetworkConnection conn = null)
         {
-            // ── Guard cơ bản ──────────────────────────────────────────────────
+            // ── Host fallback: conn is null when ServerRpc is called locally on host
+            //    because FishNet skips serialization. Resolve from playerNob.Owner. ──
+            if (conn == null)
+                conn = playerNob?.Owner;
+
             if (conn == null)
             {
-                Debug.LogError("[WorldItem] RequestPickup: conn is NULL — FishNet Codegen lỗi.");
+                Debug.LogError("[WorldItem] RequestPickup: conn is NULL — không resolve được từ playerNob.Owner.");
                 return;
             }
             if (!IsServerInitialized)

@@ -11,8 +11,11 @@ namespace NightHunt.Networking
     {
         protected virtual void Awake()
         {
-            // Disable on client immediately
-            if (!IsServer)
+            // In Awake, FishNet NetworkBehaviour properties like IsServer are not yet
+            // initialized (object not spawned). Use InstanceFinder for reliable detection.
+            // IsServer here means: dedicated server OR host (server started).
+            bool serverRunning = FishNet.InstanceFinder.IsServerStarted;
+            if (!serverRunning)
             {
                 enabled = false;
                 return;

@@ -1,142 +1,128 @@
+using System.Collections;
 using UnityEngine;
 using NightHunt.Data;
-using NightHunt.Gameplay.Core.Events;
-using NightHunt.Networking;
-using FishNet.Object;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
     /// <summary>
-    /// Projectile weapon với local spawn
-    /// Visual bullets always spawn, collision logic uses hitscan or collider based on config
+    /// Weapon bắn đạn (bullet/projectile).
+    ///
+    /// Prefab weapon cần có:
+    ///   FirePoint        — empty child ở đầu nòng.
+    ///   MuzzleFlashChild — child particle, inactive mặc định; bật/tắt khi Fire().
+    ///
+    /// Projectile prefab được gán trên ProjectileSpawner.projectilePrefab.
+    /// Prefab chứa ProjectileComponent (kế thừa ProjectileBase), VFX là child objects.
     /// </summary>
     public class ProjectileWeapon : WeaponBase
     {
         [Header("Projectile Settings")]
-        [SerializeField] private GameObject visualProjectilePrefab; // Always spawn for visual
-        [SerializeField] private bool useHitscanForLogic = false; // If true, use hitscan; if false, use collider
-        [SerializeField] private LayerMask hitLayers = -1;
+        [SerializeField] private bool       useHitscanForLogic = false;
+        [SerializeField] private LayerMask  hitLayers          = -1;
 
-        private float lastFireTime;
-        private ProjectileSpawner projectileSpawner;
+        [Header("Weapon VFX Children")]
+        [Tooltip("Child particle trên weapon prefab — bật khi Fire, tắt tự động.")]
+        [SerializeField] private GameObject muzzleFlashChild;
+        [Tooltip("Giây muzzle flash tắt sau khi bắn.")]
+        [SerializeField] private float      muzzleFlashDuration = 0.08f;
 
+        private float            _lastFireTime;
+        private ProjectileSpawner _projectileSpawner;
+
+        // -----------------------------------------------------------------
         protected override void Awake()
         {
             base.Awake();
-            projectileSpawner = GetComponent<ProjectileSpawner>();
-            if (projectileSpawner == null)
-            {
-                projectileSpawner = gameObject.AddComponent<ProjectileSpawner>();
-            }
+            _projectileSpawner = GetComponent<ProjectileSpawner>();
+            if (_projectileSpawner == null)
+                _projectileSpawner = gameObject.AddComponent<ProjectileSpawner>();
+
+            // Đảm bảo muzzle flash tắt lúc đầu
+            if (muzzleFlashChild != null)
+                muzzleFlashChild.SetActive(false);
         }
 
+        // -----------------------------------------------------------------
         public override void Fire(Vector3 direction)
         {
             if (!CanFire()) return;
 
-            lastFireTime = Time.time;
+            _lastFireTime = Time.time;
             currentAmmo--;
 
             Vector3 startPos = firePoint != null ? firePoint.position : transform.position;
 
-            // Always spawn visual projectile locally
-            if (visualProjectilePrefab != null)
-            {
-                SpawnVisualProjectile(startPos, direction);
-            }
+            // Muzzle flash — bật rồi tắt sau muzzleFlashDuration
+            PlayMuzzleFlash();
 
-            // Send to server for validation and broadcast
-            var networkPlayer = GetComponentInParent<NetworkPlayer>();
-            if (networkPlayer != null && networkPlayer.IsOwner)
-            {
-                SendProjectileToServer(startPos, direction);
-            }
+            // Spawn projectile:
+            // ProjectileSpawner xử lý cả local instance + network broadcast.
+            // Owner sẽ thấy bản local; các client khác nhận bản broadcast.
+            _projectileSpawner.SpawnLocal(startPos, direction, weaponConfig);
 
-            // Process collision logic based on config
+            // Hitscan: raycast ngay lập tức để tính damage server-side
             if (useHitscanForLogic)
-            {
                 ProcessHitscanLogic(startPos, direction);
-            }
-            // Otherwise, collision is handled by projectile collider
         }
 
-        /// <summary>
-        /// Spawn visual projectile locally
-        /// </summary>
-        private void SpawnVisualProjectile(Vector3 position, Vector3 direction)
+        // -----------------------------------------------------------------
+        // Muzzle Flash
+        // -----------------------------------------------------------------
+        private void PlayMuzzleFlash()
         {
-            if (projectileSpawner != null)
+            if (muzzleFlashChild == null) return;
+            muzzleFlashChild.SetActive(true);
+
+            // Restart particle nếu có
+            foreach (var ps in muzzleFlashChild.GetComponentsInChildren<ParticleSystem>(true))
             {
-                projectileSpawner.SpawnLocal(position, direction, weaponConfig);
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                ps.Play(true);
             }
-            else if (visualProjectilePrefab != null)
-            {
-                GameObject projectile = Instantiate(visualProjectilePrefab, position, Quaternion.LookRotation(direction));
-                var projectileComponent = projectile.GetComponent<ProjectileComponent>();
-                if (projectileComponent != null)
-                {
-                    projectileComponent.Initialize(weaponConfig, direction, useHitscanForLogic);
-                }
-            }
+
+            StartCoroutine(DisableMuzzleFlashAfter(muzzleFlashDuration));
         }
 
-        /// <summary>
-        /// Send projectile data to server
-        /// </summary>
-        private void SendProjectileToServer(Vector3 position, Vector3 direction)
+        private IEnumerator DisableMuzzleFlashAfter(float delay)
         {
-            // Wire up ServerRpc for projectile data once server-authoritative combat is added.
-            // Server will validate and broadcast to other clients
+            yield return new WaitForSeconds(delay);
+            if (muzzleFlashChild != null)
+                muzzleFlashChild.SetActive(false);
         }
 
-        /// <summary>
-        /// Process hitscan logic (if config says use hitscan)
-        /// </summary>
+        // -----------------------------------------------------------------
+        // Hitscan
+        // -----------------------------------------------------------------
         private void ProcessHitscanLogic(Vector3 startPos, Vector3 direction)
         {
-            RaycastHit hit;
-            if (Physics.Raycast(startPos, direction, out hit, weaponConfig.MaxRange, hitLayers))
-            {
+            if (Physics.Raycast(startPos, direction, out RaycastHit hit, weaponConfig.MaxRange, hitLayers))
                 ProcessHit(hit);
-            }
         }
 
-        /// <summary>
-        /// Process hit
-        /// </summary>
         private void ProcessHit(RaycastHit hit)
         {
-            // var hitCharacter = hit.collider.GetComponent<PlayerStats>();
-            // if (hitCharacter != null)
-            // {
-            //     float damage = weaponConfig.DamageBody;
-            //     bool isHeadshot = hit.collider.CompareTag("Head");
-            //     if (isHeadshot)
-            //     {
-            //         damage *= weaponConfig.DamageHeadMul;
-            //     }
-            //
-            //     // Send RPC to server for damage application once server-authoritative combat is added.
-            //     hitCharacter.TakeDamage(damage);
-            // }
+            // TODO: gửi ServerRpc để server apply damage
+            // var hitStat = hit.collider.GetComponent<IPlayerStats>();
+            // if (hitStat != null)
+            //     RequestDamageServerRpc(hitStat.OwnerId, weaponConfig.DamageBody, hit.collider.CompareTag("Head"));
         }
 
+        // -----------------------------------------------------------------
         public override void Reload()
         {
             if (isReloading || currentAmmo >= weaponConfig.MagazineSize || reserveAmmo <= 0)
                 return;
-
             isReloading = true;
         }
 
         public override bool CanFire()
         {
             if (weaponConfig == null) return false;
-            if (isReloading) return false;
-            if (currentAmmo <= 0) return false;
+            if (isReloading)         return false;
+            if (currentAmmo <= 0)    return false;
 
-            float timeSinceLastFire = Time.time - lastFireTime;
-            float fireInterval = 1f / weaponConfig.FireRate;
+            float timeSinceLastFire = Time.time - _lastFireTime;
+            float fireInterval      = 1f / weaponConfig.FireRate;
             return timeSinceLastFire >= fireInterval;
         }
     }

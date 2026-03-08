@@ -6,7 +6,7 @@ namespace NightHunt.Config
     /// SceneConfig - Configuration cho scene names
     /// Tạo ScriptableObject instance trong Unity Editor để config scene names
     /// </summary>
-    [CreateAssetMenu(fileName = "SceneConfig", menuName = "NightHunt/Scene Config")]
+    [CreateAssetMenu(fileName = "SceneConfig", menuName = "NightHunt/Config/Scene Config")]
     public class SceneConfig : ScriptableObject
     {
         [Header("Scene Names")]

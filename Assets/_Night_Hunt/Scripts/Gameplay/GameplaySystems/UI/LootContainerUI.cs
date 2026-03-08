@@ -43,7 +43,7 @@ namespace NightHunt.GameplaySystems.UI
 
         [Header("Item list")]
         [SerializeField] private Transform  _slotsParent;
-        [SerializeField] private GameObject _itemSlotPrefab; // optional
+        [SerializeField] private LootItemRow _itemRowPrefab; // optional — assign a prefab with LootItemRow component
 
         [Header("Buttons")]
         [SerializeField] private Button _takeAllButton;
@@ -152,24 +152,29 @@ namespace NightHunt.GameplaySystems.UI
 
         private GameObject SpawnRow(ItemInstanceData item, int storageIndex)
         {
-            var def         = ItemDatabase.GetDefinition(item.DefinitionID);
+            var def        = ItemDatabase.GetDefinition(item.DefinitionID);
             string itemName = def != null ? def.DisplayName : item.DefinitionID;
+            Sprite  icon    = def != null ? def.Icon       : null;
 
             GameObject row;
+            Image           iconImg  = null;
             TextMeshProUGUI nameText = null;
             TextMeshProUGUI qtyText  = null;
-            Button takeBtn           = null;
+            Button          takeBtn  = null;
 
-            if (_itemSlotPrefab != null && _slotsParent != null)
+            if (_itemRowPrefab != null && _slotsParent != null)
             {
-                row      = Instantiate(_itemSlotPrefab, _slotsParent);
-                nameText = row.transform.Find("NameText")?.GetComponent<TextMeshProUGUI>();
-                qtyText  = row.transform.Find("QtyText")?.GetComponent<TextMeshProUGUI>();
-                takeBtn  = row.transform.Find("TakeButton")?.GetComponent<Button>();
+                var rowComp = Instantiate(_itemRowPrefab, _slotsParent);
+                row      = rowComp.gameObject;
+                iconImg  = rowComp.Icon;
+                nameText = rowComp.NameText;
+                qtyText  = rowComp.QtyText;
+                takeBtn  = rowComp.TakeButton;
+                rowComp.gameObject.SetActive(true); // deactivate prefab instance until fully setup to avoid showing uninitialized values
             }
             else
             {
-                // Build a minimal row at runtime
+                // Fallback: build a minimal row at runtime
                 row = new GameObject($"Row_{storageIndex}", typeof(RectTransform),
                                       typeof(HorizontalLayoutGroup));
                 if (_slotsParent != null)
@@ -181,20 +186,25 @@ namespace NightHunt.GameplaySystems.UI
                 hlg.spacing            = 6f;
 
                 var rt = row.GetComponent<RectTransform>();
-                rt.sizeDelta = new Vector2(400f, 36f);
+                rt.sizeDelta = new Vector2(440f, 40f);
 
-                nameText = CreateLabel(row.transform,  "NameText",  new Vector2(200f, 36f));
-                qtyText  = CreateLabel(row.transform,  "QtyText",   new Vector2(60f,  36f));
-                takeBtn  = CreateButton(row.transform, "TakeButton",new Vector2(80f,  36f), "Take");
+                iconImg  = CreateIconSlot(row.transform, "Icon",       new Vector2(40f,  40f));
+                nameText = CreateLabel(   row.transform, "NameText",   new Vector2(220f, 40f));
+                qtyText  = CreateLabel(   row.transform, "QtyText",    new Vector2(60f,  40f));
+                takeBtn  = CreateButton(  row.transform, "TakeButton", new Vector2(80f,  40f), "Take");
             }
 
+            if (iconImg  != null)
+            {
+                iconImg.sprite  = icon;
+                iconImg.enabled = icon != null;
+            }
             if (nameText != null) nameText.text = itemName;
             if (qtyText  != null) qtyText.text  = $"×{item.Quantity}";
 
             // Capture for closure
-            int  idx = storageIndex;
-            int  qty = item.Quantity;
-
+            int idx = storageIndex;
+            int qty = item.Quantity;
             if (takeBtn != null)
                 takeBtn.onClick.AddListener(() => TakeItem(idx, qty));
 
@@ -227,6 +237,17 @@ namespace NightHunt.GameplaySystems.UI
         }
 
         // ── Minimal uGUI helpers (used when no prefab is assigned) ────────────
+
+        private static Image CreateIconSlot(Transform parent, string name, Vector2 size)
+        {
+            var go  = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var rt  = go.GetComponent<RectTransform>();
+            rt.sizeDelta = size;
+            var img = go.GetComponent<Image>();
+            img.color = new Color(0.25f, 0.25f, 0.25f, 0.8f); // dark placeholder bg
+            return img;
+        }
 
         private static TextMeshProUGUI CreateLabel(Transform parent, string name, Vector2 size)
         {

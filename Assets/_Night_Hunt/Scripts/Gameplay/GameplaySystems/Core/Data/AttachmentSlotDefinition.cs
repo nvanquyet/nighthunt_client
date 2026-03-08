@@ -22,7 +22,7 @@ namespace NightHunt.GameplaySystems.Core.Data
     ///     CanAttachTo[]  on base ItemDefinition specifies which AttachmentSlotTypes
     ///     this attachment can go into (e.g. Optic, Barrel, Plate…).
     /// </summary>
-    [CreateAssetMenu(fileName = "Attachment_", menuName = "GameplaySystems/Items/Attachment Definition")]
+    [CreateAssetMenu(fileName = "Attachment_", menuName = "NightHunt/Items/Attachment Definition")]
     public class AttachmentDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Attachment;

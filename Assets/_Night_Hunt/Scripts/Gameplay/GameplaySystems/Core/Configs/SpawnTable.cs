@@ -35,7 +35,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
     /// Supports 3 modes: RandomOnly, FixedOnly, FixedPlusRandom
     /// Used by SpawnPoints, Containers, and other loot sources
     /// </summary>
-    [CreateAssetMenu(fileName = "SpawnTable", menuName = "GameplaySystems/Config/Spawn Table")]
+    [CreateAssetMenu(fileName = "SpawnTable", menuName = "NightHunt/Gameplay/Spawn Table")]
     public class SpawnTable : ScriptableObject
     {
         [Header("Spawn Mode")]

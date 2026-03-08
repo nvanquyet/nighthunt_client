@@ -51,6 +51,8 @@ namespace NightHunt.Gameplay.Character
         private bool _crouch;
         private bool _cameraLocked;
         private float _yaw;
+        /// <summary>Aim-derived yaw for character model facing (cursor-to-ground in STRAFE mode).</summary>
+        private float _aimYaw;
 
         // ===== STATE =====
         private Vector3 _velocity;
@@ -171,13 +173,49 @@ namespace NightHunt.Gameplay.Character
             // onto the real Unity Camera via CinemachineBrain.  Reading _camera.transform
             // always returned the initial spawn yaw, causing movement to ignore where the
             // player is actually looking.  Camera.main.transform is correct here.
-            if (_mainCamera == null)
-                _mainCamera = UnityEngine.Camera.main;   // lazy re-fetch if missed in Awake
+            //
+            // Always re-fetch Camera.main (not lazy null-check) so that a stale reference
+            // to a scene/lobby camera that was assigned before the player's own MainCamera
+            // became active (common on HOST where both server+client share the same process)
+            // is replaced as soon as the correct camera is available.
+            var freshCam = UnityEngine.Camera.main;
+            if (freshCam != null)
+                _mainCamera = freshCam;
 
             if (_mainCamera != null)
                 _yaw = _mainCamera.transform.eulerAngles.y;
             else if (_camera != null)
                 _yaw = _camera.transform.eulerAngles.y;  // fallback: editor / headless
+
+            // Aim yaw: cursor-to-ground direction for ALL modes.
+            // TANK idle also uses aimRot so the character faces where the cursor points
+            // even when not moving — NOT fixed to camera direction.
+            _aimYaw = _yaw;
+            {
+                bool aimResolved = false;
+                var combatH = InputManager.Instance?.CombatHandler;
+                if (combatH != null)
+                {
+                    Vector3 aimDir = combatH.GetAimDirection();
+                    if (aimDir.sqrMagnitude > 0.001f)
+                    {
+                        _aimYaw = Quaternion.LookRotation(aimDir, Vector3.up).eulerAngles.y;
+                        aimResolved = true;
+                    }
+                }
+                if (!aimResolved && _mainCamera != null)
+                {
+                    Ray ray = _mainCamera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+                    Plane ground = new Plane(Vector3.up, transform.position);
+                    if (ground.Raycast(ray, out float dist))
+                    {
+                        Vector3 dir = ray.GetPoint(dist) - transform.position;
+                        dir.y = 0f;
+                        if (dir.sqrMagnitude > 0.001f)
+                            _aimYaw = Quaternion.LookRotation(dir, Vector3.up).eulerAngles.y;
+                    }
+                }
+            }
 
             if (enableDebugLogs && _moveInput.sqrMagnitude > 0.01f)
             {
@@ -217,6 +255,7 @@ namespace NightHunt.Gameplay.Character
             MovementReplicateData replicateData = new(
                 _moveInput,
                 _yaw,
+                _aimYaw,
                 _sprint,
                 _crouch,
                 _cameraLocked
@@ -334,16 +373,18 @@ namespace NightHunt.Gameplay.Character
                 inputDir.Normalize();
 
             Quaternion camRot = Quaternion.Euler(0f, data.Yaw, 0f);
+            // Cursor-derived facing — differs from camRot in top-down MOBA (camera doesn't rotate).
+            Quaternion aimRot = Quaternion.Euler(0f, data.AimYaw, 0f);
             Vector3 moveDir = Vector3.zero;
 
             // ===== ROTATION & MOVEMENT =====
             if (data.CameraLocked)
             {
                 // ============= STRAFE MODE =============
-                // Always face camera direction
+                // Face cursor direction; move camera-relative
                 transform.rotation = Quaternion.RotateTowards(
                     transform.rotation,
-                    camRot,
+                    aimRot,
                     lockTurnSpeed * dt * 100f
                 );
 
@@ -371,13 +412,14 @@ namespace NightHunt.Gameplay.Character
                 }
                 else
                 {
-                    // Idle: slowly turn towards camera
-                    float angle = Quaternion.Angle(transform.rotation, camRot);
+                    // Idle: slowly face cursor/aim direction so the character looks where
+                    // the player is pointing while standing still.
+                    float angle = Quaternion.Angle(transform.rotation, aimRot);
                     if (angle > 5f)
                     {
                         transform.rotation = Quaternion.RotateTowards(
                             transform.rotation,
-                            camRot,
+                            aimRot,
                             tankTurnSpeed * 0.5f * dt * 100f
                         );
                     }
@@ -511,6 +553,13 @@ namespace NightHunt.Gameplay.Character
                 // identical SimulateMovement() calls with the same Yaw data.
                 _velocity = data.Velocity;
                 _stamina = data.Stamina;
+
+                // Restore the vertical-velocity accumulator from reconcile.
+                // SimulateMovement does: finalMove.y = _verticalVelocity; _velocity = finalMove;
+                // so data.Velocity.y carries the authoritative vertical speed.
+                // Without this, every reconcile leaves _verticalVelocity at an old
+                // client value and the player flies upward on the next tick.
+                _verticalVelocity = data.Velocity.y;
             }
             else if (!IsServerStarted)
             {

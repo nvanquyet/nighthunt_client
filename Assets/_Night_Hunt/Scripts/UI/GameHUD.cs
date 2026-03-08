@@ -71,10 +71,52 @@ namespace NightHunt.UI
 
         private void Awake()
         {
-            // Death screen starts hidden
-            if (deathScreen != null) deathScreen.Hide();
-            // Loot container starts hidden
-            if (lootContainerUI != null) lootContainerUI.Hide();
+            // ── Panel activation strategy ─────────────────────────────────────────
+            // ALL panels must be active here so Awake()/GetComponentInChildren()
+            // run on every child MonoBehaviour and references are wired up.
+            // We then selectively hide panels that should NOT show at game start.
+            // Do NOT SetActive(false) on item prefabs inside panels — only the PANEL root.
+            SetupPanelsInitialState();
+
+            // ── Cursor: always visible in top-down gameplay — cursor IS the aim indicator.
+            // Never lock/hide; mobile has no cursor so this is a no-op on device.
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible   = true;
+        }
+
+        // ── Panel initial state ───────────────────────────────────────────────────
+        private void SetupPanelsInitialState()
+        {
+            // These panels are OVERLAY / on-demand → start hidden
+            if (deathScreen      != null) deathScreen.Hide();
+            if (lootContainerUI  != null) lootContainerUI.Hide();
+            // Combat + Player HUD stay active — they show gameplay info at all times
+            // MatchUI / KillFeed / Crosshair / InteractionPrompt / Minimap start active
+            // (they self-manage visibility via their own logic)
+        }
+
+        // ── Cursor helpers ─────────────────────────────────────────────────────────
+        /// <summary>
+        /// Show or hide cursor for UI overlay contexts (e.g. pause / loading).
+        /// In this top-down game the cursor should stay visible at all times
+        /// because it is the aim indicator.  Only hide when a full-screen non-
+        /// gameplay overlay needs an exclusively locked state (rare).
+        /// On mobile this is a no-op because there is no system cursor.
+        /// </summary>
+        public static void SetCursorForUI(bool uiOverlayActive)
+        {
+            // Top-down game: cursor is ALWAYS visible during gameplay.
+            // UI overlays can also leave cursor visible — no state change needed.
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible   = true;
+        }
+
+        /// <summary>Legacy alias kept so existing call-sites compile.</summary>
+        public static void LockCursor(bool locked)
+        {
+            // Repurposed: locking is no longer used in this top-down game.
+            // Cursor stays visible regardless of the 'locked' argument.
+            SetCursorForUI(!locked);
         }
 
         /// <summary>

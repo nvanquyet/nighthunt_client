@@ -105,13 +105,21 @@ namespace NightHunt.UI
                 return item;
             }
 
-            // Assign text
-            var tmp = item.GetComponentInChildren<TextMeshProUGUI>();
-            if (tmp != null) tmp.text = message;
-
-            // Assign background color
-            var img = item.GetComponentInChildren<Image>();
-            if (img != null) img.color = bgColor;
+            // Assign text and background via ToastItem component if available,
+            // otherwise fall back to GetComponentInChildren (for simple prefabs without ToastItem).
+            var toastItem = item.GetComponent<ToastItem>();
+            if (toastItem != null)
+            {
+                if (toastItem.MessageText != null) toastItem.MessageText.text  = message;
+                if (toastItem.Background  != null) toastItem.Background.color  = bgColor;
+            }
+            else
+            {
+                var tmp = item.GetComponentInChildren<TextMeshProUGUI>();
+                if (tmp != null) tmp.text = message;
+                var img = item.GetComponentInChildren<Image>();
+                if (img != null) img.color = bgColor;
+            }
 
             return item;
         }

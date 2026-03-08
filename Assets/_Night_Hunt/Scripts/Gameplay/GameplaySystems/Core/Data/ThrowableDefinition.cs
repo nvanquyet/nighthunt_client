@@ -9,7 +9,7 @@ namespace NightHunt.GameplaySystems.Core.Data
     /// Throwable item definition (grenades, molotovs, flashbangs …)
     /// NEW FILE – drop into Core/Data alongside ConsumableDefinition.
     /// </summary>
-    [CreateAssetMenu(fileName = "Throwable_", menuName = "GameplaySystems/Items/Throwable Definition")]
+    [CreateAssetMenu(fileName = "Throwable_", menuName = "NightHunt/Items/Throwable Definition")]
     public class ThrowableDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Throwable;

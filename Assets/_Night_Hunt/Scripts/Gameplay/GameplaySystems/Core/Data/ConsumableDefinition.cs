@@ -9,7 +9,7 @@ namespace NightHunt.GameplaySystems.Core.Data
     /// Consumable item definition (food, medkits, potions, drinks …)
     /// Effects are now stored in ConsumableStatConfig.
     /// </summary>
-    [CreateAssetMenu(fileName = "Consumable_", menuName = "GameplaySystems/Items/Consumable Definition")]
+    [CreateAssetMenu(fileName = "Consumable_", menuName = "NightHunt/Items/Consumable Definition")]
     public class ConsumableDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Consumable;

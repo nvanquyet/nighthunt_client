@@ -72,14 +72,6 @@ namespace NightHunt.UI
 
         private void OnMatchEnded(MatchEndedEvent evt)
         {
-            // Load display duration from config
-            var cfg = NightHunt.Data.GameConfigLoader.Instance?.GetMatchEndConfig();
-            if (cfg != null)
-            {
-                if (cfg.ResultsDisplayDuration > 0f) _displayDuration    = cfg.ResultsDisplayDuration;
-                if (cfg.PostMatchCountdown > 0f)      _postMatchCountdown = cfg.PostMatchCountdown;
-            }
-
             ShowResults(evt);
             StartCoroutine(CountdownCoroutine());
         }

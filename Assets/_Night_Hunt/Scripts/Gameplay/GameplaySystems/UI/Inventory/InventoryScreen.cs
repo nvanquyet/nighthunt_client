@@ -285,6 +285,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     _slotViews[id] = view;
                     DragDropController.Instance?.RegisterSlotView(view);
                 }
+                go.gameObject.SetActive(true); // Activate after initialization to avoid showing uninitialized values
             }
 
             // Force rebuild layout sau khi spawn tất cả slots

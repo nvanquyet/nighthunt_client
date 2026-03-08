@@ -48,8 +48,7 @@ namespace NightHunt.Gameplay.Respawn
         {
             base.OnStartNetwork();
 
-            // Load config
-            var configData = GameConfigLoader.Instance?.ConfigData;
+            GameConfigData configData = null; // TODO: load from new data source
             if (configData != null && configData.RespawnConfig != null && configData.RespawnConfig.Count > 0)
             {
                 config = configData.RespawnConfig[0];

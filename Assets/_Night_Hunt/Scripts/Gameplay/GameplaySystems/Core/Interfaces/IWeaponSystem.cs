@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 
@@ -189,6 +190,16 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Hook: force switch, show pickup prompt, disable fire button.
         /// </summary>
         event Action<WeaponSlotType> OnWeaponDepleted;
+
+        /// <summary>
+        /// Fired immediately after each shot is processed (ammo deducted, hit confirmed).
+        /// Parameters: (slot, aimDirection) — aimDirection is the normalized world-space direction used.
+        /// VFX controllers listen to this to spawn muzzle flash / trail / projectile visuals.
+        /// </summary>
+        event Action<WeaponSlotType, Vector3> OnShotFired;
+
+        /// <summary>Supply the current aim direction to WeaponSystem so OnShotFired carries it.</summary>
+        void SetAimDirection(Vector3 worldDirection);
 
         #endregion
     }

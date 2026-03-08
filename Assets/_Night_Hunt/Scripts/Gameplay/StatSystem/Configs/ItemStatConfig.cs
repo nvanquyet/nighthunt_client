@@ -8,7 +8,7 @@ namespace NightHunt.StatSystem.Configs
     /// Base config for item stats. Contains Stats + PlayerModifiers + ItemModifiers.
     /// Equipment/Weapon use PlayerModifiers. Attachment uses ItemModifiers.
     /// </summary>
-    [CreateAssetMenu(fileName = "ItemStatConfig", menuName = "StatSystem/Config/Item Stat Config")]
+    [CreateAssetMenu(fileName = "ItemStatConfig", menuName = "NightHunt/StatSystem/Item Stat Config")]
     public class ItemStatConfig : ScriptableObject
     {
         [Header("Base Stats")]
@@ -64,25 +64,25 @@ namespace NightHunt.StatSystem.Configs
     /// <summary>
     /// Equipment stat config - Stats + PlayerModifiers
     /// </summary>
-    [CreateAssetMenu(fileName = "EquipmentStatConfig", menuName = "StatSystem/Config/Equipment Stat Config")]
+    [CreateAssetMenu(fileName = "EquipmentStatConfig", menuName = "NightHunt/StatSystem/Equipment Stat Config")]
     public class EquipmentStatConfig : ItemStatConfig { }
 
     /// <summary>
     /// Weapon stat config - Stats + PlayerModifiers
     /// </summary>
-    [CreateAssetMenu(fileName = "WeaponStatConfig", menuName = "StatSystem/Config/Weapon Stat Config")]
+    [CreateAssetMenu(fileName = "WeaponStatConfig", menuName = "NightHunt/StatSystem/Weapon Stat Config")]
     public class WeaponStatConfig : ItemStatConfig { }
 
     /// <summary>
     /// Attachment stat config - Stats + ItemModifiers
     /// </summary>
-    [CreateAssetMenu(fileName = "AttachmentStatConfig", menuName = "StatSystem/Config/Attachment Stat Config")]
+    [CreateAssetMenu(fileName = "AttachmentStatConfig", menuName = "NightHunt/StatSystem/Attachment Stat Config")]
     public class AttachmentStatConfig : ItemStatConfig { }
 
     /// <summary>
     /// Consumable stat config - Stats + ConsumableEffects
     /// </summary>
-    [CreateAssetMenu(fileName = "ConsumableStatConfig", menuName = "StatSystem/Config/Consumable Stat Config")]
+    [CreateAssetMenu(fileName = "ConsumableStatConfig", menuName = "NightHunt/StatSystem/Consumable Stat Config")]
     public class ConsumableStatConfig : ItemStatConfig
     {
         [Header("Consumable Effects")]
@@ -94,6 +94,6 @@ namespace NightHunt.StatSystem.Configs
     /// Throwable stat config - Stats only (typically Weight).
     /// No PlayerModifiers / ItemModifiers / Effects.
     /// </summary>
-    [CreateAssetMenu(fileName = "ThrowableStatConfig", menuName = "StatSystem/Config/Throwable Stat Config")]
+    [CreateAssetMenu(fileName = "ThrowableStatConfig", menuName = "NightHunt/StatSystem/Throwable Stat Config")]
     public class ThrowableStatConfig : ItemStatConfig { }
 }

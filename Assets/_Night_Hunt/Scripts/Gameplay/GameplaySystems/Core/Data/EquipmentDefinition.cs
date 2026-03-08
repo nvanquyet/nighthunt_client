@@ -9,7 +9,7 @@ namespace NightHunt.GameplaySystems.Core.Data
     /// <summary>
     /// Equipment item definition. Stats + PlayerModifiers from StatConfig.
     /// </summary>
-    [CreateAssetMenu(fileName = "Armor_", menuName = "GameplaySystems/Items/Armor Definition")]
+    [CreateAssetMenu(fileName = "Armor_", menuName = "NightHunt/Items/Armor Definition")]
     public class EquipmentDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Equipment;

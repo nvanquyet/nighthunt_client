@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -7,34 +8,33 @@ using NightHunt.StatSystem.Configs;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// HUD panel that shows Health / Stamina / Speed / Armor / Weight.
-    /// Reads live data from UIDomainBridge and display metadata from PlayerStatUIConfig.
+    /// Config-driven HUD panel for player stats.
+    ///
+    /// At runtime, Initialize() reads <see cref="PlayerStatUIConfig.Stats"/> and
+    /// spawns one <see cref="StatRowEntry"/> prefab per stat that has ShowInUI = true.
+    /// Adding or removing a stat requires only an SO change — no code, no scene edits.
+    ///
+    /// Inspector setup:
+    ///   • _statUIConfig  – assign PlayerStatUIConfig SO
+    ///   • _statRowPrefab – assign a prefab with a StatRowEntry component
+    ///   • _rowContainer  – assign a Transform with VerticalLayoutGroup
     /// </summary>
     public class PlayerHUDPanel : MonoBehaviour
     {
-        [Header("Health")]
-        [SerializeField] private Slider             _healthSlider;
-        [SerializeField] private TextMeshProUGUI    _healthText;
-
-        [Header("Stamina")]
-        [SerializeField] private Slider             _staminaSlider;
-        [SerializeField] private TextMeshProUGUI    _staminaText;
-
-        [Header("Speed")]
-        [SerializeField] private Slider             _speedSlider;
-        [SerializeField] private TextMeshProUGUI    _speedText;
-
-        [Header("Armor")]
-        [SerializeField] private Slider             _armorSlider;
-        [SerializeField] private TextMeshProUGUI    _armorText;
-
-        [Header("Weight")]
-        [SerializeField] private Slider             _weightSlider;
-        [SerializeField] private TextMeshProUGUI    _weightText;
-
         [Header("Config")]
-        [Tooltip("UI display config – provides display types, colors, format strings, etc.")]
+        [Tooltip("Drives which stats are shown and their display format / color.")]
         [SerializeField] private PlayerStatUIConfig _statUIConfig;
+
+        [Header("Dynamic Row Spawning")]
+        [Tooltip("Prefab instantiated once per visible stat. Must have a StatRowEntry component.")]
+        [SerializeField] private StatRowEntry _statRowPrefab;
+
+        [Tooltip("Parent transform (VerticalLayoutGroup) where stat rows are spawned.")]
+        [SerializeField] private Transform _rowContainer;
+
+        // ── Runtime ───────────────────────────────────────────────────────────
+        private readonly Dictionary<PlayerStatType, StatRowEntry> _rows =
+            new Dictionary<PlayerStatType, StatRowEntry>();
 
         private UIDomainBridge _domainBridge;
 
@@ -42,10 +42,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         //  Public API
         // ─────────────────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Bind this panel to a <see cref="UIDomainBridge"/>.
+        /// Safe to call again (e.g. spectator switch, respawn) — re-builds rows and re-subscribes.
+        /// </summary>
         public void Initialize(UIDomainBridge bridge)
         {
+            SubscribeBridgeEvents(false); // unsub old
             _domainBridge = bridge;
+            BuildRows();
             SubscribeBridgeEvents(true);
+            PushInitialSnapshot();
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -58,6 +65,66 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
 
         // ─────────────────────────────────────────────────────────────────────
+        //  Row Builder — runs once per Initialize call
+        // ─────────────────────────────────────────────────────────────────────
+
+        private void BuildRows()
+        {
+            // Destroy previously spawned rows
+            if (_rowContainer != null)
+                foreach (Transform child in _rowContainer)
+                    Destroy(child.gameObject);
+            _rows.Clear();
+
+            if (_statRowPrefab == null || _rowContainer == null || _statUIConfig == null)
+            {
+                Debug.LogWarning("[PlayerHUDPanel] Missing _statRowPrefab, _rowContainer, or _statUIConfig — no rows built.");
+                return;
+            }
+
+            foreach (var uiDef in _statUIConfig.Stats)
+            {
+                if (!uiDef.ShowInUI) continue;
+
+                var row = Instantiate(_statRowPrefab, _rowContainer);
+                row.name     = $"Row_{uiDef.Type}";
+                row.StatType = uiDef.Type;
+
+                // Apply accent color from config to slider fill and accent image
+                if (row.Slider != null && row.Slider.fillRect != null)
+                {
+                    var fill = row.Slider.fillRect.GetComponent<UnityEngine.UI.Image>();
+                    if (fill != null) fill.color = uiDef.DisplayColor;
+                }
+                if (row.AccentImage != null)
+                    row.AccentImage.color = uiDef.DisplayColor;
+                if (row.ValueText != null)
+                    row.ValueText.color = uiDef.TextColor.a < 0.01f ? uiDef.DisplayColor : uiDef.TextColor;
+
+                _rows[uiDef.Type] = row;
+
+                //Active the row gameobject after setup to avoid showing uninitialized values
+                row.gameObject.SetActive(true);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Initial snapshot — fill rows once after bind
+        // ─────────────────────────────────────────────────────────────────────
+
+        private void PushInitialSnapshot()
+        {
+            if (_domainBridge == null || !_domainBridge.IsReady || _statUIConfig == null) return;
+
+            foreach (var uiDef in _statUIConfig.Stats)
+            {
+                if (!uiDef.ShowInUI) continue;
+                float val = _domainBridge.Bridge.GetStat(uiDef.Type);
+                RefreshStatUI(uiDef.Type, val);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         //  Event Wiring
         // ─────────────────────────────────────────────────────────────────────
 
@@ -67,42 +134,41 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (subscribe)
             {
-                _domainBridge.OnStatChanged  += HandleStatChanged;
+                _domainBridge.OnStatChanged   += HandleStatChanged;
                 _domainBridge.OnWeightChanged += HandleWeightChanged;
             }
             else
             {
-                _domainBridge.OnStatChanged  -= HandleStatChanged;
+                _domainBridge.OnStatChanged   -= HandleStatChanged;
                 _domainBridge.OnWeightChanged -= HandleWeightChanged;
             }
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Handlers
+        //  Event Handlers
         // ─────────────────────────────────────────────────────────────────────
 
         private void HandleStatChanged(PlayerStatType type, float oldValue, float newValue)
         {
             if (_domainBridge == null || !_domainBridge.IsReady) return;
 
-            // When a "max stat" changes (e.g. MaxHealth) we must also refresh the
-            // dependent "current stat" row (e.g. Health) so the slider ratio is correct.
+            // When a max-stat changes (e.g. MaxHealth) → also refresh the dependent current-stat row
             RefreshRelatedCurrentStats(type);
-
-            // Refresh the stat that actually changed
             RefreshStatUI(type, newValue);
         }
 
         private void HandleWeightChanged(float current, float capacity)
         {
-            if (_weightSlider != null)
+            // Weight is routed through the generic path via CurrentWeight stat
+            if (_rows.TryGetValue(PlayerStatType.CurrentWeight, out var row))
             {
-                _weightSlider.value = capacity > 0f ? current / capacity : 0f;
-            }
-
-            if (_weightText != null)
-            {
-                _weightText.text = $"{current:F1}/{capacity:F1} kg";
+                if (row.Slider != null)
+                {
+                    row.Slider.value    = capacity > 0f ? current / capacity : 0f;
+                    row.Slider.maxValue = 1.5f; // allow over-weight visual
+                }
+                if (row.ValueText != null)
+                    row.ValueText.text = $"{current:F1}/{capacity:F1} kg";
             }
         }
 
@@ -112,25 +178,22 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void RefreshRelatedCurrentStats(PlayerStatType changedType)
         {
-            if (_statUIConfig == null || _statUIConfig.Stats == null) return;
-
+            if (_statUIConfig == null) return;
             foreach (var uiDef in _statUIConfig.Stats)
             {
-                // A "current stat" row uses changedType as its dynamic ceiling
                 if (uiDef.ShowInUI &&
                     uiDef.RelatedMaxStatType == changedType &&
                     uiDef.Type != changedType)
                 {
-                    float currentValue = _domainBridge.Bridge.GetStat(uiDef.Type);
-                    RefreshStatUI(uiDef.Type, currentValue);
+                    float val = _domainBridge.Bridge.GetStat(uiDef.Type);
+                    RefreshStatUI(uiDef.Type, val);
                 }
             }
         }
 
         private void RefreshStatUI(PlayerStatType type, float newValue)
         {
-            // Always look up fresh UI metadata from config
-            if (_statUIConfig == null) return;
+            if (_statUIConfig == null || !_rows.TryGetValue(type, out var row)) return;
 
             var uiDef = _statUIConfig.GetUIDefinition(type);
             if (!uiDef.ShowInUI) return;
@@ -139,23 +202,42 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 case StatDisplayType.SliderWithMax:
                 {
-                    float maxValue = GetRelatedMaxValue(uiDef);
-                    UpdateSliderWithMax(type, newValue, maxValue, uiDef.ShowMaxValue, uiDef.DisplayFormat);
+                    float max = GetRelatedMaxValue(uiDef);
+                    if (row.Slider != null)
+                        row.Slider.value = max > 0f ? newValue / max : 0f;
+                    if (row.ValueText != null)
+                    {
+                        row.ValueText.text = uiDef.ShowMaxValue && max > 0f
+                            ? $"{newValue.ToString(uiDef.DisplayFormat)}/{max.ToString(uiDef.DisplayFormat)}"
+                            : newValue.ToString(uiDef.DisplayFormat);
+                    }
                     break;
                 }
 
                 case StatDisplayType.SliderWithRange:
-                    UpdateText(type, newValue, uiDef.DisplayFormat);
+                    if (row.ValueText != null)
+                        row.ValueText.text = newValue.ToString(uiDef.DisplayFormat);
                     break;
 
                 case StatDisplayType.Text:
-                    UpdateText(type, newValue, uiDef.DisplayFormat);
+                    if (row.ValueText != null)
+                        row.ValueText.text = newValue.ToString(uiDef.DisplayFormat);
                     break;
 
                 case StatDisplayType.ProgressBar:
                 {
-                    float maxValue = GetRelatedMaxValue(uiDef);
-                    UpdateProgressBar(type, newValue, maxValue, uiDef.ShowMaxValue);
+                    float max = GetRelatedMaxValue(uiDef);
+                    if (row.Slider != null)
+                    {
+                        row.Slider.value    = max > 0f ? newValue / max : 0f;
+                        row.Slider.maxValue = 1.5f;
+                    }
+                    if (row.ValueText != null)
+                    {
+                        row.ValueText.text = uiDef.ShowMaxValue && max > 0f
+                            ? $"{newValue:F1}/{max:F1}"
+                            : $"{newValue.ToString(uiDef.DisplayFormat)}";
+                    }
                     break;
                 }
             }
@@ -163,92 +245,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private float GetRelatedMaxValue(PlayerStatUIDefinition uiDef)
         {
-            // RelatedMaxStatType == Type → no dynamic max
             if (uiDef.RelatedMaxStatType == uiDef.Type) return 0f;
             if (_domainBridge == null || !_domainBridge.IsReady) return 0f;
-
             return _domainBridge.Bridge.GetStat(uiDef.RelatedMaxStatType);
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        //  Low-level UI setters
-        // ─────────────────────────────────────────────────────────────────────
-
-        private void UpdateSliderWithMax(PlayerStatType type, float current, float max, bool showMax, string format)
-        {
-            var slider = GetSliderForStat(type);
-            var text   = GetTextForStat(type);
-
-            if (slider != null)
-            {
-                slider.value = max > 0f ? current / max : 0f;
-            }
-
-            if (text != null)
-            {
-                text.text = showMax && max > 0f
-                    ? $"{current.ToString(format)}/{max.ToString(format)}"
-                    : current.ToString(format);
-            }
-        }
-
-        private void UpdateText(PlayerStatType type, float value, string format)
-        {
-            var text = GetTextForStat(type);
-            if (text != null)
-            {
-                text.text = value.ToString(format);
-            }
-        }
-
-        private void UpdateProgressBar(PlayerStatType type, float current, float max, bool showMax)
-        {
-            var slider = GetSliderForStat(type);
-            var text   = GetTextForStat(type);
-
-            if (slider != null)
-            {
-                // Allow > 1 to visually show overweight
-                slider.value    = max > 0f ? current / max : 0f;
-                slider.maxValue = 1.5f;
-            }
-
-            if (text != null)
-            {
-                text.text = showMax && max > 0f
-                    ? $"{current:F1}/{max:F1} kg"
-                    : $"{current:F1}";
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        //  Stat → Widget mapping
-        // ─────────────────────────────────────────────────────────────────────
-
-        private Slider GetSliderForStat(PlayerStatType type)
-        {
-            return type switch
-            {
-                PlayerStatType.Health        => _healthSlider,
-                PlayerStatType.Stamina       => _staminaSlider,
-                PlayerStatType.MovementSpeed => _speedSlider,
-                PlayerStatType.Armor         => _armorSlider,
-                PlayerStatType.CurrentWeight => _weightSlider,
-                _                            => null
-            };
-        }
-
-        private TextMeshProUGUI GetTextForStat(PlayerStatType type)
-        {
-            return type switch
-            {
-                PlayerStatType.Health        => _healthText,
-                PlayerStatType.Stamina       => _staminaText,
-                PlayerStatType.MovementSpeed => _speedText,
-                PlayerStatType.Armor         => _armorText,
-                PlayerStatType.CurrentWeight => _weightText,
-                _                            => null
-            };
         }
     }
 }
+

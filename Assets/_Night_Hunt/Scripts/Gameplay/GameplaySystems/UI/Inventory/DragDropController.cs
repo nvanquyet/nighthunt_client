@@ -254,6 +254,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return;
 
             _activeGhost = Instantiate(_ghostPrefab, _dragCanvas.transform);
+            if(_activeGhost == null)
+                return;
+            _activeGhost.gameObject.SetActive(true);
             _activeGhost.SetupFromSlot(sourceView);
 
             RectTransformUtility.ScreenPointToLocalPointInRectangle(

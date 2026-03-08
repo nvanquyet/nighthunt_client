@@ -17,7 +17,7 @@ namespace NightHunt.StatSystem.Configs
     /// USAGE:
     /// Create via: Assets → Create → StatSystem/Config/Player Stat Config
     /// </summary>
-    [CreateAssetMenu(fileName = "PlayerStatConfig", menuName = "StatSystem/Config/Player Stat Config")]
+    [CreateAssetMenu(fileName = "PlayerStatConfig", menuName = "NightHunt/StatSystem/Player Stat Config")]
     public class PlayerStatConfig : ScriptableObject
     {
         [Header("Player Stats")]

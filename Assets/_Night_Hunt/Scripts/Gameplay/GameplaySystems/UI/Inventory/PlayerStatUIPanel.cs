@@ -134,6 +134,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             statView.Initialize(uiDef.Type, uiDef, _domainBridge);
             _statViews[uiDef.Type] = statView;
+            rowGO.SetActive(true); // Activate after initialization to avoid showing uninitialized values
         }
 
         private void ClearStatViews()

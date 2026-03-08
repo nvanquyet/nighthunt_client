@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using NightHunt.Common;
+using NightHunt.Config;
 using NightHunt.Data;
 using NightHunt.State;
 using NightHunt.Core;

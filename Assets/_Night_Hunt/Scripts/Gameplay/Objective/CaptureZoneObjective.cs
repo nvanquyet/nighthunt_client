@@ -1,7 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
 using FishNet;
-using NightHunt.Data;
 using NightHunt.Gameplay.Match;
 using NightHunt.Networking;
 
@@ -14,7 +13,7 @@ namespace NightHunt.Gameplay.Objective
     ///   • Checks which team has ≥ minPlayers inside.
     ///   • If one team controls the zone, ticks <c>scorePerSecond</c> points
     ///     to that team via <see cref="MatchEndManager.AddObjectiveScore"/>.
-    ///   • Config values loaded from <see cref="GameConfigLoader.GetMatchEndConfig"/>.
+    ///   • Config values: TODO wire in new data source.
     ///
     /// This MonoBehaviour is expected to run on the server GameObject only,
     /// or is safe to run client-side because <see cref="IsServer"/> guards it.
@@ -54,16 +53,6 @@ namespace NightHunt.Gameplay.Objective
             Progress        = 0f;
             captureProgress = 0f;
             _controllingTeam = -1;
-
-            // Load config
-            var cfg = GameConfigLoader.Instance?.GetMatchEndConfig();
-            if (cfg != null)
-            {
-                if (cfg.CaptureZoneScorePerSecond > 0f)
-                    _scorePerSecond = cfg.CaptureZoneScorePerSecond;
-                if (cfg.CaptureZoneMinPlayers > 0)
-                    requiredPlayers = cfg.CaptureZoneMinPlayers;
-            }
 
             if (_matchEndManager == null)
                 _matchEndManager = FindFirstObjectByType<MatchEndManager>();

@@ -76,8 +76,9 @@ namespace NightHunt.GameplaySystems.Weapon
         /// <inheritdoc cref="IWeaponSystem.OnReloadStateChanged"/>
         public event Action<bool> OnReloadStateChanged;
         /// <inheritdoc cref="IWeaponSystem.OnWeaponDepleted"/>
-        public event Action<WeaponSlotType> OnWeaponDepleted;
-        
+        public event Action<WeaponSlotType> OnWeaponDepleted;        /// <inheritdoc cref="IWeaponSystem.OnShotFired"/>
+        /// Raised on owner-client after each successful shot. VFX controllers subscribe here.
+        public event Action<WeaponSlotType, Vector3> OnShotFired;        
         #endregion
 
         #region Local Fire State (owner-client + server)
@@ -89,6 +90,7 @@ namespace NightHunt.GameplaySystems.Weapon
         private bool _isFiring;
         private bool _isReloading;
         private Coroutine _autoFireCoroutine;
+        private Vector3 _aimDirection = Vector3.forward; // updated by SetAimDirection()
 
         #endregion
         
@@ -203,6 +205,16 @@ namespace NightHunt.GameplaySystems.Weapon
             return FireMode.Auto;
         }
 
+        /// <summary>
+        /// Supply the current world-space aim direction each frame / on input change.
+        /// WeaponSystem stores it so <see cref="OnShotFired"/> can pass it to VFX controllers.
+        /// CombatInputHandler calls this via <c>_weaponSystem.SetAimDirection(GetAimDirection())</c>.
+        /// </summary>
+        public void SetAimDirection(Vector3 worldDirection)
+        {
+            _aimDirection = worldDirection.sqrMagnitude > 0.001f ? worldDirection.normalized : Vector3.forward;
+        }
+
         // ── Private fire helpers ─────────────────────────────────────────────
 
         private System.Collections.IEnumerator AutoFireCoroutine()
@@ -256,6 +268,10 @@ namespace NightHunt.GameplaySystems.Weapon
                 (int)mag);
             // Fire via BallisticExecutor once that subsystem is integrated:
             // BallisticExecutor.Execute(inst, aimSystem.FinalAimDir)
+
+            // Notify VFX controllers (muzzle flash, trail, projectile visual).
+            // WeaponVFXController subscribes and fetches WeaponDefinition.MuzzleFlashPrefab etc.
+            OnShotFired?.Invoke(slot.Value, _aimDirection);
         }
 
         private System.Collections.IEnumerator ReloadCoroutine(WeaponSlotType slot, ItemInstance inst)

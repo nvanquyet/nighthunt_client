@@ -33,6 +33,10 @@ namespace NightHunt.Gameplay.Input.Core
     /// </code>
     /// </summary>
     // ──────────────────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────────────
+    // Execution order: must Awake() BEFORE any IInputHandler so Instance is ready
+    // when handlers call InitializeActions() in their own Awake().
+    [UnityEngine.DefaultExecutionOrder(-100)]
     public class InputLayerManager : MonoBehaviour
     {
         public static InputLayerManager Instance { get; private set; }
@@ -52,10 +56,11 @@ namespace NightHunt.Gameplay.Input.Core
             },  
             {
                 InputState.InventoryOpen,
-                // ✅ UI + Inventory (hotkeys) + Camera
-                // ❌ Combat OFF → click chuột trái không bắn
-                // ❌ Player OFF → không di chuyển / tương tác world khi đang mở inventory
-                InputLayer.UI | InputLayer.Inventory | InputLayer.Camera
+                // Player ON  → can still move / interact while browsing gear (MOBA style)
+                // Camera ON  → can pan / orbit camera
+                // Inventory ON → hotkeys still work
+                // Combat OFF  → left-click doesn't fire
+                InputLayer.Player | InputLayer.UI | InputLayer.Inventory | InputLayer.Camera
             },
             {
                 InputState.MapOpen,

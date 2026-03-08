@@ -78,7 +78,11 @@ namespace NightHunt.GameplaySystems.World
             return Vector3.Distance(transform.position, interactor.transform.position) <= maxDist;
         }
 
-        public void Interact(GameObject interactor) => Toggle();
+        public void Interact(GameObject interactor)
+        {
+            var playerNob = interactor?.GetComponent<FishNet.Object.NetworkObject>();
+            Toggle(playerNob);
+        }
 
         public void OnHoverEnter(GameObject interactor) { /* outline effect wired up when highlight system is ready */ }
         public void OnHoverExit(GameObject interactor)  { /* outline effect wired up when highlight system is ready */ }
@@ -109,10 +113,36 @@ namespace NightHunt.GameplaySystems.World
         // ── Server-side toggle ───────────────────────────────────────────────────
 
         [ServerRpc(RequireOwnership = false)]
-        private void Toggle()
+        private void Toggle(FishNet.Object.NetworkObject playerNob, FishNet.Connection.NetworkConnection conn = null)
         {
             if (!IsServerInitialized) return;
             if (_isUsed) return;
+
+            // Host fallback: conn not injected for local ServerRpc calls.
+            if (conn == null) conn = playerNob?.Owner;
+
+            // Ownership check.
+            if (playerNob != null && conn != null && playerNob.Owner != conn)
+            {
+                Debug.LogWarning($"[WorldSwitch] Toggle: ownership mismatch (ClientId={conn.ClientId}).");
+                return;
+            }
+
+            // Distance check — server-side re-validation.
+            if (playerNob != null)
+            {
+                var player = playerNob.GetComponent<NightHunt.Networking.NetworkPlayer>();
+                if (player != null)
+                {
+                    float dist    = Vector3.Distance(transform.position, player.transform.position);
+                    float maxDist = _config?.MaxInteractDistance ?? 3f;
+                    if (dist > maxDist)
+                    {
+                        Debug.LogWarning($"[WorldSwitch] Toggle: Quá xa ({dist:F2}m > {maxDist}m).");
+                        return;
+                    }
+                }
+            }
 
             bool willBeActive = !_isActive;
             syncIsActive.Value = willBeActive;

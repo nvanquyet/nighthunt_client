@@ -5,84 +5,57 @@ using FishNet.Object;
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
     /// <summary>
-    /// Local projectile spawner
-    /// Spawns projectiles locally on client, syncs via network
+    /// Spawn projectile local + đồng bộ qua network.
+    ///
+    /// Flow:
+    ///   1. ProjectileWeapon gọi SpawnLocal() → tạo instance trên máy owner (owner thấy luôn).
+    ///   2. SpawnLocal() gọi ServerRpc → server validate → ObserversRpc → spawn trên các client còn lại.
+    ///   Không còn logic ẩn renderer: owner thấy đúng một viên duy nhất.
     /// </summary>
     public class ProjectileSpawner : NetworkBehaviour
     {
         [Header("Projectile Settings")]
         [SerializeField] private GameObject projectilePrefab;
 
-        //private LocalSpawnManager localSpawnManager;
-        private uint nextProjectileId = 1;
-
-        private void Awake()
-        {
-            //localSpawnManager = LocalSpawnManager.Instance;
-        }
-
-        /// <summary>
-        /// Spawn projectile locally
-        /// </summary>
+        // -----------------------------------------------------------------
         public void SpawnLocal(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
         {
             if (projectilePrefab == null)
             {
-                Debug.LogError("[ProjectileSpawner] Projectile prefab is null!");
+                Debug.LogError("[ProjectileSpawner] projectilePrefab chưa được gán!");
                 return;
             }
 
-            // Spawn visual projectile locally
-            GameObject projectile = Instantiate(projectilePrefab, position, Quaternion.LookRotation(direction));
-            
-            // Setup projectile component
-            var projectileComponent = projectile.GetComponent<ProjectileComponent>();
-            if (projectileComponent != null)
-            {
-                projectileComponent.Initialize(weaponConfig, direction, false);
-            }
+            // Tạo instance — owner thấy viên đạn này
+            SpawnInstance(position, direction, weaponConfig);
 
-            // Register with local spawn manager
-            // if (localSpawnManager != null)
-            // {
-            //     localSpawnManager.SpawnLocal(projectile, position, Quaternion.LookRotation(direction), nextProjectileId++);
-            // }
-
-            // Send to server for validation and broadcast
+            // Báo server để broadcast sang các client khác
             if (IsOwner)
-            {
-                SendProjectileToServer(position, direction, weaponConfig);
-            }
+                SendToServerRpc(position, direction, weaponConfig);
         }
 
-        /// <summary>
-        /// Send projectile data to server
-        /// </summary>
+        // -----------------------------------------------------------------
+        private void SpawnInstance(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
+        {
+            var go = Instantiate(projectilePrefab, position, Quaternion.LookRotation(direction));
+            var comp = go.GetComponent<ProjectileComponent>();
+            if (comp != null)
+                comp.Initialize(weaponConfig, direction, false);
+        }
+
+        // -----------------------------------------------------------------
         [ServerRpc(RequireOwnership = true)]
-        private void SendProjectileToServer(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
+        private void SendToServerRpc(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
         {
-            // Validate projectile
-            // Broadcast to all clients
-            BroadcastProjectileToClients(position, direction, weaponConfig);
+            // TODO: server validate (tầm xa, thời gian, v.v.)
+            BroadcastToClientsRpc(position, direction, weaponConfig);
         }
 
-        /// <summary>
-        /// Broadcast projectile to all clients
-        /// </summary>
         [ObserversRpc]
-        private void BroadcastProjectileToClients(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
+        private void BroadcastToClientsRpc(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
         {
-            // Spawn projectile on other clients
-            if (!IsOwner && projectilePrefab != null)
-            {
-                GameObject projectile = Instantiate(projectilePrefab, position, Quaternion.LookRotation(direction));
-                var projectileComponent = projectile.GetComponent<ProjectileComponent>();
-                if (projectileComponent != null)
-                {
-                    projectileComponent.Initialize(weaponConfig, direction, false);
-                }
-            }
-        }
+            // Chỉ spawn trên các client KHÔNG phải owner; owner đã có bản từ SpawnLocal()
+            if (!IsOwner)
+                SpawnInstance(position, direction, weaponConfig);        }
     }
 }
-

@@ -1,7 +1,9 @@
+using System;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
+using Object = UnityEngine.Object;
 
 namespace NightHunt.Gameplay.Input.Handlers.Interaction
 {
@@ -41,6 +43,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         public WorldItem            CurrentWorldItem  => CurrentInteractable as WorldItem;
         public WorldContainer       CurrentContainer  => CurrentInteractable as WorldContainer;
         public WorldCorpse          CurrentCorpse     => CurrentInteractable as WorldCorpse;
+        
+        public bool IsOwner { get; private set; }
 
         // Backward compat
         [System.Obsolete("Use CurrentWorldItem instead.")]
@@ -53,6 +57,24 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         // ── Unity lifecycle ──────────────────────────────────────────────────────
 
+        private void OnEnable()
+        {
+            NetworkPlayer.OnOwnerReady += HandleOwnerReady;
+        }
+
+        private void HandleOwnerReady(NetworkPlayer obj)
+        {
+            if (obj != null && obj.IsLocalPlayer)
+            {
+                IsOwner = true;
+            } 
+        }
+ 
+        private void OnDisable()
+        {
+            NetworkPlayer.OnOwnerReady -= HandleOwnerReady;
+        }
+
         private void Awake()
         {
             if (playerCamera == null)
@@ -60,15 +82,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
             // Prefer the player root as the interactor, not the camera rig.
             // This makes CanInteract(distance checks) stable and consistent with gameplay systems.
-            var player = GetComponentInParent<NetworkPlayer>();
-            if (player != null)
-                _interactor = player.gameObject;
-            else
-                _interactor = transform.root != null ? transform.root.gameObject : gameObject;
+            _interactor = transform.root != null ? transform.root.gameObject : gameObject;
         }
 
         private void Update()
         {
+            if(!IsOwner) return;
             // Chỉ raycast khi Player layer active (tức là đang trong PlayerAlive / ScoutMode)
             // Dùng IsLayerActive thay vì so sánh enum state cụ thể → robust hơn khi thêm state mới
             var ilm = NightHunt.Gameplay.Input.Core.InputLayerManager.Instance;

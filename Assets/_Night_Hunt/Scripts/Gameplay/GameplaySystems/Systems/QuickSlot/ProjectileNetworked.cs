@@ -3,6 +3,7 @@ using UnityEngine;
 using FishNet.Object;
 using FishNet.Connection;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.Gameplay.Character.Combat.Weapons;
 
 namespace NightHunt.GameplaySystems.QuickSlot
 {
@@ -30,6 +31,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
         
         private ThrowableDefinition _def;
         private Rigidbody _rb;
+        private ProjectileBase _projectileBase;
         private bool _initialized;
         private bool _exploded;
         
@@ -47,6 +49,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
         private void Awake()
         {
             _rb = GetComponent<Rigidbody>();
+            _projectileBase = GetComponent<ProjectileBase>();
         }
         
         public override void OnStartNetwork()
@@ -189,13 +192,9 @@ namespace NightHunt.GameplaySystems.QuickSlot
         [ObserversRpc]
         private void RpcExplode(Vector3 position, Quaternion rotation)
         {
-            // VFX
-            if (_def?.ExplosionEffectPrefab != null)
-            {
-                var vfx = Instantiate(_def.ExplosionEffectPrefab, position, rotation);
-                Destroy(vfx, 5f); // Auto-cleanup VFX
-            }
-            
+            // VFX — bật DetonationVFX child thay vì Instantiate prefab mới
+            _projectileBase?.TriggerDetonation(position, rotation);
+
             // SFX
             if (_def?.ImpactSound != null)
                 AudioSource.PlayClipAtPoint(_def.ImpactSound, position);
@@ -204,10 +203,10 @@ namespace NightHunt.GameplaySystems.QuickSlot
         [Server]
         private IEnumerator DespawnAfterExplosion()
         {
-            // Small delay to ensure RPC delivered
-            yield return new WaitForSeconds(0.1f);
-            
-            // Despawn from network
+            // Đợi VFX chạy xong rồi mới despawn khỏi network
+            float delay = _projectileBase != null ? _projectileBase.lifetimeAfterImpact : 3f;
+            yield return new WaitForSeconds(delay);
+
             if (NetworkObject != null)
                 ServerManager.Despawn(gameObject);
         }

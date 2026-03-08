@@ -25,6 +25,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         private bool isCrouching;
         private bool isCameraLocked; // ✅ NEW
 
+        // ── Fire-time STRAFE override ────────────────────────────────────────
+        // When _lockOverrideActive = true, IsCameraLocked() returns _lockOverrideValue
+        // regardless of the manual toggle.  Used by CombatInputHandler during fire.
+        private bool _lockOverrideActive;
+        private bool _lockOverrideValue;
+
         private bool inputEnabled = false;
         
         #region Lifecycle
@@ -234,7 +240,31 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         public Vector2 GetMoveInput() => moveInput;
         public bool IsSprinting() => isSprinting;
         public bool IsCrouching() => isCrouching;
-        public bool IsCameraLocked() => isCameraLocked; // ✅ NEW
+
+        /// <summary>
+        /// Returns the effective camera-lock state.
+        /// If a fire override is active (see SetCameraLockOverride), returns that value
+        /// instead of the manual X-key toggle state.
+        /// </summary>
+        public bool IsCameraLocked() => _lockOverrideActive ? _lockOverrideValue : isCameraLocked;
+
+        /// <summary>
+        /// Called by CombatInputHandler to temporarily force STRAFE mode during fire.
+        /// <para><c>active = true</c>  → override to <paramref name="forcedValue"/> regardless of X-key.</para>
+        /// <para><c>active = false</c> → remove override; X-key toggle resumes.</para>
+        /// </summary>
+        public void SetCameraLockOverride(bool active, bool forcedValue = false)
+        {
+            bool prevEffective = IsCameraLocked();
+            _lockOverrideActive = active;
+            _lockOverrideValue  = forcedValue;
+            bool newEffective = IsCameraLocked();
+            // Only fire event when the effective lock state actually changes —
+            // prevents CameraStateManager from toggling Free ↔ Locked every fire press/release
+            // when the player already had the same lock state before firing.
+            if (newEffective != prevEffective)
+                OnCameraLockToggled?.Invoke(newEffective);
+        }
 
         #endregion
 

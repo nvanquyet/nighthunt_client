@@ -14,12 +14,23 @@ namespace NightHunt.Networking.ClientOnly
 
         private void Awake()
         {
+            // Build-time check: always disable in dedicated server builds.
             #if UNITY_SERVER
             if (disableOnServer)
             {
                 gameObject.SetActive(false);
+                return;
             }
             #endif
+
+            // Runtime check: also disable when running as dedicated server in Editor
+            // (server started but client NOT started — excludes host mode where both run).
+            bool isDedicatedServer = FishNet.InstanceFinder.IsServerStarted
+                                     && !FishNet.InstanceFinder.IsClientStarted;
+            if (disableOnServer && isDedicatedServer)
+            {
+                gameObject.SetActive(false);
+            }
         }
     }
 }

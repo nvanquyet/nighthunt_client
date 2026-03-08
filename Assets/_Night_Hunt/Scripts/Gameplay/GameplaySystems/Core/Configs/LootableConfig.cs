@@ -15,7 +15,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
     /// Configuration for lootable/interactable objects
     /// Defines how players interact with WorldItem, WorldContainer, WorldCorpse, etc.
     /// </summary>
-    [CreateAssetMenu(fileName = "LootableConfig", menuName = "GameplaySystems/Config/Lootable Config")]
+    [CreateAssetMenu(fileName = "LootableConfig", menuName = "NightHunt/Gameplay/Lootable Config")]
     public class LootableConfig : ScriptableObject
     {
         [Header("Interaction Settings")]

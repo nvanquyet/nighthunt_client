@@ -2,6 +2,7 @@ using NightHunt.Gameplay.Spectator;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking;
+using NightHunt.GameplaySystems.UI.Combat;
 using UnityEngine;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
@@ -15,7 +16,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     {
         [Header("Panels")]
         [SerializeField] private InventoryScreen _inventoryScreen;
-        [SerializeField] private PlayerHUDPanel _playerHudPanel;
+        [SerializeField] private PlayerHUDPanel  _playerHudPanel;
+        [SerializeField] private CombatHUDPanel  _combatHudPanel;
 
         [Header("Inventory Toggle")]
         [SerializeField] private GameObject _inventoryRootObject;
@@ -25,12 +27,30 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void Awake()
         {
-            InitBridgeAndUI();
+            // Initialize bridge + inventory screen layout only.
+            // CombatHUD data bind is deferred to OnCurrentPlayerChanged.
+            _domainBridge = new UIDomainBridge();
+            if (_inventoryScreen != null)
+                _inventoryScreen.Initialize(_domainBridge);
+
+            // Force slot GO spawn NOW — even if CombatHUDPanel's GameObject is inactive
+            // (Awake won't fire on inactive GOs, but we can call methods directly).
+            _combatHudPanel?.EnsureSlots();
 
             if (_inventoryRootObject != null)
                 _inventoryRootObject.SetActive(false);
 
             _inventoryVisible = false;
+        }
+
+        private void Start()
+        {
+            // Edge-case: UIRootController was enabled AFTER the local player already spawned
+            // (e.g. additive scene load). Synthesise the callback so CombatHUD gets its
+            // first real init without waiting for a future player-change event.
+            var existing = SpectateManager.Instance?.GetCurrentPlayer();
+            if (existing != null)
+                OnCurrentPlayerChanged(existing);
         }
 
         private void OnEnable()
@@ -98,21 +118,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             if (_playerHudPanel != null)
+                _playerHudPanel.Initialize(_domainBridge);
+
+            if (_combatHudPanel != null)
             {
-                _playerHudPanel.Initialize(_domainBridge);
+                
+                var playerT = SpectateManager.Instance?.GetCurrentPlayer()?.transform;
+                _combatHudPanel.Initialize(
+                    _domainBridge.IsReady ? _domainBridge.Bridge.Weapon    : null,
+                    _domainBridge.IsReady ? _domainBridge.Bridge.QuickSlot : null,
+                    _domainBridge.IsReady ? _domainBridge.Bridge.Stat      : null,
+                    playerT);
             }
-        }
-
-        private void InitBridgeAndUI()
-        {
-            _domainBridge = new UIDomainBridge();
-            _domainBridge.InitializeForCurrentPlayer();
-
-            if (_inventoryScreen != null)
-                _inventoryScreen.Initialize(_domainBridge);
-
-            if (_playerHudPanel != null)
-                _playerHudPanel.Initialize(_domainBridge);
         }
 
         public void ToggleInventory()
@@ -155,16 +172,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             _inventoryRootObject.SetActive(visible);
 
-            if (visible)
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
-            else
-            {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
+            // Cursor is always visible in this top-down game — no lock/unlock needed.
+            // Both inventory-open and gameplay states keep cursor free and visible.
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible   = true;
         }
     }
 }

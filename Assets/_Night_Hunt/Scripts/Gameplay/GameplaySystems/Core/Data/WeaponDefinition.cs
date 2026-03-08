@@ -20,7 +20,7 @@ namespace NightHunt.GameplaySystems.Core.Data
     /// - ReloadTime field       → use StatConfig[ItemStatType.ReloadSpeed]
     /// - ResourceType / MaxResource / DefaultResource → removed from ItemDefinition entirely
     /// </summary>
-    [CreateAssetMenu(fileName = "Weapon_", menuName = "GameplaySystems/Items/Weapon Definition")]
+    [CreateAssetMenu(fileName = "Weapon_", menuName = "NightHunt/Items/Weapon Definition")]
     public class WeaponDefinition : ItemDefinition
     {
         public override ItemType Type => ItemType.Weapon;
@@ -48,7 +48,21 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Header("Reload")]
         [Tooltip("Can reload when magazine still has ammo (tactical reload)")]
         public bool CanTacticalReload = true;
+        // ── Visual FX (per-weapon) ──────────────────────────────────────
+        // Each weapon owns its own VFX so CharacterCombat never needs centralized references.
+        // WeaponVFXController reads these fields when OnShotFired is raised.
+        [Header("Visual FX")]
+        [Tooltip("For BallisticType.Projectile: spawn at muzzle point on fire.")]
+        public GameObject ProjectilePrefab;
 
+        [Tooltip("Muzzle flash particle or prefab spawned at the weapon's muzzle point on every shot.")]
+        public GameObject MuzzleFlashPrefab;
+
+        [Tooltip("Hitscan bullet trail prefab (LR / VFX Graph). Spawned between muzzle and hit point.")]
+        public GameObject BulletTrailPrefab;
+
+        [Tooltip("Impact particle spawned at hit point (stone/flesh/metal variants managed by caller).")]
+        public GameObject HitEffectPrefab;
         // ── Stat Helpers ──────────────────────────────────────────────────────
         /// <summary>Read a stat from StatConfig (base value before attachments).</summary>
         public float GetStatValue(ItemStatType statType)

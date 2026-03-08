@@ -13,7 +13,7 @@ namespace NightHunt.StatSystem.Configs
     /// USAGE:
     /// Create via: Assets → Create → StatSystem/Config/Item Stat UI Config
     /// </summary>
-    [CreateAssetMenu(fileName = "ItemStatUIConfig", menuName = "StatSystem/Config/Item Stat UI Config")]
+    [CreateAssetMenu(fileName = "ItemStatUIConfig", menuName = "NightHunt/StatSystem/Item Stat UI Config")]
     public class ItemStatUIConfig : ScriptableObject
     {
         [Header("Item Stats")]

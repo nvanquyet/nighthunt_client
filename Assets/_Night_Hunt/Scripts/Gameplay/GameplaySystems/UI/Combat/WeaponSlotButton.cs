@@ -57,7 +57,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _slotType     = slotType;
             _weaponSystem = weaponSystem;
 
-            if (_weaponSystem == null) return;
+            // Always show placeholder even with no system so the button count matches config.
+            if (_weaponSystem == null)
+            {
+                _isBound = true;
+                RefreshEmpty();
+                return;
+            }
 
             _weaponSystem.OnWeaponEquipped      += HandleWeaponEquipped;
             _weaponSystem.OnWeaponUnequipped    += HandleWeaponUnequipped;
@@ -71,13 +77,16 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public void Unbind()
         {
-            if (_weaponSystem == null || !_isBound) return;
+            if (!_isBound) return;
 
-            _weaponSystem.OnWeaponEquipped      -= HandleWeaponEquipped;
-            _weaponSystem.OnWeaponUnequipped    -= HandleWeaponUnequipped;
-            _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
-            _weaponSystem.OnAmmoChanged         -= HandleAmmoChanged;
-            _weaponSystem.OnReloadStateChanged  -= HandleReloadStateChanged;
+            if (_weaponSystem != null)
+            {
+                _weaponSystem.OnWeaponEquipped      -= HandleWeaponEquipped;
+                _weaponSystem.OnWeaponUnequipped    -= HandleWeaponUnequipped;
+                _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
+                _weaponSystem.OnAmmoChanged         -= HandleAmmoChanged;
+                _weaponSystem.OnReloadStateChanged  -= HandleReloadStateChanged;
+            }
 
             _weaponSystem = null;
             _isBound      = false;
@@ -133,7 +142,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var activeSlot = _weaponSystem.GetActiveWeaponSlot();
             if (!activeSlot.HasValue || activeSlot.Value != _slotType) return;
 
-            RefreshAmmoText(currentMag, capacity);
+            RefreshAmmoText(currentMag, totalLeft);
         }
 
         private void HandleReloadStateChanged(bool isReloading)
@@ -176,8 +185,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             SetSelectedBorder(isSelected);
 
             int mag      = _weaponSystem.GetCurrentMagazine(_slotType);
-            int capacity = GetMagazineCapacity(weapon);
-            RefreshAmmoText(mag, capacity);
+            int total    = Mathf.RoundToInt(_weaponSystem.GetTotalAmmo(_slotType));
+            RefreshAmmoText(mag, total);
         }
 
         private void RefreshEmpty()
@@ -201,18 +210,22 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _emptySlotOverlay.enabled = false;
         }
 
-        private void RefreshAmmoText(int currentMag, int capacity)
+        /// <param name="currentMag">Bullets currently in magazine.</param>
+        /// <param name="totalLeft">Total remaining ammo (reserve + current mag).</param>
+        private void RefreshAmmoText(int currentMag, int totalLeft)
         {
             if (_ammoText == null) return;
 
-            // Melee weapons have no ammo — hide text
-            if (capacity <= 0)
+            // Melee weapons — no magazine capacity on this slot, hide text
+            var weapon = _weaponSystem?.GetWeapon(_slotType);
+            int cap    = weapon != null ? GetMagazineCapacity(weapon) : 0;
+            if (cap <= 0)
             {
                 _ammoText.text = string.Empty;
                 return;
             }
 
-            _ammoText.text = $"{currentMag}/{capacity}";
+            _ammoText.text = $"{currentMag}/{totalLeft}";
         }
 
         private void SetSelectedBorder(bool selected)

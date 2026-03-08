@@ -161,8 +161,6 @@ namespace NightHunt.GameplaySystems.Interaction
                 }
             }
 
-            // Legacy fallback for any target not yet implementing IInteractable
-            HandleLegacyInteract();
         }
 
         public void HandleInteractCanceled()
@@ -330,32 +328,6 @@ namespace NightHunt.GameplaySystems.Interaction
             }
 
             Debug.Log($"[Pickup] PickupAll: triggered {count} pickup(s).");
-        }
-
-        // ── Legacy fallback ──────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Called when the raycast target doesn't implement IInteractable.
-        /// Keeps backward compatibility for typed checks.
-        /// </summary>
-        private void HandleLegacyInteract()
-        {
-            if (raycastDetector == null) return;
-
-            var container = raycastDetector.CurrentContainer;
-            if (container != null)
-            {
-                var playerNob = GetLocalPlayerNob();
-                if (playerNob != null) container.RequestOpen(playerNob);
-                return;
-            }
-
-            var corpse = raycastDetector.CurrentCorpse;
-            if (corpse != null)
-            {
-                var playerNob = GetLocalPlayerNob();
-                if (playerNob != null) corpse.RequestOpen(playerNob);
-            }
         }
 
         // ── Helper ───────────────────────────────────────────────────────────────

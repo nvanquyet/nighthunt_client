@@ -44,7 +44,7 @@ namespace NightHunt.StatSystem.Configs
     /// USAGE:
     /// Create via: Assets → Create → StatSystem/Config/Player Stat UI Config
     /// </summary>
-    [CreateAssetMenu(fileName = "PlayerStatUIConfig", menuName = "StatSystem/Config/Player Stat UI Config")]
+    [CreateAssetMenu(fileName = "PlayerStatUIConfig", menuName = "NightHunt/StatSystem/Player Stat UI Config")]
     public class PlayerStatUIConfig : ScriptableObject
     {
         [Header("UI Definitions")]

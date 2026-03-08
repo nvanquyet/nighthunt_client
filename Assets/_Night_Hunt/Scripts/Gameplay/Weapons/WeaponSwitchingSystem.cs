@@ -1,6 +1,5 @@
 using UnityEngine;
 using NightHunt.Data;
-using NightHunt.Gameplay.Character;
 
 namespace NightHunt.Gameplay.Weapons
 {
@@ -18,14 +17,12 @@ namespace NightHunt.Gameplay.Weapons
         [SerializeField] private Transform weaponParent;
         [SerializeField] private GameObject[] weaponModels = new GameObject[2];
 
-        private CharacterCombat characterCombat;
         private WeaponConfigData[] weaponSlots;
         private int currentWeaponIndex = 0;
         private bool isSwitching = false;
 
         private void Awake()
         {
-            characterCombat = GetComponent<CharacterCombat>();
             weaponSlots = new WeaponConfigData[maxWeaponSlots];
         }
 
@@ -72,7 +69,7 @@ namespace NightHunt.Gameplay.Weapons
             if (slotIndex < 0 || slotIndex >= maxWeaponSlots)
                 return false;
 
-            var weaponConfig = GameConfigLoader.Instance?.GetWeaponConfig(weaponId);
+            WeaponConfigData weaponConfig = null; // TODO: load from new data source
             if (weaponConfig == null)
                 return false;
 
@@ -84,11 +81,11 @@ namespace NightHunt.Gameplay.Weapons
 
             // Equip new weapon
             weaponSlots[slotIndex] = weaponConfig;
-            
-            // If switching to this slot, equip it
+
+            // If switching to this slot, update model
             if (slotIndex == currentWeaponIndex)
             {
-                characterCombat?.EquipWeapon(weaponId);
+                // Weapon equip delegated to WeaponSystem
                 UpdateWeaponModel(slotIndex);
             }
 
@@ -172,7 +169,7 @@ namespace NightHunt.Gameplay.Weapons
 
             // Switch
             currentWeaponIndex = newIndex;
-            characterCombat?.EquipWeapon(weaponSlots[newIndex].WeaponId);
+            // Weapon equip delegated to WeaponSystem
             UpdateWeaponModel(newIndex);
 
             isSwitching = false;
@@ -211,7 +208,7 @@ namespace NightHunt.Gameplay.Weapons
                 // No other weapon, unequip
                 if (weaponSlots[currentWeaponIndex] == null)
                 {
-                    characterCombat?.EquipWeapon(null);
+                    // Holster delegated to WeaponSystem
                 }
             }
 

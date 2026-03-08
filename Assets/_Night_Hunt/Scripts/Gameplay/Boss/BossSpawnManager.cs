@@ -10,7 +10,7 @@ namespace NightHunt.Gameplay.Boss
 {
     /// <summary>
     /// Spawns boss(es) when Phase 2 (Hunt) starts, based on
-    /// <see cref="BossSpawnConfigData"/> entries from <see cref="GameConfigLoader"/>.
+    /// <see cref="BossSpawnConfigData"/> entries. TODO: wire in new data source.
     ///
     /// Map designers tag boss spawn points with the tag defined in each entry's
     /// <c>SpawnPointTag</c> field (default "BossSpawn").
@@ -69,7 +69,7 @@ namespace NightHunt.Gameplay.Boss
         [Server]
         private void SpawnAllBosses()
         {
-            var configs = GameConfigLoader.Instance?.GetAllBossConfigs();
+            List<BossSpawnConfigData> configs = null; // TODO: load from new data source
             if (configs == null || configs.Count == 0)
             {
                 Debug.LogWarning("[BossSpawnManager] No boss configs found.");

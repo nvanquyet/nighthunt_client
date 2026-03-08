@@ -29,33 +29,32 @@ namespace NightHunt.Gameplay.Character
         : FishNetPredictedBehaviour<MovementReplicateData, MovementReconcileData>,
             IMovementController
     {
-        [Header("Movement Settings")]
-        [SerializeField]
+        [Header("Movement Settings")] [SerializeField]
         protected MovementSettings movementSettings;
 
-        [Header("Rotation")]
-        [SerializeField] protected float tankTurnSpeed = 10f;
+        [Header("Rotation")] [SerializeField] protected float tankTurnSpeed = 10f;
         [SerializeField] protected float lockTurnSpeed = 18f;
 
-        [Header("Camera Lock")]
-        [SerializeField] protected bool allowCameraLockToggle = true;
+        [Header("Camera Lock")] [SerializeField]
+        protected bool allowCameraLockToggle = true;
+
         [SerializeField] protected bool startWithCameraLock = false;
 
-        [Header("Network Interpolation")]
-        [SerializeField]
+        [Header("Network Interpolation")] [SerializeField]
         protected float interpolationSpeed = 15f;
 
-        [Header("Stamina Recovery (Advanced)")]
-        [SerializeField] protected float staminaRecoveryDelay = 1.5f;
+        [Header("Stamina Recovery (Advanced)")] [SerializeField]
+        protected float staminaRecoveryDelay = 1.5f;
+
         [SerializeField] protected float slowMovementThreshold = 1.0f;
 
-        [Header("Debug")]
-        [SerializeField] protected bool enableDebugLogs = false;
+        [Header("Debug")] [SerializeField] protected bool enableDebugLogs = false;
 
         // Components
 
         // ===== INPUT (OWNER ONLY) =====
         protected CinemachineCamera _cinemachineCamera;
+
         // The real Unity Camera driven by CinemachineBrain — used to read the live yaw.
         // CinemachineCamera's own transform never rotates; the Brain writes the result here.
         protected UnityEngine.Camera _mainCamera;
@@ -65,6 +64,9 @@ namespace NightHunt.Gameplay.Character
         protected bool _cameraLocked;
         protected float _yaw;
 
+        /// <summary>Aim-derived yaw for character model facing (cursor-to-ground in STRAFE mode).</summary>
+        protected float _aimYaw;
+
         // ===== STATE =====
         protected Vector3 _velocity;
         protected float _verticalVelocity;
@@ -72,6 +74,7 @@ namespace NightHunt.Gameplay.Character
 
         // ===== STAMINA RECOVERY =====
         protected float _staminaRecoveryTimer = 0f;
+        private float _aimFallbackLogTimer = 0f;
 
         // ===== STATS =====
         protected IPlayerStatSystem _playerStatSystem;
@@ -165,7 +168,7 @@ namespace NightHunt.Gameplay.Character
             _staminaRecoveryTimer = 0f;
 
             _cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
-            _mainCamera         ??= UnityEngine.Camera.main;
+            _mainCamera ??= UnityEngine.Camera.main;
 
             if (enableDebugLogs)
                 Debug.Log(
@@ -176,9 +179,6 @@ namespace NightHunt.Gameplay.Character
 
         #region INPUT GATHERING
 
-        /// <summary>
-        /// Get input from InputManager - consistent with CharacterNormalMovement
-        /// </summary>
         protected virtual void GatherInput()
         {
             if (!IsOwner || !IsSpawned) return;
@@ -208,7 +208,6 @@ namespace NightHunt.Gameplay.Character
             if (allowCameraLockToggle)
             {
                 bool newCameraLockState = handler.IsCameraLocked();
-
                 if (newCameraLockState != _cameraLocked)
                 {
                     _cameraLocked = newCameraLockState;
@@ -217,17 +216,66 @@ namespace NightHunt.Gameplay.Character
                 }
             }
 
-            // Capture camera yaw.
-            // IMPORTANT: CinemachineCamera's own transform never rotates — Cinemachine
-            // stores orbital axes internally and writes the final rotation onto the
-            // actual Unity Camera via CinemachineBrain.  _mainCamera is that Camera.
-            if (_mainCamera == null)
-                _mainCamera = UnityEngine.Camera.main;   // lazy re-fetch
-
-            if (_mainCamera != null)
+            // ── Camera Yaw ────────────────────────────────────────────────────────
+            // CinemachineCamera (child of player prefab) là VIRTUAL camera — transform
+            // của nó KHÔNG bao giờ xoay. Cinemachine lưu orbital angles nội bộ và
+            // ghi kết quả lên Camera.main (scene-level, có CinemachineBrain) mỗi LateUpdate.
+            // → _yaw PHẢI đọc từ Camera.main, KHÔNG đọc từ _cinemachineCamera.transform.
+            var freshCam = UnityEngine.Camera.main;
+            if (freshCam != null)
+            {
+                _mainCamera = freshCam;
                 _yaw = _mainCamera.transform.eulerAngles.y;
-            else if (_cinemachineCamera != null)
-                _yaw = _cinemachineCamera.transform.eulerAngles.y; // headless/editor fallback
+            }
+            else
+            {
+                // Giữ _yaw frame trước — KHÔNG fallback về _cinemachineCamera (luôn sai)
+                if (enableDebugLogs)
+                    Debug.LogWarning($"[{GetType().Name}] Camera.main NULL — keeping _yaw={_yaw:F1}");
+            }
+
+            // ── Aim Yaw ───────────────────────────────────────────────────────────
+            // Priority 1: CombatHandler.GetAimDirection()
+            //   → Chỉ trả direction khi _isFiring = true (xem CombatInputHandler.GetAimDirection)
+            //   → Trả Vector3.zero khi KHÔNG fire → fallback về camera yaw ✅
+            //
+            // Priority 2 (raycast trực tiếp tại đây): ĐÃ BỎ
+            //   CombatInputHandler đã xử lý raycast nội bộ và expose qua GetAimDirection().
+            //   Nếu để Priority 2 ở đây sẽ bypass _isFiring gate
+            //   → character LUÔN nhìn theo chuột dù không bấm bắn ← đây là bug cũ.
+            //
+            // Priority 3: _yaw (camera yaw) — safe default, set sẵn ở trên
+            _aimYaw = _yaw;
+
+            bool aimResolved = false;
+
+            // Priority 1: CombatHandler (chỉ non-zero khi đang fire)
+            var combatH = InputManager.Instance?.CombatHandler;
+            if (combatH != null)
+            {
+                Vector3 aimDir = combatH.GetAimDirection();
+                if (aimDir.sqrMagnitude > 0.001f)
+                {
+                    _aimYaw = Quaternion.LookRotation(aimDir, Vector3.up).eulerAngles.y;
+                    aimResolved = true;
+                }
+            }
+
+            // Throttled debug log — không spam 50 msgs/giây
+            if (!aimResolved && enableDebugLogs)
+            {
+                _aimFallbackLogTimer += TickDelta;
+                if (_aimFallbackLogTimer >= 5f)
+                {
+                    _aimFallbackLogTimer = 0f;
+                    string reason = combatH == null ? "CombatHandler=NULL" : "not firing";
+                    Debug.LogWarning($"[{GetType().Name}] AimYaw fallback to camera yaw — {reason}");
+                }
+            }
+            else
+            {
+                _aimFallbackLogTimer = 0f;
+            }
         }
 
         #endregion
@@ -236,18 +284,8 @@ namespace NightHunt.Gameplay.Character
 
         protected override void TimeManager_OnTick()
         {
-            if (!IsSpawned)
-                return;
-
-
-            if (!IsSpawned || this == null || gameObject == null)
-            {
-                Debug.LogError($"[{GetType().Name}] Object invalid in Tick!");
-                return;
-            }
-
-            if (!IsOwner && !IsServerStarted)
-                return;
+            if (!IsSpawned) return;
+            if (!IsOwner && !IsServerStarted) return;
 
             MovementReplicateData replicateData = default;
             if (IsOwner)
@@ -256,6 +294,7 @@ namespace NightHunt.Gameplay.Character
                 replicateData = new MovementReplicateData(
                     _moveInput,
                     _yaw,
+                    _aimYaw,
                     _sprint,
                     _crouch,
                     _cameraLocked
@@ -378,15 +417,17 @@ namespace NightHunt.Gameplay.Character
                 inputDir.Normalize();
 
             Quaternion camRot = Quaternion.Euler(0f, data.Yaw, 0f);
+            // Cursor-derived facing — differs from camRot in top-down MOBA (camera doesn't rotate).
+            Quaternion aimRot = Quaternion.Euler(0f, data.AimYaw, 0f);
             Vector3 moveDir = Vector3.zero;
 
             // ===== ROTATION & MOVEMENT =====
             if (data.CameraLocked)
             {
-                // STRAFE MODE
+                // STRAFE MODE — character model faces cursor, moves camera-relative
                 transform.rotation = Quaternion.RotateTowards(
                     transform.rotation,
-                    camRot,
+                    aimRot,
                     lockTurnSpeed * dt * 100f
                 );
 
@@ -406,19 +447,20 @@ namespace NightHunt.Gameplay.Character
                     transform.rotation = Quaternion.RotateTowards(
                         transform.rotation,
                         targetRot,
-                        tankTurnSpeed * dt
+                        tankTurnSpeed * dt * 100f // match STRAFE multiplier convention
                     );
                 }
                 else
                 {
-                    // Idle: slowly turn towards camera
-                    float angle = Quaternion.Angle(transform.rotation, camRot);
+                    // Idle: slowly face cursor/aim direction so the model looks where
+                    // the player is pointing while standing still.
+                    float angle = Quaternion.Angle(transform.rotation, aimRot);
                     if (angle > 5f)
                     {
                         transform.rotation = Quaternion.RotateTowards(
                             transform.rotation,
-                            camRot,
-                            tankTurnSpeed * 0.5f * dt
+                            aimRot,
+                            tankTurnSpeed * 0.5f * dt * 100f // half-speed idle follow
                         );
                     }
                 }
@@ -560,7 +602,7 @@ namespace NightHunt.Gameplay.Character
                 //   1. Introduce a visible snap each reconcile tick.
                 //   2. Drive rotation from a server roundtrip instead of local camera input.
                 _velocity = data.Velocity;
-                _stamina  = data.Stamina;
+                _stamina = data.Stamina;
 
                 // Restore vertical velocity from reconcile data.
                 // _verticalVelocity is a separate accumulator used by SimulateMovement for
@@ -653,7 +695,7 @@ namespace NightHunt.Gameplay.Character
         {
             transform.position = position;
             transform.rotation = rotation;
-            _velocity         = Vector3.zero;
+            _velocity = Vector3.zero;
             _verticalVelocity = -2f;
             ResetPhysicsState();
 
@@ -672,6 +714,18 @@ namespace NightHunt.Gameplay.Character
         protected virtual void OnDrawGizmos()
         {
             if (!Application.isPlaying) return;
+
+            // Guard: NetworkObject may not be spawned yet (before OnStartNetwork) —
+            // IsSpawned dereferences NB._networkObject which is null at that point → NullRef.
+            // Use try-catch because FishNet doesn't expose a safe "is initialized" check.
+            try
+            {
+                if (!IsSpawned) return;
+            }
+            catch
+            {
+                return;
+            }
 
             if (IsOwner)
             {

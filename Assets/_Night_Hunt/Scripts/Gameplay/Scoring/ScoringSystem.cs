@@ -30,8 +30,7 @@ namespace NightHunt.Gameplay.Scoring
         {
             base.OnStartServer();
 
-            // Load score configs
-            scoreConfigs = GameConfigLoader.Instance?.ConfigData?.ScoreSystem;
+            scoreConfigs = null; // TODO: load from new data source
             phaseManager = FindObjectOfType<MatchPhaseManager>();
         }
 

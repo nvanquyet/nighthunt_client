@@ -59,13 +59,25 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public event Action OnPressed;
         public event Action OnReleased;
 
+
+        public CanvasGroup Canvas
+        {
+            get
+            {
+                if (_canvasGroup == null)
+                    _canvasGroup = GetComponent<CanvasGroup>();
+
+                return _canvasGroup;
+            }
+        }
+
+
         // ─────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle
         // ─────────────────────────────────────────────────────────────────────
 
         protected virtual void Awake()
         {
-            _canvasGroup = GetComponent<CanvasGroup>();
             ResetCooldownRing();
         }
 
@@ -112,9 +124,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public void SetInteractable(bool value)
         {
             _interactable                  = value;
-            _canvasGroup.interactable      = value;
-            _canvasGroup.blocksRaycasts    = value;
-            _canvasGroup.alpha             = value ? 1f : _disabledAlpha;
+            Canvas.interactable      = value;
+            Canvas.blocksRaycasts    = value;
+            Canvas.alpha             = value ? 1f : _disabledAlpha;
         }
 
         /// <summary>

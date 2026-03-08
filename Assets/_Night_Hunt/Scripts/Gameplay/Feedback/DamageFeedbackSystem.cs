@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
@@ -81,120 +81,7 @@ namespace NightHunt.Gameplay.Feedback
                 indicator = indicatorObj.AddComponent<HitIndicator>();
             }
 
-            indicator.Initialize(hitDirection, indicatorLifetime);
-        }
-    }
-
-    /// <summary>
-    /// Damage number component
-    /// </summary>
-    public class DamageNumber : MonoBehaviour
-    {
-        private TextMeshProUGUI text;
-        private RectTransform rectTransform;
-        private float lifetime;
-        private float speed;
-        private Vector3 startPosition;
-
-        public void Initialize(Vector3 screenPosition, float damage, Color color, float lifeTime, float moveSpeed)
-        {
-            text = GetComponentInChildren<TextMeshProUGUI>();
-            rectTransform = GetComponent<RectTransform>();
-
-            if (text != null)
-            {
-                text.text = Mathf.CeilToInt(damage).ToString();
-                text.color = color;
-            }
-
-            if (rectTransform != null)
-            {
-                rectTransform.position = screenPosition;
-                startPosition = screenPosition;
-            }
-
-            lifetime = lifeTime;
-            speed = moveSpeed;
-
-            StartCoroutine(AnimateNumber());
-        }
-
-        private IEnumerator AnimateNumber()
-        {
-            float elapsed = 0f;
-            Vector3 randomOffset = new Vector3(Random.Range(-50f, 50f), 0f, 0f);
-
-            while (elapsed < lifetime)
-            {
-                elapsed += Time.deltaTime;
-                float progress = elapsed / lifetime;
-
-                // Move up
-                if (rectTransform != null)
-                {
-                    Vector3 position = startPosition + Vector3.up * (speed * elapsed * 100f) + randomOffset;
-                    rectTransform.position = position;
-
-                    // Fade out
-                    if (text != null)
-                    {
-                        Color color = text.color;
-                        color.a = 1f - progress;
-                        text.color = color;
-                    }
-                }
-
-                yield return null;
-            }
-
-            Destroy(gameObject);
-        }
-    }
-
-    /// <summary>
-    /// Hit indicator component
-    /// </summary>
-    public class HitIndicator : MonoBehaviour
-    {
-        private Image image;
-        private float lifetime;
-
-        public void Initialize(Vector3 direction, float lifeTime)
-        {
-            image = GetComponent<Image>();
-            lifetime = lifeTime;
-
-            // Rotate to face hit direction
-            if (image != null)
-            {
-                float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
-                transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
-            }
-
-            StartCoroutine(FadeOut());
-        }
-
-        private IEnumerator FadeOut()
-        {
-            float elapsed = 0f;
-
-            while (elapsed < lifetime)
-            {
-                elapsed += Time.deltaTime;
-                float alpha = 1f - (elapsed / lifetime);
-
-                if (image != null)
-                {
-                    Color color = image.color;
-                    color.a = alpha;
-                    image.color = color;
-                }
-
-                yield return null;
-            }
-
-            Destroy(gameObject);
+            indicator.Initialize(hitDirection, indicatorLifetime); 
         }
     }
 }
-

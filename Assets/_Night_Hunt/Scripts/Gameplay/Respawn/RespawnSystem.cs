@@ -1,7 +1,6 @@
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
-using NightHunt.Data;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Spawn;
@@ -20,7 +19,7 @@ namespace NightHunt.Gameplay.Respawn
     {
         [Header("Respawn Settings")]
         [SerializeField] private float respawnDelay = 5f;
-        /// <summary>Fallback; overridden at runtime by GameConfigLoader.</summary>
+        /// <summary>Phase-3 respawn delay in seconds.</summary>
         [SerializeField] private float phase3RespawnDelay = 10f;
 
         [Header("Dependencies")]
@@ -49,11 +48,6 @@ namespace NightHunt.Gameplay.Respawn
         private void Awake()
         {
             phaseManager = FindFirstObjectByType<MatchPhaseManager>();
-
-            // Override Phase-3 delay from live config (falls back to SerializeField default)
-            float configDelay = GameConfigLoader.Instance?.GetPhase3RespawnDelay() ?? phase3RespawnDelay;
-            if (configDelay > 0f)
-                phase3RespawnDelay = configDelay;
         }
 
         public override void OnStartNetwork()

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using TMPro;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -21,7 +22,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
     ///   Call Bind(slotIndex, quickSlotSystem) once the local player is ready.
     ///   Call Unbind() on destroy.
     /// </summary>
-    public class QuickSlotHUDButton : ActionButton
+    public class QuickSlotHUDButton : ActionButton, IDragHandler, IEndDragHandler
     {
         // ─────────────────────────────────────────────────────────────────────
         //  Inspector
@@ -34,6 +35,19 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [Header("Slot Config")]
         [SerializeField] private int             _slotIndex;
 
+        [Header("Quickslot Aim (optional)")]
+        [Tooltip("Assign the scene QuickSlotAimController. When present, throwable items " +
+                 "enter aim mode instead of being used immediately.")]
+        [SerializeField] private QuickSlotAimController _aimController;
+
+        [Header("MOBA Visual Feedback")]
+        [Tooltip("2D ring pulse around this button. Auto-found on the same GO.")]
+        [SerializeField] private ButtonPulseRing _pulseRing;
+
+        [Tooltip("World-space range indicator (show while aiming). " +
+                 "Assign via BindRangeIndicator() after player spawns.")]
+        [SerializeField] private RangeIndicator _rangeIndicator;
+
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime
         // ─────────────────────────────────────────────────────────────────────
@@ -45,6 +59,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
         //  Binding
         // ─────────────────────────────────────────────────────────────────────
 
+        /// <summary>Assign or replace the aim controller (called by CombatHUDPanel after spawning).</summary>
+        public void SetAimController(QuickSlotAimController controller)
+        {
+            _aimController = controller;
+        }
+
         public void Bind(int slotIndex, IQuickSlotSystem quickSlotSystem)
         {
             if (_isBound) Unbind();
@@ -52,7 +72,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _slotIndex        = slotIndex;
             _quickSlotSystem  = quickSlotSystem;
 
-            if (_quickSlotSystem == null) return;
+            // Auto-find ButtonPulseRing if not assigned in Inspector
+            if (_pulseRing == null)
+                _pulseRing = GetComponent<ButtonPulseRing>();
+
+            // Always show placeholder even with no system so the button count matches config.
+            if (_quickSlotSystem == null)
+            {
+                _isBound = true;
+                RefreshEmpty();
+                return;
+            }
 
             _quickSlotSystem.OnQuickSlotAssigned += HandleSlotAssigned;
             _quickSlotSystem.OnQuickSlotRemoved  += HandleSlotRemoved;
@@ -64,11 +94,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public void Unbind()
         {
-            if (_quickSlotSystem == null || !_isBound) return;
+            if (!_isBound) return;
 
-            _quickSlotSystem.OnQuickSlotAssigned -= HandleSlotAssigned;
-            _quickSlotSystem.OnQuickSlotRemoved  -= HandleSlotRemoved;
-            _quickSlotSystem.OnQuickSlotUsed     -= HandleSlotUsed;
+            if (_quickSlotSystem != null)
+            {
+                _quickSlotSystem.OnQuickSlotAssigned -= HandleSlotAssigned;
+                _quickSlotSystem.OnQuickSlotRemoved  -= HandleSlotRemoved;
+                _quickSlotSystem.OnQuickSlotUsed     -= HandleSlotUsed;
+            }
 
             _quickSlotSystem = null;
             _isBound         = false;
@@ -84,11 +117,44 @@ namespace NightHunt.GameplaySystems.UI.Combat
             base.OnDestroy();
         }
 
-        public override void OnPointerDown(UnityEngine.EventSystems.PointerEventData eventData)
+        public override void OnPointerDown(PointerEventData eventData)
         {
             base.OnPointerDown(eventData);
-            if (_quickSlotSystem != null && _quickSlotSystem.CanUseQuickSlot(_slotIndex))
+
+            // MOBA feedback — pulse ring around button + world-space range indicator
+            _pulseRing?     .Play();
+            _rangeIndicator?.Show();
+
+            if (_aimController != null)
+            {
+                // Delegate to aim controller — it will decide whether to aim or direct-use.
+                _aimController.TryBeginAim(_slotIndex, transform as RectTransform, eventData.position);
+            }
+            else if (_quickSlotSystem != null && _quickSlotSystem.CanUseQuickSlot(_slotIndex))
+            {
+                // Fallback: direct use (no aim controller present).
                 _quickSlotSystem.UseQuickSlot(_slotIndex);
+            }
+        }
+
+        public override void OnPointerUp(PointerEventData eventData)
+        {
+            base.OnPointerUp(eventData);
+            // Hide the range ring that was shown on PointerDown.
+            // (Throwable aim mode hides via ResetAimState; non-throwable needs this.)
+            _rangeIndicator?.Hide();
+        }
+
+        // IDragHandler — forwarded to aim controller for mobile joystick movement.
+        public void OnDrag(PointerEventData eventData)
+        {
+            _aimController?.OnMobileDrag(eventData);
+        }
+
+        // IEndDragHandler — forwarded to aim controller to confirm / cancel on lift.
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            _aimController?.OnMobileDragEnd(eventData);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -173,6 +239,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (_selectedHighlight != null)
                 _selectedHighlight.enabled = selected;
+        }
+
+        /// <summary>
+        /// Bind the world-space range indicator (e.g. throw-arc radius).
+        /// Call after the local player spawns, once the indicator GO is ready.
+        /// Pass <c>null</c> to detach.
+        /// </summary>
+        public void BindRangeIndicator(RangeIndicator indicator, float? rangeOverride = null)
+        {
+            _rangeIndicator = indicator;
+            if (rangeOverride.HasValue)
+                _rangeIndicator?.SetRange(rangeOverride.Value);
         }
     }
 }

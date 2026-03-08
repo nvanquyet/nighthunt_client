@@ -10,7 +10,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
     /// Contains all settings for inventory, equipment, weapons, quickslots, UI, and behavior
     /// </summary>
     [CreateAssetMenu(fileName = "InventoryConfig",
-        menuName = "GameplaySystems/Config/Inventory Config")]
+        menuName = "NightHunt/Gameplay/Inventory Config")]
     public class InventoryConfig : ScriptableObject
     {
         #region ========== INVENTORY CONFIG ==========

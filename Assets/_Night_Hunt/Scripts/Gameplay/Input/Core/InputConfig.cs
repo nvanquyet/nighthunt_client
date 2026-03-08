@@ -7,7 +7,7 @@ namespace NightHunt.Gameplay.Input.Core
     /// Centralized configuration for input system.
     /// Create via: Assets &gt; Create &gt; Night Hunt &gt; Input &gt; Input Config
     /// </summary>
-    [CreateAssetMenu(fileName = "InputConfig", menuName = "Night Hunt/Input/Input Config")]
+    [CreateAssetMenu(fileName = "InputConfig", menuName = "NightHunt/Config/Input Config")]
     public class InputConfig : ScriptableObject
     {
         [Header("Input Action Asset")]

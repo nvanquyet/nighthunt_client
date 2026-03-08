@@ -25,7 +25,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
     ///        → Gán trực tiếp vào component WorldDoor / WorldSwitch / WorldButton.
     /// </summary>
     [CreateAssetMenu(fileName = "InteractableConfig",
-                     menuName = "GameplaySystems/Config/Interactable Config")]
+                     menuName = "NightHunt/Gameplay/Interactable Config")]
     public class InteractableConfig : ScriptableObject
     {
         [Header("Type")]
