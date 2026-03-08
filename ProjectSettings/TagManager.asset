@@ -3,7 +3,23 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 3
-  tags: []
+  tags:
+  - Destroyable
+  - Enemy
+  - Usable
+  - EndLevel
+  - SurvCamera
+  - Alarm
+  - EnvZone
+  - Pickup
+  - Noise
+  - Bullets
+  - Canvas
+  - AIPlayer
+  - AINeutral
+  - Vehicles
+  - Game
+  - Missile
   layers:
   - Default
   - TransparentFX
@@ -11,25 +27,25 @@ TagManager:
   - 
   - Water
   - UI
-  - VisionLayer
-  - 'FogLayer '
-  - Interactable
+  - 
+  - 
+  - Objects
+  - Character
+  - DeadCharacter
+  - Dynamic
+  - Triggers
+  - Bullets
+  - PlayerCharacter
+  - CameraWall
+  - Blood
+  - Weapon
+  - Vehicles
+  - Camera
+  - Items
+  - Minimap
+  - 
   - Pickup
-  - Player
-  - Projectile
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
+  - Interactable
   - 
   - 
   - 
@@ -43,10 +59,3 @@ TagManager:
     locked: 0
   m_RenderingLayers:
   - Default
-  - Light Layer 1
-  - Light Layer 2
-  - Light Layer 3
-  - Light Layer 4
-  - Light Layer 5
-  - Light Layer 6
-  - Light Layer 7

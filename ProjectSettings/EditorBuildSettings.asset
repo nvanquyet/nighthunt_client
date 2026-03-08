@@ -4,7 +4,32 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
-  m_configObjects:
-    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
-  m_UseUCBPForAssetBundles: 0
+  m_Scenes:
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/0_DemoScene_MainMenu.unity
+    guid: f14cc2ba4a75fbb4899260b778ef7066
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/1_DemoScene_CharacterSelectionMultiplayer.unity
+    guid: 685f25b0530700241ac1bfbc505d7cbd
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/1_DemoScene_CharacterSelectionSinglePlayer.unity
+    guid: 9dca2713a2aebde4f9c51f6ac334c442
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/2a_DemoScene_SinglePlayer_Scripts.unity
+    guid: 925b775592d995f4895358b28a17ca6a
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/2b_DemoScene_CoopMultiplayer_Scripts.unity
+    guid: 3dcb3b5da3e66d144bce3f10f2fddc9b
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/2c_DemoScene_LocalMultiplayer.unity
+    guid: b5242d91617dc4d4cbde79edf4210451
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/2d_DemoScene_LocalMultiplayer_SplitScreen.unity
+    guid: ed10cd49d1a752842b9f1de3fd6b080a
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/2f_DemoScene_SurvivalMode.unity
+    guid: 6a3a50bd7f9b14043a8a397990f0e520
+  - enabled: 1
+    path: Assets/SciFi_Space_Soldier_Complete/Scenes/3_DemoScene_TowerDefenseTest.unity
+    guid: 6efbcfe769a9a694e9eb0d46618cf163
+  m_configObjects: {}

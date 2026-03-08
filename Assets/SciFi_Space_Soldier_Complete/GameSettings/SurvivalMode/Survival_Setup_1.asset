@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 89c70d3508b6f4848a73521830d47300, type: 3}
+  m_Name: Survival_Setup_1
+  m_EditorClassIdentifier: 
+  initialTimer: 5
+  waves:
+  - {fileID: 11400000, guid: 552e17285d061cd4eab6d1c1c833f639, type: 2}
+  - {fileID: 11400000, guid: e7400ecbf6af75446840aa2cff22433c, type: 2}
+  - {fileID: 11400000, guid: 067f40ea508f6254091f29e58092206b, type: 2}
+  - {fileID: 11400000, guid: 6b1d4329847b64044bf1c3aa5931d419, type: 2}
+  - {fileID: 11400000, guid: 235fe663095c6b44882432ac23f8a60d, type: 2}
+  repeatLastWaves: 1
+  timeBetweenWaves: 5
+  spawnItems: 1
+  items:
+  - {fileID: 148064, guid: dc88f868494603e45a1fca7bc0b74ebf, type: 3}
+  - {fileID: 148064, guid: 3068aff6dea92a9458172df90972768f, type: 3}
+  - {fileID: 169640, guid: 2fdc839b4e4380747950a657e7557226, type: 3}
+  - {fileID: 148064, guid: 362b8c6525801c4459b163796c4a17b2, type: 3}

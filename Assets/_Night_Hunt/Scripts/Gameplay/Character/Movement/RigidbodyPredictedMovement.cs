@@ -349,6 +349,13 @@ namespace NightHunt.Gameplay.Character
 
         #endregion
 
+        #region ROLL WALL CHECK
+
+        protected override bool IsRollBlocked(Vector3 direction, float stepDistance)
+            => IsBlockedHorizontally(direction, stepDistance);
+
+        #endregion
+
         #region ADDITIONAL FEATURES
 
         /// <summary>

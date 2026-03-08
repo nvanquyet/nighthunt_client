@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: c73a7c042161dd541a2b51368ff20d22
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - m_ViewDataDictionary: {instanceID: 0}
+  - universal_render_pipeline_asset: {fileID: 11400000, guid: eed0a568c87f79d49ba3bbb9501d04f0,
+      type: 2}
+  - HD_render_pipeline_asset: {fileID: 11400000, guid: 981d6d134e0763b4bb7468c12a42c0f8,
+      type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

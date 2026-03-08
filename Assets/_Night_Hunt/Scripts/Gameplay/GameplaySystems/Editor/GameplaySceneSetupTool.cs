@@ -23,7 +23,6 @@ using NightHunt.Gameplay.Scoring;
 using NightHunt.Gameplay.Objective;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Character.Movement;
-using NightHunt.Gameplay.Weapons;
 using NightHunt.Gameplay.Feedback;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Gameplay.ClientEffects;
@@ -63,7 +62,8 @@ using NightHunt.GameplaySystems.Weapon;
 using NightHunt.GameplaySystems.QuickSlot;
 using NightHunt.GameplaySystems.Attachment;
 using NightHunt.GameplaySystems.Interaction;
-using NightHunt.GameplaySystems.Systems.Stat;
+using NightHunt.GameplaySystems.Stat;
+using NightHunt.GameplaySystems.Aim;
 using NightHunt.Gameplay.Player;
 using NightHunt.Gameplay.FogOfWar;
 
@@ -243,7 +243,7 @@ namespace NightHunt.Editor.Tools
                     "[State]  CharacterStateMachine · CharacterLifecycleController\n" +
                     "         CharacterInputLifecycle\n" +
                     "[Net]    NetworkPlayer\n" +
-                    "[Combat] WeaponSystem · WeaponVFXController · WeaponSwitchingSystem\n" +
+                    "[Combat] WeaponSystem · WeaponVFXController · WeaponModelController\n" +
                     "[Stat]   PlayerStatSystem · ItemStatSystem · StatApplyOrchestrator\n" +
                     "[Inv]    InventorySystem · EquipmentSystem · QuickSlotSystem\n" +
                     "         AttachmentSystem\n" +
@@ -1383,8 +1383,17 @@ namespace NightHunt.Editor.Tools
                 CapsuleCollider cap = root.GetComponent<CapsuleCollider>();
                 if (cap == null) cap = root.AddComponent<CapsuleCollider>();
                 cap.radius = 0.4f; cap.height = 1.8f; cap.center = new Vector3(0f, 0.9f, 0f);
-                Debug.LogWarning("[GameplaySetupTool] Movement (Rigidbody): Rigidbody + CapsuleCollider added.\n" +
-                    "CharacterNormalMovement is in development — assign your Rigidbody movement component manually.");
+
+                var mov = Add<RigidbodyPredictedMovement>(root);
+                Sp(mov, "movementSettings",      movementCfg);
+                Sp(mov, "tankTurnSpeed",         10f);
+                Sp(mov, "lockTurnSpeed",         18f);
+                Sp(mov, "staminaRecoveryDelay",  1.5f);
+                Sp(mov, "allowCameraLockToggle", true);
+                Sp(mov, "startWithCameraLock",   false);
+                Sp(mov, "slowMovementThreshold", 1f);
+                Sp(mov, "enableDebugLogs",       debugLogs);
+                Debug.Log("[GameplaySetupTool] Movement: RigidbodyPredictedMovement ✓");
             }
 
             // ── State machine & Lifecycle ─────────────────────────────────────
@@ -1409,11 +1418,12 @@ namespace NightHunt.Editor.Tools
                       "     • GameCameraController._virtualCamera\n" +
                       "     • CameraStateManager._inputAxisController (CinemachineInputAxisController)");
 
-            // ── Weapon switching (client-side) ────────────────────────────────
-            var wss = Add<WeaponSwitchingSystem>(root);
-            Sp(wss, "maxWeaponSlots", 2);
-            Sp(wss, "switchTime",     1f);
-            Sp(wss, "weaponParent",   wHolder.transform);
+            // ── Weapon model + VFX (client-side) ─────────────────────────────
+            var wmc  = Add<WeaponModelController>(root);
+            Sp(wmc, "_weaponSocket", wHolder.transform);
+
+            var wvfx = Add<WeaponVFXController>(root);
+            // _weaponSystemSource / _vfxController wired below after WeaponSystem is added.
 
             // ── Stat systems ──────────────────────────────────────────────────
             var pss = Add<PlayerStatSystem>(root);
@@ -1421,6 +1431,9 @@ namespace NightHunt.Editor.Tools
             Sp(pss, "_gameplayConfig", gameplayCfg);
             Sp(pss, "_showDebugUI",   debugLogs);
             // Note: ItemStatSystem is a static utility class — no component needed.
+
+            var aim = Add<AimSystem>(root);
+            Sp(aim, "_playerStatSystemMB", pss);
 
             var sao = Add<StatApplyOrchestrator>(root);
             Sp(sao, "_playerStatSystemMB", pss);
@@ -1446,6 +1459,11 @@ namespace NightHunt.Editor.Tools
             Sp(wepSys, "_statSystemComponent",      pss);
             Sp(wepSys, "_inventorySystemComponent", inv);
             Sp(wepSys, "_enableDebugLogs",          debugLogs);
+
+            // Wire weapon model + VFX controllers now that WeaponSystem exists.
+            Sp(wmc,  "_weaponSystemSource", wepSys);
+            Sp(wmc,  "_vfxController",      wvfx);
+            Sp(wvfx, "_weaponSystemSource", wepSys);
 
             var qs = Add<QuickSlotSystem>(root);
             Sp(qs, "_inventoryConfig",          inventoryCfg);

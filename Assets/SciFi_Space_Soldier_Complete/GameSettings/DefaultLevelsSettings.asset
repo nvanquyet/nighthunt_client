@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aeb39422aac0c9444b223ed6157bffd7, type: 3}
+  m_Name: DefaultLevelsSettings
+  m_EditorClassIdentifier: 
+  selectRandomLevel: 0
+  actualLevel: 0
+  availableSinglePlayerLevels:
+  - 2a_DemoScene_SinglePlayer_Scripts
+  - 2a_DemoScene_SinglePlayer_Scripts
+  - 2a_DemoScene_SinglePlayer_Scripts
+  availableCoopLevels:
+  - 2b_DemoScene_CoopMultiplayer_Scripts
+  availableMultiplayerLevels:
+  - 2c_DemoScene_LocalMultiplayer
+  availableSurvivalLevels:
+  - 2f_DemoScene_SurvivalMode
+  availableTowerDefenseLevels:
+  - 3_DemoScene_TowerDefenseTest

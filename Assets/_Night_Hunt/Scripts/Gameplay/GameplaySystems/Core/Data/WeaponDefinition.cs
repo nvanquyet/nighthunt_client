@@ -48,9 +48,15 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Header("Reload")]
         [Tooltip("Can reload when magazine still has ammo (tactical reload)")]
         public bool CanTacticalReload = true;
+        // ── Bullet Type ───────────────────────────────────────────────────────
+        [Header("Bullet Type (Soldier System)")]
+        public GameObject DefaultBulletType;
+
         // ── Visual FX (per-weapon) ──────────────────────────────────────
         // Each weapon owns its own VFX so CharacterCombat never needs centralized references.
         // WeaponVFXController reads these fields when OnShotFired is raised.
+        // SoldierCombatController uses BulletTypeDefinition.ResolveMuzzleFlash(MuzzleFlashPrefab)
+        // so these act as the fallback when BulletTypeDefinition has no override.
         [Header("Visual FX")]
         [Tooltip("For BallisticType.Projectile: spawn at muzzle point on fire.")]
         public GameObject ProjectilePrefab;

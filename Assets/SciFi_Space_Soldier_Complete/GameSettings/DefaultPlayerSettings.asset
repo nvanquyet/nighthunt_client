@@ -1,0 +1,90 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef949606b80223d489bab95243fe5125, type: 3}
+  m_Name: DefaultPlayerSettings
+  m_EditorClassIdentifier: 
+  playerName:
+  - Player 1
+  - Player 2
+  - Player 3
+  - Player 4
+  playerCtrlMap:
+  - Horizontal
+  - Vertical
+  - LookX
+  - LookY
+  - FireTrigger
+  - Reload
+  - EquipWeapon
+  - Sprint
+  - Aim
+  - AimTrigger
+  - Roll
+  - Use
+  - Crouch
+  - ChangeWeapon
+  - Throw
+  - Fire
+  - Mouse ScrollWheel
+  - Melee
+  useLives: 1
+  livesPerPlayer: 4
+  respawnAfterDeathTimer: 3
+  useSplitScreenForMultiplayer: 1
+  singlePlayerThirdPerson: 0
+  singlePlayerCamera: {fileID: 2818464021268992962, guid: 5353fa7d00ccf2e43b86b1b8fe3bd378,
+    type: 3}
+  thirdPersonCamera: {fileID: 6885804517512710590, guid: b32bd9b308ff64f4cb8fb3d79e59a977,
+    type: 3}
+  multiplayerCamera: {fileID: 106884, guid: 466be402dff7bdd4ea24693b79f35c09, type: 3}
+  useMinimap: 1
+  minimap: {fileID: 6056441148071298951, guid: 9e44b8299c8456e4aac41cda75c1823d, type: 3}
+  minimapZoom: 45
+  minimapIcon: {fileID: 5940265104739592573, guid: 97caf36523f0f174eae46c6c968d97ac,
+    type: 3}
+  playerIconScale: 8
+  friendlyAiIconScale: 4
+  friendlyAiIconColor: {r: 0.5943396, g: 0.5943396, b: 0.5943396, a: 1}
+  enemyIconScale: 6
+  enemyIconColor: {r: 1, g: 0.2980455, b: 0.14509803, a: 1}
+  UnselectedTextColor: {r: 0.29682097, g: 0.64868456, b: 0.89705884, a: 1}
+  SelectedTextColor: {r: 0.25605538, g: 0.9411765, b: 0.4592292, a: 1}
+  TypeSelected: 0
+  availableCharacters:
+  - {fileID: 1280941345836250, guid: 59680d571a517a6469d0cbe8e3ea5a99, type: 3}
+  selectedCharacters:
+  - {fileID: 1280941345836250, guid: 59680d571a517a6469d0cbe8e3ea5a99, type: 3}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  playersInGame: 01000000
+  finalPlayerCount: 1
+  GameType: 0
+  useSinglePlayerColor: 0
+  singlePlayerColor: {r: 1, g: 1, b: 1, a: 1}
+  useCoopPlayerColor: 0
+  coopPlayerColor:
+  - {r: 0.28676468, g: 0.46876255, b: 1, a: 1}
+  - {r: 0.5735294, g: 0.78823537, b: 1, a: 1}
+  playerColor:
+  - {r: 0.25, g: 0.5344828, b: 1, a: 1}
+  - {r: 1, g: 0.29747126, b: 0.25098038, a: 1}
+  - {r: 0.08088237, g: 1, b: 0.18933828, a: 1}
+  - {r: 0.96799994, g: 1, b: 0, a: 1}
+  teamColor:
+  - {r: 1, g: 0.26734278, b: 0.051470578, a: 1}
+  - {r: 0.022058845, g: 0.5144014, b: 1, a: 1}
+  AlwaysShowPickups: 1
+  ActivePickupColor: {r: 1, g: 0.8124138, b: 0.19999999, a: 1}
+  InactivePickupColor: {r: 0.3, g: 0.3, b: 0.3, a: 0.4}
+  showPickupText: 1
+  PickupTextColor: {r: 1, g: 0.8124138, b: 0.19999999, a: 1}

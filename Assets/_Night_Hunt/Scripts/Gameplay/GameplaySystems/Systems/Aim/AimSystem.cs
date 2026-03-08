@@ -3,7 +3,7 @@ using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Interfaces;
 
-namespace NightHunt.GameplaySystems.Systems.Aim
+namespace NightHunt.GameplaySystems.Aim
 {
     /// <summary>
     /// Top-down aim resolver for a single local player.
@@ -53,6 +53,11 @@ namespace NightHunt.GameplaySystems.Systems.Aim
 
         [Tooltip("Fallback VisionRange used when the stat system is unavailable.")]
         [SerializeField] private float _fallbackVisionRange = 15f;
+
+        [Header("World Cursor")]
+        [Tooltip("Optional world-space Transform (flat disc, decal, or ring) that is repositioned to FinalAimPos every frame. "
+               + "Mirrors PR\u2019s AimTargetVisual pattern. Assign a prefab instance in the scene.")]
+        [SerializeField] private Transform _worldAimCursor;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime State
@@ -193,6 +198,10 @@ namespace NightHunt.GameplaySystems.Systems.Aim
 
             FinalAimPos  = origin + FinalAimDir * dist;
             FinalAimPos  = new Vector3(FinalAimPos.x, origin.y, FinalAimPos.z);
+
+            // Reposition the world cursor (mirrors PR’s AimTargetVisual moving to AimFinalPos).
+            if (_worldAimCursor != null)
+                _worldAimCursor.position = FinalAimPos;
         }
 
         private float GetVisionRange()

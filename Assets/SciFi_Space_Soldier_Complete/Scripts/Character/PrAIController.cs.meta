@@ -1,0 +1,31 @@
+fileFormatVersion: 2
+guid: 3da730cf379c4c64c87f04b3bef6b548
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - controlledCharacter: {instanceID: 0}
+  - character: {instanceID: 0}
+  - characterInventory: {instanceID: 0}
+  - characterHUD: {instanceID: 0}
+  - characterUtils: {instanceID: 0}
+  - charAnimator: {instanceID: 0}
+  - playerSettings: {fileID: 11400000, guid: 8e2d0b354a488ae47bbc60ced1173ff0, type: 2}
+  - eyesAndEarTransform: {instanceID: 0}
+  - waypointRoute: {instanceID: 0}
+  - towerDefenseTarget: {instanceID: 0}
+  - charTargetTransform: {instanceID: 0}
+  - charTargetUtils: {instanceID: 0}
+  - charTargetConstroller: {instanceID: 0}
+  - currentTarget: {instanceID: 0}
+  - agent: {instanceID: 0}
+  - AIRigidBody: {instanceID: 0}
+  - AIController: {instanceID: 0}
+  - DebugText: {instanceID: 0}
+  - AreaMesh: {instanceID: 0}
+  - TargetArrow: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

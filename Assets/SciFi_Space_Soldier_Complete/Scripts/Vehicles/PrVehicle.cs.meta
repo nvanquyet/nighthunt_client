@@ -1,0 +1,47 @@
+fileFormatVersion: 2
+guid: 2cffb59caf579b0418bf181e24631b33
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - actualActorPrefab: {instanceID: 0}
+  - actorAnimController: {instanceID: 0}
+  - actorRootMotionAnimController: {instanceID: 0}
+  - NoiseTrigger: {instanceID: 0}
+  - spawnFX: {instanceID: 0}
+  - DamageFX: {instanceID: 0}
+  - Audio: {instanceID: 0}
+  - BurnAndFrozenVFXParent: {instanceID: 0}
+  - frozenVFX: {instanceID: 0}
+  - actualFrozenVFX: {instanceID: 0}
+  - burningVFX: {instanceID: 0}
+  - actualBurningVFX: {instanceID: 0}
+  - damageSplatVFX: {instanceID: 0}
+  - actualSplatVFX: {instanceID: 0}
+  - deathVFX: {instanceID: 0}
+  - actualDeathVFX: {instanceID: 0}
+  - explosiveDeathVFX: {instanceID: 0}
+  - actualExplosiveDeathVFX: {instanceID: 0}
+  - HUD: {instanceID: 0}
+  - actualHUD: {instanceID: 0}
+  - visualVehicle: {instanceID: 0}
+  - lights: {instanceID: 0}
+  - m_rigidbody: {instanceID: 0}
+  - HUDVehiclePicture: {instanceID: 0}
+  - driver: {instanceID: 0}
+  - driverLocation: {instanceID: 0}
+  - outDriverPos: {instanceID: 0}
+  - turret: {instanceID: 0}
+  - turretWeaponPos: {instanceID: 0}
+  - weapon: {instanceID: 0}
+  - actualWeapon: {instanceID: 0}
+  - weaponAudio: {instanceID: 0}
+  - engineIdle: {fileID: 8300000, guid: f46b15572b7998e45884ac97b8b78122, type: 3}
+  - engineRunning: {fileID: 8300000, guid: f0b0d2e728daca448975a0f0a1ffc07e, type: 3}
+  - controller: {instanceID: 0}
+  - animator: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

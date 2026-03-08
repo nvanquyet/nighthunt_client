@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 5ce69f9e76b43a64ebfe9955dddf0ee6
+timeCreated: 1557273293
+licenseType: Store
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - reachTarget: {instanceID: 0}
+  - resistZone: {instanceID: 0}
+  - targetMesh: {fileID: 4300000, guid: 779ac9a814ea8ee40bdce0f683b397d3, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

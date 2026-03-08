@@ -53,11 +53,19 @@ namespace NightHunt.Gameplay.Character
         private float _yaw;
         /// <summary>Aim-derived yaw for character model facing (cursor-to-ground in STRAFE mode).</summary>
         private float _aimYaw;
+        // One-shot inputs — set by GatherInput(), consumed each Tick.
+        private bool _jump;
+        private bool _roll;
 
         // ===== STATE =====
         private Vector3 _velocity;
         private float _verticalVelocity;
         private float _stamina;
+        /// <summary>True while the jump arc is in flight (readable by IK/animation).</summary>
+        public bool IsJumping  { get; private set; }
+        /// <summary>True during the active roll window (readable by IK/animation).</summary>
+        public bool IsRolling  { get; private set; }
+        private float _rollTimer;
         
         // ===== STAMINA RECOVERY =====
         private float _staminaRecoveryTimer = 0f; // Timer đếm thời gian đứng yên/chậm
@@ -153,6 +161,8 @@ namespace NightHunt.Gameplay.Character
             _moveInput = handler.GetMoveInput();
             _sprint = handler.IsSprinting();
             _crouch = handler.IsCrouching();
+            _jump   = handler.IsJumping(); // consumes one-shot flag
+            _roll   = handler.IsRolling(); // consumes one-shot flag
             
             // Camera lock toggle - SAME AS CharacterNormalMovement
             if (allowCameraLockToggle)
@@ -258,7 +268,9 @@ namespace NightHunt.Gameplay.Character
                 _aimYaw,
                 _sprint,
                 _crouch,
-                _cameraLocked
+                _cameraLocked,
+                _jump,
+                _roll
             );
 
             if (enableDebugLogs && _moveInput.sqrMagnitude > 0.01f)
@@ -318,6 +330,11 @@ namespace NightHunt.Gameplay.Character
             {
                 speed *= movementSettings.crouchMultiplier;
             }
+            else if (IsRolling)
+            {
+                // Roll propels at sprint speed for the duration window.
+                speed *= GetSprintSpeedMultiplier();
+            }
 
             // ===== STAMINA LOGIC =====
             // Movement LUÔN tự tính drain + regen dựa trên MovementSettings config.
@@ -328,35 +345,29 @@ namespace NightHunt.Gameplay.Character
             Vector3 inputDir = new Vector3(data.Move.x, 0f, data.Move.y);
             float inputMagnitude = inputDir.magnitude;
 
-            // ── DRAIN khi sprint ─────────────────────────────────────────────
-            if (data.Sprint && canSprint)
+            // ── Tiêu hao stamina: chỉ khi sprint hoặc đang roll ──────────────
+            bool isConsumingStamina = (data.Sprint && canSprint) || IsRolling;
+
+            if (isConsumingStamina)
             {
-                float drainRate = GetStaminaDrainRate();
-                _stamina = Mathf.Max(0f, _stamina - drainRate * dt);
+                // Sprint → drain liên tục theo thời gian.
+                if (data.Sprint && canSprint)
+                {
+                    float drainRate = GetStaminaDrainRate();
+                    _stamina = Mathf.Max(0f, _stamina - drainRate * dt);
+                }
+                // Roll đã trừ rollStaminaCost ngay khi bắt đầu → không drain thêm ở đây.
+                _staminaRecoveryTimer = 0f; // reset delay khi đang tiêu stamina
             }
             else
             {
-                // ── REGEN khi đứng yên / di chuyển chậm / không sprint ───────
-                // Phải đợi staminaRecoveryDelay giây mới bắt đầu hồi
-                float expectedSpeed   = inputMagnitude * speed;
-                bool isIdle           = inputMagnitude < 0.01f;
-                bool isMovingSlowly   = !isIdle && expectedSpeed <= slowMovementThreshold;
-                bool isIdleOrSlow     = isIdle || isMovingSlowly;
-                bool isBelowThreshold = _stamina < GetMinStaminaToSprint(); // hồi kể cả khi dưới ngưỡng sprint
-
-                if (isIdleOrSlow || isBelowThreshold)
+                // ── Hồi stamina sau delay — idle/walk/crouch đều được hồi ────
+                // Chỉ reset timer khi đang sprint/roll; di chuyển bình thường không chặn hồi.
+                _staminaRecoveryTimer += dt;
+                if (_staminaRecoveryTimer >= staminaRecoveryDelay)
                 {
-                    _staminaRecoveryTimer += dt;
-                    if (_staminaRecoveryTimer >= staminaRecoveryDelay)
-                    {
-                        float regenRate = GetStaminaRegenRate();
-                        _stamina = Mathf.Min(_stamina + regenRate * dt, maxStamina);
-                    }
-                }
-                else
-                {
-                    // Đang di chuyển nhanh (không sprint) → reset timer
-                    _staminaRecoveryTimer = 0f;
+                    float regenRate = GetStaminaRegenRate();
+                    _stamina = Mathf.Min(_stamina + regenRate * dt, maxStamina);
                 }
             }
 
@@ -424,6 +435,30 @@ namespace NightHunt.Gameplay.Character
                         );
                     }
                 }
+            }
+
+            // ===== JUMP =====
+            if (data.Jump && grounded && !IsRolling)
+            {
+                _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.jumpHeight);
+                IsJumping = true;
+            }
+            if (grounded && _verticalVelocity <= 0f)
+                IsJumping = false;
+
+            // ===== ROLL =====
+            if (data.Roll && grounded && !IsJumping && !IsRolling
+                && _stamina >= movementSettings.rollStaminaCost)
+            {
+                _stamina -= movementSettings.rollStaminaCost;
+                IsRolling = true;
+                _rollTimer = 0f;
+            }
+            if (IsRolling)
+            {
+                _rollTimer += dt;
+                if (_rollTimer >= movementSettings.rollDuration)
+                    IsRolling = false;
             }
 
             // ===== GRAVITY =====

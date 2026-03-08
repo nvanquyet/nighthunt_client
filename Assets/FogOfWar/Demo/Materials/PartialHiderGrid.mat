@@ -8,7 +8,8 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: PartialHiderGrid
-  m_Shader: {fileID: -6465566751694194690, guid: db1c1192b07f6304fb423e80da8b8823, type: 3}
+  m_Shader: {fileID: -6465566751694194690, guid: db1c1192b07f6304fb423e80da8b8823,
+    type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
@@ -160,7 +161,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   version: 7
---- !u!114 &1779923031399238465
+--- !u!114 &1834134119898479162
 MonoBehaviour:
   m_ObjectHideFlags: 11
   m_CorrespondingSourceObject: {fileID: 0}

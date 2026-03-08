@@ -10,14 +10,8 @@ using NightHunt.StatSystem.Systems;
 namespace NightHunt.GameplaySystems.Attachment
 {
     /// <summary>
-    /// PRODUCTION-OPTIMIZED Attachment System
-    /// 
-    /// Improvements:
-    /// ✓ Attachment recovery on parent drop/destroy
-    /// ✓ Validation improvements
-    /// ✓ Proper cache invalidation
-    /// 
-    /// CRITICAL FIX: Recovers attachments when parent item dropped
+    /// Manages item attachment slots (scopes, grips, etc.) for a networked player.
+    /// Automatically recovers attachments to inventory when the parent item is dropped.
     /// </summary>
     public class AttachmentSystem : NetworkBehaviour, IAttachmentSystem, IDisposable
     {
@@ -266,9 +260,6 @@ namespace NightHunt.GameplaySystems.Attachment
 
             if (attachment != null)
             {
-                // BUG 6 FIX: Restore the ORIGINAL instance with all its state data
-                // (CurrentResource, CurrentMagazine, CustomData, etc.) instead of
-                // creating a new item via AddItem(definitionID, 1) which loses all that data.
                 _inventorySystem.RestoreItemToSlots(attachment);
                 OnAttachmentDetached?.Invoke(parentInstanceID, slotIndex, attachment);
             }
@@ -310,8 +301,7 @@ namespace NightHunt.GameplaySystems.Attachment
             string attach1 = parent1.GetAttachment(slotIndex1);
             string attach2 = parent2.GetAttachment(slotIndex2);
 
-            // BUG 6 FIX: validate compatibility before swapping to prevent illegal attachment states.
-            // Each attachment must be compatible with its new target slot.
+            // Validate cross-compatibility before swapping.
             if (!string.IsNullOrEmpty(attach1) && !string.IsNullOrEmpty(attach2))
             {
                 // Both slots occupied – validate cross-compatibility
@@ -375,23 +365,16 @@ namespace NightHunt.GameplaySystems.Attachment
                 if (parent.HasAttachment(i))
                 {
                     if (returnToInventory)
-                    {
-                        DetachItemServer(parentInstanceID, i); // Return vào inventory
-                    }
-                    // Nếu dropWithItem = true, attachments sẽ drop cùng item (không gỡ)
+                        DetachItemServer(parentInstanceID, i);
                 }
             }
         }
         
         #endregion
         
-        #region Auto-Recovery System - CRITICAL FIX
-        
-        /// <summary>
-        /// CRITICAL: Auto-recover attachments when parent item removed
-        /// Prevents attachment loss when dropping/destroying equipped items
-        /// Chỉ recover nếu config cho phép return vào inventory
-        /// </summary>
+        #region Auto-Recovery
+
+        /// <summary>Recovers attached items into inventory when the parent item is removed.</summary>
         [Server]
         private void OnParentItemRemoved(ItemInstance parentItem, int quantity)
         {

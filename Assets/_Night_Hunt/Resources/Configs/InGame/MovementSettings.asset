@@ -13,17 +13,24 @@ MonoBehaviour:
   m_Name: MovementSettings
   m_EditorClassIdentifier: 
   baseSpeed: 5
-  sprintMultiplier: 1.5
+  sprintSpeedMultiplier: 1.6
   crouchMultiplier: 0.6
   acceleration: 25
   deceleration: 30
   gravity: 20
   jumpHeight: 1.2
   groundedStickDownVelocity: 2
+  enableJump: 0
   maxStamina: 100
   staminaDrainRate: 20
   staminaRegenRate: 15
   minStaminaToSprint: 10
+  rollStaminaCost: 20
+  rollDistance: 4
+  rollDuration: 0.2
+  rollMode: 1
+  rollLeapHeight: 1.2
+  enableRoll: 1
   rotationDeadzoneDegrees: 8
   rotationSpeed: 10
   moveInputThreshold: 0.1

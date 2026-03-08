@@ -14,15 +14,32 @@ namespace NightHunt.GameplaySystems.Loot
     /// Server-authoritative manager quản lý toàn bộ World object spawn lifecycle.
     ///
     /// TRÁCH NHIỆM:
-    ///   1. Khi server start: tìm tất cả <see cref="WorldItemSpawnPoint"/> trong scene
-    ///      và khởi động spawn-loop cho từng điểm.
-    ///   2. API spawn: <see cref="SpawnWorldItem"/>, <see cref="SpawnWorldContainer"/>
-    ///      — dùng prefab có sẵn, không tạo GO động.
-    ///   3. Implement <see cref="IDropHandler"/> để InventorySystem gọi khi player drop item.
+    ///   1. Khi server start: tìm tất cả WorldItemSpawnPoint trong scene và khởi động spawn-loop.
+    ///   2. API spawn: SpawnWorldItem, SpawnWorldContainer — dùng prefab có sẵn.
+    ///   3. Implement IDropHandler để InventorySystem gọi khi player drop item.
     ///
-    /// NAMING CONVENTION (prefix "World"):
-    ///   WorldItem      — item rơi trên đất (pickup)
-    ///   WorldContainer — thùng / crate / rương / chest (tất cả dùng 1 prefab)
+    /// ═══════════════════════════════════════════════════════════════════════════
+    /// CRITICAL — THỨ TỰ SPAWN ĐÚNG:
+    ///
+    ///   ❌ SAI (cũ):
+    ///      ServerManager.Spawn(netObj);     ← FishNet fires OnStartClient() NGAY ĐÂY
+    ///      worldItem.Initialize(data);      ← quá trễ, OnStartClient đã chạy rồi
+    ///
+    ///   ✅ ĐÚNG (mới):
+    ///      worldItem.InitializeBeforeSpawn(data);   ← set data trực tiếp, chưa có SyncVar
+    ///      ServerManager.Spawn(netObj);              ← FishNet embed SyncVar vào spawn packet
+    ///                                                   → client nhận đủ data ngay lần đầu
+    ///
+    /// Lý do:
+    ///   - Host mode: OnStartClient() chạy synchronously BÊN TRONG ServerManager.Spawn().
+    ///     Nếu data chưa set trước Spawn → OnStartClient thấy SyncVar rỗng → không spawn model.
+    ///   - Dedicated server: SyncVar value được embed vào spawn packet khi Spawn() được gọi.
+    ///     Nếu Initialize() gọi sau Spawn → client nhận spawn packet không có data → miss model.
+    ///
+    ///   InitializeBeforeSpawn() set data trực tiếp lên field + SyncVar TRƯỚC Spawn(),
+    ///   nên khi FishNet build spawn packet, SyncVar đã có value → được embed vào packet.
+    ///   Cả host lẫn dedicated server client đều nhận đúng data ngay lần đầu.
+    /// ═══════════════════════════════════════════════════════════════════════════
     /// </summary>
     public class WorldSpawnManager : NetworkBehaviour, IDropHandler
     {
@@ -47,11 +64,7 @@ namespace NightHunt.GameplaySystems.Loot
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
         }
 
@@ -62,7 +75,7 @@ namespace NightHunt.GameplaySystems.Loot
             _spawnPoints.Clear();
             _spawnPoints.AddRange(FindObjectsByType<WorldItemSpawnPoint>(FindObjectsSortMode.None));
 
-            Debug.Log($"[WorldSpawnManager] Found {_spawnPoints.Count} WorldItemSpawnPoint(s). Starting spawn loops.");
+            Debug.Log($"[WorldSpawnManager] OnStartServer: found {_spawnPoints.Count} WorldItemSpawnPoint(s). Starting spawn loops.");
 
             foreach (var point in _spawnPoints)
             {
@@ -71,7 +84,7 @@ namespace NightHunt.GameplaySystems.Loot
             }
         }
 
-        // ── Spawn Loop (server) ──────────────────────────────────────────────────
+        // ── Spawn Loop ───────────────────────────────────────────────────────────
 
         [Server]
         private IEnumerator SpawnLoop(WorldItemSpawnPoint point)
@@ -80,24 +93,18 @@ namespace NightHunt.GameplaySystems.Loot
 
             while (true)
             {
-                // Điểm đã hết lượt spawn → dừng vĩnh viễn
                 if (point.IsExhausted) yield break;
 
-                // Chờ đến khi có chỗ trống
                 while (point.IsFull) yield return null;
 
                 SpawnAtPoint(point);
 
-                // One-shot: không có respawn → dừng sau lần spawn đầu tiên
                 if (!config.CanRespawn) yield break;
 
-                // Chờ đến khi object bị loot/despawn (slot trống lại)
                 while (point.IsFull) yield return null;
 
-                // Kiểm tra đã hết số lần respawn chưa
                 if (point.IsExhausted) yield break;
 
-                // Chờ thời gian respawn
                 yield return new WaitForSeconds(config.RespawnTime);
             }
         }
@@ -111,7 +118,11 @@ namespace NightHunt.GameplaySystems.Loot
             switch (config.SpawnType)
             {
                 case WorldSpawnType.Item:
-                    SpawnWorldItemsFromTable(config.SpawnTable, point.GetSpawnPosition(), config.ScatterRadius, point, config.LootableConfig);
+                    // Truyền transform.position (không phải GetSpawnPosition()) để
+                    // SpawnWorldItemsFromTable tự scatter mỗi item trong ScatterRadius.
+                    // GetSpawnPosition() đã tự scatter → gọi ở đây gây double-scatter.
+                    SpawnWorldItemsFromTable(config.SpawnTable, point.transform.position,
+                                            config.ScatterRadius, point, config.LootableConfig);
                     break;
                 case WorldSpawnType.Container:
                     SpawnWorldContainer(config, point.transform.position, point);
@@ -121,43 +132,63 @@ namespace NightHunt.GameplaySystems.Loot
 
         // ── Public Spawn API ─────────────────────────────────────────────────────
 
-        /// <summary>Spawn một WorldItem (item rơi đất). Server-only.</summary>
+        /// <summary>
+        /// Spawn một WorldItem (item rơi đất). Server-only.
+        ///
+        /// THỨ TỰ BẮT BUỘC:
+        ///   1. Instantiate GO
+        ///   2. worldItem.InitializeBeforeSpawn(data)  ← SET DATA TRƯỚC
+        ///   3. ServerManager.Spawn(netObj)            ← SPAWN SAU
+        ///
+        /// Lý do xem comment class WorldSpawnManager.
+        /// </summary>
         [Server]
-        public WorldItem SpawnWorldItem(ItemInstanceData data, Vector3 position, Quaternion rotation, WorldItemSpawnPoint sourcePoint = null, LootableConfig lootableConfig = null)
+        public WorldItem SpawnWorldItem(
+            ItemInstanceData data,
+            Vector3 position,
+            Quaternion rotation,
+            WorldItemSpawnPoint sourcePoint = null,
+            LootableConfig lootableConfig = null)
         {
             if (!IsServerInitialized)
             {
                 Debug.LogWarning("[WorldSpawnManager] SpawnWorldItem: server-only!");
                 return null;
             }
-
             if (worldItemPrefab == null)
             {
-                Debug.LogError("[WorldSpawnManager] worldItemPrefab is not assigned!");
+                Debug.LogError("[WorldSpawnManager] SpawnWorldItem: worldItemPrefab chưa được gán!");
                 return null;
             }
 
-            var go = Instantiate(worldItemPrefab, position, rotation);
-            var netObj = go.GetComponent<NetworkObject>();
+            // ── 1. Instantiate ────────────────────────────────────────────────────
+            var go        = Instantiate(worldItemPrefab, position, rotation);
+            var netObj    = go.GetComponent<NetworkObject>();
             var worldItem = go.GetComponent<WorldItem>();
 
             if (netObj == null || worldItem == null)
             {
-                Debug.LogError("[WorldSpawnManager] worldItemPrefab thiếu NetworkObject hoặc WorldItem component!");
+                Debug.LogError("[WorldSpawnManager] SpawnWorldItem: worldItemPrefab thiếu NetworkObject hoặc WorldItem!");
                 Destroy(go);
                 return null;
             }
 
+            // ── 2. InitializeBeforeSpawn — SET DATA TRƯỚC KHI SPAWN ──────────────
+            //    Ghi data trực tiếp vào field + SyncVar nội bộ của WorldItem.
+            //    Khi FishNet build spawn packet ở bước 3, SyncVar đã có value
+            //    và được embed vào packet → client nhận đủ data ngay lần đầu.
+            worldItem.InitializeBeforeSpawn(data, lootableConfig);
+
+            Debug.Log($"[WorldSpawnManager] SpawnWorldItem: InitializeBeforeSpawn done. " +
+                      $"defID='{data.DefinitionID}' pos={position}. About to Spawn...");
+
+            // ── 3. Spawn — FishNet tạo NetworkObject, gửi packet tới clients ──────
             ServerManager.Spawn(netObj);
 
-            // DEBUG: Log which connections are observers for this world item.
-            Debug.Log($"[WorldSpawnManager] SpawnWorldItem: spawned NetId={netObj.ObjectId}, Observers={netObj.Observers.Count}");
-            foreach (var observerConn in netObj.Observers)
-            {
-                Debug.Log($"[WorldSpawnManager]   → Observer connection ClientId={observerConn.ClientId}");
-            }
-            worldItem.Initialize(data, lootableConfig);
+            Debug.Log($"[WorldSpawnManager] SpawnWorldItem: Spawned. " +
+                      $"NetId={netObj.ObjectId} Observers={netObj.Observers.Count} defID='{data.DefinitionID}'");
 
+            // ── 4. Đăng ký sourcePoint callback ──────────────────────────────────
             if (sourcePoint != null)
             {
                 sourcePoint.RegisterActive();
@@ -167,43 +198,49 @@ namespace NightHunt.GameplaySystems.Loot
             return worldItem;
         }
 
-        /// <summary>Spawn một WorldContainer (thùng/crate). Server-only.</summary>
+        /// <summary>
+        /// Spawn một WorldContainer (thùng/crate). Server-only.
+        ///
+        /// THỨ TỰ BẮT BUỘC: InitializeBeforeSpawn → ServerManager.Spawn (tương tự WorldItem).
+        /// </summary>
         [Server]
-        public WorldContainer SpawnWorldContainer(WorldSpawnConfig config, Vector3 position, WorldItemSpawnPoint sourcePoint = null)
+        public WorldContainer SpawnWorldContainer(
+            WorldSpawnConfig config,
+            Vector3 position,
+            WorldItemSpawnPoint sourcePoint = null)
         {
             if (!IsServerInitialized)
             {
                 Debug.LogWarning("[WorldSpawnManager] SpawnWorldContainer: server-only!");
                 return null;
             }
-
             if (worldContainerPrefab == null)
             {
-                Debug.LogError("[WorldSpawnManager] worldContainerPrefab is not assigned!");
+                Debug.LogError("[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab chưa được gán!");
                 return null;
             }
 
-            var go = Instantiate(worldContainerPrefab, position, Quaternion.identity);
-            var netObj = go.GetComponent<NetworkObject>();
+            var go        = Instantiate(worldContainerPrefab, position, Quaternion.identity);
+            var netObj    = go.GetComponent<NetworkObject>();
             var container = go.GetComponent<WorldContainer>();
 
             if (netObj == null || container == null)
             {
-                Debug.LogError("[WorldSpawnManager] worldContainerPrefab thiếu NetworkObject hoặc WorldContainer component!");
+                Debug.LogError("[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab thiếu NetworkObject hoặc WorldContainer!");
                 Destroy(go);
                 return null;
             }
 
+            // Set data trước Spawn (tương tự WorldItem)
+            container.InitializeBeforeSpawn(config.SpawnTable, config.SpawnLocked,
+                                            config.LootableConfig,
+                                            config.ContainerAutoReset,
+                                            config.ContainerResetDelay);
+
             ServerManager.Spawn(netObj);
 
-            // DEBUG: Log which connections are observers for this world container.
-            Debug.Log($"[WorldSpawnManager] SpawnWorldContainer: spawned NetId={netObj.ObjectId}, Observers={netObj.Observers.Count}");
-            foreach (var observerConn in netObj.Observers)
-            {
-                Debug.Log($"[WorldSpawnManager]   → Observer connection ClientId={observerConn.ClientId}");
-            }
-            container.Initialize(config.SpawnTable, config.SpawnLocked, config.LootableConfig,
-                                  config.ContainerAutoReset, config.ContainerResetDelay);
+            Debug.Log($"[WorldSpawnManager] SpawnWorldContainer: Spawned. " +
+                      $"NetId={netObj.ObjectId} Observers={netObj.Observers.Count}");
 
             if (sourcePoint != null)
             {
@@ -216,14 +253,18 @@ namespace NightHunt.GameplaySystems.Loot
 
         /// <summary>Roll SpawnTable và scatter WorldItem quanh centerPosition. Server-only.</summary>
         [Server]
-        public void SpawnWorldItemsFromTable(SpawnTable table, Vector3 centerPosition, float spreadRadius = 1.5f, WorldItemSpawnPoint sourcePoint = null, LootableConfig lootableConfig = null)
+        public void SpawnWorldItemsFromTable(
+            SpawnTable table,
+            Vector3 centerPosition,
+            float spreadRadius = 1.5f,
+            WorldItemSpawnPoint sourcePoint = null,
+            LootableConfig lootableConfig = null)
         {
             if (!IsServerInitialized)
             {
                 Debug.LogWarning("[WorldSpawnManager] SpawnWorldItemsFromTable: server-only!");
                 return;
             }
-
             if (table == null)
             {
                 Debug.LogWarning("[WorldSpawnManager] SpawnWorldItemsFromTable: SpawnTable is null!");
@@ -231,27 +272,30 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             var results = table.Roll();
+            Debug.Log($"[WorldSpawnManager] SpawnWorldItemsFromTable: rolled {results.Count} item(s) from '{table.name}'");
 
             foreach (var result in results)
             {
                 if (result.ItemDef == null) continue;
 
                 var instance = new ItemInstance(result.ItemDef.ItemID, result.Quantity, -1);
-                var data = instance.ToData();
+                var data     = instance.ToData();
 
-                Vector2 rand = Random.insideUnitCircle * spreadRadius;
+                Vector2 rand     = Random.insideUnitCircle * spreadRadius;
                 Vector3 spawnPos = centerPosition + new Vector3(rand.x, 0f, rand.y);
 
                 SpawnWorldItem(data, spawnPos, Quaternion.identity, sourcePoint, lootableConfig);
             }
         }
 
-        /// <summary>
-        /// Spawn WorldItem từ danh sách SpawnResult đã roll sẵn.
-        /// Server-only.
-        /// </summary>
+        /// <summary>Spawn WorldItem từ danh sách SpawnResult đã roll sẵn. Server-only.</summary>
         [Server]
-        public void SpawnWorldItemsFromResults(List<SpawnResult> results, Vector3 centerPosition, float spreadRadius = 1.5f, WorldItemSpawnPoint sourcePoint = null, LootableConfig lootableConfig = null)
+        public void SpawnWorldItemsFromResults(
+            List<SpawnResult> results,
+            Vector3 centerPosition,
+            float spreadRadius = 1.5f,
+            WorldItemSpawnPoint sourcePoint = null,
+            LootableConfig lootableConfig = null)
         {
             if (!IsServerInitialized)
             {
@@ -265,7 +309,7 @@ namespace NightHunt.GameplaySystems.Loot
 
                 var instance = new ItemInstance(result.ItemDef.ItemID, result.Quantity, -1);
                 Vector2 rand = Random.insideUnitCircle * spreadRadius;
-                Vector3 pos = centerPosition + new Vector3(rand.x, 0f, rand.y);
+                Vector3 pos  = centerPosition + new Vector3(rand.x, 0f, rand.y);
                 SpawnWorldItem(instance.ToData(), pos, Quaternion.identity, sourcePoint, lootableConfig);
             }
         }

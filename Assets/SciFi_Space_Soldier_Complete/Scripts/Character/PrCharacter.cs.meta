@@ -1,0 +1,38 @@
+fileFormatVersion: 2
+guid: a2fd0817f130bf349a7650d7d4f3fd31
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - actualActorPrefab: {instanceID: 0}
+  - actorAnimController: {fileID: 9100000, guid: a6d164a2d41d981429b6d238ec576bae,
+      type: 2}
+  - actorRootMotionAnimController: {fileID: 9100000, guid: faa6c7acd10fb7f43b26bb2fe9d773db,
+      type: 2}
+  - NoiseTrigger: {instanceID: 0}
+  - spawnFX: {instanceID: 0}
+  - DamageFX: {instanceID: 0}
+  - Audio: {instanceID: 0}
+  - BurnAndFrozenVFXParent: {instanceID: 0}
+  - frozenVFX: {instanceID: 0}
+  - actualFrozenVFX: {instanceID: 0}
+  - burningVFX: {instanceID: 0}
+  - actualBurningVFX: {instanceID: 0}
+  - damageSplatVFX: {instanceID: 0}
+  - actualSplatVFX: {instanceID: 0}
+  - deathVFX: {instanceID: 0}
+  - actualDeathVFX: {instanceID: 0}
+  - explosiveDeathVFX: {instanceID: 0}
+  - actualExplosiveDeathVFX: {instanceID: 0}
+  - HUD: {instanceID: 0}
+  - actualHUD: {instanceID: 0}
+  - characterController: {instanceID: 0}
+  - AIController: {instanceID: 0}
+  - characterInventory: {instanceID: 0}
+  - actualCharUtils: {instanceID: 0}
+  - charAnimator: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

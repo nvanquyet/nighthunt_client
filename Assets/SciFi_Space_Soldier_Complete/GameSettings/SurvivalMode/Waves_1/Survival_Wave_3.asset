@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f5a66014100de24685ef51fb36bc523, type: 3}
+  m_Name: Survival_Wave_3
+  m_EditorClassIdentifier: 
+  Enemies:
+  - {fileID: 1280941345836250, guid: 5567e628d0b2c9a4a954bcc2df2f1642, type: 3}
+  - {fileID: 1280941345836250, guid: 798d8f766eb63aa4e941706b2461bfff, type: 3}
+  enemiesCount: 15
+  timeBetweenSpawn: {x: 1, y: 2}

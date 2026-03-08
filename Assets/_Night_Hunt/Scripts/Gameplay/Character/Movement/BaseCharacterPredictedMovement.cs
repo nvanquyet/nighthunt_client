@@ -76,6 +76,16 @@ namespace NightHunt.Gameplay.Character
         protected float _staminaRecoveryTimer = 0f;
         private float _aimFallbackLogTimer = 0f;
 
+        // ===== JUMP / ROLL (OWNER) =====
+        private bool _jumpRequest;
+        private bool _rollRequest;
+
+        // ===== ROLL STATE =====
+        protected bool _isRolling;
+        protected float _rollTimer;
+        /// <summary>Horizontal direction locked at roll-start. Not reconciled — deterministic from tick data.</summary>
+        protected Vector3 _rollDir;
+
         // ===== STATS =====
         protected IPlayerStatSystem _playerStatSystem;
 
@@ -116,15 +126,17 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         protected abstract void ResetPhysicsState();
 
-        /// <summary>
-        /// Initialize physics components in Awake
-        /// </summary>
+        /// <summary>Initialize physics components in Awake</summary>
         protected abstract void InitializePhysicsComponents();
 
-        /// <summary>
-        /// Get physics component name for debug display
-        /// </summary>
+        /// <summary>Get physics component name for debug display</summary>
         protected abstract string GetPhysicsComponentName();
+
+        /// <summary>
+        /// Returns true if a wall blocks movement in <paramref name="direction"/> over <paramref name="stepDistance"/> metres.
+        /// Called each tick while rolling to cancel on impact. Default returns false (no wall detection).
+        /// </summary>
+        protected virtual bool IsRollBlocked(Vector3 direction, float stepDistance) => false;
 
         #endregion
 
@@ -163,7 +175,7 @@ namespace NightHunt.Gameplay.Character
 
             _targetPosition = transform.position;
             _targetRotation = transform.rotation;
-            _verticalVelocity = -2f;
+            _verticalVelocity = -(movementSettings?.groundedStickDownVelocity ?? 2f);
             _cameraLocked = startWithCameraLock;
             _staminaRecoveryTimer = 0f;
 
@@ -234,6 +246,10 @@ namespace NightHunt.Gameplay.Character
                     Debug.LogWarning($"[{GetType().Name}] Camera.main NULL — keeping _yaw={_yaw:F1}");
             }
 
+            // ── Jump / Roll one-shot ──────────────────────────────────────────────
+            if (handler.IsJumping()) _jumpRequest = true;
+            if (handler.IsRolling()) _rollRequest = true;
+
             // ── Aim Yaw ───────────────────────────────────────────────────────────
             // Priority 1: CombatHandler.GetAimDirection()
             //   → Chỉ trả direction khi _isFiring = true (xem CombatInputHandler.GetAimDirection)
@@ -297,8 +313,13 @@ namespace NightHunt.Gameplay.Character
                     _aimYaw,
                     _sprint,
                     _crouch,
-                    _cameraLocked
+                    _cameraLocked,
+                    _jumpRequest,
+                    _rollRequest
                 );
+                // One-shot: consumed by this tick's Replicate call.
+                _jumpRequest = false;
+                _rollRequest = false;
             }
 
             // All (Owner, Server, Non-owner): Call Replicate
@@ -372,37 +393,24 @@ namespace NightHunt.Gameplay.Character
             }
 
             // ===== STAMINA ADVANCED LOGIC =====
-            if (data.Sprint && canSprint)
+            // Chỉ sprint và roll tiêu stamina; idle/walk/crouch đều cho hồi sau delay.
+            bool isConsumingStamina = (data.Sprint && canSprint) || _isRolling;
+
+            if (isConsumingStamina)
             {
-                // Drain stamina while sprinting.
-                _stamina = Mathf.Max(0f, _stamina - drainRate * dt);
+                // Sprint → drain liên tục.
+                if (data.Sprint && canSprint)
+                    _stamina = Mathf.Max(0f, _stamina - drainRate * dt);
+                // Roll đã trừ rollStaminaCost ngay khi bắt đầu → không drain thêm ở đây.
                 _staminaRecoveryTimer = 0f;
             }
             else
             {
-                // Regenerate stamina when idle or moving slowly,
-                // OR when below sprint threshold (to recover enough to sprint again).
-                if (inputDir.sqrMagnitude > 1f)
-                    inputDir.Normalize();
-
-                float expectedSpeed = inputMagnitude * speed;
-                bool isIdle = inputMagnitude < 0.01f;
-                bool isMovingSlow = !isIdle && expectedSpeed <= slowMovementThreshold;
-                bool isIdleOrSlow = isIdle || isMovingSlow;
-                bool isBelowSprintThreshold = _stamina < minStaminaToSprint;
-
-                if (isIdleOrSlow || isBelowSprintThreshold)
+                // Hồi stamina sau delay — idle/walk/crouch đều được hồi.
+                _staminaRecoveryTimer += dt;
+                if (_staminaRecoveryTimer >= staminaRecoveryDelay)
                 {
-                    _staminaRecoveryTimer += dt;
-                    if (_staminaRecoveryTimer >= staminaRecoveryDelay)
-                    {
-                        _stamina = Mathf.Min(_stamina + regenRate * dt, maxStamina);
-                    }
-                }
-                else
-                {
-                    // Moving fast (not sprinting) -> no regen, reset timer.
-                    _staminaRecoveryTimer = 0f;
+                    _stamina = Mathf.Min(_stamina + regenRate * dt, maxStamina);
                 }
             }
 
@@ -466,16 +474,68 @@ namespace NightHunt.Gameplay.Character
                 }
             }
 
+            // ===== ROLL STATE =====
+            float rollHSpeed = movementSettings.rollDistance / movementSettings.rollDuration;
+
+            // Tick down timer and check wall cancel.
+            if (_isRolling)
+            {
+                _rollTimer -= dt;
+                bool expired = _rollTimer <= 0f;
+                bool blocked = !expired && IsRollBlocked(_rollDir, rollHSpeed * dt);
+                if (expired || blocked)
+                {
+                    _isRolling = false;
+                    _rollTimer = 0f;
+                    _rollDir   = Vector3.zero;
+                }
+            }
+
+            // Activate new roll.
+            if (data.Roll && !_isRolling && grounded
+                && movementSettings.enableRoll
+                && _stamina >= movementSettings.rollStaminaCost)
+            {
+                _isRolling = true;
+                _rollTimer = movementSettings.rollDuration;
+                _stamina   = Mathf.Max(0f, _stamina - movementSettings.rollStaminaCost);
+
+                // Lock direction: camera-relative input, fallback to character forward.
+                Vector3 inputDir3 = new Vector3(data.Move.x, 0f, data.Move.y);
+                _rollDir = inputDir3.sqrMagnitude > 0.01f
+                    ? (camRot * inputDir3).normalized
+                    : transform.forward;
+
+                // Leap: launch upward at start.
+                if (movementSettings.rollMode == RollMode.Leap && movementSettings.rollLeapHeight > 0f)
+                    _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.rollLeapHeight);
+            }
+
+            // Override normal move while rolling — player cannot steer mid-roll.
+            if (_isRolling)
+            {
+                moveDir = _rollDir;
+                speed   = rollHSpeed;
+            }
+
             // ===== GRAVITY =====
-            if (grounded)
-            {
-                if (_verticalVelocity < 0f)
-                    _verticalVelocity = -2f;
-            }
-            else
-            {
-                _verticalVelocity += Physics.gravity.y * dt;
-            }
+            // Apply every tick so launch velocity from Jump/Leap decelerates correctly
+            // even when IsGrounded() still returns true the tick after launch starts
+            // (ground-check sphere hasn't cleared the surface yet).
+            // While airborne and falling, scale gravity up so the descent matches the
+            // snappiness of the launch (standard game-feel technique).
+            float gravityScale = (!grounded && _verticalVelocity < 0f)
+                ? movementSettings.fallGravityMultiplier
+                : 1f;
+            _verticalVelocity -= movementSettings.gravity * gravityScale * dt;
+            // While on the ground and falling, clamp to a small stick-down value so
+            // the character doesn't build up a large negative free-fall velocity in place.
+            if (grounded && _verticalVelocity < 0f)
+                _verticalVelocity = -movementSettings.groundedStickDownVelocity;
+
+            // ===== JUMP =====
+            if (data.Jump && grounded && movementSettings.enableJump)
+                _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.jumpHeight);
 
             // ===== APPLY MOVEMENT =====
             Vector3 horizontalMovement = moveDir * speed;
@@ -570,7 +630,9 @@ namespace NightHunt.Gameplay.Character
                 transform.position,
                 transform.rotation,
                 _velocity,
-                _stamina
+                _stamina,
+                _isRolling,
+                _rollTimer
             );
 
             Reconcile(data, Channel.Unreliable);
@@ -582,7 +644,9 @@ namespace NightHunt.Gameplay.Character
                 transform.position,
                 transform.rotation,
                 _velocity,
-                _stamina
+                _stamina,
+                _isRolling,
+                _rollTimer
             );
         }
 
@@ -603,6 +667,8 @@ namespace NightHunt.Gameplay.Character
                 //   2. Drive rotation from a server roundtrip instead of local camera input.
                 _velocity = data.Velocity;
                 _stamina = data.Stamina;
+                _isRolling = data.IsRolling;
+                _rollTimer = data.RollTimer;
 
                 // Restore vertical velocity from reconcile data.
                 // _verticalVelocity is a separate accumulator used by SimulateMovement for

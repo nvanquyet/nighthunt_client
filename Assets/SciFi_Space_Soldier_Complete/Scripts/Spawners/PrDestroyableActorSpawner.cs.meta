@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: a88a83e2fb7d4434cbdbc3b59607c28c
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - actorsParent: {instanceID: 0}
+  - areaMesh: {fileID: 4300000, guid: 6f7b5c6dee4c0594d947f1537906d39e, type: 3}
+  - iconMesh: {fileID: 6686097678407549244, guid: 0d6c2d150c8803f4a9838fd5e8d724d7,
+      type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

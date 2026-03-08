@@ -238,7 +238,8 @@ MonoBehaviour:
       Owner: {fileID: 6113968423294948847}
       Enabled: 1
       Input:
-        InputAction: {fileID: 2863052850329002295, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+        InputAction: {fileID: 2863052850329002295, guid: 052faaac586de48259a63d0c4782560b,
+          type: 3}
         Gain: 1
         LegacyInput: 
         LegacyGain: 1
@@ -251,7 +252,8 @@ MonoBehaviour:
       Owner: {fileID: 6113968423294948847}
       Enabled: 0
       Input:
-        InputAction: {fileID: 2863052850329002295, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+        InputAction: {fileID: 2863052850329002295, guid: 052faaac586de48259a63d0c4782560b,
+          type: 3}
         Gain: -1
         LegacyInput: 
         LegacyGain: 1
@@ -264,7 +266,8 @@ MonoBehaviour:
       Owner: {fileID: 6113968423294948847}
       Enabled: 1
       Input:
-        InputAction: {fileID: 152355795495668328, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+        InputAction: {fileID: 152355795495668328, guid: 052faaac586de48259a63d0c4782560b,
+          type: 3}
         Gain: -1
         LegacyInput: 
         LegacyGain: 1
@@ -519,7 +522,6 @@ GameObject:
   - component: {fileID: 7787011859975595047}
   - component: {fileID: 2698279300146127577}
   - component: {fileID: 5002469889206839817}
-  - component: {fileID: 5856131940836897058}
   - component: {fileID: 2125858533983064380}
   - component: {fileID: 3472814331583980281}
   - component: {fileID: 388409578161785621}
@@ -757,24 +759,6 @@ MonoBehaviour:
   drag: 0
   angularDrag: 0.05
   wallCheckSkinWidth: 0.08
---- !u!114 &5856131940836897058
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6186874985291187823}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d39044e2213436a46a159a94ef20f7e6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  maxWeaponSlots: 2
-  switchTime: 1
-  weaponParent: {fileID: 5447928725488776468}
-  weaponModels:
-  - {fileID: 0}
-  - {fileID: 0}
 --- !u!114 &2125858533983064380
 MonoBehaviour:
   m_ObjectHideFlags: 0

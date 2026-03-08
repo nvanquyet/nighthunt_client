@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 057e7093de7395f43a6c3dd4e5d6ac8c, type: 3}
+  m_Name: SoldierMovementConfig
+  m_EditorClassIdentifier: 
+  fallbackBaseSpeed: 5
+  fallbackMaxStamina: 100
+  sprintMultiplier: 1.6
+  crouchMultiplier: 0.6
+  acceleration: 25
+  deceleration: 30
+  jumpHeight: 1.8
+  gravityScale: 2.2
+  groundStickVelocity: 2
+  rollDuration: 0.55
+  rollSpeedMultiplier: 1.8
+  rollStaminaCost: 25
+  rollCooldown: 0.8
+  normalHeight: 1.8
+  crouchHeight: 1
+  normalCapsuleCenter: 0.9
+  crouchCapsuleCenter: 0.5
+  staminaDrainRate: 20
+  staminaRegenRate: 15
+  staminaRegenDelay: 1.5
+  minStaminaToSprint: 10
+  tankTurnSpeed: 900
+  strafeTurnSpeed: 1800
+  idleAimTurnSpeed: 450
+  rotationDeadzone: 5
+  groundCheckDistance: 0.15
+  groundLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  interpolationSpeed: 15

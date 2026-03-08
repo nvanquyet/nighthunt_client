@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 904771ffa3f5ef546bcca3867f22514e, type: 3}
+  m_Name: SoldierSetupData
+  m_EditorClassIdentifier: 
+  MovementConfig: {fileID: 11400000, guid: 2b4001032649de3469611e0ce71f0b24, type: 2}
+  DefaultBulletType: {fileID: 11400000, guid: 467c946324ef8154db95ef32d02be5e8, type: 2}
+  BulletPoolSize: 40
+  FallbackBulletRange: 30
+  PickupConfig: {fileID: 11400000, guid: f1b454fbc02c78e4ea56f27898773e9e, type: 2}
+  DefaultFOV: 60

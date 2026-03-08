@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: d88bb1c7c20cf21468a00f096a3eb519
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - m_ViewDataDictionary: {instanceID: 0}
+  - initialRoomMaterial: {fileID: 2100000, guid: 97f8ee1da42bd904fa334f48630a8d4d,
+      type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

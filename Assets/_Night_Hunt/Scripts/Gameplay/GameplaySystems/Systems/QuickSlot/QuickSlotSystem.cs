@@ -12,15 +12,8 @@ using NightHunt.GameplaySystems.Inventory;
 namespace NightHunt.GameplaySystems.QuickSlot
 {
     /// <summary>
-    /// PRODUCTION-OPTIMIZED Quick Slot System
-    /// 
-    /// Improvements:
-    /// ✓ Auto-cleanup slots when items consumed
-    /// ✓ Proper event subscription cleanup
-    /// ✓ Validation before use
-    /// ✓ Config-driven slot count
-    /// 
-    /// CRITICAL FIX: Auto-removes slot reference when item fully consumed
+    /// Manages quick-slot bindings for a networked player, routing item use to
+    /// <see cref="IItemUseSystem"/>. Auto-clears slots when bound items are consumed.
     /// </summary>
     public class QuickSlotSystem : NetworkBehaviour, IQuickSlotSystem, IDisposable
     {
@@ -48,8 +41,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
         
         #region Tracked Subscriptions
         
-        // CRITICAL: Track event subscriptions for proper cleanup
-        private System.Collections.Generic.Dictionary<int, Action<ItemInstance>> _activeCompletionHandlers = 
+        private System.Collections.Generic.Dictionary<int, Action<ItemInstance>> _activeCompletionHandlers =
             new System.Collections.Generic.Dictionary<int, Action<ItemInstance>>();
         
         #endregion

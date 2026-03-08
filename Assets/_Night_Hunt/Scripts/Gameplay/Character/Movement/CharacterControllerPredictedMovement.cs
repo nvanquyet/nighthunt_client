@@ -64,11 +64,28 @@ namespace NightHunt.Gameplay.Character
 
             // CharacterController uses Move() with deltaTime
             CollisionFlags flags = _controller.Move(movement * dt);
+            // Track intended movement as velocity so GetCurrentVelocity() returns a value
+            // that carries the correct _verticalVelocity into the reconcile snapshot.
+            // Without this, data.Velocity.y is always 0 and every reconcile wipes fall speed.
+            _velocity = movement;
 
             if (enableDebugLogs && movement.sqrMagnitude > 0.01f)
             {
                 Debug.Log($"[CharacterControllerPredictedMovement] Move: {movement * dt}, Flags: {flags}");
             }
+        }
+
+        protected override bool IsRollBlocked(Vector3 direction, float stepDistance)
+        {
+            if (_controller == null) return false;
+            // CapsuleCast in the roll direction to detect walls before committing the step.
+            float height = _controller.height;
+            float radius = _controller.radius;
+            Vector3 center = transform.position + _controller.center;
+            Vector3 p1 = center + Vector3.up * (height * 0.5f - radius);
+            Vector3 p2 = center - Vector3.up * (height * 0.5f - radius);
+            return Physics.CapsuleCast(p2, p1, radius * 0.9f, direction, stepDistance,
+                ~0, QueryTriggerInteraction.Ignore);
         }
 
         protected override Vector3 GetCurrentVelocity()
@@ -89,9 +106,10 @@ namespace NightHunt.Gameplay.Character
                 _controller.enabled = true;
             }
 
-            // Reset vertical velocity so gravity restarts cleanly.
-            if (_verticalVelocity < 0f)
-                _verticalVelocity = -2f;
+            // NOTE: Do NOT reset _verticalVelocity here.
+            // Reconcile has already written _verticalVelocity = data.Velocity.y before
+            // calling ResetPhysicsState. Clamping it here wipes the server-authoritative
+            // fall/launch speed every reconcile tick, causing stutter mid-jump/fall.
         }
 
         /// <summary>

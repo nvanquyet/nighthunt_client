@@ -218,7 +218,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
             else
             {
-                Debug.LogWarning($"[PlayerStatUIPanel] No view found for stat type: {type} (old={oldValue:F1}, new={newValue:F1})");
+                // Only warn for stats that are expected to have a view (ShowInUI = true).
+                // Stats like VisionRange (ShowInUI = false) are broadcast but intentionally not rendered.
+                if (_statUIConfig != null)
+                {
+                    foreach (var def in _statUIConfig.Stats)
+                    {
+                        if (def.Type == type && def.ShowInUI)
+                        {
+                            Debug.LogWarning($"[PlayerStatUIPanel] No view found for stat type: {type} (old={oldValue:F1}, new={newValue:F1})");
+                            break;
+                        }
+                    }
+                }
             }
 
             // If this type is used as a RelatedMaxStatType by another visible row,

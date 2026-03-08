@@ -8,7 +8,7 @@ using NightHunt.StatSystem.Core.Data;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
 
-namespace NightHunt.GameplaySystems.Systems.Stat
+namespace NightHunt.GameplaySystems.Stat
 {
     /// <summary>
     /// Orchestrates all item → player stat contributions.

@@ -14,13 +14,8 @@ using NightHunt.StatSystem.Core.Data;
 namespace NightHunt.GameplaySystems.Weapon
 {
     /// <summary>
-    /// PRODUCTION-OPTIMIZED Weapon System
-    /// 
-    /// Improvements:
-    /// ✓ Config-driven slot priorities (no hard-coding)
-    /// ✓ Cached weapon lookups
-    /// ✓ Proper event cleanup
-    /// ✓ Reload validation optimization
+    /// Manages weapon slot assignment, equip/unequip, firing, and reload for a networked player.
+    /// Slot priorities are config-driven; all slot mutations are server-authoritative via SyncDictionary.
     /// </summary>
     public class WeaponSystem : NetworkBehaviour, IWeaponSystem, IDisposable
     {
@@ -58,7 +53,6 @@ namespace NightHunt.GameplaySystems.Weapon
         
         #region Local Cache
         
-        // OPTIMIZED: Cache weapons for O(1) access
         private Dictionary<WeaponSlotType, ItemInstance> _weaponCache = new Dictionary<WeaponSlotType, ItemInstance>();
         
         #endregion
@@ -76,9 +70,10 @@ namespace NightHunt.GameplaySystems.Weapon
         /// <inheritdoc cref="IWeaponSystem.OnReloadStateChanged"/>
         public event Action<bool> OnReloadStateChanged;
         /// <inheritdoc cref="IWeaponSystem.OnWeaponDepleted"/>
-        public event Action<WeaponSlotType> OnWeaponDepleted;        /// <inheritdoc cref="IWeaponSystem.OnShotFired"/>
-        /// Raised on owner-client after each successful shot. VFX controllers subscribe here.
-        public event Action<WeaponSlotType, Vector3> OnShotFired;        
+        public event Action<WeaponSlotType> OnWeaponDepleted;
+        /// <summary>Raised on each successful shot; VFX controllers subscribe for muzzle/trail effects.</summary>
+        public event Action<WeaponSlotType, Vector3> OnShotFired;
+        
         #endregion
 
         #region Local Fire State (owner-client + server)
@@ -266,11 +261,6 @@ namespace NightHunt.GameplaySystems.Weapon
                 (int)inst.GetCurrentValue(ItemStatType.MagazineSize),
                 (int)inst.GetCurrentValue(ItemStatType.MaxAmmo),
                 (int)mag);
-            // Fire via BallisticExecutor once that subsystem is integrated:
-            // BallisticExecutor.Execute(inst, aimSystem.FinalAimDir)
-
-            // Notify VFX controllers (muzzle flash, trail, projectile visual).
-            // WeaponVFXController subscribes and fetches WeaponDefinition.MuzzleFlashPrefab etc.
             OnShotFired?.Invoke(slot.Value, _aimDirection);
         }
 
@@ -499,10 +489,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
             _weapons[targetSlot] = instanceID;
             item.InventoryIndex = -1; // Mark as equipped
-            // BUG 7 FIX: Push the updated InventoryIndex to clients so UI can clear the old inventory slot.
             _inventorySystem.SyncItemState(instanceID);
-
-            ApplyWeaponModifiers(instanceID, weaponDef);
 
             if (_enableDebugLogs)
                 Debug.Log($"[WeaponSystem] EquipWeaponToSlot: {weaponDef.DisplayName} → {targetSlot} (explicit)");
@@ -525,8 +512,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
             }
             
-            // OPTIMIZED: Config-driven slot selection
-            WeaponSlotType targetSlot = FindAvailableWeaponSlotOptimized();
+            // Use configured priority; if all slots are occupied, the first slot is returned (swap).
+            WeaponSlotType targetSlot = FindAvailableSlot();
             
             // If no available slot, swap with target slot
             if (_weapons.ContainsKey(targetSlot))
@@ -535,11 +522,7 @@ namespace NightHunt.GameplaySystems.Weapon
             // Equip weapon
             _weapons[targetSlot] = instanceID;
             item.InventoryIndex = -1; // Mark as equipped
-            // BUG 7 FIX: Push the updated InventoryIndex to clients so UI can clear the old inventory slot.
             _inventorySystem.SyncItemState(instanceID);
-            
-            // Apply stat modifiers
-            ApplyWeaponModifiers(instanceID, weaponDef);
             
             if (_enableDebugLogs)
                 Debug.Log($"[WeaponSystem] Equipped {weaponDef.DisplayName} → {targetSlot}");
@@ -577,8 +560,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_activeSlot.Value == slotType)
                 HolsterWeaponServer();
 
-            // BUG 3 FIX: Detach all attachments before unequipping (mirrors EquipmentSystem behaviour).
-            // Only detach if config requires it; otherwise attachments stay on the weapon item.
+            // Detach attachments before unequipping if config requires it.
             if (_inventoryConfig != null && _inventoryConfig.DetachAttachmentsOnUnequip)
             {
                 var attachmentSystem = GetComponent<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>()
@@ -594,16 +576,12 @@ namespace NightHunt.GameplaySystems.Weapon
             
             // Return to inventory (mark with a valid index so UIDomainBridge can show it)
             item.InventoryIndex = FindNextAvailableInventoryIndex();
-            // BUG 7 FIX: Push restored InventoryIndex to clients so UI can show item in inventory.
             _inventorySystem.SyncItemState(instanceID);
-            
-            // Remove stat modifiers
-            RemoveWeaponModifiers(instanceID);
-            
+
             if (_enableDebugLogs)
             {
                 var def = ItemDatabase.GetDefinition(item.DefinitionID);
-                Debug.Log($"[WeaponSystem] Unequipped {def?.DisplayName} from {slotType}, returned to inventory index {item.InventoryIndex}");
+                Debug.Log($"[WeaponSystem] Unequipped {def?.DisplayName} from {slotType}.");
             }
         }
         
@@ -882,12 +860,9 @@ namespace NightHunt.GameplaySystems.Weapon
         
         #endregion
         
-        #region Helper Methods - OPTIMIZED
-        
-        /// <summary>
-        /// OPTIMIZED: Config-driven slot selection instead of hard-coded priorities
-        /// </summary>
-        private WeaponSlotType FindAvailableWeaponSlotOptimized()
+        #region Helpers
+
+        private WeaponSlotType FindAvailableSlot()
         {
             // Use configured priority order
             foreach (var slotType in _slotPriority)
@@ -902,7 +877,6 @@ namespace NightHunt.GameplaySystems.Weapon
         
         private int FindNextAvailableInventoryIndex()
         {
-            // ROOT CAUSE A FIX: Use gap-finding (first free slot) instead of maxIndex+1.
             return _inventorySystem?.GetNextFreeInventoryIndex() ?? 0;
         }
         

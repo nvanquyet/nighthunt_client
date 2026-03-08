@@ -9,6 +9,8 @@ namespace NightHunt.Gameplay.Character.Movement
         public Quaternion Rotation;
         public Vector3 Velocity;
         public float Stamina;
+        public bool IsRolling;
+        public float RollTimer;
 
         private uint _tick;
 
@@ -16,12 +18,16 @@ namespace NightHunt.Gameplay.Character.Movement
             Vector3 position,
             Quaternion rotation,
             Vector3 velocity,
-            float stamina)
+            float stamina,
+            bool isRolling = false,
+            float rollTimer = 0f)
         {
             Position = position;
             Rotation = rotation;
             Velocity = velocity;
             Stamina = stamina;
+            IsRolling = isRolling;
+            RollTimer = rollTimer;
             _tick = 0;
         }
 

@@ -5,20 +5,8 @@ using NightHunt.GameplaySystems.Core.Data;
 namespace NightHunt.GameplaySystems.Inventory
 {
     /// <summary>
-    /// PRODUCTION-OPTIMIZED Item Database
-    /// 
-    /// Performance improvements:
-    /// ✓ O(1) lookups by type with cached dictionaries
-    /// ✓ Lazy initialization with validation
-    /// ✓ Memory-efficient instance tracking with pooling
-    /// ✓ Pre-warmed caches on startup
-    /// ✓ Thread-safe singleton pattern
-    /// 
-    /// Memory profile (6-10 equipment + 3-4 attachments):
-    /// - ~2KB definition cache
-    /// - ~1KB type lookup cache
-    /// - ~0.5KB per tracked instance
-    /// Total: <5KB baseline
+    /// Scene-singleton registry for <see cref="ItemDefinition"/> assets and live <see cref="ItemInstance"/> objects.
+    /// Provides O(1) lookups by ID and type-filtered queries.
     /// </summary>
     public class ItemDatabase : MonoBehaviour
     {

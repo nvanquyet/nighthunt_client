@@ -17,6 +17,10 @@ namespace NightHunt.Gameplay.Character.Movement
         public bool Sprint;
         public bool Crouch;
         public bool CameraLocked;
+        /// <summary>One-shot jump request captured from InputAction.started.</summary>
+        public bool Jump;
+        /// <summary>One-shot roll request captured from InputAction.started.</summary>
+        public bool Roll;
 
         private uint _tick;
 
@@ -26,7 +30,9 @@ namespace NightHunt.Gameplay.Character.Movement
             float aimYaw,
             bool sprint,
             bool crouch,
-            bool cameraLocked)
+            bool cameraLocked,
+            bool jump = false,
+            bool roll = false)
         {
             Move = move;
             Yaw = yaw;
@@ -34,6 +40,8 @@ namespace NightHunt.Gameplay.Character.Movement
             Sprint = sprint;
             Crouch = crouch;
             CameraLocked = cameraLocked;
+            Jump = jump;
+            Roll = roll;
             _tick = 0;
         }
 

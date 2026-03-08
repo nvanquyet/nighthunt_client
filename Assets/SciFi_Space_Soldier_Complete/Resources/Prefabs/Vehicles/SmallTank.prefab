@@ -1,0 +1,87 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1300839709989083901
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1300839709989083875}
+  - component: {fileID: 1300839709989083900}
+  m_Layer: 0
+  m_Name: SmallTank
+  m_TagString: Vehicles
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1300839709989083875
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1300839709989083901}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1300839709989083900
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1300839709989083901}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22643fc6385752a49823a639b47b32ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playerCtrlMap:
+  - Horizontal
+  - Vertical
+  - LookX
+  - LookY
+  - FireTrigger
+  - Reload
+  - EquipWeapon
+  - Sprint
+  - Aim
+  - ChangeWTrigger
+  - Roll
+  - Use
+  - Crouch
+  - ChangeWeapon
+  - Throw
+  - Fire
+  - Mouse ScrollWheel
+  - Melee
+  vehicle: {fileID: 5921060858108707891, guid: 58dababf87872564399ff40a9d6db57a, type: 3}
+  actualVehicle: {fileID: 0}
+  playerSelection: {fileID: 2060970895435601817, guid: 54671cb2fc0ec914da0ead696a0953b3,
+    type: 3}
+  playerSelectionScale: 5
+  currentPlayerSelection: {fileID: 0}
+  controlON: 0
+  orientToGround: 1
+  driverController: {fileID: 0}
+  driver: {fileID: 0}
+  velocity: 0
+  acceleration: 5
+  forceFactor: 1
+  maxVelocity: 8
+  rotation: 0
+  steerAcceleration: 1
+  rotationSpeed: 0
+  heightRotBlendSpeed: 3
+  turretRotSpeed: 10
+  canShoot: 1
+  aimTarget: {fileID: 2758545229512597104, guid: 9177f59c9c627be4cac5119186db85c8,
+    type: 3}
+  actualAimTarget: {fileID: 0}

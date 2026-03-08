@@ -14,17 +14,8 @@ using NightHunt.GameplaySystems.Loot;
 namespace NightHunt.GameplaySystems.Inventory
 {
     /// <summary>
-    /// PRODUCTION-OPTIMIZED Inventory System
-    /// 
-    /// Performance improvements:
-    /// ✓ O(1) item lookups with Dictionary cache
-    /// ✓ O(1) index-based access with secondary Dictionary
-    /// ✓ Cached item counts by definition (no LINQ)
-    /// ✓ Batch operations for multiple items
-    /// ✓ Auto-cleanup of null/invalid items
-    /// ✓ Event batching to reduce UI updates
-    /// 
-    /// Memory: ~8KB for 100 items (mobile-optimized)
+    /// Server-authoritative inventory using SyncList. Provides O(1) item access
+    /// via ID and index caches, and broadcasts change events for UI synchronisation.
     /// </summary>
     public class InventorySystem : NetworkBehaviour, IInventorySystem, IDisposable
     {

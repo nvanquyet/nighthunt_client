@@ -1,4 +1,5 @@
 {
+    "version": 1,
     "name": "InputSystem_Actions",
     "maps": [
         {
@@ -27,6 +28,24 @@
                     "name": "Crouch",
                     "type": "Button",
                     "id": "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f8a",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Jump",
+                    "type": "Button",
+                    "id": "2ed4b372-698b-4eb2-9f23-be00269e5739",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Roll",
+                    "type": "Button",
+                    "id": "6a92018f-d319-49f3-90e2-f172f411d3b7",
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "Press",
@@ -138,8 +157,8 @@
                 },
                 {
                     "name": "",
-                    "id": "a3b4c5d6-e7f8-4a5b-0c1d-2e3f4a5b6c7d",
-                    "path": "<Keyboard>/leftCtrl",
+                    "id": "b4c5d6e7-f8a9-4b5c-1d2e-3f4a5b6c7d8e",
+                    "path": "<Keyboard>/c",
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
@@ -149,12 +168,23 @@
                 },
                 {
                     "name": "",
-                    "id": "b4c5d6e7-f8a9-4b5c-1d2e-3f4a5b6c7d8e",
-                    "path": "<Keyboard>/c",
+                    "id": "19643523-f092-4e29-bb0c-8ab4d81529f1",
+                    "path": "<Keyboard>/space",
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
-                    "action": "Crouch",
+                    "action": "Jump",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "e2ab6cb8-f70f-4495-9490-1c00577a8ea2",
+                    "path": "<Keyboard>/space",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Roll",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -193,7 +223,7 @@
                 },
                 {
                     "name": "",
-                    "id": "e7f8a9b0-c1d2-4e5f-4a5b-6c7d8e9f0a1b",
+                    "id": "f9673905-a4d8-4b11-b155-90e2a069dd68",
                     "path": "<Keyboard>/f6",
                     "interactions": "",
                     "processors": "",

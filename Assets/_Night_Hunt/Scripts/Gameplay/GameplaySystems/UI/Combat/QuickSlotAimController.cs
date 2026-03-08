@@ -58,6 +58,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IQuickSlotSystem  _quickSlotSystem;
         private Transform         _playerTransform;
         private Camera            _cam;
+        private IAimSystem        _aimSystem;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Aim state
@@ -129,11 +130,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public void Initialize(
             IPlayerStatSystem statSystem,
             IQuickSlotSystem  quickSlotSystem,
-            Transform         playerTransform)
+            Transform         playerTransform,
+            IAimSystem        aimSystem = null)
         {
             _statSystem      = statSystem;
             _quickSlotSystem = quickSlotSystem;
             _playerTransform = playerTransform;
+            _aimSystem       = aimSystem;
 
             if (_rangeIndicator != null)
                 _rangeIndicator.SetFollowTarget(playerTransform);
@@ -208,6 +211,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 AimWorldTarget = _playerTransform.position + worldDir;
                 AimDirection   = worldDir.normalized;
                 MoveCursor(AimWorldTarget);
+                // Sync AimSystem so FinalAimPos matches the mobile drag target.
+                _aimSystem?.SetThrowableAim(new Vector2(AimDirection.x, AimDirection.z));
             }
         }
 
@@ -280,6 +285,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (_rangeIndicator != null) _rangeIndicator.Hide();
             HideCursor();
+            // Exit throwable mode in AimSystem so it reverts to normal mouse aim.
+            _aimSystem?.SetThrowableAim(Vector2.zero);
         }
 
         // ─────────────────────────────────────────────────────────────────────

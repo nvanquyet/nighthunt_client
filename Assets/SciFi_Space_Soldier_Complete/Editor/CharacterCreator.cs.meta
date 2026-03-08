@@ -1,0 +1,29 @@
+fileFormatVersion: 2
+guid: e07d5755233140c41a8c122323d759e5
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - m_ViewDataDictionary: {instanceID: 0}
+  - CharacterMesh: {instanceID: 0}
+  - overridedAnimatorController: {instanceID: 0}
+  - AnimatorController: {fileID: 9100000, guid: a6d164a2d41d981429b6d238ec576bae,
+      type: 2}
+  - AnimatorControllerRM: {fileID: 9100000, guid: faa6c7acd10fb7f43b26bb2fe9d773db,
+      type: 2}
+  - AIMeleeAnimController: {fileID: 9100000, guid: a0bb4cf19138f7e479c147940a05fb0e,
+      type: 2}
+  - AIRangedAnimController: {fileID: 9100000, guid: 6f794a73914a0f54abccbff87cd81b57,
+      type: 2}
+  - AIMeleeAnimControllerRM: {fileID: 9100000, guid: 0a088e43ec6ee8644bbc64c7b61740f8,
+      type: 2}
+  - AIRangedAnimControllerRM: {fileID: 9100000, guid: 30d2474f545695b4bb6364685a5d9acd,
+      type: 2}
+  - secondaryAudioGroup: {fileID: 24314882, guid: 9d4fc489ef8e72e4280953acb26e6c32,
+      type: 2}
+  - weaponAudioGroup: {fileID: 24385430, guid: 9d4fc489ef8e72e4280953acb26e6c32, type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

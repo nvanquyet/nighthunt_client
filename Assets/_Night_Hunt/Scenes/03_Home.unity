@@ -1784,22 +1784,18 @@ MonoBehaviour:
   usernameText: {fileID: 921329705}
   emailText: {fileID: 2045977119}
   userIdText: {fileID: 1081230313}
-  createLobbyButton: {fileID: 1682375036}
-  joinLobbyButton: {fileID: 678503259}
-  quickPlayButton: {fileID: 1387906722}
+  rankTierText: {fileID: 0}
+  customGameButton: {fileID: 0}
   logoutButton: {fileID: 798660787}
-  joinLobbyPanel: {fileID: 1327519465}
-  roomCodeInput: {fileID: 344412331}
-  joinConfirmButton: {fileID: 1878301513}
-  cancelJoinButton: {fileID: 901805464}
-  createLobbyPanel: {fileID: 1105662596}
-  modeDropdown: {fileID: 1907420104}
-  isPublicToggle: {fileID: 74879478}
-  isLockedToggle: {fileID: 1085475678}
-  passwordInput: {fileID: 1257323823}
-  createConfirmButton: {fileID: 336235366}
-  cancelCreateButton: {fileID: 816664217}
-  passwordPopup: {fileID: 169236642}
+  rankedIdlePanel: {fileID: 0}
+  findMatchButton: {fileID: 0}
+  rankedSearchingPanel: {fileID: 0}
+  searchTimeText: {fileID: 0}
+  cancelSearchButton: {fileID: 0}
+  rankedMatchFoundPanel: {fileID: 0}
+  matchFoundCountdownText: {fileID: 0}
+  acceptMatchButton: {fileID: 0}
+  declineMatchButton: {fileID: 0}
 --- !u!1 &611306048
 GameObject:
   m_ObjectHideFlags: 0
@@ -6275,17 +6271,28 @@ MonoBehaviour:
   m_MoveRepeatDelay: 0.5
   m_MoveRepeatRate: 0.1
   m_XRTrackingOrigin: {fileID: 0}
-  m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_SubmitAction: {fileID: 392368643174621059, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_CancelAction: {fileID: 7727032971491509709, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_LeftClickAction: {fileID: 3001919216989983466, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_MiddleClickAction: {fileID: -2185481485913320682, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_RightClickAction: {fileID: -4090225696740746782, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_ScrollWheelAction: {fileID: 6240969308177333660, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_TrackedDevicePositionAction: {fileID: 6564999863303420839, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
-  m_TrackedDeviceOrientationAction: {fileID: 7970375526676320489, guid: ca9f5fa95ffab41fb9a615ab714db018, type: 3}
+  m_ActionsAsset: {fileID: -944628639613478452, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_PointAction: {fileID: -1654692200621890270, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_MoveAction: {fileID: -8784545083839296357, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_SubmitAction: {fileID: 392368643174621059, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_CancelAction: {fileID: 7727032971491509709, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_LeftClickAction: {fileID: 3001919216989983466, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_MiddleClickAction: {fileID: -2185481485913320682, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_RightClickAction: {fileID: -4090225696740746782, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_ScrollWheelAction: {fileID: 6240969308177333660, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_TrackedDevicePositionAction: {fileID: 6564999863303420839, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
+  m_TrackedDeviceOrientationAction: {fileID: 7970375526676320489, guid: ca9f5fa95ffab41fb9a615ab714db018,
+    type: 3}
   m_DeselectOnBackgroundClick: 1
   m_PointerBehavior: 0
   m_CursorLockBehavior: 0

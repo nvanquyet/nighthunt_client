@@ -10,18 +10,8 @@ using NightHunt.StatSystem.Core.Interfaces;
 namespace NightHunt.GameplaySystems.QuickSlot
 {
     /// <summary>
-    /// PRODUCTION-OPTIMIZED Item Use System
-    /// 
-    /// Improvements:
-    /// ✓ Separated consumable/throwable logic into handlers
-    /// ✓ Proper coroutine cleanup
-    /// ✓ Event subscription safety
-    /// ✓ Better state management
-    /// 
-    /// Architecture:
-    /// - ItemUseSystem = Orchestrator (this class)
-    /// - ConsumableHandler = Apply effects
-    /// - ThrowableHandler = Spawn projectiles
+    /// Orchestrates item usage on the server, routing consumables to
+    /// <see cref="ConsumableHandler"/> and throwables to <see cref="ThrowableHandler"/>.
     /// </summary>
     public class ItemUseSystem : NetworkBehaviour, IItemUseSystem, IDisposable
     {
@@ -196,9 +186,13 @@ namespace NightHunt.GameplaySystems.QuickSlot
                 return;
             }
             
-            // Spawn projectile via handler
-            _throwableHandler.SpawnProjectile(def, transform);
-            
+            // Spawn projectile via handler — pass confirmed aim target from QuickSlotAimController.
+            // QuickSlotAimController.AimWorldTarget is set when the player confirms the throw direction.
+            _throwableHandler.SpawnProjectile(
+                def,
+                transform,
+                NightHunt.GameplaySystems.UI.Combat.QuickSlotAimController.AimWorldTarget);
+
             // Consume item & complete
             ConsumeItem(_currentItem);
             CompleteUse(_currentItem);
@@ -231,10 +225,8 @@ namespace NightHunt.GameplaySystems.QuickSlot
             var item = _currentItem;
             _isUsingItem = false;
             _currentItem = null;
-            
+
             OnItemUseCancelled?.Invoke(item);
-            Debug.Log($"[ItemUseSystem] Cancelled use of '{item?.DefinitionID}'");
-            
             RestoreWeapon();
         }
         
@@ -300,26 +292,20 @@ namespace NightHunt.GameplaySystems.QuickSlot
         {
             if (_weaponSystem == null)
                 return;
-            
+
             _previousWeaponSlot = _weaponSystem.GetActiveWeaponSlot();
             if (_previousWeaponSlot.HasValue)
-            {
                 _weaponSystem.HolsterWeapon();
-                Debug.Log($"[ItemUseSystem] Holstered: {_previousWeaponSlot}");
-            }
         }
         
         private void RestoreWeapon()
         {
             if (_weaponSystem == null)
                 return;
-            
+
             if (_previousWeaponSlot.HasValue)
-            {
                 _weaponSystem.SelectWeapon(_previousWeaponSlot.Value);
-                Debug.Log($"[ItemUseSystem] Restored: {_previousWeaponSlot}");
-            }
-            
+
             _previousWeaponSlot = null;
         }
         
@@ -330,7 +316,6 @@ namespace NightHunt.GameplaySystems.QuickSlot
         private void ConsumeItem(ItemInstance item)
         {
             _inventorySystem?.RemoveItem(item.InstanceID, 1);
-            Debug.Log($"[ItemUseSystem] Consumed 1× '{item.DefinitionID}'");
         }
         
         private void CompleteUse(ItemInstance item)
@@ -338,10 +323,8 @@ namespace NightHunt.GameplaySystems.QuickSlot
             _isUsingItem = false;
             _currentItem = null;
             _useCoroutine = null;
-            
+
             OnItemUseCompleted?.Invoke(item);
-            Debug.Log($"[ItemUseSystem] Use completed: '{item?.DefinitionID}'");
-            
             RestoreWeapon();
         }
         

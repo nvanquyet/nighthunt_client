@@ -14,13 +14,8 @@ using NightHunt.StatSystem.Core.Data;
 namespace NightHunt.GameplaySystems.Equipment
 {
     /// <summary>
-    /// PRODUCTION-OPTIMIZED Equipment System
-    /// 
-    /// Improvements:
-    /// ✓ Cached equipment lookups
-    /// ✓ Proper event cleanup
-    /// ✓ Batch stat modifier updates
-    /// ✓ Weight update optimization
+    /// Manages equipment slot assignment (head, body, legs, feet) for a networked player.
+    /// All slot mutations are server-authoritative via SyncDictionary.
     /// </summary>
     public class EquipmentSystem : NetworkBehaviour, IEquipmentSystem, IDisposable
     {
@@ -48,7 +43,6 @@ namespace NightHunt.GameplaySystems.Equipment
         
         #region Local Cache
         
-        // OPTIMIZED: Cache for O(1) lookups
         private Dictionary<EquipmentSlotType, ItemInstance> _equipmentCache = new Dictionary<EquipmentSlotType, ItemInstance>();
         
         #endregion
@@ -251,12 +245,8 @@ namespace NightHunt.GameplaySystems.Equipment
             // Equip new item
             _equippedItems[slotType] = instanceID;
             item.InventoryIndex = -1; // Mark as equipped
-            // BUG 7 FIX: Push the updated InventoryIndex to clients so UI can clear the old inventory slot.
             _inventorySystem.SyncItemState(instanceID);
-            
-            // OPTIMIZED: Batch apply modifiers
-            ApplyEquipmentModifiersOptimized(instanceID, equipmentDef);
-            
+
             if (_enableDebugLogs)
                 Debug.Log($"[EquipmentSystem] Equipped {equipmentDef.DisplayName} → {slotType}");
         }
@@ -297,7 +287,6 @@ namespace NightHunt.GameplaySystems.Equipment
                 return;
             }
             
-            // Gỡ attachments nếu có config
             if (_inventoryConfig != null && _inventoryConfig.DetachAttachmentsOnUnequip)
             {
                 var attachmentSystem = GetComponent<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>();
@@ -318,17 +307,13 @@ namespace NightHunt.GameplaySystems.Equipment
             
             // Return to inventory
             item.InventoryIndex = FindNextAvailableInventoryIndex();
-            // BUG 7 FIX: Push restored InventoryIndex to clients so UI can show item in inventory.
             _inventorySystem.SyncItemState(instanceID);
-            
-            // Remove modifiers
-            RemoveEquipmentModifiers(instanceID);
-            
+
+            // [SAO] StatApplyOrchestrator handles modifier removal — disabled to prevent double-apply
+            // RemoveEquipmentModifiers(instanceID);
+
             if (_enableDebugLogs)
-            {
-                Debug.Log($"[EquipmentSystem] Unequipped {equipmentDef.DisplayName} from {slotType}");
-                Debug.Log($"[EquipmentSystem] Item {item.DefinitionID} successfully moved to inventory at index {item.InventoryIndex}");
-            }
+                Debug.Log($"[EquipmentSystem] Unequipped {equipmentDef.DisplayName} from {slotType}.");
         }
         
         public void SwapEquipment(EquipmentSlotType slot1, EquipmentSlotType slot2)
@@ -377,13 +362,10 @@ namespace NightHunt.GameplaySystems.Equipment
         
         #endregion
         
-        #region Stat Modifiers - OPTIMIZED
-        
-        /// <summary>
-        /// OPTIMIZED: Batch apply all modifiers at once
-        /// </summary>
+        #region Stat Modifiers
+
         [Server]
-        private void ApplyEquipmentModifiersOptimized(string instanceID, EquipmentDefinition equipmentDef)
+        private void ApplyEquipmentModifiers(string instanceID, EquipmentDefinition equipmentDef)
         {
             if (_statSystem == null)
                 return;
@@ -469,9 +451,6 @@ namespace NightHunt.GameplaySystems.Equipment
         
         private int FindNextAvailableInventoryIndex()
         {
-            // ROOT CAUSE A FIX: Use gap-finding (first free slot) instead of maxIndex+1.
-            // maxIndex+1 always appended items beyond the last used slot even when earlier
-            // slots were freed by equipping – causing items to appear in unexpected positions.
             return _inventorySystem?.GetNextFreeInventoryIndex() ?? 0;
         }
         

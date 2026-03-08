@@ -67,8 +67,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         // ── Combat system refs ────────────────────────────────────────────────────
         private MovementInputHandler _movementInputHandler;
-        private NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem _weaponSystem;
-        /// <summary>Local player transform — origin cho ground-plane aim raycast.</summary>
+        private NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem _weaponSystem;        private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem _aimSystem;        /// <summary>Local player transform — origin cho ground-plane aim raycast.</summary>
         private Transform _playerTransform;
         /// <summary>Camera lock state trước khi fire — restored khi EndFire.</summary>
         private bool _prevCameraLockBeforeFire;
@@ -309,6 +308,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             // Luôn push aim direction vào WeaponSystem để đạn bay đúng hướng.
             // WeaponSystem cần direction ngay cả khi chưa bắn (preview trajectory, v.v.)
             _weaponSystem?.SetAimDirection(_aimDirection);
+
+            // Mobile gun aim: push normalised XZ direction to AimSystem so the world
+            // cursor (AimSystem._worldAimCursor) follows the drag while firing.
+            if (_mobileAimActive && _aimDirection.sqrMagnitude > 0.001f)
+                _aimSystem?.SetThrowableAim(new Vector2(_aimDirection.x, _aimDirection.z));
         }
 
         // ── Fire Callbacks ────────────────────────────────────────────────────────
@@ -525,6 +529,15 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_cameraStateManager == null)
                 Debug.LogWarning("[CombatInputHandler] CameraStateManager not bound — " +
                                  "camera will NOT freeze during fire.");
+        }
+
+        /// <summary>
+        /// Optional: bind AimSystem so the mobile-aim world cursor stays in sync with
+        /// fire drag direction. Call after BindCombatSystems when the local player spawns.
+        /// </summary>
+        public void BindAimSystem(NightHunt.GameplaySystems.Core.Interfaces.IAimSystem aimSystem)
+        {
+            _aimSystem = aimSystem;
         }
     }
 }

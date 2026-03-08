@@ -18,12 +18,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         private InputAction sprintAction;
         private InputAction crouchAction;
         private InputAction toggleCameraLockAction; // ✅ NEW
+        private InputAction jumpAction;
+        private InputAction rollAction;
 
         // Current input state
         [SerializeField] private Vector2 moveInput;
         private bool isSprinting;
         private bool isCrouching;
         private bool isCameraLocked; // ✅ NEW
+        // One-shot flags consumed by IsJumping() / IsRolling()
+        private bool isJumping;
+        private bool isRolling;
 
         // ── Fire-time STRAFE override ────────────────────────────────────────
         // When _lockOverrideActive = true, IsCameraLocked() returns _lockOverrideValue
@@ -74,6 +79,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
                 sprintAction = playerActionMap.FindAction("Sprint");
                 crouchAction = playerActionMap.FindAction("Crouch");
                 toggleCameraLockAction = playerActionMap.FindAction("ToggleCameraLock"); // ✅ NEW
+                jumpAction = playerActionMap.FindAction("Jump");
+                rollAction = playerActionMap.FindAction("Roll");
             }
             else
             {
@@ -151,6 +158,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
                 toggleCameraLockAction.performed += OnToggleCameraLockPerformed;
             }
 
+            if (jumpAction != null) jumpAction.started += OnJumpStarted;
+            if (rollAction != null) rollAction.started += OnRollStarted;
+
             Debug.Log("[MovementInputHandler] Input enabled");
         }
 
@@ -187,10 +197,15 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
                 toggleCameraLockAction.performed -= OnToggleCameraLockPerformed;
             }
 
+            if (jumpAction != null) jumpAction.started -= OnJumpStarted;
+            if (rollAction != null) rollAction.started -= OnRollStarted;
+
             // Reset state
             moveInput = Vector2.zero;
             isSprinting = false;
             isCrouching = false;
+            isJumping = false;
+            isRolling = false;
             // Don't reset camera lock on disable - preserve state
 
             Debug.Log("[MovementInputHandler] Input disabled");
@@ -233,6 +248,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
             OnCameraLockToggled?.Invoke(isCameraLocked);
         }
 
+        private void OnJumpStarted(InputAction.CallbackContext context) { isJumping = true; }
+        private void OnRollStarted(InputAction.CallbackContext context) { isRolling = true; }
+
         #endregion
 
         #region Public API
@@ -240,6 +258,28 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         public Vector2 GetMoveInput() => moveInput;
         public bool IsSprinting() => isSprinting;
         public bool IsCrouching() => isCrouching;
+
+        /// <summary>
+        /// Returns true once if Jump was pressed since last call (consumes the flag).
+        /// Called by CharacterPredictedMovement.GatherInput() every prediction tick.
+        /// </summary>
+        public bool IsJumping()
+        {
+            if (!isJumping) return false;
+            isJumping = false;
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true once if Roll was pressed since last call (consumes the flag).
+        /// Called by CharacterPredictedMovement.GatherInput() every prediction tick.
+        /// </summary>
+        public bool IsRolling()
+        {
+            if (!isRolling) return false;
+            isRolling = false;
+            return true;
+        }
 
         /// <summary>
         /// Returns the effective camera-lock state.

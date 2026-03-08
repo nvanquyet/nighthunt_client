@@ -4,7 +4,7 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.StatSystem.Core.Data;
 using NightHunt.StatSystem.Core.Types;
 
-namespace NightHunt.GameplaySystems.Systems.Stat
+namespace NightHunt.GameplaySystems.Stat
 {
     /// <summary>
     /// Stateless utility: computes an <see cref="ItemInstance"/>'s final stats

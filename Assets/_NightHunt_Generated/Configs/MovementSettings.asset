@@ -17,13 +17,21 @@ MonoBehaviour:
   crouchMultiplier: 0.45
   acceleration: 25
   deceleration: 30
-  gravity: 20
+  gravity: 40
+  fallGravityMultiplier: 2
   jumpHeight: 1.2
   groundedStickDownVelocity: 2
+  enableJump: 0
   maxStamina: 0
   staminaDrainRate: 20
   staminaRegenRate: 15
   minStaminaToSprint: 10
+  rollStaminaCost: 20
+  rollDistance: 4
+  rollDuration: 0.35
+  rollMode: 0
+  rollLeapHeight: 0.8
+  enableRoll: 1
   rotationDeadzoneDegrees: 8
   rotationSpeed: 12
   moveInputThreshold: 0.1
