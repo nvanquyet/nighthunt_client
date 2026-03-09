@@ -1,46 +1,24 @@
 using System.Collections.Generic;
 using UnityEngine;
+using NightHunt.Core;
 using NightHunt.GameplaySystems.Core.Data;
 
 namespace NightHunt.GameplaySystems.Inventory
 {
     /// <summary>
-    /// Scene-singleton registry for <see cref="ItemDefinition"/> assets and live <see cref="ItemInstance"/> objects.
-    /// Provides O(1) lookups by ID and type-filtered queries.
+    /// ScriptableObject singleton registry for <see cref="ItemDefinition"/> assets
+    /// and live <see cref="ItemInstance"/> objects. Provides O(1) lookups by ID.
+    ///
+    /// SETUP:
+    ///   1. Right-click in Project → Create → NightHunt → Items → Item Database
+    ///   2. Save as "Assets/_Night_Hunt/Data/ItemDatabase.asset" (one per project).
+    ///   3. Drag all ItemDefinition assets into _itemDefinitions array.
+    ///   4. Either reference the asset from any scene/prefab, OR place it in a
+    ///      Resources/ folder named exactly "ItemDatabase.asset" for auto-load.
     /// </summary>
-    public class ItemDatabase : MonoBehaviour
+    [CreateAssetMenu(fileName = "ItemDatabase", menuName = "NightHunt/Items/Item Database")]
+    public class ItemDatabase : ScriptableObjectSingleton<ItemDatabase>
     {
-        #region Singleton (Thread-Safe)
-        
-        private static readonly object _lock = new object();
-        private static ItemDatabase _instance;
-        
-        public static ItemDatabase Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    lock (_lock)
-                    {
-                        if (_instance == null)
-                        {
-                            _instance = FindFirstObjectByType<ItemDatabase>();
-                            
-                            if (_instance == null)
-                            {
-                                var go = new GameObject("[ItemDatabase]");
-                                _instance = go.AddComponent<ItemDatabase>();
-                                DontDestroyOnLoad(go);
-                            }
-                        }
-                    }
-                }
-                return _instance;
-            }
-        }
-        
-        #endregion
         
         #region Serialized Fields
         
@@ -49,7 +27,8 @@ namespace NightHunt.GameplaySystems.Inventory
         
         [Header("Settings")]
         [SerializeField] private bool _autoLoadFromResources = true;
-        [SerializeField] private string _resourcesPath = "Items";
+        [Tooltip("Resources-relative folder containing ItemDefinition assets (used by auto-load).")]
+        [SerializeField] private string _itemDefinitionsPath = "Items";
         
         [Header("Performance (Mobile Optimization)")]
         [Tooltip("Pre-build type lookup cache on init (recommended)")]
@@ -91,18 +70,9 @@ namespace NightHunt.GameplaySystems.Inventory
         #endregion
         
         #region Lifecycle
-        
-        private void Awake()
+
+        protected override void OnSingletonEnabled()
         {
-            if (_instance != null && _instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-            
-            _instance = this;
-            DontDestroyOnLoad(gameObject);
-            
             Initialize();
         }
         
@@ -196,7 +166,7 @@ namespace NightHunt.GameplaySystems.Inventory
             }
             
             // Load from Resources (first time only)
-            var definitions = Resources.LoadAll<ItemDefinition>(_resourcesPath);
+            var definitions = Resources.LoadAll<ItemDefinition>(_itemDefinitionsPath);
             
             if (definitions != null && definitions.Length > 0)
             {
@@ -207,11 +177,11 @@ namespace NightHunt.GameplaySystems.Inventory
                     RegisterDefinition(def);
                 
                 if (_enableDebugLogs)
-                    Debug.Log($"[ItemDatabase] Loaded & cached {definitions.Length} from Resources/{_resourcesPath}");
+                    Debug.Log($"[ItemDatabase] Loaded & cached {definitions.Length} from Resources/{_itemDefinitionsPath}");
             }
             else
             {
-                Debug.LogWarning($"[ItemDatabase] No items found in Resources/{_resourcesPath}");
+                Debug.LogWarning($"[ItemDatabase] No items found in Resources/{_itemDefinitionsPath}");
             }
         }
         
@@ -407,7 +377,7 @@ namespace NightHunt.GameplaySystems.Inventory
         [ContextMenu("Validation/Check For Duplicates")]
         private void CheckDuplicates()
         {
-            var allDefs = Resources.LoadAll<ItemDefinition>(_resourcesPath);
+            var allDefs = Resources.LoadAll<ItemDefinition>(_itemDefinitionsPath);
             var idCount = new Dictionary<string, int>();
             
             foreach (var def in allDefs)

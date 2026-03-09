@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking;
 
@@ -45,8 +46,7 @@ namespace NightHunt.UI
 
         // ── Runtime ───────────────────────────────────────────────────────────
 
-        private CharacterLifecycleController _lifecycle;
-        private Coroutine                    _countdownRoutine;
+        private CharacterLifecycleController _lifecycle;        private PlayerHealthSystem           _healthSystem;        private Coroutine                    _countdownRoutine;
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -61,11 +61,16 @@ namespace NightHunt.UI
             // Unsubscribe from previous player (spectate scenario)
             UnregisterCurrent();
 
-            _lifecycle = player.GetComponent<CharacterLifecycleController>();
-            if (_lifecycle == null) return;
+            _lifecycle    = player.GetComponent<CharacterLifecycleController>();
+            _healthSystem = player.GetComponent<PlayerHealthSystem>();
 
-            _lifecycle.OnDied      += HandleDied;
-            _lifecycle.OnRespawned += HandleRespawned;
+            // Lifecycle: used only to hide screen on respawn.
+            if (_lifecycle != null)
+                _lifecycle.OnRespawned += HandleRespawned;
+
+            // HealthSystem: primary trigger for SHOW — carries the confirmed killer name from server.
+            if (_healthSystem != null)
+                _healthSystem.OnPlayerDied += HandlePlayerHealthDied;
         }
 
         public void Show(string killerName = "")
@@ -117,19 +122,23 @@ namespace NightHunt.UI
 
         private void UnregisterCurrent()
         {
-            if (_lifecycle == null) return;
-            _lifecycle.OnDied      -= HandleDied;
-            _lifecycle.OnRespawned -= HandleRespawned;
-            _lifecycle = null;
+            if (_lifecycle != null)
+            {
+                _lifecycle.OnRespawned -= HandleRespawned;
+                _lifecycle = null;
+            }
+
+            if (_healthSystem != null)
+            {
+                _healthSystem.OnPlayerDied -= HandlePlayerHealthDied;
+                _healthSystem = null;
+            }
         }
 
         // ── Event handlers ────────────────────────────────────────────────────
 
-        private void HandleDied()
-        {
-            string killer = _lifecycle != null ? _lifecycle.LastKillerName : string.Empty;
-            Show(killer);
-        }
+        // Killer name comes from the server-authoritative kill RPC — always populated correctly.
+        private void HandlePlayerHealthDied(string killerName) => Show(killerName);
 
         private void HandleRespawned() => Hide();
 

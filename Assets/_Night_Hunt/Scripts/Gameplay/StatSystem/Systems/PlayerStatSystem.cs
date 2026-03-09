@@ -62,6 +62,12 @@ namespace NightHunt.StatSystem.Systems
         /// Rebuilt when sync data changes
         /// </summary>
         private Dictionary<PlayerStatType, StatData> _statCache = new Dictionary<PlayerStatType, StatData>();
+
+        /// <summary>
+        /// True once _statCache has been populated (server: after InitializeStatsServer; client: after first sync).
+        /// Suppresses per-frame warning noise during the brief window before data arrives.
+        /// </summary>
+        private bool _isCacheReady;
         
         /// <summary>
         /// Active modifiers for each stat type (server only)
@@ -176,6 +182,8 @@ namespace NightHunt.StatSystem.Systems
                 _modifiers[statDef.Type] = new List<StatModifier>();
             }
             
+            _isCacheReady = true;
+
             if (_gameplayConfig.EnableStatDebugLogs)
             {
                 Debug.Log($"[PlayerStatSystem] Initialized {_syncedStats.Count} stats for player");
@@ -190,8 +198,10 @@ namespace NightHunt.StatSystem.Systems
         {
             if (_statCache.TryGetValue(type, out var stat))
                 return stat.CurrentValue;
-            
-            Debug.LogWarning($"[PlayerStatSystem] Stat not found: {type}");
+
+            // Suppress warning while cache hasn't been populated yet (client waiting for first sync).
+            if (_isCacheReady)
+                Debug.LogWarning($"[PlayerStatSystem] Stat not found: {type}");
             return 0f;
         }
         
@@ -199,8 +209,9 @@ namespace NightHunt.StatSystem.Systems
         {
             if (_statCache.TryGetValue(type, out var stat))
                 return stat.BaseValue;
-            
-            Debug.LogWarning($"[PlayerStatSystem] Stat not found: {type}");
+
+            if (_isCacheReady)
+                Debug.LogWarning($"[PlayerStatSystem] Stat not found: {type}");
             return 0f;
         }
         
@@ -630,6 +641,9 @@ namespace NightHunt.StatSystem.Systems
             {
                 _statCache[stat.Type] = stat;
             }
+
+            if (_syncedStats.Count > 0)
+                _isCacheReady = true;
         }
         
         #endregion

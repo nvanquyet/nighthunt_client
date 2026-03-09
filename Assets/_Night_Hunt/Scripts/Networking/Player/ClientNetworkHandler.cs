@@ -1,4 +1,5 @@
 ﻿using FishNet.Object;
+using NightHunt.Gameplay.Character.Data;
 using NightHunt.Networking.Player;
 using NightHunt.State;
 using UnityEngine;
@@ -60,30 +61,55 @@ namespace NightHunt.Networking
         /// <summary>
         /// Reads player identity from the active SessionState (set during login / auto-login).
         /// Falls back to a guest entry when no authenticated session is present.
+        ///
+        /// CHARACTER RESOLUTION FLOW:
+        ///   1. Character-select screen saves the backend string ID (e.g. "character_02")
+        ///      to PlayerPrefs key "SelectedCharacterId".
+        ///   2. GetLocalPlayerData() reads the string and resolves it to an array index
+        ///      via CharacterDatabase.GetIndexById().
+        ///   3. The resolved int is sent to the server as CharacterModelIndex.
+        ///   4. If the string is missing or unknown, falls back to index 0 (default skin).
         /// </summary>
         private PlayerRegistryData GetLocalPlayerData()
         {
             var session = SessionState.Instance;
+
+            // Resolve selected character: string ID from character-select screen → array index
+            string savedCharacterId = PlayerPrefs.GetString("SelectedCharacterId", "");
+            int characterModelIndex = 0;
+
+            if (!string.IsNullOrEmpty(savedCharacterId) && CharacterDatabase.Instance != null)
+            {
+                int resolved = CharacterDatabase.Instance.GetIndexById(savedCharacterId);
+                if (resolved >= 0)
+                    characterModelIndex = resolved;
+                else
+                    Debug.LogWarning($"[ClientNetworkHandler] Unknown character ID '{savedCharacterId}' — " +
+                                     "falling back to index 0 (default skin).");
+            }
+
             if (session != null && session.IsAuthenticated)
             {
                 return new PlayerRegistryData
                 {
-                    BackendPlayerId = session.UserId.ToString(),
-                    DisplayName     = !string.IsNullOrEmpty(session.Username)
-                                          ? session.Username
-                                          : $"Player_{session.UserId}",
-                    TeamId          = 0,
-                    Status          = PlayerConnectionStatus.Connected
+                    BackendPlayerId     = session.UserId.ToString(),
+                    DisplayName         = !string.IsNullOrEmpty(session.Username)
+                                              ? session.Username
+                                              : $"Player_{session.UserId}",
+                    TeamId              = 0,
+                    Status              = PlayerConnectionStatus.Connected,
+                    CharacterModelIndex = characterModelIndex
                 };
             }
 
             Debug.LogWarning("[ClientNetworkHandler] No authenticated session found — using fallback guest data.");
             return new PlayerRegistryData
             {
-                BackendPlayerId = $"guest_{Random.Range(1000, 9999)}",
-                DisplayName     = $"Guest_{Random.Range(1, 100)}",
-                TeamId          = 0,
-                Status          = PlayerConnectionStatus.Connected
+                BackendPlayerId     = $"guest_{Random.Range(1000, 9999)}",
+                DisplayName         = $"Guest_{Random.Range(1, 100)}",
+                TeamId              = 0,
+                Status              = PlayerConnectionStatus.Connected,
+                CharacterModelIndex = characterModelIndex
             };
         }
     }

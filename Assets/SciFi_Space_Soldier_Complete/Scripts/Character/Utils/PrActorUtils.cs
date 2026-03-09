@@ -39,17 +39,17 @@ public class PrActorUtils : MonoBehaviour
     void Awake()
     {
         MeshRenderers = GetComponentsInChildren<SkinnedMeshRenderer>();
+        // Cache Animator in Awake (not Start) so charAnimator is valid by the time
+        // PlayerModelLoader.OnModelReady fires, closing the root-motion drift window.
+        if (GetComponent<Animator>())
+            charAnimator = GetComponent<Animator>();
     }
 
     // Start is called before the first frame update
     void Start()
     {
-        
         if (GetComponent<AudioSource>())
             Audio = GetComponent<AudioSource>();
-        if (GetComponent<Animator>())
-            charAnimator = GetComponent<Animator>();
-
     }
 
     public void SetTagAndLayer()

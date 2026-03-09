@@ -57,58 +57,37 @@ namespace NightHunt.GameplaySystems.Weapon
         private void OnEnable()
         {
             if (_weaponSystem != null)
-                _weaponSystem.OnShotFired += HandleShotFired;
+            {
+                _weaponSystem.OnShotFired    += HandleShotFired;
+                _weaponSystem.OnHitscanResult += HandleHitscanResult;
+            }
         }
 
         private void OnDisable()
         {
             if (_weaponSystem != null)
-                _weaponSystem.OnShotFired -= HandleShotFired;
+            {
+                _weaponSystem.OnShotFired    -= HandleShotFired;
+                _weaponSystem.OnHitscanResult -= HandleHitscanResult;
+            }
         }
 
         // ── Event Handler ─────────────────────────────────────────────────────
 
         private void HandleShotFired(WeaponSlotType slot, Vector3 aimDirection)
         {
-            // Fetch weapon definition for this slot
-            var inst = _weaponSystem.GetWeapon(slot);
-            if (inst == null) return;
+            // All VFX (muzzle flash, trail, hit effect) are children of the bullet prefab
+            // spawned by ProjectileWeapon + ProjectileSpawner. Nothing to do here.
+        }
 
-            var def = ItemDatabase.GetDefinition(inst.DefinitionID) as WeaponDefinition;
-            if (def == null) return;
-
-            Vector3 origin = _muzzlePoint != null ? _muzzlePoint.position : transform.position;
-            Quaternion rot = aimDirection.sqrMagnitude > 0.001f
-                ? Quaternion.LookRotation(aimDirection)
-                : (_muzzlePoint != null ? _muzzlePoint.rotation : transform.rotation);
-
-            // 1. Muzzle flash ──────────────────────────────────────────────────
-            if (def.MuzzleFlashPrefab != null)
-            {
-                var flash = PoolGet(def.MuzzleFlashPrefab, origin, rot);
-                float lifetime = 0.15f;
-                var ps = flash.GetComponentInChildren<ParticleSystem>();
-                if (ps != null) lifetime = ps.main.duration + ps.main.startLifetime.constantMax;
-                PoolReturn(flash, def.MuzzleFlashPrefab, lifetime);
-            }
-
-            // 2. Projectile (Projectile-type weapons only) ─────────────────────
-            if (def.BallisticType == BallisticType.Projectile && def.ProjectilePrefab != null)
-            {
-                var proj = PoolGet(def.ProjectilePrefab, origin, rot);
-                var rb = proj.GetComponent<Rigidbody>();
-                if (rb != null) rb.linearVelocity = aimDirection.normalized * rb.linearVelocity.magnitude;
-                // Projectiles are typically long-lived; return handled by the projectile itself
-                // or fall back to a safety timeout.
-                PoolReturn(proj, def.ProjectilePrefab, 10f);
-            }
-
-            // 3. Bullet trail (Hitscan) ────────────────────────────────────────
-            if (def.BallisticType == BallisticType.Hitscan && def.BulletTrailPrefab != null)
-            {
-                var trail = PoolGet(def.BulletTrailPrefab, origin, rot);
-                PoolReturn(trail, def.BulletTrailPrefab, 1f);
-            }
+        /// <summary>
+        /// Draws a bullet-trail prefab from muzzle origin to the confirmed ray endpoint.
+        /// Subscribed to <see cref="IWeaponSystem.OnHitscanResult"/>.
+        /// </summary>
+        private void HandleHitscanResult(WeaponSlotType slot, Vector3 origin, Vector3 endpoint)
+        {
+            // All visual feedback (trail, hit effect) is owned by the bullet prefab.
+            // Reserved for future central hooks (e.g. camera shake, audio).
         }
 
         // ── Pooling helpers ───────────────────────────────────────────────────

@@ -24,8 +24,10 @@ MonoBehaviour:
   AttachmentSlots: 0100000003000000040000000200000006000000
   CanAttachTo: 
   ValidSlots: 0000000002000000
-  EquippedPrefab: {fileID: 5417513897872433537, guid: d282706988ecc844e92e0b68ae72d776, type: 3}
-  DroppedPrefab: {fileID: 5417513897872433537, guid: d282706988ecc844e92e0b68ae72d776, type: 3}
+  EquippedPrefab: {fileID: 6326673001157521716, guid: 79a86a91ff5c87f4c8911924595e0ac4,
+    type: 3}
+  DroppedPrefab: {fileID: 6326673001157521716, guid: 79a86a91ff5c87f4c8911924595e0ac4,
+    type: 3}
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 0
@@ -34,4 +36,7 @@ MonoBehaviour:
   BallisticType: 0
   DefaultFireMode: 0
   AllowFireModeToggle: 1
+  DamageHeadMul: 2
   CanTacticalReload: 1
+  DefaultBulletType: {fileID: 0}
+  ProjectilePrefab: {fileID: 0}

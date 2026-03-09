@@ -112,6 +112,9 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_vfxController != null)
                 _vfxController.SetMuzzlePoint(muzzle); // null is fine — VFX falls back to transform
 
+            // Propagate muzzle point to WeaponSystem for hitscan raycast origin.
+            _weaponSystem?.SetFireOrigin(muzzle);
+
             // Expose left-hand IK target so PrCharacterIK can pick it up.
             LeftHandIKTarget = _currentModel.transform.Find(_leftHandIKName);
 

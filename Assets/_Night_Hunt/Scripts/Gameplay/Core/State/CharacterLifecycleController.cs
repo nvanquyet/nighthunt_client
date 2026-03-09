@@ -187,6 +187,9 @@ namespace NightHunt.Gameplay.Core.State
             if (!IsServer)
                 return;
 
+            // Update _isAlive SyncVar — broadcasts dead state to all clients including late-joiners.
+            _networkPlayer?.SetAlive(false);
+
             if (_autoRequestRespawnOnDeath &&
                 _respawnSystem != null &&
                 _networkPlayer != null)
@@ -205,6 +208,9 @@ namespace NightHunt.Gameplay.Core.State
             }
 
             OnRespawned?.Invoke();
+
+            if (IsServer)
+                _networkPlayer?.SetAlive(true);
         }
 
         #endregion

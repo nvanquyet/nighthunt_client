@@ -7,6 +7,7 @@ using FishNet;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Gameplay.Character;
 using System.Collections.Generic;
 using NightHunt.Networking.Player;
 
@@ -220,6 +221,18 @@ namespace NightHunt.Networking
             networkPlayer.SetPublicData(publicData);
             
             Debug.Log($"[ServerGameManager] Step 4: Public data set");
+
+            // STEP 4b: Inform PlayerModelLoader of the chosen character skin.
+            // SetModelIndex replicates via its own SyncVar so every client (including
+            // late-joiners) instantiates the correct model under the Model child.
+            PlayerModelLoader modelLoader = playerObj.GetComponent<PlayerModelLoader>();
+            if (modelLoader != null)
+                modelLoader.SetModelIndex(serverData.CharacterModelIndex);
+            else
+                Debug.LogWarning("[ServerGameManager] PlayerModelLoader not found on player prefab. " +
+                                 "Add PlayerModelLoader to the root PlayerPrefab.");
+            
+            Debug.Log($"[ServerGameManager] Step 4b: ModelIndex set to {serverData.CharacterModelIndex}");
             
             // STEP 5: Register với RegistryService (lưu PRIVATE data)
             _registryService.RegisterPlayer(networkPlayer, serverData);

@@ -1,4 +1,5 @@
 using UnityEngine;
+using NightHunt.StatSystem.Core.Interfaces;
 
 namespace NightHunt.GameplaySystems.Core.Interfaces
 {
@@ -28,5 +29,17 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Call with Vector2.zero to exit throwable mode and revert to mouse aim.
         /// </summary>
         void SetThrowableAim(Vector2 joystickInput);
+
+        /// <summary>
+        /// Wire this AimSystem to a spawned player at runtime.
+        /// Called from NetworkPlayer.EnableInput() after the local player spawns.
+        /// </summary>
+        void Initialize(Transform playerRoot, IPlayerStatSystem statSystem);
+
+        /// <summary>Show or hide the world-space aim cursor.</summary>
+        void SetCursorVisible(bool visible);
+
+        /// <summary>Current VisionRange from the player stat system (or fallback).</summary>
+        float GetVisionRange();
     }
 }

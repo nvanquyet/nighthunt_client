@@ -55,15 +55,24 @@ namespace NightHunt.GameplaySystems.Aim
         [SerializeField] private float _fallbackVisionRange = 15f;
 
         [Header("World Cursor")]
-        [Tooltip("Optional world-space Transform (flat disc, decal, or ring) that is repositioned to FinalAimPos every frame. "
-               + "Mirrors PR\u2019s AimTargetVisual pattern. Assign a prefab instance in the scene.")]
+        [Tooltip("Optional world-space Transform (flat disc, decal, or ring) that is repositioned to FinalAimPos every frame.")]
         [SerializeField] private Transform _worldAimCursor;
+
+        public enum CursorFacingAxis { X, Y, Z }
+        [Tooltip("Which local axis of the cursor mesh is rotated to face toward the player.\n" +
+                 "Y  → mesh forward on XZ plane (default for 3D arrow/sprite standing upright)\n" +
+                 "X  → rotates around X axis (rare)\n" +
+                 "Z  → mesh lying flat with Z pointing toward player")]
+        [SerializeField] private CursorFacingAxis _cursorFacingAxis = CursorFacingAxis.Y;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime State
         // ─────────────────────────────────────────────────────────────────────
 
         private IPlayerStatSystem _playerStats;
+
+        // Cursor facing — capture initial X/Z euler so we only ever change Y at runtime
+        private Vector3 _cursorInitialEuler;
 
         // Throwable override
         private bool    _isThrowableMode;
@@ -91,6 +100,40 @@ namespace NightHunt.GameplaySystems.Aim
 
             if (_playerRoot == null)
                 _playerRoot = transform;
+
+            // Save the mesh's designed tilt (X, Z) so we only rotate Y at runtime.
+            if (_worldAimCursor != null)
+                _cursorInitialEuler = _worldAimCursor.eulerAngles;
+        }
+
+        /// <inheritdoc/>
+        public void Initialize(Transform playerRoot, IPlayerStatSystem statSystem)
+        {
+            _playerRoot  = playerRoot;
+            _playerStats = statSystem;
+
+            if (_camera == null)
+                _camera = UnityEngine.Camera.main;
+
+            // PC: cursor always visible after player spawns.
+            if (!Application.isMobilePlatform)
+                SetCursorVisible(true);
+        }
+
+        /// <inheritdoc/>
+        public void SetCursorVisible(bool visible)
+        {
+            if (_worldAimCursor != null)
+                _worldAimCursor.gameObject.SetActive(visible);
+        }
+
+        /// <inheritdoc/>
+        public float GetVisionRange()
+        {
+            if (_playerStats == null) return _fallbackVisionRange;
+            float range = _playerStats.GetStat(PlayerStatType.VisionRange);
+            // GetStat returns 0 when _statCache not yet populated (client waiting for sync).
+            return range > 0f ? range : _fallbackVisionRange;
         }
 
         private void Update()
@@ -199,17 +242,25 @@ namespace NightHunt.GameplaySystems.Aim
             FinalAimPos  = origin + FinalAimDir * dist;
             FinalAimPos  = new Vector3(FinalAimPos.x, origin.y, FinalAimPos.z);
 
-            // Reposition the world cursor (mirrors PR’s AimTargetVisual moving to AimFinalPos).
+            // Reposition the world cursor and rotate it to face the player.
+            // Only the configured axis angle is changed; the other two keep their designer-set values.
             if (_worldAimCursor != null)
+            {
                 _worldAimCursor.position = FinalAimPos;
-        }
-
-        private float GetVisionRange()
-        {
-            if (_playerStats != null)
-                return _playerStats.GetStat(PlayerStatType.VisionRange);
-
-            return _fallbackVisionRange;
+                if (FinalAimDir.sqrMagnitude > 0.001f)
+                {
+                    // angle in degrees that points FROM cursor TOWARD player on the horizontal plane
+                    float yaw = Mathf.Atan2(-FinalAimDir.x, -FinalAimDir.z) * Mathf.Rad2Deg;
+                    Vector3 e = _cursorInitialEuler;
+                    switch (_cursorFacingAxis)
+                    {
+                        case CursorFacingAxis.Y: e.y = yaw; break;
+                        case CursorFacingAxis.X: e.x = yaw; break;
+                        case CursorFacingAxis.Z: e.z = yaw; break;
+                    }
+                    _worldAimCursor.rotation = Quaternion.Euler(e);
+                }
+            }
         }
 
 #if UNITY_EDITOR

@@ -44,6 +44,11 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Tooltip("Allow player to toggle between Auto and Single on HUD")]
         public bool AllowFireModeToggle = true;
 
+        // ── Combat Multipliers ────────────────────────────────────────────────
+        [Header("Combat Multipliers")]
+        [Tooltip("Damage multiplier applied on a confirmed headshot. Default 2 = double damage.")]
+        public float DamageHeadMul = 2f;
+
         // ── Reload ────────────────────────────────────────────────────────────
         [Header("Reload")]
         [Tooltip("Can reload when magazine still has ammo (tactical reload)")]
@@ -52,23 +57,12 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Header("Bullet Type (Soldier System)")]
         public GameObject DefaultBulletType;
 
-        // ── Visual FX (per-weapon) ──────────────────────────────────────
-        // Each weapon owns its own VFX so CharacterCombat never needs centralized references.
-        // WeaponVFXController reads these fields when OnShotFired is raised.
-        // SoldierCombatController uses BulletTypeDefinition.ResolveMuzzleFlash(MuzzleFlashPrefab)
-        // so these act as the fallback when BulletTypeDefinition has no override.
+        // ── Visual FX ─────────────────────────────────────────────────────────
+        // All VFX (muzzle, trail, hit) are owned by the bullet/projectile prefab itself.
+        // Weapon only holds a reference to the bullet it fires.
         [Header("Visual FX")]
-        [Tooltip("For BallisticType.Projectile: spawn at muzzle point on fire.")]
+        [Tooltip("Bullet/projectile prefab spawned at muzzle on fire. All VFX are children of this prefab.")]
         public GameObject ProjectilePrefab;
-
-        [Tooltip("Muzzle flash particle or prefab spawned at the weapon's muzzle point on every shot.")]
-        public GameObject MuzzleFlashPrefab;
-
-        [Tooltip("Hitscan bullet trail prefab (LR / VFX Graph). Spawned between muzzle and hit point.")]
-        public GameObject BulletTrailPrefab;
-
-        [Tooltip("Impact particle spawned at hit point (stone/flesh/metal variants managed by caller).")]
-        public GameObject HitEffectPrefab;
         // ── Stat Helpers ──────────────────────────────────────────────────────
         /// <summary>Read a stat from StatConfig (base value before attachments).</summary>
         public float GetStatValue(ItemStatType statType)

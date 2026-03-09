@@ -4,6 +4,7 @@ using NightHunt.GameplaySystems.UI.Inventory;
 using NightHunt.GameplaySystems.UI.Combat;
 using NightHunt.GameplaySystems.UI.Interaction;
 using NightHunt.Networking;
+using NightHunt.Gameplay.Character.Combat;
 
 namespace NightHunt.UI
 {
@@ -66,7 +67,8 @@ namespace NightHunt.UI
         public MinimapUI          Minimap           => minimapUI;
         public DeathScreen        DeathScreen       => deathScreen;
         public LootContainerUI    LootContainerUI   => lootContainerUI;
-
+        // NetworkObject ID of the local player; used to filter shooter-side damage numbers.
+        private int _localNetObjId = -1;
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
         private void Awake()
@@ -131,8 +133,40 @@ namespace NightHunt.UI
                 return;
             }
 
+            _localNetObjId = (int)localPlayer.ObjectId;
+
             if (minimapUI != null)  minimapUI.SetLocalPlayer(localPlayer);
             if (deathScreen != null) deathScreen.RegisterPlayer(localPlayer);
+
+            // Subscribe global combat events so UI updates for all players, not only the local one.
+            PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;
+            PlayerHealthSystem.OnAnyHitReceived += HandleAnyHitReceived;
+
+            Debug.Log($"[GameHUD] Initialized for player ObjectId={_localNetObjId}");
+        }
+
+        private void OnDestroy()
+        {
+            PlayerHealthSystem.OnAnyPlayerDied  -= HandleAnyPlayerDied;
+            PlayerHealthSystem.OnAnyHitReceived -= HandleAnyHitReceived;
+        }
+
+        // ── Combat event routing ───────────────────────────────────────────
+
+        // Fires on all clients when any player is killed — route to kill feed.
+        private void HandleAnyPlayerDied(string victimName, string killerName, string weaponId)
+        {
+            killFeedUI?.AddKill(killerName, victimName, weaponId);
+        }
+
+        // Fires on all clients when any player takes a hit.
+        // Only show damage numbers when the LOCAL player is the shooter.
+        private void HandleAnyHitReceived(DamageInfo info)
+        {
+            if (_localNetObjId < 0 || info.ShooterNetworkObjectId != _localNetObjId)
+                return;
+
+            damageFeedback?.ShowDamageNumber(info.HitPoint, info.Damage, info.IsHeadshot);
         }
 
         // ── Visibility helpers ────────────────────────────────────────────────

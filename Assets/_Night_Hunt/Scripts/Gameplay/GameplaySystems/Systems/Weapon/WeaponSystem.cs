@@ -10,6 +10,7 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Core.Data;
+using NightHunt.Gameplay.Character.Combat;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
@@ -73,6 +74,9 @@ namespace NightHunt.GameplaySystems.Weapon
         public event Action<WeaponSlotType> OnWeaponDepleted;
         /// <summary>Raised on each successful shot; VFX controllers subscribe for muzzle/trail effects.</summary>
         public event Action<WeaponSlotType, Vector3> OnShotFired;
+
+        /// <inheritdoc cref="IWeaponSystem.OnHitscanResult"/>
+        public event Action<WeaponSlotType, Vector3, Vector3> OnHitscanResult;
         
         #endregion
 
@@ -86,6 +90,14 @@ namespace NightHunt.GameplaySystems.Weapon
         private bool _isReloading;
         private Coroutine _autoFireCoroutine;
         private Vector3 _aimDirection = Vector3.forward; // updated by SetAimDirection()
+
+        /// <summary>Muzzle-tip Transform — set by WeaponModelController after each weapon swap.</summary>
+        private Transform _fireOrigin;
+
+        /// <summary>LayerMask used for hitscan raycasts. Set to the player hitbox layer in the Inspector or via SetHitscanLayers.</summary>
+        [Header("Hitscan")]
+        [SerializeField] private LayerMask _hitscanLayers = ~0;
+        [SerializeField] private float _hitscanMaxRange = 50f;
 
         #endregion
         
@@ -210,6 +222,12 @@ namespace NightHunt.GameplaySystems.Weapon
             _aimDirection = worldDirection.sqrMagnitude > 0.001f ? worldDirection.normalized : Vector3.forward;
         }
 
+        /// <inheritdoc cref="IWeaponSystem.SetFireOrigin"/>
+        public void SetFireOrigin(Transform muzzlePoint)
+        {
+            _fireOrigin = muzzlePoint;
+        }
+
         // ── Private fire helpers ─────────────────────────────────────────────
 
         private System.Collections.IEnumerator AutoFireCoroutine()
@@ -246,7 +264,6 @@ namespace NightHunt.GameplaySystems.Weapon
             int currentMag = (int)inst.GetCurrentValue(ItemStatType.MagazineSize);
             if (currentMag <= 0)
             {
-                // Auto-reload if reserve available
                 float totalAmmo = inst.GetCurrentValue(ItemStatType.MaxAmmo);
                 if (totalAmmo > 0)
                     StartCoroutine(ReloadCoroutine(slot.Value, inst));
@@ -256,12 +273,68 @@ namespace NightHunt.GameplaySystems.Weapon
             }
 
             inst.AdjustCurrentValue(ItemStatType.MagazineSize, -1f);
-            float mag  = inst.GetComputedStat(ItemStatType.MagazineSize);
+            float mag = inst.GetComputedStat(ItemStatType.MagazineSize);
             OnAmmoChanged?.Invoke(
                 (int)inst.GetCurrentValue(ItemStatType.MagazineSize),
                 (int)inst.GetCurrentValue(ItemStatType.MaxAmmo),
                 (int)mag);
+
             OnShotFired?.Invoke(slot.Value, _aimDirection);
+
+            // Hitscan weapons: perform owner-side raycast then send to server for damage.
+            var def = ItemDatabase.GetDefinition(inst.DefinitionID) as WeaponDefinition;
+            if (def != null && def.BallisticType == BallisticType.Hitscan)
+                ProcessHitscanShot(slot.Value, def, inst);
+        }
+
+        private void ProcessHitscanShot(WeaponSlotType slot, WeaponDefinition def, ItemInstance inst)
+        {
+            Vector3 origin    = _fireOrigin != null ? _fireOrigin.position : transform.position;
+            Vector3 direction = _aimDirection;
+            float   maxRange  = def.HasStat(ItemStatType.Damage)
+                ? _hitscanMaxRange
+                : _hitscanMaxRange;
+
+            float damage = def.GetStatValue(ItemStatType.Damage);
+
+            bool didHit = Physics.Raycast(origin, direction, out RaycastHit hit, maxRange, _hitscanLayers,
+                QueryTriggerInteraction.Ignore);
+
+            Vector3 endpoint = didHit ? hit.point : origin + direction * maxRange;
+
+            // Raise event so VFXController can draw the hitscan trail.
+            OnHitscanResult?.Invoke(slot, origin, endpoint);
+
+            if (!didHit)
+            {
+                Debug.Log($"[WeaponSystem] Hitscan MISS — origin: {origin}, dir: {direction}");
+                return;
+            }
+
+            Debug.Log($"[WeaponSystem] Hitscan HIT '{hit.collider.name}' at {hit.point}");
+
+            var hitbox = hit.collider.GetComponent<PlayerHitboxMarker>();
+            if (hitbox == null || hitbox.HealthSystem == null)
+                return;
+
+            // Do not damage own player.
+            if (hitbox.HealthSystem.gameObject == gameObject)
+                return;
+
+            var info = new DamageInfo
+            {
+                Damage                   = damage,
+                IsHeadshot               = hitbox.IsHeadshot,
+                HitPoint                 = hit.point,
+                HitNormal                = hit.normal,
+                ShooterNetworkObjectId   = (int)ObjectId,
+                WeaponId                 = def.ItemID,
+            };
+
+            Debug.Log($"[WeaponSystem] Requesting damage — target: {hitbox.HealthSystem.name}" +
+                      $", damage: {damage:F1}, headshot: {hitbox.IsHeadshot}, weapon: {def.ItemID}");
+
+            hitbox.HealthSystem.RequestDamage(info);
         }
 
         private System.Collections.IEnumerator ReloadCoroutine(WeaponSlotType slot, ItemInstance inst)

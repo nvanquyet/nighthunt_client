@@ -26,9 +26,9 @@ namespace NightHunt.Gameplay.AntiCamping
         private Dictionary<uint, CampingData> playerCampingData = new Dictionary<uint, CampingData>();
         private Dictionary<uint, bool> revealedPlayers = new Dictionary<uint, bool>();
 
-        // Synchronized revealed players
-        // Note: List cannot be directly synced with SyncVar, using manual sync via RPCs
-        private List<uint> networkRevealedPlayers = new List<uint>();
+        // Synchronized revealed players — SyncList ensures late-joining clients
+        // receive the current set without needing a manual state-dump RPC.
+        private readonly SyncList<uint> networkRevealedPlayers = new SyncList<uint>();
 
         public override void OnStartServer()
         {

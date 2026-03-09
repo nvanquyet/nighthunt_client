@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using FishNet.Object;
+using FishNet.Object.Synchronizing;
 
 namespace NightHunt.Networking
 {
@@ -27,8 +28,12 @@ namespace NightHunt.Networking
             "Red Team"
         };
         
-        // Data tracking (cho UI queries)
+        // Server-only: tracks individual client IDs per team for addition / removal logic.
         private Dictionary<int, List<int>> _playersByTeam = new(); // TeamId → List<FishNet ClientId>
+
+        // Network-synced: broadcasts team counts to ALL clients including late-joiners.
+        // SyncDictionary carries current state in every spawn packet — no manual TargetRpc needed.
+        private readonly SyncDictionary<int, int> _teamCounts = new SyncDictionary<int, int>();
         
         // Events
         public event Action<int, int> OnTeamCountChanged; // TeamId, new count
@@ -49,14 +54,33 @@ namespace NightHunt.Networking
         public override void OnStartServer()
         {
             base.OnStartServer();
-            
-            // Initialize team lists
+
+            // Pre-initialize both player list and synced count for every slot so that
+            // late-joining clients receive a 0 rather than a missing key.
             for (int i = 0; i < _teamColors.Length; i++)
             {
                 _playersByTeam[i] = new List<int>();
+                _teamCounts[i]    = 0;
             }
-            
+
             Debug.Log("[TeamService] ✅ Initialized");
+        }
+
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+
+            _teamCounts.OnChange += OnTeamCountsChanged;
+
+            // Replay current snapshot so UI is correct even when joining mid-game.
+            foreach (var kvp in _teamCounts)
+                OnTeamCountChanged?.Invoke(kvp.Key, kvp.Value);
+        }
+
+        public override void OnStopClient()
+        {
+            base.OnStopClient();
+            _teamCounts.OnChange -= OnTeamCountsChanged;
         }
         
         // ===== NOTIFICATIONS FROM TeamAssignmentSystem =====
@@ -66,40 +90,38 @@ namespace NightHunt.Networking
         {
             if (!_playersByTeam.ContainsKey(teamId))
                 _playersByTeam[teamId] = new List<int>();
-            
+
             _playersByTeam[teamId].Add(fishnetClientId);
-            
+
             Debug.Log($"[TeamService] Player {fishnetClientId} assigned to Team {teamId} (Count: {_playersByTeam[teamId].Count})");
-            
-            // Sync to clients
-            RpcUpdateTeamCount(teamId, _playersByTeam[teamId].Count);
+
+            _teamCounts[teamId] = _playersByTeam[teamId].Count;
         }
-        
+
         [Server]
         public void OnPlayerSwitchedTeam(int fishnetClientId, int oldTeam, int newTeam)
         {
             _playersByTeam[oldTeam]?.Remove(fishnetClientId);
-            
+
             if (!_playersByTeam.ContainsKey(newTeam))
                 _playersByTeam[newTeam] = new List<int>();
-            
+
             _playersByTeam[newTeam].Add(fishnetClientId);
-            
+
             Debug.Log($"[TeamService] Player {fishnetClientId} switched: {oldTeam} → {newTeam}");
-            
-            // Sync counts
-            RpcUpdateTeamCount(oldTeam, _playersByTeam[oldTeam].Count);
-            RpcUpdateTeamCount(newTeam, _playersByTeam[newTeam].Count);
+
+            _teamCounts[oldTeam] = _playersByTeam[oldTeam].Count;
+            _teamCounts[newTeam] = _playersByTeam[newTeam].Count;
         }
-        
+
         [Server]
         public void OnPlayerRemovedFromTeam(int fishnetClientId, int teamId)
         {
             _playersByTeam[teamId]?.Remove(fishnetClientId);
-            
+
             Debug.Log($"[TeamService] Player {fishnetClientId} removed from Team {teamId}");
-            
-            RpcUpdateTeamCount(teamId, _playersByTeam[teamId].Count);
+
+            _teamCounts[teamId] = _playersByTeam.TryGetValue(teamId, out var list) ? list.Count : 0;
         }
         
         // ===== UI QUERIES =====
@@ -120,15 +142,21 @@ namespace NightHunt.Networking
         
         public int GetTeamPlayerCount(int teamId)
         {
-            return _playersByTeam.TryGetValue(teamId, out var list) ? list.Count : 0;
+            // Reads from SyncDictionary so both server and clients return consistent values.
+            return _teamCounts.TryGetValue(teamId, out var count) ? count : 0;
         }
-        
+
         // ===== NETWORK SYNC =====
-        
-        [ObserversRpc]
-        private void RpcUpdateTeamCount(int teamId, int count)
+
+        /// <summary>
+        /// Fires on all clients (including server) whenever _teamCounts changes.
+        /// Forwards the update through the public OnTeamCountChanged event for UI.
+        /// </summary>
+        private void OnTeamCountsChanged(
+            SyncDictionaryOperation op, int teamId, int count, bool asServer)
         {
-            OnTeamCountChanged?.Invoke(teamId, count);
+            if (op == SyncDictionaryOperation.Add || op == SyncDictionaryOperation.Set)
+                OnTeamCountChanged?.Invoke(teamId, count);
         }
     }
 }

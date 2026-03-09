@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using NightHunt.Data;
+using NightHunt.Gameplay.Character.Combat;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
@@ -17,7 +18,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
     /// </summary>
     public class ProjectileComponent : ProjectileBase
     {
-        // runtime state — KHÔNG serialized
+        // Runtime state — not serialized.
         private WeaponConfigData _config;
         private Vector3          _direction;
         private float            _speed;
@@ -28,34 +29,51 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         private Coroutine        _fuseRoutine;
         private Coroutine        _despawnRoutine;
 
-        // -----------------------------------------------------------------
+        // Damage identity — set via SetOwnerData() by the spawner on the owner machine.
+        private float  _damage;
+        private bool   _isOwnerShot;   // Only owner may send damage RPCs to server.
+        private int    _shooterNetObjId = -1;
+        private string _weaponId;
+
         // Pool reset
-        // -----------------------------------------------------------------
         protected override void OnEnable()
         {
-            base.OnEnable();      // reset VFX children
+            base.OnEnable();
             _hasDetonated     = false;
             _distanceTraveled = 0f;
             _fuseRoutine      = null;
             _despawnRoutine   = null;
+            _isOwnerShot      = false;
+            _shooterNetObjId  = -1;
         }
 
-        // -----------------------------------------------------------------
-        // Init — gọi mỗi lần spawn/reuse
-        // -----------------------------------------------------------------
+        // Init — called on every spawn/reuse from pool.
         public void Initialize(WeaponConfigData config, Vector3 dir, bool useHitscan)
         {
-            _config       = config;
-            _direction    = dir.normalized;
-            _speed        = config.ProjectileSpeed;
-            _maxRange     = config.MaxRange;
-            _useHitscan   = useHitscan;
+            _config     = config;
+            _direction  = dir.normalized;
+            _speed      = config.ProjectileSpeed;
+            _maxRange   = config.MaxRange;
+            _useHitscan = useHitscan;
+            _damage     = config.DamageBody;
+            _weaponId   = config.WeaponId;
 
             PlayMainVisual();
 
-            // Bắt đầu fuse timer nếu có
             if (!isImpact && fuseTime > 0f)
                 _fuseRoutine = StartCoroutine(FuseRoutine());
+        }
+
+        /// <summary>
+        /// Call after Initialize on the owner machine so that only the owner instance
+        /// can send damage RPCs to the server (prevents duplicate damage from all clients).
+        /// </summary>
+        public void SetOwnerData(int shooterNetworkObjectId, string weaponId = null)
+        {
+            _isOwnerShot     = true;
+            _shooterNetObjId = shooterNetworkObjectId;
+            if (!string.IsNullOrEmpty(weaponId))
+                _weaponId = weaponId;
         }
 
         // -----------------------------------------------------------------
@@ -85,24 +103,45 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 Despawn();
         }
 
-        // -----------------------------------------------------------------
-        // Va chạm
-        // -----------------------------------------------------------------
+        // Collision
         private void OnTriggerEnter(Collider other)
         {
             if (_hasDetonated) return;
 
-            // Hitscan: damage xử lý bên ProjectileWeapon rồi, nhưng vẫn Detonate để chạy VFX
+            // Hitscan-logic mode: damage was already applied via WeaponSystem raycast.
+            // Only run detonation VFX.
             if (_useHitscan)
             {
                 Detonate();
                 return;
             }
 
-            // Collider-based
-            if (isImpact)
-                Detonate();
-            // isImpact = false → chỉ bounce/stick, fuse timer tự Detonate sau
+            // For true ballistic projectiles: only the owner instance (or server in dedicated mode)
+            // sends damage to avoid duplicate hits from all client copies.
+            bool isAuthoritativeInstance = _isOwnerShot || FishNet.InstanceFinder.IsServerStarted;
+            if (isAuthoritativeInstance)
+            {
+                var hitbox = other.GetComponent<PlayerHitboxMarker>();
+                if (hitbox != null && hitbox.HealthSystem != null)
+                {
+                    var info = new DamageInfo
+                    {
+                        Damage                 = _damage,
+                        IsHeadshot             = hitbox.IsHeadshot,
+                        HitPoint               = transform.position,
+                        HitNormal              = -_direction,
+                        ShooterNetworkObjectId = _shooterNetObjId,
+                        WeaponId               = _weaponId ?? string.Empty,
+                    };
+
+                    Debug.Log($"[ProjectileComponent] Projectile hit '{other.name}' — damage: {_damage:F1}" +
+                              $", headshot: {hitbox.IsHeadshot}, owner shot: {_isOwnerShot}");
+
+                    hitbox.HealthSystem.RequestDamage(info);
+                }
+            }
+
+            Detonate();
         }
 
         // -----------------------------------------------------------------
@@ -114,9 +153,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             if (!_hasDetonated) Detonate();
         }
 
-        // -----------------------------------------------------------------
         // Detonation
-        // -----------------------------------------------------------------
         private void Detonate()
         {
             if (_hasDetonated) return;
@@ -128,12 +165,9 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 _fuseRoutine = null;
             }
 
-            // Bật DetonationVFX, tắt trail/mesh nếu cần
+            // Activate DetonationVFX child, hide trail/mesh.
             TriggerDetonation(transform.position, Quaternion.LookRotation(_direction));
 
-            // TODO: thông báo server để apply damage / AoE (Server RPC)
-
-            // Đợi VFX xong rồi trả về pool
             _despawnRoutine = StartCoroutine(DespawnAfter(lifetimeAfterImpact));
         }
 

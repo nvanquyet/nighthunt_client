@@ -201,6 +201,20 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// <summary>Supply the current aim direction to WeaponSystem so OnShotFired carries it.</summary>
         void SetAimDirection(Vector3 worldDirection);
 
+        /// <summary>
+        /// Set the world-space Transform used as the raycast / projectile origin (muzzle tip).
+        /// Called by WeaponModelController after each weapon model swap.
+        /// </summary>
+        void SetFireOrigin(Transform muzzlePoint);
+
+        /// <summary>
+        /// Fired after a hitscan shot, carrying the muzzle origin and the ray endpoint
+        /// (hit surface or max-range fallback point).
+        /// WeaponVFXController subscribes to drive bullet-trail start / end positions.
+        /// Parameters: (slot, muzzleOrigin, rayEndpoint)
+        /// </summary>
+        event Action<WeaponSlotType, Vector3, Vector3> OnHitscanResult;
+
         #endregion
     }
 }

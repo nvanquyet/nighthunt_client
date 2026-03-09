@@ -5,57 +5,59 @@ using FishNet.Object;
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
     /// <summary>
-    /// Spawn projectile local + đồng bộ qua network.
+    /// Spawns projectiles locally for the owner and broadcasts to remote clients via FishNet RPCs.
     ///
     /// Flow:
-    ///   1. ProjectileWeapon gọi SpawnLocal() → tạo instance trên máy owner (owner thấy luôn).
-    ///   2. SpawnLocal() gọi ServerRpc → server validate → ObserversRpc → spawn trên các client còn lại.
-    ///   Không còn logic ẩn renderer: owner thấy đúng một viên duy nhất.
+    ///   1. Owner calls SpawnLocal() → Instantiate owner copy, mark as authoritative for damage.
+    ///   2. SpawnLocal() → SendToServerRpc → server validates → BroadcastToClientsRpc → non-owners Instantiate visual copy.
+    ///   Only the owner copy has _isOwnerShot = true, so only it sends damage RPCs to the server.
     /// </summary>
     public class ProjectileSpawner : NetworkBehaviour
     {
         [Header("Projectile Settings")]
         [SerializeField] private GameObject projectilePrefab;
 
-        // -----------------------------------------------------------------
         public void SpawnLocal(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
         {
             if (projectilePrefab == null)
             {
-                Debug.LogError("[ProjectileSpawner] projectilePrefab chưa được gán!");
+                Debug.LogError("[ProjectileSpawner] projectilePrefab is not assigned.");
                 return;
             }
 
-            // Tạo instance — owner thấy viên đạn này
-            SpawnInstance(position, direction, weaponConfig);
+            // Owner copy — marked as authoritative so it can send damage RPCs.
+            SpawnInstance(position, direction, weaponConfig, isOwnerCopy: true);
 
-            // Báo server để broadcast sang các client khác
             if (IsOwner)
                 SendToServerRpc(position, direction, weaponConfig);
         }
 
-        // -----------------------------------------------------------------
-        private void SpawnInstance(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
+        private void SpawnInstance(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig,
+                                   bool isOwnerCopy = false)
         {
-            var go = Instantiate(projectilePrefab, position, Quaternion.LookRotation(direction));
+            var go   = Instantiate(projectilePrefab, position, Quaternion.LookRotation(direction));
             var comp = go.GetComponent<ProjectileComponent>();
-            if (comp != null)
-                comp.Initialize(weaponConfig, direction, false);
+            if (comp == null) return;
+
+            comp.Initialize(weaponConfig, direction, false);
+
+            if (isOwnerCopy)
+                comp.SetOwnerData((int)ObjectId, weaponConfig.WeaponId);
         }
 
-        // -----------------------------------------------------------------
         [ServerRpc(RequireOwnership = true)]
         private void SendToServerRpc(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
         {
-            // TODO: server validate (tầm xa, thời gian, v.v.)
+            // TODO: validate position plausibility against server-tracked player position.
             BroadcastToClientsRpc(position, direction, weaponConfig);
         }
 
         [ObserversRpc]
         private void BroadcastToClientsRpc(Vector3 position, Vector3 direction, WeaponConfigData weaponConfig)
         {
-            // Chỉ spawn trên các client KHÔNG phải owner; owner đã có bản từ SpawnLocal()
+            // Non-owners spawn a visual-only copy; isOwnerCopy = false so no damage RPCs are sent.
             if (!IsOwner)
-                SpawnInstance(position, direction, weaponConfig);        }
+                SpawnInstance(position, direction, weaponConfig, isOwnerCopy: false);
+        }
     }
 }

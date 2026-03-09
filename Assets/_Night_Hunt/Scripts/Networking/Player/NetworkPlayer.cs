@@ -51,6 +51,11 @@ namespace NightHunt.Networking
 
         public IGameplayBridge GamePlaySystemBridge { get; private set; }
 
+        // Cached owner-side refs — set in EnableInput(), used 
+        // to cleanly disable / re-enable when IsAlive changes.
+        private NightHunt.Gameplay.Input.Handlers.Combat.CombatInputHandler _cachedCombatHandler;
+        private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem          _cachedAimSystem;
+
 
         // ── PUBLIC PLAYER DATA ────────────────────────────────────────────────
         // SyncVar ensures FishNet includes the current value in every spawn packet
@@ -65,6 +70,12 @@ namespace NightHunt.Networking
 
         /// <summary>True while the player is alive (false during death / waiting for respawn).</summary>
         public bool IsAlive => _isAlive.Value;
+
+        /// <summary>
+        /// Fired on every client (including server) when _isAlive changes.
+        /// CharacterVisualController subscribes to trigger ragdoll / animator visuals.
+        /// </summary>
+        public event System.Action<bool> OnAliveChanged;
 
         private PlayerPublicData PlayerData => _playerData.Value;
 
@@ -142,6 +153,7 @@ namespace NightHunt.Networking
 
             // Listen for future data changes (name / team updates mid-game).
             _playerData.OnChange += OnPlayerDataChanged;
+            _isAlive.OnChange   += OnAliveStateChanged;
 
             // Owner-specific setup
             if (IsOwner)
@@ -166,6 +178,7 @@ namespace NightHunt.Networking
         {
             base.OnStopClient();
             _playerData.OnChange -= OnPlayerDataChanged;
+            _isAlive.OnChange    -= OnAliveStateChanged;
             PlayerPublicRegistry.Instance.Unregister((int)this.ObjectId);
         }
 
@@ -176,6 +189,35 @@ namespace NightHunt.Networking
         private void OnPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next, bool asServer)
         {
             PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
+        }
+
+        /// <summary>
+        /// Called on all clients when _isAlive SyncVar changes.
+        /// Forwards the new value through OnAliveChanged so CharacterVisualController
+        /// can react without depending on FishNet internals.
+        /// Also gates combat input for the owning client.
+        /// </summary>
+        private void OnAliveStateChanged(bool prev, bool next, bool asServer)
+        {
+            OnAliveChanged?.Invoke(next);
+
+            // Owner-only, client-side: keep input + cursor in sync with alive state.
+            if (!IsOwner || asServer) return;
+
+            if (!next)
+            {
+                // Dying: force EndFire (hides RangeIndicator, stops weapon) then disable
+                // all combat input so no further clicks register while ragdolled.
+                _cachedCombatHandler?.DisableInput();
+                _cachedAimSystem?.SetCursorVisible(false);
+            }
+            else
+            {
+                // Respawning: re-enable input and restore cursor.
+                _cachedCombatHandler?.EnableInput();
+                if (!Application.isMobilePlatform)
+                    _cachedAimSystem?.SetCursorVisible(true);
+            }
         }
 
         #endregion
@@ -218,8 +260,45 @@ namespace NightHunt.Networking
                 inputManager.MovementHandler,
                 weaponSystem,
                 transform,
-                cameraStateManager // ← NEW: truyền vào để BeginFire/EndFire có thể freeze camera
+                cameraStateManager
             );
+            _cachedCombatHandler = inputManager.CombatHandler; // cache for alive-state gating
+
+            // Bind AimSystem — single source of aim direction (VisionRange-clamped cursor).
+            // AimSystem.Initialize wires it to this player's transform + stat system.
+            var aimSystem = UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.Aim.AimSystem>();
+            if (aimSystem != null)
+            {
+                var statSystem = GetComponent<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>()
+                              ?? GetComponentInChildren<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>();
+                if (statSystem == null)
+                    Debug.LogWarning("[NetworkPlayer] IPlayerStatSystem not found on player — AimSystem will use fallback VisionRange.");
+                else
+                    Debug.Log($"[NetworkPlayer] AimSystem bound with statSystem: {statSystem.GetType().Name}");
+                aimSystem.Initialize(transform, statSystem);
+                inputManager.CombatHandler?.BindAimSystem(aimSystem);
+                _cachedAimSystem = aimSystem; // cache for alive-state gating
+            }
+            else
+            {
+                Debug.LogWarning("[NetworkPlayer] AimSystem not found in scene — falling back to own ground-plane raycast.");
+            }
+
+            // Bind RangeIndicator so BeginFire/EndFire can Show/Hide the vision ring.
+            var rangeIndicator = UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.UI.Combat.RangeIndicator>();
+            if (rangeIndicator != null)
+            {
+                rangeIndicator.SetFollowTarget(transform);
+                // Initial range — refreshed again every BeginFire via _aimSystem.GetVisionRange().
+                // Use AimSystem.GetVisionRange() so the same fallback logic applies (handles cache-not-ready).
+                float initRange = _cachedAimSystem != null ? _cachedAimSystem.GetVisionRange() : 15f;
+                rangeIndicator.SetRange(initRange);
+                inputManager.CombatHandler?.BindAttackIndicators(rangeIndicator);
+            }
+            else
+            {
+                Debug.LogWarning("[NetworkPlayer] RangeIndicator not found in scene — vision ring will not appear.");
+            }
         }
 
         #endregion
