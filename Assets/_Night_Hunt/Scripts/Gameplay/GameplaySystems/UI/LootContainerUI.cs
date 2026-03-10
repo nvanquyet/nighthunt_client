@@ -62,6 +62,10 @@ namespace NightHunt.GameplaySystems.UI
         /// <summary>Live snapshot of the current storage (kept in sync via events).</summary>
         private IReadOnlyList<ItemInstanceData> _currentStorage;
 
+        // Track which lootable is currently open so we can unsubscribe storage-change events.
+        private WorldContainer _openContainer;
+        private WorldCorpse    _openCorpse;
+
         private readonly List<GameObject> _spawnedRows = new List<GameObject>();
 
         // ── Unity lifecycle ───────────────────────────────────────────────────
@@ -81,12 +85,20 @@ namespace NightHunt.GameplaySystems.UI
         {
             WorldContainer.OnContainerOpened += HandleContainerOpened;
             WorldCorpse.OnCorpseOpened       += HandleCorpseOpened;
+            WorldContainer.OnAnyHoverEnter   += HandleContainerHoverEnter;
+            WorldContainer.OnAnyHoverExit    += HandleContainerHoverExit;
+            WorldCorpse.OnAnyHoverEnter      += HandleCorpseHoverEnter;
+            WorldCorpse.OnAnyHoverExit       += HandleCorpseHoverExit;
         }
 
         private void OnDisable()
         {
             WorldContainer.OnContainerOpened -= HandleContainerOpened;
             WorldCorpse.OnCorpseOpened       -= HandleCorpseOpened;
+            WorldContainer.OnAnyHoverEnter   -= HandleContainerHoverEnter;
+            WorldContainer.OnAnyHoverExit    -= HandleContainerHoverExit;
+            WorldCorpse.OnAnyHoverEnter      -= HandleCorpseHoverEnter;
+            WorldCorpse.OnAnyHoverExit       -= HandleCorpseHoverExit;
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -99,10 +111,25 @@ namespace NightHunt.GameplaySystems.UI
 
         public void Hide()
         {
+            UnsubscribeOpenLootable();
             if (_containerPanel != null) _containerPanel.SetActive(false);
             _takeItemAction  = null;
             _currentStorage  = null;
             ClearRows();
+        }
+
+        private void UnsubscribeOpenLootable()
+        {
+            if (_openContainer != null)
+            {
+                _openContainer.OnClientStorageChanged -= RebuildRows;
+                _openContainer = null;
+            }
+            if (_openCorpse != null)
+            {
+                _openCorpse.OnClientStorageChanged -= RebuildRows;
+                _openCorpse = null;
+            }
         }
 
         // ── Handlers ─────────────────────────────────────────────────────────
@@ -110,6 +137,12 @@ namespace NightHunt.GameplaySystems.UI
         private void HandleContainerOpened(WorldContainer container, FishNet.Connection.NetworkConnection conn)
         {
             if (container == null) return;
+            // Only open for the local player who triggered the open.
+            if (_localNob != null && conn != null && conn != _localNob.Owner) return;
+
+            UnsubscribeOpenLootable();
+            _openContainer = container;
+            _openContainer.OnClientStorageChanged += RebuildRows;
 
             _takeItemAction = (idx, qty) => container.RequestTakeItem(_localNob, idx, qty);
             ShowLoot("Container", container.GetStorage());
@@ -118,9 +151,54 @@ namespace NightHunt.GameplaySystems.UI
         private void HandleCorpseOpened(WorldCorpse corpse, FishNet.Connection.NetworkConnection conn)
         {
             if (corpse == null) return;
+            // Only open for the local player who triggered the open.
+            if (_localNob != null && conn != null && conn != _localNob.Owner) return;
+
+            UnsubscribeOpenLootable();
+            _openCorpse = corpse;
+            _openCorpse.OnClientStorageChanged += RebuildRows;
 
             _takeItemAction = (idx, qty) => corpse.RequestTakeItem(_localNob, idx, qty);
             ShowLoot("Corpse", corpse.GetStorage());
+        }
+
+        // -- Hover handlers: close when looking away, reopen when looking back --
+
+        private void HandleContainerHoverEnter(WorldContainer container)
+        {
+            if (container == null || container.IsLooted) return;
+            // Already showing this container — nothing to do.
+            if (_openContainer == container) return;
+
+            UnsubscribeOpenLootable();
+            _openContainer = container;
+            _openContainer.OnClientStorageChanged += RebuildRows;
+            _takeItemAction = (idx, qty) => container.RequestTakeItem(_localNob, idx, qty);
+            ShowLoot("Container", container.GetStorage());
+        }
+
+        private void HandleContainerHoverExit(WorldContainer container)
+        {
+            if (_openContainer == container)
+                Hide();
+        }
+
+        private void HandleCorpseHoverEnter(WorldCorpse corpse)
+        {
+            if (corpse == null || corpse.IsLooted) return;
+            if (_openCorpse == corpse) return;
+
+            UnsubscribeOpenLootable();
+            _openCorpse = corpse;
+            _openCorpse.OnClientStorageChanged += RebuildRows;
+            _takeItemAction = (idx, qty) => corpse.RequestTakeItem(_localNob, idx, qty);
+            ShowLoot("Corpse", corpse.GetStorage());
+        }
+
+        private void HandleCorpseHoverExit(WorldCorpse corpse)
+        {
+            if (_openCorpse == corpse)
+                Hide();
         }
 
         // ── Internal ──────────────────────────────────────────────────────────
@@ -134,6 +212,17 @@ namespace NightHunt.GameplaySystems.UI
             if (_containerNameText != null) _containerNameText.text = title;
 
             BuildRows(storage);
+        }
+
+        /// <summary>Called when the open lootable's SyncList changes — refreshes the item rows.</summary>
+        private void RebuildRows()
+        {
+            IReadOnlyList<ItemInstanceData> src = null;
+            if (_openContainer != null) src = _openContainer.GetStorage();
+            else if (_openCorpse != null) src = _openCorpse.GetStorage();
+            if (src == null) return;
+            _currentStorage = src;
+            BuildRows(src);
         }
 
         private void BuildRows(IReadOnlyList<ItemInstanceData> storage)

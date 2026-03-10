@@ -474,7 +474,22 @@ namespace NightHunt.GameplaySystems.Weapon
         
         public ItemInstance GetWeapon(WeaponSlotType slotType)
         {
-            return _weaponCache.TryGetValue(slotType, out var weapon) ? weapon : null;
+            if (_weaponCache.TryGetValue(slotType, out var weapon))
+                return weapon;
+
+            // Cache-miss fallback (e.g. first tick on a pure client before OnWeaponsChanged
+            // fires, or host-mode before cache was seeded).  Populate cache on hit.
+            if (_weapons.TryGetValue(slotType, out var instanceID))
+            {
+                var item = _inventorySystem?.GetItemByInstanceID(instanceID);
+                if (item != null)
+                {
+                    _weaponCache[slotType] = item;
+                    Debug.LogWarning($"[WeaponSystem] GetWeapon: cache miss for {slotType} — rebuilt from _weapons.");
+                    return item;
+                }
+            }
+            return null;
         }
         
         public Dictionary<WeaponSlotType, ItemInstance> GetAllWeapons()
@@ -507,8 +522,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (itemDef == null || !(itemDef is WeaponDefinition))
                 return false;
             
-            // All weapon slots can accept any weapon
-            // Can add specific restrictions in config if needed
+            // All weapon slots accept any weapon.
             return true;
         }
         
@@ -561,8 +575,13 @@ namespace NightHunt.GameplaySystems.Weapon
                 UnequipWeaponServer(targetSlot);
 
             _weapons[targetSlot] = instanceID;
+            _weaponCache[targetSlot] = item;
             item.InventoryIndex = -1; // Mark as equipped
             _inventorySystem.SyncItemState(instanceID);
+
+            // Auto-select this weapon if the player isn't holding anything yet.
+            if (_activeSlot.Value == null)
+                _activeSlot.Value = targetSlot;
 
             if (_enableDebugLogs)
                 Debug.Log($"[WeaponSystem] EquipWeaponToSlot: {weaponDef.DisplayName} → {targetSlot} (explicit)");
@@ -594,9 +613,14 @@ namespace NightHunt.GameplaySystems.Weapon
             
             // Equip weapon
             _weapons[targetSlot] = instanceID;
+            _weaponCache[targetSlot] = item;
             item.InventoryIndex = -1; // Mark as equipped
             _inventorySystem.SyncItemState(instanceID);
-            
+
+            // Auto-select this weapon if the player isn't holding anything yet.
+            if (_activeSlot.Value == null)
+                _activeSlot.Value = targetSlot;
+
             if (_enableDebugLogs)
                 Debug.Log($"[WeaponSystem] Equipped {weaponDef.DisplayName} → {targetSlot}");
         }
@@ -646,7 +670,8 @@ namespace NightHunt.GameplaySystems.Weapon
 
             // Remove from weapon slots
             _weapons.Remove(slotType);
-            
+            _weaponCache.Remove(slotType);
+
             // Return to inventory (mark with a valid index so UIDomainBridge can show it)
             item.InventoryIndex = FindNextAvailableInventoryIndex();
             _inventorySystem.SyncItemState(instanceID);

@@ -58,6 +58,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private int     _currentWeaponSlot = 0;
         private Vector3 _aimDirection;          // internal — luôn track cursor
         private bool    _inputEnabled = false;
+        private bool    _uiConsumedThisPress;   // set by WeaponSlotButton etc. to block the concurrent LMB fire event
         // ── Camera ref (PC raycast) ───────────────────────────────────────────────
         private UnityEngine.Camera _playerCamera;
 
@@ -83,7 +84,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         /// Khi true, _aimDirection được set bởi FireButton.OnDrag thay vì mouse raycast.
         /// </summary>
         private bool    _mobileAimActive;
-        private Vector3 _mobileAimDirection;
+        private Vector3 _mobileAimDirection;   // normalised — dùng cho character rotation
+        private Vector2 _mobileJoystick01;     // raw [0,1] với magnitude — dùng cho cursor placement
 
         // ── Events ────────────────────────────────────────────────────────────────
         public event System.Action       OnFire;
@@ -309,21 +311,31 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             // WeaponSystem cần direction ngay cả khi chưa bắn (preview trajectory, v.v.)
             _weaponSystem?.SetAimDirection(_aimDirection);
 
-            // Mobile gun aim: push normalised XZ direction to AimSystem so the world
-            // cursor (AimSystem._worldAimCursor) follows the drag while firing.
-            if (_mobileAimActive && _aimDirection.sqrMagnitude > 0.001f)
-                _aimSystem?.SetThrowableAim(new Vector2(_aimDirection.x, _aimDirection.z));
+            // Mobile MOBA cursor sync:
+            // Dùng _mobileJoystick01 (giữ nguyên magnitude [0,1]) thay vì _aimDirection (normalized).
+            // -> Cursor đặt tại player + joystickDir * joystickMagnitude * visionRange.
+            // -> joystick 50% ra đưa cursor đến 50% range — giống Mobile Legends.
+            if (_mobileAimActive && _mobileJoystick01.sqrMagnitude > 0.001f)
+                _aimSystem?.SetThrowableAim(_mobileJoystick01);
         }
 
         // ── Fire Callbacks ────────────────────────────────────────────────────────
 
         private void OnFirePerformed(InputAction.CallbackContext ctx)
         {
+            // Skip if the pointer is currently over a UI element (e.g. FireButton, QuickSlot).
+            // Those buttons call SimulateFire() directly via EventSystem — the Input System
+            // action must NOT also trigger BeginFire() for the same press.
+            if (IsPointerOverAnyUI()) return;
+
+            // Skip if a UI button consumed this press via NotifyUIConsumedPress().
+            if (_uiConsumedThisPress) { _uiConsumedThisPress = false; return; }
             BeginFire(); // Mouse Down
         }
-        
+
         private void OnFireCanceled(InputAction.CallbackContext ctx)
         {
+            _uiConsumedThisPress = false;  // clear in case LMB-up fires after UI ate the down
             EndFire(); // Mouse Up
         }
 
@@ -368,7 +380,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             // → character xoay nhìn theo cursor
 
             OnFire?.Invoke();
-            _rangeIndicator?.Show();
+            // Update range to live value each time the ring is shown.
+            // This avoids the init-timing race (stat cache not ready at spawn)
+            // and ensures the ring matches the actual AimSystem clamp every fire.
+            if (_rangeIndicator != null)
+                _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
+
+            // Mobile: show world aim cursor so it’s visible while holding the FireButton.
+            // PC: cursor is always visible (set in AimSystem.Initialize).
+            if (Application.isMobilePlatform)
+                _aimSystem?.SetCursorVisible(true);
         }
 
         /// <summary>
@@ -401,9 +422,15 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_cameraStateManager != null)
                 _cameraStateManager.ForceState(_prevCameraStateBeforeFire);
 
-            // Reset mobile aim nếu còn active
+            // Reset mobile aim and throwable cursor (activated by SetFireMobileJoystick)
             _mobileAimActive    = false;
             _mobileAimDirection = Vector3.zero;
+            _mobileJoystick01   = Vector2.zero;
+            _aimSystem?.SetThrowableAim(Vector2.zero);  // exit throwable mode if joystick activated it
+
+            // Mobile: hide world aim cursor on fire-stop.
+            if (Application.isMobilePlatform)
+                _aimSystem?.SetCursorVisible(false);
 
             OnFireStop?.Invoke();
         }
@@ -487,7 +514,29 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         public void SimulateFire(bool start)
         {
             if (!_inputEnabled) return;
-            if (start) BeginFire(); else EndFire();
+            if (start)
+            {
+                // Immediately activate mobile aim so AimSystem stops chasing the mouse
+                // the moment the button is pressed (before the first OnDrag fires).
+                // Direction is the current _aimDirection (where the cursor already is);
+                // it will be overridden by SetFireMobileJoystick on the first drag frame.
+                _mobileAimActive    = true;
+                _mobileAimDirection = _aimDirection.sqrMagnitude > 0.001f
+                    ? _aimDirection
+                    : transform.forward;
+                // Use a small initial magnitude so cursor appears near the player, not at the edge.
+                _mobileJoystick01   = new Vector2(_mobileAimDirection.x, _mobileAimDirection.z) * 0.15f;
+                _aimSystem?.SetThrowableAim(_mobileJoystick01);
+
+                Debug.Log($"[FireButton] SimulateFire(true) — mobileAimDir={_mobileAimDirection:F2}  joystick01={_mobileJoystick01:F2}  " +
+                          $"aimPos={_aimSystem?.FinalAimPos:F2}  mobileAimActive={_mobileAimActive}");
+
+                BeginFire();
+            }
+            else
+            {
+                EndFire();
+            }
         }
 
         /// <summary>
@@ -506,6 +555,57 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         }
 
         /// <summary>
+        /// Called by UI buttons (WeaponSlotButton etc.) on PointerDown.
+        /// Prevents the concurrent Input System LMB-performed event from triggering BeginFire.
+        /// Clears automatically on the next fire event.
+        /// </summary>
+        public void NotifyUIConsumedPress() => _uiConsumedThisPress = true;
+
+        /// <summary>
+        /// Returns true if the mouse cursor or any active touch is currently over a UI element.
+        /// Used to prevent aim direction from snapping to UI panel screen positions.
+        /// </summary>
+        private static bool IsPointerOverAnyUI()
+        {
+            if (EventSystem.current == null) return false;
+            if (EventSystem.current.IsPointerOverGameObject()) return true;
+            for (int i = 0; i < UnityEngine.Input.touchCount; i++)
+                if (EventSystem.current.IsPointerOverGameObject(UnityEngine.Input.GetTouch(i).fingerId))
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Called by the FireButton virtual joystick while dragging.
+        /// <paramref name="joystick01"/> is a camera-relative XZ vector with magnitude [0,1]:
+        ///   • character rotates toward the direction
+        ///   • AimSystem cursor placed at magnitude × VisionRange (not always at the edge)
+        /// Call with active=false on finger lift to restore normal mouse aim.
+        /// </summary>
+        public void SetFireMobileJoystick(Vector2 joystick01, bool active)
+        {
+            if (active && joystick01.sqrMagnitude > 0.001f)
+            {
+                _mobileAimActive    = true;
+                // Store raw joystick01 WITH magnitude so cursor placement is proportional.
+                // (joystickMagnitude 0.5 → cursor at 50% of VisionRange, not at the edge)
+                _mobileJoystick01   = joystick01;
+                _mobileAimDirection = new Vector3(joystick01.x, 0f, joystick01.y).normalized; // rotation only
+                _aimSystem?.SetThrowableAim(joystick01);   // immediate update; also refreshed in UpdateAimDirection
+
+                Debug.Log($"[FireButton] SetFireMobileJoystick active — joystick01={joystick01:F2} mag={joystick01.magnitude:F2}  " +
+                          $"aimPos={_aimSystem?.FinalAimPos:F2}  dir={_mobileAimDirection:F2}");
+            }
+            else
+            {
+                _mobileAimActive    = false;
+                _mobileAimDirection = Vector3.zero;
+                _mobileJoystick01   = Vector2.zero;
+                _aimSystem?.SetThrowableAim(Vector2.zero); // revert AimSystem to mouse aim
+            }
+        }
+
+        /// <summary>
         /// Bind tất cả refs cần thiết cho fire flow.
         /// Gọi một lần sau khi local player spawn (trong NetworkPlayer.EnableInput).
         ///
@@ -521,10 +621,26 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             Transform playerTransform = null,
             NightHunt.Gameplay.Camera.CameraStateManager cameraStateManager = null)
         {
+            // Unsubscribe old weapon system before replacing (safe rebind).
+            if (_weaponSystem != null)
+            {
+                OnFire     -= _weaponSystem.StartFire;
+                OnFireStop -= _weaponSystem.StopFire;
+                OnReload   -= _weaponSystem.RequestReload;
+            }
+
             _movementInputHandler = movementInputHandler;
             _weaponSystem         = weaponSystem;
             _playerTransform      = playerTransform;
             _cameraStateManager   = cameraStateManager;
+
+            // Wire combat events → weapon system so button / keyboard fire actually shoots.
+            if (_weaponSystem != null)
+            {
+                OnFire     += _weaponSystem.StartFire;
+                OnFireStop += _weaponSystem.StopFire;
+                OnReload   += _weaponSystem.RequestReload;
+            }
 
             if (_cameraStateManager == null)
                 Debug.LogWarning("[CombatInputHandler] CameraStateManager not bound — " +

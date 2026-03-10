@@ -278,38 +278,6 @@ MonoBehaviour:
         DecelTime: 0
   PlayerIndex: -1
   AutoEnableInputs: 1
---- !u!1 &3326068159638514855
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 5447928725488776468}
-  m_Layer: 0
-  m_Name: WeaponHolder
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &5447928725488776468
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3326068159638514855}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.3, y: 1.5, z: 0.5}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 6223694094125879303}
-  m_Father: {fileID: 5923780521188038293}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &6186874985291187823
 GameObject:
   m_ObjectHideFlags: 0
@@ -347,6 +315,8 @@ GameObject:
   - component: {fileID: 5379918314552202696}
   - component: {fileID: 4068383897207154761}
   - component: {fileID: 8977838086412616377}
+  - component: {fileID: 6488589827618119743}
+  - component: {fileID: 3633809429351613294}
   m_Layer: 9
   m_Name: PlayerPrefab
   m_TagString: Untagged
@@ -367,7 +337,6 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 5447928725488776468}
   - {fileID: 3474373626740050212}
   - {fileID: 8734720127442249217}
   m_Father: {fileID: 0}
@@ -402,16 +371,16 @@ MonoBehaviour:
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
   NetworkObserver: {fileID: 0}
-  _enablePrediction: 0
-  _predictionType: 0
-  _graphicalObject: {fileID: 0}
+  _enablePrediction: 1
+  _predictionType: 1
+  _graphicalObject: {fileID: 8734720127442249217}
   _detachGraphicalObject: 0
   _enableStateForwarding: 1
   _networkTransform: {fileID: 0}
   _ownerInterpolation: 1
-  _ownerSmoothedProperties: 255
-  _adaptiveInterpolation: 3
-  _spectatorSmoothedProperties: 255
+  _ownerSmoothedProperties: 4294967295
+  _adaptiveInterpolation: 6
+  _spectatorSmoothedProperties: 4294967295
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
@@ -558,7 +527,7 @@ MonoBehaviour:
   interpolationSpeed: 15
   staminaRecoveryDelay: 1.5
   slowMovementThreshold: 1
-  enableDebugLogs: 1
+  enableDebugLogs: 0
   groundCheckDistance: 0.1
   groundLayer:
     serializedVersion: 2
@@ -763,7 +732,7 @@ MonoBehaviour:
   playerCamera: {fileID: 0}
   interactableLayerMask:
     serializedVersion: 2
-    m_Bits: 768
+    m_Bits: 26608384
   maxDistance: 50
   ignorePlayerLayer: 1
   showDebugRay: 1
@@ -835,8 +804,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ViewRadius: 15
-  SoftenDistance: 3
-  ViewAngle: 360
+  SoftenDistance: 0.2
+  ViewAngle: 135
   UnobscuredRadius: 1
   Opacity: 1
   AddCorners: 1
@@ -855,12 +824,12 @@ MonoBehaviour:
   MaxHidersSampledPerFrame: 50
   QualityPreset: 5
   RaycastResolution: 0.5
-  NumExtraIterations: 4
+  NumExtraIterations: 3
   NumExtraRaysOnIteration: 3
   ResolveEdge: 1
-  MaxEdgeResolveIterations: 10
+  MaxEdgeResolveIterations: 3
   MaxAcceptableEdgeAngleDifference: 0.005
-  EdgeDstThreshold: 0.1
+  EdgeDstThreshold: 0.15
   DoubleHitMaxAngleDelta: 15
   FogOfWarID: 0
   IndexID: 0
@@ -939,7 +908,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _lifecycle: {fileID: 5895629736225627408}
   _networkPlayer: {fileID: 2698279300146127577}
-  _weaponSystemSource: {fileID: 4303916320540100758}
 --- !u!114 &8977838086412616377
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -957,37 +925,39 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 0}
   _characterDatabase: {fileID: 11400000, guid: bb0e2b542f3b06248a3ae4ac7e051bf4, type: 2}
   _modelParent: {fileID: 8734720127442249217}
---- !u!1 &6246318579326351169
-GameObject:
+--- !u!114 &6488589827618119743
+MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 6223694094125879303}
-  m_Layer: 0
-  m_Name: FirePoint
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &6223694094125879303
-Transform:
+  m_GameObject: {fileID: 6186874985291187823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11f91ed8e987edd409b83181c1c4075f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _groundCheckRadius: 0.25
+  _groundCheckOffset: 0.05
+  _groundLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  _speedSmoothing: 12
+  _layerWeightTransitionSpeed: 8
+--- !u!114 &3633809429351613294
+MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6246318579326351169}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0.5}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 5447928725488776468}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_GameObject: {fileID: 6186874985291187823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 14532d45c65895c43b30691abbd73aa2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _weaponSystemSource: {fileID: 4303916320540100758}
+  localRotationWeapon: {x: 90, y: 0, z: 0}
 --- !u!1 &6927907726633053832
 GameObject:
   m_ObjectHideFlags: 0

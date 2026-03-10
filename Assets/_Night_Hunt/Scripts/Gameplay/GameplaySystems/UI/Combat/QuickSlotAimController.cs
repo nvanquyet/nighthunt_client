@@ -47,8 +47,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] private Transform _aimCursor;
 
         [Header("Mobile Drag Threshold")]
-        [Tooltip("Minimum screen-space drag distance (pixels) before a release is treated as a confirm.")]
-        [SerializeField] private float _dragThresholdPixels = 50f;
+        [Tooltip("Minimum joystick magnitude [0\u20131] for a drag-release to be treated as a confirm throw.")]
+        [SerializeField] private float _dragThreshold = 0.25f;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime refs
@@ -66,7 +66,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private bool    _inAimMode;
         private int     _activeSlot  = -1;
-        private Vector2 _mobileDragStart;      // screen-space anchor for mobile
 
         // ─────────────────────────────────────────────────────────────────────
         //  Static output (read by ThrowableHandler)
@@ -155,7 +154,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// If the item in <paramref name="slotIndex"/> is a <c>Throwable</c>, enters aim mode.
         /// Otherwise falls back to direct <see cref="IQuickSlotSystem.UseQuickSlot"/>.
         /// </summary>
-        public void TryBeginAim(int slotIndex, RectTransform buttonRT, Vector2 screenAnchor)
+        public void TryBeginAim(int slotIndex)
         {
             if (_quickSlotSystem == null) return;
 
@@ -184,11 +183,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_rangeIndicator != null)
                 _rangeIndicator.ShowWithRange(range);
 
-            if (IsMobile)
-            {
-                _mobileDragStart = screenAnchor;
-            }
-            else
+            if (!IsMobile)
             {
                 // PC: immediately do a raycast so the ring is ready on first frame.
                 UpdatePCRaycast();
@@ -197,35 +192,35 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         /// <summary>
         /// Called by <see cref="QuickSlotHUDButton"/> IDragHandler during a mobile drag.
+        /// <paramref name="joystickDir"/> is <see cref="VariableJoystick.Direction"/> — already
+        /// normalised [0,1] joystick space; no further screen-space conversion needed.
         /// </summary>
-        public void OnMobileDrag(PointerEventData eventData)
+        public void OnMobileDrag(Vector2 joystickDir)
         {
             if (!_inAimMode || !IsMobile) return;
 
-            Vector2 delta       = eventData.position - _mobileDragStart;
-            float   range       = GetVisionRange();
-            Vector3 worldDir    = ScreenDeltaToWorldDir(delta, range);
+            float   range    = GetVisionRange();
+            Vector3 worldDir = Joystick01ToWorldDir(joystickDir, range);
 
             if (_playerTransform != null)
             {
                 AimWorldTarget = _playerTransform.position + worldDir;
-                AimDirection   = worldDir.normalized;
+                AimDirection   = worldDir.magnitude > 0.001f ? worldDir.normalized : Vector3.forward;
                 MoveCursor(AimWorldTarget);
-                // Sync AimSystem so FinalAimPos matches the mobile drag target.
-                _aimSystem?.SetThrowableAim(new Vector2(AimDirection.x, AimDirection.z));
+                _aimSystem?.SetThrowableAim(joystickDir);
             }
         }
 
         /// <summary>
         /// Called by <see cref="QuickSlotHUDButton"/> IEndDragHandler when the finger lifts.
+        /// <paramref name="joystickMagnitude"/> is the final <see cref="VariableJoystick.Direction"/>
+        /// magnitude [0,1] at the moment of release.
         /// </summary>
-        public void OnMobileDragEnd(PointerEventData eventData)
+        public void OnMobileDragEnd(float joystickMagnitude)
         {
             if (!_inAimMode || !IsMobile) return;
 
-            float drag = Vector2.Distance(eventData.position, _mobileDragStart);
-
-            if (drag >= _dragThresholdPixels)
+            if (joystickMagnitude >= _dragThreshold)
                 ConfirmAim();
             else
                 CancelAim();
@@ -301,22 +296,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
         }
 
         /// <summary>
-        /// Convert a 2D screen-space drag delta into a clamped world-space offset vector.
-        /// Camera-relative: right drag → camera right projected to XZ, up drag → camera forward projected to XZ.
+        /// Convert [0,1] joystick value to camera-relative world XZ offset scaled by range.
         /// </summary>
-        private Vector3 ScreenDeltaToWorldDir(Vector2 screenDelta, float range)
+        private Vector3 Joystick01ToWorldDir(Vector2 joystick01, float range)
         {
             if (_cam == null) return Vector3.zero;
-
             Vector3 camRight   = _cam.transform.right;   camRight.y   = 0; camRight.Normalize();
             Vector3 camForward = _cam.transform.forward; camForward.y = 0; camForward.Normalize();
-
-            // Normalise screen delta by screen height to get a [0..1] magnitude.
-            float normMag = screenDelta.magnitude / Screen.height;
-            float clampedMag = Mathf.Min(normMag, 1f) * range;
-
-            Vector2 dir2D = screenDelta.sqrMagnitude > 0.001f ? screenDelta.normalized : Vector2.zero;
-            return (camRight * dir2D.x + camForward * dir2D.y) * clampedMag;
+            return (camRight * joystick01.x + camForward * joystick01.y) * range;
         }
 
         private void MoveCursor(Vector3 worldPos)

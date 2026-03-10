@@ -21,19 +21,19 @@ MonoBehaviour:
   Weight: 0.4
   ModifyWeightWhenEquipped: 0
   EquippedWeightModifier: 0
-  ResourceType: 0
-  MaxResource: 0
-  DefaultResource: 0
   AttachmentSlots: 
   CanAttachTo: 
   ValidSlots: 0000000003000000
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
+  EquippedPrefab: {fileID: 7342610198373781452, guid: 9807f3674ec38c44d8a2fa03e140b4ae,
+    type: 3}
+  DroppedPrefab: {fileID: 7342610198373781452, guid: 9807f3674ec38c44d8a2fa03e140b4ae,
+    type: 3}
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 1
   StatConfig: {fileID: 11400000, guid: db5ff78c6f456f0429f72830db9e43a0, type: 2}
-  ProjectilePrefab: {fileID: 0}
+  ProjectilePrefab: {fileID: 7342610198373781452, guid: 9807f3674ec38c44d8a2fa03e140b4ae,
+    type: 3}
   ThrowForce: 15
   MaxRange: 30
   PrepareTime: 0.5

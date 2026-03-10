@@ -88,6 +88,10 @@ namespace NightHunt.Gameplay.Character
 
         // ===== STATS =====
         protected IPlayerStatSystem _playerStatSystem;
+        
+        // ===== ANIMATION EVENTS =====
+        public event System.Action OnJumpTriggered;
+        public event System.Action OnRollTriggered;
 
         // ===== NON OWNER INTERPOLATION =====
         protected Vector3 _targetPosition;
@@ -360,195 +364,129 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         protected virtual void SimulateMovement(MovementReplicateData data, float dt)
         {
-            if (!IsSpawned) return;
+            if (!IsSpawned || movementSettings == null) return;
 
-            if (movementSettings == null)
-            {
-                return; // Skip simulation until movementSettings is ready
-            }
-
+            // ── Ground state ──────────────────────────────────────────────────────
             bool grounded = IsGrounded();
 
-            // ===== SPEED & STAMINA CONFIG FROM STATS / SETTINGS =====
+            // ── Speed modifier ────────────────────────────────────────────────────
             float speed = GetBaseSpeed();
-            float maxStamina = GetMaxStamina();
-            float minStaminaToSprint = GetMinStaminaToSprint();
-            float drainRate = GetStaminaDrainRate();
-            float regenRate = GetStaminaRegenRate();
-            float sprintMultiplier = GetSprintSpeedMultiplier();
+            bool canSprint = data.Sprint && _stamina > GetMinStaminaToSprint();
+            if      (canSprint)    speed *= GetSprintSpeedMultiplier();
+            else if (data.Crouch)  speed *= movementSettings.crouchMultiplier;
 
-            // ===== INPUT DIRECTION =====
-            Vector3 inputDir = new Vector3(data.Move.x, 0f, data.Move.y);
-            float inputMagnitude = inputDir.magnitude;
-
-            bool canSprint = data.Sprint && _stamina > minStaminaToSprint;
-
+            // ── Stamina ───────────────────────────────────────────────────────────
             if (canSprint)
             {
-                speed *= sprintMultiplier;
-            }
-            else if (data.Crouch)
-            {
-                speed *= movementSettings.crouchMultiplier;
-            }
-
-            // ===== STAMINA ADVANCED LOGIC =====
-            // Chỉ sprint và roll tiêu stamina; idle/walk/crouch đều cho hồi sau delay.
-            bool isConsumingStamina = (data.Sprint && canSprint) || _isRolling;
-
-            if (isConsumingStamina)
-            {
-                // Sprint → drain liên tục.
-                if (data.Sprint && canSprint)
-                    _stamina = Mathf.Max(0f, _stamina - drainRate * dt);
-                // Roll đã trừ rollStaminaCost ngay khi bắt đầu → không drain thêm ở đây.
+                _stamina = Mathf.Max(0f, _stamina - GetStaminaDrainRate() * dt);
                 _staminaRecoveryTimer = 0f;
             }
-            else
+            else if (!_isRolling)
             {
-                // Hồi stamina sau delay — idle/walk/crouch đều được hồi.
                 _staminaRecoveryTimer += dt;
                 if (_staminaRecoveryTimer >= staminaRecoveryDelay)
-                {
-                    _stamina = Mathf.Min(_stamina + regenRate * dt, maxStamina);
-                }
+                    _stamina = Mathf.Min(_stamina + GetStaminaRegenRate() * dt, GetMaxStamina());
             }
 
-            // ===== WRITE-BACK TO PLAYER STAT SYSTEM (SERVER ONLY) =====
             if (IsServerStarted && _playerStatSystem != null)
-            {
                 _playerStatSystem.SetCurrentStat(PlayerStatType.Stamina, _stamina);
-            }
 
-            // ===== FINAL INPUT DIRECTION (NORMALIZED) =====
-            if (inputDir.sqrMagnitude > 1f)
-                inputDir.Normalize();
+            // ── Input & rotation ─────────────────────────────────────────────────
+            Vector3 inputDir = new Vector3(data.Move.x, 0f, data.Move.y);
+            if (inputDir.sqrMagnitude > 1f) inputDir.Normalize();
 
             Quaternion camRot = Quaternion.Euler(0f, data.Yaw, 0f);
-            // Cursor-derived facing — differs from camRot in top-down MOBA (camera doesn't rotate).
             Quaternion aimRot = Quaternion.Euler(0f, data.AimYaw, 0f);
-            Vector3 moveDir = Vector3.zero;
+            Vector3 moveDir   = Vector3.zero;
 
-            // ===== ROTATION & MOVEMENT =====
             if (data.CameraLocked)
             {
-                // STRAFE MODE — character model faces cursor, moves camera-relative
-                transform.rotation = Quaternion.RotateTowards(
-                    transform.rotation,
-                    aimRot,
-                    lockTurnSpeed * dt * 100f
-                );
-
-                if (inputDir.sqrMagnitude > 0.001f)
-                {
-                    moveDir = camRot * inputDir;
-                }
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, aimRot, lockTurnSpeed * dt * 100f);
+                if (inputDir.sqrMagnitude > 0.001f) moveDir = camRot * inputDir;
             }
             else
             {
-                // TANK MODE
                 if (inputDir.sqrMagnitude > 0.001f)
                 {
                     moveDir = camRot * inputDir;
-                    Quaternion targetRot = Quaternion.LookRotation(moveDir);
-
                     transform.rotation = Quaternion.RotateTowards(
-                        transform.rotation,
-                        targetRot,
-                        tankTurnSpeed * dt * 100f // match STRAFE multiplier convention
-                    );
+                        transform.rotation, Quaternion.LookRotation(moveDir), tankTurnSpeed * dt * 100f);
                 }
-                else
+                else if (Quaternion.Angle(transform.rotation, aimRot) > 5f)
                 {
-                    // Idle: slowly face cursor/aim direction so the model looks where
-                    // the player is pointing while standing still.
-                    float angle = Quaternion.Angle(transform.rotation, aimRot);
-                    if (angle > 5f)
-                    {
-                        transform.rotation = Quaternion.RotateTowards(
-                            transform.rotation,
-                            aimRot,
-                            tankTurnSpeed * 0.5f * dt * 100f // half-speed idle follow
-                        );
-                    }
+                    transform.rotation = Quaternion.RotateTowards(
+                        transform.rotation, aimRot, tankTurnSpeed * 0.5f * dt * 100f);
                 }
             }
 
-            // ===== ROLL STATE =====
+            // ── Roll ─────────────────────────────────────────────────────────────
             float rollHSpeed = movementSettings.rollDistance / movementSettings.rollDuration;
 
-            // Tick down timer and check wall cancel.
+            // Tick active roll.
             if (_isRolling)
             {
-                _rollTimer -= dt;
-                bool expired = _rollTimer <= 0f;
-                bool blocked = !expired && IsRollBlocked(_rollDir, rollHSpeed * dt);
-                if (expired || blocked)
-                {
-                    _isRolling = false;
-                    _rollTimer = 0f;
-                    _rollDir   = Vector3.zero;
-                }
+                bool wall = IsRollBlocked(_rollDir, rollHSpeed * dt);
+
+                bool done = wall || (movementSettings.rollMode == RollMode.Leap
+                    ? grounded && _verticalVelocity <= 0f     // Leap ends on landing
+                    : ((_rollTimer -= dt) <= 0f));             // Dash ends on timer
+
+                if (done) { _isRolling = false; _rollTimer = 0f; _rollDir = Vector3.zero; }
             }
 
-            // Activate new roll.
-            if (data.Roll && !_isRolling && grounded
-                && movementSettings.enableRoll
+            // Start new roll.
+            if (data.Roll && !_isRolling && grounded && movementSettings.enableRoll
                 && _stamina >= movementSettings.rollStaminaCost)
             {
                 _isRolling = true;
                 _rollTimer = movementSettings.rollDuration;
                 _stamina   = Mathf.Max(0f, _stamina - movementSettings.rollStaminaCost);
+                _rollDir   = inputDir.sqrMagnitude > 0.01f ? (camRot * inputDir).normalized : transform.forward;
 
-                // Lock direction: camera-relative input, fallback to character forward.
-                Vector3 inputDir3 = new Vector3(data.Move.x, 0f, data.Move.y);
-                _rollDir = inputDir3.sqrMagnitude > 0.01f
-                    ? (camRot * inputDir3).normalized
-                    : transform.forward;
-
-                // Leap: launch upward at start.
                 if (movementSettings.rollMode == RollMode.Leap && movementSettings.rollLeapHeight > 0f)
                     _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.rollLeapHeight);
+                
+                OnRollTriggered?.Invoke(); // Fire animation event
             }
 
-            // Override normal move while rolling — player cannot steer mid-roll.
+            // Apply roll override.
             if (_isRolling)
             {
                 moveDir = _rollDir;
-                speed   = rollHSpeed;
+                if (movementSettings.rollMode == RollMode.Dash)
+                {
+                    // Ease-out trong rollEaseOutFraction cuối để kết thúc mượt.
+                    float t = _rollTimer / movementSettings.rollDuration;
+                    float w = movementSettings.rollEaseOutFraction;
+                    speed = rollHSpeed * (w > 0f && t < w ? Mathf.SmoothStep(0f, 1f, t / w) : 1f);
+                }
+                else
+                {
+                    speed = rollHSpeed; // Leap: horizontal cố định, gravity tạo arc tự nhiên.
+                }
             }
 
-            // ===== GRAVITY =====
-            // Apply every tick so launch velocity from Jump/Leap decelerates correctly
-            // even when IsGrounded() still returns true the tick after launch starts
-            // (ground-check sphere hasn't cleared the surface yet).
-            // While airborne and falling, scale gravity up so the descent matches the
-            // snappiness of the launch (standard game-feel technique).
-            float gravityScale = (!grounded && _verticalVelocity < 0f)
-                ? movementSettings.fallGravityMultiplier
-                : 1f;
-            _verticalVelocity -= movementSettings.gravity * gravityScale * dt;
-            // While on the ground and falling, clamp to a small stick-down value so
-            // the character doesn't build up a large negative free-fall velocity in place.
-            if (grounded && _verticalVelocity < 0f)
-                _verticalVelocity = -movementSettings.groundedStickDownVelocity;
-
-            // ===== JUMP =====
+            // ── Vertical / gravity ───────────────────────────────────────────────
+            // Jump fires first so launch velocity isn't eaten by gravity on the same tick.
             if (data.Jump && grounded && movementSettings.enableJump)
+            {
                 _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.jumpHeight);
+                OnJumpTriggered?.Invoke(); // Fire animation event
+            }
 
-            // ===== APPLY MOVEMENT =====
-            Vector3 horizontalMovement = moveDir * speed;
-            Vector3 finalMovement = new Vector3(
-                horizontalMovement.x,
-                _verticalVelocity,
-                horizontalMovement.z
-            );
+            if (grounded && _verticalVelocity <= 0f)
+            {
+                // Snap to small stick-down; no accumulation → no PhysX floor-push jitter.
+                _verticalVelocity = -movementSettings.groundedStickDownVelocity;
+            }
+            else
+            {
+                float mult = _verticalVelocity < 0f ? Mathf.Max(1f, movementSettings.fallGravityMultiplier) : 1f;
+                _verticalVelocity -= movementSettings.gravity * mult * dt;
+            }
 
-            // Delegate to physics implementation
-            ApplyMovement(finalMovement, dt);
-
-            // Update velocity from physics component
+            // ── Apply ─────────────────────────────────────────────────────────────
+            ApplyMovement(new Vector3(moveDir.x * speed, _verticalVelocity, moveDir.z * speed), dt);
             _velocity = GetCurrentVelocity();
         }
 
@@ -725,6 +663,9 @@ namespace NightHunt.Gameplay.Character
         public bool IsSprinting() => _sprint;
         public bool IsCrouching() => _crouch;
         public bool IsCameraLocked() => _cameraLocked;
+        public bool IsRolling() => _isRolling;
+        public Vector2 GetMoveInput() => _moveInput;
+        public float GetCameraYaw() => _yaw;
 
         public virtual void SetWeightPenalty(float penalty)
         {

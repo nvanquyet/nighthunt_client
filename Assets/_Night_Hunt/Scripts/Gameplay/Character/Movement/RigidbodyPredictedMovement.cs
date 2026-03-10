@@ -224,8 +224,19 @@ namespace NightHunt.Gameplay.Character
 
             // Cache the resolved (possibly wall-blocked) movement so GetCurrentVelocity()
             // returns it deterministically — no collision-induced linearVelocity noise.
+            // _lastAppliedMovement carries the full intended Y (including stick-down) so
+            // reconcile snapshots always receive the authoritative vertical velocity.
             Vector3 resolvedMovement = horizontal + vertical;
             _lastAppliedMovement = resolvedMovement;
+
+            // NOTE: Do NOT suppress physicsMovement.y here.
+            // Previous iteration zeroed Y when grounded to avoid PhysX floor-push jitter,
+            // but that causes the character to "float" above terrain after rolling (capsule
+            // drifts up a few millimetres, grounded check still true, y=0 → stuck at height).
+            // With the corrected gravity model (constant -stickDown, no accumulation),
+            // the downward force is tiny (stickDown=0.3 → 6mm/tick); PhysX contact
+            // resolution + Rigidbody interpolation keeps it visually stable.
+            Vector3 physicsMovement = resolvedMovement;
 
             // Owner / Server: drive movement via MovePosition.
             //
@@ -239,7 +250,7 @@ namespace NightHunt.Gameplay.Character
             //     manifests as jitter at sprint speed.
             //   • Because we call MovePosition once per tick (50 Hz) the displacement
             //     per call is resolvedMovement * dt  (same as velocity * fixedDeltaTime).
-            Vector3 newPosition = _rigidbody.position + resolvedMovement * dt;
+            Vector3 newPosition = _rigidbody.position + physicsMovement * dt;
             _rigidbody.MovePosition(newPosition);
             // Zero residual velocity so PhysX does not apply it again between ticks.
             // MovePosition commits the exact intended displacement; any leftover
@@ -248,7 +259,7 @@ namespace NightHunt.Gameplay.Character
             _rigidbody.linearVelocity = Vector3.zero;
 
             if (enableDebugLogs && resolvedMovement.sqrMagnitude > 0.01f)
-                Debug.Log($"[RigidbodyPredictedMovement] MovePosition delta={(resolvedMovement * dt).magnitude:F4}");
+                Debug.Log($"[RigidbodyPredictedMovement] MovePosition delta={(physicsMovement * dt).magnitude:F4}");
         }
 
         /// <summary>

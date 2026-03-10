@@ -33,6 +33,8 @@ namespace NightHunt.GameplaySystems.Loot
         private bool          _autoReset     = false;
         private float         _autoResetDelay = 60f;
         private Coroutine     _autoResetCoroutine;
+        // Items pending scatter to world on open (DropToWorldOnOpen=true)
+        private List<SpawnResult> _pendingDropResults;
 
         // ── SyncVars ──────────────────────────────────────────────────────────────
         private readonly SyncList<ItemInstanceData> syncStorage   = new SyncList<ItemInstanceData>();
@@ -71,27 +73,59 @@ namespace NightHunt.GameplaySystems.Loot
 
         // ── IHoldInteractable ─────────────────────────────────────────────────────
 
-        public float HoldDuration => _lootableConfig?.HoldDuration ?? holdDuration;
+        // When container is already open, show loot UI instantly (no hold needed).
+        public float HoldDuration => IsOpen ? 0f : (_lootableConfig?.HoldDuration ?? holdDuration);
 
         public bool CanInteract(GameObject interactor)
         {
-            if (isLocked || IsOpen || _isOpenPending) return false;
+            if (isLocked) return false;
+            if (IsLooted) return false;
+            if (!IsOpen && _isOpenPending) return false; // Đang chờ server confirm open — chặn spam
             return Vector3.Distance(transform.position, interactor.transform.position) <= GetInteractDistance();
         }
 
         public void Interact(GameObject interactor)
         {
-            if (_isOpenPending) return;
             var playerNob = interactor?.GetComponent<NetworkObject>();
             if (playerNob == null) return;
+
+            if (IsOpen)
+            {
+                // Container đã mở — re-show loot UI locally, không cần server call.
+                Debug.Log($"[WorldContainer] Interact: already open, re-showing loot UI. Items={storage.Count}");
+                OnContainerOpened?.Invoke(this, playerNob.Owner);
+                return;
+            }
+
+            if (_isOpenPending) return;
             _isOpenPending = true;
             RequestOpen(playerNob);
         }
 
-        public void OnHoverEnter(GameObject interactor) { }
-        public void OnHoverExit(GameObject interactor)  { }
+        /// <summary>Fired on the local client whenever the player's raycast enters this container.</summary>
+        public static event Action<WorldContainer> OnAnyHoverEnter;
+        /// <summary>Fired on the local client whenever the player's raycast leaves this container.</summary>
+        public static event Action<WorldContainer> OnAnyHoverExit;
+
+        public void OnHoverEnter(GameObject interactor)
+        {
+            if (IsOpen && !IsLooted)
+            {
+                Debug.Log($"[WorldContainer] OnHoverEnter: container open — auto-showing loot UI. Items={storage.Count}");
+                OnAnyHoverEnter?.Invoke(this);
+            }
+        }
+
+        public void OnHoverExit(GameObject interactor)
+        {
+            Debug.Log("[WorldContainer] OnHoverExit — hiding loot UI if open.");
+            OnAnyHoverExit?.Invoke(this);
+        }
 
         public static event Action<WorldContainer, NetworkConnection> OnContainerOpened;
+
+        /// <summary>Fired on clients whenever the synced storage list changes (items added/removed).</summary>
+        public event Action OnClientStorageChanged;
 
         // ── Network Lifecycle ─────────────────────────────────────────────────────
 
@@ -138,13 +172,16 @@ namespace NightHunt.GameplaySystems.Loot
             _autoReset      = autoReset;
             _autoResetDelay = autoResetDelay;
             hasRolled       = false;
+            _pendingDropResults = null;
 
             // Set SyncVars TRƯỚC Spawn để embed vào spawn packet
             syncIsLocked.Value  = locked;
-            syncHasRolled.Value = false;
             syncIsOpen.Value    = false;
 
-            Debug.Log($"[WorldContainer] InitializeBeforeSpawn: locked={locked} autoReset={autoReset} ObjId={ObjectId}");
+            // Roll items ngay lúc spawn — không đợi player mở (mặc định khởi tạo luôn)
+            RollLootInternal();
+
+            Debug.Log($"[WorldContainer] InitializeBeforeSpawn: locked={locked} autoReset={autoReset} storage={storage.Count} ObjId={ObjectId}");
         }
 
         // ── ServerRpc: Open ───────────────────────────────────────────────────────
@@ -165,39 +202,63 @@ namespace NightHunt.GameplaySystems.Loot
             if (dist > GetInteractDistance()) { Debug.LogWarning($"[WorldContainer] RequestOpen: quá xa ({dist:F2}m)."); return; }
             if (isLocked)                     { Debug.LogWarning("[WorldContainer] RequestOpen: container bị khóa.");    return; }
 
-            if (!hasRolled && spawnTable != null && spawnTable.RollOnOpen)
-                RollLoot();
+            // Items đã được roll tại InitializeBeforeSpawn → không cần roll lại.
+            // Nếu DropToWorldOnOpen=true: scatter pending items ra world khi lần đầu mở.
+            if (_pendingDropResults != null && _pendingDropResults.Count > 0)
+            {
+                if (WorldSpawnManager.Instance != null)
+                    WorldSpawnManager.Instance.SpawnWorldItemsFromResults(_pendingDropResults, transform.position, 1.5f);
+                _pendingDropResults = null;
+            }
 
+            Debug.Log($"[WorldContainer] RequestOpen: opening ObjId={ObjectId} storage={storage.Count} items → ClientId={conn?.ClientId}");
             syncIsOpen.Value = true;
             RpcOnContainerOpened(conn);
         }
 
-        [Server]
-        private void RollLoot()
+        /// <summary>
+        /// Roll loot từ SpawnTable và lưu vào storage.
+        /// KHÔNG có [Server] attribute — gọi được từ InitializeBeforeSpawn (trước IsServerInitialized).
+        /// </summary>
+        private void RollLootInternal()
         {
-            if (spawnTable == null) { Debug.LogWarning("[WorldContainer] RollLoot: SpawnTable null."); return; }
+            if (spawnTable == null)
+            {
+                Debug.LogWarning("[WorldContainer] RollLootInternal: SpawnTable là NULL — container sẽ rỗng!");
+                hasRolled           = true;
+                syncHasRolled.Value = true;
+                return;
+            }
 
-            var results = spawnTable.Roll();
+            Debug.Log($"[WorldContainer] RollLootInternal: START SpawnTable='{spawnTable.name}' Mode={spawnTable.Mode} DropToWorld={spawnTable.DropToWorldOnOpen}");
 
             if (spawnTable.DropToWorldOnOpen)
             {
-                if (WorldSpawnManager.Instance != null)
-                    WorldSpawnManager.Instance.SpawnWorldItemsFromResults(results, transform.position, 1.5f);
+                _pendingDropResults = spawnTable.Roll();
+                Debug.Log($"[WorldContainer] RollLootInternal: DropToWorldOnOpen=true — {_pendingDropResults.Count} item(s) sẽ scatter khi mở.");
             }
             else
             {
+                var results = spawnTable.Roll();
+                Debug.Log($"[WorldContainer] RollLootInternal: Rolled {results.Count} item(s):");
                 foreach (var result in results)
                 {
-                    if (result.ItemDef == null) continue;
+                    if (result.ItemDef == null) { Debug.LogWarning("[WorldContainer] RollLootInternal:   ✗ ItemDef null — bỏ qua!"); continue; }
                     var instance = new ItemInstance(result.ItemDef.ItemID, result.Quantity, -1);
-                    storage.Add(instance.ToData());
-                    syncStorage.Add(instance.ToData());
+                    var data = instance.ToData();
+                    storage.Add(data);
+                    syncStorage.Add(data);
+                    Debug.Log($"[WorldContainer] RollLootInternal:   + '{result.ItemDef.ItemID}' ({result.ItemDef.DisplayName}) x{result.Quantity}");
                 }
+                Debug.Log($"[WorldContainer] RollLootInternal: DONE — storage.Count={storage.Count}");
             }
 
             hasRolled           = true;
             syncHasRolled.Value = true;
         }
+
+        [Server]
+        private void RollLoot() => RollLootInternal();
 
         // ── ServerRpc: Take Item ──────────────────────────────────────────────────
 
@@ -248,9 +309,11 @@ namespace NightHunt.GameplaySystems.Loot
             {
                 case SyncListOperation.Add:      storage.Add(newValue); break;
                 case SyncListOperation.RemoveAt: if (index >= 0 && index < storage.Count) storage.RemoveAt(index); break;
+                // fall-through to fire event below
                 case SyncListOperation.Set:      if (index >= 0 && index < storage.Count) storage[index] = newValue; break;
                 case SyncListOperation.Clear:    storage.Clear(); break;
             }
+            OnClientStorageChanged?.Invoke();
         }
 
         private void OnLockedChanged(bool o, bool n, bool s)  { if (!s) isLocked  = n; }
@@ -264,14 +327,18 @@ namespace NightHunt.GameplaySystems.Loot
             Debug.Log($"[WorldContainer] Auto-reset sau {_autoResetDelay}s... ObjId={ObjectId}");
             yield return new WaitForSeconds(_autoResetDelay);
 
-            syncIsOpen.Value    = false;
-            syncHasRolled.Value = false;
-            hasRolled           = false;
+            syncIsOpen.Value = false;
             storage.Clear();
             syncStorage.Clear();
+            hasRolled = false;
+            syncHasRolled.Value = false;
+            _pendingDropResults = null;
+
+            // Re-roll items cho lần loot tiếp theo
+            RollLootInternal();
 
             _autoResetCoroutine = null;
-            Debug.Log($"[WorldContainer] Reset xong — sẵn sàng loot lại. ObjId={ObjectId}");
+            Debug.Log($"[WorldContainer] Reset xong — sẵn sàng loot lại. storage={storage.Count} ObjId={ObjectId}");
         }
 
         // ── ObserversRpc ──────────────────────────────────────────────────────────

@@ -38,6 +38,14 @@ namespace NightHunt.GameplaySystems.Loot
 
         public static event Action<WorldCorpse, NetworkConnection> OnCorpseOpened;
 
+        /// <summary>Fired on the local client when the player's raycast enters this corpse.</summary>
+        public static event Action<WorldCorpse> OnAnyHoverEnter;
+        /// <summary>Fired on the local client when the player's raycast leaves this corpse.</summary>
+        public static event Action<WorldCorpse> OnAnyHoverExit;
+
+        /// <summary>Fired on clients whenever the synced storage list changes (items added/removed).</summary>
+        public event Action OnClientStorageChanged;
+
         // ── ILootable ───────────────────────────────────────────────────────────
 
         public bool IsLooted => storage.Count == 0;
@@ -57,21 +65,42 @@ namespace NightHunt.GameplaySystems.Loot
         public bool CanInteract(GameObject interactor)
         {
             if (storage.Count == 0) return false;
-            if (syncIsOpen.Value || _isOpenPending) return false; // Đã mở hoặc đang chờ server confirm
+            if (!IsOpen && _isOpenPending) return false; // Đang chờ server confirm — chặn spam
             return Vector3.Distance(transform.position, interactor.transform.position) <= GetInteractDistance();
         }
 
         public void Interact(GameObject interactor)
         {
-            if (_isOpenPending) return;
             var playerNob = interactor?.GetComponent<FishNet.Object.NetworkObject>();
             if (playerNob == null) return;
+
+            if (IsOpen)
+            {
+                // Corpse đã mở — re-show loot UI locally.
+                Debug.Log($"[WorldCorpse] Interact: already open, re-showing loot UI. Items={storage.Count}");
+                OnCorpseOpened?.Invoke(this, playerNob.Owner);
+                return;
+            }
+
+            if (_isOpenPending) return;
             _isOpenPending = true;
             RequestOpen(playerNob);
         }
 
-        public void OnHoverEnter(GameObject interactor) { /* outline effect wired up when highlight system is ready */ }
-        public void OnHoverExit(GameObject interactor)  { /* outline effect wired up when highlight system is ready */ }
+        public void OnHoverEnter(GameObject interactor)
+        {
+            if (IsOpen && storage.Count > 0)
+            {
+                Debug.Log($"[WorldCorpse] OnHoverEnter: corpse open — auto-showing loot UI. Items={storage.Count}");
+                OnAnyHoverEnter?.Invoke(this);
+            }
+        }
+
+        public void OnHoverExit(GameObject interactor)
+        {
+            Debug.Log("[WorldCorpse] OnHoverExit — hiding loot UI if open.");
+            OnAnyHoverExit?.Invoke(this);
+        }
 
         public override void OnStartNetwork()
         {
@@ -178,6 +207,7 @@ namespace NightHunt.GameplaySystems.Loot
                 case SyncListOperation.Set:      if (index >= 0 && index < storage.Count) storage[index] = newValue; break;
                 case SyncListOperation.Clear:    storage.Clear(); break;
             }
+            OnClientStorageChanged?.Invoke();
         }
 
         [ObserversRpc]

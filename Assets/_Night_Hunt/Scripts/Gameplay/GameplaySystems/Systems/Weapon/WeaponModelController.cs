@@ -1,54 +1,57 @@
+using System;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.Gameplay.Character;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
     /// <summary>
     /// Spawns and destroys weapon model GameObjects whenever the active weapon slot changes.
     ///
-    /// Mirrors the role that PrCharacterInventory plays in the PR reference:
-    /// equip → instantiate EquippedPrefab under the weapon socket bone; unequip → destroy.
+    /// Follows the same SciFi package convention as PrCharacterInventory:
+    ///   • Instantiates EquippedPrefab under PrActorUtils.WeaponR (right-hand bone).
+    ///   • Reads PrWeapon.ShootFXPos for the fire/hitscan origin — no child-name search.
+    ///   • Reads PrWeapon.useIK + "ArmIK" child for left-hand IK — SciFi convention.
+    ///   • PrWeapon self-manages its own muzzle flash (ShootFXFLash/Muzzle) internally.
     ///
-    /// Inspector setup:
-    ///   _weaponSystemSource — MonoBehaviour implementing IWeaponSystem on the same player.
-    ///   _weaponSocket       — Transform on the character's right-hand bone (weapon parent).
-    ///   _vfxController      — optional WeaponVFXController; muzzle point is updated after each swap.
+    /// Inspector setup: only _weaponSystemSource needs to be assigned.
+    /// PrActorUtils is resolved automatically via PlayerModelLoader.OnModelReady.
     ///
-    /// Convention (each EquippedPrefab should follow):
-    ///   Child named "Muzzle"      → muzzle flash / projectile origin point.
-    ///   Child named "LeftHandIK"  → two-handed grip IK target for PrCharacterIK.leftHandTarget.
+    /// Events:
+    ///   OnWeaponModelChanged(PrWeapon)  — fires after each swap; WeaponVFXController/
+    ///                                     WeaponSystem subscribe for ShootFXPos updates.
+    ///   OnLeftHandIKTargetChanged(Transform) — fires after each swap; CharacterVisualController
+    ///                                          subscribes for IK wiring.
     /// </summary>
     public class WeaponModelController : MonoBehaviour
     {
         [Header("References")]
         [Tooltip("MonoBehaviour that implements IWeaponSystem (e.g. the WeaponSystem component on this player).")]
         [SerializeField] private MonoBehaviour _weaponSystemSource;
-
-        [Tooltip("Transform on the character's right-hand bone where weapon models are parented.")]
-        [SerializeField] private Transform _weaponSocket;
-
-        [Tooltip("Optional WeaponVFXController — muzzle point is refreshed after every weapon swap.")]
-        [SerializeField] private WeaponVFXController _vfxController;
-
-        [Header("Child-transform name conventions")]
-        [Tooltip("Name of the child Transform on each EquippedPrefab used as left-hand IK target.")]
-        [SerializeField] private string _leftHandIKName = "LeftHandIK";
-
-        [Tooltip("Name of the child Transform on each EquippedPrefab used as the muzzle point.")]
-        [SerializeField] private string _muzzleName = "Muzzle";
-
+        [SerializeField] private Vector3 localRotationWeapon = new Vector3(90,0,0); 
         // ── Runtime ──────────────────────────────────────────────────────────
-        private IWeaponSystem _weaponSystem;
-        private GameObject    _currentModel;
+        private IWeaponSystem     _weaponSystem;
+        private PrActorUtils      _actorUtils;     // resolved via PlayerModelLoader.OnModelReady
+        private PlayerModelLoader _modelLoader;
+        private GameObject        _currentModel;
+
+        /// <summary>Left-hand IK "ArmIK" Transform on the current weapon model, or null.</summary>
+        public Transform LeftHandIKTarget { get; private set; }
 
         /// <summary>
-        /// Left-hand IK target found on the current weapon model.
-        /// Read by PrCharacterIK (or any IK component) and assigned to leftHandTarget.
-        /// Null when no weapon is equipped or the model has no IK marker child.
+        /// Fired after every weapon swap with the spawned model's PrWeapon component,
+        /// or null when holstered. WeaponVFXController / WeaponSystem subscribe here
+        /// to grab ShootFXPos without needing child-name string lookups.
         /// </summary>
-        public Transform LeftHandIKTarget { get; private set; }
+        public event Action<PrWeapon> OnWeaponModelChanged;
+
+        /// <summary>
+        /// Fired after every weapon swap with the left-hand IK Transform (may be null).
+        /// CharacterVisualController subscribes here so IK is set only after model is live.
+        /// </summary>
+        public event Action<Transform> OnLeftHandIKTargetChanged;
 
         // ── Unity Lifecycle ───────────────────────────────────────────────────
 
@@ -57,6 +60,17 @@ namespace NightHunt.GameplaySystems.Weapon
             _weaponSystem = _weaponSystemSource as IWeaponSystem;
             if (_weaponSystem == null && _weaponSystemSource != null)
                 Debug.LogWarning("[WeaponModelController] _weaponSystemSource does not implement IWeaponSystem.");
+
+            // PrActorUtils lives on the dynamically-spawned model child — bind once it's ready.
+            _modelLoader = GetComponent<PlayerModelLoader>();
+            if (_modelLoader != null)
+                _modelLoader.OnModelReady += OnModelReady;
+        }
+
+        private void OnDestroy()
+        {
+            if (_modelLoader != null)
+                _modelLoader.OnModelReady -= OnModelReady;
         }
 
         private void OnEnable()
@@ -71,19 +85,27 @@ namespace NightHunt.GameplaySystems.Weapon
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
         }
 
+        // ── Model Binding ─────────────────────────────────────────────────────
+
+        private void OnModelReady(GameObject modelRoot)
+        {
+            _actorUtils = modelRoot.GetComponentInChildren<PrActorUtils>(true);
+            if (_actorUtils == null)
+                Debug.LogWarning("[WeaponModelController] PrActorUtils not found on model — weapon will spawn under controller root.");
+        }
+
         // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Inject dependencies at runtime after all systems are initialised (called from NetworkPlayer).
+        /// Re-inject IWeaponSystem at runtime (e.g. from NetworkPlayer after late spawn).
+        /// PrActorUtils is always self-resolved via PlayerModelLoader.
         /// </summary>
-        public void Initialize(IWeaponSystem weaponSystem, Transform weaponSocket)
+        public void Initialize(IWeaponSystem weaponSystem)
         {
-            // Unsubscribe from old system if re-initialising.
             if (_weaponSystem != null)
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
 
             _weaponSystem = weaponSystem;
-            _weaponSocket = weaponSocket;
 
             if (_weaponSystem != null)
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
@@ -93,33 +115,64 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private void HandleActiveWeaponChanged(WeaponSlotType? previousSlot, WeaponSlotType? newSlot)
         {
+            Debug.Log($"[WeaponModelController] OnActiveWeaponChanged: {previousSlot} → {newSlot} | " +
+                      $"weaponSystem={_weaponSystem != null} | actorUtils={_actorUtils != null} | " +
+                      $"WeaponR={_actorUtils?.WeaponR != null}");
+
             DestroyCurrentModel();
 
-            if (newSlot == null || _weaponSystem == null) return;
+            if (newSlot == null || _weaponSystem == null)
+            {
+                Debug.Log("[WeaponModelController] Skipping spawn — no active slot or weaponSystem.");
+                return;
+            }
 
             var inst = _weaponSystem.GetWeapon(newSlot.Value);
-            if (inst == null) return;
+            if (inst == null)
+            {
+                Debug.LogWarning($"[WeaponModelController] GetWeapon({newSlot.Value}) returned null — item not in cache yet.");
+                return;
+            }
 
             var def = ItemDatabase.GetDefinition(inst.DefinitionID);
-            if (def == null || def.EquippedPrefab == null) return;
+            if (def == null)
+            {
+                Debug.LogWarning($"[WeaponModelController] No ItemDatabase definition for '{inst.DefinitionID}'.");
+                return;
+            }
+            if (def.EquippedPrefab == null)
+            {
+                Debug.LogWarning($"[WeaponModelController] '{def.DisplayName}' has no EquippedPrefab set in ItemDatabase.");
+                return;
+            }
 
-            Transform parent = _weaponSocket != null ? _weaponSocket : transform;
+            Transform parent = (_actorUtils != null && _actorUtils.WeaponR != null)
+                ? _actorUtils.WeaponR
+                : transform;
+
             _currentModel = Instantiate(def.EquippedPrefab, parent);
-            _currentModel.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
 
-            // Refresh muzzle point on VFX controller.
-            Transform muzzle = _currentModel.transform.Find(_muzzleName);
-            if (_vfxController != null)
-                _vfxController.SetMuzzlePoint(muzzle); // null is fine — VFX falls back to transform
+            _currentModel.transform.localPosition = Vector3.zero;
+            //Change local rotation to localRotationWeapon value
+            _currentModel.transform.localRotation = Quaternion.Euler(localRotationWeapon);
 
-            // Propagate muzzle point to WeaponSystem for hitscan raycast origin.
-            _weaponSystem?.SetFireOrigin(muzzle);
 
-            // Expose left-hand IK target so PrCharacterIK can pick it up.
-            LeftHandIKTarget = _currentModel.transform.Find(_leftHandIKName);
+            var prWeapon = _currentModel.GetComponent<PrWeapon>();
 
-            Debug.Log($"[WeaponModelController] Spawned model '{def.EquippedPrefab.name}' for '{def.DisplayName}'" +
-                      $" | Muzzle={muzzle != null} | LeftHandIK={LeftHandIKTarget != null}");
+            _weaponSystem.SetFireOrigin(prWeapon != null ? prWeapon.ShootFXPos : null);
+            OnWeaponModelChanged?.Invoke(prWeapon);
+
+            // SciFi convention: "ArmIK" child on weapon prefab; PrWeapon.useIK=false disables it.
+            LeftHandIKTarget = (prWeapon == null || prWeapon.useIK)
+                ? _currentModel.transform.Find("ArmIK")
+                : null;
+            OnLeftHandIKTargetChanged?.Invoke(LeftHandIKTarget);
+
+            Debug.Log($"[WeaponModelController] Spawned '{def.EquippedPrefab.name}' for '{def.DisplayName}'" +
+                      $" | parent={parent.name}" +
+                      $" | PrWeapon={prWeapon != null}" +
+                      $" | ShootFXPos={prWeapon?.ShootFXPos != null}" +
+                      $" | ArmIK={LeftHandIKTarget != null}");
         }
 
         private void DestroyCurrentModel()
@@ -130,6 +183,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 _currentModel = null;
             }
             LeftHandIKTarget = null;
+            OnLeftHandIKTargetChanged?.Invoke(null);
+            OnWeaponModelChanged?.Invoke(null);
         }
     }
 }

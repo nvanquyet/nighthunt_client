@@ -135,8 +135,9 @@ namespace NightHunt.UI
 
             _localNetObjId = (int)localPlayer.ObjectId;
 
-            if (minimapUI != null)  minimapUI.SetLocalPlayer(localPlayer);
-            if (deathScreen != null) deathScreen.RegisterPlayer(localPlayer);
+            if (minimapUI != null)        minimapUI.SetLocalPlayer(localPlayer);
+            if (deathScreen != null)      deathScreen.RegisterPlayer(localPlayer);
+            if (lootContainerUI != null)  lootContainerUI.SetLocalPlayer(localPlayer);
 
             // Subscribe global combat events so UI updates for all players, not only the local one.
             PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;

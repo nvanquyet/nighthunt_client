@@ -27,7 +27,8 @@ namespace NightHunt.Gameplay.Character.Movement
         [Tooltip("Extra gravity multiplier applied only while falling (verticalVelocity < 0). Higher = snappier landing. Recommended 1.5–2.5.")]
         [Min(1f)] public float fallGravityMultiplier = 2f;
         [Min(0f)] public float jumpHeight = 1.2f;
-        [Min(0f)] public float groundedStickDownVelocity = 2f;
+        [Tooltip("Downward velocity applied every grounded tick to hug terrain. Keep small (0.2–0.5) to avoid PhysX floor-push jitter.")]
+        [Min(0f)] public float groundedStickDownVelocity = 0.3f;
         public bool enableJump = true;
 
         [Header("Stamina")]
@@ -43,6 +44,8 @@ namespace NightHunt.Gameplay.Character.Movement
         [Min(0.5f)] public float rollDistance = 4f;
         [Tooltip("Seconds to travel rollDistance. Lower = faster dash.")]
         [Min(0.05f)] public float rollDuration = 0.35f;
+        [Tooltip("Fraction of rollDuration spent easing out at end (0=hard stop, 0.3=smooth). Actual distance is slightly less when > 0.")]
+        [Range(0f, 0.5f)] public float rollEaseOutFraction = 0.25f;
         [Tooltip("Dash = stays on the ground. Leap = launches in a forward arc.")]
         public RollMode rollMode = RollMode.Dash;
         [Tooltip("Vertical launch height for Leap mode (metres). Ignored when Dash.")]

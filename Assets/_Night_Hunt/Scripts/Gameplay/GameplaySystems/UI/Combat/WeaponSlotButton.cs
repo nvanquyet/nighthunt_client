@@ -5,6 +5,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.Input.Handlers.Combat;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -39,8 +40,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         //  Runtime
         // ─────────────────────────────────────────────────────────────────────
 
-        private IWeaponSystem _weaponSystem;
-        private bool          _isBound;
+        private IWeaponSystem      _weaponSystem;
+        private CombatInputHandler _combatInputHandler;  // notified on press to block concurrent LMB fire
+        private bool               _isBound;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Binding
@@ -75,6 +77,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
             RefreshAll();
         }
 
+        /// <summary>
+        /// Bind the CombatInputHandler so OnPointerDown can notify it to block concurrent fire events.
+        /// Call once after the local player spawns.
+        /// </summary>
+        public void BindCombatHandler(CombatInputHandler handler)
+        {
+            _combatInputHandler = handler;
+        }
+
         public void Unbind()
         {
             if (!_isBound) return;
@@ -105,6 +116,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public override void OnPointerDown(UnityEngine.EventSystems.PointerEventData eventData)
         {
             base.OnPointerDown(eventData);
+            // Notify CombatInputHandler to block the concurrent Input System LMB-performed event.
+            _combatInputHandler?.NotifyUIConsumedPress();
             // Request weapon select via the bound system
             _weaponSystem?.SelectWeapon(_slotType);
         }

@@ -84,16 +84,17 @@ namespace NightHunt.Gameplay.FogOfWar
             {
                 try
                 {
-                    radius = _statSystem.GetStat(PlayerStatType.VisionRange);
+                    float v = _statSystem.GetStat(PlayerStatType.VisionRange);
+                    // v == 0 means stat cache not yet populated (client waiting for sync).
+                    // Keep defaultViewRadius until real data arrives.
+                    if (v > 0f)
+                        radius = v;
                 }
                 catch
                 {
                     // Fail-safe: giữ default nếu có vấn đề khi đọc stat.
                 }
             }
-
-            if (radius < 0f)
-                radius = 0f;
 
             _revealer.ViewRadius = radius;
         }

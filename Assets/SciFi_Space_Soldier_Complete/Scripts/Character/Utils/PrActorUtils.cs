@@ -165,12 +165,13 @@ public class PrActorUtils : MonoBehaviour
 
     public void SetNewSpeed(float speedFactor)
     {
-        if (Type == AT.player)
+        if (Type == AT.player && character != null)
             character.characterController.m_MoveSpeedSpecialModifier = speedFactor;
     }
 
     public void FootStep(string stepType)
     {
+        if (character == null) return;
         character.FootStep(stepType);
     }
 
@@ -182,11 +183,13 @@ public class PrActorUtils : MonoBehaviour
 
     public void CantRotate()
     {
+        if (character?.characterController == null) return;
         character.characterController.b_CanRotate = false;
     }
 
     public void CanJump(int Value)
     {
+        if (character?.characterController == null) return;
         if (Value == 1)
         {
             character.characterController.b_canJump = true;
@@ -199,22 +202,25 @@ public class PrActorUtils : MonoBehaviour
 
     public void CanAttack()
     {
+        if (character?.AIController == null) return;
         character.AIController.CanAttack();
     }
 
     public void EndRoll()
     {
+        if (character?.characterController == null) return;
         character.characterController.EndRoll();
     }
 
     void ThrowG()
     {
+        if (character?.characterInventory == null) return;
         character.characterInventory.ThrowG();
-        
     }
 
     void EndThrow()
     {
+        if (character?.characterInventory == null) return;
         character.characterInventory.EndThrow();
     }
 

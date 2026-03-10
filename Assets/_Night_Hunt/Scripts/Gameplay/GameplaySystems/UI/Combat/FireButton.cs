@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using NightHunt.Gameplay.Input.Handlers.Combat;
@@ -44,6 +45,19 @@ namespace NightHunt.GameplaySystems.UI.Combat
                  "Call BindRangeIndicator() after player spawns to set follow-target + VisionRange.")]
         [SerializeField] private RangeIndicator _rangeIndicator;
 
+        [Header("Mobile Virtual Joystick")]
+        [Tooltip("VariableJoystick on a child GO — must be DISABLED in the scene by default. " +
+                 "Set mode = Floating. FireButton enables it after the hold delay and disables it on release.")]
+        [SerializeField] private VariableJoystick _joystick;
+        [Tooltip("Hold duration in seconds before the joystick visual appears. Short taps fire straight ahead.")]
+        [SerializeField] private float _holdDelay = 0.25f;
+
+        // ── Runtime joystick state ────────────────────────────────────────────
+        private Coroutine        _holdTimer;
+        private bool             _joystickStarted;
+        /// <summary>PointerDown event cached on press; used to position the joystick once the hold delay fires.</summary>
+        private PointerEventData _pressEventData;
+
         // ─────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle
         // ─────────────────────────────────────────────────────────────────────
@@ -61,6 +75,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (_pulseRing == null)
                 _pulseRing = GetComponent<ButtonPulseRing>();
+
+            // Joystick must start hidden so it does not capture pointer events instead of this button.
+            if (_joystick != null) _joystick.gameObject.SetActive(false);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -70,58 +87,105 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public override void OnPointerDown(PointerEventData eventData)
         {
             base.OnPointerDown(eventData);
-            _combatInputHandler?.SimulateFire(true);
+            _pressEventData  = eventData;   // save press position; joystick will use it after hold delay
+            _joystickStarted = false;
+            _combatInputHandler?.SimulateFire(true);   // frame 1: aim = current player facing direction
             _pulseRing?.Play();
-            _rangeIndicator?.Show();
+
+            Debug.Log($"[FireButton] OnPointerDown — screenPos={eventData.position:F0}  " +
+                      $"joystickAssigned={_joystick != null}  handler={_combatInputHandler != null}");
+
+            // Start hold timer — joystick enables only after _holdDelay seconds.
+            if (_holdTimer != null) StopCoroutine(_holdTimer);
+            _holdTimer = StartCoroutine(HoldTimerCo());
         }
 
         public override void OnPointerUp(PointerEventData eventData)
         {
             base.OnPointerUp(eventData);
+            StopHoldTimer();
+            if (_joystickStarted && _joystick != null)
+            {
+                _joystick.OnPointerUp(eventData);
+                _joystick.gameObject.SetActive(false);   // hide + remove from raycast
+            }
+            _joystickStarted = false;
+            _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _combatInputHandler?.SimulateFire(false);
-            _combatInputHandler?.SetMobileAimDirection(Vector3.zero, active: false);
             _rangeIndicator?.Hide();
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Mobile Joystick Aim  (IDragHandler / IBeginDragHandler / IEndDragHandler)
+        //  Mobile Virtual Joystick (IDragHandler / IBeginDragHandler / IEndDragHandler)
         // ─────────────────────────────────────────────────────────────────────
-        // When the player holds the fire button and drags on mobile, the drag
-        // direction is turned into a world-space aim direction so the character
-        // faces that way while firing — identical to MOBA joystick aim.
+        //  Hold-delay pattern:
+        //    PointerDown  → SimulateFire(true) + start hold timer
+        //    < holdDelay  → quick tap — fires straight, joystick not shown
+        //    ≥ holdDelay  → VariableJoystick appears at press position
+        //    OnDrag       → package handles clamp/thumb; read Direction; camera-relative XZ
+        //    PointerUp    → hide joystick, clear aim, SimulateFire(false)
 
         public void OnBeginDrag(PointerEventData eventData)
         {
-            // Nothing — drag tracking starts on the first OnDrag call.
+            if (!_joystickStarted) StartJoystick(eventData);
         }
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (_combatInputHandler == null) return;
+            if (!_joystickStarted) StartJoystick(eventData);
+            if (_joystick == null) return;   // no joystick assigned — keep frame-1 direction
 
-            // delta from press origin in screen pixels → normalised 2-D direction
-            Vector2 screenDelta = eventData.position - eventData.pressPosition;
-            if (screenDelta.sqrMagnitude < 4f) return; // dead-zone: 2 px radius
+            _joystick.OnDrag(eventData);
+            Vector2 joystickDir = CamRelativeXZ(_joystick.Direction);
 
-            // Map screen XY → world XZ using camera orientation so dragging "up"
-            // on screen always means camera-forward in world space, regardless of
-            // the camera's yaw (matches QuickSlotAimController.ScreenDeltaToWorldDir).
-            var cam = UnityEngine.Camera.main;
-            if (cam == null) return;
+            Debug.Log($"[FireButton] OnDrag — rawDir={_joystick.Direction:F2}  " +
+                      $"camRelXZ={joystickDir:F2}  mag={joystickDir.magnitude:F2}");
 
-            Vector3 camRight   = cam.transform.right;   camRight.y   = 0f; camRight.Normalize();
-            Vector3 camForward = cam.transform.forward; camForward.y = 0f; camForward.Normalize();
-
-            Vector2 dir2D  = screenDelta.normalized;
-            Vector3 worldDir = camRight * dir2D.x + camForward * dir2D.y;
-            if (worldDir.sqrMagnitude < 0.001f) return;
-
-            _combatInputHandler.SetMobileAimDirection(worldDir.normalized, active: true);
+            _combatInputHandler?.SetFireMobileJoystick(joystickDir, active: true);
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            _combatInputHandler?.SetMobileAimDirection(Vector3.zero, active: false);
+            if (_joystickStarted && _joystick != null)
+            {
+                _joystick.OnPointerUp(eventData);
+                _joystick.gameObject.SetActive(false);
+            }
+            _joystickStarted = false;
+            _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
+        }
+
+        private IEnumerator HoldTimerCo()
+        {
+            yield return new WaitForSecondsRealtime(_holdDelay);
+            // Use the cached press event so the joystick appears at the original touch point.
+            if (!_joystickStarted) StartJoystick(_pressEventData);
+            _holdTimer = null;
+        }
+
+        private void StartJoystick(PointerEventData eventData)
+        {
+            _joystickStarted = true;
+            if (_joystick != null)
+            {
+                _joystick.gameObject.SetActive(true);    // make visible + enable raycasting
+                _joystick.OnPointerDown(eventData);      // Floating mode: positions background at touch point
+            }
+        }
+
+        private void StopHoldTimer()
+        {
+            if (_holdTimer != null) { StopCoroutine(_holdTimer); _holdTimer = null; }
+        }
+
+        private static Vector2 CamRelativeXZ(Vector2 dir)
+        {
+            var cam = Camera.main;
+            if (cam == null) return Vector2.zero;
+            Vector3 right   = cam.transform.right;   right.y   = 0f; right.Normalize();
+            Vector3 forward = cam.transform.forward; forward.y = 0f; forward.Normalize();
+            Vector3 world   = right * dir.x + forward * dir.y;
+            return new Vector2(world.x, world.z);
         }
 
         // ─────────────────────────────────────────────────────────────────────

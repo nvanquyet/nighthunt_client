@@ -18,6 +18,7 @@ MonoBehaviour:
   acceleration: 25
   deceleration: 30
   gravity: 20
+  fallGravityMultiplier: 2.5
   jumpHeight: 1.2
   groundedStickDownVelocity: 2
   enableJump: 0
@@ -28,6 +29,7 @@ MonoBehaviour:
   rollStaminaCost: 20
   rollDistance: 4
   rollDuration: 0.2
+  rollEaseOutFraction: 0.25
   rollMode: 1
   rollLeapHeight: 1.2
   enableRoll: 1
