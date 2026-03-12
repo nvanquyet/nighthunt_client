@@ -32,4 +32,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/SciFi_Space_Soldier_Complete/Scenes/3_DemoScene_TowerDefenseTest.unity
     guid: 6efbcfe769a9a694e9eb0d46618cf163
-  m_configObjects: {}
+  m_configObjects:
+    com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 35f8ec9ffcbebf94499ec1d900b20e92,
+      type: 3}
+  m_UseUCBPForAssetBundles: 0
