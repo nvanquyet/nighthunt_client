@@ -2,6 +2,7 @@ using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Core.State
 {
@@ -15,7 +16,11 @@ namespace NightHunt.Gameplay.Core.State
 
         private void Awake()
         {
-            _lifecycle = GetComponent<CharacterLifecycleController>();
+            _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] CharacterLifecycleController not found")
+        .Resolve();
         }
 
         private void OnEnable()

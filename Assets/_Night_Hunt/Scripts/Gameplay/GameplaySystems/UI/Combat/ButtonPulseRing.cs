@@ -1,6 +1,7 @@
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -22,23 +23,28 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         [Header("Visual")]
         [Tooltip("The ring Image child — assign manually or auto-find by name 'PulseRing'.")]
-        [SerializeField] private Image _pulseImage;
+        [SerializeField]
+        private Image _pulseImage;
 
         [Header("Animation")]
         [Tooltip("Starting size relative to button size (e.g. 1.0 = same size as button).")]
-        [SerializeField] private float _startScale  = 1.0f;
-        [Tooltip("Ending size — ring expands to this scale.")]
-        [SerializeField] private float _endScale    = 2.2f;
-        [Tooltip("Total duration in seconds.")]
-        [SerializeField] private float _duration    = 0.45f;
-        [Tooltip("Ring color at peak opacity.")]
-        [SerializeField] private Color _pulseColor  = new Color(1f, 0.5f, 0.05f, 0.9f); // orange
+        [SerializeField]
+        private float _startScale = 1.0f;
+
+        [Tooltip("Ending size — ring expands to this scale.")] [SerializeField]
+        private float _endScale = 2.2f;
+
+        [Tooltip("Total duration in seconds.")] [SerializeField]
+        private float _duration = 0.45f;
+
+        [Tooltip("Ring color at peak opacity.")] [SerializeField]
+        private Color _pulseColor = new Color(1f, 0.5f, 0.05f, 0.9f); // orange
 
         // ── Runtime ────────────────────────────────────────────────────────────
 
         private RectTransform _pulseRT;
-        private Coroutine     _anim;
-        private Vector2       _baseSize;
+        private Coroutine _anim;
+        private Vector2 _baseSize;
 
         // ── Unity Lifecycle ────────────────────────────────────────────────────
 
@@ -50,7 +56,11 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 var found = transform.Find("PulseRing");
                 if (found != null)
                 {
-                    _pulseImage = found.GetComponent<Image>();
+                    _pulseImage = ComponentResolver.Find<Image>(found)
+                        .OnSelf()
+                        .InChildren()
+                        .OrLogWarning("[Auto] Image not found")
+                        .Resolve();
                 }
                 else
                 {
@@ -58,22 +68,30 @@ namespace NightHunt.GameplaySystems.UI.Combat
                     // without any manual prefab setup.
                     var go = new GameObject("PulseRing", typeof(RectTransform), typeof(Image));
                     go.transform.SetParent(transform, false);
-                    var rt = go.GetComponent<RectTransform>();
-                    rt.anchorMin        = Vector2.zero;
-                    rt.anchorMax        = Vector2.one;
-                    rt.offsetMin        = Vector2.zero;
-                    rt.offsetMax        = Vector2.zero;
-                    var img = go.GetComponent<Image>();
-                    img.raycastTarget   = false;
-                    img.color           = new Color(_pulseColor.r, _pulseColor.g, _pulseColor.b, 0f);
-                    _pulseImage         = img;
+                    var rt = ComponentResolver.Find<RectTransform>(go)
+                        .OnSelf()
+                        .InChildren()
+                        .OrLogWarning("[Auto] RectTransform not found")
+                        .Resolve();
+                    rt.anchorMin = Vector2.zero;
+                    rt.anchorMax = Vector2.one;
+                    rt.offsetMin = Vector2.zero;
+                    rt.offsetMax = Vector2.zero;
+                    var img = ComponentResolver.Find<Image>(go)
+                        .OnSelf()
+                        .InChildren()
+                        .OrLogWarning("[Auto] Image not found")
+                        .Resolve();
+                    img.raycastTarget = false;
+                    img.color = new Color(_pulseColor.r, _pulseColor.g, _pulseColor.b, 0f);
+                    _pulseImage = img;
                 }
             }
 
             if (_pulseImage != null)
             {
-                _pulseRT   = _pulseImage.rectTransform;
-                _baseSize  = _pulseRT.sizeDelta;
+                _pulseRT = _pulseImage.rectTransform;
+                _baseSize = _pulseRT.sizeDelta;
                 _pulseImage.color = new Color(_pulseColor.r, _pulseColor.g, _pulseColor.b, 0f);
                 _pulseImage.gameObject.SetActive(true);
             }
@@ -103,6 +121,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 SetAlpha(p);
                 yield return null;
             }
+
             // Fade-out phase (continue expanding + alpha drops)
             for (float t = 0; t < half; t += Time.deltaTime)
             {
@@ -121,7 +140,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void SetAlpha(float a)
         {
             _pulseImage.color = new Color(_pulseColor.r, _pulseColor.g, _pulseColor.b,
-                                          _pulseColor.a * a);
+                _pulseColor.a * a);
         }
     }
 }

@@ -1,10 +1,11 @@
-using FishNet.Object;
+﻿using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using UnityEngine.Events;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.World
 {
@@ -24,29 +25,26 @@ namespace NightHunt.GameplaySystems.World
     /// </summary>
     public class WorldSwitch : NetworkBehaviour, IHoldInteractable
     {
-        [Header("Config")]
-        [SerializeField] private InteractableConfig _config;
+        [Header("Config")] [SerializeField] private InteractableConfig _config;
 
-        [Header("Events")]
-        [Tooltip("Fired (server + clients) khi switch được bật ON hoặc button được nhấn.")]
+        [Header("Events")] [Tooltip("Fired (server + clients) khi switch được bật ON hoặc button được nhấn.")]
         public UnityEvent OnActivated;
 
         [Tooltip("Fired (server + clients) khi switch được tắt OFF (không fire với Button type).")]
         public UnityEvent OnDeactivated;
 
-        [Header("State")]
-        [SerializeField] private bool startActive = false;
+        [Header("State")] [SerializeField] private bool startActive = false;
 
         // SYNC
         private readonly SyncVar<bool> syncIsActive = new SyncVar<bool>();
-        private readonly SyncVar<bool> syncIsUsed   = new SyncVar<bool>(); // OneTimeUse exhausted
+        private readonly SyncVar<bool> syncIsUsed = new SyncVar<bool>(); // OneTimeUse exhausted
 
         // Client-cache
         private bool _isActive;
         private bool _isUsed;
 
         public bool IsActive => syncIsActive.Value;
-        public bool IsUsed   => syncIsUsed.Value;
+        public bool IsUsed => syncIsUsed.Value;
 
         // ── IHoldInteractable ────────────────────────────────────────────────────
 
@@ -80,12 +78,23 @@ namespace NightHunt.GameplaySystems.World
 
         public void Interact(GameObject interactor)
         {
-            var playerNob = interactor?.GetComponent<FishNet.Object.NetworkObject>();
+            var playerNob = ComponentResolver.Find<FishNet.Object.NetworkObject>(interactor)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] FishNet.Object.NetworkObject not found")
+                .Resolve();
             Toggle(playerNob);
         }
 
-        public void OnHoverEnter(GameObject interactor) { /* outline effect wired up when highlight system is ready */ }
-        public void OnHoverExit(GameObject interactor)  { /* outline effect wired up when highlight system is ready */ }
+        public void OnHoverEnter(GameObject interactor)
+        {
+            /* outline effect wired up when highlight system is ready */
+        }
+
+        public void OnHoverExit(GameObject interactor)
+        {
+            /* outline effect wired up when highlight system is ready */
+        }
 
         // ── Network lifecycle ────────────────────────────────────────────────────
 
@@ -93,21 +102,21 @@ namespace NightHunt.GameplaySystems.World
         {
             base.OnStartServer();
             syncIsActive.Value = startActive;
-            syncIsUsed.Value   = false;
+            syncIsUsed.Value = false;
         }
 
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
             syncIsActive.OnChange += OnActiveChanged;
-            syncIsUsed.OnChange   += OnUsedChanged;
+            syncIsUsed.OnChange += OnUsedChanged;
         }
 
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
             syncIsActive.OnChange -= OnActiveChanged;
-            syncIsUsed.OnChange   -= OnUsedChanged;
+            syncIsUsed.OnChange -= OnUsedChanged;
         }
 
         // ── Server-side toggle ───────────────────────────────────────────────────
@@ -131,10 +140,14 @@ namespace NightHunt.GameplaySystems.World
             // Distance check — server-side re-validation.
             if (playerNob != null)
             {
-                var player = playerNob.GetComponent<NightHunt.Networking.NetworkPlayer>();
+                var player = ComponentResolver.Find<NightHunt.Networking.NetworkPlayer>(playerNob)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] NightHunt.Networking.NetworkPlayer not found")
+                    .Resolve();
                 if (player != null)
                 {
-                    float dist    = Vector3.Distance(transform.position, player.transform.position);
+                    float dist = Vector3.Distance(transform.position, player.transform.position);
                     float maxDist = _config?.MaxInteractDistance ?? 3f;
                     if (dist > maxDist)
                     {
@@ -158,13 +171,13 @@ namespace NightHunt.GameplaySystems.World
         private void RpcFireEvents(bool activated)
         {
             if (activated) OnActivated?.Invoke();
-            else           OnDeactivated?.Invoke();
+            else OnDeactivated?.Invoke();
         }
 
         // ── Client sync handlers ─────────────────────────────────────────────────
 
         private void OnActiveChanged(bool oldVal, bool newVal, bool asServer) => _isActive = newVal;
-        private void OnUsedChanged(bool oldVal, bool newVal, bool asServer)   => _isUsed   = newVal;
+        private void OnUsedChanged(bool oldVal, bool newVal, bool asServer) => _isUsed = newVal;
 
         // ── Gizmos ───────────────────────────────────────────────────────────────
 

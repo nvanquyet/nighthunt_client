@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using NightHunt.Networking;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -12,21 +13,23 @@ namespace NightHunt.UI
     /// </summary>
     public class NetworkStartMenu : MonoBehaviour
     {
-        [Header("Buttons")]
-        [SerializeField] private Button startServerButton;
+        [Header("Buttons")] [SerializeField] private Button startServerButton;
         [SerializeField] private Button startClientLocalButton; // Test local
         [SerializeField] private Button startClientButton; // Kết nối server thật
 
-        [Header("Server Address Input")]
-        [SerializeField] private TMP_InputField serverAddressInput;
+        [Header("Server Address Input")] [SerializeField]
+        private TMP_InputField serverAddressInput;
+
         [SerializeField] private TextMeshProUGUI serverAddressLabel;
 
-        [Header("Status Display")]
-        [SerializeField] private TextMeshProUGUI statusText;
+        [Header("Status Display")] [SerializeField]
+        private TextMeshProUGUI statusText;
+
         [SerializeField] private GameObject loadingIndicator;
 
-        [Header("UI Management")]
-        [SerializeField] private GameObject menuPanel;
+        [Header("UI Management")] [SerializeField]
+        private GameObject menuPanel;
+
         [SerializeField] private bool hideOnStart = true;
 
         private NetworkGameManager networkGameManager;
@@ -48,7 +51,11 @@ namespace NightHunt.UI
             if (serverAddressInput != null)
             {
                 serverAddressInput.text = "localhost"; // Default
-                serverAddressInput.placeholder.GetComponent<TextMeshProUGUI>().text = "Enter server address";
+                ComponentResolver.Find<TextMeshProUGUI>(serverAddressInput.placeholder)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] TextMeshProUGUI not found")
+                    .Resolve().text = "Enter server address";
             }
 
             // If menuPanel is not assigned, use this GameObject
@@ -111,7 +118,7 @@ namespace NightHunt.UI
             {
                 networkGameManager.StartClient("localhost");
                 UpdateStatus("Connecting...");
-                
+
                 // Check connection status after delay
                 Invoke(nameof(CheckConnectionStatus), 3f);
             }
@@ -146,7 +153,7 @@ namespace NightHunt.UI
             {
                 networkGameManager.StartClient(serverAddress);
                 UpdateStatus("Connecting...");
-                
+
                 // Check connection status after delay
                 Invoke(nameof(CheckConnectionStatus), 3f);
             }
@@ -193,7 +200,7 @@ namespace NightHunt.UI
             if (networkGameManager != null && networkGameManager.IsClient)
             {
                 UpdateStatus("Connected!");
-                
+
                 if (hideOnStart)
                 {
                     Invoke(nameof(HideMenu), 0.5f);
@@ -216,6 +223,7 @@ namespace NightHunt.UI
             {
                 statusText.text = message;
             }
+
             Debug.Log($"[NetworkStartMenu] {message}");
         }
 

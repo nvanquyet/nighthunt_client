@@ -7,6 +7,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.World;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Loot
 {
@@ -51,10 +52,13 @@ namespace NightHunt.GameplaySystems.Loot
 
         [Header("Network Prefabs — gán prefab có NetworkObject component")]
         [Tooltip("Prefab WorldItem (item rơi đất). Phải có NetworkObject + WorldItem component.")]
-        [SerializeField] private GameObject worldItemPrefab;
+        [SerializeField]
+        private GameObject worldItemPrefab;
 
-        [Tooltip("Prefab WorldContainer (thùng / crate / rương / chest). Phải có NetworkObject + WorldContainer component.")]
-        [SerializeField] private GameObject worldContainerPrefab;
+        [Tooltip(
+            "Prefab WorldContainer (thùng / crate / rương / chest). Phải có NetworkObject + WorldContainer component.")]
+        [SerializeField]
+        private GameObject worldContainerPrefab;
 
         // ── Internal ─────────────────────────────────────────────────────────────
 
@@ -64,7 +68,12 @@ namespace NightHunt.GameplaySystems.Loot
 
         private void Awake()
         {
-            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
             Instance = this;
         }
 
@@ -75,7 +84,8 @@ namespace NightHunt.GameplaySystems.Loot
             _spawnPoints.Clear();
             _spawnPoints.AddRange(FindObjectsByType<WorldItemSpawnPoint>(FindObjectsSortMode.None));
 
-            Debug.Log($"[WorldSpawnManager] OnStartServer: found {_spawnPoints.Count} WorldItemSpawnPoint(s). Starting spawn loops.");
+            Debug.Log(
+                $"[WorldSpawnManager] OnStartServer: found {_spawnPoints.Count} WorldItemSpawnPoint(s). Starting spawn loops.");
 
             foreach (var point in _spawnPoints)
             {
@@ -122,7 +132,7 @@ namespace NightHunt.GameplaySystems.Loot
                     // SpawnWorldItemsFromTable tự scatter mỗi item trong ScatterRadius.
                     // GetSpawnPosition() đã tự scatter → gọi ở đây gây double-scatter.
                     SpawnWorldItemsFromTable(config.SpawnTable, point.transform.position,
-                                            config.ScatterRadius, point, config.LootableConfig);
+                        config.ScatterRadius, point, config.LootableConfig);
                     break;
                 case WorldSpawnType.Container:
                     SpawnWorldContainer(config, point.transform.position, point);
@@ -155,6 +165,7 @@ namespace NightHunt.GameplaySystems.Loot
                 Debug.LogWarning("[WorldSpawnManager] SpawnWorldItem: server-only!");
                 return null;
             }
+
             if (worldItemPrefab == null)
             {
                 Debug.LogError("[WorldSpawnManager] SpawnWorldItem: worldItemPrefab chưa được gán!");
@@ -162,13 +173,22 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             // ── 1. Instantiate ────────────────────────────────────────────────────
-            var go        = Instantiate(worldItemPrefab, position, rotation);
-            var netObj    = go.GetComponent<NetworkObject>();
-            var worldItem = go.GetComponent<WorldItem>();
+            var go = Instantiate(worldItemPrefab, position, rotation);
+            var netObj = ComponentResolver.Find<NetworkObject>(go)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkObject not found")
+                .Resolve();
+            var worldItem = ComponentResolver.Find<WorldItem>(go)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] WorldItem not found")
+                .Resolve();
 
             if (netObj == null || worldItem == null)
             {
-                Debug.LogError("[WorldSpawnManager] SpawnWorldItem: worldItemPrefab thiếu NetworkObject hoặc WorldItem!");
+                Debug.LogError(
+                    "[WorldSpawnManager] SpawnWorldItem: worldItemPrefab thiếu NetworkObject hoặc WorldItem!");
                 Destroy(go);
                 return null;
             }
@@ -214,28 +234,38 @@ namespace NightHunt.GameplaySystems.Loot
                 Debug.LogWarning("[WorldSpawnManager] SpawnWorldContainer: server-only!");
                 return null;
             }
+
             if (worldContainerPrefab == null)
             {
                 Debug.LogError("[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab chưa được gán!");
                 return null;
             }
 
-            var go        = Instantiate(worldContainerPrefab, position, Quaternion.identity);
-            var netObj    = go.GetComponent<NetworkObject>();
-            var container = go.GetComponent<WorldContainer>();
+            var go = Instantiate(worldContainerPrefab, position, Quaternion.identity);
+            var netObj = ComponentResolver.Find<NetworkObject>(go)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkObject not found")
+                .Resolve();
+            var container = ComponentResolver.Find<WorldContainer>(go)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] WorldContainer not found")
+                .Resolve();
 
             if (netObj == null || container == null)
             {
-                Debug.LogError("[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab thiếu NetworkObject hoặc WorldContainer!");
+                Debug.LogError(
+                    "[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab thiếu NetworkObject hoặc WorldContainer!");
                 Destroy(go);
                 return null;
             }
 
             // Set data trước Spawn (tương tự WorldItem)
             container.InitializeBeforeSpawn(config.SpawnTable, config.SpawnLocked,
-                                            config.LootableConfig,
-                                            config.ContainerAutoReset,
-                                            config.ContainerResetDelay);
+                config.LootableConfig,
+                config.ContainerAutoReset,
+                config.ContainerResetDelay);
 
             ServerManager.Spawn(netObj);
 
@@ -265,6 +295,7 @@ namespace NightHunt.GameplaySystems.Loot
                 Debug.LogWarning("[WorldSpawnManager] SpawnWorldItemsFromTable: server-only!");
                 return;
             }
+
             if (table == null)
             {
                 Debug.LogWarning("[WorldSpawnManager] SpawnWorldItemsFromTable: SpawnTable is null!");
@@ -272,16 +303,17 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             var results = table.Roll();
-            Debug.Log($"[WorldSpawnManager] SpawnWorldItemsFromTable: rolled {results.Count} item(s) from '{table.name}'");
+            Debug.Log(
+                $"[WorldSpawnManager] SpawnWorldItemsFromTable: rolled {results.Count} item(s) from '{table.name}'");
 
             foreach (var result in results)
             {
                 if (result.ItemDef == null) continue;
 
                 var instance = new ItemInstance(result.ItemDef.ItemID, result.Quantity, -1);
-                var data     = instance.ToData();
+                var data = instance.ToData();
 
-                Vector2 rand     = Random.insideUnitCircle * spreadRadius;
+                Vector2 rand = Random.insideUnitCircle * spreadRadius;
                 Vector3 spawnPos = centerPosition + new Vector3(rand.x, 0f, rand.y);
 
                 SpawnWorldItem(data, spawnPos, Quaternion.identity, sourcePoint, lootableConfig);
@@ -309,7 +341,7 @@ namespace NightHunt.GameplaySystems.Loot
 
                 var instance = new ItemInstance(result.ItemDef.ItemID, result.Quantity, -1);
                 Vector2 rand = Random.insideUnitCircle * spreadRadius;
-                Vector3 pos  = centerPosition + new Vector3(rand.x, 0f, rand.y);
+                Vector3 pos = centerPosition + new Vector3(rand.x, 0f, rand.y);
                 SpawnWorldItem(instance.ToData(), pos, Quaternion.identity, sourcePoint, lootableConfig);
             }
         }

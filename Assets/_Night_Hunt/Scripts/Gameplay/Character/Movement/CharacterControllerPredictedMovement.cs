@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -30,7 +31,11 @@ namespace NightHunt.Gameplay.Character
 
         protected override void InitializePhysicsComponents()
         {
-            _controller = GetComponent<CharacterController>();
+            _controller = ComponentResolver.Find<CharacterController>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] CharacterController not found")
+        .Resolve();
 
             if (_controller == null)
             {

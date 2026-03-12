@@ -3,6 +3,7 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -206,7 +207,12 @@ namespace NightHunt.UI
 
             if (okButton == null)
             {
-                okButton = GetComponentInChildren<Button>();
+                okButton = ComponentResolver.Find<Button>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] Button not found")
+        .Resolve();
             }
         }
 #endif

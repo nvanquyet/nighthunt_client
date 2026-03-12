@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Configs;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -11,20 +12,22 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     /// </summary>
     public class PlayerStatUIPanel : MonoBehaviour
     {
-        [Header("Prefab")]
-        [Tooltip("Row prefab – must have a PlayerStatUIView component")]
-        [SerializeField] private GameObject _statRowPrefab;
+        [Header("Prefab")] [Tooltip("Row prefab – must have a PlayerStatUIView component")] [SerializeField]
+        private GameObject _statRowPrefab;
 
-        [Header("Layout")]
-        [Tooltip("Container for spawned rows (VerticalLayoutGroup recommended)")]
-        [SerializeField] private RectTransform _statContainer;
+        [Header("Layout")] [Tooltip("Container for spawned rows (VerticalLayoutGroup recommended)")] [SerializeField]
+        private RectTransform _statContainer;
 
         [Header("Config")]
         [Tooltip("UI config for stat display. If null, assign manually before Initialize is called.")]
-        [SerializeField] private PlayerStatUIConfig _statUIConfig;
+        [SerializeField]
+        private PlayerStatUIConfig _statUIConfig;
 
         private UIDomainBridge _domainBridge;
-        private Dictionary<PlayerStatType, PlayerStatUIView> _statViews = new Dictionary<PlayerStatType, PlayerStatUIView>();
+
+        private Dictionary<PlayerStatType, PlayerStatUIView> _statViews =
+            new Dictionary<PlayerStatType, PlayerStatUIView>();
+
         private bool _isInitialized = false;
 
         // ─────────────────────────────────────────────────────────────────────
@@ -41,7 +44,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return;
             }
 
-            Debug.Log($"[PlayerStatUIPanel] Initialize: bridge.IsReady={bridge?.IsReady}, bridge.Bridge={bridge?.Bridge}");
+            Debug.Log(
+                $"[PlayerStatUIPanel] Initialize: bridge.IsReady={bridge?.IsReady}, bridge.Bridge={bridge?.Bridge}");
 
             BuildStatUI();
             SubscribeBridgeEvents(true);
@@ -63,7 +67,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_domainBridge != null)
             {
                 _domainBridge.OnStatChanged -= HandleStatChanged;
-                Debug.Log($"[PlayerStatUIPanel] RefreshForNewPlayer: Unsubscribed from old UIDomainBridge #{_domainBridge.GetHashCode()}");
+                Debug.Log(
+                    $"[PlayerStatUIPanel] RefreshForNewPlayer: Unsubscribed from old UIDomainBridge #{_domainBridge.GetHashCode()}");
             }
 
             // Gán bridge mới
@@ -72,7 +77,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             // Nếu panel chưa từng Initialize trước đó → dùng lại flow Initialize
             if (!_isInitialized)
             {
-                Debug.Log("[PlayerStatUIPanel] RefreshForNewPlayer: Panel not initialized yet, calling Initialize with new bridge.");
+                Debug.Log(
+                    "[PlayerStatUIPanel] RefreshForNewPlayer: Panel not initialized yet, calling Initialize with new bridge.");
                 Initialize(bridge);
                 return;
             }
@@ -82,7 +88,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             // Đăng ký lại event với bridge mới
             _domainBridge.OnStatChanged += HandleStatChanged;
-            Debug.Log($"[PlayerStatUIPanel] RefreshForNewPlayer: Subscribed to OnStatChanged on UIDomainBridge #{_domainBridge.GetHashCode()}");
+            Debug.Log(
+                $"[PlayerStatUIPanel] RefreshForNewPlayer: Subscribed to OnStatChanged on UIDomainBridge #{_domainBridge.GetHashCode()}");
 
             // Refresh snapshot hiện tại vào UI
             RefreshAllStats();
@@ -123,7 +130,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private void SpawnStatRow(PlayerStatUIDefinition uiDef)
         {
             var rowGO = Instantiate(_statRowPrefab, _statContainer, false);
-            var statView = rowGO.GetComponent<PlayerStatUIView>();
+            var statView = ComponentResolver.Find<PlayerStatUIView>(rowGO)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] PlayerStatUIView not found")
+                .Resolve();
 
             if (statView == null)
             {
@@ -144,6 +155,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (kvp.Value != null)
                     Destroy(kvp.Value.gameObject);
             }
+
             _statViews.Clear();
         }
 
@@ -194,12 +206,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (subscribe)
             {
                 _domainBridge.OnStatChanged += HandleStatChanged;
-                Debug.Log($"[PlayerStatUIPanel] Subscribed to OnStatChanged on UIDomainBridge #{_domainBridge.GetHashCode()}");
+                Debug.Log(
+                    $"[PlayerStatUIPanel] Subscribed to OnStatChanged on UIDomainBridge #{_domainBridge.GetHashCode()}");
             }
             else
             {
                 _domainBridge.OnStatChanged -= HandleStatChanged;
-                Debug.Log($"[PlayerStatUIPanel] Unsubscribed from OnStatChanged on UIDomainBridge #{_domainBridge.GetHashCode()}");
+                Debug.Log(
+                    $"[PlayerStatUIPanel] Unsubscribed from OnStatChanged on UIDomainBridge #{_domainBridge.GetHashCode()}");
             }
         }
 
@@ -226,7 +240,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     {
                         if (def.Type == type && def.ShowInUI)
                         {
-                            Debug.LogWarning($"[PlayerStatUIPanel] No view found for stat type: {type} (old={oldValue:F1}, new={newValue:F1})");
+                            Debug.LogWarning(
+                                $"[PlayerStatUIPanel] No view found for stat type: {type} (old={oldValue:F1}, new={newValue:F1})");
                             break;
                         }
                     }
@@ -241,7 +256,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 {
                     if (!uiDef.ShowInUI) continue;
                     if (uiDef.RelatedMaxStatType != type) continue;
-                    if (uiDef.Type == type) continue;   // Avoid re-triggering the same stat
+                    if (uiDef.Type == type) continue; // Avoid re-triggering the same stat
 
                     if (_statViews.TryGetValue(uiDef.Type, out var relatedView))
                     {

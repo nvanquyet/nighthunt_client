@@ -5,6 +5,7 @@ using NightHunt.GameplaySystems.UI.Combat;
 using NightHunt.GameplaySystems.UI.Interaction;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Character.Combat;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -192,17 +193,72 @@ namespace NightHunt.UI
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            if (playerHUDPanel == null)  playerHUDPanel  = GetComponentInChildren<PlayerHUDPanel>(true);
-            if (combatHUDPanel == null)  combatHUDPanel  = GetComponentInChildren<CombatHUDPanel>(true);
-            if (uiRootController == null) uiRootController = GetComponentInChildren<UIRootController>(true);
-            if (matchUI == null)         matchUI         = GetComponentInChildren<MatchUI>(true);
-            if (killFeedUI == null)      killFeedUI      = GetComponentInChildren<KillFeedUI>(true);
-            if (crosshairUI == null)     crosshairUI     = GetComponentInChildren<CrosshairUI>(true);
-            if (interactionPromptUI == null) interactionPromptUI = GetComponentInChildren<InteractionPromptUI>(true);
-            if (minimapUI == null)       minimapUI       = GetComponentInChildren<MinimapUI>(true);
-            if (deathScreen == null)     deathScreen     = GetComponentInChildren<DeathScreen>(true);
-            if (lootContainerUI == null) lootContainerUI = GetComponentInChildren<LootContainerUI>(true);
-            if (damageFeedback == null)  damageFeedback  = GetComponentInChildren<Gameplay.Feedback.DamageFeedbackSystem>(true);
+            if (playerHUDPanel == null)  playerHUDPanel  = ComponentResolver.Find<PlayerHUDPanel>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] PlayerHUDPanel not found")
+        .Resolve();
+            if (combatHUDPanel == null)  combatHUDPanel  = ComponentResolver.Find<CombatHUDPanel>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] CombatHUDPanel not found")
+        .Resolve();
+            if (uiRootController == null) uiRootController = ComponentResolver.Find<UIRootController>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] UIRootController not found")
+        .Resolve();
+            if (matchUI == null)         matchUI         = ComponentResolver.Find<MatchUI>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] MatchUI not found")
+        .Resolve();
+            if (killFeedUI == null)      killFeedUI      = ComponentResolver.Find<KillFeedUI>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] KillFeedUI not found")
+        .Resolve();
+            if (crosshairUI == null)     crosshairUI     = ComponentResolver.Find<CrosshairUI>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] CrosshairUI not found")
+        .Resolve();
+            if (interactionPromptUI == null) interactionPromptUI = ComponentResolver.Find<InteractionPromptUI>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] InteractionPromptUI not found")
+        .Resolve();
+            if (minimapUI == null)       minimapUI       = ComponentResolver.Find<MinimapUI>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] MinimapUI not found")
+        .Resolve();
+            if (deathScreen == null)     deathScreen     = ComponentResolver.Find<DeathScreen>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] DeathScreen not found")
+        .Resolve();
+            if (lootContainerUI == null) lootContainerUI = ComponentResolver.Find<LootContainerUI>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] LootContainerUI not found")
+        .Resolve();
+            if (damageFeedback == null)  damageFeedback  = ComponentResolver.Find<Gameplay.Feedback.DamageFeedbackSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] Gameplay.Feedback.DamageFeedbackSystem not found")
+        .Resolve();
         }
 #endif
     }

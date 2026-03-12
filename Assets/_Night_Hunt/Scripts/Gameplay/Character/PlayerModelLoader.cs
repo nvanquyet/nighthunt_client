@@ -1,7 +1,8 @@
-using UnityEngine;
+﻿using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Character.Data;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -248,8 +249,11 @@ namespace NightHunt.Gameplay.Character
             //    every physics tick and fights the CharacterController on the player root
             //    → the model "kéo tụt" / drifts down.
             //    PrCharacterRagdoll.InitializeRagdoll() deliberately skips the root GO
-            //    (name != gameObject.name condition), so nothing else resets this.
-            Rigidbody modelRb = modelRoot.GetComponent<Rigidbody>();
+            Rigidbody modelRb = ComponentResolver.Find<Rigidbody>(modelRoot)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] Rigidbody not found")
+                .Resolve();
             if (modelRb != null)
             {
                 modelRb.isKinematic      = true;
@@ -258,16 +262,22 @@ namespace NightHunt.Gameplay.Character
 
             // 5. Disable model-root CapsuleCollider.
             //    CharacterController on the player root is the authoritative physics capsule.
-            //    A second CapsuleCollider here causes double-collision and character push issues.
-            CapsuleCollider modelCap = modelRoot.GetComponent<CapsuleCollider>();
+            CapsuleCollider modelCap = ComponentResolver.Find<CapsuleCollider>(modelRoot)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] CapsuleCollider not found")
+                .Resolve();
             if (modelCap != null)
                 modelCap.enabled = false;
 
             // 6. Disable root motion immediately.
             //    The prefab stores m_ApplyRootMotion=1. PrActorUtils.Update() overwrites it
             //    false each frame, but charAnimator is cached in PrActorUtils.Awake() now —
-            //    this explicit disable closes the gap between Instantiate and the first Update.
-            Animator modelAnim = modelRoot.GetComponent<Animator>();
+            Animator modelAnim = ComponentResolver.Find<Animator>(modelRoot)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] Animator not found")
+                .Resolve();
             if (modelAnim != null)
                 modelAnim.applyRootMotion = false;
 

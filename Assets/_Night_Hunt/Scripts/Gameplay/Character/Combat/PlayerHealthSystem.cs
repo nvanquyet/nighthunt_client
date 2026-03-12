@@ -7,6 +7,7 @@ using NightHunt.Networking.Player;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat
 {
@@ -65,16 +66,28 @@ namespace NightHunt.Gameplay.Character.Combat
 
         private void Awake()
         {
-            _networkPlayer = GetComponent<NetworkPlayer>();
+            _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NetworkPlayer not found")
+        .Resolve();
 
             if (_statSystemSource != null)
                 _statSystem = _statSystemSource as IPlayerStatSystem;
 
             if (_statSystem == null)
-                _statSystem = GetComponent<IPlayerStatSystem>();
+                _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IPlayerStatSystem not found")
+        .Resolve();
 
             if (_lifecycle == null)
-                _lifecycle = GetComponent<CharacterLifecycleController>();
+                _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] CharacterLifecycleController not found")
+        .Resolve();
         }
 
         public override void OnStartServer()

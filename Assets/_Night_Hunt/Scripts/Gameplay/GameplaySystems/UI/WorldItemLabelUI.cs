@@ -2,6 +2,7 @@ using UnityEngine;
 using TMPro;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Loot;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI
 {
@@ -46,7 +47,11 @@ namespace NightHunt.GameplaySystems.UI
 
         private void Awake()
         {
-            _worldItem  = GetComponent<WorldItem>();
+            _worldItem  = ComponentResolver.Find<WorldItem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] WorldItem not found")
+        .Resolve();
             _mainCamera = Camera.main;
 
             RefreshLabel();

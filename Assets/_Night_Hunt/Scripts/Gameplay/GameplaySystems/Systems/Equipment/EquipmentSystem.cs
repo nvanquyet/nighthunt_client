@@ -10,6 +10,7 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Core.Data;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Equipment
 {
@@ -109,7 +110,11 @@ namespace NightHunt.GameplaySystems.Equipment
             // Auto-find if not assigned
             if (_statSystem == null)
             {
-                var statSys = GetComponent<IPlayerStatSystem>();
+                var statSys = ComponentResolver.Find<IPlayerStatSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IPlayerStatSystem not found")
+        .Resolve();
                 if (statSys != null)
                 {
                     _statSystemComponent = statSys as MonoBehaviour;
@@ -119,7 +124,11 @@ namespace NightHunt.GameplaySystems.Equipment
             
             if (_inventorySystem == null)
             {
-                var invSys = GetComponent<IInventorySystem>();
+                var invSys = ComponentResolver.Find<IInventorySystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IInventorySystem not found")
+        .Resolve();
                 if (invSys != null)
                 {
                     _inventorySystemComponent = invSys as MonoBehaviour;
@@ -139,7 +148,8 @@ namespace NightHunt.GameplaySystems.Equipment
         }
         
 #if UNITY_EDITOR
-        private void OnValidate()
+        [ContextMenu("Validate References")]
+        protected override void OnValidate()
         {
             if (_statSystemComponent != null)
                 _statSystem = _statSystemComponent as IPlayerStatSystem;
@@ -149,7 +159,11 @@ namespace NightHunt.GameplaySystems.Equipment
             
             if (_statSystem == null)
             {
-                var statSys = GetComponent<IPlayerStatSystem>();
+                var statSys = ComponentResolver.Find<IPlayerStatSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IPlayerStatSystem not found")
+        .Resolve();
                 if (statSys != null)
                 {
                     _statSystemComponent = statSys as MonoBehaviour;
@@ -159,7 +173,11 @@ namespace NightHunt.GameplaySystems.Equipment
             
             if (_inventorySystem == null)
             {
-                var invSys = GetComponent<IInventorySystem>();
+                var invSys = ComponentResolver.Find<IInventorySystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IInventorySystem not found")
+        .Resolve();
                 if (invSys != null)
                 {
                     _inventorySystemComponent = invSys as MonoBehaviour;
@@ -293,11 +311,19 @@ namespace NightHunt.GameplaySystems.Equipment
             
             if (_inventoryConfig != null && _inventoryConfig.DetachAttachmentsOnUnequip)
             {
-                var attachmentSystem = GetComponent<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>();
+                var attachmentSystem = ComponentResolver.Find<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem not found")
+        .Resolve();
                 if (attachmentSystem == null)
                 {
                     // Try to find in parent or siblings
-                    attachmentSystem = GetComponentInParent<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>();
+                    attachmentSystem = ComponentResolver.Find<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>(this)
+        .InParent()
+        .InRootChildren()
+        .OrLogWarning("[Auto] NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem not found")
+        .Resolve();
                 }
                 
                 if (attachmentSystem != null)

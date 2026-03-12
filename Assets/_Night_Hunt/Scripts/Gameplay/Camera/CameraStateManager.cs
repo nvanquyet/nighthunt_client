@@ -4,6 +4,7 @@ using Unity.Cinemachine;
 using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Networking;
 
 namespace NightHunt.Gameplay.Camera
@@ -38,7 +39,7 @@ namespace NightHunt.Gameplay.Camera
 
         [Header("Weapon System")]
         [Tooltip("MonoBehaviour that implements IWeaponSystem (typically WeaponSystem on this GameObject).")]
-        [SerializeField] private MonoBehaviour _weaponSystemMB;
+        [SerializeField] private WeaponSystem _weaponSystemMB;
 
         // ─────────────────────────────────────────────────────────────────────
         //  State

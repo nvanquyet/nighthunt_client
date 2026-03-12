@@ -8,6 +8,7 @@ using NightHunt.GameplaySystems.Inventory;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -18,15 +19,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     {
         public static DragDropController Instance { get; private set; }
 
-        [Header("Ghost")]
-        [SerializeField] private DragDropGhost _ghostPrefab;
+        [Header("Ghost")] [SerializeField] private DragDropGhost _ghostPrefab;
         [SerializeField] private Canvas _dragCanvas;
-        
-        [Header("Dialogs")]
-        [SerializeField] private DropQuantityDialog _dropQuantityDialog;
-        
-        [Header("Debug")]
-        [SerializeField] private bool _enableDebugLogs;
+
+        [Header("Dialogs")] [SerializeField] private DropQuantityDialog _dropQuantityDialog;
+
+        [Header("Debug")] [SerializeField] private bool _enableDebugLogs;
 
         private DragDropGhost _activeGhost;
         private ItemSlotView _sourceView;
@@ -37,8 +35,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private readonly DragDropValidator _validator = new DragDropValidator();
         private readonly Dictionary<UISlotId, ItemSlotView> _allSlots = new Dictionary<UISlotId, ItemSlotView>();
 
-        [Header("Raycast")]
-        [SerializeField] private GraphicRaycaster _raycaster;
+        [Header("Raycast")] [SerializeField] private GraphicRaycaster _raycaster;
 
         private ItemSlotView _currentHoverView;
 
@@ -155,7 +152,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 ItemSlotView hoverView = null;
                 foreach (var r in results)
                 {
-                    hoverView = r.gameObject.GetComponentInParent<ItemSlotView>();
+                    hoverView = ComponentResolver.Find<ItemSlotView>(r.gameObject)
+                        .InParent()
+                        .InRootChildren()
+                        .OrLogWarning("[Auto] ItemSlotView not found")
+                        .Resolve();
                     if (hoverView != null)
                         break;
                 }
@@ -254,7 +255,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return;
 
             _activeGhost = Instantiate(_ghostPrefab, _dragCanvas.transform);
-            if(_activeGhost == null)
+            if (_activeGhost == null)
                 return;
             _activeGhost.gameObject.SetActive(true);
             _activeGhost.SetupFromSlot(sourceView);
@@ -270,7 +271,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             UITweenUtil.ScaleInstant(rt, 1f);
 
             // SetupFromSlot đã set alpha = 1f, không cần SetAlpha(0f) nữa
-            var cg = _activeGhost.GetComponent<CanvasGroup>();
+            var cg = ComponentResolver.Find<CanvasGroup>(_activeGhost)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] CanvasGroup not found")
+                .Resolve();
             if (cg != null)
             {
                 UITweenUtil.FadeCanvasGroupInstant(cg, 1f);
@@ -286,15 +291,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 {
                     rt.position = _sourceView.transform.position;
                 }
-                
-                var cg = _activeGhost.GetComponent<CanvasGroup>();
+
+                var cg = ComponentResolver.Find<CanvasGroup>(_activeGhost)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] CanvasGroup not found")
+                    .Resolve();
                 if (cg != null)
                 {
                     UITweenUtil.FadeCanvasGroupInstant(cg, 0f);
                 }
-                
+
                 yield return null;
-                
+
                 // Check lại sau yield vì có thể bị destroy từ nơi khác
                 if (_activeGhost != null)
                 {
@@ -307,7 +316,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 _sourceView.SetState(_sourceStateSnapshot);
             }
-            
+
             ClearState();
         }
 
@@ -317,11 +326,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 var rt = _activeGhost.RectTransform;
                 rt.position = targetWorldPos;
-                var cg = _activeGhost.GetComponent<CanvasGroup>();
+                var cg = ComponentResolver.Find<CanvasGroup>(_activeGhost)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] CanvasGroup not found")
+                    .Resolve();
                 if (cg != null)
                 {
                     UITweenUtil.FadeCanvasGroupInstant(cg, 0f);
                 }
+
                 yield return null;
                 Destroy(_activeGhost.gameObject);
             }
@@ -341,6 +355,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     clearState.IsValidDropTarget = false;
                     _currentHoverView.SetState(clearState);
                 }
+
                 _currentHoverView = null;
             }
 
@@ -348,7 +363,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _sourceView = null;
             _sourceStateSnapshot = null;
             _targetStateSnapshot = null;
-            _dropHandled = false;  // FIX Bug 5: always reset for next drag cycle
+            _dropHandled = false; // FIX Bug 5: always reset for next drag cycle
         }
 
         #endregion
@@ -389,6 +404,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                             targetView.SetState(newState);
                         }
                     }
+
                     break;
 
                 case DropActionType.Equip:
@@ -439,6 +455,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         var previewState = CloneState(sourceState);
                         targetView.SetState(previewState);
                     }
+
                     // Server confirmation (OnQuickSlotAssigned event) will finalize both slots.
                     break;
 
@@ -455,6 +472,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         var movedState = CloneState(sourceState);
                         targetView.SetState(movedState);
                     }
+
                     break;
             }
         }
@@ -489,6 +507,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     {
                         bridge.Inventory.StackItems(targetState.Item.InstanceID, item.InstanceID);
                     }
+
                     break;
 
                 case DropActionType.Swap:
@@ -503,6 +522,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"item2={targetState.Item.DefinitionID} ({targetState.Item.InstanceID}) " +
                                       $"from={action.Source} to={action.Target}");
                         }
+
                         bridge.SwapItems(item.InstanceID, targetState.Item.InstanceID);
                     }
                     else if (action.Source.Type == UISlotType.Equipment &&
@@ -517,6 +537,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"slot2={action.Target.EquipmentSlot.Value} " +
                                       $"from={action.Source} to={action.Target}");
                         }
+
                         bridge.Equipment.SwapEquipment(
                             action.Source.EquipmentSlot.Value,
                             action.Target.EquipmentSlot.Value);
@@ -533,12 +554,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"slot2={action.Target.WeaponSlot.Value} " +
                                       $"from={action.Source} to={action.Target}");
                         }
+
                         bridge.Weapon.SwapWeapons(
                             action.Source.WeaponSlot.Value,
                             action.Target.WeaponSlot.Value);
                     }
                     else if (action.Source.Type == UISlotType.QuickSlot &&
-                        action.Target.Type == UISlotType.QuickSlot)
+                             action.Target.Type == UISlotType.QuickSlot)
                     {
                         if (_enableDebugLogs)
                         {
@@ -547,6 +569,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"slot2={action.Target.Index} " +
                                       $"from={action.Source} to={action.Target}");
                         }
+
                         bridge.QuickSlot.SwapQuickSlots(
                             action.Source.Index,
                             action.Target.Index);
@@ -568,6 +591,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                 action.Target.Index);
                         }
                     }
+
                     break;
 
                 case DropActionType.Equip:
@@ -577,6 +601,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                   $"item={item.DefinitionID} ({item.InstanceID}) " +
                                   $"from={action.Source} to={action.Target}");
                     }
+
                     bridge.EquipItem(item.InstanceID);
                     break;
 
@@ -591,6 +616,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       + $"item={item.DefinitionID} ({item.InstanceID}) "
                                       + $"from={action.Source} to={action.Target} slot={action.Target.WeaponSlot.Value}");
                         }
+
                         bridge.EquipWeaponToSlot(item.InstanceID, action.Target.WeaponSlot.Value);
                     }
                     else
@@ -598,6 +624,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         // Fallback: auto-select slot (no specific target slot info)
                         bridge.EquipWeapon(item.InstanceID);
                     }
+
                     break;
 
                 case DropActionType.Unequip:
@@ -609,8 +636,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"slot={action.Source.EquipmentSlot.Value} " +
                                       $"source={action.Source} target={action.Target}");
                         }
+
                         bridge.UnequipItem(action.Source.EquipmentSlot.Value);
                     }
+
                     break;
 
                 case DropActionType.UnequipWeapon:
@@ -622,14 +651,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"slot={action.Source.WeaponSlot.Value} " +
                                       $"source={action.Source} target={action.Target}");
                         }
+
                         bridge.UnequipWeapon(action.Source.WeaponSlot.Value);
                     }
+
                     break;
 
                 case DropActionType.AssignQuickSlot:
                     if (action.Target.Type == UISlotType.QuickSlot)
                     {
-                        Debug.Log($"[DragDropController][QS] Calling bridge.AssignToQuickSlot: item={item.DefinitionID} ({item.InstanceID}) → slot={action.Target.Index}");
+                        Debug.Log(
+                            $"[DragDropController][QS] Calling bridge.AssignToQuickSlot: item={item.DefinitionID} ({item.InstanceID}) → slot={action.Target.Index}");
                         bridge.AssignToQuickSlot(item.InstanceID, action.Target.Index);
                         if (_enableDebugLogs)
                         {
@@ -638,6 +670,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"to QuickSlot[{action.Target.Index}] from={action.Source}");
                         }
                     }
+
                     break;
 
                 case DropActionType.RemoveQuickSlot:
@@ -664,12 +697,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"QuickSlot[{action.Source.Index}] cleared (source={action.Source}, target={action.Target})");
                         }
                     }
+
                     break;
 
                 case DropActionType.DropToWorld:
                     // Nếu stack đủ lớn (>=3), mở dialog chọn số lượng drop thay vì luôn drop full stack.
                     if (item.Quantity > 2 && TryShowDropQuantityDialog(item, qty =>
-                        ExecuteDropToWorld(bridge, action.Source, item, qty)))
+                            ExecuteDropToWorld(bridge, action.Source, item, qty)))
                     {
                         return;
                     }
@@ -690,6 +724,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                 action.Target.Index);
                         }
                     }
+
                     break;
 
                 case DropActionType.Detach:
@@ -704,12 +739,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                 action.Source.Index);
                         }
                     }
+
                     break;
 
                 case DropActionType.Trash:
                     // Khi trash stack lớn (>=3), cho phép người chơi chọn số lượng xoá.
                     if (item.Quantity > 2 && TryShowDropQuantityDialog(item, qty =>
-                        ExecuteTrash(bridge, action.Source, item, qty)))
+                            ExecuteTrash(bridge, action.Source, item, qty)))
                     {
                         return;
                     }
@@ -777,6 +813,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         bridge.UnequipItem(source.EquipmentSlot.Value);
                         bridge.DropItem(item.InstanceID, quantity);
                     }
+
                     break;
 
                 case UISlotType.Weapon:
@@ -785,6 +822,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         bridge.UnequipWeapon(source.WeaponSlot.Value);
                         bridge.DropItem(item.InstanceID, quantity);
                     }
+
                     break;
 
                 case UISlotType.QuickSlot:
@@ -829,6 +867,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                   $"item={item.DefinitionID} ({item.InstanceID}) " +
                                   $"from={source} qty={quantity}");
                     }
+
                     bridge.RemoveItem(item.InstanceID, quantity);
                     break;
 
@@ -848,6 +887,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         // 2) Xoá instance khỏi inventory.
                         bridge.RemoveItem(item.InstanceID, quantity);
                     }
+
                     break;
 
                 case UISlotType.Weapon:
@@ -866,6 +906,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         // 2) Xoá instance khỏi inventory.
                         bridge.RemoveItem(item.InstanceID, quantity);
                     }
+
                     break;
 
                 case UISlotType.QuickSlot:
@@ -899,6 +940,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                             source.ParentInstanceID,
                             source.Index);
                     }
+
                     break;
 
                 default:
@@ -907,6 +949,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         Debug.Log($"[DragDropController] [UI→Server][Trash] Unsupported source type={source.Type} " +
                                   $"item={item.DefinitionID} ({item.InstanceID}) from={source} qty={quantity}");
                     }
+
                     break;
             }
         }
@@ -915,11 +958,15 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             var spectate = SpectateManager.Instance;
             if (spectate == null) return null;
-            
+
             var player = spectate.GetCurrentPlayer();
             if (player == null) return null;
-            
-            return player.GetComponent<IAttachmentSystem>();
+
+            return ComponentResolver.Find<IAttachmentSystem>(player)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IAttachmentSystem not found")
+                .Resolve();
         }
 
         #endregion
@@ -946,4 +993,3 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
     }
 }
-

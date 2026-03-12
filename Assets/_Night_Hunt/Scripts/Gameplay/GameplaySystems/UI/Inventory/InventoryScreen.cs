@@ -5,6 +5,7 @@ using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Spectator;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -48,14 +49,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private ItemSlotView _hoveredSlot;
 
 
-
         private PlayerStatUIPanel StatPanel
         {
             get
             {
                 if (playerStatUIPanel == null)
                 {
-                    playerStatUIPanel = GetComponentInChildren<PlayerStatUIPanel>();
+                    playerStatUIPanel = ComponentResolver.Find<PlayerStatUIPanel>(this)
+                        .OnSelf()
+                        .InChildren()
+                        .InParent()
+                        .OrLogWarning("[Auto] PlayerStatUIPanel not found")
+                        .Resolve();
                     if (playerStatUIPanel == null)
                     {
                         Debug.LogWarning("[InventoryScreen] PlayerStatUIPanel not found in children!");
@@ -184,7 +189,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     {
                         var go = Instantiate(prefab, _inventoryGridRoot, false);
                         SetupSlotRectTransform(go);
-                        var view = go.GetComponent<ItemSlotView>();
+                        var view = ComponentResolver.Find<ItemSlotView>(go)
+                            .OnSelf()
+                            .InChildren()
+                            .OrLogWarning("[Auto] ItemSlotView not found")
+                            .Resolve();
                         if (view != null)
                         {
                             var id = UISlotId.Inventory(i);
@@ -208,7 +217,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     {
                         var go = Instantiate(prefab, _equipmentRoot, false);
                         SetupSlotRectTransform(go);
-                        var view = go.GetComponent<ItemSlotView>();
+                        var view = ComponentResolver.Find<ItemSlotView>(go)
+                            .OnSelf()
+                            .InChildren()
+                            .OrLogWarning("[Auto] ItemSlotView not found")
+                            .Resolve();
                         if (view != null)
                         {
                             var id = UISlotId.Equipment(equipmentSlot.Type);
@@ -232,7 +245,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     {
                         var go = Instantiate(prefab, _weaponRoot, false);
                         SetupSlotRectTransform(go);
-                        var view = go.GetComponent<ItemSlotView>();
+                        var view = ComponentResolver.Find<ItemSlotView>(go)
+                            .OnSelf()
+                            .InChildren()
+                            .OrLogWarning("[Auto] ItemSlotView not found")
+                            .Resolve();
                         if (view != null)
                         {
                             var id = UISlotId.Weapon(weaponSlot.Type);
@@ -256,7 +273,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     {
                         var go = Instantiate(prefab, _quickSlotRoot, false);
                         SetupSlotRectTransform(go);
-                        var view = go.GetComponent<ItemSlotView>();
+                        var view = ComponentResolver.Find<ItemSlotView>(go)
+                            .OnSelf()
+                            .InChildren()
+                            .OrLogWarning("[Auto] ItemSlotView not found")
+                            .Resolve();
                         if (view != null)
                         {
                             var id = UISlotId.QuickSlot(i);
@@ -276,7 +297,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 var go = Instantiate(_trashSlotPrefab, _trashSlotRoot, false);
                 // Không gọi SetupSlotRectTransform() - giữ nguyên anchor/position từ prefab
 
-                var view = go.GetComponent<ItemSlotView>();
+                var view = ComponentResolver.Find<ItemSlotView>(go)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] ItemSlotView not found")
+                    .Resolve();
                 if (view != null)
                 {
                     var id = UISlotId.DropArea();
@@ -285,6 +310,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     _slotViews[id] = view;
                     DragDropController.Instance?.RegisterSlotView(view);
                 }
+
                 go.gameObject.SetActive(true); // Activate after initialization to avoid showing uninitialized values
             }
 
@@ -309,7 +335,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         /// </summary>
         private void SetupSlotRectTransform(GameObject slotGO)
         {
-            var rectTransform = slotGO.GetComponent<RectTransform>();
+            var rectTransform = ComponentResolver.Find<RectTransform>(slotGO)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] RectTransform not found")
+                .Resolve();
             if (rectTransform == null) return;
 
             // Đảm bảo GameObject active để RectTransform có thể được setup
@@ -334,11 +364,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             rectTransform.sizeDelta = _slotSize;
 
             // Nếu parent có Layout Group, cần thêm LayoutElement
-            var parentLayoutGroup = rectTransform.parent?.GetComponent<UnityEngine.UI.LayoutGroup>();
+            var parentLayoutGroup = ComponentResolver.Find<UnityEngine.UI.LayoutGroup>(rectTransform.parent)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] UnityEngine.UI.LayoutGroup not found")
+                .Resolve();
             if (parentLayoutGroup != null)
             {
                 // Thêm LayoutElement với preferred size nếu chưa có
-                var layoutElement = slotGO.GetComponent<UnityEngine.UI.LayoutElement>();
+                var layoutElement = ComponentResolver.Find<UnityEngine.UI.LayoutElement>(slotGO)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] UnityEngine.UI.LayoutElement not found")
+                    .Resolve();
                 if (layoutElement == null)
                 {
                     layoutElement = slotGO.AddComponent<UnityEngine.UI.LayoutElement>();
@@ -449,7 +487,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             foreach (var kvp in _slotViews)
             {
-                var input = kvp.Value.GetComponent<ItemSlotInput>();
+                var input = ComponentResolver.Find<ItemSlotInput>(kvp.Value)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] ItemSlotInput not found")
+                    .Resolve();
                 if (input != null)
                 {
                     if (subscribe)
@@ -532,13 +574,26 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private IAttachmentSystem GetAttachmentSystem()
         {
             var spectate = SpectateManager.Instance;
-            if (spectate == null) { Debug.LogWarning("[InventoryScreen][Attachment] SpectateManager.Instance is NULL"); return null; }
+            if (spectate == null)
+            {
+                Debug.LogWarning("[InventoryScreen][Attachment] SpectateManager.Instance is NULL");
+                return null;
+            }
 
             var currentPlayer = spectate.GetCurrentPlayer();
-            if (currentPlayer == null) { Debug.LogWarning("[InventoryScreen][Attachment] SpectateManager.GetCurrentPlayer() is NULL"); return null; }
+            if (currentPlayer == null)
+            {
+                Debug.LogWarning("[InventoryScreen][Attachment] SpectateManager.GetCurrentPlayer() is NULL");
+                return null;
+            }
 
-            var sys = currentPlayer.GetComponent<IAttachmentSystem>();
-            Debug.Log($"[InventoryScreen][Attachment] GetAttachmentSystem on '{currentPlayer.name}': {(sys != null ? sys.GetType().Name : "NULL — component missing on prefab!")}");
+            var sys = ComponentResolver.Find<IAttachmentSystem>(currentPlayer)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IAttachmentSystem not found")
+                .Resolve();
+            Debug.Log(
+                $"[InventoryScreen][Attachment] GetAttachmentSystem on '{currentPlayer.name}': {(sys != null ? sys.GetType().Name : "NULL — component missing on prefab!")}");
             return sys;
         }
 
@@ -551,7 +606,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (currentPlayer == null) return null;
 
             var bridge = currentPlayer.GamePlaySystemBridge;
-            Debug.Log($"[InventoryScreen][Attachment] GetGameplayBridge: {(bridge != null ? $"IsReady={bridge.IsReady}" : "NULL")}");
+            Debug.Log(
+                $"[InventoryScreen][Attachment] GetGameplayBridge: {(bridge != null ? $"IsReady={bridge.IsReady}" : "NULL")}");
             return bridge;
         }
 

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using FishNet;
 using FishNet.Connection;
 using FishNet.Object;
@@ -8,6 +8,7 @@ using NightHunt.Gameplay.Respawn;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Beacon
 {
@@ -132,7 +133,11 @@ namespace NightHunt.Gameplay.Beacon
 
             // Instantiate
             var go     = Instantiate(prefab, position, rotation);
-            var beacon = go.GetComponent<RespawnBeacon>();
+            var beacon = ComponentResolver.Find<RespawnBeacon>(go)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] RespawnBeacon not found")
+        .Resolve();
             if (beacon == null)
             {
                 Debug.LogError("[BeaconManager] Beacon prefab is missing RespawnBeacon component!");

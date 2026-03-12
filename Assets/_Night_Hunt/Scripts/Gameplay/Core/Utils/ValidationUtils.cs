@@ -1,4 +1,5 @@
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Core.Utils
 {
@@ -68,8 +69,11 @@ namespace NightHunt.Gameplay.Core.Utils
         /// </summary>
         public static bool HasComponent<T>(GameObject obj) where T : Component
         {
-            return obj != null && obj.GetComponent<T>() != null;
+            return obj != null && ComponentResolver.Find<T>(obj)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] T not found")
+                .Resolve() != null;
         }
     }
 }
-

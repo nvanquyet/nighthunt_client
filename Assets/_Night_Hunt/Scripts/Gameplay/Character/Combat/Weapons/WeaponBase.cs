@@ -4,6 +4,7 @@ using UnityEngine;
 using NightHunt.Data;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.Gameplay.Character.Combat;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
@@ -168,7 +169,11 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             if (didHit)
             {
-                var hitbox = hit.collider.GetComponent<PlayerHitboxMarker>();
+                var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(hit.collider)
+                                            .OnSelf()
+                                            .InChildren()
+                                            .OrLogWarning("[Auto] PlayerHitboxMarker not found")
+                                            .Resolve();
                 if (hitbox != null && hitbox.HealthSystem != null)
                 {
                     float dmg = config.DamageBody * (hitbox.IsHeadshot ? damageHeadMultiplier : 1f);

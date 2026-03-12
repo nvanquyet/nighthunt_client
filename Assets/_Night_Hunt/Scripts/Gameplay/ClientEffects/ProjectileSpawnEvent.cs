@@ -1,5 +1,6 @@
 using UnityEngine;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.ClientEffects
 {
@@ -19,10 +20,13 @@ namespace NightHunt.Gameplay.ClientEffects
             Speed = speed;
             if (instigator != null)
             {
-                var networkObj = instigator.GetComponent<FishNet.Object.NetworkObject>();
+                var networkObj = ComponentResolver.Find<FishNet.Object.NetworkObject>(instigator)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] FishNet.Object.NetworkObject not found")
+                    .Resolve();
                 NetworkId = networkObj != null ? (int)networkObj.ObjectId : 0;
             }
         }
     }
 }
-

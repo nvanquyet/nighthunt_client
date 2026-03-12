@@ -4,6 +4,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Networking;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Beacon
 {
@@ -52,7 +53,11 @@ namespace NightHunt.Gameplay.Beacon
         private void Awake()
         {
             if (_networkPlayer == null)
-                _networkPlayer = GetComponent<NetworkPlayer>();
+                _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NetworkPlayer not found")
+        .Resolve();
 
             if (_cameraTransform == null)
             {
@@ -61,10 +66,18 @@ namespace NightHunt.Gameplay.Beacon
             }
 
             // Inventory system used server-side to validate & consume the beacon item.
-            _inventorySystem = GetComponent<IInventorySystem>();
+            _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IInventorySystem not found")
+        .Resolve();
 
             // Cancel placement mode when the player dies.
-            _lifecycle = GetComponent<CharacterLifecycleController>();
+            _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] CharacterLifecycleController not found")
+        .Resolve();
             if (_lifecycle != null) _lifecycle.OnDied += OnPlayerDied;
         }
 
@@ -253,7 +266,11 @@ namespace NightHunt.Gameplay.Beacon
             // authoritative InventorySystem component on this GameObject.
             if (!string.IsNullOrEmpty(itemInstanceId))
             {
-                var inv  = _inventorySystem ?? GetComponent<IInventorySystem>();
+                var inv  = _inventorySystem ?? ComponentResolver.Find<IInventorySystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IInventorySystem not found")
+        .Resolve();
                 var held = inv?.GetItemByInstanceID(itemInstanceId);
                 if (held == null)
                 {
@@ -275,7 +292,11 @@ namespace NightHunt.Gameplay.Beacon
             // ── Consume item only on success ──────────────────────────────────
             if (placed && !string.IsNullOrEmpty(itemInstanceId))
             {
-                var inv = _inventorySystem ?? GetComponent<IInventorySystem>();
+                var inv = _inventorySystem ?? ComponentResolver.Find<IInventorySystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IInventorySystem not found")
+        .Resolve();
                 inv?.RemoveItem(itemInstanceId, 1);
                 Debug.Log("[BeaconPlaceable] Beacon item consumed from inventory.");
             }

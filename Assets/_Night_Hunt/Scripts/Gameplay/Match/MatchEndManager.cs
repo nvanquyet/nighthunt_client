@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using FishNet.Object;
@@ -6,6 +6,7 @@ using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Networking;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Match
 {
@@ -28,12 +29,11 @@ namespace NightHunt.Gameplay.Match
     public sealed class MatchEndManager : NetworkBehaviour
     {
         // ── Inspector ──────────────────────────────────────────────────────────
-        [Header("References")]
-        [SerializeField] private MatchPhaseManager _phaseManager;
+        [Header("References")] [SerializeField]
+        private MatchPhaseManager _phaseManager;
 
-        [Header("Settings")]
-        [Tooltip("Team IDs present in the match (usually {0, 1}).")]
-        [SerializeField] private int[] _teamIds = { 0, 1 };
+        [Header("Settings")] [Tooltip("Team IDs present in the match (usually {0, 1}).")] [SerializeField]
+        private int[] _teamIds = { 0, 1 };
 
         // ── Public events (server-only) ────────────────────────────────────────
         /// <summary>Raised on the server when the match resolves. winnerTeamId == -1 → Draw.</summary>
@@ -44,8 +44,10 @@ namespace NightHunt.Gameplay.Match
 
         // Per-team kill score accumulator (server-side, not synced — only needed for tie-break)
         private readonly Dictionary<int, int> _teamKillScore = new();
+
         // Per-team objective score (supplied by CaptureZoneObjective via AddScore)
         private readonly Dictionary<int, float> _teamObjectiveScore = new();
+
         // Per-player kill counter keyed by BackendPlayerId
         private readonly Dictionary<string, int> _playerKillCount = new();
 
@@ -54,6 +56,7 @@ namespace NightHunt.Gameplay.Match
         private IBeaconProvider _beaconProvider;
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Unity / FishNet Lifecycle
 
         private void Awake()
@@ -63,8 +66,8 @@ namespace NightHunt.Gameplay.Match
 
             foreach (int teamId in _teamIds)
             {
-                _teamKillScore[teamId]       = 0;
-                _teamObjectiveScore[teamId]  = 0f;
+                _teamKillScore[teamId] = 0;
+                _teamObjectiveScore[teamId] = 0f;
             }
         }
 
@@ -93,6 +96,7 @@ namespace NightHunt.Gameplay.Match
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Public API
 
         /// <summary>Register a beacon provider (BeaconManager calls this on Awake).</summary>
@@ -141,12 +145,17 @@ namespace NightHunt.Gameplay.Match
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Player death hook
 
         private void SubscribePlayerDeath(NetworkPlayer np)
         {
             // CharacterLifecycleController on the same GameObject fires OnDied
-            var lifecycle = np.GetComponent<CharacterLifecycleController>();
+            var lifecycle = ComponentResolver.Find<CharacterLifecycleController>(np)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] CharacterLifecycleController not found")
+                .Resolve();
             if (lifecycle != null)
                 lifecycle.OnDied += () => OnPlayerDied(np);
         }
@@ -165,6 +174,7 @@ namespace NightHunt.Gameplay.Match
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Beacon event
 
         private void OnBeaconDestroyed(BeaconDestroyedEvent evt)
@@ -177,6 +187,7 @@ namespace NightHunt.Gameplay.Match
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Phase change
 
         private void OnPhaseChanged(MatchPhaseState oldPhase, MatchPhaseState newPhase)
@@ -201,6 +212,7 @@ namespace NightHunt.Gameplay.Match
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Elimination logic
 
         private void EvaluateTeamElimination(int teamId)
@@ -210,8 +222,8 @@ namespace NightHunt.Gameplay.Match
             RegistryService registry = RegistryService.Instance;
             if (registry == null) return;
 
-            bool allDead    = registry.GetAliveCount(teamId) == 0;
-            bool noBeacons  = GetActiveBeaconCount(teamId) == 0;
+            bool allDead = registry.GetAliveCount(teamId) == 0;
+            bool noBeacons = GetActiveBeaconCount(teamId) == 0;
 
             if (_phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
             {
@@ -240,7 +252,8 @@ namespace NightHunt.Gameplay.Match
             int winnerTeamId = ResolveWinner(eliminatedTeamId);
             MatchEndReason reason = MatchEndReason.TeamEliminated;
 
-            Debug.Log($"[MatchEndManager] Team {eliminatedTeamId} eliminated → Winner: {(winnerTeamId >= 0 ? $"Team {winnerTeamId}" : "DRAW")}");
+            Debug.Log(
+                $"[MatchEndManager] Team {eliminatedTeamId} eliminated → Winner: {(winnerTeamId >= 0 ? $"Team {winnerTeamId}" : "DRAW")}");
 
             // Publish server-local event
             OnMatchEnded?.Invoke(winnerTeamId, reason);
@@ -252,15 +265,16 @@ namespace NightHunt.Gameplay.Match
             MatchResult[] results = BuildResults(winnerTeamId, reason);
             GameplayEventBus.Instance?.Publish(new MatchEndedEvent
             {
-                WinnerTeamId   = winnerTeamId,
-                Reason         = reason,
-                PlayerResults  = results
+                WinnerTeamId = winnerTeamId,
+                Reason = reason,
+                PlayerResults = results
             });
         }
 
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Tie-break resolution
 
         private int ResolveWinner(int eliminatedTeamId)
@@ -273,7 +287,7 @@ namespace NightHunt.Gameplay.Match
                     survivors.Add(id);
             }
 
-            if (survivors.Count == 0) return -1;   // edge-case: draw
+            if (survivors.Count == 0) return -1; // edge-case: draw
             if (survivors.Count == 1) return survivors[0]; // normal 2-team match
 
             // Multiple survivors — fall through to tie-break
@@ -284,19 +298,19 @@ namespace NightHunt.Gameplay.Match
         {
             RegistryService registry = RegistryService.Instance;
 
-            int bestTeam  = -1;
+            int bestTeam = -1;
             int bestAlive = -1;
             float bestScore = -1f;
 
             foreach (int teamId in candidates)
             {
-                int aliveCount  = registry != null ? registry.GetAliveCount(teamId) : 0;
+                int aliveCount = registry != null ? registry.GetAliveCount(teamId) : 0;
                 float teamScore = GetTotalScore(teamId);
 
                 if (aliveCount > bestAlive ||
                     (aliveCount == bestAlive && teamScore > bestScore))
                 {
-                    bestTeam  = teamId;
+                    bestTeam = teamId;
                     bestAlive = aliveCount;
                     bestScore = teamScore;
                 }
@@ -306,7 +320,7 @@ namespace NightHunt.Gameplay.Match
             int tiedCount = 0;
             foreach (int teamId in candidates)
             {
-                int alive  = registry != null ? registry.GetAliveCount(teamId) : 0;
+                int alive = registry != null ? registry.GetAliveCount(teamId) : 0;
                 float score = GetTotalScore(teamId);
                 if (alive == bestAlive && Mathf.Approximately(score, bestScore))
                     tiedCount++;
@@ -317,14 +331,15 @@ namespace NightHunt.Gameplay.Match
 
         private float GetTotalScore(int teamId)
         {
-            float kills  = _teamKillScore.TryGetValue(teamId, out int k) ? k : 0;
-            float obj    = _teamObjectiveScore.TryGetValue(teamId, out float o) ? o : 0f;
+            float kills = _teamKillScore.TryGetValue(teamId, out int k) ? k : 0;
+            float obj = _teamObjectiveScore.TryGetValue(teamId, out float o) ? o : 0f;
             return kills + obj;
         }
 
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Helpers
 
         private int GetActiveBeaconCount(int teamId)
@@ -363,21 +378,23 @@ namespace NightHunt.Gameplay.Match
                     list.Add(new MatchResult
                     {
                         BackendPlayerId = pid,
-                        DisplayName     = data?.DisplayName ?? "Unknown",
-                        TeamId          = teamId,
-                        Kills           = _playerKillCount.TryGetValue(pid, out int k) ? k : 0,
-                        Deaths          = 0,
-                        Score           = (int)GetTotalScore(teamId),
-                        EloChange       = 0    // calculated server-side post-match
+                        DisplayName = data?.DisplayName ?? "Unknown",
+                        TeamId = teamId,
+                        Kills = _playerKillCount.TryGetValue(pid, out int k) ? k : 0,
+                        Deaths = 0,
+                        Score = (int)GetTotalScore(teamId),
+                        EloChange = 0 // calculated server-side post-match
                     });
                 }
             }
+
             return list.ToArray();
         }
 
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region RPCs
 
         [ObserversRpc]
@@ -385,9 +402,9 @@ namespace NightHunt.Gameplay.Match
         {
             GameplayEventBus.Instance?.Publish(new MatchEndedEvent
             {
-                WinnerTeamId  = winnerTeamId,
-                Reason        = (MatchEndReason)reason,
-                PlayerResults = Array.Empty<MatchResult>()   // full results sent separately via event
+                WinnerTeamId = winnerTeamId,
+                Reason = (MatchEndReason)reason,
+                PlayerResults = Array.Empty<MatchResult>() // full results sent separately via event
             });
         }
 

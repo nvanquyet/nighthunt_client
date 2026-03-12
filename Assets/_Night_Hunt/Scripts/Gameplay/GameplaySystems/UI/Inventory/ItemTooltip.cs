@@ -7,6 +7,7 @@ using NightHunt.StatSystem.Configs;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.StatSystem.Core.Data;
 using NightHunt.StatSystem.Systems;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -88,7 +89,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             // Try to get canvas from tooltip root or use main canvas
             Canvas targetCanvas = _canvas;
             if (targetCanvas == null)
-                targetCanvas = _tooltipRoot.GetComponentInParent<Canvas>();
+                targetCanvas = ComponentResolver.Find<Canvas>(_tooltipRoot)
+                    .InParent()
+                    .InRootChildren()
+                    .OrLogWarning("[Auto] Canvas not found")
+                    .Resolve();
 
             if (targetCanvas == null)
             {
@@ -97,7 +102,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return;
             }
 
-            var rectTransform = _tooltipRoot.GetComponent<RectTransform>();
+            var rectTransform = ComponentResolver.Find<RectTransform>(_tooltipRoot)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] RectTransform not found")
+                .Resolve();
             if (rectTransform == null) return;
 
             // Handle different canvas render modes
@@ -176,7 +185,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (string.IsNullOrEmpty(statDef.DisplayName)) continue;
 
                 var go = Instantiate(_statRowPrefab, _itemStatsContainer);
-                var rowView = go.GetComponent<TooltipStatRow>();
+                var rowView = ComponentResolver.Find<TooltipStatRow>(go)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] TooltipStatRow not found")
+                    .Resolve();
 
                 if (rowView != null)
                 {
@@ -207,7 +220,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (modifier.Value == 0) continue;
 
                 var go = Instantiate(_statRowPrefab, _playerModifiersContainer);
-                var rowView = go.GetComponent<TooltipStatRow>();
+                var rowView = ComponentResolver.Find<TooltipStatRow>(go)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] TooltipStatRow not found")
+                    .Resolve();
 
                 if (rowView != null)
                 {

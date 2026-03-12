@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Input.Handlers.Interaction
 {
@@ -125,7 +126,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             var found = new List<IInteractable>(hitCount);
             for (int i = 0; i < hitCount; i++)
             {
-                var interactable = _overlapBuffer[i].GetComponentInParent<IInteractable>();
+                var interactable = ComponentResolver.Find<IInteractable>(_overlapBuffer[i])
+                                                    .InParent()
+                                                    .InRootChildren()
+                                                    .OrLogWarning("[Auto] IInteractable not found")
+                                                    .Resolve();
                 if (interactable == null) continue;
                 if (found.Contains(interactable)) continue; // already found via another collider
                 found.Add(interactable);

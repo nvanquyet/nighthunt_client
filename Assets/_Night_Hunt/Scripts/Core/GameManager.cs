@@ -7,6 +7,7 @@ using NightHunt.Services.Room;
 using NightHunt.State;
 using NightHunt.Core;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Core
 {
@@ -109,7 +110,11 @@ namespace NightHunt.Core
             // Ensure all services are initialized
             if (backendHttpClient == null)
             {
-                backendHttpClient = GetComponent<BackendHttpClient>();
+                backendHttpClient = ComponentResolver.Find<BackendHttpClient>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] BackendHttpClient not found")
+        .Resolve();
                 if (backendHttpClient == null)
                 {
                     backendHttpClient = gameObject.AddComponent<BackendHttpClient>();
@@ -118,7 +123,11 @@ namespace NightHunt.Core
 
             if (authService == null)
             {
-                authService = GetComponent<AuthService>();
+                authService = ComponentResolver.Find<AuthService>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] AuthService not found")
+        .Resolve();
                 if (authService == null)
                 {
                     authService = gameObject.AddComponent<AuthService>();
@@ -127,7 +136,11 @@ namespace NightHunt.Core
 
             if (roomService == null)
             {
-                roomService = GetComponent<RoomService>();
+                roomService = ComponentResolver.Find<RoomService>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] RoomService not found")
+        .Resolve();
                 if (roomService == null)
                 {
                     roomService = gameObject.AddComponent<RoomService>();
@@ -139,7 +152,11 @@ namespace NightHunt.Core
 
             if (sessionState == null)
             {
-                sessionState = GetComponent<SessionState>();
+                sessionState = ComponentResolver.Find<SessionState>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] SessionState not found")
+        .Resolve();
                 if (sessionState == null)
                 {
                     sessionState = gameObject.AddComponent<SessionState>();
@@ -148,7 +165,11 @@ namespace NightHunt.Core
 
             if (roomState == null)
             {
-                roomState = GetComponent<RoomState>();
+                roomState = ComponentResolver.Find<RoomState>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] RoomState not found")
+        .Resolve();
                 if (roomState == null)
                 {
                     roomState = gameObject.AddComponent<RoomState>();
@@ -158,7 +179,11 @@ namespace NightHunt.Core
             // Initialize GameWebSocketService (unified WebSocket for all game events)
             if (gameWebSocketService == null)
             {
-                gameWebSocketService = GetComponent<GameWebSocketService>();
+                gameWebSocketService = ComponentResolver.Find<GameWebSocketService>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] GameWebSocketService not found")
+        .Resolve();
                 if (gameWebSocketService == null)
                 {
                     gameWebSocketService = gameObject.AddComponent<GameWebSocketService>();
@@ -182,7 +207,11 @@ namespace NightHunt.Core
         public T GetService<T>() where T : Component
         {
             // Direct property access is preferred, but this method provides fallback
-            return GetComponent<T>();
+            return ComponentResolver.Find<T>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] T not found")
+        .Resolve();
         }
 
         /// <summary>

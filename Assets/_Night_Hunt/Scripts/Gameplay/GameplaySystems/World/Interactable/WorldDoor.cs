@@ -4,6 +4,7 @@ using System.Collections;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.World
 {
@@ -24,18 +25,17 @@ namespace NightHunt.GameplaySystems.World
     {
         [Header("Config")]
         [Tooltip("InteractableConfig xác định type, interaction mode, hold duration, prompt...")]
-        [SerializeField] private InteractableConfig _config;
+        [SerializeField]
+        private InteractableConfig _config;
 
-        [Header("References")]
-        [Tooltip("Animator để play open/close animation (optional).")]
-        [SerializeField] private Animator _animator;
+        [Header("References")] [Tooltip("Animator để play open/close animation (optional).")] [SerializeField]
+        private Animator _animator;
 
-        [Tooltip("Tên bool parameter trong Animator điều khiển trạng thái cửa.")]
-        [SerializeField] private string _animatorBoolName = "IsOpen";
+        [Tooltip("Tên bool parameter trong Animator điều khiển trạng thái cửa.")] [SerializeField]
+        private string _animatorBoolName = "IsOpen";
 
-        [Header("State")]
-        [Tooltip("Trạng thái ban đầu khi scene load.")]
-        [SerializeField] private bool startOpen = false;
+        [Header("State")] [Tooltip("Trạng thái ban đầu khi scene load.")] [SerializeField]
+        private bool startOpen = false;
 
         // SYNC: all clients see the same door state
         private readonly SyncVar<bool> syncIsOpen = new SyncVar<bool>();
@@ -46,7 +46,7 @@ namespace NightHunt.GameplaySystems.World
         private bool _isLocked;
         private Coroutine _autoCloseCoroutine;
 
-        public bool IsOpen   => syncIsOpen.Value;
+        public bool IsOpen => syncIsOpen.Value;
         public bool IsLocked => syncIsLocked.Value;
 
         // ── IHoldInteractable ────────────────────────────────────────────────────
@@ -83,40 +83,52 @@ namespace NightHunt.GameplaySystems.World
         /// <summary>Client calls this → fires ToggleDoor ServerRpc.</summary>
         public void Interact(GameObject interactor)
         {
-            var playerNob = interactor?.GetComponent<FishNet.Object.NetworkObject>();
+            var playerNob = ComponentResolver.Find<FishNet.Object.NetworkObject>(interactor)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] FishNet.Object.NetworkObject not found")
+                .Resolve();
             ToggleDoor(playerNob);
         }
 
-        public void OnHoverEnter(GameObject interactor) { /* outline effect wired up when highlight system is ready */ }
-        public void OnHoverExit(GameObject interactor)  { /* outline effect wired up when highlight system is ready */ }
+        public void OnHoverEnter(GameObject interactor)
+        {
+            /* outline effect wired up when highlight system is ready */
+        }
+
+        public void OnHoverExit(GameObject interactor)
+        {
+            /* outline effect wired up when highlight system is ready */
+        }
 
         // ── Network lifecycle ────────────────────────────────────────────────────
 
         public override void OnStartServer()
         {
             base.OnStartServer();
-            syncIsOpen.Value   = startOpen;
+            syncIsOpen.Value = startOpen;
             syncIsLocked.Value = false;
         }
 
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-            syncIsOpen.OnChange   += OnOpenChanged;
+            syncIsOpen.OnChange += OnOpenChanged;
             syncIsLocked.OnChange += OnLockedChanged;
         }
 
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
-            syncIsOpen.OnChange   -= OnOpenChanged;
+            syncIsOpen.OnChange -= OnOpenChanged;
             syncIsLocked.OnChange -= OnLockedChanged;
         }
 
         // ── Server-side toggle ───────────────────────────────────────────────────
 
         [ServerRpc(RequireOwnership = false)]
-        private void ToggleDoor(FishNet.Object.NetworkObject playerNob, FishNet.Connection.NetworkConnection conn = null)
+        private void ToggleDoor(FishNet.Object.NetworkObject playerNob,
+            FishNet.Connection.NetworkConnection conn = null)
         {
             if (!IsServerInitialized) return;
 
@@ -133,10 +145,14 @@ namespace NightHunt.GameplaySystems.World
             // Distance check — server-side re-validation.
             if (playerNob != null)
             {
-                var player = playerNob.GetComponent<NightHunt.Networking.NetworkPlayer>();
+                var player = ComponentResolver.Find<NightHunt.Networking.NetworkPlayer>(playerNob)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] NightHunt.Networking.NetworkPlayer not found")
+                    .Resolve();
                 if (player != null)
                 {
-                    float dist    = Vector3.Distance(transform.position, player.transform.position);
+                    float dist = Vector3.Distance(transform.position, player.transform.position);
                     float maxDist = _config?.MaxInteractDistance ?? 3f;
                     if (dist > maxDist)
                     {
@@ -146,7 +162,11 @@ namespace NightHunt.GameplaySystems.World
                 }
             }
 
-            if (_isLocked) { Debug.LogWarning("[WorldDoor] ToggleDoor: door is locked."); return; }
+            if (_isLocked)
+            {
+                Debug.LogWarning("[WorldDoor] ToggleDoor: door is locked.");
+                return;
+            }
 
             if (_config?.OneTimeUse == true && _isOpen)
             {
@@ -185,6 +205,7 @@ namespace NightHunt.GameplaySystems.World
                 syncIsOpen.Value = false;
                 Debug.Log("[WorldDoor] đã tự đóng.");
             }
+
             _autoCloseCoroutine = null;
         }
 

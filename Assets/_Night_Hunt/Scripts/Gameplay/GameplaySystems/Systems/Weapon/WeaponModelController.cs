@@ -1,67 +1,68 @@
 using System;
+using System.Collections;
 using UnityEngine;
+using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Character;
+using NightHunt.Gameplay.Character.Combat.Weapons;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
     /// <summary>
-    /// Spawns and destroys weapon model GameObjects whenever the active weapon slot changes.
+    /// Spawns / destroys weapon model GameObjects whenever the active weapon slot changes.
     ///
-    /// Follows the same SciFi package convention as PrCharacterInventory:
-    ///   • Instantiates EquippedPrefab under PrActorUtils.WeaponR (right-hand bone).
-    ///   • Reads PrWeapon.ShootFXPos for the fire/hitscan origin — no child-name search.
-    ///   • Reads PrWeapon.useIK + "ArmIK" child for left-hand IK — SciFi convention.
-    ///   • PrWeapon self-manages its own muzzle flash (ShootFXFLash/Muzzle) internally.
+    /// PREFAB SETUP:
+    ///   Lives on the same child GO as WeaponSystem (e.g. "WeaponSystem" child).
+    ///   PlayerModelLoader is auto-found on the root via GetComponentInParent.
     ///
-    /// Inspector setup: only _weaponSystemSource needs to be assigned.
-    /// PrActorUtils is resolved automatically via PlayerModelLoader.OnModelReady.
+    /// RACE CONDITION FIX:
+    ///   On remote clients the SyncVar fires before the inventory cache is populated.
+    ///   HandleActiveWeaponChanged now retries for up to 5 frames before giving up.
     ///
-    /// Events:
-    ///   OnWeaponModelChanged(PrWeapon)  — fires after each swap; WeaponVFXController/
-    ///                                     WeaponSystem subscribe for ShootFXPos updates.
-    ///   OnLeftHandIKTargetChanged(Transform) — fires after each swap; CharacterVisualController
-    ///                                          subscribes for IK wiring.
+    /// EVENTS:
+    ///   OnWeaponModelChanged(WeaponBase)      — fires after each swap (null = holstered).
+    ///   OnLeftHandIKTargetChanged(Transform)  — fires after each swap (null = holstered).
     /// </summary>
     public class WeaponModelController : MonoBehaviour
     {
         [Header("References")]
-        [Tooltip("MonoBehaviour that implements IWeaponSystem (e.g. the WeaponSystem component on this player).")]
-        [SerializeField] private MonoBehaviour _weaponSystemSource;
-        [SerializeField] private Vector3 localRotationWeapon = new Vector3(90,0,0); 
-        // ── Runtime ──────────────────────────────────────────────────────────
-        private IWeaponSystem     _weaponSystem;
-        private PrActorUtils      _actorUtils;     // resolved via PlayerModelLoader.OnModelReady
-        private PlayerModelLoader _modelLoader;
-        private GameObject        _currentModel;
+        [Tooltip("Leave blank — auto-resolved from same GO.")]
+        [SerializeField] private PlayerModelLoader _modelLoader;
+        [SerializeField] private WeaponSystem _weaponSystemSource;
+        [SerializeField] private Vector3 _localRotationWeapon = new Vector3(90f, 0f, 0f);
 
-        /// <summary>Left-hand IK "ArmIK" Transform on the current weapon model, or null.</summary>
+        [Header("Spawn Retry")]
+        [Tooltip("Frames to wait when GetWeapon() returns null (inventory cache not yet populated).")]
+        [SerializeField] private int _maxSpawnRetryFrames = 8;
+
+        // ── Runtime refs ───────────────────────────────────────────────────────
+        private IWeaponSystem     _weaponSystem;
+        private PrActorUtils      _actorUtils;
+        private GameObject        _currentModel;
+        private Coroutine         _spawnRetryCoroutine;
+
+        // ── Public API ─────────────────────────────────────────────────────────
         public Transform LeftHandIKTarget { get; private set; }
 
-        /// <summary>
-        /// Fired after every weapon swap with the spawned model's WeaponBase component,
-        /// or null when holstered. WeaponVFXController subscribes to update the muzzle point.
-        /// </summary>
-        public event Action<NightHunt.Gameplay.Character.Combat.Weapons.WeaponBase> OnWeaponModelChanged;
+        public event Action<WeaponBase>  OnWeaponModelChanged;
+        public event Action<Transform>   OnLeftHandIKTargetChanged;
 
-        /// <summary>
-        /// Fired after every weapon swap with the left-hand IK Transform (may be null).
-        /// CharacterVisualController subscribes here so IK is set only after model is live.
-        /// </summary>
-        public event Action<Transform> OnLeftHandIKTargetChanged;
-
-        // ── Unity Lifecycle ───────────────────────────────────────────────────
-
+        // ── Unity lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
-            _weaponSystem = _weaponSystemSource as IWeaponSystem;
-            if (_weaponSystem == null && _weaponSystemSource != null)
-                Debug.LogWarning("[WeaponModelController] _weaponSystemSource does not implement IWeaponSystem.");
+            _weaponSystem ??= ComponentResolver.Find<IWeaponSystem>(this)
+                .UseExisting(_weaponSystemSource as IWeaponSystem)
+                .OnSelf().InParent()
+                .OrLogError("[WeaponModelController] IWeaponSystem not found")
+                .Resolve();
 
-            // PrActorUtils lives on the dynamically-spawned model child — bind once it's ready.
-            _modelLoader = GetComponent<PlayerModelLoader>();
+            _modelLoader ??= ComponentResolver.Find<PlayerModelLoader>(this)
+                .OnSelf().InParent().OnRoot()
+                .OrLogWarning("[WeaponModelController] PlayerModelLoader not found")
+                .Resolve();
+
             if (_modelLoader != null)
                 _modelLoader.OnModelReady += OnModelReady;
         }
@@ -82,23 +83,13 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             if (_weaponSystem != null)
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
+
+            StopSpawnRetry();
         }
 
-        // ── Model Binding ─────────────────────────────────────────────────────
+        // ── Public API ─────────────────────────────────────────────────────────
 
-        private void OnModelReady(GameObject modelRoot)
-        {
-            _actorUtils = modelRoot.GetComponentInChildren<PrActorUtils>(true);
-            if (_actorUtils == null)
-                Debug.LogWarning("[WeaponModelController] PrActorUtils not found on model — weapon will spawn under controller root.");
-        }
-
-        // ── Public API ────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Re-inject IWeaponSystem at runtime (e.g. from NetworkPlayer after late spawn).
-        /// PrActorUtils is always self-resolved via PlayerModelLoader.
-        /// </summary>
+        /// <summary>Re-inject IWeaponSystem at runtime (e.g. from NetworkPlayer after late spawn).</summary>
         public void Initialize(IWeaponSystem weaponSystem)
         {
             if (_weaponSystem != null)
@@ -110,70 +101,108 @@ namespace NightHunt.GameplaySystems.Weapon
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
         }
 
-        // ── Internal ──────────────────────────────────────────────────────────
+        // ── Model binding ──────────────────────────────────────────────────────
 
-        private void HandleActiveWeaponChanged(WeaponSlotType? previousSlot, WeaponSlotType? newSlot)
+        private void OnModelReady(GameObject modelRoot)
         {
-            Debug.Log($"[WeaponModelController] OnActiveWeaponChanged: {previousSlot} → {newSlot} | " +
-                      $"weaponSystem={_weaponSystem != null} | actorUtils={_actorUtils != null} | " +
-                      $"WeaponR={_actorUtils?.WeaponR != null}");
+            _actorUtils = ComponentResolver.Find<PrActorUtils>(modelRoot)
+                .OnSelf().InChildren()
+                .OrLogWarning("[WeaponModelController] PrActorUtils not found — weapon spawns under controller root")
+                .Resolve();
+        }
 
+        // ── Active weapon changed ──────────────────────────────────────────────
+
+        private void HandleActiveWeaponChanged(WeaponSlotType? prev, WeaponSlotType? next)
+        {
+            StopSpawnRetry();
             DestroyCurrentModel();
 
-            if (newSlot == null || _weaponSystem == null)
-            {
-                Debug.Log("[WeaponModelController] Skipping spawn — no active slot or weaponSystem.");
-                return;
-            }
+            if (next == null || _weaponSystem == null) return;
 
-            var inst = _weaponSystem.GetWeapon(newSlot.Value);
+            var inst = _weaponSystem.GetWeapon(next.Value);
             if (inst == null)
             {
-                Debug.LogWarning($"[WeaponModelController] GetWeapon({newSlot.Value}) returned null — item not in cache yet.");
+                // Inventory cache not yet ready on this client — retry each frame.
+                _spawnRetryCoroutine = StartCoroutine(RetrySpawnWeapon(next.Value));
                 return;
             }
 
+            SpawnWeaponModel(next.Value, inst);
+        }
+
+        /// <summary>
+        /// Retries SpawnWeaponModel each frame until inventory cache is ready.
+        /// Covers the race where the SyncVar arrives before SyncDictionary is populated
+        /// on freshly-connected remote clients.
+        /// </summary>
+        private IEnumerator RetrySpawnWeapon(WeaponSlotType slot)
+        {
+            for (int i = 0; i < _maxSpawnRetryFrames; i++)
+            {
+                yield return null;
+
+                var inst = _weaponSystem?.GetWeapon(slot);
+                if (inst != null)
+                {
+                    SpawnWeaponModel(slot, inst);
+                    _spawnRetryCoroutine = null;
+                    yield break;
+                }
+            }
+
+            Debug.LogWarning($"[WeaponModelController] RetrySpawn: GetWeapon({slot}) still null after " +
+                             $"{_maxSpawnRetryFrames} frames — model not spawned.");
+            _spawnRetryCoroutine = null;
+        }
+
+        private void StopSpawnRetry()
+        {
+            if (_spawnRetryCoroutine != null)
+            {
+                StopCoroutine(_spawnRetryCoroutine);
+                _spawnRetryCoroutine = null;
+            }
+        }
+
+        // ── Spawn / Destroy ────────────────────────────────────────────────────
+
+        private void SpawnWeaponModel(WeaponSlotType slot, ItemInstance inst)
+        {
             var def = ItemDatabase.GetDefinition(inst.DefinitionID);
             if (def == null)
             {
-                Debug.LogWarning($"[WeaponModelController] No ItemDatabase definition for '{inst.DefinitionID}'.");
+                Debug.LogWarning($"[WeaponModelController] No ItemDatabase entry for '{inst.DefinitionID}'.");
                 return;
             }
             if (def.EquippedPrefab == null)
             {
-                Debug.LogWarning($"[WeaponModelController] '{def.DisplayName}' has no EquippedPrefab set in ItemDatabase.");
+                Debug.LogWarning($"[WeaponModelController] '{def.DisplayName}' has no EquippedPrefab.");
                 return;
             }
 
-            Transform parent = (_actorUtils != null && _actorUtils.WeaponR != null)
-                ? _actorUtils.WeaponR
-                : transform;
+            Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
 
             _currentModel = Instantiate(def.EquippedPrefab, parent);
-
             _currentModel.transform.localPosition = Vector3.zero;
-            //Change local rotation to localRotationWeapon value
-            _currentModel.transform.localRotation = Quaternion.Euler(localRotationWeapon);
+            _currentModel.transform.localRotation = Quaternion.Euler(_localRotationWeapon);
 
-            var weaponBase = _currentModel.GetComponent<NightHunt.Gameplay.Character.Combat.Weapons.WeaponBase>();
+            var wb = ComponentResolver.Find<WeaponBase>(_currentModel)
+                .OnSelf().InChildren()
+                .Resolve(); // null is valid — weapon may not have WeaponBase
 
-            // Set fire origin from WeaponBase.FirePoint (replaces PrWeapon.ShootFXPos).
-            _weaponSystem.SetFireOrigin(weaponBase != null ? weaponBase.FirePoint : null);
+            // Wire WeaponSystem so it delegates fire/FX to the spawned prefab component.
+            _weaponSystem.SetFireOrigin(wb?.FirePoint);
+            _weaponSystem.SetCurrentWeaponBase(wb);
 
-            // Wire WeaponBase so WeaponSystem delegates ballistics to the prefab component.
-            _weaponSystem.SetCurrentWeaponBase(weaponBase);
+            // IK target — read from WeaponBase inspector field (no child-name search needed).
+            LeftHandIKTarget = wb?.LeftHandIKTarget;
 
-            OnWeaponModelChanged?.Invoke(weaponBase);
-
-            // Left-hand IK target from WeaponBase inspector field (replaces Find("ArmIK")).
-            LeftHandIKTarget = weaponBase?.LeftHandIKTarget;
+            OnWeaponModelChanged?.Invoke(wb);
             OnLeftHandIKTargetChanged?.Invoke(LeftHandIKTarget);
 
-            Debug.Log($"[WeaponModelController] Spawned '{def.EquippedPrefab.name}' for '{def.DisplayName}'" +
-                      $" | parent={parent.name}" +
-                      $" | WeaponBase={weaponBase != null}" +
-                      $" | FirePoint={weaponBase?.FirePoint != null}" +
-                      $" | IKTarget={LeftHandIKTarget != null}");
+            Debug.Log($"[WeaponModelController] Spawned '{def.DisplayName}' | parent={parent.name} " +
+                      $"| WeaponBase={wb != null} | FirePoint={wb?.FirePoint != null} | IK={LeftHandIKTarget != null}");
         }
 
         private void DestroyCurrentModel()
@@ -183,10 +212,13 @@ namespace NightHunt.GameplaySystems.Weapon
                 Destroy(_currentModel);
                 _currentModel = null;
             }
+
             LeftHandIKTarget = null;
-            OnLeftHandIKTargetChanged?.Invoke(null);
-            OnWeaponModelChanged?.Invoke(null);
             _weaponSystem?.SetCurrentWeaponBase(null);
+            _weaponSystem?.SetFireOrigin(null);
+
+            OnWeaponModelChanged?.Invoke(null);
+            OnLeftHandIKTargetChanged?.Invoke(null);
         }
     }
 }

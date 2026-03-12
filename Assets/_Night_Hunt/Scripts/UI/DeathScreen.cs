@@ -7,6 +7,7 @@ using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -28,25 +29,25 @@ namespace NightHunt.UI
     {
         // ── Inspector ─────────────────────────────────────────────────────────
 
-        [Header("Panel")]
-        [SerializeField] private GameObject _deathPanel;
+        [Header("Panel")] [SerializeField] private GameObject _deathPanel;
 
-        [Header("Labels")]
-        [SerializeField] private TextMeshProUGUI _killedByText;    // "Killed by: PlayerX"
+        [Header("Labels")] [SerializeField] private TextMeshProUGUI _killedByText; // "Killed by: PlayerX"
         [SerializeField] private TextMeshProUGUI _respawnTimerText; // "Respawn in: 5"
 
-        [Header("Buttons")]
-        [SerializeField] private Button _spectateButton;
+        [Header("Buttons")] [SerializeField] private Button _spectateButton;
         [SerializeField] private Button _respawnButton;
 
         [Header("Settings")]
         [Tooltip("Seconds before the Respawn button becomes active. " +
                  "Set 0 to make it available instantly.")]
-        [SerializeField] private float _respawnDelay = 5f;
+        [SerializeField]
+        private float _respawnDelay = 5f;
 
         // ── Runtime ───────────────────────────────────────────────────────────
 
-        private CharacterLifecycleController _lifecycle;        private PlayerHealthSystem           _healthSystem;        private Coroutine                    _countdownRoutine;
+        private CharacterLifecycleController _lifecycle;
+        private PlayerHealthSystem _healthSystem;
+        private Coroutine _countdownRoutine;
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -61,8 +62,16 @@ namespace NightHunt.UI
             // Unsubscribe from previous player (spectate scenario)
             UnregisterCurrent();
 
-            _lifecycle    = player.GetComponent<CharacterLifecycleController>();
-            _healthSystem = player.GetComponent<PlayerHealthSystem>();
+            _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(player)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] CharacterLifecycleController not found")
+                .Resolve();
+            _healthSystem = ComponentResolver.Find<PlayerHealthSystem>(player)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] PlayerHealthSystem not found")
+                .Resolve();
 
             // Lifecycle: used only to hide screen on respawn.
             if (_lifecycle != null)

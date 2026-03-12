@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -13,7 +14,12 @@ namespace NightHunt.UI
         public void Initialize(string actorName, string targetName, string weaponName, KillFeedType type, Color color)
         {
             if (_text == null)
-                _text = GetComponentInChildren<TextMeshProUGUI>();
+                _text = ComponentResolver.Find<TextMeshProUGUI>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] TextMeshProUGUI not found")
+        .Resolve();
 
             if (_text != null)
             {

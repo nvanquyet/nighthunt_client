@@ -4,6 +4,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
 using Object = UnityEngine.Object;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Input.Handlers.Interaction
 {
@@ -20,14 +21,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
     /// </summary>
     public class RaycastDetector : MonoBehaviour
     {
-        [Header("Settings")]
-        [SerializeField] private UnityEngine.Camera playerCamera;
+        [Header("Settings")] [SerializeField] private UnityEngine.Camera playerCamera;
         [SerializeField] private LayerMask interactableLayerMask = -1;
         [SerializeField] private float maxDistance = 5f;
         [SerializeField] private bool ignorePlayerLayer = true;
 
-        [Header("Debug")]
-        [SerializeField] private bool showDebugRay = false;
+        [Header("Debug")] [SerializeField] private bool showDebugRay = false;
         [SerializeField] private bool logTargetChanges = false;
 
         // ── Primary API (interface-based) ────────────────────────────────────────
@@ -40,15 +39,15 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         // ── Backward-compatible typed properties ─────────────────────────────────
 
-        public WorldItem            CurrentWorldItem  => CurrentInteractable as WorldItem;
-        public WorldContainer       CurrentContainer  => CurrentInteractable as WorldContainer;
-        public WorldCorpse          CurrentCorpse     => CurrentInteractable as WorldCorpse;
-        
+        public WorldItem CurrentWorldItem => CurrentInteractable as WorldItem;
+        public WorldContainer CurrentContainer => CurrentInteractable as WorldContainer;
+        public WorldCorpse CurrentCorpse => CurrentInteractable as WorldCorpse;
+
         public bool IsOwner { get; private set; }
 
         // Backward compat
         [System.Obsolete("Use CurrentWorldItem instead.")]
-        public WorldItem            CurrentWorldPickup => CurrentWorldItem;
+        public WorldItem CurrentWorldPickup => CurrentWorldItem;
 
         // ── Private ──────────────────────────────────────────────────────────────
 
@@ -67,9 +66,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             if (obj != null && obj.IsLocalPlayer)
             {
                 IsOwner = true;
-            } 
+            }
         }
- 
+
         private void OnDisable()
         {
             NetworkPlayer.OnOwnerReady -= HandleOwnerReady;
@@ -87,7 +86,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         private void Update()
         {
-            if(!IsOwner) return;
+            if (!IsOwner) return;
             // Chỉ raycast khi Player layer active (tức là đang trong PlayerAlive / ScoutMode)
             // Dùng IsLayerActive thay vì so sánh enum state cụ thể → robust hơn khi thêm state mới
             var ilm = NightHunt.Gameplay.Input.Core.InputLayerManager.Instance;
@@ -119,10 +118,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             IInteractable hit = null;
 
             if (Physics.Raycast(ray, out RaycastHit hitInfo, maxDistance, mask,
-                QueryTriggerInteraction.Collide))
+                    QueryTriggerInteraction.Collide))
             {
                 // Try interface first (works for all types implementing IInteractable)
-                hit = hitInfo.collider.GetComponentInParent<IInteractable>();
+                hit = ComponentResolver.Find<IInteractable>(hitInfo.collider)
+                    .InParent()
+                    .InRootChildren()
+                    .OrLogWarning("[Auto] IInteractable not found")
+                    .Resolve();
             }
 
             // Fire hover enter / exit when target changes

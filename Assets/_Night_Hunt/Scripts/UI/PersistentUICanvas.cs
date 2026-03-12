@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using NightHunt.Core;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -50,7 +51,11 @@ namespace NightHunt.UI
             // Tự động tạo Canvas nếu chưa có
             if (canvas == null)
             {
-                canvas = GetComponent<Canvas>();
+                canvas = ComponentResolver.Find<Canvas>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] Canvas not found")
+        .Resolve();
                 if (canvas == null)
                 {
                     canvas = gameObject.AddComponent<Canvas>();
@@ -64,7 +69,11 @@ namespace NightHunt.UI
             // Tự động tạo CanvasScaler nếu chưa có
             if (canvasScaler == null)
             {
-                canvasScaler = GetComponent<CanvasScaler>();
+                canvasScaler = ComponentResolver.Find<CanvasScaler>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] CanvasScaler not found")
+        .Resolve();
                 if (canvasScaler == null)
                 {
                     canvasScaler = gameObject.AddComponent<CanvasScaler>();
@@ -79,7 +88,11 @@ namespace NightHunt.UI
             // Tự động tạo GraphicRaycaster nếu chưa có
             if (graphicRaycaster == null)
             {
-                graphicRaycaster = GetComponent<GraphicRaycaster>();
+                graphicRaycaster = ComponentResolver.Find<GraphicRaycaster>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] GraphicRaycaster not found")
+        .Resolve();
                 if (graphicRaycaster == null)
                 {
                     graphicRaycaster = gameObject.AddComponent<GraphicRaycaster>();
@@ -109,7 +122,12 @@ namespace NightHunt.UI
 
             // Wire UINotificationService with all notification backends
             if (notificationService == null)
-                notificationService = GetComponentInChildren<UINotificationService>(true);
+                notificationService = ComponentResolver.Find<UINotificationService>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] UINotificationService not found")
+        .Resolve();
             if (notificationService == null)
             {
                 var go = new GameObject("UINotificationService");
@@ -193,42 +211,79 @@ namespace NightHunt.UI
             // Auto-assign references nếu chưa có
             if (canvas == null)
             {
-                canvas = GetComponent<Canvas>();
+                canvas = ComponentResolver.Find<Canvas>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] Canvas not found")
+        .Resolve();
             }
 
             if (canvasScaler == null)
             {
-                canvasScaler = GetComponent<CanvasScaler>();
+                canvasScaler = ComponentResolver.Find<CanvasScaler>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] CanvasScaler not found")
+        .Resolve();
             }
 
             if (graphicRaycaster == null)
             {
-                graphicRaycaster = GetComponent<GraphicRaycaster>();
+                graphicRaycaster = ComponentResolver.Find<GraphicRaycaster>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] GraphicRaycaster not found")
+        .Resolve();
             }
 
             if (loadingManager == null)
             {
-                loadingManager = GetComponentInChildren<LoadingManager>();
+                loadingManager = ComponentResolver.Find<LoadingManager>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] LoadingManager not found")
+        .Resolve();
             }
 
             if (reconnectPopup == null)
             {
-                reconnectPopup = GetComponentInChildren<ReconnectPopup>();
+                reconnectPopup = ComponentResolver.Find<ReconnectPopup>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] ReconnectPopup not found")
+        .Resolve();
             }
 
             if (pingDisplay == null)
             {
-                pingDisplay = GetComponentInChildren<PingDisplay>();
+                pingDisplay = ComponentResolver.Find<PingDisplay>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] PingDisplay not found")
+        .Resolve();
             }
 
             if (noticePopup == null)
             {
-                noticePopup = GetComponentInChildren<NoticePopup>();
+                noticePopup = ComponentResolver.Find<NoticePopup>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] NoticePopup not found")
+        .Resolve();
             }
 
             if (notificationService == null)
             {
-                notificationService = GetComponentInChildren<UINotificationService>(true);
+                notificationService = ComponentResolver.Find<UINotificationService>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] UINotificationService not found")
+        .Resolve();
             }
         }
 #endif

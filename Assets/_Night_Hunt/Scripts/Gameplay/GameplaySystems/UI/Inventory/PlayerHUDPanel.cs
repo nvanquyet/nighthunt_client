@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using TMPro;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.StatSystem.Configs;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -21,16 +22,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     /// </summary>
     public class PlayerHUDPanel : MonoBehaviour
     {
-        [Header("Config")]
-        [Tooltip("Drives which stats are shown and their display format / color.")]
-        [SerializeField] private PlayerStatUIConfig _statUIConfig;
+        [Header("Config")] [Tooltip("Drives which stats are shown and their display format / color.")] [SerializeField]
+        private PlayerStatUIConfig _statUIConfig;
 
         [Header("Dynamic Row Spawning")]
         [Tooltip("Prefab instantiated once per visible stat. Must have a StatRowEntry component.")]
-        [SerializeField] private StatRowEntry _statRowPrefab;
+        [SerializeField]
+        private StatRowEntry _statRowPrefab;
 
-        [Tooltip("Parent transform (VerticalLayoutGroup) where stat rows are spawned.")]
-        [SerializeField] private Transform _rowContainer;
+        [Tooltip("Parent transform (VerticalLayoutGroup) where stat rows are spawned.")] [SerializeField]
+        private Transform _rowContainer;
 
         // ── Runtime ───────────────────────────────────────────────────────────
         private readonly Dictionary<PlayerStatType, StatRowEntry> _rows =
@@ -78,7 +79,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (_statRowPrefab == null || _rowContainer == null || _statUIConfig == null)
             {
-                Debug.LogWarning("[PlayerHUDPanel] Missing _statRowPrefab, _rowContainer, or _statUIConfig — no rows built.");
+                Debug.LogWarning(
+                    "[PlayerHUDPanel] Missing _statRowPrefab, _rowContainer, or _statUIConfig — no rows built.");
                 return;
             }
 
@@ -87,15 +89,20 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (!uiDef.ShowInUI) continue;
 
                 var row = Instantiate(_statRowPrefab, _rowContainer);
-                row.name     = $"Row_{uiDef.Type}";
+                row.name = $"Row_{uiDef.Type}";
                 row.StatType = uiDef.Type;
 
                 // Apply accent color from config to slider fill and accent image
                 if (row.Slider != null && row.Slider.fillRect != null)
                 {
-                    var fill = row.Slider.fillRect.GetComponent<UnityEngine.UI.Image>();
+                    var fill = ComponentResolver.Find<UnityEngine.UI.Image>(row.Slider.fillRect)
+                        .OnSelf()
+                        .InChildren()
+                        .OrLogWarning("[Auto] UnityEngine.UI.Image not found")
+                        .Resolve();
                     if (fill != null) fill.color = uiDef.DisplayColor;
                 }
+
                 if (row.AccentImage != null)
                     row.AccentImage.color = uiDef.DisplayColor;
                 if (row.ValueText != null)
@@ -134,12 +141,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (subscribe)
             {
-                _domainBridge.OnStatChanged   += HandleStatChanged;
+                _domainBridge.OnStatChanged += HandleStatChanged;
                 _domainBridge.OnWeightChanged += HandleWeightChanged;
             }
             else
             {
-                _domainBridge.OnStatChanged   -= HandleStatChanged;
+                _domainBridge.OnStatChanged -= HandleStatChanged;
                 _domainBridge.OnWeightChanged -= HandleWeightChanged;
             }
         }
@@ -164,9 +171,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 if (row.Slider != null)
                 {
-                    row.Slider.value    = capacity > 0f ? current / capacity : 0f;
+                    row.Slider.value = capacity > 0f ? current / capacity : 0f;
                     row.Slider.maxValue = 1.5f; // allow over-weight visual
                 }
+
                 if (row.ValueText != null)
                     row.ValueText.text = $"{current:F1}/{capacity:F1} kg";
             }
@@ -211,6 +219,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                             ? $"{newValue.ToString(uiDef.DisplayFormat)}/{max.ToString(uiDef.DisplayFormat)}"
                             : newValue.ToString(uiDef.DisplayFormat);
                     }
+
                     break;
                 }
 
@@ -229,15 +238,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     float max = GetRelatedMaxValue(uiDef);
                     if (row.Slider != null)
                     {
-                        row.Slider.value    = max > 0f ? newValue / max : 0f;
+                        row.Slider.value = max > 0f ? newValue / max : 0f;
                         row.Slider.maxValue = 1.5f;
                     }
+
                     if (row.ValueText != null)
                     {
                         row.ValueText.text = uiDef.ShowMaxValue && max > 0f
                             ? $"{newValue:F1}/{max:F1}"
                             : $"{newValue.ToString(uiDef.DisplayFormat)}";
                     }
+
                     break;
                 }
             }
@@ -251,4 +262,3 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
     }
 }
-

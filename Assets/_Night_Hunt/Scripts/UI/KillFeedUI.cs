@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using System.Collections;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -11,14 +12,14 @@ namespace NightHunt.UI
     /// </summary>
     public class KillFeedUI : MonoBehaviour
     {
-        [Header("Kill Feed Settings")]
-        [SerializeField] private Transform killFeedParent;
+        [Header("Kill Feed Settings")] [SerializeField]
+        private Transform killFeedParent;
+
         [SerializeField] private GameObject killFeedItemPrefab;
         [SerializeField] private int maxItems = 5;
         [SerializeField] private float itemLifetime = 5f;
 
-        [Header("Colors")]
-        [SerializeField] private Color killColor = Color.red;
+        [Header("Colors")] [SerializeField] private Color killColor = Color.red;
         [SerializeField] private Color assistColor = Color.yellow;
         [SerializeField] private Color deathColor = Color.gray;
 
@@ -64,7 +65,11 @@ namespace NightHunt.UI
                 return;
 
             GameObject itemObj = Instantiate(killFeedItemPrefab, killFeedParent);
-            KillFeedItem item = itemObj.GetComponent<KillFeedItem>();
+            KillFeedItem item = ComponentResolver.Find<KillFeedItem>(itemObj)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] KillFeedItem not found")
+                .Resolve();
 
             if (item == null)
             {
@@ -130,7 +135,11 @@ namespace NightHunt.UI
         {
             if (item == null) yield break;
 
-            CanvasGroup canvasGroup = item.GetComponent<CanvasGroup>();
+            CanvasGroup canvasGroup = ComponentResolver.Find<CanvasGroup>(item)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] CanvasGroup not found")
+                .Resolve();
             if (canvasGroup == null)
             {
                 canvasGroup = item.gameObject.AddComponent<CanvasGroup>();
@@ -163,4 +172,3 @@ namespace NightHunt.UI
         Death
     }
 }
-

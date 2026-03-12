@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Feedback
 {
@@ -14,7 +15,11 @@ namespace NightHunt.Gameplay.Feedback
 
         public void Initialize(Vector3 direction, float lifeTime)
         {
-            image ??= GetComponent<Image>();
+            image ??= ComponentResolver.Find<Image>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] Image not found")
+        .Resolve();
             lifetime = lifeTime;
 
             // Rotate to face hit direction

@@ -1,6 +1,7 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using NightHunt.Networking;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI
 {
@@ -114,7 +115,11 @@ namespace NightHunt.GameplaySystems.UI
                 if (tm == null || tm == _localPlayer) continue;
 
                 var dot    = Instantiate(_teammateDotPrefab, _teammateDotParent);
-                var img    = dot.GetComponent<UnityEngine.UI.Image>();
+                var img    = ComponentResolver.Find<UnityEngine.UI.Image>(dot)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] UnityEngine.UI.Image not found")
+        .Resolve();
                 if (img != null) img.color = _teammateColor;
                 // Position updated each frame in Update
                 dot.name = $"Dot_{tm.name}";

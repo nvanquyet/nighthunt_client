@@ -1,5 +1,6 @@
 using UnityEngine;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.ClientEffects
 {
@@ -12,7 +13,8 @@ namespace NightHunt.Gameplay.ClientEffects
         public Vector3 HitDirection { get; private set; }
         public float DamageAmount { get; private set; }
 
-        public DamageEffectEvent(Vector3 hitPoint, Vector3 hitDirection, float damageAmount, GameObject instigator = null)
+        public DamageEffectEvent(Vector3 hitPoint, Vector3 hitDirection, float damageAmount,
+            GameObject instigator = null)
             : base()
         {
             Position = hitPoint;
@@ -21,10 +23,13 @@ namespace NightHunt.Gameplay.ClientEffects
             DamageAmount = damageAmount;
             if (instigator != null)
             {
-                var networkObj = instigator.GetComponent<FishNet.Object.NetworkObject>();
+                var networkObj = ComponentResolver.Find<FishNet.Object.NetworkObject>(instigator)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] FishNet.Object.NetworkObject not found")
+                    .Resolve();
                 NetworkId = networkObj != null ? (int)networkObj.ObjectId : 0;
             }
         }
     }
 }
-

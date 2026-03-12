@@ -9,6 +9,7 @@ using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking.Player;
 using UnityEngine;
 using Unity.Cinemachine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Networking
 {
@@ -54,7 +55,7 @@ namespace NightHunt.Networking
         // Cached owner-side refs — set in EnableInput(), used 
         // to cleanly disable / re-enable when IsAlive changes.
         private NightHunt.Gameplay.Input.Handlers.Combat.CombatInputHandler _cachedCombatHandler;
-        private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem          _cachedAimSystem;
+        private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem _cachedAimSystem;
 
 
         // ── PUBLIC PLAYER DATA ────────────────────────────────────────────────
@@ -99,12 +100,36 @@ namespace NightHunt.Networking
         {
             // Initialize GameplaySystemsBridge with Dependency Injection
             // Get all system components
-            var inventory = GetComponent<IInventorySystem>();
-            var equipment = GetComponent<IEquipmentSystem>();
-            var weapon = GetComponent<IWeaponSystem>();
-            var quickSlot = GetComponent<IQuickSlotSystem>();
-            var statSystem = GetComponent<IPlayerStatSystem>();
-            var itemUse = GetComponent<IItemUseSystem>();
+            var inventory = ComponentResolver.Find<IInventorySystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IInventorySystem not found")
+                .Resolve();
+            var equipment = ComponentResolver.Find<IEquipmentSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IEquipmentSystem not found")
+                .Resolve();
+            var weapon = ComponentResolver.Find<IWeaponSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IWeaponSystem not found")
+                .Resolve();
+            var quickSlot = ComponentResolver.Find<IQuickSlotSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IQuickSlotSystem not found")
+                .Resolve();
+            var statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IPlayerStatSystem not found")
+                .Resolve();
+            var itemUse = ComponentResolver.Find<IItemUseSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IItemUseSystem not found")
+                .Resolve();
 
             // Create bridge with DI
             if (inventory != null && equipment != null && weapon != null &&
@@ -153,7 +178,7 @@ namespace NightHunt.Networking
 
             // Listen for future data changes (name / team updates mid-game).
             _playerData.OnChange += OnPlayerDataChanged;
-            _isAlive.OnChange   += OnAliveStateChanged;
+            _isAlive.OnChange += OnAliveStateChanged;
 
             // Owner-specific setup
             if (IsOwner)
@@ -178,7 +203,7 @@ namespace NightHunt.Networking
         {
             base.OnStopClient();
             _playerData.OnChange -= OnPlayerDataChanged;
-            _isAlive.OnChange    -= OnAliveStateChanged;
+            _isAlive.OnChange -= OnAliveStateChanged;
             PlayerPublicRegistry.Instance.Unregister((int)this.ObjectId);
         }
 
@@ -246,10 +271,19 @@ namespace NightHunt.Networking
             inputManager.EnableAllInput();
 
             // Lấy các refs cần thiết cho BindCombatSystems
-            var weaponSystem = GetComponent<NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem>();
+            var weaponSystem = ComponentResolver.Find<NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem not found")
+                .Resolve();
 
             // CameraStateManager nằm trên player prefab (hoặc child)
-            var cameraStateManager = GetComponentInChildren<NightHunt.Gameplay.Camera.CameraStateManager>();
+            var cameraStateManager = ComponentResolver.Find<NightHunt.Gameplay.Camera.CameraStateManager>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .OrLogWarning("[Auto] NightHunt.Gameplay.Camera.CameraStateManager not found")
+                .Resolve();
 
             if (cameraStateManager == null)
                 Debug.LogWarning("[NetworkPlayer] EnableInput: CameraStateManager not found on player prefab! " +
@@ -269,10 +303,22 @@ namespace NightHunt.Networking
             var aimSystem = UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.Aim.AimSystem>();
             if (aimSystem != null)
             {
-                var statSystem = GetComponent<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>()
-                              ?? GetComponentInChildren<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>();
+                var statSystem = ComponentResolver.Find<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
+                                     .OnSelf()
+                                     .InChildren()
+                                     .OrLogWarning(
+                                         "[Auto] NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
+                                     .Resolve()
+                                 ?? ComponentResolver.Find<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
+                                     .OnSelf()
+                                     .InChildren()
+                                     .InParent()
+                                     .OrLogWarning(
+                                         "[Auto] NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
+                                     .Resolve();
                 if (statSystem == null)
-                    Debug.LogWarning("[NetworkPlayer] IPlayerStatSystem not found on player — AimSystem will use fallback VisionRange.");
+                    Debug.LogWarning(
+                        "[NetworkPlayer] IPlayerStatSystem not found on player — AimSystem will use fallback VisionRange.");
                 else
                     Debug.Log($"[NetworkPlayer] AimSystem bound with statSystem: {statSystem.GetType().Name}");
                 aimSystem.Initialize(transform, statSystem);
@@ -280,16 +326,22 @@ namespace NightHunt.Networking
                 _cachedAimSystem = aimSystem; // cache for alive-state gating
 
                 // Propagate AimSystem to WeaponVFXController so trail length = VisionRange.
-                GetComponent<NightHunt.GameplaySystems.Weapon.WeaponVFXController>()
+                ComponentResolver.Find<NightHunt.GameplaySystems.Weapon.WeaponVFXController>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] NightHunt.GameplaySystems.Weapon.WeaponVFXController not found")
+                    .Resolve()
                     ?.Initialize(aimSystem);
             }
             else
             {
-                Debug.LogWarning("[NetworkPlayer] AimSystem not found in scene — falling back to own ground-plane raycast.");
+                Debug.LogWarning(
+                    "[NetworkPlayer] AimSystem not found in scene — falling back to own ground-plane raycast.");
             }
 
             // Bind RangeIndicator so BeginFire/EndFire can Show/Hide the vision ring.
-            var rangeIndicator = UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.UI.Combat.RangeIndicator>();
+            var rangeIndicator =
+                UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.UI.Combat.RangeIndicator>();
             if (rangeIndicator != null)
             {
                 rangeIndicator.SetFollowTarget(transform);

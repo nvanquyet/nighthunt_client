@@ -6,6 +6,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.StatSystem.Systems;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Attachment
 {
@@ -49,7 +50,11 @@ namespace NightHunt.GameplaySystems.Attachment
         {
 #if UNITY_EDITOR
             if (_inventorySystem == null)
-                _inventorySystem = GetComponent<InventorySystem>();
+                _inventorySystem = ComponentResolver.Find<InventorySystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] InventorySystem not found")
+        .Resolve();
 #endif
             
             if (_inventorySystem == null)
@@ -60,7 +65,11 @@ namespace NightHunt.GameplaySystems.Attachment
         private void OnValidate()
         {
             if (_inventorySystem == null)
-                _inventorySystem = GetComponent<InventorySystem>();
+                _inventorySystem = ComponentResolver.Find<InventorySystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] InventorySystem not found")
+        .Resolve();
         }
 #endif
         

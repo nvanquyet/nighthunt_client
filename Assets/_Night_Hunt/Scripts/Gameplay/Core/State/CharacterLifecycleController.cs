@@ -6,6 +6,7 @@ using NightHunt.Networking;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Core.State
 {
@@ -60,16 +61,28 @@ namespace NightHunt.Gameplay.Core.State
         private void Awake()
         {
             if (_stateMachine == null)
-                _stateMachine = GetComponent<CharacterStateMachine>();
+                _stateMachine = ComponentResolver.Find<CharacterStateMachine>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] CharacterStateMachine not found")
+        .Resolve();
 
             if (_networkPlayer == null)
-                _networkPlayer = GetComponent<NetworkPlayer>();
+                _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NetworkPlayer not found")
+        .Resolve();
 
             if (_respawnSystem == null)
                 _respawnSystem = FindFirstObjectByType<RespawnSystem>();
 
             if (_statSystemSource == null)
-                _statSystemSource = GetComponent<MonoBehaviour>() as IPlayerStatSystem as MonoBehaviour;
+                _statSystemSource = ComponentResolver.Find<MonoBehaviour>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] MonoBehaviour not found")
+        .Resolve() as IPlayerStatSystem as MonoBehaviour;
 
             ResolveStatSystem();
         }
@@ -113,7 +126,11 @@ namespace NightHunt.Gameplay.Core.State
 
             if (_statSystem == null)
             {
-                _statSystem = GetComponent<IPlayerStatSystem>();
+                _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IPlayerStatSystem not found")
+        .Resolve();
             }
         }
 

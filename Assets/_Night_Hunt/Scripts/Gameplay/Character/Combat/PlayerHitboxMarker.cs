@@ -1,4 +1,5 @@
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat
 {
@@ -25,7 +26,11 @@ namespace NightHunt.Gameplay.Character.Combat
             get
             {
                 if (_healthSystemRef == null)
-                    _healthSystemRef = GetComponentInParent<PlayerHealthSystem>();
+                    _healthSystemRef = ComponentResolver.Find<PlayerHealthSystem>(this)
+        .InParent()
+        .InRootChildren()
+        .OrLogWarning("[Auto] PlayerHealthSystem not found")
+        .Resolve();
                 return _healthSystemRef;
             }
         }

@@ -5,6 +5,7 @@ using NightHunt.Data;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Match;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Boss
 {
@@ -110,7 +111,11 @@ namespace NightHunt.Gameplay.Boss
 
             // Instantiate + network-spawn
             var go   = Instantiate(prefab, pos, rot);
-            var boss = go.GetComponent<BossController>();
+            var boss = ComponentResolver.Find<BossController>(go)
+                                        .OnSelf()
+                                        .InChildren()
+                                        .OrLogWarning("[Auto] BossController not found")
+                                        .Resolve();
             if (boss == null)
             {
                 Debug.LogError($"[BossSpawnManager] Prefab for '{cfg.BossId}' missing BossController!");

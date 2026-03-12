@@ -2,6 +2,7 @@ using FOW;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.FogOfWar
 {
@@ -23,8 +24,16 @@ namespace NightHunt.Gameplay.FogOfWar
 
         private void Awake()
         {
-            _hider = GetComponent<FogOfWarHider>();
-            _networkPlayer = GetComponent<NetworkPlayer>();
+            _hider = ComponentResolver.Find<FogOfWarHider>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] FogOfWarHider not found")
+        .Resolve();
+            _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NetworkPlayer not found")
+        .Resolve();
         }
 
         private void Start()
@@ -119,7 +128,11 @@ namespace NightHunt.Gameplay.FogOfWar
             teamId = -1;
 
             if (_networkPlayer == null)
-                _networkPlayer = GetComponent<NetworkPlayer>();
+                _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NetworkPlayer not found")
+        .Resolve();
 
             if (_networkPlayer == null)
                 return false;

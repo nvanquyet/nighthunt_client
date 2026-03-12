@@ -1,12 +1,16 @@
 using System;
 using System.Collections.Generic;
+using NightHunt.GameplaySystems.Attachment;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Equipment;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Weapon;
 using NightHunt.StatSystem.Core.Data;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
+using NightHunt.StatSystem.Systems;
 
 namespace NightHunt.GameplaySystems.Stat
 {
@@ -33,10 +37,10 @@ namespace NightHunt.GameplaySystems.Stat
 
         // ── Inspector wiring (MonoBehaviour references cast to interfaces) ────
         [Header("Required Systems")]
-        [SerializeField] private MonoBehaviour _playerStatSystemMB;
-        [SerializeField] private MonoBehaviour _equipmentSystemMB;
-        [SerializeField] private MonoBehaviour _weaponSystemMB;
-        [SerializeField] private MonoBehaviour _attachmentSystemMB;
+        [SerializeField] private PlayerStatSystem _playerStatSystemMB;
+        [SerializeField] private EquipmentSystem _equipmentSystemMB;
+        [SerializeField] private WeaponSystem _weaponSystemMB;
+        [SerializeField] private AttachmentSystem _attachmentSystemMB;
 
         // ── Runtime interfaces ────────────────────────────────────────────────
         private IPlayerStatSystem  _playerStats;

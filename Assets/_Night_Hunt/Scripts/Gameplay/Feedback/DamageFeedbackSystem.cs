@@ -1,8 +1,9 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
 using Cam = UnityEngine.Camera;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Feedback
 {
@@ -11,16 +12,18 @@ namespace NightHunt.Gameplay.Feedback
     /// </summary>
     public class DamageFeedbackSystem : MonoBehaviour
     {
-        [Header("Damage Number Settings")]
-        [SerializeField] private GameObject damageNumberPrefab;
+        [Header("Damage Number Settings")] [SerializeField]
+        private GameObject damageNumberPrefab;
+
         [SerializeField] private float numberLifetime = 2f;
         [SerializeField] private float numberSpeed = 2f;
         [SerializeField] private Color normalDamageColor = Color.white;
         [SerializeField] private Color criticalDamageColor = Color.yellow;
         [SerializeField] private Color headshotColor = Color.red;
 
-        [Header("Hit Indicator Settings")]
-        [SerializeField] private GameObject hitIndicatorPrefab;
+        [Header("Hit Indicator Settings")] [SerializeField]
+        private GameObject hitIndicatorPrefab;
+
         [SerializeField] private float indicatorLifetime = 0.5f;
 
         private Cam playerCamera;
@@ -37,7 +40,8 @@ namespace NightHunt.Gameplay.Feedback
         /// <summary>
         /// Show damage number
         /// </summary>
-        public void ShowDamageNumber(Vector3 worldPosition, float damage, bool isHeadshot = false, bool isCritical = false)
+        public void ShowDamageNumber(Vector3 worldPosition, float damage, bool isHeadshot = false,
+            bool isCritical = false)
         {
             if (damageNumberPrefab == null) return;
 
@@ -46,7 +50,11 @@ namespace NightHunt.Gameplay.Feedback
             if (screenPos.z < 0) return; // Behind camera
 
             GameObject numberObj = Instantiate(damageNumberPrefab, transform);
-            DamageNumber number = numberObj.GetComponent<DamageNumber>();
+            DamageNumber number = ComponentResolver.Find<DamageNumber>(numberObj)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] DamageNumber not found")
+                .Resolve();
 
             if (number == null)
             {
@@ -74,14 +82,18 @@ namespace NightHunt.Gameplay.Feedback
             if (hitIndicatorPrefab == null) return;
 
             GameObject indicatorObj = Instantiate(hitIndicatorPrefab, transform);
-            HitIndicator indicator = indicatorObj.GetComponent<HitIndicator>();
+            HitIndicator indicator = ComponentResolver.Find<HitIndicator>(indicatorObj)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] HitIndicator not found")
+                .Resolve();
 
             if (indicator == null)
             {
                 indicator = indicatorObj.AddComponent<HitIndicator>();
             }
 
-            indicator.Initialize(hitDirection, indicatorLifetime); 
+            indicator.Initialize(hitDirection, indicatorLifetime);
         }
     }
 }

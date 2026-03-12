@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using NightHunt.Common;
 using NightHunt.Core;
@@ -9,6 +9,7 @@ using NightHunt.State;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -30,65 +31,67 @@ namespace NightHunt.UI
     public sealed class CustomLobbyView : MonoBehaviour
     {
         // ── Inspector ─────────────────────────────────────────────────────────
-        [Header("Room Info")]
-        [SerializeField] private TextMeshProUGUI roomCodeText;
+        [Header("Room Info")] [SerializeField] private TextMeshProUGUI roomCodeText;
         [SerializeField] private TextMeshProUGUI modeText;
-        [SerializeField] private Button          copyCodeButton;
+        [SerializeField] private Button copyCodeButton;
 
-        [Header("Team Slots")]
-        [SerializeField] private Transform team1Container;
+        [Header("Team Slots")] [SerializeField]
+        private Transform team1Container;
+
         [SerializeField] private Transform team2Container;
         [SerializeField] private GameObject playerSlotPrefab;
 
-        [Header("Actions")]
-        [SerializeField] private Button readyButton;
+        [Header("Actions")] [SerializeField] private Button readyButton;
         [SerializeField] private Button leaveButton;
-        [SerializeField] private Button startButton;           // visible to host only
+        [SerializeField] private Button startButton; // visible to host only
         [SerializeField] private TextMeshProUGUI startButtonText;
         [SerializeField] private TextMeshProUGUI statusText;
 
-        [Header("Join / Create Panels")]
-        [SerializeField] private GameObject     joinCreatePanel;
-        [SerializeField] private Button         createRoomButton;
-        [SerializeField] private Button         joinRoomButton;
+        [Header("Join / Create Panels")] [SerializeField]
+        private GameObject joinCreatePanel;
+
+        [SerializeField] private Button createRoomButton;
+        [SerializeField] private Button joinRoomButton;
         [SerializeField] private TMP_InputField joinCodeInput;
-        [SerializeField] private Button         joinConfirmButton;
-        [SerializeField] private Button         backToHomeButton;
+        [SerializeField] private Button joinConfirmButton;
+        [SerializeField] private Button backToHomeButton;
 
         // ── Services ──────────────────────────────────────────────────────────
-        private RoomService  _roomService;
-        private RoomState    _roomState;
+        private RoomService _roomService;
+        private RoomState _roomState;
         private SessionState _sessionState;
 
         // ── Runtime ───────────────────────────────────────────────────────────
         private readonly Dictionary<string, PlayerSlotView> _slotViews = new();
         private int _maxSlotsPerTeam = 2;
         private string _lastStatus;
-        private bool   _refreshPending;
-        private float  _lastRefreshTime;
+        private bool _refreshPending;
+        private float _lastRefreshTime;
         private const float REFRESH_THROTTLE = 0.1f;
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Unity Lifecycle
 
         private void Awake()
         {
             if (GameManager.Instance != null)
             {
-                _roomService  = GameManager.Instance.RoomService;
+                _roomService = GameManager.Instance.RoomService;
                 _sessionState = GameManager.Instance.SessionState;
             }
+
             _roomState = RoomState.Instance;
 
             // Buttons
-            if (createRoomButton  != null) createRoomButton.onClick.AddListener(OnCreateRoomClicked);
-            if (joinRoomButton     != null) joinRoomButton.onClick.AddListener(OnJoinRoomPanelClicked);
-            if (joinConfirmButton  != null) joinConfirmButton.onClick.AddListener(OnJoinConfirmClicked);
-            if (readyButton        != null) readyButton.onClick.AddListener(OnReadyClicked);
-            if (leaveButton        != null) leaveButton.onClick.AddListener(OnLeaveClicked);
-            if (startButton        != null) startButton.onClick.AddListener(OnStartClicked);
-            if (backToHomeButton   != null) backToHomeButton.onClick.AddListener(OnBackToHomeClicked);
-            if (copyCodeButton     != null) copyCodeButton.onClick.AddListener(OnCopyCodeClicked);
+            if (createRoomButton != null) createRoomButton.onClick.AddListener(OnCreateRoomClicked);
+            if (joinRoomButton != null) joinRoomButton.onClick.AddListener(OnJoinRoomPanelClicked);
+            if (joinConfirmButton != null) joinConfirmButton.onClick.AddListener(OnJoinConfirmClicked);
+            if (readyButton != null) readyButton.onClick.AddListener(OnReadyClicked);
+            if (leaveButton != null) leaveButton.onClick.AddListener(OnLeaveClicked);
+            if (startButton != null) startButton.onClick.AddListener(OnStartClicked);
+            if (backToHomeButton != null) backToHomeButton.onClick.AddListener(OnBackToHomeClicked);
+            if (copyCodeButton != null) copyCodeButton.onClick.AddListener(OnCopyCodeClicked);
         }
 
         private void Start()
@@ -106,19 +109,20 @@ namespace NightHunt.UI
             _refreshPending = false;
             if (GameEventBus.Instance != null)
             {
-                GameEventBus.Instance.OnRoomUpdated       += HandleRoomUpdated;
-                GameEventBus.Instance.OnPlayerJoined      += HandlePlayerJoined;
-                GameEventBus.Instance.OnPlayerLeft        += HandlePlayerLeft;
-                GameEventBus.Instance.OnPlayerReady       += HandlePlayerReady;
-                GameEventBus.Instance.OnTeamChanged       += HandleTeamChanged;
+                GameEventBus.Instance.OnRoomUpdated += HandleRoomUpdated;
+                GameEventBus.Instance.OnPlayerJoined += HandlePlayerJoined;
+                GameEventBus.Instance.OnPlayerLeft += HandlePlayerLeft;
+                GameEventBus.Instance.OnPlayerReady += HandlePlayerReady;
+                GameEventBus.Instance.OnTeamChanged += HandleTeamChanged;
                 GameEventBus.Instance.OnRoomStatusChanged += HandleRoomStatusChanged;
-                GameEventBus.Instance.OnSwapRequest       += HandleSwapRequest;
+                GameEventBus.Instance.OnSwapRequest += HandleSwapRequest;
                 GameEventBus.Instance.OnSwapRequestStatus += HandleSwapRequestStatus;
-                GameEventBus.Instance.OnForceLogout       += HandleForceLogout;
-                GameEventBus.Instance.OnSessionExpired    += HandleSessionExpired;
-                GameEventBus.Instance.OnAppFocusGained    += HandleAppFocusGained;
-                GameEventBus.Instance.OnAppResumed        += HandleAppResumed;
+                GameEventBus.Instance.OnForceLogout += HandleForceLogout;
+                GameEventBus.Instance.OnSessionExpired += HandleSessionExpired;
+                GameEventBus.Instance.OnAppFocusGained += HandleAppFocusGained;
+                GameEventBus.Instance.OnAppResumed += HandleAppResumed;
             }
+
             if (_roomState != null && _roomState.IsInRoom)
                 RefreshRoomDisplay();
         }
@@ -127,24 +131,25 @@ namespace NightHunt.UI
         {
             if (GameEventBus.Instance != null)
             {
-                GameEventBus.Instance.OnRoomUpdated       -= HandleRoomUpdated;
-                GameEventBus.Instance.OnPlayerJoined      -= HandlePlayerJoined;
-                GameEventBus.Instance.OnPlayerLeft        -= HandlePlayerLeft;
-                GameEventBus.Instance.OnPlayerReady       -= HandlePlayerReady;
-                GameEventBus.Instance.OnTeamChanged       -= HandleTeamChanged;
+                GameEventBus.Instance.OnRoomUpdated -= HandleRoomUpdated;
+                GameEventBus.Instance.OnPlayerJoined -= HandlePlayerJoined;
+                GameEventBus.Instance.OnPlayerLeft -= HandlePlayerLeft;
+                GameEventBus.Instance.OnPlayerReady -= HandlePlayerReady;
+                GameEventBus.Instance.OnTeamChanged -= HandleTeamChanged;
                 GameEventBus.Instance.OnRoomStatusChanged -= HandleRoomStatusChanged;
-                GameEventBus.Instance.OnSwapRequest       -= HandleSwapRequest;
+                GameEventBus.Instance.OnSwapRequest -= HandleSwapRequest;
                 GameEventBus.Instance.OnSwapRequestStatus -= HandleSwapRequestStatus;
-                GameEventBus.Instance.OnForceLogout       -= HandleForceLogout;
-                GameEventBus.Instance.OnSessionExpired    -= HandleSessionExpired;
-                GameEventBus.Instance.OnAppFocusGained   -= HandleAppFocusGained;
-                GameEventBus.Instance.OnAppResumed        -= HandleAppResumed;
+                GameEventBus.Instance.OnForceLogout -= HandleForceLogout;
+                GameEventBus.Instance.OnSessionExpired -= HandleSessionExpired;
+                GameEventBus.Instance.OnAppFocusGained -= HandleAppFocusGained;
+                GameEventBus.Instance.OnAppResumed -= HandleAppResumed;
             }
         }
 
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Room Actions
 
         private async void OnCreateRoomClicked()
@@ -242,6 +247,7 @@ namespace NightHunt.UI
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region Display
 
         private void RefreshRoomDisplay()
@@ -257,8 +263,10 @@ namespace NightHunt.UI
                     _refreshPending = true;
                     StartCoroutine(DelayedRefresh());
                 }
+
                 return;
             }
+
             _refreshPending = false;
             _lastRefreshTime = now;
             RefreshRoomDisplayImmediate();
@@ -288,17 +296,18 @@ namespace NightHunt.UI
                 "2v2" => 2, "3v3" => 3, "5v5" => 5, _ => 2
             };
 
-            bool isHost  = IsLocalPlayerHost();
+            bool isHost = IsLocalPlayerHost();
             bool waiting = room.status == Constants.ROOM_STATUS_WAITING;
             bool allReady = room.players != null && room.players.Count > 0
-                            && room.players.All(p => p.isReady);
-            bool full     = room.players?.Count >= _maxSlotsPerTeam * 2;
+                                                 && room.players.All(p => p.isReady);
+            bool full = room.players?.Count >= _maxSlotsPerTeam * 2;
 
             if (startButton != null)
             {
                 startButton.gameObject.SetActive(isHost && waiting);
                 startButton.interactable = isHost && waiting && full && allReady;
             }
+
             if (readyButton != null)
                 readyButton.gameObject.SetActive(!isHost && waiting);
 
@@ -309,7 +318,8 @@ namespace NightHunt.UI
         {
             // Destroy old slot views
             foreach (var sv in _slotViews.Values)
-                if (sv != null) Destroy(sv.gameObject);
+                if (sv != null)
+                    Destroy(sv.gameObject);
             _slotViews.Clear();
 
             bool isHost = IsLocalPlayerHost();
@@ -322,8 +332,12 @@ namespace NightHunt.UI
                 for (int slotIdx = 0; slotIdx < _maxSlotsPerTeam; slotIdx++)
                 {
                     var player = players?.FirstOrDefault(p => p.team == team && p.slot == slotIdx);
-                    var go     = Instantiate(playerSlotPrefab, container);
-                    var sv     = go.GetComponent<PlayerSlotView>();
+                    var go = Instantiate(playerSlotPrefab, container);
+                    var sv = ComponentResolver.Find<PlayerSlotView>(go)
+                        .OnSelf()
+                        .InChildren()
+                        .OrLogWarning("[Auto] PlayerSlotView not found")
+                        .Resolve();
                     if (sv != null)
                     {
                         sv.SetSlot(team, slotIdx, player, isHost, OnSlotClicked, OnTransferOwnerClicked);
@@ -394,6 +408,7 @@ namespace NightHunt.UI
         #endregion
 
         // ──────────────────────────────────────────────────────────────────────
+
         #region GameEventBus Handlers
 
         private void HandleRoomUpdated(RoomResponse room)
@@ -436,6 +451,7 @@ namespace NightHunt.UI
                 Debug.Log("[CustomLobbyView] Game started — loading MatchLoading scene.");
                 SceneLoader.LoadMatchLoading();
             }
+
             _lastStatus = evt.newStatus;
             RefreshRoomDisplay();
         }
@@ -464,8 +480,9 @@ namespace NightHunt.UI
             SceneLoader.LoadLogin();
         }
 
-        private void HandleAppFocusGained()  => RefreshRoomDisplay();
-        private void HandleAppResumed()       => RefreshRoomDisplay();
+        private void HandleAppFocusGained() => RefreshRoomDisplay();
+        private void HandleAppResumed() => RefreshRoomDisplay();
 
         #endregion
-    }}
+    }
+}

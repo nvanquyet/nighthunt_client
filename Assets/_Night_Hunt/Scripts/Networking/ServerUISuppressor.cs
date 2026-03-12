@@ -1,7 +1,8 @@
-using UnityEngine;
+﻿using UnityEngine;
 using FishNet;
 using FishNet.Object;
 using FishNet.Managing;
+using NightHunt.Utilities;
 
 namespace NightHunt.Networking
 {
@@ -26,8 +27,8 @@ namespace NightHunt.Networking
     [DefaultExecutionOrder(-50)]
     public class ServerUISuppressor : MonoBehaviour
     {
-        [Tooltip("Tag applied to any Canvas that should remain active on the server.")]
-        [SerializeField] private string _serverCanvasTag = "ServerCanvas";
+        [Tooltip("Tag applied to any Canvas that should remain active on the server.")] [SerializeField]
+        private string _serverCanvasTag = "ServerCanvas";
 
         private void Awake()
         {
@@ -43,12 +44,17 @@ namespace NightHunt.Networking
                 // (those are disabled automatically when server has no observer)
                 if (!string.IsNullOrEmpty(_serverCanvasTag) && canvas.CompareTag(_serverCanvasTag)) continue;
                 // Only disable top-level canvas roots (not nested ones — parent handles them)
-                if (canvas.transform.parent == null || canvas.transform.parent.GetComponentInParent<Canvas>() == null)
+                if (canvas.transform.parent == null || ComponentResolver.Find<Canvas>(canvas.transform.parent)
+                        .InParent()
+                        .InRootChildren()
+                        .OrLogWarning("[Auto] Canvas not found")
+                        .Resolve() == null)
                 {
                     canvas.gameObject.SetActive(false);
                     disabled++;
                 }
             }
+
             Debug.Log($"[ServerUISuppressor] Disabled {disabled} Canvas root(s) on dedicated server.");
         }
     }

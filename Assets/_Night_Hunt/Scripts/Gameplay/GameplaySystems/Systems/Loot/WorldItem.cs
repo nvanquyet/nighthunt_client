@@ -1,4 +1,4 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using System.Collections;
@@ -7,6 +7,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Networking;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Loot
 {
@@ -61,7 +62,8 @@ namespace NightHunt.GameplaySystems.Loot
 
         [Header("Settings")]
         [Tooltip("Maximum distance to pickup — fallback khi không có LootableConfig.")]
-        [SerializeField] private float maxPickupDistance = 3f;
+        [SerializeField]
+        private float maxPickupDistance = 3f;
 
         // Runtime config — inject từ WorldSpawnManager.
         private NightHunt.GameplaySystems.Core.Configs.LootableConfig _lootableConfig;
@@ -73,24 +75,24 @@ namespace NightHunt.GameplaySystems.Loot
 
         // ── Local state ───────────────────────────────────────────────────────────
         private ItemInstanceData _itemData;
-        private GameObject       _modelInstance;
-        private bool             _initialized;
-        private bool             _modelSpawned;       // guard: SpawnModelLocal chỉ chạy 1 lần
-        private Coroutine        _waitDataCoroutine;  // fallback polling coroutine
+        private GameObject _modelInstance;
+        private bool _initialized;
+        private bool _modelSpawned; // guard: SpawnModelLocal chỉ chạy 1 lần
+        private Coroutine _waitDataCoroutine; // fallback polling coroutine
 
         // ── Properties ────────────────────────────────────────────────────────────
 
         private bool IsDataReady => !string.IsNullOrEmpty(_itemData.DefinitionID);
 
-        public ItemInstanceData ItemData   => _itemData;
-        public bool             IsLootable => true;
+        public ItemInstanceData ItemData => _itemData;
+        public bool IsLootable => true;
 
         // ── IPickupable ───────────────────────────────────────────────────────────
 
         public string ItemDefinitionID => _itemData.DefinitionID;
-        public int    Quantity         => _itemData.Quantity;
-        public bool   IsPickedUp       { get; private set; }
-        private bool  _isPickupPending;
+        public int Quantity => _itemData.Quantity;
+        public bool IsPickedUp { get; private set; }
+        private bool _isPickupPending;
 
         // ── IInteractable ─────────────────────────────────────────────────────────
 
@@ -98,7 +100,7 @@ namespace NightHunt.GameplaySystems.Loot
         {
             get
             {
-                var def  = ItemDatabase.GetDefinition(_itemData.DefinitionID);
+                var def = ItemDatabase.GetDefinition(_itemData.DefinitionID);
                 string n = def != null ? def.DisplayName : _itemData.DefinitionID;
                 return $"[F] Pick up {n} \xd7{_itemData.Quantity}";
             }
@@ -109,16 +111,20 @@ namespace NightHunt.GameplaySystems.Loot
         public bool CanInteract(GameObject interactor)
         {
             if (IsPickedUp || _isPickupPending) return false;
-            if (!IsDataReady)                   return false;
+            if (!IsDataReady) return false;
             return Vector3.Distance(transform.position, interactor.transform.position) <= GetInteractDistance();
         }
 
         public void Interact(GameObject interactor)
         {
             if (interactor == null || _isPickupPending) return;
-            if (!IsSpawned || !IsClientStarted)         return;
+            if (!IsSpawned || !IsClientStarted) return;
 
-            var playerNob = interactor.GetComponent<NetworkObject>();
+            var playerNob = ComponentResolver.Find<NetworkObject>(interactor)
+                .OnSelf()
+                .InParent()
+                .OrLogWarning("[Auto] NetworkObject not found")
+                .Resolve();
             if (playerNob == null)
             {
                 Debug.LogError($"[WorldItem] Interact: '{interactor.name}' không có NetworkObject!");
@@ -129,8 +135,13 @@ namespace NightHunt.GameplaySystems.Loot
             RequestPickup(playerNob);
         }
 
-        public void OnHoverEnter(GameObject interactor) { }
-        public void OnHoverExit(GameObject interactor)  { }
+        public void OnHoverEnter(GameObject interactor)
+        {
+        }
+
+        public void OnHoverExit(GameObject interactor)
+        {
+        }
 
         // ═════════════════════════════════════════════════════════════════════════
         // NETWORK LIFECYCLE
@@ -198,17 +209,19 @@ namespace NightHunt.GameplaySystems.Loot
             {
                 if (string.IsNullOrEmpty(_itemData.DefinitionID))
                 {
-                    _itemData    = syncVal;
+                    _itemData = syncVal;
                     _initialized = true;
                     Debug.Log($"[WorldItem] OnStartClient: synced _itemData từ syncVal ObjId={ObjectId}");
                 }
+
                 SpawnModelLocal("OnStartClient");
             }
             else
             {
                 // Edge case: data chưa arrive → poll
-                Debug.LogWarning($"[WorldItem] OnStartClient: defID rỗng → start WaitForDataCoroutine ObjId={ObjectId}. " +
-                                 "Nếu thấy log này thường xuyên → InitializeBeforeSpawn() chưa được gọi trước Spawn()!");
+                Debug.LogWarning(
+                    $"[WorldItem] OnStartClient: defID rỗng → start WaitForDataCoroutine ObjId={ObjectId}. " +
+                    "Nếu thấy log này thường xuyên → InitializeBeforeSpawn() chưa được gọi trước Spawn()!");
                 if (_waitDataCoroutine != null) StopCoroutine(_waitDataCoroutine);
                 _waitDataCoroutine = StartCoroutine(WaitForDataCoroutine());
             }
@@ -220,7 +233,7 @@ namespace NightHunt.GameplaySystems.Loot
             _syncItemData.OnChange -= OnSyncItemDataChanged;
 
             _isPickupPending = false;
-            _modelSpawned    = false;
+            _modelSpawned = false;
 
             if (_waitDataCoroutine != null)
             {
@@ -263,9 +276,9 @@ namespace NightHunt.GameplaySystems.Loot
         {
             Debug.Log($"[WorldItem] ── InitializeBeforeSpawn ENTRY ── defID='{data.DefinitionID}'");
 
-            _itemData       = data;
+            _itemData = data;
             _lootableConfig = lootableConfig;
-            _initialized    = true;
+            _initialized = true;
 
             // Set SyncVar TRƯỚC Spawn → FishNet embed value vào spawn packet
             _syncItemData.Value = data;
@@ -279,7 +292,7 @@ namespace NightHunt.GameplaySystems.Loot
         [Server]
         public void UpdateData(ItemInstanceData data)
         {
-            _itemData           = data;
+            _itemData = data;
             _syncItemData.Value = data;
             Debug.Log($"[WorldItem] ── UpdateData ── defID='{data.DefinitionID}' ObjId={ObjectId}");
         }
@@ -308,7 +321,7 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            _itemData    = newData;
+            _itemData = newData;
             _initialized = true;
 
             SpawnModelLocal($"OnSyncItemDataChanged(asServer={asServer})");
@@ -361,17 +374,19 @@ namespace NightHunt.GameplaySystems.Loot
             var def = ItemDatabase.GetDefinition(_itemData.DefinitionID);
             if (def == null)
             {
-                Debug.LogError($"[WorldItem] SpawnModelLocal [{caller}]: ItemDatabase.GetDefinition('{_itemData.DefinitionID}') = NULL! " +
-                               $"ObjId={ObjectId} — Kiểm tra: 1) ItemDatabase đã init chưa? " +
-                               $"2) DefinitionID '{_itemData.DefinitionID}' có tồn tại không?");
+                Debug.LogError(
+                    $"[WorldItem] SpawnModelLocal [{caller}]: ItemDatabase.GetDefinition('{_itemData.DefinitionID}') = NULL! " +
+                    $"ObjId={ObjectId} — Kiểm tra: 1) ItemDatabase đã init chưa? " +
+                    $"2) DefinitionID '{_itemData.DefinitionID}' có tồn tại không?");
                 return;
             }
 
             // ── Guard 5 ───────────────────────────────────────────────────────────
             if (def.DroppedPrefab == null)
             {
-                Debug.LogError($"[WorldItem] SpawnModelLocal [{caller}]: def.DroppedPrefab = NULL cho '{_itemData.DefinitionID}'! " +
-                               $"ObjId={ObjectId} — Vào Inspector ItemDefinition '{_itemData.DefinitionID}' và gán DroppedPrefab.");
+                Debug.LogError(
+                    $"[WorldItem] SpawnModelLocal [{caller}]: def.DroppedPrefab = NULL cho '{_itemData.DefinitionID}'! " +
+                    $"ObjId={ObjectId} — Vào Inspector ItemDefinition '{_itemData.DefinitionID}' và gán DroppedPrefab.");
                 return;
             }
 
@@ -382,7 +397,11 @@ namespace NightHunt.GameplaySystems.Loot
             _modelInstance = Instantiate(def.DroppedPrefab, transform.position, transform.rotation, transform);
 
             // DroppedPrefab phải là pure visual — không được có NetworkObject
-            var modelNetObj = _modelInstance.GetComponent<NetworkObject>();
+            var modelNetObj = ComponentResolver.Find<NetworkObject>(_modelInstance)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkObject not found")
+                .Resolve();
             if (modelNetObj != null)
             {
                 Debug.LogWarning($"[WorldItem] DroppedPrefab '{def.ItemID}' có NetworkObject — removing. " +
@@ -450,10 +469,12 @@ namespace NightHunt.GameplaySystems.Loot
                 {
                     if (string.IsNullOrEmpty(_itemData.DefinitionID))
                     {
-                        _itemData    = syncVal;
+                        _itemData = syncVal;
                         _initialized = true;
                     }
-                    Debug.Log($"[WorldItem] WaitForDataCoroutine: found defID='{defID}' after {elapsed:F2}s ObjId={ObjectId}");
+
+                    Debug.Log(
+                        $"[WorldItem] WaitForDataCoroutine: found defID='{defID}' after {elapsed:F2}s ObjId={ObjectId}");
                     SpawnModelLocal("WaitForDataCoroutine");
                     yield break;
                 }
@@ -479,16 +500,19 @@ namespace NightHunt.GameplaySystems.Loot
                 Debug.LogError("[WorldItem] RequestPickup: conn NULL.");
                 return;
             }
+
             if (!IsServerInitialized)
             {
                 Debug.LogError("[WorldItem] RequestPickup: IsServerInitialized=false.");
                 return;
             }
+
             if (playerNob == null)
             {
                 Debug.LogError($"[WorldItem] RequestPickup: playerNob NULL (ClientId={conn.ClientId}).");
                 return;
             }
+
             if (playerNob.Owner != conn)
             {
                 Debug.LogWarning($"[WorldItem] RequestPickup: ownership mismatch " +
@@ -496,14 +520,18 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            var player = playerNob.GetComponent<NetworkPlayer>();
+            var player = ComponentResolver.Find<NetworkPlayer>(playerNob)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkPlayer not found")
+                .Resolve();
             if (player == null)
             {
                 Debug.LogError($"[WorldItem] RequestPickup: không có NetworkPlayer trên '{playerNob.name}'.");
                 return;
             }
 
-            float dist    = Vector3.Distance(transform.position, player.transform.position);
+            float dist = Vector3.Distance(transform.position, player.transform.position);
             float maxDist = GetInteractDistance();
             if (dist > maxDist)
             {
@@ -511,13 +539,23 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            var inventory = player.GetComponent<IInventorySystem>()
-                         ?? player.GetComponentInChildren<IInventorySystem>();
+            var inventory = ComponentResolver.Find<IInventorySystem>(player)
+                                .OnSelf()
+                                .InChildren()
+                                .OrLogWarning("[Auto] IInventorySystem not found")
+                                .Resolve()
+                            ?? ComponentResolver.Find<IInventorySystem>(player)
+                                .OnSelf()
+                                .InChildren()
+                                .InParent()
+                                .OrLogWarning("[Auto] IInventorySystem not found")
+                                .Resolve();
             if (inventory == null)
             {
                 Debug.LogError($"[WorldItem] RequestPickup: IInventorySystem không tìm thấy trên '{player.name}'.");
                 return;
             }
+
             if (inventory is NetworkBehaviour nb && !nb.IsServerInitialized)
             {
                 Debug.LogError("[WorldItem] RequestPickup: IInventorySystem.IsServerInitialized=false.");
@@ -526,7 +564,8 @@ namespace NightHunt.GameplaySystems.Loot
 
             inventory.AddItem(_itemData.DefinitionID, _itemData.Quantity);
             IsPickedUp = true;
-            Debug.Log($"[WorldItem] ✓ Pickup: '{_itemData.DefinitionID}' ×{_itemData.Quantity} ClientId={conn.ClientId}");
+            Debug.Log(
+                $"[WorldItem] ✓ Pickup: '{_itemData.DefinitionID}' ×{_itemData.Quantity} ClientId={conn.ClientId}");
             DespawnPickup();
         }
 
@@ -538,6 +577,7 @@ namespace NightHunt.GameplaySystems.Loot
                 Destroy(_modelInstance);
                 _modelInstance = null;
             }
+
             OnDespawned?.Invoke();
             base.Despawn();
         }
@@ -550,4 +590,4 @@ namespace NightHunt.GameplaySystems.Loot
             Gizmos.DrawWireSphere(transform.position, maxPickupDistance);
         }
     }
-} 
+}

@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using System.Collections;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Feedback
 {
@@ -17,8 +18,17 @@ namespace NightHunt.Gameplay.Feedback
 
         public void Initialize(Vector3 screenPosition, float damage, Color color, float lifeTime, float moveSpeed)
         {
-            if (_text == null) _text = GetComponentInChildren<TextMeshProUGUI>();
-            rectTransform = GetComponent<RectTransform>();
+            if (_text == null) _text = ComponentResolver.Find<TextMeshProUGUI>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] TextMeshProUGUI not found")
+        .Resolve();
+            rectTransform = ComponentResolver.Find<RectTransform>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] RectTransform not found")
+        .Resolve();
 
             if (_text != null)
             {

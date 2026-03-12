@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using FishNet.Object.Prediction;
 using FishNet.Transporting;
@@ -8,6 +8,7 @@ using NightHunt.Networking.Prediction.FishNet;
 using Unity.Cinemachine;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -148,8 +149,17 @@ namespace NightHunt.Gameplay.Character
 
         private void Awake()
         {
-            _cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
-            _playerStatSystem = GetComponent<IPlayerStatSystem>();
+            _cinemachineCamera ??= ComponentResolver.Find<CinemachineCamera>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] CinemachineCamera not found")
+        .Resolve();
+            _playerStatSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] IPlayerStatSystem not found")
+        .Resolve();
             InitializePhysicsComponents();
         }
 
@@ -183,7 +193,12 @@ namespace NightHunt.Gameplay.Character
             _cameraLocked = startWithCameraLock;
             _staminaRecoveryTimer = 0f;
 
-            _cinemachineCamera ??= GetComponentInChildren<CinemachineCamera>();
+            _cinemachineCamera ??= ComponentResolver.Find<CinemachineCamera>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] CinemachineCamera not found")
+        .Resolve();
             _mainCamera ??= UnityEngine.Camera.main;
 
             if (enableDebugLogs)

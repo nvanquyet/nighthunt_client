@@ -18,7 +18,6 @@ namespace NightHunt.Gameplay.Player
     /// - Perform line-of-sight checks
     /// - Register with VisionService for fog of war
     /// </summary>
-    [RequireComponent(typeof(NetworkPlayer))]
     public class PlayerVisionSystem : NetworkBehaviour
     {
         [Header("References")]

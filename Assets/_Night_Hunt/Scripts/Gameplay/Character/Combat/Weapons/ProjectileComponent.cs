@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using NightHunt.Data;
 using NightHunt.Gameplay.Character.Combat;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
@@ -121,7 +122,11 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             bool isAuthoritativeInstance = _isOwnerShot || FishNet.InstanceFinder.IsServerStarted;
             if (isAuthoritativeInstance)
             {
-                var hitbox = other.GetComponent<PlayerHitboxMarker>();
+                var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(other)
+                                            .OnSelf()
+                                            .InChildren()
+                                            .OrLogWarning("[Auto] PlayerHitboxMarker not found")
+                                            .Resolve();
                 if (hitbox != null && hitbox.HealthSystem != null)
                 {
                     var info = new DamageInfo

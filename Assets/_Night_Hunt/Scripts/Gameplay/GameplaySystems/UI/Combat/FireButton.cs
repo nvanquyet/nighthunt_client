@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.Gameplay.Input.Handlers.Movement;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -74,7 +75,11 @@ namespace NightHunt.GameplaySystems.UI.Combat
                                  "Assign it manually or ensure it exists before this Awake.");
 
             if (_pulseRing == null)
-                _pulseRing = GetComponent<ButtonPulseRing>();
+                _pulseRing = ComponentResolver.Find<ButtonPulseRing>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] ButtonPulseRing not found")
+        .Resolve();
 
             // Joystick must start hidden so it does not capture pointer events instead of this button.
             if (_joystick != null) _joystick.gameObject.SetActive(false);

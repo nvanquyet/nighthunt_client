@@ -1,5 +1,6 @@
-using UnityEngine;
+﻿using UnityEngine;
 using FishNet.Object;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Objective
 {
@@ -8,8 +9,9 @@ namespace NightHunt.Gameplay.Objective
     /// </summary>
     public class BossSpawnPoint : MonoBehaviour
     {
-        [Header("Boss Settings")]
-        [SerializeField] private GameObject bossPrefab;
+        [Header("Boss Settings")] [SerializeField]
+        private GameObject bossPrefab;
+
         [SerializeField] private bool hasSpawned = false;
 
         /// <summary>
@@ -23,7 +25,11 @@ namespace NightHunt.Gameplay.Objective
             hasSpawned = true;
 
             // Spawn on network if needed
-            var networkObject = boss.GetComponent<NetworkObject>();
+            var networkObject = ComponentResolver.Find<NetworkObject>(boss)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkObject not found")
+                .Resolve();
             if (networkObject != null)
             {
                 // Would need NetworkManager reference to spawn

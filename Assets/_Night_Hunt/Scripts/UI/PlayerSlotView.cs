@@ -3,6 +3,7 @@ using NightHunt.State;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -168,7 +169,11 @@ namespace NightHunt.UI
         {
             // Auto-assign references in editor
             if (slotButton == null)
-                slotButton = GetComponent<Button>();
+                slotButton = ComponentResolver.Find<Button>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] Button not found")
+        .Resolve();
         }
 #endif
     }

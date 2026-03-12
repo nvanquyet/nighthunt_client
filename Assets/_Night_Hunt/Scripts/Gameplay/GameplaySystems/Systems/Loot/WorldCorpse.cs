@@ -9,6 +9,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Networking;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Loot
 {
@@ -21,8 +22,9 @@ namespace NightHunt.GameplaySystems.Loot
         /// <summary>Fired server-side khi corpse bị despawn (looted hoặc hết thời gian).</summary>
         public event System.Action OnDespawned;
 
-        [Header("Settings")]
-        [SerializeField] private float maxInteractDistance = 3f; // fallback khi không có LootableConfig
+        [Header("Settings")] [SerializeField]
+        private float maxInteractDistance = 3f; // fallback khi không có LootableConfig
+
         [SerializeField] private float despawnTime = 300f; // 5 phút
 
         // Runtime config — inject khi spawn (không gán trên prefab).
@@ -40,6 +42,7 @@ namespace NightHunt.GameplaySystems.Loot
 
         /// <summary>Fired on the local client when the player's raycast enters this corpse.</summary>
         public static event Action<WorldCorpse> OnAnyHoverEnter;
+
         /// <summary>Fired on the local client when the player's raycast leaves this corpse.</summary>
         public static event Action<WorldCorpse> OnAnyHoverExit;
 
@@ -49,7 +52,9 @@ namespace NightHunt.GameplaySystems.Loot
         // ── ILootable ───────────────────────────────────────────────────────────
 
         public bool IsLooted => storage.Count == 0;
-        public bool IsOpen   => syncIsOpen.Value;
+
+        public bool IsOpen => syncIsOpen.Value;
+
         // Pending flag: block spam giữa Interact() và server confirm syncIsOpen=true.
         private bool _isOpenPending;
 
@@ -71,7 +76,11 @@ namespace NightHunt.GameplaySystems.Loot
 
         public void Interact(GameObject interactor)
         {
-            var playerNob = interactor?.GetComponent<FishNet.Object.NetworkObject>();
+            var playerNob = ComponentResolver.Find<FishNet.Object.NetworkObject>(interactor)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] FishNet.Object.NetworkObject not found")
+                .Resolve();
             if (playerNob == null) return;
 
             if (IsOpen)
@@ -106,7 +115,10 @@ namespace NightHunt.GameplaySystems.Loot
         {
             base.OnStartNetwork();
             syncStorage.OnChange += OnStorageChanged;
-            syncIsOpen.OnChange  += (o, n, s) => { if (!s) _isOpenPending = false; }; // Reset khi server confirm
+            syncIsOpen.OnChange += (o, n, s) =>
+            {
+                if (!s) _isOpenPending = false;
+            }; // Reset khi server confirm
             spawnTime = Time.time;
         }
 
@@ -150,38 +162,103 @@ namespace NightHunt.GameplaySystems.Loot
         public void RequestOpen(NetworkObject playerNob, NetworkConnection conn = null)
         {
             if (conn == null) conn = playerNob?.Owner;
-            if (!IsServerInitialized) { Debug.LogWarning("[WorldCorpse] RequestOpen: server-only!"); return; }
-            if (playerNob == null) { Debug.LogWarning("[WorldCorpse] RequestOpen: playerNob là NULL."); return; }
-            if (conn == null) { Debug.LogWarning("[WorldCorpse] RequestOpen: conn là NULL."); return; }
-            if (playerNob.Owner != conn) { Debug.LogWarning($"[WorldCorpse] RequestOpen: ownership mismatch (ClientId={conn?.ClientId})."); return; }
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[WorldCorpse] RequestOpen: server-only!");
+                return;
+            }
 
-            var player = playerNob.GetComponent<NetworkPlayer>();
-            if (player == null) { Debug.LogWarning("[WorldCorpse] RequestOpen: không tìm thấy NetworkPlayer."); return; }
+            if (playerNob == null)
+            {
+                Debug.LogWarning("[WorldCorpse] RequestOpen: playerNob là NULL.");
+                return;
+            }
+
+            if (conn == null)
+            {
+                Debug.LogWarning("[WorldCorpse] RequestOpen: conn là NULL.");
+                return;
+            }
+
+            if (playerNob.Owner != conn)
+            {
+                Debug.LogWarning($"[WorldCorpse] RequestOpen: ownership mismatch (ClientId={conn?.ClientId}).");
+                return;
+            }
+
+            var player = ComponentResolver.Find<NetworkPlayer>(playerNob)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkPlayer not found")
+                .Resolve();
+            if (player == null)
+            {
+                Debug.LogWarning("[WorldCorpse] RequestOpen: không tìm thấy NetworkPlayer.");
+                return;
+            }
 
             float dist = Vector3.Distance(transform.position, player.transform.position);
             float maxDist = GetInteractDistance();
-            if (dist > maxDist) { Debug.LogWarning($"[WorldCorpse] RequestOpen: Quá xa ({dist:F2}m)"); return; }
+            if (dist > maxDist)
+            {
+                Debug.LogWarning($"[WorldCorpse] RequestOpen: Quá xa ({dist:F2}m)");
+                return;
+            }
 
             syncIsOpen.Value = true;
             RpcOnCorpseOpened(conn);
         }
 
         [ServerRpc(RequireOwnership = false)]
-        public void RequestTakeItem(NetworkObject playerNob, int storageIndex, int quantity, NetworkConnection conn = null)
+        public void RequestTakeItem(NetworkObject playerNob, int storageIndex, int quantity,
+            NetworkConnection conn = null)
         {
             if (conn == null) conn = playerNob?.Owner;
-            Debug.Log($"[WorldCorpse] RequestTakeItem: arrived — objId={playerNob?.ObjectId} idx={storageIndex} qty={quantity} conn={conn?.ClientId} storage.Count={storage.Count}");
-            if (!IsServerInitialized) { Debug.LogWarning("[WorldCorpse] RequestTakeItem: server-only!"); return; }
-            if (playerNob == null) { Debug.LogWarning("[WorldCorpse] RequestTakeItem: playerNob là NULL."); return; }
-            if (conn == null) { Debug.LogWarning("[WorldCorpse] RequestTakeItem: conn là NULL."); return; }
-            if (playerNob.Owner != conn) { Debug.LogWarning($"[WorldCorpse] RequestTakeItem: ownership mismatch (ClientId={conn?.ClientId})."); return; }
-            if (storageIndex < 0 || storageIndex >= storage.Count) { Debug.LogWarning($"[WorldCorpse] RequestTakeItem: Invalid index {storageIndex}"); return; }
+            Debug.Log(
+                $"[WorldCorpse] RequestTakeItem: arrived — objId={playerNob?.ObjectId} idx={storageIndex} qty={quantity} conn={conn?.ClientId} storage.Count={storage.Count}");
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[WorldCorpse] RequestTakeItem: server-only!");
+                return;
+            }
 
-            var itemData  = storage[storageIndex];
-            int takeQty   = Mathf.Min(quantity, itemData.Quantity);
+            if (playerNob == null)
+            {
+                Debug.LogWarning("[WorldCorpse] RequestTakeItem: playerNob là NULL.");
+                return;
+            }
 
-            var inventory = playerNob.GetComponent<IInventorySystem>();
-            if (inventory == null) { Debug.LogWarning("[WorldCorpse] RequestTakeItem: IInventorySystem not found"); return; }
+            if (conn == null)
+            {
+                Debug.LogWarning("[WorldCorpse] RequestTakeItem: conn là NULL.");
+                return;
+            }
+
+            if (playerNob.Owner != conn)
+            {
+                Debug.LogWarning($"[WorldCorpse] RequestTakeItem: ownership mismatch (ClientId={conn?.ClientId}).");
+                return;
+            }
+
+            if (storageIndex < 0 || storageIndex >= storage.Count)
+            {
+                Debug.LogWarning($"[WorldCorpse] RequestTakeItem: Invalid index {storageIndex}");
+                return;
+            }
+
+            var itemData = storage[storageIndex];
+            int takeQty = Mathf.Min(quantity, itemData.Quantity);
+
+            var inventory = ComponentResolver.Find<IInventorySystem>(playerNob)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IInventorySystem not found")
+                .Resolve();
+            if (inventory == null)
+            {
+                Debug.LogWarning("[WorldCorpse] RequestTakeItem: IInventorySystem not found");
+                return;
+            }
 
             inventory.AddItem(itemData.DefinitionID, takeQty);
 
@@ -193,7 +270,7 @@ namespace NightHunt.GameplaySystems.Loot
             else
             {
                 itemData.Quantity -= takeQty;
-                storage[storageIndex]     = itemData;
+                storage[storageIndex] = itemData;
                 syncStorage[storageIndex] = itemData;
             }
         }
@@ -207,10 +284,12 @@ namespace NightHunt.GameplaySystems.Loot
             for (int i = 0; i < syncStorage.Count; i++)
                 storage.Add(syncStorage[i]);
 
-            Debug.Log($"[WorldCorpse] OnStartClient: storage rebuilt from syncStorage. Count={storage.Count} ObjId={ObjectId}");
+            Debug.Log(
+                $"[WorldCorpse] OnStartClient: storage rebuilt from syncStorage. Count={storage.Count} ObjId={ObjectId}");
         }
 
-        private void OnStorageChanged(SyncListOperation op, int index, ItemInstanceData oldValue, ItemInstanceData newValue, bool asServer)
+        private void OnStorageChanged(SyncListOperation op, int index, ItemInstanceData oldValue,
+            ItemInstanceData newValue, bool asServer)
         {
             if (asServer) return; // server-side callback — storage managed directly
 
@@ -219,12 +298,17 @@ namespace NightHunt.GameplaySystems.Loot
                 // Pure client: mirror the SyncList operation into the local cache.
                 switch (op)
                 {
-                    case SyncListOperation.Add:      storage.Add(newValue); break;
-                    case SyncListOperation.RemoveAt: if (index >= 0 && index < storage.Count) storage.RemoveAt(index); break;
-                    case SyncListOperation.Set:      if (index >= 0 && index < storage.Count) storage[index] = newValue; break;
-                    case SyncListOperation.Clear:    storage.Clear(); break;
+                    case SyncListOperation.Add: storage.Add(newValue); break;
+                    case SyncListOperation.RemoveAt:
+                        if (index >= 0 && index < storage.Count) storage.RemoveAt(index);
+                        break;
+                    case SyncListOperation.Set:
+                        if (index >= 0 && index < storage.Count) storage[index] = newValue;
+                        break;
+                    case SyncListOperation.Clear: storage.Clear(); break;
                 }
             }
+
             // Always notify — host storage was already updated by server code directly.
             OnClientStorageChanged?.Invoke();
         }
@@ -233,7 +317,5 @@ namespace NightHunt.GameplaySystems.Loot
         private void RpcOnCorpseOpened(NetworkConnection viewer) => OnCorpseOpened?.Invoke(this, viewer);
 
         public IReadOnlyList<ItemInstanceData> GetStorage() => storage;
-
-
     }
 }

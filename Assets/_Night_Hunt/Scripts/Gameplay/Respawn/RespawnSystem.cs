@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using NightHunt.Gameplay.Player;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Respawn
 {
@@ -17,14 +18,17 @@ namespace NightHunt.Gameplay.Respawn
     /// </summary>
     public class RespawnSystem : NetworkBehaviour, IRespawnProvider
     {
-        [Header("Respawn Settings")]
-        [SerializeField] private float respawnDelay = 5f;
+        [Header("Respawn Settings")] [SerializeField]
+        private float respawnDelay = 5f;
+
         /// <summary>Phase-3 respawn delay in seconds.</summary>
         [SerializeField] private float phase3RespawnDelay = 10f;
 
         [Header("Dependencies")]
         [Tooltip("Reference to SpawnSystem for team-based fallback spawn points.")]
-        [SerializeField] private SpawnSystem _spawnSystem;
+        [SerializeField]
+        private SpawnSystem _spawnSystem;
+
         [SerializeField] private MatchEndManager _matchEndManager;
 
         // Synchronized state
@@ -42,6 +46,7 @@ namespace NightHunt.Gameplay.Respawn
                 if (kvp.Key != null && kvp.Key.TeamId == teamId && kvp.Value > 0f)
                     return true;
             }
+
             return false;
         }
 
@@ -147,7 +152,11 @@ namespace NightHunt.Gameplay.Respawn
             // Use the movement controller's Teleport to properly reset CharacterController
             // and the prediction pipeline.  Direct transform.position assignment would
             // be overwritten by CharacterController on the next FixedUpdate.
-            var movement = player.GetComponent<IMovementController>();
+            var movement = ComponentResolver.Find<IMovementController>(player)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IMovementController not found")
+                .Resolve();
             if (movement != null)
             {
                 movement.Teleport(respawnPosition, respawnRotation);
@@ -159,7 +168,11 @@ namespace NightHunt.Gameplay.Respawn
             }
 
             // Restore player stats via PlayerStatSystem (health)
-            var statSystem = player.GetComponent<IPlayerStatSystem>();
+            var statSystem = ComponentResolver.Find<IPlayerStatSystem>(player)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IPlayerStatSystem not found")
+                .Resolve();
             if (statSystem is NightHunt.StatSystem.Systems.PlayerStatSystem concrete)
             {
                 float maxHealth = concrete.GetStat(PlayerStatType.MaxHealth);
@@ -211,6 +224,7 @@ namespace NightHunt.Gameplay.Respawn
                     return beacon;
                 }
             }
+
             return null;
         }
 
@@ -279,6 +293,7 @@ namespace NightHunt.Gameplay.Respawn
             {
                 return phase3RespawnDelay;
             }
+
             return respawnDelay;
         }
 
@@ -290,7 +305,11 @@ namespace NightHunt.Gameplay.Respawn
             if (player == null)
                 return false;
 
-            var statSystem = player.GetComponent<IPlayerStatSystem>();
+            var statSystem = ComponentResolver.Find<IPlayerStatSystem>(player)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IPlayerStatSystem not found")
+                .Resolve();
             if (statSystem == null)
                 return false;
 
@@ -318,4 +337,3 @@ namespace NightHunt.Gameplay.Respawn
         }
     }
 }
-

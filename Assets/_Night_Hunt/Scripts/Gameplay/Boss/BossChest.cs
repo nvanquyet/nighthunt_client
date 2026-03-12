@@ -7,6 +7,7 @@ using NightHunt.Data;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Boss
 {
@@ -107,7 +108,11 @@ namespace NightHunt.Gameplay.Boss
         public void Interact(GameObject interactor)
         {
             if (!IsServerStarted) return; // should never happen; ServerRpc enforces ownership
-            Open(interactor.GetComponent<FishNet.Object.NetworkObject>()?.Owner);
+            Open(ComponentResolver.Find<FishNet.Object.NetworkObject>(interactor)
+                                    .OnSelf()
+                                    .InChildren()
+                                    .OrLogWarning("[Auto] FishNet.Object.NetworkObject not found")
+                                    .Resolve()?.Owner);
         }
 
         /// <summary>ServerRpc — client asks to open the chest.</summary>

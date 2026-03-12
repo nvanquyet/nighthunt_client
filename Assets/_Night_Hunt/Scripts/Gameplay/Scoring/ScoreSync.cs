@@ -2,6 +2,7 @@ using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Scoring
 {
@@ -16,7 +17,11 @@ namespace NightHunt.Gameplay.Scoring
 
         private void Awake()
         {
-            scoringSystem = GetComponent<ScoringSystem>();
+            scoringSystem = ComponentResolver.Find<ScoringSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] ScoringSystem not found")
+        .Resolve();
         }
 
         public override void OnStartNetwork()

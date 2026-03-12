@@ -2,6 +2,7 @@ using FOW;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.FogOfWar
 {
@@ -15,7 +16,8 @@ namespace NightHunt.Gameplay.FogOfWar
     {
         [Header("Config")]
         [Tooltip("Fallback nếu stat system chưa sẵn sàng hoặc không có VisionRange.")]
-        [SerializeField] private float defaultViewRadius = 15f;
+        [SerializeField]
+        private float defaultViewRadius = 15f;
 
         private FogOfWarRevealer3D _revealer;
         private IPlayerStatSystem _statSystem;
@@ -23,12 +25,21 @@ namespace NightHunt.Gameplay.FogOfWar
 
         private void Awake()
         {
-            _revealer = GetComponent<FogOfWarRevealer3D>();
-            _statSystem = GetComponent<IPlayerStatSystem>();
+            _revealer = ComponentResolver.Find<FogOfWarRevealer3D>(this)
+                .OnSelf()
+                .InChildren().InParent()
+                .OrLogWarning("[Auto] FogOfWarRevealer3D not found")
+                .Resolve();
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+                .OnSelf()
+                .InChildren().InParent()
+                .OrLogWarning("[Auto] IPlayerStatSystem not found")
+                .Resolve();
 
             if (_statSystem == null)
             {
-                Debug.LogWarning("[FogVisionBinder] IPlayerStatSystem not found on object, using defaultViewRadius only.", this);
+                Debug.LogWarning(
+                    "[FogVisionBinder] IPlayerStatSystem not found on object, using defaultViewRadius only.", this);
             }
         }
 
@@ -57,10 +68,18 @@ namespace NightHunt.Gameplay.FogOfWar
                 return;
 
             if (_revealer == null)
-                _revealer = GetComponent<FogOfWarRevealer3D>();
+                _revealer = ComponentResolver.Find<FogOfWarRevealer3D>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] FogOfWarRevealer3D not found")
+                    .Resolve();
 
             if (_statSystem == null)
-                _statSystem = GetComponent<IPlayerStatSystem>();
+                _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] IPlayerStatSystem not found")
+                    .Resolve();
 
             _initialized = true;
         }
@@ -100,4 +119,3 @@ namespace NightHunt.Gameplay.FogOfWar
         }
     }
 }
-

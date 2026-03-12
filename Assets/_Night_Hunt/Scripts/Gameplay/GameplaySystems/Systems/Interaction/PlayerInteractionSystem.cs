@@ -7,6 +7,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Interaction
 {
@@ -61,12 +62,24 @@ namespace NightHunt.GameplaySystems.Interaction
         private void Awake()
         {
             if (raycastDetector == null)
-                raycastDetector = GetComponent<RaycastDetector>();
+                raycastDetector = ComponentResolver.Find<RaycastDetector>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] RaycastDetector not found")
+        .Resolve();
 
             if (proximityScanner == null)
-                proximityScanner = GetComponent<ProximityInteractScanner>();
+                proximityScanner = ComponentResolver.Find<ProximityInteractScanner>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] ProximityInteractScanner not found")
+        .Resolve();
 
-            _networkPlayer = GetComponent<NetworkPlayer>();
+            _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NetworkPlayer not found")
+        .Resolve();
 
             // In case Network/ownership is not ready yet when this component enables,
             // listen for NetworkPlayer owner-ready callback to safely subscribe input.
@@ -333,7 +346,11 @@ namespace NightHunt.GameplaySystems.Interaction
         // ── Helper ───────────────────────────────────────────────────────────────
 
         // PlayerInteractionSystem luôn nằm trên player GameObject — GetComponent<NetworkObject>() là chính xác.
-        private NetworkObject GetLocalPlayerNob() => GetComponent<NetworkObject>();
+        private NetworkObject GetLocalPlayerNob() => ComponentResolver.Find<NetworkObject>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NetworkObject not found")
+        .Resolve();
 
         private NetworkConnection GetLocalConnection()
         {

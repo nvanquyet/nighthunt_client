@@ -6,6 +6,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Loot;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Loot
 {
@@ -15,16 +16,16 @@ namespace NightHunt.GameplaySystems.Loot
     /// </summary>
     public class CorpseDropOnDeath : NetworkBehaviour
     {
-        [Header("References")]
-        [SerializeField] private CharacterLifecycleController lifecycleController;
+        [Header("References")] [SerializeField]
+        private CharacterLifecycleController lifecycleController;
+
         [SerializeField] private MonoBehaviour inventorySystemComponent;
         [SerializeField] private MonoBehaviour equipmentSystemComponent;
         [SerializeField] private MonoBehaviour quickSlotSystemComponent;
         [SerializeField] private MonoBehaviour attachmentSystemComponent;
 
-        [Header("Prefab")]
-        [Tooltip("Corpse prefab with WorldCorpse component")]
-        [SerializeField] private GameObject corpsePrefab;
+        [Header("Prefab")] [Tooltip("Corpse prefab with WorldCorpse component")] [SerializeField]
+        private GameObject corpsePrefab;
 
         private IInventorySystem inventorySystem;
         private IEquipmentSystem equipmentSystem;
@@ -34,18 +35,22 @@ namespace NightHunt.GameplaySystems.Loot
         private void Awake()
         {
             if (lifecycleController == null)
-                lifecycleController = GetComponent<CharacterLifecycleController>();
+                lifecycleController = ComponentResolver.Find<CharacterLifecycleController>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] CharacterLifecycleController not found")
+                    .Resolve();
 
             // Get systems
             if (inventorySystemComponent != null)
                 inventorySystem = inventorySystemComponent as IInventorySystem;
-            
+
             if (equipmentSystemComponent != null)
                 equipmentSystem = equipmentSystemComponent as IEquipmentSystem;
-            
+
             if (quickSlotSystemComponent != null)
                 quickSlotSystem = quickSlotSystemComponent as IQuickSlotSystem;
-            
+
             if (attachmentSystemComponent != null)
                 attachmentSystem = attachmentSystemComponent as IAttachmentSystem;
 
@@ -53,28 +58,44 @@ namespace NightHunt.GameplaySystems.Loot
             // Auto-find if not assigned
             if (inventorySystem == null)
             {
-                inventorySystem = GetComponent<IInventorySystem>();
+                inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] IInventorySystem not found")
+                    .Resolve();
                 if (inventorySystem != null)
                     inventorySystemComponent = inventorySystem as MonoBehaviour;
             }
 
             if (equipmentSystem == null)
             {
-                equipmentSystem = GetComponent<IEquipmentSystem>();
+                equipmentSystem = ComponentResolver.Find<IEquipmentSystem>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] IEquipmentSystem not found")
+                    .Resolve();
                 if (equipmentSystem != null)
                     equipmentSystemComponent = equipmentSystem as MonoBehaviour;
             }
 
             if (quickSlotSystem == null)
             {
-                quickSlotSystem = GetComponent<IQuickSlotSystem>();
+                quickSlotSystem = ComponentResolver.Find<IQuickSlotSystem>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] IQuickSlotSystem not found")
+                    .Resolve();
                 if (quickSlotSystem != null)
                     quickSlotSystemComponent = quickSlotSystem as MonoBehaviour;
             }
 
             if (attachmentSystem == null)
             {
-                attachmentSystem = GetComponent<IAttachmentSystem>();
+                attachmentSystem = ComponentResolver.Find<IAttachmentSystem>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] IAttachmentSystem not found")
+                    .Resolve();
                 if (attachmentSystem != null)
                     attachmentSystemComponent = attachmentSystem as MonoBehaviour;
             }
@@ -168,6 +189,7 @@ namespace NightHunt.GameplaySystems.Loot
                         items.Add(item.ToData());
                     }
                 }
+
                 quickSlotSystem.ClearAllQuickSlots();
             }
 
@@ -201,7 +223,11 @@ namespace NightHunt.GameplaySystems.Loot
             Quaternion rot = transform.rotation;
 
             var go = Instantiate(corpsePrefab, deathPos, rot);
-            var netObj = go.GetComponent<NetworkObject>();
+            var netObj = ComponentResolver.Find<NetworkObject>(go)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkObject not found")
+                .Resolve();
             if (netObj == null)
             {
                 Debug.LogError("[CorpseDropOnDeath] Corpse prefab must have NetworkObject component!");
@@ -209,7 +235,11 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            var corpse = go.GetComponent<WorldCorpse>();
+            var corpse = ComponentResolver.Find<WorldCorpse>(go)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] WorldCorpse not found")
+                .Resolve();
             if (corpse == null)
             {
                 Debug.LogError("[CorpseDropOnDeath] Corpse prefab must have WorldCorpse component!");

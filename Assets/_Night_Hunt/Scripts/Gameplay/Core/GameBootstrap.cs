@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using FishNet.Object;
 using FishNet.Managing;
 using FishNet;
@@ -7,6 +7,7 @@ using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Team;
 using NightHunt.Networking;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Core
 {
@@ -27,50 +28,50 @@ namespace NightHunt.Gameplay.Core
     public class GameBootstrap : MonoBehaviour
     {
         #region Serialized Fields
-        
-        [Header("Core Systems")]
-        [SerializeField] private MatchPhaseManager _matchPhaseManager;
-        
-        [Header("Server Systems")]
-        [SerializeField] private SpawnSystem _spawnSystem;
+
+        [Header("Core Systems")] [SerializeField]
+        private MatchPhaseManager _matchPhaseManager;
+
+        [Header("Server Systems")] [SerializeField]
+        private SpawnSystem _spawnSystem;
+
         [SerializeField] private TeamAssignmentSystem _teamAssignmentSystem;
-        
-        [Header("Settings")]
-        [SerializeField] private bool _initializeOnStart = true;
+
+        [Header("Settings")] [SerializeField] private bool _initializeOnStart = true;
         [SerializeField] private bool _autoSpawnNetworkObjects = true;
-        
+
         #endregion
-        
+
         #region State
-        
+
         private NetworkManager _networkManager;
         private bool _isInitialized = false;
-        
+
         #endregion
-        
+
         #region Events
-        
+
         /// <summary>
         /// Fired when all systems are initialized
         /// ServerGameManager subscribes to this
         /// </summary>
         public event Action OnSystemsInitialized;
-        
+
         #endregion
-        
+
         #region Properties
-        
+
         public bool IsInitialized => _isInitialized;
-        
+
         // System accessors for ServerGameManager
         public MatchPhaseManager MatchPhaseManager => _matchPhaseManager;
         public SpawnSystem SpawnSystem => _spawnSystem;
         public TeamAssignmentSystem TeamAssignmentSystem => _teamAssignmentSystem;
-        
+
         #endregion
-        
+
         #region Lifecycle
-        
+
         private void Awake()
         {
             // Don't initialize in Awake - wait for network
@@ -80,27 +81,27 @@ namespace NightHunt.Gameplay.Core
                 return;
             }
         }
-        
+
         private void Start()
         {
             _networkManager = InstanceFinder.NetworkManager;
-            
+
             if (_networkManager == null)
             {
                 Debug.LogError("[GameBootstrap] NetworkManager not found!");
                 return;
             }
-            
+
             if (_initializeOnStart)
             {
                 Initialize();
             }
         }
-        
+
         #endregion
-        
+
         #region Initialization
-        
+
         /// <summary>
         /// Initialize all gameplay systems
         /// Can be called manually or automatically on Start
@@ -112,37 +113,37 @@ namespace NightHunt.Gameplay.Core
                 Debug.LogWarning("[GameBootstrap] Already initialized!");
                 return;
             }
-            
+
             Debug.Log("[GameBootstrap] ===== Initializing Gameplay Systems =====");
-            
+
             // Step 1: Initialize singleton services
             InitializeSingletonServices();
-            
+
             // Step 2: Find/validate system references
             ValidateSystemReferences();
-            
+
             // Step 3: Spawn NetworkObjects if on server
             if (_networkManager.IsServerStarted && _autoSpawnNetworkObjects)
             {
                 SpawnNetworkSystems();
             }
-            
+
             _isInitialized = true;
-            
+
             Debug.Log("[GameBootstrap] ===== ✅ All Systems Initialized =====");
-            
+
             // Notify listeners (ServerGameManager)
             OnSystemsInitialized?.Invoke();
         }
-        
+
         #endregion
-        
+
         #region Service Initialization
-        
+
         private void InitializeSingletonServices()
         {
             Debug.Log("[GameBootstrap] Initializing singleton services...");
-            
+
             // Verify singleton services exist
             if (RegistryService.Instance == null)
             {
@@ -150,25 +151,25 @@ namespace NightHunt.Gameplay.Core
                 GameObject registryGO = new GameObject("RegistryService");
                 registryGO.AddComponent<RegistryService>();
             }
-            
+
             if (TeamService.Instance == null)
             {
                 Debug.LogWarning("[GameBootstrap] TeamService not found - creating one");
                 GameObject teamGO = new GameObject("TeamService");
                 teamGO.AddComponent<TeamService>();
             }
-            
+
             Debug.Log("[GameBootstrap] ✅ Singleton services initialized");
         }
-        
+
         #endregion
-        
+
         #region System Reference Validation
-        
+
         private void ValidateSystemReferences()
         {
             Debug.Log("[GameBootstrap] Validating system references...");
-            
+
             // Auto-find systems if not assigned
             if (_matchPhaseManager == null)
             {
@@ -176,53 +177,53 @@ namespace NightHunt.Gameplay.Core
                 if (_matchPhaseManager == null)
                     Debug.LogError("[GameBootstrap] MatchPhaseManager not found!");
             }
-            
+
             if (_spawnSystem == null)
             {
                 _spawnSystem = FindFirstObjectByType<SpawnSystem>();
                 if (_spawnSystem == null)
                     Debug.LogError("[GameBootstrap] SpawnSystem not found!");
             }
-            
+
             if (_teamAssignmentSystem == null)
             {
                 _teamAssignmentSystem = FindFirstObjectByType<TeamAssignmentSystem>();
                 if (_teamAssignmentSystem == null)
                     Debug.LogError("[GameBootstrap] TeamAssignmentSystem not found!");
             }
-            
+
             Debug.Log("[GameBootstrap] ✅ System references validated");
         }
-        
+
         #endregion
-        
+
         #region Network Object Spawning
-        
+
         /// <summary>
         /// SERVER: Spawn NetworkObjects for systems that need network sync
         /// </summary>
         private void SpawnNetworkSystems()
         {
             Debug.Log("[GameBootstrap] Spawning network systems...");
-            
+
             // Spawn MatchPhaseManager
             SpawnNetworkSystem(_matchPhaseManager, "MatchPhaseManager");
-            
+
             // Spawn SpawnSystem
             SpawnNetworkSystem(_spawnSystem, "SpawnSystem");
-            
+
             // Spawn TeamAssignmentSystem
             SpawnNetworkSystem(_teamAssignmentSystem, "TeamAssignmentSystem");
-            
+
             // Spawn TeamService (if it's a NetworkBehaviour)
             if (TeamService.Instance != null)
             {
                 SpawnNetworkSystem(TeamService.Instance, "TeamService");
             }
-            
+
             Debug.Log("[GameBootstrap] ✅ Network systems spawned");
         }
-        
+
         /// <summary>
         /// SERVER: Spawn a single NetworkObject system
         /// </summary>
@@ -233,9 +234,13 @@ namespace NightHunt.Gameplay.Core
                 Debug.LogWarning($"[GameBootstrap] Cannot spawn null system: {systemName}");
                 return;
             }
-            
-            NetworkObject networkObject = system.GetComponent<NetworkObject>();
-            
+
+            NetworkObject networkObject = ComponentResolver.Find<NetworkObject>(system)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkObject not found")
+                .Resolve();
+
             if (networkObject != null)
             {
                 // This is a NetworkObject - spawn it on network
@@ -259,11 +264,11 @@ namespace NightHunt.Gameplay.Core
                 }
             }
         }
-        
+
         #endregion
-        
+
         #region Phase System Activation
-        
+
         /// <summary>
         /// SERVER: Activate systems for Phase 1 (Preparation)
         /// Called by ServerGameManager when phase starts
@@ -271,69 +276,73 @@ namespace NightHunt.Gameplay.Core
         public void ActivatePhase1Systems()
         {
             Debug.Log("[GameBootstrap] ===== Activating Phase 1 Systems =====");
-            
+
             // Phase 1: Basic systems
             // - Spawn system (already active)
             // - Team system (already active)
             // - Vision system (already active)
-            
+
             Debug.Log("[GameBootstrap] Phase 1: Core systems already active");
-            
+
             // Activate when beacon-placement, item-spawn, and safe-zone systems are built.
             // - Beacon placement system
             // - Item spawn system
             // - Safe zone system
-            
+
             Debug.Log("[GameBootstrap] ✅ Phase 1 systems activated");
         }
-        
+
         /// <summary>
         /// SERVER: Activate systems for Phase 2 (Hunt & Objectives)
         /// </summary>
         public void ActivatePhase2Systems()
         {
             Debug.Log("[GameBootstrap] ===== Activating Phase 2 Systems =====");
-            
+
             // Phase 2: Objective systems
             // Activate when objective, boss-AI, capture-zone, and predator/prey systems are built.
             // - Objective system
             // - AI boss system
             // - Capture zone system
             // - Predator/Prey system
-            
+
             Debug.Log("[GameBootstrap] ✅ Phase 2 systems activated");
         }
-        
+
         /// <summary>
         /// SERVER: Activate systems for Phase 3 (Final Lockdown)
         /// </summary>
         public void ActivatePhase3Systems()
         {
             Debug.Log("[GameBootstrap] ===== Activating Phase 3 Systems =====");
-            
+
             // Phase 3: Endgame systems
             // Activate when zone-close, enhanced buffs, and final-objective systems are built.
             // - Zone closing system
             // - Enhanced predator/prey buffs
             // - Final objective system
             // - Disable beacon placement
-            
+
             Debug.Log("[GameBootstrap] ✅ Phase 3 systems activated");
         }
-        
+
         #endregion
-        
+
         #region System Deactivation
-        
+
         /// <summary>
         /// SERVER: Deactivate/despawn a system
         /// </summary>
         public void DeactivateSystem(Component system, string systemName)
         {
             if (system == null) return;
-            
-            NetworkObject networkObject = system.GetComponent<NetworkObject>();
-            
+
+            NetworkObject networkObject = ComponentResolver.Find<NetworkObject>(system)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] NetworkObject not found")
+                .Resolve();
+
             if (networkObject != null && networkObject.IsSpawned)
             {
                 // NetworkObject - despawn from network
@@ -350,11 +359,11 @@ namespace NightHunt.Gameplay.Core
                 Debug.Log($"[GameBootstrap] Deactivated {systemName}");
             }
         }
-        
+
         #endregion
-        
+
         #region Cleanup
-        
+
         /// <summary>
         /// Cleanup all systems
         /// Called on scene unload or game end
@@ -362,24 +371,24 @@ namespace NightHunt.Gameplay.Core
         public void Cleanup()
         {
             if (!_isInitialized) return;
-            
+
             Debug.Log("[GameBootstrap] Cleaning up gameplay systems...");
-            
+
             // Clean up: clear event subscribers, reset state, unload resources
             _isInitialized = false;
-            
+
             Debug.Log("[GameBootstrap] ✅ Cleanup complete");
         }
-        
+
         private void OnDestroy()
         {
             Cleanup();
         }
-        
+
         #endregion
-        
+
         #region Public API
-        
+
         /// <summary>
         /// Force re-initialization (useful for testing)
         /// </summary>
@@ -389,7 +398,7 @@ namespace NightHunt.Gameplay.Core
             _isInitialized = false;
             Initialize();
         }
-        
+
         /// <summary>
         /// Get debug info string
         /// </summary>
@@ -401,7 +410,7 @@ namespace NightHunt.Gameplay.Core
                    $"TeamAssignmentSystem: {(_teamAssignmentSystem != null ? "✅" : "❌")}\n" +
                    $"Network Manager: {(_networkManager != null ? "✅" : "❌")}";
         }
-        
+
         #endregion
     }
 }

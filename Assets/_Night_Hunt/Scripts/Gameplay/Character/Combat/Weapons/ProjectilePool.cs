@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
@@ -76,7 +77,11 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             if (proj == null)
             {
                 var go = Instantiate(prefab, position, rotation);
-                proj = go.GetComponent<ProjectileComponent>();
+                proj = ComponentResolver.Find<ProjectileComponent>(go)
+                                        .OnSelf()
+                                        .InChildren()
+                                        .OrLogWarning("[Auto] ProjectileComponent not found")
+                                        .Resolve();
                 if (proj == null)
                 {
                     Debug.LogError($"[ProjectilePool] '{prefab.name}' has no ProjectileComponent.");

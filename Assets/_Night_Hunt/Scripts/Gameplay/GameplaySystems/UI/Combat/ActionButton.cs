@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using DG.Tweening;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -65,7 +66,11 @@ namespace NightHunt.GameplaySystems.UI.Combat
             get
             {
                 if (_canvasGroup == null)
-                    _canvasGroup = GetComponent<CanvasGroup>();
+                    _canvasGroup = ComponentResolver.Find<CanvasGroup>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] CanvasGroup not found")
+        .Resolve();
 
                 return _canvasGroup;
             }

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -24,7 +25,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void Awake()
         {
-            _view = GetComponent<ItemSlotView>();
+            _view = ComponentResolver.Find<ItemSlotView>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] ItemSlotView not found")
+        .Resolve();
         }
 
         public void OnPointerDown(PointerEventData eventData)

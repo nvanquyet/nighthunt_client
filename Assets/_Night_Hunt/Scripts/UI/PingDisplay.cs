@@ -9,6 +9,7 @@ using NightHunt.Core;
 using NightHunt.Services.Backend;
 using TMPro;
 using UnityEngine;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -78,7 +79,11 @@ namespace NightHunt.UI
             // Auto-assign references
             if (pingText == null)
             {
-                pingText = GetComponent<TextMeshProUGUI>();
+                pingText = ComponentResolver.Find<TextMeshProUGUI>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] TextMeshProUGUI not found")
+        .Resolve();
             }
         }
 
@@ -285,7 +290,11 @@ namespace NightHunt.UI
             // Auto-assign references in editor
             if (pingText == null)
             {
-                pingText = GetComponent<TextMeshProUGUI>();
+                pingText = ComponentResolver.Find<TextMeshProUGUI>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] TextMeshProUGUI not found")
+        .Resolve();
             }
         }
 #endif

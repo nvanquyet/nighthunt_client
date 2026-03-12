@@ -6,6 +6,7 @@ using NightHunt.Data;
 using NightHunt.Gameplay.Core.Events;
 using UnityEngine;
 using UnityEngine.AI;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Boss
 {
@@ -62,7 +63,11 @@ namespace NightHunt.Gameplay.Boss
 
         private void Awake()
         {
-            _agent = GetComponent<NavMeshAgent>();
+            _agent = ComponentResolver.Find<NavMeshAgent>(this)
+        .OnSelf()
+        .InChildren()
+        .OrLogWarning("[Auto] NavMeshAgent not found")
+        .Resolve();
         }
 
         public override void OnStartServer()
@@ -164,7 +169,11 @@ namespace NightHunt.Gameplay.Boss
             if (_target == null) return;
 
             // Damage target via stat system
-            var statSystem = _target.GetComponent<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>();
+            var statSystem = ComponentResolver.Find<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>(_target)
+                                                .OnSelf()
+                                                .InChildren()
+                                                .OrLogWarning("[Auto] NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
+                                                .Resolve();
             if (statSystem != null)
             {
                 var modifier = NightHunt.StatSystem.Core.Data.StatModifier.CreateFlat(
@@ -244,7 +253,11 @@ namespace NightHunt.Gameplay.Boss
                 transform.position + Vector3.up * 0.5f,
                 Quaternion.identity);
 
-            var chest = go.GetComponent<BossChest>();
+            var chest = ComponentResolver.Find<BossChest>(go)
+                                        .OnSelf()
+                                        .InChildren()
+                                        .OrLogWarning("[Auto] BossChest not found")
+                                        .Resolve();
             if (chest != null && _config != null)
                 chest.Initialize(_config.DropTable);
 
@@ -271,10 +284,20 @@ namespace NightHunt.Gameplay.Boss
         [ObserversRpc]
         private void RpcPlayAttackVFX()
         {
-            var anim = GetComponentInChildren<Animator>();
+            var anim = ComponentResolver.Find<Animator>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] Animator not found")
+        .Resolve();
             anim?.SetTrigger("Attack");
 
-            var ps = GetComponentInChildren<ParticleSystem>();
+            var ps = ComponentResolver.Find<ParticleSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] ParticleSystem not found")
+        .Resolve();
             if (ps != null && !ps.isPlaying)
                 ps.Play();
         }

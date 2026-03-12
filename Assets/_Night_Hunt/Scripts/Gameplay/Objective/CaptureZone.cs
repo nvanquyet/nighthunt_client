@@ -1,8 +1,9 @@
-using UnityEngine;
+﻿using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System.Collections.Generic;
 using NightHunt.Networking;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Objective
 {
@@ -11,13 +12,13 @@ namespace NightHunt.Gameplay.Objective
     /// </summary>
     public class CaptureZone : NetworkBehaviour
     {
-        [Header("Capture Settings")]
-        [SerializeField] private float captureRadius = 10f;
+        [Header("Capture Settings")] [SerializeField]
+        private float captureRadius = 10f;
+
         [SerializeField] private float captureTime = 5f;
         [SerializeField] private int scorePerSecond = 20;
 
-        [Header("Visual")]
-        [SerializeField] private GameObject zoneIndicator;
+        [Header("Visual")] [SerializeField] private GameObject zoneIndicator;
         [SerializeField] private Material neutralMaterial;
         [SerializeField] private Material capturingMaterial;
         [SerializeField] private Material capturedMaterial;
@@ -84,7 +85,11 @@ namespace NightHunt.Gameplay.Objective
 
             foreach (var collider in colliders)
             {
-                var networkPlayer = collider.GetComponent<NetworkPlayer>();
+                var networkPlayer = ComponentResolver.Find<NetworkPlayer>(collider)
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] NetworkPlayer not found")
+                    .Resolve();
                 if (networkPlayer != null)
                 {
                     int teamId = networkPlayer.TeamId;
@@ -92,6 +97,7 @@ namespace NightHunt.Gameplay.Objective
                     {
                         playersInZone[teamId] = 0;
                     }
+
                     playersInZone[teamId]++;
                 }
             }
