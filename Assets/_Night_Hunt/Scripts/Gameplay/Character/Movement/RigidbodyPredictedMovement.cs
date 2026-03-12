@@ -1,5 +1,4 @@
 using UnityEngine;
-using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -63,16 +62,8 @@ namespace NightHunt.Gameplay.Character
 
         protected override void InitializePhysicsComponents()
         {
-            _rigidbody = ComponentResolver.Find<Rigidbody>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] Rigidbody not found")
-        .Resolve();
-            _capsule = ComponentResolver.Find<CapsuleCollider>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] CapsuleCollider not found")
-        .Resolve();
+            _rigidbody = GetComponent<Rigidbody>();
+            _capsule = GetComponent<CapsuleCollider>();
 
             if (_rigidbody == null)
             {

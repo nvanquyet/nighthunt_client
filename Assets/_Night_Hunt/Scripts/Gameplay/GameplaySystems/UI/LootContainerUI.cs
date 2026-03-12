@@ -9,7 +9,6 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
-using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI
 {
@@ -35,21 +34,24 @@ namespace NightHunt.GameplaySystems.UI
 
         // ── Inspector ─────────────────────────────────────────────────────────
 
-        [Header("Panel")] [SerializeField] private GameObject _containerPanel;
+        [Header("Panel")]
+        [SerializeField] private GameObject  _containerPanel;
         [SerializeField] private CanvasGroup _canvasGroup;
 
-        [Header("Header")] [SerializeField] private TextMeshProUGUI _containerNameText;
+        [Header("Header")]
+        [SerializeField] private TextMeshProUGUI _containerNameText;
 
-        [Header("Item list")] [SerializeField] private Transform _slotsParent;
+        [Header("Item list")]
+        [SerializeField] private Transform  _slotsParent;
         [SerializeField] private LootItemRow _itemRowPrefab; // optional — assign a prefab with LootItemRow component
 
-        [Header("Buttons")] [SerializeField] private Button _takeAllButton;
+        [Header("Buttons")]
+        [SerializeField] private Button _takeAllButton;
         [SerializeField] private Button _closeButton;
 
         [Header("Interaction")]
         [Tooltip("Max distance (world units) between player and container before the loot panel auto-closes.")]
-        [SerializeField]
-        private float _maxLootDistance = 4f;
+        [SerializeField] private float _maxLootDistance = 4f;
 
         // ── Runtime ───────────────────────────────────────────────────────────
 
@@ -66,7 +68,7 @@ namespace NightHunt.GameplaySystems.UI
 
         // Track which lootable is currently open so we can unsubscribe storage-change events.
         private WorldContainer _openContainer;
-        private WorldCorpse _openCorpse;
+        private WorldCorpse    _openCorpse;
 
         /// <summary>
         /// True when the panel was opened by the player explicitly holding E (interaction RPC).
@@ -81,55 +83,45 @@ namespace NightHunt.GameplaySystems.UI
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
 
             if (_containerPanel != null) _containerPanel.SetActive(false);
             // Ensure CanvasGroup starts non-interactable so it matches the hidden state.
-            if (_canvasGroup != null)
-            {
-                _canvasGroup.interactable = false;
-                _canvasGroup.blocksRaycasts = false;
-            }
+            if (_canvasGroup != null) { _canvasGroup.interactable = false; _canvasGroup.blocksRaycasts = false; }
 
             _takeAllButton?.onClick.AddListener(OnTakeAll);
             _closeButton?.onClick.AddListener(Hide);
 
-            string panelInfo = _containerPanel != null ? "ok" : "NULL";
-            string cgInfo = _canvasGroup != null ? "ok" : "NULL";
-            string takeAllInfo = _takeAllButton != null ? "ok" : "NULL";
-            string closeBtnInfo = _closeButton != null ? "ok" : "NULL";
-            string prefabInfo = _itemRowPrefab != null ? "ok" : "NULL";
-            string slotsInfo = _slotsParent != null ? _slotsParent.name : "NULL";
-            Debug.Log(
-                $"[LootContainerUI] Awake: panel={panelInfo} canvasGroup={cgInfo} takeAllBtn={takeAllInfo} closeBtn={closeBtnInfo} rowPrefab={prefabInfo} slotsParent={slotsInfo}");
+            string panelInfo      = _containerPanel  != null ? "ok" : "NULL";
+            string cgInfo         = _canvasGroup      != null ? "ok" : "NULL";
+            string takeAllInfo    = _takeAllButton    != null ? "ok" : "NULL";
+            string closeBtnInfo   = _closeButton      != null ? "ok" : "NULL";
+            string prefabInfo     = _itemRowPrefab    != null ? "ok" : "NULL";
+            string slotsInfo      = _slotsParent      != null ? _slotsParent.name : "NULL";
+            Debug.Log($"[LootContainerUI] Awake: panel={panelInfo} canvasGroup={cgInfo} takeAllBtn={takeAllInfo} closeBtn={closeBtnInfo} rowPrefab={prefabInfo} slotsParent={slotsInfo}");
         }
 
         private void OnEnable()
         {
-            NetworkPlayer.OnOwnerReady += HandleOwnerReady;
-            WorldContainer.OnContainerOpened += HandleContainerOpened;
-            WorldCorpse.OnCorpseOpened += HandleCorpseOpened;
-            WorldContainer.OnAnyHoverEnter += HandleContainerHoverEnter;
-            WorldContainer.OnAnyHoverExit += HandleContainerHoverExit;
-            WorldCorpse.OnAnyHoverEnter += HandleCorpseHoverEnter;
-            WorldCorpse.OnAnyHoverExit += HandleCorpseHoverExit;
+            NetworkPlayer.OnOwnerReady           += HandleOwnerReady;
+            WorldContainer.OnContainerOpened     += HandleContainerOpened;
+            WorldCorpse.OnCorpseOpened           += HandleCorpseOpened;
+            WorldContainer.OnAnyHoverEnter       += HandleContainerHoverEnter;
+            WorldContainer.OnAnyHoverExit        += HandleContainerHoverExit;
+            WorldCorpse.OnAnyHoverEnter          += HandleCorpseHoverEnter;
+            WorldCorpse.OnAnyHoverExit           += HandleCorpseHoverExit;
         }
 
         private void OnDisable()
         {
-            NetworkPlayer.OnOwnerReady -= HandleOwnerReady;
-            WorldContainer.OnContainerOpened -= HandleContainerOpened;
-            WorldCorpse.OnCorpseOpened -= HandleCorpseOpened;
-            WorldContainer.OnAnyHoverEnter -= HandleContainerHoverEnter;
-            WorldContainer.OnAnyHoverExit -= HandleContainerHoverExit;
-            WorldCorpse.OnAnyHoverEnter -= HandleCorpseHoverEnter;
-            WorldCorpse.OnAnyHoverExit -= HandleCorpseHoverExit;
+            NetworkPlayer.OnOwnerReady           -= HandleOwnerReady;
+            WorldContainer.OnContainerOpened     -= HandleContainerOpened;
+            WorldCorpse.OnCorpseOpened           -= HandleCorpseOpened;
+            WorldContainer.OnAnyHoverEnter       -= HandleContainerHoverEnter;
+            WorldContainer.OnAnyHoverExit        -= HandleContainerHoverExit;
+            WorldCorpse.OnAnyHoverEnter          -= HandleCorpseHoverEnter;
+            WorldCorpse.OnAnyHoverExit           -= HandleCorpseHoverExit;
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -146,8 +138,7 @@ namespace NightHunt.GameplaySystems.UI
         {
             // OnOwnerReady fires only on the owning client, so this is always the local player.
             _localNob = player.NetworkObject;
-            Debug.Log(
-                $"[LootContainerUI] HandleOwnerReady: _localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} player={player.name}");
+            Debug.Log($"[LootContainerUI] HandleOwnerReady: _localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} player={player.name}");
         }
 
         public void Hide()
@@ -155,14 +146,9 @@ namespace NightHunt.GameplaySystems.UI
             UnsubscribeOpenLootable();
             if (_containerPanel != null) _containerPanel.SetActive(false);
             // Disable CanvasGroup so clicks don't pass through a hidden panel.
-            if (_canvasGroup != null)
-            {
-                _canvasGroup.interactable = false;
-                _canvasGroup.blocksRaycasts = false;
-            }
-
-            _takeItemAction = null;
-            _currentStorage = null;
+            if (_canvasGroup != null) { _canvasGroup.interactable = false; _canvasGroup.blocksRaycasts = false; }
+            _takeItemAction      = null;
+            _currentStorage      = null;
             _openedViaInteraction = false;
             ClearRows();
         }
@@ -196,7 +182,6 @@ namespace NightHunt.GameplaySystems.UI
                 _openContainer.OnClientStorageChanged -= RebuildRows;
                 _openContainer = null;
             }
-
             if (_openCorpse != null)
             {
                 _openCorpse.OnClientStorageChanged -= RebuildRows;
@@ -212,14 +197,12 @@ namespace NightHunt.GameplaySystems.UI
             // Only open for the local player who triggered the open.
             if (_localNob != null && conn != null && conn != _localNob.Owner)
             {
-                Debug.Log(
-                    $"[LootContainerUI] HandleContainerOpened: SKIP — conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
+                Debug.Log($"[LootContainerUI] HandleContainerOpened: SKIP — conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
                 return;
             }
 
             var storageList = container.GetStorage();
-            Debug.Log(
-                $"[LootContainerUI] HandleContainerOpened: SHOW — localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
+            Debug.Log($"[LootContainerUI] HandleContainerOpened: SHOW — localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
 
             UnsubscribeOpenLootable();
             _openContainer = container;
@@ -236,14 +219,12 @@ namespace NightHunt.GameplaySystems.UI
             // Only open for the local player who triggered the open.
             if (_localNob != null && conn != null && conn != _localNob.Owner)
             {
-                Debug.Log(
-                    $"[LootContainerUI] HandleCorpseOpened: SKIP — conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
+                Debug.Log($"[LootContainerUI] HandleCorpseOpened: SKIP — conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
                 return;
             }
 
             var storageList = corpse.GetStorage();
-            Debug.Log(
-                $"[LootContainerUI] HandleCorpseOpened: SHOW — localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
+            Debug.Log($"[LootContainerUI] HandleCorpseOpened: SHOW — localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
 
             UnsubscribeOpenLootable();
             _openCorpse = corpse;
@@ -310,18 +291,13 @@ namespace NightHunt.GameplaySystems.UI
 
             if (_containerPanel != null) _containerPanel.SetActive(true);
             // Enable CanvasGroup so buttons are clickable.
-            if (_canvasGroup != null)
-            {
-                _canvasGroup.interactable = true;
-                _canvasGroup.blocksRaycasts = true;
-            }
+            if (_canvasGroup != null) { _canvasGroup.interactable = true; _canvasGroup.blocksRaycasts = true; }
 
             if (_containerNameText != null) _containerNameText.text = title;
 
             string showPanelInfo = _containerPanel != null ? "ok" : "NULL";
-            string showCgInfo = _canvasGroup != null ? "ok" : "NULL";
-            Debug.Log(
-                $"[LootContainerUI] ShowLoot: title='{title}' items={storage?.Count ?? 0} panel={showPanelInfo} canvasGroup={showCgInfo}");
+            string showCgInfo    = _canvasGroup    != null ? "ok" : "NULL";
+            Debug.Log($"[LootContainerUI] ShowLoot: title='{title}' items={storage?.Count ?? 0} panel={showPanelInfo} canvasGroup={showCgInfo}");
             BuildRows(storage);
         }
 
@@ -340,85 +316,70 @@ namespace NightHunt.GameplaySystems.UI
         {
             ClearRows();
 
-            if (storage == null)
-            {
-                Debug.LogWarning("[LootContainerUI] BuildRows: storage NULL");
-                return;
-            }
+            if (storage == null) { Debug.LogWarning("[LootContainerUI] BuildRows: storage NULL"); return; }
 
             string prefabInfo = _itemRowPrefab != null ? "assigned" : "NULL";
-            Debug.Log(
-                $"[LootContainerUI] BuildRows: {storage.Count} item(s) — slotsParent={(_slotsParent != null ? _slotsParent.name : "NULL")} rowPrefab={prefabInfo}");
+            Debug.Log($"[LootContainerUI] BuildRows: {storage.Count} item(s) — slotsParent={(_slotsParent != null ? _slotsParent.name : "NULL")} rowPrefab={prefabInfo}");
 
             for (int i = 0; i < storage.Count; i++)
             {
-                var item = storage[i];
-                var rowGo = SpawnRow(item, i);
+                var item   = storage[i];
+                var rowGo  = SpawnRow(item, i);
                 if (rowGo != null) _spawnedRows.Add(rowGo);
             }
         }
 
         private GameObject SpawnRow(ItemInstanceData item, int storageIndex)
         {
-            var def = ItemDatabase.GetDefinition(item.DefinitionID);
+            var def        = ItemDatabase.GetDefinition(item.DefinitionID);
             string itemName = def != null ? def.DisplayName : item.DefinitionID;
-            Sprite icon = def != null ? def.Icon : null;
+            Sprite  icon    = def != null ? def.Icon       : null;
 
             GameObject row;
-            Image iconImg = null;
+            Image           iconImg  = null;
             TextMeshProUGUI nameText = null;
-            TextMeshProUGUI qtyText = null;
-            Button takeBtn = null;
+            TextMeshProUGUI qtyText  = null;
+            Button          takeBtn  = null;
 
             if (_itemRowPrefab != null && _slotsParent != null)
             {
                 var rowComp = Instantiate(_itemRowPrefab, _slotsParent);
-                row = rowComp.gameObject;
-                iconImg = rowComp.Icon;
+                row      = rowComp.gameObject;
+                iconImg  = rowComp.Icon;
                 nameText = rowComp.NameText;
-                qtyText = rowComp.QtyText;
-                takeBtn = rowComp.TakeButton;
-                rowComp.gameObject
-                    .SetActive(true); // deactivate prefab instance until fully setup to avoid showing uninitialized values
+                qtyText  = rowComp.QtyText;
+                takeBtn  = rowComp.TakeButton;
+                rowComp.gameObject.SetActive(true); // deactivate prefab instance until fully setup to avoid showing uninitialized values
             }
             else
             {
                 // Fallback: build a minimal row at runtime
                 row = new GameObject($"Row_{storageIndex}", typeof(RectTransform),
-                    typeof(HorizontalLayoutGroup));
+                                      typeof(HorizontalLayoutGroup));
                 if (_slotsParent != null)
                     row.transform.SetParent(_slotsParent, false);
 
-                var hlg = ComponentResolver.Find<HorizontalLayoutGroup>(row)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] HorizontalLayoutGroup not found")
-                    .Resolve();
+                var hlg = row.GetComponent<HorizontalLayoutGroup>();
                 hlg.childControlHeight = false;
-                hlg.childControlWidth = false;
-                hlg.spacing = 6f;
+                hlg.childControlWidth  = false;
+                hlg.spacing            = 6f;
 
-                var rt = ComponentResolver.Find<RectTransform>(row)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] RectTransform not found")
-                    .Resolve();
+                var rt = row.GetComponent<RectTransform>();
                 rt.sizeDelta = new Vector2(440f, 40f);
 
-                iconImg = CreateIconSlot(row.transform, "Icon", new Vector2(40f, 40f));
-                nameText = CreateLabel(row.transform, "NameText", new Vector2(220f, 40f));
-                qtyText = CreateLabel(row.transform, "QtyText", new Vector2(60f, 40f));
-                takeBtn = CreateButton(row.transform, "TakeButton", new Vector2(80f, 40f), "Take");
+                iconImg  = CreateIconSlot(row.transform, "Icon",       new Vector2(40f,  40f));
+                nameText = CreateLabel(   row.transform, "NameText",   new Vector2(220f, 40f));
+                qtyText  = CreateLabel(   row.transform, "QtyText",    new Vector2(60f,  40f));
+                takeBtn  = CreateButton(  row.transform, "TakeButton", new Vector2(80f,  40f), "Take");
             }
 
-            if (iconImg != null)
+            if (iconImg  != null)
             {
-                iconImg.sprite = icon;
+                iconImg.sprite  = icon;
                 iconImg.enabled = icon != null;
             }
-
             if (nameText != null) nameText.text = itemName;
-            if (qtyText != null) qtyText.text = $"×{item.Quantity}";
+            if (qtyText  != null) qtyText.text  = $"×{item.Quantity}";
 
             // Capture for closure
             int idx = storageIndex;
@@ -426,14 +387,12 @@ namespace NightHunt.GameplaySystems.UI
             if (takeBtn != null)
             {
                 takeBtn.onClick.AddListener(() => TakeItem(idx, qty));
-                Debug.Log(
-                    $"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn wired — item='{itemName}' qty={qty} interactable={takeBtn.interactable}");
+                Debug.Log($"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn wired — item='{itemName}' qty={qty} interactable={takeBtn.interactable}");
             }
             else
             {
                 string rowPrefabInfo = _itemRowPrefab != null ? "assigned" : "NULL";
-                Debug.LogWarning(
-                    $"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn is NULL — button onClick will NOT fire! prefab={rowPrefabInfo}");
+                Debug.LogWarning($"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn is NULL — button onClick will NOT fire! prefab={rowPrefabInfo}");
             }
 
             return row;
@@ -442,31 +401,18 @@ namespace NightHunt.GameplaySystems.UI
         private void TakeItem(int storageIndex, int quantity)
         {
             string nobInfo = _localNob != null ? _localNob.ObjectId.ToString() : "NULL";
-            Debug.Log(
-                $"[LootContainerUI] ▶ TakeItem CALLED: idx={storageIndex} qty={quantity} localNob={nobInfo} action={_takeItemAction != null}");
-            if (_localNob == null)
-            {
-                Debug.LogWarning("[LootContainerUI] TakeItem: localNob not set");
-                return;
-            }
-
-            if (_takeItemAction == null)
-            {
-                Debug.LogWarning("[LootContainerUI] TakeItem: _takeItemAction null");
-                return;
-            }
-
+            Debug.Log($"[LootContainerUI] ▶ TakeItem CALLED: idx={storageIndex} qty={quantity} localNob={nobInfo} action={_takeItemAction != null}");
+            if (_localNob == null) { Debug.LogWarning("[LootContainerUI] TakeItem: localNob not set"); return; }
+            if (_takeItemAction == null) { Debug.LogWarning("[LootContainerUI] TakeItem: _takeItemAction null"); return; }
             _takeItemAction.Invoke(storageIndex, quantity);
         }
 
         private void OnTakeAll()
         {
-            Debug.Log(
-                $"[LootContainerUI] ▶ OnTakeAll CALLED: action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
+            Debug.Log($"[LootContainerUI] ▶ OnTakeAll CALLED: action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
             if (_takeItemAction == null || _currentStorage == null || _localNob == null)
             {
-                Debug.LogWarning(
-                    $"[LootContainerUI] OnTakeAll: SKIP — action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
+                Debug.LogWarning($"[LootContainerUI] OnTakeAll: SKIP — action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
                 return;
             }
 
@@ -487,8 +433,7 @@ namespace NightHunt.GameplaySystems.UI
         private void ClearRows()
         {
             foreach (var row in _spawnedRows)
-                if (row != null)
-                    Destroy(row);
+                if (row != null) Destroy(row);
             _spawnedRows.Clear();
         }
 
@@ -496,86 +441,50 @@ namespace NightHunt.GameplaySystems.UI
 
         private static Image CreateIconSlot(Transform parent, string name, Vector2 size)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            var go  = new GameObject(name, typeof(RectTransform), typeof(Image));
             go.transform.SetParent(parent, false);
-            var rt = ComponentResolver.Find<RectTransform>(go)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] RectTransform not found")
-                .Resolve();
+            var rt  = go.GetComponent<RectTransform>();
             rt.sizeDelta = size;
-            var img = ComponentResolver.Find<Image>(go)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] Image not found")
-                .Resolve();
+            var img = go.GetComponent<Image>();
             img.color = new Color(0.25f, 0.25f, 0.25f, 0.8f); // dark placeholder bg
             return img;
         }
 
         private static TextMeshProUGUI CreateLabel(Transform parent, string name, Vector2 size)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
+            var go  = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
             go.transform.SetParent(parent, false);
-            var rt = ComponentResolver.Find<RectTransform>(go)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] RectTransform not found")
-                .Resolve();
+            var rt  = go.GetComponent<RectTransform>();
             rt.sizeDelta = size;
-            var tmp = ComponentResolver.Find<TextMeshProUGUI>(go)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] TextMeshProUGUI not found")
-                .Resolve();
-            tmp.fontSize = 16f;
-            tmp.alignment = TextAlignmentOptions.MidlineLeft;
-            tmp.color = Color.white;
+            var tmp = go.GetComponent<TextMeshProUGUI>();
+            tmp.fontSize   = 16f;
+            tmp.alignment  = TextAlignmentOptions.MidlineLeft;
+            tmp.color      = Color.white;
             return tmp;
         }
 
         private static Button CreateButton(Transform parent, string name, Vector2 size, string label)
         {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            var go  = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
-            var rt = ComponentResolver.Find<RectTransform>(go)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] RectTransform not found")
-                .Resolve();
+            var rt  = go.GetComponent<RectTransform>();
             rt.sizeDelta = size;
-            ComponentResolver.Find<Image>(go)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] Image not found")
-                .Resolve().color = new Color(0.25f, 0.45f, 0.25f, 1f);
+            go.GetComponent<Image>().color = new Color(0.25f, 0.45f, 0.25f, 1f);
 
-            var textGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            var textGo  = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
             textGo.transform.SetParent(go.transform, false);
-            var textRt = ComponentResolver.Find<RectTransform>(textGo)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] RectTransform not found")
-                .Resolve();
+            var textRt  = textGo.GetComponent<RectTransform>();
             textRt.anchorMin = Vector2.zero;
             textRt.anchorMax = Vector2.one;
             textRt.offsetMin = Vector2.zero;
             textRt.offsetMax = Vector2.zero;
-            var tmp = ComponentResolver.Find<TextMeshProUGUI>(textGo)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] TextMeshProUGUI not found")
-                .Resolve();
-            tmp.text = label;
-            tmp.fontSize = 14f;
+            var tmp = textGo.GetComponent<TextMeshProUGUI>();
+            tmp.text      = label;
+            tmp.fontSize  = 14f;
             tmp.alignment = TextAlignmentOptions.Center;
-            tmp.color = Color.white;
+            tmp.color     = Color.white;
 
-            return ComponentResolver.Find<Button>(go)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] Button not found")
-                .Resolve();
+            return go.GetComponent<Button>();
         }
     }
 }

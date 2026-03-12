@@ -6,7 +6,6 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Input.Handlers.Combat;
-using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -87,11 +86,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             // Auto-find ButtonPulseRing if not assigned in Inspector
             if (_pulseRing == null)
-                _pulseRing = ComponentResolver.Find<ButtonPulseRing>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] ButtonPulseRing not found")
-        .Resolve();
+                _pulseRing = GetComponent<ButtonPulseRing>();
 
             // Always show placeholder even with no system so the button count matches config.
             if (_quickSlotSystem == null)
