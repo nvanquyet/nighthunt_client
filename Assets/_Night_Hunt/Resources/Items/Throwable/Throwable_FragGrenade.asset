@@ -15,7 +15,7 @@ MonoBehaviour:
   ItemID: throwable_fraggrenade
   DisplayName: Frag Grenade
   Description: "Explosive grenade \u2013 3 s fuse. Deals AoE damage."
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: dd261f4df49b886428c464e68407b835, type: 3}
   IsStackable: 1
   MaxStackSize: 3
   Weight: 0.4
@@ -42,6 +42,5 @@ MonoBehaviour:
   ExplosionRadius: 5
   FuseTime: 3
   CanBounce: 1
-  ExplosionEffectPrefab: {fileID: 0}
   ThrowSound: {fileID: 0}
   ImpactSound: {fileID: 0}

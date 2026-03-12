@@ -60,40 +60,4 @@ namespace NightHunt.StatSystem.Configs
 
         #endregion 
     }
-
-    /// <summary>
-    /// Equipment stat config - Stats + PlayerModifiers
-    /// </summary>
-    [CreateAssetMenu(fileName = "EquipmentStatConfig", menuName = "NightHunt/StatSystem/Equipment Stat Config")]
-    public class EquipmentStatConfig : ItemStatConfig { }
-
-    /// <summary>
-    /// Weapon stat config - Stats + PlayerModifiers
-    /// </summary>
-    [CreateAssetMenu(fileName = "WeaponStatConfig", menuName = "NightHunt/StatSystem/Weapon Stat Config")]
-    public class WeaponStatConfig : ItemStatConfig { }
-
-    /// <summary>
-    /// Attachment stat config - Stats + ItemModifiers
-    /// </summary>
-    [CreateAssetMenu(fileName = "AttachmentStatConfig", menuName = "NightHunt/StatSystem/Attachment Stat Config")]
-    public class AttachmentStatConfig : ItemStatConfig { }
-
-    /// <summary>
-    /// Consumable stat config - Stats + ConsumableEffects
-    /// </summary>
-    [CreateAssetMenu(fileName = "ConsumableStatConfig", menuName = "NightHunt/StatSystem/Consumable Stat Config")]
-    public class ConsumableStatConfig : ItemStatConfig
-    {
-        [Header("Consumable Effects")]
-        [Tooltip("All effects applied when this item finishes being consumed.")]
-        public GameplaySystems.Core.Data.ConsumableEffect[] Effects;
-    }
-
-    /// <summary>
-    /// Throwable stat config - Stats only (typically Weight).
-    /// No PlayerModifiers / ItemModifiers / Effects.
-    /// </summary>
-    [CreateAssetMenu(fileName = "ThrowableStatConfig", menuName = "NightHunt/StatSystem/Throwable Stat Config")]
-    public class ThrowableStatConfig : ItemStatConfig { }
 }

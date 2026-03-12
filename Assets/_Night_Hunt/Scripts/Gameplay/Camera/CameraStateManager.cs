@@ -12,8 +12,8 @@ namespace NightHunt.Gameplay.Camera
     /// Manages the three gameplay camera states:
     ///   Free       – default, CinemachineInputAxisController active (free rotation).
     ///   Locked     – X-key toggle; camera rotation frozen at current orientation.
-    ///   WeaponAim  – automatically entered when a weapon is drawn; exits back to
-    ///                the previous state (Free or Locked) when holstered.
+    ///   WeaponAim  – entered explicitly when the player aims (e.g. RMB via EnterWeaponAim);
+    ///                exits back to the previous state (Free or Locked) when holstered.
     ///
     /// WIRING:
     ///   1. Assign _virtualCamera + _inputAxisController (the CinemachineCamera child component).
@@ -123,16 +123,13 @@ namespace NightHunt.Gameplay.Camera
 
         /// <summary>
         /// Called when the active weapon slot changes.
-        /// newSlot != null  → enter WeaponAim.
-        /// newSlot == null  → exit WeaponAim, restore previous state.
+        /// Holstering (newSlot == null) exits WeaponAim if active, restoring the prior state.
+        /// Equipping a weapon does NOT enter WeaponAim — camera stays Free/Locked.
+        /// WeaponAim is entered only by explicit aim input (e.g. RMB via EnterWeaponAim).
         /// </summary>
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
         {
-            if (newSlot.HasValue)
-            {
-                EnterWeaponAim();
-            }
-            else
+            if (!newSlot.HasValue)
             {
                 ExitWeaponAim();
             }

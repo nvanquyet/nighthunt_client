@@ -7,8 +7,6 @@ using NightHunt.Networking.Player;
 using NightHunt.StatSystem.Core.Interfaces;
 using NightHunt.StatSystem.Core.Types;
 using NightHunt.Gameplay.Core.State;
-using NightHunt.GameplaySystems.Inventory;
-using NightHunt.GameplaySystems.Core.Data;
 
 namespace NightHunt.Gameplay.Character.Combat
 {
@@ -169,21 +167,12 @@ namespace NightHunt.Gameplay.Character.Combat
         [Server]
         private float ComputeFinalDamage(DamageInfo info)
         {
+            // DamageInfo.Damage already includes headshot multiplier (applied by WeaponBase on the client).
+            // Server only applies armor reduction on top of the pre-computed value.
             float damage = info.Damage;
 
             if (info.IsHeadshot)
-            {
-                // Read per-weapon headshot multiplier from WeaponDefinition; fall back to 2×.
-                float headMul = 2f;
-                if (!string.IsNullOrEmpty(info.WeaponId))
-                {
-                    var weaponDef = ItemDatabase.GetDefinition(info.WeaponId) as WeaponDefinition;
-                    if (weaponDef != null)
-                        headMul = weaponDef.DamageHeadMul;
-                }
-                damage *= headMul;
-                Debug.Log($"[PlayerHealthSystem] HEADSHOT on {_networkPlayer?.DisplayName} — ×{headMul:F2} → damage: {damage:F1}");
-            }
+                Debug.Log($"[PlayerHealthSystem] HEADSHOT on {_networkPlayer?.DisplayName} — damage: {damage:F1}");
 
             if (_applyArmorReduction)
             {

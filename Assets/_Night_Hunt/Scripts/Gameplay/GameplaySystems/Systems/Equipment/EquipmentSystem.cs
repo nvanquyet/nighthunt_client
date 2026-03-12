@@ -253,15 +253,19 @@ namespace NightHunt.GameplaySystems.Equipment
         
         public void UnequipItem(EquipmentSlotType slotType)
         {
-            if (!IsServerInitialized)
+            if (IsServerInitialized)
             {
-                Debug.LogWarning("[EquipmentSystem] UnequipItem: server-only!");
+                UnequipItemServer(slotType);
                 return;
             }
-            
-            UnequipItemServer(slotType);
+            if (IsOwner)
+                UnequipItemServerRpc(slotType);
         }
-        
+
+        [ServerRpc(RequireOwnership = true)]
+        private void UnequipItemServerRpc(EquipmentSlotType slotType)
+            => UnequipItemServer(slotType);
+
         [Server]
         private void UnequipItemServer(EquipmentSlotType slotType)
         {

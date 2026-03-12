@@ -27,42 +27,18 @@ namespace NightHunt.GameplaySystems.Core.Data
 
         // ── Stat Config ───────────────────────────────────────────────────────
         [Header("Stat Config")]
-        [Tooltip("WeaponStatConfig containing Damage/FireRate/Accuracy/Spread/MagazineSize/DrawSpeed/ReloadSpeed + PlayerModifiers")]
+        [Tooltip("WeaponStatConfig containing all numeric combat stats (Damage, FireRate, MagazineSize, ReloadSpeed…)")]
         public WeaponStatConfig StatConfig;
 
         // ── Weapon Identity ───────────────────────────────────────────────────
         [Header("Weapon Identity")]
-        [Tooltip("Weapon class for attachment compatibility and UI grouping")]
+        [Tooltip("Weapon class for attachment compatibility and UI slot grouping.")]
         public WeaponClass WeaponClass = WeaponClass.Rifle;
 
-        [Tooltip("How damage is applied: instant raycast or spawned projectile")]
-        public BallisticType BallisticType = BallisticType.Hitscan;
+        // BallisticType, DefaultFireMode, AllowFireModeToggle, DamageHeadMul,
+        // ProjectilePrefab, ProjectileSpeed, MaxRange, GravityScale, DefaultBulletType,
+        // CanTacticalReload — all moved to WeaponBase (weapon model prefab component).
 
-        [Tooltip("Default fire mode. Player can toggle on HUD if AllowFireModeToggle = true")]
-        public FireMode DefaultFireMode = FireMode.Auto;
-
-        [Tooltip("Allow player to toggle between Auto and Single on HUD")]
-        public bool AllowFireModeToggle = true;
-
-        // ── Combat Multipliers ────────────────────────────────────────────────
-        [Header("Combat Multipliers")]
-        [Tooltip("Damage multiplier applied on a confirmed headshot. Default 2 = double damage.")]
-        public float DamageHeadMul = 2f;
-
-        // ── Reload ────────────────────────────────────────────────────────────
-        [Header("Reload")]
-        [Tooltip("Can reload when magazine still has ammo (tactical reload)")]
-        public bool CanTacticalReload = true;
-        // ── Bullet Type ───────────────────────────────────────────────────────
-        [Header("Bullet Type (Soldier System)")]
-        public GameObject DefaultBulletType;
-
-        // ── Visual FX ─────────────────────────────────────────────────────────
-        // All VFX (muzzle, trail, hit) are owned by the bullet/projectile prefab itself.
-        // Weapon only holds a reference to the bullet it fires.
-        [Header("Visual FX")]
-        [Tooltip("Bullet/projectile prefab spawned at muzzle on fire. All VFX are children of this prefab.")]
-        public GameObject ProjectilePrefab;
         // ── Stat Helpers ──────────────────────────────────────────────────────
         /// <summary>Read a stat from StatConfig (base value before attachments).</summary>
         public float GetStatValue(ItemStatType statType)

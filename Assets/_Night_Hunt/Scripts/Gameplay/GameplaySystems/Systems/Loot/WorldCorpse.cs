@@ -170,6 +170,7 @@ namespace NightHunt.GameplaySystems.Loot
         public void RequestTakeItem(NetworkObject playerNob, int storageIndex, int quantity, NetworkConnection conn = null)
         {
             if (conn == null) conn = playerNob?.Owner;
+            Debug.Log($"[WorldCorpse] RequestTakeItem: arrived — objId={playerNob?.ObjectId} idx={storageIndex} qty={quantity} conn={conn?.ClientId} storage.Count={storage.Count}");
             if (!IsServerInitialized) { Debug.LogWarning("[WorldCorpse] RequestTakeItem: server-only!"); return; }
             if (playerNob == null) { Debug.LogWarning("[WorldCorpse] RequestTakeItem: playerNob là NULL."); return; }
             if (conn == null) { Debug.LogWarning("[WorldCorpse] RequestTakeItem: conn là NULL."); return; }
@@ -197,16 +198,34 @@ namespace NightHunt.GameplaySystems.Loot
             }
         }
 
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+            if (IsServerInitialized) return;
+
+            storage.Clear();
+            for (int i = 0; i < syncStorage.Count; i++)
+                storage.Add(syncStorage[i]);
+
+            Debug.Log($"[WorldCorpse] OnStartClient: storage rebuilt from syncStorage. Count={storage.Count} ObjId={ObjectId}");
+        }
+
         private void OnStorageChanged(SyncListOperation op, int index, ItemInstanceData oldValue, ItemInstanceData newValue, bool asServer)
         {
-            if (asServer) return;
-            switch (op)
+            if (asServer) return; // server-side callback — storage managed directly
+
+            if (!IsServerInitialized)
             {
-                case SyncListOperation.Add:      storage.Add(newValue); break;
-                case SyncListOperation.RemoveAt: if (index >= 0 && index < storage.Count) storage.RemoveAt(index); break;
-                case SyncListOperation.Set:      if (index >= 0 && index < storage.Count) storage[index] = newValue; break;
-                case SyncListOperation.Clear:    storage.Clear(); break;
+                // Pure client: mirror the SyncList operation into the local cache.
+                switch (op)
+                {
+                    case SyncListOperation.Add:      storage.Add(newValue); break;
+                    case SyncListOperation.RemoveAt: if (index >= 0 && index < storage.Count) storage.RemoveAt(index); break;
+                    case SyncListOperation.Set:      if (index >= 0 && index < storage.Count) storage[index] = newValue; break;
+                    case SyncListOperation.Clear:    storage.Clear(); break;
+                }
             }
+            // Always notify — host storage was already updated by server code directly.
             OnClientStorageChanged?.Invoke();
         }
 

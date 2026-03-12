@@ -48,9 +48,6 @@ namespace NightHunt.GameplaySystems.Core.Data
         public bool CanBounce = true;
 
         [Header("FX")]
-        [Tooltip("VFX prefab instantiated at the explosion point.")]
-        public GameObject ExplosionEffectPrefab;
-
         [Tooltip("Sound played the moment the player releases the item.")]
         public AudioClip ThrowSound;
 

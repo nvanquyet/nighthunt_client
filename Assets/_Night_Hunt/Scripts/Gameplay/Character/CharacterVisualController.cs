@@ -1,6 +1,8 @@
 using UnityEngine;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Weapon;
 
 namespace NightHunt.Gameplay.Character
@@ -20,7 +22,7 @@ namespace NightHunt.Gameplay.Character
     /// INSPECTOR SETUP:
     ///  1. Attach to the ROOT player prefab alongside NetworkPlayer.
     ///  2. Also add PlayerModelLoader to the root — it will call BindModel() at runtime.
-    ///  3. _lifecycle, _networkPlayer auto-resolve via GetComponent.
+    ///  3. _lifecycle, _networkPlayer, _weaponSystemSource all auto-resolve via GetComponent.
     ///     DO NOT try to drag PrActorUtils / PrCharacterIK / PrCharacterRagdoll —
     ///     those live on the dynamically-spawned model child (e.g. Soldier_White)
     ///     and are bound automatically when PlayerModelLoader fires OnModelReady.
@@ -31,13 +33,17 @@ namespace NightHunt.Gameplay.Character
         [Header("Core Components (auto-resolved, drag only if needed)")]
         [SerializeField] private CharacterLifecycleController _lifecycle;
         [SerializeField] private NetworkPlayer _networkPlayer;
+        [SerializeField] private MonoBehaviour _weaponSystemSource;
 
-        // Injected at runtime by PlayerModelLoader.OnModelReady — never set in Inspector.
-        private PrCharacterRagdoll    _ragdoll;
-        private PrActorUtils          _actorUtils;
-        private PrCharacterIK         _charIK;
+        // These are NEVER set in the Inspector — they are injected at runtime via
+        // PlayerModelLoader.OnModelReady → BindModel(). The model (Soldier_White) is
+        // spawned dynamically, so Inspector drag-and-drop is impossible.
+        private PrCharacterRagdoll _ragdoll;
+        private PrActorUtils       _actorUtils;
+        private PrCharacterIK      _charIK;
 
-        private PlayerModelLoader     _modelLoader;
+        private IWeaponSystem    _weaponSystem;
+        private PlayerModelLoader _modelLoader;
         private WeaponModelController _weaponModelController;
 
         // ── Unity Lifecycle ───────────────────────────────────────────────────
@@ -50,13 +56,17 @@ namespace NightHunt.Gameplay.Character
             if (_networkPlayer == null)
                 _networkPlayer = GetComponent<NetworkPlayer>();
 
+            _weaponSystem = _weaponSystemSource as IWeaponSystem
+                         ?? GetComponent<IWeaponSystem>();
+
             _weaponModelController = GetComponent<WeaponModelController>();
 
             _modelLoader = GetComponent<PlayerModelLoader>();
             if (_modelLoader != null)
                 _modelLoader.OnModelReady += BindModel;
             else
-                Debug.LogWarning("[CharacterVisualController] PlayerModelLoader not found — model components will not bind.");
+                Debug.LogWarning("[CharacterVisualController] PlayerModelLoader not found on root. " +
+                                 "Model components will not be bound automatically.");
         }
 
         private void OnDestroy()
@@ -72,8 +82,13 @@ namespace NightHunt.Gameplay.Character
                 _lifecycle.OnDied      += HandleDied;
                 _lifecycle.OnRespawned += HandleRespawned;
             }
+
             if (_networkPlayer != null)
                 _networkPlayer.OnAliveChanged += HandleAliveChanged;
+
+            if (_weaponSystem != null)
+                _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
+
             if (_weaponModelController != null)
                 _weaponModelController.OnLeftHandIKTargetChanged += HandleIKTargetChanged;
         }
@@ -85,28 +100,51 @@ namespace NightHunt.Gameplay.Character
                 _lifecycle.OnDied      -= HandleDied;
                 _lifecycle.OnRespawned -= HandleRespawned;
             }
+
             if (_networkPlayer != null)
                 _networkPlayer.OnAliveChanged -= HandleAliveChanged;
+
+            if (_weaponSystem != null)
+                _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
+
             if (_weaponModelController != null)
                 _weaponModelController.OnLeftHandIKTargetChanged -= HandleIKTargetChanged;
         }
 
         // ── Event Handlers ────────────────────────────────────────────────────
 
-        private void HandleDied()     => SetDeadVisuals();
-        private void HandleRespawned() => SetAliveVisuals();
+        private void HandleDied()
+            => SetDeadVisuals();
 
+        private void HandleRespawned()
+            => SetAliveVisuals();
+
+        /// <summary>
+        /// Backup / late-join path: fires when _isAlive SyncVar arrives in spawn packet.
+        /// Prevents newly-connected clients from seeing a dead player standing upright.
+        /// </summary>
         private void HandleAliveChanged(bool isAlive)
         {
             if (isAlive) SetAliveVisuals();
             else         SetDeadVisuals();
         }
 
+        private void HandleActiveWeaponChanged(WeaponSlotType? _, WeaponSlotType? newSlot)
+        {
+            // Clear IK immediately on weapon swap; WeaponModelController fires
+            // OnLeftHandIKTargetChanged once the new model is ready.
+            if (_charIK != null)
+            {
+                _charIK.leftHandTarget  = null;
+                _charIK.rightHandTarget = null;
+            }
+        }
+
         private void HandleIKTargetChanged(Transform leftHandIK)
         {
             if (_charIK == null) return;
             _charIK.leftHandTarget  = leftHandIK;
-            _charIK.rightHandTarget = null;
+            _charIK.rightHandTarget = null; // right hand stays animation-driven
         }
 
         // ── Model Binding ─────────────────────────────────────────────────────
@@ -174,5 +212,6 @@ namespace NightHunt.Gameplay.Character
                 : null);
         }
 
+        // ── IK Wiring ─────────────────────────────────────────────────────────
     }
 }

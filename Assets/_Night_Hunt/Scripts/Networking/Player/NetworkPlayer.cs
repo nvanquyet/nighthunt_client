@@ -278,6 +278,10 @@ namespace NightHunt.Networking
                 aimSystem.Initialize(transform, statSystem);
                 inputManager.CombatHandler?.BindAimSystem(aimSystem);
                 _cachedAimSystem = aimSystem; // cache for alive-state gating
+
+                // Propagate AimSystem to WeaponVFXController so trail length = VisionRange.
+                GetComponent<NightHunt.GameplaySystems.Weapon.WeaponVFXController>()
+                    ?.Initialize(aimSystem);
             }
             else
             {

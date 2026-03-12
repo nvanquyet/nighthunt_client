@@ -30,7 +30,7 @@ MonoBehaviour:
     MinValue: 0
     MaxValue: 100
   - Type: 13
-    DefaultValue: 0.5
+    DefaultValue: 2
     MinValue: 0
     MaxValue: 10
   - Type: 17

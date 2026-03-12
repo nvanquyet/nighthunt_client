@@ -352,6 +352,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private void BeginFire()
         {
             if (_isFiring) return;
+
+            // Guard: only fire when a weapon is actively equipped/drawn.
+            // Prevents fire animation + camera lock triggering in empty hands.
+            if (_weaponSystem != null && _weaponSystem.GetActiveWeaponSlot() == null)
+                return;
+
             _isFiring = true;
 
             // ── Bước 1: Freeze camera tại góc hiện tại ────────────────────────────

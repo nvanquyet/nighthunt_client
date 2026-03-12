@@ -266,6 +266,7 @@ namespace NightHunt.GameplaySystems.Loot
         public void RequestTakeItem(NetworkObject playerNob, int storageIndex, int quantity, NetworkConnection conn = null)
         {
             if (conn == null) conn = playerNob?.Owner;
+            Debug.Log($"[WorldContainer] RequestTakeItem: arrived — objId={playerNob?.ObjectId} idx={storageIndex} qty={quantity} conn={conn?.ClientId} storage.Count={storage.Count}");
             if (!IsServerInitialized)                            { Debug.LogWarning("[WorldContainer] RequestTakeItem: server-only!"); return; }
             if (playerNob == null)                               { Debug.LogWarning("[WorldContainer] RequestTakeItem: playerNob NULL."); return; }
             if (conn == null)                                    { Debug.LogWarning("[WorldContainer] RequestTakeItem: conn NULL."); return; }
@@ -301,18 +302,43 @@ namespace NightHunt.GameplaySystems.Loot
 
         // ── SyncVar / SyncList Callbacks ──────────────────────────────────────────
 
+        /// <summary>
+        /// Rebuild client-side storage cache from syncStorage after spawn packet is fully applied.
+        /// Called by FishNet AFTER InvokeSyncTypeOnStartCallbacks, so syncStorage is already
+        /// populated with whatever the spawn packet delivered.
+        /// </summary>
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+            if (IsServerInitialized) return; // Host: server manages storage directly
+
+            // Authoritative rebuild — overrides anything OnStorageChanged may have written
+            // during the initial InvokeSyncTypeOnStartCallbacks pass.
+            storage.Clear();
+            for (int i = 0; i < syncStorage.Count; i++)
+                storage.Add(syncStorage[i]);
+
+            Debug.Log($"[WorldContainer] OnStartClient: storage rebuilt from syncStorage. Count={storage.Count} ObjId={ObjectId}");
+        }
+
         private void OnStorageChanged(SyncListOperation op, int index,
                                       ItemInstanceData oldValue, ItemInstanceData newValue, bool asServer)
         {
-            if (asServer) return;
-            switch (op)
+            if (asServer) return; // server-side callback — storage managed directly
+
+            if (!IsServerInitialized)
             {
-                case SyncListOperation.Add:      storage.Add(newValue); break;
-                case SyncListOperation.RemoveAt: if (index >= 0 && index < storage.Count) storage.RemoveAt(index); break;
-                // fall-through to fire event below
-                case SyncListOperation.Set:      if (index >= 0 && index < storage.Count) storage[index] = newValue; break;
-                case SyncListOperation.Clear:    storage.Clear(); break;
+                // Pure client: mirror the SyncList operation into the local cache.
+                switch (op)
+                {
+                    case SyncListOperation.Add:      storage.Add(newValue); break;
+                    case SyncListOperation.RemoveAt: if (index >= 0 && index < storage.Count) storage.RemoveAt(index); break;
+                    case SyncListOperation.Set:      if (index >= 0 && index < storage.Count) storage[index] = newValue; break;
+                    case SyncListOperation.Clear:    storage.Clear(); break;
+                }
             }
+            // Always notify — host storage was already updated by server code directly;
+            // pure-client storage was just mirrored above. UI needs a refresh in both cases.
             OnClientStorageChanged?.Invoke();
         }
 

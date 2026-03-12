@@ -185,9 +185,11 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
 
-            // SetActive(false) để trả về pool; nếu không dùng pool thì Destroy
-            gameObject.SetActive(false);
-            // Destroy(gameObject);   ← dùng cái này nếu chưa có pool
+            // Return to pool if available, otherwise just deactivate.
+            if (ProjectilePool.Instance != null)
+                ProjectilePool.Instance.Return(this);
+            else
+                gameObject.SetActive(false);
         }
     }
 }

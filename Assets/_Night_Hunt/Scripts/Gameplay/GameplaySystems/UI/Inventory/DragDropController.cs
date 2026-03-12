@@ -629,6 +629,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 case DropActionType.AssignQuickSlot:
                     if (action.Target.Type == UISlotType.QuickSlot)
                     {
+                        Debug.Log($"[DragDropController][QS] Calling bridge.AssignToQuickSlot: item={item.DefinitionID} ({item.InstanceID}) → slot={action.Target.Index}");
                         bridge.AssignToQuickSlot(item.InstanceID, action.Target.Index);
                         if (_enableDebugLogs)
                         {

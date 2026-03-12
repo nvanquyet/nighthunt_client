@@ -49,6 +49,10 @@ namespace NightHunt.GameplaySystems.UI
         [SerializeField] private Button _takeAllButton;
         [SerializeField] private Button _closeButton;
 
+        [Header("Interaction")]
+        [Tooltip("Max distance (world units) between player and container before the loot panel auto-closes.")]
+        [SerializeField] private float _maxLootDistance = 4f;
+
         // ── Runtime ───────────────────────────────────────────────────────────
 
         private NetworkObject _localNob;
@@ -66,6 +70,13 @@ namespace NightHunt.GameplaySystems.UI
         private WorldContainer _openContainer;
         private WorldCorpse    _openCorpse;
 
+        /// <summary>
+        /// True when the panel was opened by the player explicitly holding E (interaction RPC).
+        /// In that case hover-exit should NOT close the panel — the player needs to click the buttons.
+        /// False when opened purely by hover-preview (already-open container).
+        /// </summary>
+        private bool _openedViaInteraction;
+
         private readonly List<GameObject> _spawnedRows = new List<GameObject>();
 
         // ── Unity lifecycle ───────────────────────────────────────────────────
@@ -76,29 +87,41 @@ namespace NightHunt.GameplaySystems.UI
             Instance = this;
 
             if (_containerPanel != null) _containerPanel.SetActive(false);
+            // Ensure CanvasGroup starts non-interactable so it matches the hidden state.
+            if (_canvasGroup != null) { _canvasGroup.interactable = false; _canvasGroup.blocksRaycasts = false; }
 
             _takeAllButton?.onClick.AddListener(OnTakeAll);
             _closeButton?.onClick.AddListener(Hide);
+
+            string panelInfo      = _containerPanel  != null ? "ok" : "NULL";
+            string cgInfo         = _canvasGroup      != null ? "ok" : "NULL";
+            string takeAllInfo    = _takeAllButton    != null ? "ok" : "NULL";
+            string closeBtnInfo   = _closeButton      != null ? "ok" : "NULL";
+            string prefabInfo     = _itemRowPrefab    != null ? "ok" : "NULL";
+            string slotsInfo      = _slotsParent      != null ? _slotsParent.name : "NULL";
+            Debug.Log($"[LootContainerUI] Awake: panel={panelInfo} canvasGroup={cgInfo} takeAllBtn={takeAllInfo} closeBtn={closeBtnInfo} rowPrefab={prefabInfo} slotsParent={slotsInfo}");
         }
 
         private void OnEnable()
         {
-            WorldContainer.OnContainerOpened += HandleContainerOpened;
-            WorldCorpse.OnCorpseOpened       += HandleCorpseOpened;
-            WorldContainer.OnAnyHoverEnter   += HandleContainerHoverEnter;
-            WorldContainer.OnAnyHoverExit    += HandleContainerHoverExit;
-            WorldCorpse.OnAnyHoverEnter      += HandleCorpseHoverEnter;
-            WorldCorpse.OnAnyHoverExit       += HandleCorpseHoverExit;
+            NetworkPlayer.OnOwnerReady           += HandleOwnerReady;
+            WorldContainer.OnContainerOpened     += HandleContainerOpened;
+            WorldCorpse.OnCorpseOpened           += HandleCorpseOpened;
+            WorldContainer.OnAnyHoverEnter       += HandleContainerHoverEnter;
+            WorldContainer.OnAnyHoverExit        += HandleContainerHoverExit;
+            WorldCorpse.OnAnyHoverEnter          += HandleCorpseHoverEnter;
+            WorldCorpse.OnAnyHoverExit           += HandleCorpseHoverExit;
         }
 
         private void OnDisable()
         {
-            WorldContainer.OnContainerOpened -= HandleContainerOpened;
-            WorldCorpse.OnCorpseOpened       -= HandleCorpseOpened;
-            WorldContainer.OnAnyHoverEnter   -= HandleContainerHoverEnter;
-            WorldContainer.OnAnyHoverExit    -= HandleContainerHoverExit;
-            WorldCorpse.OnAnyHoverEnter      -= HandleCorpseHoverEnter;
-            WorldCorpse.OnAnyHoverExit       -= HandleCorpseHoverExit;
+            NetworkPlayer.OnOwnerReady           -= HandleOwnerReady;
+            WorldContainer.OnContainerOpened     -= HandleContainerOpened;
+            WorldCorpse.OnCorpseOpened           -= HandleCorpseOpened;
+            WorldContainer.OnAnyHoverEnter       -= HandleContainerHoverEnter;
+            WorldContainer.OnAnyHoverExit        -= HandleContainerHoverExit;
+            WorldCorpse.OnAnyHoverEnter          -= HandleCorpseHoverEnter;
+            WorldCorpse.OnAnyHoverExit           -= HandleCorpseHoverExit;
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -106,16 +129,50 @@ namespace NightHunt.GameplaySystems.UI
         /// <summary>Call from GameHUD.Initialize() with the local NetworkPlayer's NetworkObject.</summary>
         public void SetLocalPlayer(NetworkPlayer player)
         {
-            _localNob = player?.NetworkObject;
+            // Kept for backward compatibility with GameHUD.Initialize().
+            // Real assignment now happens via NetworkPlayer.OnOwnerReady in OnEnable.
+            if (player != null) HandleOwnerReady(player);
+        }
+
+        private void HandleOwnerReady(NetworkPlayer player)
+        {
+            // OnOwnerReady fires only on the owning client, so this is always the local player.
+            _localNob = player.NetworkObject;
+            Debug.Log($"[LootContainerUI] HandleOwnerReady: _localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} player={player.name}");
         }
 
         public void Hide()
         {
             UnsubscribeOpenLootable();
             if (_containerPanel != null) _containerPanel.SetActive(false);
-            _takeItemAction  = null;
-            _currentStorage  = null;
+            // Disable CanvasGroup so clicks don't pass through a hidden panel.
+            if (_canvasGroup != null) { _canvasGroup.interactable = false; _canvasGroup.blocksRaycasts = false; }
+            _takeItemAction      = null;
+            _currentStorage      = null;
+            _openedViaInteraction = false;
             ClearRows();
+        }
+
+        private void Update()
+        {
+            // When the panel was opened via Hold-E interaction, hover-exit is suppressed
+            // (player needs to look at screen to click buttons). Instead we close the panel
+            // when the player physically walks too far from the lootable.
+            if (!_openedViaInteraction || _localNob == null) return;
+
+            Vector3 playerPos = _localNob.transform.position;
+            if (_openContainer != null &&
+                Vector3.Distance(playerPos, _openContainer.transform.position) > _maxLootDistance)
+            {
+                Debug.Log("[LootContainerUI] Update: player walked too far from container — closing panel.");
+                Hide();
+            }
+            else if (_openCorpse != null &&
+                     Vector3.Distance(playerPos, _openCorpse.transform.position) > _maxLootDistance)
+            {
+                Debug.Log("[LootContainerUI] Update: player walked too far from corpse — closing panel.");
+                Hide();
+            }
         }
 
         private void UnsubscribeOpenLootable()
@@ -138,28 +195,44 @@ namespace NightHunt.GameplaySystems.UI
         {
             if (container == null) return;
             // Only open for the local player who triggered the open.
-            if (_localNob != null && conn != null && conn != _localNob.Owner) return;
+            if (_localNob != null && conn != null && conn != _localNob.Owner)
+            {
+                Debug.Log($"[LootContainerUI] HandleContainerOpened: SKIP — conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
+                return;
+            }
+
+            var storageList = container.GetStorage();
+            Debug.Log($"[LootContainerUI] HandleContainerOpened: SHOW — localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
 
             UnsubscribeOpenLootable();
             _openContainer = container;
             _openContainer.OnClientStorageChanged += RebuildRows;
 
             _takeItemAction = (idx, qty) => container.RequestTakeItem(_localNob, idx, qty);
-            ShowLoot("Container", container.GetStorage());
+            _openedViaInteraction = true;
+            ShowLoot("Container", storageList);
         }
 
         private void HandleCorpseOpened(WorldCorpse corpse, FishNet.Connection.NetworkConnection conn)
         {
             if (corpse == null) return;
             // Only open for the local player who triggered the open.
-            if (_localNob != null && conn != null && conn != _localNob.Owner) return;
+            if (_localNob != null && conn != null && conn != _localNob.Owner)
+            {
+                Debug.Log($"[LootContainerUI] HandleCorpseOpened: SKIP — conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
+                return;
+            }
+
+            var storageList = corpse.GetStorage();
+            Debug.Log($"[LootContainerUI] HandleCorpseOpened: SHOW — localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
 
             UnsubscribeOpenLootable();
             _openCorpse = corpse;
             _openCorpse.OnClientStorageChanged += RebuildRows;
 
             _takeItemAction = (idx, qty) => corpse.RequestTakeItem(_localNob, idx, qty);
-            ShowLoot("Corpse", corpse.GetStorage());
+            _openedViaInteraction = true;
+            ShowLoot("Corpse", storageList);
         }
 
         // -- Hover handlers: close when looking away, reopen when looking back --
@@ -170,15 +243,22 @@ namespace NightHunt.GameplaySystems.UI
             // Already showing this container — nothing to do.
             if (_openContainer == container) return;
 
+            var storageList = container.GetStorage();
+            Debug.Log($"[LootContainerUI] HandleContainerHoverEnter: storage.Count={storageList.Count}");
             UnsubscribeOpenLootable();
             _openContainer = container;
             _openContainer.OnClientStorageChanged += RebuildRows;
             _takeItemAction = (idx, qty) => container.RequestTakeItem(_localNob, idx, qty);
-            ShowLoot("Container", container.GetStorage());
+            _openedViaInteraction = false; // hover-preview only
+            ShowLoot("Container", storageList);
         }
 
         private void HandleContainerHoverExit(WorldContainer container)
         {
+            // If the panel was opened by explicit interaction (Hold E), keep it open
+            // so the player can click Take / Take All without losing the panel when
+            // the crosshair drifts off the 3D container.
+            if (_openedViaInteraction) return;
             if (_openContainer == container)
                 Hide();
         }
@@ -192,11 +272,13 @@ namespace NightHunt.GameplaySystems.UI
             _openCorpse = corpse;
             _openCorpse.OnClientStorageChanged += RebuildRows;
             _takeItemAction = (idx, qty) => corpse.RequestTakeItem(_localNob, idx, qty);
+            _openedViaInteraction = false; // hover-preview only
             ShowLoot("Corpse", corpse.GetStorage());
         }
 
         private void HandleCorpseHoverExit(WorldCorpse corpse)
         {
+            if (_openedViaInteraction) return;
             if (_openCorpse == corpse)
                 Hide();
         }
@@ -208,9 +290,14 @@ namespace NightHunt.GameplaySystems.UI
             _currentStorage = storage;
 
             if (_containerPanel != null) _containerPanel.SetActive(true);
+            // Enable CanvasGroup so buttons are clickable.
+            if (_canvasGroup != null) { _canvasGroup.interactable = true; _canvasGroup.blocksRaycasts = true; }
 
             if (_containerNameText != null) _containerNameText.text = title;
 
+            string showPanelInfo = _containerPanel != null ? "ok" : "NULL";
+            string showCgInfo    = _canvasGroup    != null ? "ok" : "NULL";
+            Debug.Log($"[LootContainerUI] ShowLoot: title='{title}' items={storage?.Count ?? 0} panel={showPanelInfo} canvasGroup={showCgInfo}");
             BuildRows(storage);
         }
 
@@ -229,7 +316,10 @@ namespace NightHunt.GameplaySystems.UI
         {
             ClearRows();
 
-            if (storage == null) return;
+            if (storage == null) { Debug.LogWarning("[LootContainerUI] BuildRows: storage NULL"); return; }
+
+            string prefabInfo = _itemRowPrefab != null ? "assigned" : "NULL";
+            Debug.Log($"[LootContainerUI] BuildRows: {storage.Count} item(s) — slotsParent={(_slotsParent != null ? _slotsParent.name : "NULL")} rowPrefab={prefabInfo}");
 
             for (int i = 0; i < storage.Count; i++)
             {
@@ -295,27 +385,49 @@ namespace NightHunt.GameplaySystems.UI
             int idx = storageIndex;
             int qty = item.Quantity;
             if (takeBtn != null)
+            {
                 takeBtn.onClick.AddListener(() => TakeItem(idx, qty));
+                Debug.Log($"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn wired — item='{itemName}' qty={qty} interactable={takeBtn.interactable}");
+            }
+            else
+            {
+                string rowPrefabInfo = _itemRowPrefab != null ? "assigned" : "NULL";
+                Debug.LogWarning($"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn is NULL — button onClick will NOT fire! prefab={rowPrefabInfo}");
+            }
 
             return row;
         }
 
         private void TakeItem(int storageIndex, int quantity)
         {
-            if (_localNob == null) { Debug.LogWarning("[LootContainerUI] LocalNob not set"); return; }
-            _takeItemAction?.Invoke(storageIndex, quantity);
+            string nobInfo = _localNob != null ? _localNob.ObjectId.ToString() : "NULL";
+            Debug.Log($"[LootContainerUI] ▶ TakeItem CALLED: idx={storageIndex} qty={quantity} localNob={nobInfo} action={_takeItemAction != null}");
+            if (_localNob == null) { Debug.LogWarning("[LootContainerUI] TakeItem: localNob not set"); return; }
+            if (_takeItemAction == null) { Debug.LogWarning("[LootContainerUI] TakeItem: _takeItemAction null"); return; }
+            _takeItemAction.Invoke(storageIndex, quantity);
         }
 
         private void OnTakeAll()
         {
-            if (_takeItemAction == null || _currentStorage == null || _localNob == null) return;
-
-            // Take from last to first so earlier indices are not affected by removals
-            for (int i = _currentStorage.Count - 1; i >= 0; i--)
+            Debug.Log($"[LootContainerUI] ▶ OnTakeAll CALLED: action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
+            if (_takeItemAction == null || _currentStorage == null || _localNob == null)
             {
-                int qty = _currentStorage[i].Quantity;
-                _takeItemAction.Invoke(i, qty);
+                Debug.LogWarning($"[LootContainerUI] OnTakeAll: SKIP — action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
+                return;
             }
+
+            // Snapshot indices + quantities BEFORE sending any RPCs.
+            // In host mode the server may process each RPC synchronously, mutating storage
+            // mid-iteration if we read _currentStorage directly in the loop.
+            int count = _currentStorage.Count;
+            Debug.Log($"[LootContainerUI] OnTakeAll: taking {count} item(s)");
+            var snapshot = new (int idx, int qty)[count];
+            for (int i = 0; i < count; i++)
+                snapshot[i] = (i, _currentStorage[i].Quantity);
+
+            // Send from last to first so server-side removal doesn't shift earlier indices.
+            for (int i = count - 1; i >= 0; i--)
+                _takeItemAction.Invoke(snapshot[i].idx, snapshot[i].qty);
         }
 
         private void ClearRows()

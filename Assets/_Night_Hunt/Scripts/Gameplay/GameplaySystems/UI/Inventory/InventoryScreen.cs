@@ -532,12 +532,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private IAttachmentSystem GetAttachmentSystem()
         {
             var spectate = SpectateManager.Instance;
-            if (spectate == null) return null;
+            if (spectate == null) { Debug.LogWarning("[InventoryScreen][Attachment] SpectateManager.Instance is NULL"); return null; }
 
             var currentPlayer = spectate.GetCurrentPlayer();
-            if (currentPlayer == null) return null;
+            if (currentPlayer == null) { Debug.LogWarning("[InventoryScreen][Attachment] SpectateManager.GetCurrentPlayer() is NULL"); return null; }
 
-            return currentPlayer.GetComponent<IAttachmentSystem>();
+            var sys = currentPlayer.GetComponent<IAttachmentSystem>();
+            Debug.Log($"[InventoryScreen][Attachment] GetAttachmentSystem on '{currentPlayer.name}': {(sys != null ? sys.GetType().Name : "NULL — component missing on prefab!")}");
+            return sys;
         }
 
         private IGameplayBridge GetGameplayBridge()
@@ -548,7 +550,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var currentPlayer = spectate.GetCurrentPlayer();
             if (currentPlayer == null) return null;
 
-            return currentPlayer.GamePlaySystemBridge;
+            var bridge = currentPlayer.GamePlaySystemBridge;
+            Debug.Log($"[InventoryScreen][Attachment] GetGameplayBridge: {(bridge != null ? $"IsReady={bridge.IsReady}" : "NULL")}");
+            return bridge;
         }
 
         #endregion

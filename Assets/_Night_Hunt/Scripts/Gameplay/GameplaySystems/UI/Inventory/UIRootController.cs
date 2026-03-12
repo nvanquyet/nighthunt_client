@@ -24,6 +24,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private UIDomainBridge _domainBridge;
         private bool _inventoryVisible;
+        private bool _subscribedToSpectate;
 
         private void Awake()
         {
@@ -45,6 +46,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void Start()
         {
+            // Guard: if SpectateManager wasn't instantiated yet during OnEnable (script
+            // execution-order race), subscribe now — by Start() all Awake() calls
+            // in the scene have already completed.
+            if (!_subscribedToSpectate && SpectateManager.Instance != null)
+            {
+                SpectateManager.Instance.OnCurrentPlayerChanged += OnCurrentPlayerChanged;
+                _subscribedToSpectate = true;
+                Debug.Log("[UIRootController] Start: late-subscribed to SpectateManager (was null in OnEnable).");
+            }
+
             // Edge-case: UIRootController was enabled AFTER the local player already spawned
             // (e.g. additive scene load). Synthesise the callback so CombatHUD gets its
             // first real init without waiting for a future player-change event.
@@ -58,6 +69,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (SpectateManager.Instance != null)
             {
                 SpectateManager.Instance.OnCurrentPlayerChanged += OnCurrentPlayerChanged;
+                _subscribedToSpectate = true;
             }
 
             // Inventory hotkey: listen via InputManager → InventoryInputHandler
@@ -82,6 +94,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 SpectateManager.Instance.OnCurrentPlayerChanged -= OnCurrentPlayerChanged;
             }
+            _subscribedToSpectate = false;
 
             var input = InputManager.Instance;
             if (input != null && input.InventoryHandler != null)
@@ -102,6 +115,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void OnCurrentPlayerChanged(NetworkPlayer player)
         {
+            Debug.Log($"[UIRootController] OnCurrentPlayerChanged: player={player?.name ?? "null"}");
+
             // Đổi player hiển thị UI → reset mọi drag-drop đang diễn ra
             DragDropController.Instance?.ResetAll();
 
@@ -110,6 +125,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             // Tạo bridge mới
             _domainBridge = new UIDomainBridge();
             _domainBridge.InitializeForCurrentPlayer();
+
+            Debug.Log($"[UIRootController] bridge.IsReady={_domainBridge.IsReady}");
 
             // Chỉ refresh UI, không rebuild layout
             if (_inventoryScreen != null)

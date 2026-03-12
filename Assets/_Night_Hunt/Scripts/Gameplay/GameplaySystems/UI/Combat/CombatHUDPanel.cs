@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Michsky.MUIP;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
@@ -64,9 +66,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         //  Inspector — Shared HUD Labels (fixed — not config-driven)
         // ─────────────────────────────────────────────────────────────────────
 
-        [Header("Status Messages")]
-        [Tooltip("Shown while the active weapon is reloading.")]
-        [SerializeField] private GameObject _reloadingIndicator;
+        [Header("Reload Progress (center-screen)")]
+        [Tooltip("MUIP ProgressBar shown while reloading. Assign the ProgressBar component placed at screen centre.")]
+        [SerializeField] private ProgressBar _reloadProgressBar;
 
         [Header("Mobile Fire Button (optional)")]
         [Tooltip("On-screen fire button for mobile / controller. Auto-finds CombatInputHandler if not pre-assigned.")]
@@ -91,6 +93,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IQuickSlotSystem _quickSlotSystem;
         private bool             _slotsSpawned;     // true after Awake spawn pass
         private bool             _isInitialized;    // true after first data bind
+        private Coroutine        _reloadProgressCoroutine;
 
         private readonly List<WeaponSlotButton>    _spawnedWeaponButtons    = new List<WeaponSlotButton>();
         private readonly List<WeaponSlotType>      _spawnedWeaponTypes      = new List<WeaponSlotType>();
@@ -139,6 +142,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IPlayerStatSystem statSystem      = null,
             Transform         playerTransform = null)
         {
+            Debug.Log($"[CombatHUDPanel] Initialize: quickSlotSystem={(quickSlotSystem != null ? quickSlotSystem.ToString() : "null")} ({quickSlotSystem?.GetHashCode() ?? 0})");
             // If slots were never spawned (edge-case: Initialize called before Awake),
             // run the spawn pass now as a safety net.
             if (!_slotsSpawned)
@@ -322,8 +326,60 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private void HandleReloadStateChanged(bool isReloading)
         {
-            if (_reloadingIndicator != null)
-                _reloadingIndicator.SetActive(isReloading);
+            if (isReloading)
+                StartReloadProgress();
+            else
+                StopReloadProgress();
+        }
+
+        private void StartReloadProgress()
+        {
+            StopReloadProgress();
+
+            if (_reloadProgressBar == null) return;
+
+            // Read reload duration from the active weapon's computed stat.
+            float duration = 2.5f;
+            var activeWeapon = _weaponSystem?.GetActiveWeapon();
+            if (activeWeapon != null)
+            {
+                float d = activeWeapon.GetComputedStat(ItemStatType.ReloadSpeed);
+                if (d > 0f) duration = d;
+            }
+
+            // Configure and start MUIP ProgressBar:
+            //   - currentPercent starts at 0, counts up to 100 over `duration` seconds.
+            //   - speed = 100 / duration → bar reaches 100 % in exactly `duration` seconds.
+            //   - invert = false  → 0 % → 100 %
+            //   - restart = false → stays at 100 % when done (StopReloadProgress hides it).
+            _reloadProgressBar.currentPercent = 0f;
+            _reloadProgressBar.speed          = Mathf.Max(1, Mathf.RoundToInt(100f / duration));
+            _reloadProgressBar.invert         = false;
+            _reloadProgressBar.restart        = false;
+            _reloadProgressBar.isOn           = true;
+            _reloadProgressBar.gameObject.SetActive(true);
+
+            _reloadProgressCoroutine = StartCoroutine(WaitForReload(duration));
+        }
+
+        private void StopReloadProgress()
+        {
+            if (_reloadProgressCoroutine != null)
+            {
+                StopCoroutine(_reloadProgressCoroutine);
+                _reloadProgressCoroutine = null;
+            }
+            if (_reloadProgressBar != null)
+            {
+                _reloadProgressBar.isOn = false;
+                _reloadProgressBar.gameObject.SetActive(false);
+            }
+        }
+
+        private IEnumerator WaitForReload(float duration)
+        {
+            yield return new UnityEngine.WaitForSeconds(duration);
+            StopReloadProgress();
         }
 
         private void HandleWeaponDepleted(WeaponSlotType slot)
@@ -348,7 +404,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private void HideStatusMessages()
         {
-            if (_reloadingIndicator != null) _reloadingIndicator.SetActive(false);
+            StopReloadProgress();
         }
     }
 }

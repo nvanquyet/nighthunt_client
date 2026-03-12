@@ -41,10 +41,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
                  "enter aim mode instead of being used immediately.")]
         [SerializeField] private QuickSlotAimController _aimController;
 
-        [Header("Mobile Virtual Joystick")]
-        [Tooltip("VariableJoystick component on a child GO. Set mode = Floating in the Joystick Inspector.")]
-        [SerializeField] private VariableJoystick _joystick;
-
         [Header("MOBA Visual Feedback")]
         [Tooltip("2D ring pulse around this button. Auto-found on the same GO.")]
         [SerializeField] private ButtonPulseRing _pulseRing;
@@ -82,6 +78,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public void Bind(int slotIndex, IQuickSlotSystem quickSlotSystem)
         {
+            Debug.Log($"[QuickSlotHUDButton] Bind: slotIndex={slotIndex}, quickSlotSystem={(quickSlotSystem != null ? quickSlotSystem.ToString() : "null")} ({quickSlotSystem?.GetHashCode() ?? 0})");
             if (_isBound) Unbind();
 
             _slotIndex        = slotIndex;
@@ -142,10 +139,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
             // MOBA feedback — pulse ring around button + world-space range indicator
             _pulseRing?     .Play();
             _rangeIndicator?.Show();
-            _joystick?      .OnPointerDown(eventData);   // position + show joystick at press point
-
-            Debug.Log($"[QuickSlot] OnPointerDown slot={_slotIndex} — screenPos={eventData.position:F0}  " +
-                      $"aimController={_aimController != null}  joystick={_joystick != null}");
 
             if (_aimController != null)
             {
@@ -162,27 +155,20 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public override void OnPointerUp(PointerEventData eventData)
         {
             base.OnPointerUp(eventData);
-            _joystick?.OnPointerUp(eventData);
+            // Hide the range ring if it was shown (throwable aim hides via ResetAimState; this is fallback).
             _rangeIndicator?.Hide();
         }
 
-        // IDragHandler — forward to joystick then pass Direction to aim controller.
+        // IDragHandler — forwarded to aim controller for mobile joystick movement.
         public void OnDrag(PointerEventData eventData)
         {
-            _joystick?.OnDrag(eventData);
-            Vector2 dir = _joystick != null ? _joystick.Direction : Vector2.zero;
-            _aimController?.OnMobileDrag(dir);
-
-            Debug.Log($"[QuickSlot] OnDrag slot={_slotIndex} — joystickDir={dir:F2}  mag={dir.magnitude:F2}  " +
-                      $"aimTarget={NightHunt.GameplaySystems.UI.Combat.QuickSlotAimController.AimWorldTarget:F2}");
+            _aimController?.OnMobileDrag(eventData.delta);
         }
 
-        // IEndDragHandler — capture magnitude before resetting joystick, then confirm/cancel.
+        // IEndDragHandler — forwarded to aim controller to confirm / cancel on lift.
         public void OnEndDrag(PointerEventData eventData)
         {
-            float mag = _joystick != null ? _joystick.Direction.magnitude : 0f;
-            _joystick?.OnPointerUp(eventData);
-            _aimController?.OnMobileDragEnd(mag);
+            _aimController?.OnMobileDragEnd(eventData.delta.magnitude);
         }
 
         // ─────────────────────────────────────────────────────────────────────

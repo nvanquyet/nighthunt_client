@@ -202,10 +202,24 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         void SetAimDirection(Vector3 worldDirection);
 
         /// <summary>
+        /// Get the current world-space aim direction stored in WeaponSystem.
+        /// Used by VFX controllers (aim trail, muzzle preview) that need the direction outside of shot events.
+        /// </summary>
+        Vector3 GetAimDirection();
+
+        /// <summary>
         /// Set the world-space Transform used as the raycast / projectile origin (muzzle tip).
         /// Called by WeaponModelController after each weapon model swap.
         /// </summary>
         void SetFireOrigin(Transform muzzlePoint);
+
+        /// <summary>
+        /// Set the WeaponBase component from the currently spawned weapon model prefab.
+        /// Called by WeaponModelController after each weapon model swap.
+        /// WeaponSystem subscribes to WeaponBase.OnFireResult to re-raise OnHitscanResult for VFX.
+        /// Pass null when weapon is holstered or model is destroyed.
+        /// </summary>
+        void SetCurrentWeaponBase(NightHunt.Gameplay.Character.Combat.Weapons.WeaponBase weaponBase);
 
         /// <summary>
         /// Fired after a hitscan shot, carrying the muzzle origin and the ray endpoint

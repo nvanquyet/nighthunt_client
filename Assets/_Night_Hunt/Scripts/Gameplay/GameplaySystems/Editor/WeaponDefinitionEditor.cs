@@ -32,7 +32,6 @@ namespace NightHunt.GameplaySystems.Editor
             var config = ItemStatConfigSetup.GetOrCreateConfig<WeaponStatConfig>("WeaponStatConfig_Rifle");
             ItemStatConfigSetup.SetupRifle(config);
             weapon.StatConfig = config;
-            weapon.CanTacticalReload = true;
             weapon.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Weapon };
             weapon.AttachmentSlots = new AttachmentSlotType[] { AttachmentSlotType.Optic, AttachmentSlotType.Grip, AttachmentSlotType.Magazine, AttachmentSlotType.Barrel, AttachmentSlotType.UnderBarrel };
             EditorUtility.SetDirty(config);
@@ -45,7 +44,6 @@ namespace NightHunt.GameplaySystems.Editor
             var config = ItemStatConfigSetup.GetOrCreateConfig<WeaponStatConfig>("WeaponStatConfig_Pistol");
             ItemStatConfigSetup.SetupPistol(config);
             weapon.StatConfig = config;
-            weapon.CanTacticalReload = true;
             weapon.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Weapon };
             weapon.AttachmentSlots = new AttachmentSlotType[] { AttachmentSlotType.Barrel, AttachmentSlotType.Magazine };
             EditorUtility.SetDirty(config);
@@ -60,7 +58,6 @@ namespace NightHunt.GameplaySystems.Editor
                 var config = ItemStatConfigSetup.GetOrCreateConfig<WeaponStatConfig>("WeaponStatConfig_Rifle");
                 ItemStatConfigSetup.SetupRifle(config);
                 weapon.StatConfig = config;
-                weapon.CanTacticalReload = true;
                 weapon.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Weapon };
                 weapon.AttachmentSlots = new AttachmentSlotType[] { AttachmentSlotType.Optic, AttachmentSlotType.Grip, AttachmentSlotType.Magazine, AttachmentSlotType.Barrel, AttachmentSlotType.UnderBarrel };
                 EditorUtility.SetDirty(config);
@@ -71,7 +68,6 @@ namespace NightHunt.GameplaySystems.Editor
                 var config = ItemStatConfigSetup.GetOrCreateConfig<WeaponStatConfig>("WeaponStatConfig_Pistol");
                 ItemStatConfigSetup.SetupPistol(config);
                 weapon.StatConfig = config;
-                weapon.CanTacticalReload = true;
                 weapon.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Weapon };
                 weapon.AttachmentSlots = new AttachmentSlotType[] { AttachmentSlotType.Barrel, AttachmentSlotType.Magazine };
                 EditorUtility.SetDirty(config);

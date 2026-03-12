@@ -13,14 +13,22 @@ namespace NightHunt.GameplaySystems.UI.Combat
     /// HUD button representing a single weapon slot (Primary, Secondary, or Melee).
     ///
     /// Displays:
-    ///   • Weapon icon (from ItemDefinition.Icon or ItemDefinition.Thumbnail).
-    ///   • Ammo counter  "currentMag / capacity".
+    ///   • Weapon name (DisplayName from ItemDefinition).
+    ///   • Weapon icon (from ItemDefinition.Icon).
+    ///   • Magazine ammo count (Field 1 — current rounds in mag, decreases on fire).
+    ///   • Reserve ammo count (Field 2 — total remaining reserve, decreases on reload).
+    ///   • Magazine fill slider (currentMag / magCapacity).
     ///   • Selected-border highlight when this slot is the active weapon.
     ///   • Cooldown ring over the icon during reload.
     ///
+    /// Click / Double-click behaviour:
+    ///   • Single click, slot IS active  → RequestReload().
+    ///   • Single click, slot NOT active → SelectWeapon (switch).
+    ///   • Double click (≤DoubleClickThreshold) → HolsterWeapon (put away).
+    ///
     /// Usage:
     ///   Call Bind(slotType, weaponSystem) once after the local player's
-    ///   WeaponSystem subscribe to events; call Unbind() on destroy.
+    ///   WeaponSystem subscribes to events; call Unbind() on destroy.
     /// </summary>
     public class WeaponSlotButton : ActionButton
     {
@@ -30,19 +38,27 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         [Header("Weapon Slot UI")]
         [SerializeField] private Image            _selectedBorder;
-        [SerializeField] private TextMeshProUGUI  _ammoText;
-        [SerializeField] private Image            _emptySlotOverlay;    // shown when slot is empty
+        [SerializeField] private TextMeshProUGUI  _weaponNameText;     // weapon display name
+        [SerializeField] private TextMeshProUGUI  _magAmmoText;        // Field 1: rounds in mag
+        [SerializeField] private TextMeshProUGUI  _reserveAmmoText;    // Field 2: reserve ammo remaining
+        [SerializeField] private Slider           _ammoSlider;         // fill = currentMag / magCapacity
+        [SerializeField] private Image            _emptySlotOverlay;   // shown when slot is empty
 
         [Header("Slot Config")]
         [SerializeField] private WeaponSlotType   _slotType;
+
+        [Header("Double-click")]
+        [Tooltip("Max seconds between two taps to register a double-click (holster).")]
+        [SerializeField] private float _doubleClickThreshold = 0.3f;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime
         // ─────────────────────────────────────────────────────────────────────
 
         private IWeaponSystem      _weaponSystem;
-        private CombatInputHandler _combatInputHandler;  // notified on press to block concurrent LMB fire
+        private CombatInputHandler _combatInputHandler;
         private bool               _isBound;
+        private float              _lastClickTime = -999f;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Binding
@@ -118,8 +134,32 @@ namespace NightHunt.GameplaySystems.UI.Combat
             base.OnPointerDown(eventData);
             // Notify CombatInputHandler to block the concurrent Input System LMB-performed event.
             _combatInputHandler?.NotifyUIConsumedPress();
-            // Request weapon select via the bound system
-            _weaponSystem?.SelectWeapon(_slotType);
+
+            if (_weaponSystem == null) return;
+
+            float now          = Time.unscaledTime;
+            bool isDoubleClick = (now - _lastClickTime) <= _doubleClickThreshold;
+            _lastClickTime     = now;
+
+            if (isDoubleClick)
+            {
+                // Double-click → holster (put weapon away regardless of which slot)
+                _weaponSystem.HolsterWeapon();
+                return;
+            }
+
+            // Single click
+            var activeSlot = _weaponSystem.GetActiveWeaponSlot();
+            if (activeSlot.HasValue && activeSlot.Value == _slotType)
+            {
+                // Already holding this weapon → reload
+                _weaponSystem.RequestReload();
+            }
+            else
+            {
+                // Switch to this weapon slot
+                _weaponSystem.SelectWeapon(_slotType);
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -155,7 +195,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var activeSlot = _weaponSystem.GetActiveWeaponSlot();
             if (!activeSlot.HasValue || activeSlot.Value != _slotType) return;
 
-            RefreshAmmoText(currentMag, totalLeft);
+            RefreshAmmoDisplay(currentMag, totalLeft, capacity);
         }
 
         private void HandleReloadStateChanged(bool isReloading)
@@ -197,9 +237,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
             bool isSelected = activeSlot.HasValue && activeSlot.Value == _slotType;
             SetSelectedBorder(isSelected);
 
-            int mag      = _weaponSystem.GetCurrentMagazine(_slotType);
-            int total    = Mathf.RoundToInt(_weaponSystem.GetTotalAmmo(_slotType));
-            RefreshAmmoText(mag, total);
+            int mag   = _weaponSystem.GetCurrentMagazine(_slotType);
+            int total = Mathf.RoundToInt(_weaponSystem.GetTotalAmmo(_slotType));
+            int cap   = GetMagazineCapacity(weapon);
+            RefreshAmmoDisplay(mag, total, cap);
         }
 
         private void RefreshEmpty()
@@ -208,7 +249,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
             SetInteractable(false);
             SetSelectedBorder(false);
 
-            if (_ammoText       != null) _ammoText.text       = string.Empty;
+            if (_weaponNameText  != null) _weaponNameText.text  = string.Empty;
+            if (_magAmmoText     != null) _magAmmoText.text     = string.Empty;
+            if (_reserveAmmoText != null) _reserveAmmoText.text = string.Empty;
+            if (_ammoSlider      != null) _ammoSlider.value     = 0f;
             if (_emptySlotOverlay != null) _emptySlotOverlay.enabled = true;
         }
 
@@ -219,26 +263,33 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var def = ItemDatabase.GetDefinition(weapon.DefinitionID);
             SetIcon(def?.Icon);
 
+            if (_weaponNameText != null)
+                _weaponNameText.text = def?.DisplayName ?? string.Empty;
+
             if (_emptySlotOverlay != null)
                 _emptySlotOverlay.enabled = false;
         }
 
-        /// <param name="currentMag">Bullets currently in magazine.</param>
-        /// <param name="totalLeft">Total remaining ammo (reserve + current mag).</param>
-        private void RefreshAmmoText(int currentMag, int totalLeft)
+        /// <summary>
+        /// Update the three ammo display elements.
+        /// </summary>
+        /// <param name="currentMag">Rounds currently loaded in the magazine.</param>
+        /// <param name="reserveAmmo">Reserve ammo remaining (NOT including what is in mag).</param>
+        /// <param name="magCapacity">Maximum magazine capacity (for slider fill).</param>
+        private void RefreshAmmoDisplay(int currentMag, int reserveAmmo, int magCapacity)
         {
-            if (_ammoText == null) return;
-
-            // Melee weapons — no magazine capacity on this slot, hide text
-            var weapon = _weaponSystem?.GetWeapon(_slotType);
-            int cap    = weapon != null ? GetMagazineCapacity(weapon) : 0;
-            if (cap <= 0)
+            // Melee weapons have no magazine — hide ammo elements
+            if (magCapacity <= 0)
             {
-                _ammoText.text = string.Empty;
+                if (_magAmmoText     != null) _magAmmoText.text     = string.Empty;
+                if (_reserveAmmoText != null) _reserveAmmoText.text = string.Empty;
+                if (_ammoSlider      != null) _ammoSlider.value     = 0f;
                 return;
             }
 
-            _ammoText.text = $"{currentMag}/{totalLeft}";
+            if (_magAmmoText     != null) _magAmmoText.text     = currentMag.ToString();
+            if (_reserveAmmoText != null) _reserveAmmoText.text = reserveAmmo.ToString();
+            if (_ammoSlider      != null) _ammoSlider.value     = (float)currentMag / magCapacity;
         }
 
         private void SetSelectedBorder(bool selected)

@@ -175,10 +175,20 @@ namespace NightHunt.GameplaySystems.QuickSlot
         private void InitializeQuickSlots()
         {
             int slotCount = _inventoryConfig != null ? _inventoryConfig.QuickSlotConfig.SlotCount : 4;
-            
+
+            if (slotCount <= 0)
+            {
+                Debug.LogError("[QuickSlotSystem] SlotCount = 0 after config lookup! " +
+                               "Fix: open your InventoryConfig ScriptableObject → QuickSlotConfig → SlotCount " +
+                               "and set it to the number of quickslot buttons on your HUD (e.g. 3). Falling back to 4.");
+                slotCount = 4;
+            }
+
             _quickSlots.Clear();
             for (int i = 0; i < slotCount; i++)
                 _quickSlots.Add(string.Empty);
+
+            Debug.Log($"[QuickSlotSystem] InitializeQuickSlots: initialised {slotCount} slots.");
         }
         
         #endregion
@@ -247,55 +257,65 @@ namespace NightHunt.GameplaySystems.QuickSlot
         
         public void AssignToQuickSlot(string instanceID, int slotIndex)
         {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[QuickSlotSystem] AssignToQuickSlot: server-only!");
-                return;
-            }
-            
+            Debug.Log($"[QuickSlotSystem][QS] AssignToQuickSlot: instanceID={instanceID}, slot={slotIndex}, IsServer={IsServerInitialized}, IsOwner={IsOwner}");
+            if (IsServerInitialized)
+                AssignToQuickSlotServer(instanceID, slotIndex);
+            else
+                AssignToQuickSlotServerRpc(instanceID, slotIndex);
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void AssignToQuickSlotServerRpc(string instanceID, int slotIndex)
+        {
+            Debug.Log($"[QuickSlotSystem][QS] AssignToQuickSlotServerRpc received: instanceID={instanceID}, slot={slotIndex}");
             AssignToQuickSlotServer(instanceID, slotIndex);
         }
-        
-        [Server]
+
         private void AssignToQuickSlotServer(string instanceID, int slotIndex)
         {
+            Debug.Log($"[QuickSlotSystem][QS] AssignToQuickSlotServer entered: instanceID={instanceID}, slot={slotIndex}, count={_quickSlots.Count}");
             if (slotIndex < 0 || slotIndex >= _quickSlots.Count)
             {
-                Debug.LogWarning($"[QuickSlotSystem] Invalid slot index: {slotIndex}");
+                Debug.LogWarning($"[QuickSlotSystem][QS] Server: Invalid slot index: {slotIndex} (count={_quickSlots.Count})");
                 return;
             }
             
             var item = _inventorySystem.GetItemByInstanceID(instanceID);
             if (item == null)
             {
-                Debug.LogWarning($"[QuickSlotSystem] Item not found: {instanceID}");
+                Debug.LogWarning($"[QuickSlotSystem][QS] Server: Item not found in inventory: {instanceID}");
                 return;
             }
             
             var itemDef = ItemDatabase.GetDefinition(item.DefinitionID);
             if (!CanPlaceInQuickSlot(item.DefinitionID))
             {
-                Debug.LogWarning($"[QuickSlotSystem] Item type not allowed: {itemDef?.Type}");
+                Debug.LogWarning($"[QuickSlotSystem][QS] Server: Item type not allowed in quickslot: {itemDef?.Type} (defID={item.DefinitionID})");
                 return;
             }
             
             _quickSlots[slotIndex] = instanceID;
-            
-            if (_enableDebugLogs)
-                Debug.Log($"[QuickSlotSystem] Assigned {itemDef?.DisplayName} → slot {slotIndex}");
+            Debug.Log($"[QuickSlotSystem][QS] Server: Assigned '{itemDef?.DisplayName}' ({instanceID}) → slot {slotIndex} — SyncList will propagate to clients");
         }
         
         public void RemoveFromQuickSlot(int slotIndex)
         {
-            if (!IsServerInitialized)
+            if (IsServerInitialized)
             {
-                Debug.LogWarning("[QuickSlotSystem] RemoveFromQuickSlot: server-only!");
+                RemoveFromQuickSlotServer(slotIndex);
                 return;
             }
-            
+            if (IsOwner)
+                RemoveFromQuickSlotServerRpc(slotIndex);
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void RemoveFromQuickSlotServerRpc(int slotIndex)
+        {
+            Debug.Log($"[QuickSlotSystem][QS] RemoveFromQuickSlotServerRpc received: slot={slotIndex}");
             RemoveFromQuickSlotServer(slotIndex);
         }
-        
+
         [Server]
         private void RemoveFromQuickSlotServer(int slotIndex)
         {
@@ -578,31 +598,39 @@ namespace NightHunt.GameplaySystems.QuickSlot
         
         private void OnQuickSlotsChanged(SyncListOperation op, int index, string oldValue, string newValue, bool asServer)
         {
+            Debug.Log($"[QuickSlotSystem][QS] OnQuickSlotsChanged: op={op}, index={index}, old='{oldValue}', new='{newValue}', asServer={asServer}");
             if (asServer)
                 return;
-            
-            switch (op)
+
+            // Both Add (initial full-state sync on connect) and Set (live change) carry
+            // the same semantics: slot[index] now holds newValue.
+            if (op == SyncListOperation.Add || op == SyncListOperation.Set)
             {
-                case SyncListOperation.Set:
-                    if (!string.IsNullOrEmpty(newValue))
+                if (!string.IsNullOrEmpty(newValue))
+                {
+                    var item = _inventorySystem?.GetItemByInstanceID(newValue);
+                    if (item != null)
                     {
-                        var item = _inventorySystem?.GetItemByInstanceID(newValue);
-                        if (item != null)
-                        {
-                            OnQuickSlotAssigned?.Invoke(index, item);
-                        }
-                        else
-                        {
-                            // Item not yet in inventory cache (inventory SyncList update may arrive
-                            // in a later frame). Subscribe to OnItemAdded and fire QS event then.
-                            StartCoroutine(DeferredQuickSlotAssigned(index, newValue));
-                        }
+                        Debug.Log($"[QuickSlotSystem][QS] Firing OnQuickSlotAssigned: slot={index}, item={item.DefinitionID}");
+                        OnQuickSlotAssigned?.Invoke(index, item);
                     }
                     else
                     {
-                        OnQuickSlotRemoved?.Invoke(index);
+                        Debug.LogWarning($"[QuickSlotSystem][QS] Item '{newValue}' not yet in inventory cache — deferring...");
+                        StartCoroutine(DeferredQuickSlotAssigned(index, newValue));
                     }
-                    break;
+                }
+                else if (op == SyncListOperation.Set)
+                {
+                    // Set to empty string means slot was cleared.
+                    Debug.Log($"[QuickSlotSystem][QS] Slot {index} cleared — firing OnQuickSlotRemoved");
+                    OnQuickSlotRemoved?.Invoke(index);
+                }
+            }
+            else if (op == SyncListOperation.Clear)
+            {
+                for (int i = 0; i < _quickSlots.Count; i++)
+                    OnQuickSlotRemoved?.Invoke(i);
             }
         }
 
@@ -621,18 +649,21 @@ namespace NightHunt.GameplaySystems.QuickSlot
 
                 // Verify the slot still maps to this instanceID (user may have changed it).
                 if (slotIndex >= _quickSlots.Count || _quickSlots[slotIndex] != instanceID)
+                {
+                    Debug.LogWarning($"[QuickSlotSystem][QS] Deferred: slot {slotIndex} changed before item arrived, aborting");
                     yield break;
+                }
 
                 var item = _inventorySystem?.GetItemByInstanceID(instanceID);
                 if (item != null)
                 {
+                    Debug.Log($"[QuickSlotSystem][QS] Deferred fire OnQuickSlotAssigned after {f + 1} frame(s): slot={slotIndex}, item={item.DefinitionID}");
                     OnQuickSlotAssigned?.Invoke(slotIndex, item);
                     yield break;
                 }
             }
 
-            if (_enableDebugLogs)
-                Debug.LogWarning($"[QuickSlotSystem] DeferredQuickSlotAssigned: item {instanceID} never arrived in inventory cache");
+            Debug.LogWarning($"[QuickSlotSystem][QS] Deferred: item '{instanceID}' NEVER arrived in inventory cache after {maxFrames} frames");
         }
         
         #endregion

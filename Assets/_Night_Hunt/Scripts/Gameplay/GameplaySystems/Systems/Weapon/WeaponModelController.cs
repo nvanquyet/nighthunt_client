@@ -41,11 +41,10 @@ namespace NightHunt.GameplaySystems.Weapon
         public Transform LeftHandIKTarget { get; private set; }
 
         /// <summary>
-        /// Fired after every weapon swap with the spawned model's PrWeapon component,
-        /// or null when holstered. WeaponVFXController / WeaponSystem subscribe here
-        /// to grab ShootFXPos without needing child-name string lookups.
+        /// Fired after every weapon swap with the spawned model's WeaponBase component,
+        /// or null when holstered. WeaponVFXController subscribes to update the muzzle point.
         /// </summary>
-        public event Action<PrWeapon> OnWeaponModelChanged;
+        public event Action<NightHunt.Gameplay.Character.Combat.Weapons.WeaponBase> OnWeaponModelChanged;
 
         /// <summary>
         /// Fired after every weapon swap with the left-hand IK Transform (may be null).
@@ -156,23 +155,25 @@ namespace NightHunt.GameplaySystems.Weapon
             //Change local rotation to localRotationWeapon value
             _currentModel.transform.localRotation = Quaternion.Euler(localRotationWeapon);
 
+            var weaponBase = _currentModel.GetComponent<NightHunt.Gameplay.Character.Combat.Weapons.WeaponBase>();
 
-            var prWeapon = _currentModel.GetComponent<PrWeapon>();
+            // Set fire origin from WeaponBase.FirePoint (replaces PrWeapon.ShootFXPos).
+            _weaponSystem.SetFireOrigin(weaponBase != null ? weaponBase.FirePoint : null);
 
-            _weaponSystem.SetFireOrigin(prWeapon != null ? prWeapon.ShootFXPos : null);
-            OnWeaponModelChanged?.Invoke(prWeapon);
+            // Wire WeaponBase so WeaponSystem delegates ballistics to the prefab component.
+            _weaponSystem.SetCurrentWeaponBase(weaponBase);
 
-            // SciFi convention: "ArmIK" child on weapon prefab; PrWeapon.useIK=false disables it.
-            LeftHandIKTarget = (prWeapon == null || prWeapon.useIK)
-                ? _currentModel.transform.Find("ArmIK")
-                : null;
+            OnWeaponModelChanged?.Invoke(weaponBase);
+
+            // Left-hand IK target from WeaponBase inspector field (replaces Find("ArmIK")).
+            LeftHandIKTarget = weaponBase?.LeftHandIKTarget;
             OnLeftHandIKTargetChanged?.Invoke(LeftHandIKTarget);
 
             Debug.Log($"[WeaponModelController] Spawned '{def.EquippedPrefab.name}' for '{def.DisplayName}'" +
                       $" | parent={parent.name}" +
-                      $" | PrWeapon={prWeapon != null}" +
-                      $" | ShootFXPos={prWeapon?.ShootFXPos != null}" +
-                      $" | ArmIK={LeftHandIKTarget != null}");
+                      $" | WeaponBase={weaponBase != null}" +
+                      $" | FirePoint={weaponBase?.FirePoint != null}" +
+                      $" | IKTarget={LeftHandIKTarget != null}");
         }
 
         private void DestroyCurrentModel()
@@ -185,6 +186,7 @@ namespace NightHunt.GameplaySystems.Weapon
             LeftHandIKTarget = null;
             OnLeftHandIKTargetChanged?.Invoke(null);
             OnWeaponModelChanged?.Invoke(null);
+            _weaponSystem?.SetCurrentWeaponBase(null);
         }
     }
 }
