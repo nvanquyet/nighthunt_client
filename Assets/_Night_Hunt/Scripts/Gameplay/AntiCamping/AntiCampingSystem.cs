@@ -3,6 +3,7 @@ using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Character;
+using NightHunt.GameplaySystems.Core.Configs;
 using System.Collections.Generic;
 
 namespace NightHunt.Gameplay.AntiCamping
@@ -13,11 +14,8 @@ namespace NightHunt.Gameplay.AntiCamping
     /// </summary>
     public class AntiCampingSystem : NetworkBehaviour
     {
-        [Header("Camping Detection")]
-        [SerializeField] private float campingTimeThreshold = 90f; // 90 seconds
-        [SerializeField] private float positionThreshold = 5f; // 5 meter radius
-        [SerializeField] private float revealRadius = 30f;
-        [SerializeField] private float updateInterval = 5f;
+        [Header("Config")]
+        [SerializeField] private GameplayConfig _gameplayConfig;
 
         [Header("Visual")]
         [SerializeField] private GameObject revealIndicatorPrefab;
@@ -40,6 +38,7 @@ namespace NightHunt.Gameplay.AntiCamping
             if (!IsServer) return;
 
             // Update camping detection periodically
+            float updateInterval = _gameplayConfig != null ? _gameplayConfig.CampingUpdateInterval : 5f;
             if (Time.frameCount % Mathf.RoundToInt(updateInterval / Time.deltaTime) == 0)
             {
                 UpdateCampingDetection();
@@ -87,7 +86,7 @@ namespace NightHunt.Gameplay.AntiCamping
 
             // Check if player moved significantly
             float distanceMoved = Vector3.Distance(currentPosition, data.StartPosition);
-            
+            float positionThreshold = _gameplayConfig != null ? _gameplayConfig.CampingPositionThreshold : 5f;
             if (distanceMoved > positionThreshold)
             {
                 // Player moved, reset camping data
@@ -108,6 +107,7 @@ namespace NightHunt.Gameplay.AntiCamping
                 float timeCamping = Time.time - data.StartTime;
 
                 // Check if camping threshold exceeded
+                float campingTimeThreshold = _gameplayConfig != null ? _gameplayConfig.CampingTimeThreshold : 90f;
                 if (timeCamping >= campingTimeThreshold)
                 {
                     if (!revealedPlayers.ContainsKey(playerId) || !revealedPlayers[playerId])
@@ -133,6 +133,7 @@ namespace NightHunt.Gameplay.AntiCamping
             }
 
             // Apply reveal effect
+            float revealRadius = _gameplayConfig != null ? _gameplayConfig.CampingRevealRadius : 30f;
             RpcRevealPlayer(playerId, revealRadius);
 
             Debug.Log($"[AntiCampingSystem] Player {player.DisplayName} is camping and has been revealed!");

@@ -1,7 +1,7 @@
 using UnityEngine;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.StatSystem.Configs;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Configs;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.Core.Data
 {

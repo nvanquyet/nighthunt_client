@@ -4,7 +4,7 @@ using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 
-namespace NightHunt.Networking
+namespace NightHunt.Gameplay.Team
 {
     /// <summary>
     /// TeamService - Data provider cho UI

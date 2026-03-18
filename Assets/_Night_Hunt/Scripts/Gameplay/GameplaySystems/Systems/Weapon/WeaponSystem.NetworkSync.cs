@@ -22,14 +22,13 @@ namespace NightHunt.GameplaySystems.Weapon
     {
         // ── 1. Aim direction sync (20 Hz) ──────────────────────────────────────
         private float _aimSyncTimer;
-        private const float AimSyncInterval = 0.05f; // 20 Hz — enough for smooth body rotation
 
         private void Update()
         {
             if (!IsOwner) return;
 
             _aimSyncTimer += Time.deltaTime;
-            if (_aimSyncTimer >= AimSyncInterval)
+            if (_aimSyncTimer >= _aimSyncInterval)
             {
                 _aimSyncTimer = 0f;
                 SyncAimDirectionServerRpc(_aimDirection);

@@ -4,8 +4,8 @@ using FishNet.Object.Synchronizing;
 using UnityEngine;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Utilities;
 

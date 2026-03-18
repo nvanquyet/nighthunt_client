@@ -5,7 +5,7 @@ using NightHunt.Gameplay.Spectator;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Networking;
 
@@ -25,7 +25,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private NetworkPlayer _currentPlayer;
         private IGameplayBridge _bridge;
 
-        [UnityEngine.SerializeField]
         private bool _enableDebugLogs = false;
 
         public bool IsReady => _bridge != null && _bridge.IsReady;

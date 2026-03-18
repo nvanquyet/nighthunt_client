@@ -62,16 +62,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (_background != null)
             {
-                // Set background sprite theo rarity nếu có config
-                // Rarity border will be activated once Rarity is added to ItemDefinition/ItemInstance.
-                // ItemRarity rarity = state.Item?.GetRarity() ?? ItemRarity.Common;
-                // Sprite bgSprite = _uiConfig != null ? _uiConfig.GetRarityBackground(rarity) : null;
-                // if (bgSprite != null)
-                // {
-                //     _background.sprite = bgSprite;
-                // }
-                
-                // Tạm thời dùng BackgroundColor từ state
                 _background.color = state.BackgroundColor;
             }
 

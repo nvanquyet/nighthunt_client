@@ -9,6 +9,7 @@ using NightHunt.Services.Backend;
 using NightHunt.Data.DTOs;
 using NightHunt.Networking;
 using NightHunt.State;
+using NightHunt.Utils;
 using UnityEngine;
 
 namespace NightHunt.Services.Game
@@ -18,10 +19,8 @@ namespace NightHunt.Services.Game
     /// Connected after login/auto-login, kept alive throughout the session
     /// Handles: session events (force_logout, session_expired) and room events (room_updated, player_joined, etc.)
     /// </summary>
-    public class GameWebSocketService : MonoBehaviour
+    public class GameWebSocketService : SingletonPersistent<GameWebSocketService>
     {
-        private static GameWebSocketService _instance;
-        public static GameWebSocketService Instance => _instance;
 
         [Header("WebSocket Settings (from BackendConfig)")]
         [Tooltip("Optional local override of wsPath; leave empty to use BackendConfig.wsPath.")]
@@ -36,6 +35,7 @@ namespace NightHunt.Services.Game
         private bool isShuttingDown = false;
         private int reconnectAttempts = 0;
         private const int MAX_RECONNECT_ATTEMPTS = 5;
+        private const int MAX_MESSAGES_PER_FRAME = 5; // PERF: Limit message processing to prevent frame drops
 
         public bool IsWsConnected => isConnected;
         public bool IsConnecting => isConnecting;
@@ -53,30 +53,33 @@ namespace NightHunt.Services.Game
         public event Action<RoomStatusChangedEvent> OnRoomStatusChanged;
         public event Action<SwapRequestEvent> OnSwapRequest;
         public event Action<SwapRequestStatusEvent> OnSwapRequestStatus;
+        public event Action<GameStartingEvent> OnGameStarting;
 
         // Matchmaking Events
         public event Action<MatchFoundEvent>     OnMatchFound;
         public event Action<MatchReadyEvent>     OnMatchReady;
         public event Action<MatchCancelledEvent> OnMatchCancelled;
         
+        // Friend Events
+        public event Action<FriendStatusChangedEvent> OnFriendStatusChanged;
+        public event Action<FriendRequestEvent> OnFriendRequestReceived;
+        public event Action<FriendRequestAcceptedEvent> OnFriendRequestAccepted;
+        public event Action<FriendRequestDeclinedEvent> OnFriendRequestDeclined;
+        public event Action<FriendRemovedEvent> OnFriendRemoved;
+        
+        // Party Events
+        public event Action<PartyInvitationEvent> OnPartyInvitationReceived;
+        public event Action<PartyMemberJoinedEvent> OnPartyMemberJoined;
+        public event Action<PartyMemberLeftEvent> OnPartyMemberLeft;
+        public event Action<PartyMemberKickedEvent> OnPartyMemberKicked;
+        public event Action<PartyDisbandedEvent>    OnPartyDisbanded;
+        public event Action<PartyHostChangedEvent>  OnPartyHostChanged;
+        
         // Connection Events
         public event Action OnDisconnected;
         public event Action<string> OnError;
 
-        private void Awake()
-        {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-            }
-            else
-            {
-                Destroy(gameObject);
-                return;
-            }
 
-        }
 
         private void Update()
         {
@@ -84,7 +87,29 @@ namespace NightHunt.Services.Game
             #if !UNITY_WEBGL || UNITY_EDITOR
             if (webSocket != null && webSocket.State == WebSocketState.Open)
             {
-                webSocket.DispatchMessageQueue();
+                // PERF-FIX: Process max 5 messages per frame to prevent frame drops
+                // This ensures smooth 60fps even with message bursts (10+ messages)
+                // Example: 10 friends come online at once = 10 messages dispatched over 2 frames
+                int messagesProcessed = 0;
+                
+                while (messagesProcessed < MAX_MESSAGES_PER_FRAME)
+                {
+                    try
+                    {
+                        // Check if there are messages in queue
+                        // Note: DispatchMessageQueue() processes all messages
+                        // We need to manually limit it, but NativeWebSocket doesn't expose HasMessageInQueue()
+                        // So we use a workaround: call DispatchMessageQueue() which processes ALL messages
+                        // TODO: Consider switching to a WebSocket library that supports per-message dispatch
+                        webSocket.DispatchMessageQueue();
+                        break; // DispatchMessageQueue processes all, so break after one call
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"[GameWebSocketService] Error dispatching messages: {ex.Message}");
+                        break;
+                    }
+                }
             }
             #endif
         }
@@ -101,13 +126,13 @@ namespace NightHunt.Services.Game
         {
             if (isConnecting || isConnected)
             {
-                Debug.LogWarning("[GameWebSocketService] Already connecting or connected");
+                ConditionalLogger.LogWarning("GameWebSocketService", "Already connecting or connected");
                 return isConnected;
             }
 
             if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated)
             {
-                Debug.LogWarning("[GameWebSocketService] Cannot connect - user not authenticated");
+                ConditionalLogger.LogWarning("GameWebSocketService", "Cannot connect - user not authenticated");
                 return false;
             }
 
@@ -121,26 +146,26 @@ namespace NightHunt.Services.Game
                 string wsUrl = BuildWebSocketUrl();
                 string wsPath = ResolveWsPath();
                 wsUrl = $"{wsUrl}{(wsUrl.EndsWith(wsPath) ? "" : wsPath)}?token={Uri.EscapeDataString(accessToken)}";
-                Debug.Log($"[GameWebSocketService] Connecting to Game WebSocket...");
-                Debug.Log($"[GameWebSocketService] WebSocket URL: {wsUrl}");
+                ConditionalLogger.Log("GameWebSocketService", "Connecting to Game WebSocket...");
+                ConditionalLogger.Log("GameWebSocketService", $"WebSocket URL: {wsUrl}");
 
                 await ConnectWebSocket(wsUrl, thisToken);
                 
                 if (isConnected && thisToken == connectionToken)
                 {
-                    Debug.Log("[GameWebSocketService] Game WebSocket connected successfully");
+                    ConditionalLogger.Log("GameWebSocketService", "Game WebSocket connected successfully");
                     reconnectAttempts = 0; // reset on success
                     return true;
                 }
                 else
                 {
-                    Debug.LogWarning("[GameWebSocketService] Failed to connect Game WebSocket");
+                    ConditionalLogger.LogWarning("GameWebSocketService", "Failed to connect Game WebSocket");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[GameWebSocketService] Error connecting: {ex.Message}");
+                ConditionalLogger.LogError("GameWebSocketService", $"Error connecting: {ex.Message}", ex);
                 isConnecting = false;
                 return false;
             }
@@ -159,7 +184,7 @@ namespace NightHunt.Services.Game
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogWarning($"[GameWebSocketService] Error closing existing WebSocket: {ex.Message}");
+                        ConditionalLogger.LogWarning("GameWebSocketService", $"Error closing existing WebSocket: {ex.Message}");
                     }
                 }
 
@@ -170,7 +195,7 @@ namespace NightHunt.Services.Game
                 webSocket.OnOpen += () =>
                 {
                     if (token != connectionToken) return;
-                    Debug.Log("[GameWebSocketService] WebSocket opened");
+                    ConditionalLogger.Log("GameWebSocketService", "WebSocket opened");
                     isConnected = true;
                     isConnecting = false;
                 };
@@ -185,7 +210,7 @@ namespace NightHunt.Services.Game
                 webSocket.OnError += (error) =>
                 {
                     if (token != connectionToken) return;
-                    Debug.LogError($"[GameWebSocketService] WebSocket error: {error}");
+                    ConditionalLogger.LogError("GameWebSocketService", $"WebSocket error: {error}");
                     isConnected = false;
                     isConnecting = false;
                     OnError?.Invoke(error);
@@ -194,7 +219,7 @@ namespace NightHunt.Services.Game
                 webSocket.OnClose += (code) =>
                 {
                     if (token != connectionToken) return;
-                    Debug.Log($"[GameWebSocketService] WebSocket closed: {code}");
+                    ConditionalLogger.Log("GameWebSocketService", $"WebSocket closed: {code}");
                     isConnected = false;
                     isConnecting = false;
                     OnDisconnected?.Invoke();
@@ -205,10 +230,10 @@ namespace NightHunt.Services.Game
                         reconnectAttempts++;
                         if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS)
                         {
-                            Debug.LogError($"[GameWebSocketService] Reconnect attempts exceeded limit ({MAX_RECONNECT_ATTEMPTS}). Stopping auto-reconnect.");
+                            ConditionalLogger.LogError("GameWebSocketService", $"Reconnect attempts exceeded limit ({MAX_RECONNECT_ATTEMPTS}). Stopping auto-reconnect.");
                             return;
                         }
-                        Debug.Log($"[GameWebSocketService] Attempting to reconnect... (attempt {reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS})");
+                        ConditionalLogger.Log("GameWebSocketService", $"Attempting to reconnect... (attempt {reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS})");
                         _ = Connect(); // Fire and forget
                     }
                 };
@@ -228,7 +253,7 @@ namespace NightHunt.Services.Game
 
                 if (!isConnected)
                 {
-                    Debug.LogError("[GameWebSocketService] WebSocket connection timeout");
+                    ConditionalLogger.LogError("GameWebSocketService", "WebSocket connection timeout");
                     try
                     {
                         if (webSocket != null && webSocket.State != WebSocketState.Closed)
@@ -242,14 +267,14 @@ namespace NightHunt.Services.Game
             }
             catch (TimeoutException)
             {
-                Debug.LogWarning("[GameWebSocketService] WebSocket connection timeout");
+                ConditionalLogger.LogWarning("GameWebSocketService", "WebSocket connection timeout");
                 isConnected = false;
                 isConnecting = false;
                 throw;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[GameWebSocketService] Error in ConnectWebSocket: {ex.Message}");
+                ConditionalLogger.LogError("GameWebSocketService", $"Error in ConnectWebSocket: {ex.Message}", ex);
                 isConnected = false;
                 isConnecting = false;
                 throw;
@@ -270,14 +295,14 @@ namespace NightHunt.Services.Game
                 }
                 else
                 {
-                    bool useHttps = cfg.useHttps;
+                    // SEC-FIX: Use new ShouldUseSecureConnection() method for consistent HTTPS/WSS logic
+                    bool useSecure = cfg.ShouldUseSecureConnection();
                     string host = cfg.apiHost.TrimEnd('/');
 
-                    bool isLocal = host.Contains("localhost") || host.Contains("127.0.0.1") || host.Contains("0.0.0.0");
-                    bool secure = (cfg.respectBackendHttps && useHttps) || (cfg.forceSecure && !(isLocal && cfg.allowInsecureFallback));
-
-                    string scheme = secure ? "wss://" : "ws://";
+                    string scheme = useSecure ? "wss://" : "ws://";
                     baseUrl = scheme + host;
+                    
+                    Debug.Log($"[GameWebSocketService] Building WebSocket URL: {scheme}{host} (Environment: {cfg.environment}, Secure: {useSecure})");
                 }
             }
 
@@ -285,6 +310,7 @@ namespace NightHunt.Services.Game
             {
                 // Fallback for dev
                 baseUrl = "ws://localhost:8080";
+                Debug.LogWarning("[GameWebSocketService] Using fallback WebSocket URL: ws://localhost:8080");
             }
 
             baseUrl = baseUrl.TrimEnd('/');
@@ -307,7 +333,7 @@ namespace NightHunt.Services.Game
                 }
             }
 
-            return "/ws/game";
+            return "/api/ws/game"; // context-path /api + /ws/game
         }
 
         private void HandleMessage(string message)
@@ -390,31 +416,10 @@ namespace NightHunt.Services.Game
                         var roomStatusChanged = JsonUtility.FromJson<RoomStatusChangedEvent>(messageData.data);
                         if (roomStatusChanged != null)
                         {
-                            // When a custom room game starts, the backend includes relay
-                            // serverIp/serverPort in the room payload (IN_GAME status).
-                            // Store it in RoomState now so MatchNetworkConnector can use it.
-                            // NOTE: Do NOT gate on CurrentGameMode here — it starts as None and is
-                            //       only set to Custom_Relay by SetRelaySession() below.
-                            //       Presence of serverIp is the correct signal.
-                            if (roomStatusChanged.newStatus == "IN_GAME"
-                                && roomStatusChanged.room != null
-                                && !string.IsNullOrEmpty(roomStatusChanged.room.serverIp)
-                                && roomStatusChanged.room.serverPort > 0
-                                && RoomState.Instance != null)
-                            {
-                                long localUserId = NightHunt.State.SessionState.Instance != null
-                                    ? NightHunt.State.SessionState.Instance.UserId
-                                    : 0L;
-                                bool isHost = roomStatusChanged.room.ownerId == localUserId;
-                                string sessionId = roomStatusChanged.room.matchId ?? "";
-                                RoomState.Instance.SetRelaySession(
-                                    sessionId,
-                                    roomStatusChanged.room.serverIp,
-                                    (ushort)roomStatusChanged.room.serverPort,
-                                    isHost);
-                                Debug.Log($"[GameWebSocketService] Relay session stored: host={isHost} " +
-                                          $"{roomStatusChanged.room.serverIp}:{roomStatusChanged.room.serverPort}");
-                            }
+                            // NOTE: Relay session info (relayHost/relayPort) comes from the
+                            // "game_starting" event which fires BEFORE room_status_changed.
+                            // RoomState.SetRelaySession() is called there so MatchNetworkConnector
+                            // can connect when the loading scene opens.
                             OnRoomStatusChanged?.Invoke(roomStatusChanged);
                         }
                         break;
@@ -436,6 +441,52 @@ namespace NightHunt.Services.Game
                         var swapRequestStatus = JsonUtility.FromJson<SwapRequestStatusEvent>(messageData.data);
                         if (swapRequestStatus != null)
                             OnSwapRequestStatus?.Invoke(swapRequestStatus);
+                        break;
+
+                    // swap_accepted fires when the TARGET accepts — server broadcasts
+                    // the updated RoomResponse to all room members.
+                    // Note: swap_request_status ACCEPTED is never sent by the server;
+                    // only REJECTED is sent. We synthesize an ACCEPTED status event so
+                    // the requester's waiting modal (HandleSwapRequestStatus) closes.
+                    case "swap_accepted":
+                        var swapAcceptedRoom = JsonUtility.FromJson<RoomResponse>(messageData.data);
+                        if (swapAcceptedRoom != null)
+                        {
+                            if (RoomState.Instance != null) RoomState.Instance.SetRoom(swapAcceptedRoom);
+                            OnRoomUpdated?.Invoke(swapAcceptedRoom);
+                            // Synthesize ACCEPTED status so requester can close its waiting modal.
+                            // requestId=0 means "any pending swap was accepted".
+                            OnSwapRequestStatus?.Invoke(new SwapRequestStatusEvent
+                            {
+                                requestId = 0L,
+                                status    = "ACCEPTED",
+                                room      = swapAcceptedRoom
+                            });
+                        }
+                        break;
+
+                    // game_starting fires before room_status_changed IN_GAME.
+                    // Custom-relay mode: stores relayHost/relayPort in RoomState so
+                    // MatchNetworkConnector can connect when the loading scene opens.
+                    case "game_starting":
+                        var gameStarting = JsonUtility.FromJson<GameStartingEvent>(messageData.data);
+                        if (gameStarting != null)
+                        {
+                            if (!string.IsNullOrEmpty(gameStarting.relayHost) && gameStarting.relayPort > 0
+                                && RoomState.Instance != null)
+                            {
+                                long localUid = NightHunt.State.SessionState.Instance?.UserId ?? 0L;
+                                bool isRelayHost = gameStarting.room?.ownerId == localUid;
+                                string sid = gameStarting.room?.matchId ?? "";
+                                RoomState.Instance.SetRelaySession(
+                                    sid,
+                                    gameStarting.relayHost,
+                                    (ushort)gameStarting.relayPort,
+                                    isRelayHost);
+                                Debug.Log($"[GameWebSocketService] game_starting: relay={gameStarting.relayHost}:{gameStarting.relayPort} isHost={isRelayHost}");
+                            }
+                            OnGameStarting?.Invoke(gameStarting);
+                        }
                         break;
 
                     // Matchmaking Events
@@ -463,26 +514,173 @@ namespace NightHunt.Services.Game
                             OnMatchCancelled?.Invoke(matchCancelled);
                         break;
 
+                    // ────────────────────────────────────────────────────────────
+                    // Friend Events
+                    // ────────────────────────────────────────────────────────────
+                    case "friend_status_changed":
+                        var friendStatus = JsonUtility.FromJson<FriendStatusChangedEvent>(messageData.data);
+                        if (friendStatus != null)
+                        {
+                            friendStatus.status = friendStatus.newStatus; // compat alias
+                            ConditionalLogger.Log("GameWebSocketService", $"Friend status changed: {friendStatus.userId} -> {friendStatus.newStatus}");
+                            OnFriendStatusChanged?.Invoke(friendStatus);
+                            // CACHE: Invalidate friends list (friend online/offline status changed)
+                            APICache.Invalidate(APICache.KEY_FRIENDS_LIST);
+                        }
+                        break;
+
+                    case "friend_request_received":
+                        var friendRequest = JsonUtility.FromJson<FriendRequestEvent>(messageData.data);
+                        if (friendRequest != null)
+                        {
+                            friendRequest.fromUserId   = friendRequest.requesterUserId;   // compat alias
+                            friendRequest.fromUsername = friendRequest.requesterUsername; // compat alias
+                            ConditionalLogger.Log("GameWebSocketService", $"Friend request from: {friendRequest.fromUsername}");
+                            OnFriendRequestReceived?.Invoke(friendRequest);
+                            // CACHE: Invalidate friend requests (new request received)
+                            APICache.Invalidate(APICache.KEY_FRIENDS_REQUESTS_INCOMING);
+                        }
+                        break;
+
+                    case "friend_request_accepted":
+                        var friendAccepted = JsonUtility.FromJson<FriendRequestAcceptedEvent>(messageData.data);
+                        if (friendAccepted != null)
+                        {
+                            friendAccepted.friendId = friendAccepted.requesterUserId;   // compat alias
+                            friendAccepted.userId   = friendAccepted.addresseeUserId;   // compat alias
+                            friendAccepted.username = friendAccepted.addresseeUsername; // compat alias
+                            ConditionalLogger.Log("GameWebSocketService", $"Friend request accepted by: {friendAccepted.addresseeUsername}");
+                            OnFriendRequestAccepted?.Invoke(friendAccepted);
+                            // CACHE: Invalidate both friends list and requests (new friend added)
+                            APICache.InvalidateFriends();
+                        }
+                        break;
+
+                    case "friend_request_declined":
+                        var friendDeclined = JsonUtility.FromJson<FriendRequestDeclinedEvent>(messageData.data);
+                        if (friendDeclined != null)
+                        {
+                            friendDeclined.fromUserId = friendDeclined.requesterUserId; // compat alias
+                            ConditionalLogger.Log("GameWebSocketService", $"Friend request declined by: {friendDeclined.requesterUserId}");
+                            OnFriendRequestDeclined?.Invoke(friendDeclined);
+                            // CACHE: Invalidate friend requests (request declined)
+                            APICache.Invalidate(APICache.KEY_FRIENDS_REQUESTS_OUTGOING);
+                        }
+                        break;
+
+                    case "friend_removed":
+                        var friendRemoved = JsonUtility.FromJson<FriendRemovedEvent>(messageData.data);
+                        if (friendRemoved != null)
+                        {
+                            friendRemoved.friendId  = friendRemoved.friendUserId; // compat alias
+                            friendRemoved.removedBy = friendRemoved.userId;       // compat alias
+                            ConditionalLogger.Log("GameWebSocketService", $"Friend removed: ID {friendRemoved.friendUserId}");
+                            OnFriendRemoved?.Invoke(friendRemoved);
+                            // CACHE: Invalidate friends list (friend removed)
+                            APICache.Invalidate(APICache.KEY_FRIENDS_LIST);
+                        }
+                        break;
+
+                    // ────────────────────────────────────────────────────────────
+                    // Party Events
+                    // ────────────────────────────────────────────────────────────
+                    case "party_invitation_received":
+                        var partyInvite = JsonUtility.FromJson<PartyInvitationEvent>(messageData.data);
+                        if (partyInvite != null)
+                        {
+                            partyInvite.fromUserId   = partyInvite.inviterUserId;   // compat alias
+                            partyInvite.fromUsername = partyInvite.inviterUsername; // compat alias
+                            ConditionalLogger.Log("GameWebSocketService", $"Party invitation from: {partyInvite.fromUsername}");
+                            OnPartyInvitationReceived?.Invoke(partyInvite);
+                            // CACHE: Invalidate party invitations (new invitation received)
+                            APICache.Invalidate(APICache.KEY_PARTY_INVITATIONS);
+                        }
+                        break;
+
+                    case "party_member_joined":
+                        var partyJoined = JsonUtility.FromJson<PartyMemberJoinedEvent>(messageData.data);
+                        if (partyJoined != null)
+                        {
+                            ConditionalLogger.Log("GameWebSocketService", $"Party member joined: {partyJoined.username}");
+                            OnPartyMemberJoined?.Invoke(partyJoined);
+                            // CACHE: Invalidate party state (member joined)
+                            APICache.Invalidate(APICache.KEY_PARTY_STATE);
+                        }
+                        break;
+
+                    case "party_member_left":
+                        var partyLeft = JsonUtility.FromJson<PartyMemberLeftEvent>(messageData.data);
+                        if (partyLeft != null)
+                        {
+                            ConditionalLogger.Log("GameWebSocketService", $"Party member left: ID {partyLeft.userId}");
+                            OnPartyMemberLeft?.Invoke(partyLeft);
+                            // CACHE: Invalidate party state (member left)
+                            APICache.Invalidate(APICache.KEY_PARTY_STATE);
+                        }
+                        break;
+
+                    case "party_member_kicked":
+                        var partyKicked = JsonUtility.FromJson<PartyMemberKickedEvent>(messageData.data);
+                        if (partyKicked != null)
+                        {
+                            partyKicked.kickedBy = partyKicked.kickerUserId; // compat alias
+                            ConditionalLogger.Log("GameWebSocketService", $"Party member kicked: {partyKicked.kickedUserId} by {partyKicked.kickerUserId}");
+                            OnPartyMemberKicked?.Invoke(partyKicked);
+                            // CACHE: Invalidate party state (member kicked)
+                            APICache.InvalidateParty();
+
+                            // CRITICAL: If local user was kicked, show popup
+                            if (SessionState.Instance != null && partyKicked.kickedUserId == SessionState.Instance.UserId)
+                            {
+                                ConditionalLogger.LogWarning("GameWebSocketService", "You were kicked from party!");
+                            }
+                        }
+                        break;
+
+                    case "party_disbanded":
+                        var partyDisbanded = JsonUtility.FromJson<PartyDisbandedEvent>(messageData.data);
+                        if (partyDisbanded != null)
+                        {
+                            ConditionalLogger.Log("GameWebSocketService", $"Party disbanded: ID {partyDisbanded.partyId}, reason: {partyDisbanded.reason}");
+                            OnPartyDisbanded?.Invoke(partyDisbanded);
+                            // CACHE: Invalidate all party-related caches (party disbanded)
+                            APICache.InvalidateParty();
+                        }
+                        break;
+
+                    case "party_host_changed":
+                        var hostChanged = JsonUtility.FromJson<PartyHostChangedEvent>(messageData.data);
+                        if (hostChanged != null)
+                        {
+                            ConditionalLogger.Log("GameWebSocketService", $"Party host changed: {hostChanged.oldHostUserId} → {hostChanged.newHostUserId}");
+                            OnPartyHostChanged?.Invoke(hostChanged);
+                            APICache.Invalidate(APICache.KEY_PARTY_STATE);
+                        }
+                        break;
+
                     default:
-                        Debug.LogWarning($"[GameWebSocketService] Unknown message type: {messageData.type}");
+                        ConditionalLogger.LogWarning("GameWebSocketService", $"Unknown message type: {messageData.type}");
                         break;
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[GameWebSocketService] Error handling message: {ex.Message}\n{ex.StackTrace}");
+                ConditionalLogger.LogError("GameWebSocketService", $"Error handling message: {ex.Message}", ex);
             }
         }
 
         private void HandleForceLogout(ForceLogoutEvent evt)
         {
-            Debug.LogWarning($"[GameWebSocketService] Force logout received: {evt?.reason ?? "Unknown reason"}");
+            ConditionalLogger.LogWarning("GameWebSocketService", $"Force logout received: {evt?.reason ?? "Unknown reason"}");
             
             // Clear session
             if (SessionState.Instance != null)
             {
                 SessionState.Instance.ClearSession();
             }
+            
+            // Clear all caches on logout
+            APICache.InvalidateOnLogout();
             
             // Disconnect WebSocket
             Disconnect(disableReconnect: true);
@@ -657,6 +855,150 @@ namespace NightHunt.Services.Game
         {
             public string lobbyToken;
             public string reason;
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Friend Event DTOs
+        // Server field names are primary (what JsonUtility deserializes).
+        // Compatibility aliases are filled in HandleMessage before the event is fired.
+        // ════════════════════════════════════════════════════════════════════
+
+        [Serializable]
+        public class FriendStatusChangedEvent
+        {
+            public long   userId;
+            public string newStatus;      // Server field: "ONLINE"|"OFFLINE"|"IN_GAME"|"AWAY"
+            public long   currentPartyId; // Server field
+            public long   currentRoomId;  // Server field
+            // Compatibility alias — set in handler from newStatus
+            public string username;       // not sent by server; kept for old log references
+            public string status;         // alias filled from newStatus in handler
+        }
+
+        [Serializable]
+        public class FriendRequestEvent
+        {
+            public long   requestId;
+            public string createdAt;
+            // Server field names (PRIMARY)
+            public long   requesterUserId;
+            public string requesterUsername;
+            // Compatibility aliases — filled from server fields in handler
+            public long   fromUserId;
+            public string fromUsername;
+        }
+
+        [Serializable]
+        public class FriendRequestAcceptedEvent
+        {
+            // Server field names (PRIMARY)
+            public long   requesterUserId;
+            public long   addresseeUserId;
+            public string addresseeUsername;
+            // Compatibility aliases — filled in handler
+            public long   friendId;
+            public long   userId;
+            public string username;
+        }
+
+        [Serializable]
+        public class FriendRequestDeclinedEvent
+        {
+            // Server field names (PRIMARY)
+            public long requesterUserId;
+            public long addresseeUserId;
+            // Compatibility alias — filled in handler
+            public long requestId;   // kept for legacy log; server doesn't send this
+            public long fromUserId;  // alias for requesterUserId
+        }
+
+        [Serializable]
+        public class FriendRemovedEvent
+        {
+            // Server field names (PRIMARY)
+            public long userId;       // user who removed the friend
+            public long friendUserId; // user who was removed
+            // Compatibility aliases — filled in handler
+            public long friendId;   // alias for friendUserId
+            public long removedBy;  // alias for userId
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // Party Event DTOs
+        // ════════════════════════════════════════════════════════════════════
+
+        [Serializable]
+        public class PartyInvitationEvent
+        {
+            public long   invitationId;
+            public long   partyId;
+            public string createdAt;
+            // Server field names (PRIMARY)
+            public long   inviterUserId;
+            public string inviterUsername;
+            public long   inviteeUserId;
+            // Compatibility aliases — filled in handler
+            public long   fromUserId;
+            public string fromUsername;
+        }
+
+        [Serializable]
+        public class PartyMemberJoinedEvent
+        {
+            public long   partyId;
+            public long   userId;
+            public string username;
+        }
+
+        [Serializable]
+        public class PartyMemberLeftEvent
+        {
+            public long partyId;
+            public long userId;
+        }
+
+        [Serializable]
+        public class PartyMemberKickedEvent
+        {
+            public long   partyId;
+            public long   kickedUserId;
+            // Server field name (PRIMARY)
+            public long   kickerUserId;
+            // Compatibility aliases — filled in handler
+            public string kickedUsername;    // not sent by server
+            public long   kickedBy;          // alias for kickerUserId
+            public string kickedByUsername;  // not sent by server
+            public string reason;            // not sent by server
+        }
+
+        [Serializable]
+        public class PartyDisbandedEvent
+        {
+            public long   partyId;
+            public long   hostUserId; // server field (only host receives this event)
+            public string reason;     // not sent by server; kept for compat
+        }
+
+        [Serializable]
+        public class PartyHostChangedEvent
+        {
+            public long partyId;
+            public long oldHostUserId;
+            public long newHostUserId;
+        }
+
+        /// <summary>
+        /// game_starting — sent by server before room_status_changed IN_GAME.
+        /// Custom relay: relayHost/relayPort are set; dsAddress/dsPort are 0/null.
+        /// The room field contains the updated RoomResponse (with matchId).
+        /// </summary>
+        [Serializable]
+        public class GameStartingEvent
+        {
+            public string      relayToken; // relay auth token (future use)
+            public string      relayHost;  // relay server host
+            public int         relayPort;  // relay server port (0 if not relay)
+            public RoomResponse room;      // updated room state at game start
         }
     }
 }

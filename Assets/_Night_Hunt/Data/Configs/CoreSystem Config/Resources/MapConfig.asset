@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 648e49b276087ae46b1367e6dbf57112, type: 3}
+  m_Name: MapConfig
+  m_EditorClassIdentifier: 
+  maps:
+  - mapId: map_01
+    displayName: Industrial Zone
+    description: Urban combat in a derelict factory.
+    icon: {fileID: 21300000, guid: 6d62e8251d7836043a6f40e27ee5d646, type: 3}
+    sceneId: 100
+    supportedModes:
+    - 2v2
+    - 4v4
+    isLocked: 0
+  - mapId: map_02
+    displayName: Arctic Base
+    description: Close-quarters in a frozen research facility.
+    icon: {fileID: 21300000, guid: cd65830e6373d9d448046ceb3b6bebf2, type: 3}
+    sceneId: 101
+    supportedModes:
+    - 2v2
+    - 4v4
+    isLocked: 0

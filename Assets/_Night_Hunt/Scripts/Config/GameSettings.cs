@@ -1,3 +1,4 @@
+using NightHunt.Core;
 using UnityEngine;
 using UnityEngine.Audio;
 using System.IO;
@@ -8,10 +9,8 @@ namespace NightHunt.Config
     /// Manages game settings: graphics, audio, controls
     /// Persists settings to PlayerPrefs
     /// </summary>
-    public class GameSettings : MonoBehaviour
+    public class GameSettings : SingletonPersistent<GameSettings>
     {
-        private static GameSettings _instance;
-        public static GameSettings Instance => _instance;
 
         [Header("Audio")]
         [SerializeField] private AudioMixer audioMixer;
@@ -26,18 +25,9 @@ namespace NightHunt.Config
         // Settings data
         private SettingsData currentSettings;
 
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-                LoadSettings();
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            LoadSettings();
         }
 
         /// <summary>

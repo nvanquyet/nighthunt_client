@@ -48,6 +48,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private ItemSlotView _hoveredSlot;
 
+        private void Awake()
+        {
+            if (_uiConfig != null && _slotSize == new Vector2(100f, 100f))
+                _slotSize = _uiConfig.DefaultSlotSize;
+        }
 
         private PlayerStatUIPanel StatPanel
         {

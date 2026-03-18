@@ -1,7 +1,8 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.Core;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Configs;
 
 namespace NightHunt.GameplaySystems.Inventory
 {
@@ -10,7 +11,7 @@ namespace NightHunt.GameplaySystems.Inventory
     /// and live <see cref="ItemInstance"/> objects. Provides O(1) lookups by ID.
     ///
     /// SETUP:
-    ///   1. Right-click in Project → Create → NightHunt → Items → Item Database
+    ///   1. Right-click in Project â†’ Create â†’ NightHunt â†’ Items â†’ Item Database
     ///   2. Save as "Assets/_Night_Hunt/Data/ItemDatabase.asset" (one per project).
     ///   3. Drag all ItemDefinition assets into _itemDefinitions array.
     ///   4. Either reference the asset from any scene/prefab, OR place it in a
@@ -38,7 +39,7 @@ namespace NightHunt.GameplaySystems.Inventory
         [SerializeField] private int _maxCachedInstances = 100;
         
         [Header("Debug")]
-        [SerializeField] private bool _enableDebugLogs = false;
+        [SerializeField] private NightHuntDebugConfig _debugConfig;
         [SerializeField] private bool _trackInstances = true;
         
         #endregion
@@ -102,9 +103,10 @@ namespace NightHunt.GameplaySystems.Inventory
             
             var elapsed = (Time.realtimeSinceStartup - startTime) * 1000f;
             
-            if (_enableDebugLogs)
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
             {
-                Debug.Log($"[ItemDatabase] Initialized in {elapsed:F2}ms " +
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[ItemDatabase] Initialized in {elapsed:F2}ms " +
                          $"({_definitionLookup.Count} definitions, " +
                          $"{_definitionsByType.Count} types cached)");
             }
@@ -147,7 +149,7 @@ namespace NightHunt.GameplaySystems.Inventory
             if (Instance._prewarmTypeLookup)
                 AddToTypeCache(definition);
             
-            if (Instance._enableDebugLogs)
+            if (Instance._debugConfig != null && Instance._debugConfig.EnableInventoryDebugLogs)
                 Debug.Log($"[ItemDatabase] Registered: {definition.ItemID} ({definition.Type})");
         }
         
@@ -156,7 +158,7 @@ namespace NightHunt.GameplaySystems.Inventory
             // PERFORMANCE: Use cached data if available
             if (_resourcesLoaded && _cachedResourceDefinitions != null)
             {
-                if (_enableDebugLogs)
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                     Debug.Log($"[ItemDatabase] Using cached definitions ({_cachedResourceDefinitions.Length} items)");
                 
                 foreach (var def in _cachedResourceDefinitions)
@@ -176,7 +178,7 @@ namespace NightHunt.GameplaySystems.Inventory
                 foreach (var def in definitions)
                     RegisterDefinition(def);
                 
-                if (_enableDebugLogs)
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                     Debug.Log($"[ItemDatabase] Loaded & cached {definitions.Length} from Resources/{_itemDefinitionsPath}");
             }
             else
@@ -239,13 +241,13 @@ namespace NightHunt.GameplaySystems.Inventory
                     removed++;
                 }
                 
-                if (Instance._enableDebugLogs)
+                if (Instance._debugConfig != null && Instance._debugConfig.EnableInventoryDebugLogs)
                     Debug.LogWarning($"[ItemDatabase] Instance cache limit reached, removed {removed} oldest instances");
             }
             
             Instance._instanceRegistry[instance.InstanceID] = instance;
             
-            if (Instance._enableDebugLogs)
+            if (Instance._debugConfig != null && Instance._debugConfig.EnableInventoryDebugLogs)
                 Debug.Log($"[ItemDatabase] Registered instance: {instance.InstanceID}");
         }
         
@@ -254,7 +256,7 @@ namespace NightHunt.GameplaySystems.Inventory
             if (!Instance._trackInstances || string.IsNullOrEmpty(instanceID))
                 return;
             
-            if (Instance._instanceRegistry.Remove(instanceID) && Instance._enableDebugLogs)
+            if (Instance._instanceRegistry.Remove(instanceID) && Instance._debugConfig != null && Instance._debugConfig.EnableInventoryDebugLogs)
                 Debug.Log($"[ItemDatabase] Unregistered instance: {instanceID}");
         }
         
@@ -304,7 +306,7 @@ namespace NightHunt.GameplaySystems.Inventory
             foreach (var def in _definitionLookup.Values)
                 AddToTypeCache(def);
             
-            if (_enableDebugLogs)
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                 Debug.Log($"[ItemDatabase] Type cache built: {_definitionsByType.Count} types");
         }
         
@@ -331,7 +333,7 @@ namespace NightHunt.GameplaySystems.Inventory
             
             // Don't clear resource cache - keep it loaded
             
-            if (Instance._enableDebugLogs)
+            if (Instance._debugConfig != null && Instance._debugConfig.EnableInventoryDebugLogs)
                 Debug.Log("[ItemDatabase] Caches cleared");
         }
         
@@ -344,7 +346,8 @@ namespace NightHunt.GameplaySystems.Inventory
         {
             int errors = 0, warnings = 0;
             
-            Debug.Log("========== VALIDATION STARTED ==========");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log("========== VALIDATION STARTED ==========");
             
             foreach (var def in _definitionLookup.Values)
             {
@@ -367,11 +370,13 @@ namespace NightHunt.GameplaySystems.Inventory
                 }
             }
             
-            Debug.Log("========== VALIDATION COMPLETE ==========");
-            Debug.Log($"Total: {_definitionLookup.Count} | Errors: {errors} | Warnings: {warnings}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log("========== VALIDATION COMPLETE ==========");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"Total: {_definitionLookup.Count} | Errors: {errors} | Warnings: {warnings}");
             
             if (errors == 0 && warnings == 0)
-                Debug.Log("<color=green>✓ All definitions valid!</color>");
+                Debug.Log("<color=green>âœ“ All definitions valid!</color>");
         }
         
         [ContextMenu("Validation/Check For Duplicates")]
@@ -400,7 +405,7 @@ namespace NightHunt.GameplaySystems.Inventory
             }
             
             if (!foundDuplicates)
-                Debug.Log("<color=green>✓ No duplicates found!</color>");
+                Debug.Log("<color=green>âœ“ No duplicates found!</color>");
         }
         
         #endregion
@@ -414,7 +419,8 @@ namespace NightHunt.GameplaySystems.Inventory
             _cachedResourceDefinitions = null;
             ClearCaches();
             Initialize();
-            Debug.Log($"<color=cyan>✓ Reloaded! {_definitionLookup.Count} definitions</color>");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"<color=cyan>âœ“ Reloaded! {_definitionLookup.Count} definitions</color>");
         }
         
         [ContextMenu("Info/Show Performance Stats")]
@@ -424,16 +430,25 @@ namespace NightHunt.GameplaySystems.Inventory
             var instMem = _instanceRegistry.Count * 512; // ~512 bytes per instance
             var typeMem = _definitionsByType.Count * 128; // ~128 bytes per type list
             
-            Debug.Log("========== PERFORMANCE STATS ==========");
-            Debug.Log($"Initialized: {_isInitialized}");
-            Debug.Log($"Definitions: {_definitionLookup.Count} (~{defMem / 1024f:F2} KB)");
-            Debug.Log($"Instances: {_instanceRegistry.Count} (~{instMem / 1024f:F2} KB)");
-            Debug.Log($"Type Cache: {_definitionsByType.Count} types (~{typeMem / 1024f:F2} KB)");
-            Debug.Log($"Total Memory: ~{(defMem + instMem + typeMem) / 1024f:F2} KB");
-            Debug.Log($"Resource Cache: {(_resourcesLoaded ? "Loaded" : "Not Loaded")}");
-            Debug.Log("=======================================");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log("========== PERFORMANCE STATS ==========");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"Initialized: {_isInitialized}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"Definitions: {_definitionLookup.Count} (~{defMem / 1024f:F2} KB)");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"Instances: {_instanceRegistry.Count} (~{instMem / 1024f:F2} KB)");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"Type Cache: {_definitionsByType.Count} types (~{typeMem / 1024f:F2} KB)");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"Total Memory: ~{(defMem + instMem + typeMem) / 1024f:F2} KB");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"Resource Cache: {(_resourcesLoaded ? "Loaded" : "Not Loaded")}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log("=======================================");
         }
         
         #endregion
     }
 }
+

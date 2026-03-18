@@ -20,6 +20,7 @@ namespace NightHunt.Services.Backend
         public BackendConfig Config => config;
 
         private bool sslCertificateInitialized = false;
+
         // SEC-4: Use atomic int to prevent double-trigger of force logout coroutine
         private int _forceLogoutFlag = 0;
         private const string SessionHeader = "X-Session-Id";
@@ -36,7 +37,7 @@ namespace NightHunt.Services.Backend
         private void InitializeSslCertificateIgnore()
         {
             if (sslCertificateInitialized) return;
-            
+
             // Unity doesn't have a direct way to ignore SSL certificates
             // This is handled at the UnityWebRequest level
             // For production, make sure ignoreSslCertificate is false
@@ -44,15 +45,19 @@ namespace NightHunt.Services.Backend
             {
                 Debug.LogWarning("SSL certificate validation is disabled. Only use this in development!");
             }
-            
+
             sslCertificateInitialized = true;
         }
 
         // ARCH-1: Token single source of truth is SessionState.AccessToken
         // These methods are kept for interface compatibility but are no-ops
-        public void SetAuthToken(string token) { }
+        public void SetAuthToken(string token)
+        {
+        }
 
-        public void ClearAuthToken() { }
+        public void ClearAuthToken()
+        {
+        }
 
         public string GetBaseUrl()
         {
@@ -89,7 +94,7 @@ namespace NightHunt.Services.Backend
 
             string baseUrl = config.GetApiBaseUrl();
             string url = baseUrl + endpoint;
-            
+
             UnityWebRequest request;
 
             if (method == UnityWebRequest.kHttpVerbGET || method == UnityWebRequest.kHttpVerbDELETE)
@@ -117,8 +122,10 @@ namespace NightHunt.Services.Backend
             {
                 request.SetRequestHeader("Authorization", $"Bearer {token}");
             }
+
             // Attach sessionId for server-side session validation
-            if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated && !string.IsNullOrEmpty(SessionState.Instance.SessionId))
+            if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated &&
+                !string.IsNullOrEmpty(SessionState.Instance.SessionId))
             {
                 request.SetRequestHeader(SessionHeader, SessionState.Instance.SessionId);
             }
@@ -135,7 +142,7 @@ namespace NightHunt.Services.Backend
             }
 
             var operation = request.SendWebRequest();
-            
+
             while (!operation.isDone)
             {
                 await Task.Yield();
@@ -144,7 +151,7 @@ namespace NightHunt.Services.Backend
             try
             {
                 // Handle SSL certificate errors for development
-                if (request.result == UnityWebRequest.Result.ConnectionError && 
+                if (request.result == UnityWebRequest.Result.ConnectionError &&
                     config != null && config.ignoreSslCertificate && config.useHttps)
                 {
                     // Log warning but continue - in production this should not happen
@@ -163,7 +170,7 @@ namespace NightHunt.Services.Backend
                         // Parse error response to get errorCode and message
                         string errorMessage = request.error;
                         string errorCode = null;
-                        
+
                         if (!string.IsNullOrEmpty(jsonResponse))
                         {
                             try
@@ -175,6 +182,7 @@ namespace NightHunt.Services.Backend
                                     {
                                         errorMessage = errorResult.message;
                                     }
+
                                     if (!string.IsNullOrEmpty(errorResult.errorCode))
                                     {
                                         errorCode = errorResult.errorCode;
@@ -183,16 +191,17 @@ namespace NightHunt.Services.Backend
                             }
                             catch (Exception parseEx)
                             {
-                                Debug.LogWarning($"[BackendHttpClient] Failed to parse 401/403 error response: {parseEx.Message}");
+                                Debug.LogWarning(
+                                    $"[BackendHttpClient] Failed to parse 401/403 error response: {parseEx.Message}");
                             }
                         }
-                        
+
                         // Handle auth errors (force logout, session expired) BEFORE returning error
                         HandleAuthError(request.responseCode, errorCode, errorMessage);
-                        
+
                         return ApiResult<T>.Error(errorMessage ?? "Unauthorized", errorCode);
                     }
-                    
+
                     // Try to parse as ApiResult<T> first (backend format: { "success": true/false, "data": {...}, "message": "..." })
                     try
                     {
@@ -209,12 +218,14 @@ namespace NightHunt.Services.Backend
                                 // Backend returned error in ApiResponse format
                                 // Check if this is an auth error (401/403) even though responseCode might not be set correctly
                                 if (!string.IsNullOrEmpty(apiResult.errorCode) &&
-                                    (apiResult.errorCode == ErrorCodes.AUTH_FORCE_LOGOUT || apiResult.errorCode == ErrorCodes.AUTH_SESSION_EXPIRED))
+                                    (apiResult.errorCode == ErrorCodes.AUTH_FORCE_LOGOUT ||
+                                     apiResult.errorCode == ErrorCodes.AUTH_SESSION_EXPIRED))
                                 {
                                     HandleAuthError(401, apiResult.errorCode, apiResult.message);
                                 }
-                                
-                                Debug.LogWarning($"[BackendHttpClient] Backend error: {apiResult.message} (ErrorCode: {apiResult.errorCode})");
+
+                                Debug.LogWarning(
+                                    $"[BackendHttpClient] Backend error: {apiResult.message} (ErrorCode: {apiResult.errorCode})");
                                 return ApiResult<T>.Error(apiResult.message ?? "Request failed", apiResult.errorCode);
                             }
                         }
@@ -232,7 +243,8 @@ namespace NightHunt.Services.Backend
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"[BackendHttpClient] Failed to parse response: {ex.Message}\nResponse: {jsonResponse}");
+                        Debug.LogError(
+                            $"[BackendHttpClient] Failed to parse response: {ex.Message}\nResponse: {jsonResponse}");
                         return ApiResult<T>.Error($"Failed to parse response: {ex.Message}");
                     }
                 }
@@ -243,7 +255,8 @@ namespace NightHunt.Services.Backend
                     string responseText = request.downloadHandler.text;
                     string errorCode = null;
 
-                    Debug.LogWarning($"[BackendHttpClient] Error {request.responseCode}: {errorMessage}\nBody: {responseText}");
+                    Debug.LogWarning(
+                        $"[BackendHttpClient] Error {request.responseCode}: {errorMessage}\nBody: {responseText}");
 
                     // Try to parse as ApiResult to get message and errorCode from backend
                     if (!string.IsNullOrEmpty(responseText))
@@ -257,6 +270,7 @@ namespace NightHunt.Services.Backend
                                 {
                                     errorMessage = errorResult.message;
                                 }
+
                                 if (!string.IsNullOrEmpty(errorResult.errorCode))
                                 {
                                     errorCode = errorResult.errorCode;
@@ -265,32 +279,41 @@ namespace NightHunt.Services.Backend
                         }
                         catch (Exception parseEx)
                         {
-                            Debug.LogWarning($"[BackendHttpClient] Failed to parse error response body: {parseEx.Message}");
+                            Debug.LogWarning(
+                                $"[BackendHttpClient] Failed to parse error response body: {parseEx.Message}");
                         }
                     }
-                    
+
                     // Handle auth errors (force logout, session expired) BEFORE returning error
                     // This ensures popup is shown immediately
                     HandleAuthError(request.responseCode, errorCode, errorMessage);
-                    
+
                     // Map HTTP status codes to user-friendly messages
                     if (request.responseCode == 401)
                     {
-                        errorMessage = string.IsNullOrEmpty(errorMessage) ? "Unauthorized. Please login again." : errorMessage;
+                        errorMessage = string.IsNullOrEmpty(errorMessage)
+                            ? "Unauthorized. Please login again."
+                            : errorMessage;
                     }
                     else if (request.responseCode == 403)
                     {
-                        errorMessage = string.IsNullOrEmpty(errorMessage) ? "Forbidden. Please re-login or check permissions." : errorMessage;
+                        errorMessage = string.IsNullOrEmpty(errorMessage)
+                            ? "Forbidden. Please re-login or check permissions."
+                            : errorMessage;
                     }
                     else if (request.responseCode == 400)
                     {
-                        errorMessage = string.IsNullOrEmpty(errorMessage) ? "Bad request. Please check your input." : errorMessage;
+                        errorMessage = string.IsNullOrEmpty(errorMessage)
+                            ? "Bad request. Please check your input."
+                            : errorMessage;
                     }
                     else if (request.responseCode == 500)
                     {
-                        errorMessage = string.IsNullOrEmpty(errorMessage) ? "Server error. Please try again later." : errorMessage;
+                        errorMessage = string.IsNullOrEmpty(errorMessage)
+                            ? "Server error. Please try again later."
+                            : errorMessage;
                     }
-                    
+
                     return ApiResult<T>.Error(errorMessage, errorCode);
                 }
             }
@@ -302,8 +325,9 @@ namespace NightHunt.Services.Backend
 
         private void HandleAuthError(long statusCode, string errorCode, string message)
         {
-            Debug.Log($"[BackendHttpClient] HandleAuthError called - statusCode: {statusCode}, errorCode: {errorCode}, message: {message}");
-            
+            Debug.Log(
+                $"[BackendHttpClient] HandleAuthError called - statusCode: {statusCode}, errorCode: {errorCode}, message: {message}");
+
             // Check for ban errors first
             if (string.Equals(errorCode, ErrorCodes.AUTH_ACCOUNT_BANNED) ||
                 string.Equals(errorCode, ErrorCodes.AUTH_IP_BANNED) ||
@@ -337,7 +361,7 @@ namespace NightHunt.Services.Backend
                 // UI can handle this separately
                 return;
             }
-            
+
             if (statusCode == 401)
             {
                 // Backend returns AUTH_FORCE_LOGOUT or AUTH_SESSION_EXPIRED error codes
@@ -346,52 +370,59 @@ namespace NightHunt.Services.Backend
                     // Check if this is an active session (user A) or a login attempt (user B)
                     // Active session = GameWebSocket is connected (user is already logged in and active)
                     // Login attempt = GameWebSocket is NOT connected (user is trying to login/auto-login)
-                    bool isActiveSession = SessionState.Instance != null && 
-                                          SessionState.Instance.IsAuthenticated &&
-                                          GameManager.Instance != null && 
-                                          GameManager.Instance.GameWebSocket != null && 
-                                          GameManager.Instance.GameWebSocket.IsWsConnected;
-                    
-                    Debug.Log($"[BackendHttpClient] AUTH_FORCE_LOGOUT (AUTH_008) - isActiveSession: {isActiveSession}, IsAuthenticated: {SessionState.Instance?.IsAuthenticated}, IsWebSocketConnected: {GameManager.Instance?.GameWebSocket?.IsWsConnected}");
-                    
+                    bool isActiveSession = SessionState.Instance != null &&
+                                           SessionState.Instance.IsAuthenticated &&
+                                           GameManager.Instance != null &&
+                                           GameManager.Instance.GameWebSocket != null &&
+                                           GameManager.Instance.GameWebSocket.IsWsConnected;
+
+                    Debug.Log(
+                        $"[BackendHttpClient] AUTH_FORCE_LOGOUT (AUTH_008) - isActiveSession: {isActiveSession}, IsAuthenticated: {SessionState.Instance?.IsAuthenticated}, IsWebSocketConnected: {GameManager.Instance?.GameWebSocket?.IsWsConnected}");
+
                     if (isActiveSession)
                     {
                         // User A: Already logged in and active, show force logout notice
                         // This is FORCE LOGOUT due to another device logging in
                         if (Interlocked.CompareExchange(ref _forceLogoutFlag, 1, 0) == 0)
                         {
-                            Debug.Log("[BackendHttpClient] Starting ForceLogoutCoroutine for active session (AUTH_FORCE_LOGOUT)");
+                            Debug.Log(
+                                "[BackendHttpClient] Starting ForceLogoutCoroutine for active session (AUTH_FORCE_LOGOUT)");
                             StartCoroutine(ForceLogoutCoroutine(
                                 title: "Cảnh báo đăng nhập",
-                                message: message ?? "Có người khác đã đăng nhập vào tài khoản của bạn từ thiết bị khác. Bạn sẽ bị đăng xuất."
+                                message: message ??
+                                         "Có người khác đã đăng nhập vào tài khoản của bạn từ thiết bị khác. Bạn sẽ bị đăng xuất."
                             ));
                         }
                         else
                         {
-                            Debug.LogWarning("[BackendHttpClient] Force logout already in progress, skipping duplicate call");
+                            Debug.LogWarning(
+                                "[BackendHttpClient] Force logout already in progress, skipping duplicate call");
                         }
                     }
                     else
                     {
                         // User B: Trying to login/auto-login
                         // Check if this is an auto-login attempt (has saved session) vs new login
-                        bool isAutoLoginAttempt = SessionState.Instance != null && 
-                                                SessionState.Instance.IsAuthenticated &&
-                                                !string.IsNullOrEmpty(SessionState.Instance.SessionId);
-                        
+                        bool isAutoLoginAttempt = SessionState.Instance != null &&
+                                                  SessionState.Instance.IsAuthenticated &&
+                                                  !string.IsNullOrEmpty(SessionState.Instance.SessionId);
+
                         if (isAutoLoginAttempt)
                         {
                             // This is auto-login - session might be stale (user closed app and reopened)
                             // Don't show "login blocked" - just silently fail auto-login and let user login manually
-                            Debug.Log("[BackendHttpClient] AUTH_FORCE_LOGOUT during auto-login - session might be stale, allowing manual login");
+                            Debug.Log(
+                                "[BackendHttpClient] AUTH_FORCE_LOGOUT during auto-login - session might be stale, allowing manual login");
                             // Don't show login blocked notice for auto-login failures
                             // The auto-login will fail and user can login manually
                         }
                         else
                         {
                             // This is a new login attempt - show login blocked notice
-                            Debug.Log("[BackendHttpClient] Showing login blocked notice (AUTH_FORCE_LOGOUT during new login attempt)");
-                            ShowLoginBlockedNotice(message ?? "Tài khoản này đã được đăng nhập ở nơi khác. Vui lòng thử lại sau.");
+                            Debug.Log(
+                                "[BackendHttpClient] Showing login blocked notice (AUTH_FORCE_LOGOUT during new login attempt)");
+                            ShowLoginBlockedNotice(message ??
+                                                   "Tài khoản này đã được đăng nhập ở nơi khác. Vui lòng thử lại sau.");
                         }
                     }
                 }
@@ -400,9 +431,10 @@ namespace NightHunt.Services.Backend
                     // Session expired - handle if user is authenticated (regardless of polling status)
                     // This is SESSION EXPIRED (token/session naturally expired or invalidated)
                     bool isAuthenticated = SessionState.Instance != null && SessionState.Instance.IsAuthenticated;
-                    
-                    Debug.Log($"[BackendHttpClient] AUTH_SESSION_EXPIRED (AUTH_007) - isAuthenticated: {isAuthenticated}");
-                    
+
+                    Debug.Log(
+                        $"[BackendHttpClient] AUTH_SESSION_EXPIRED (AUTH_007) - isAuthenticated: {isAuthenticated}");
+
                     if (isAuthenticated)
                     {
                         // User was authenticated but session is now invalid
@@ -413,37 +445,29 @@ namespace NightHunt.Services.Backend
                             Debug.Log("[BackendHttpClient] Starting ForceLogoutCoroutine for session expired");
                             StartCoroutine(ForceLogoutCoroutine(
                                 title: "Phiên đăng nhập hết hạn",
-                                message: message ?? "Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại để tiếp tục."
+                                message: message ??
+                                         "Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại để tiếp tục."
                             ));
                         }
                         else
                         {
-                            Debug.LogWarning("[BackendHttpClient] Force logout already in progress, skipping duplicate call");
+                            Debug.LogWarning(
+                                "[BackendHttpClient] Force logout already in progress, skipping duplicate call");
                         }
                     }
                 }
             }
         }
-        
+
         private void ShowLoginBlockedNotice(string message)
         {
-            var noticePopup = PersistentUICanvas.Instance != null ? PersistentUICanvas.Instance.NoticePopup : null;
+            var noticePopup = PersistentUICanvas.Instance != null ? PersistentUICanvas.Instance.ToastService : null;
             if (noticePopup != null)
             {
                 noticePopup.Show(
                     title: "Đăng nhập thất bại",
-                    message: message,
-                    onConfirm: () =>
-                    {
-                        // Just close the popup, user can try again
-                    },
-                    autoDismissSeconds: 3f // Auto dismiss after 3 seconds
+                    message: message
                 );
-            }
-            else
-            {
-                // Fallback: use toast
-                ToastService.Instance?.Show(message, 3f);
             }
         }
 
@@ -454,33 +478,13 @@ namespace NightHunt.Services.Backend
             Debug.Log($"[BackendHttpClient] Force logout triggered - Title: {title}, Message: {message}");
 
             // Show notice popup with auto dismiss after 2 seconds
-            var noticePopup = PersistentUICanvas.Instance != null ? PersistentUICanvas.Instance.NoticePopup : null;
+            var noticePopup = PersistentUICanvas.Instance != null ? PersistentUICanvas.Instance.ToastService : null;
             if (noticePopup != null)
             {
-                bool popupDismissed = false;
-                
                 noticePopup.Show(
                     title: title ?? "Cảnh báo",
-                    message: message ?? "Phiên đăng nhập đã hết hạn. Bạn sẽ bị đăng xuất.",
-                    onConfirm: () =>
-                    {
-                        popupDismissed = true;
-                    },
-                    autoDismissSeconds: 2f
+                    message: message ?? "Phiên đăng nhập đã hết hạn. Bạn sẽ bị đăng xuất."
                 );
-
-                // Wait for popup to be dismissed (either by user clicking OK or auto dismiss)
-                while (!popupDismissed && noticePopup.IsShowing())
-                {
-                    yield return null;
-                }
-            }
-            else
-            {
-                // Fallback: use toast if notice popup not available
-                Debug.LogWarning("[BackendHttpClient] NoticePopup not available, using toast fallback");
-                ToastService.Instance?.Show(message ?? "Phiên đăng nhập đã hết hạn. Đang đăng xuất...", 2f);
-                yield return new WaitForSeconds(2f);
             }
 
             // Perform logout after popup dismissed
@@ -494,10 +498,11 @@ namespace NightHunt.Services.Backend
                     logoutCompleted = true;
                     if (task.IsFaulted)
                     {
-                        Debug.LogWarning($"[BackendHttpClient] Logout call failed during force logout: {task.Exception?.GetBaseException()?.Message}");
+                        Debug.LogWarning(
+                            $"[BackendHttpClient] Logout call failed during force logout: {task.Exception?.GetBaseException()?.Message}");
                     }
                 });
-                
+
                 // Wait for logout to complete (max 3 seconds)
                 float timeout = 3f;
                 float elapsed = 0f;
@@ -521,12 +526,14 @@ namespace NightHunt.Services.Backend
             {
                 SessionState.Instance.ClearSession();
             }
-            
+
             if (RoomState.Instance != null)
             {
                 RoomState.Instance.ClearRoom();
             }
-            SceneLoader.LoadLogin();
+
+            // Logout và quay về Login panel (không load scene, dùng UINavigator)
+            LoginView.Logout();
 
             Interlocked.Exchange(ref _forceLogoutFlag, 0);
         }
@@ -535,7 +542,7 @@ namespace NightHunt.Services.Backend
         {
             try
             {
-                ToastService.Instance.Show(message, 2f);
+                ToastService.Instance.Show("Logout", message);
             }
             catch (Exception ex)
             {
@@ -544,4 +551,3 @@ namespace NightHunt.Services.Backend
         }
     }
 }
-

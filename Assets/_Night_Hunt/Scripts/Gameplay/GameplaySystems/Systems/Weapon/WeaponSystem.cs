@@ -8,9 +8,9 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
 using NightHunt.Data;
@@ -51,6 +51,10 @@ namespace NightHunt.GameplaySystems.Weapon
 
         [Header("Debug")]
         [SerializeField] private bool _enableDebugLogs = false;
+
+        [Header("Network Sync")]
+        [Tooltip("Aim direction sync rate in seconds (default 0.05 = 20 Hz).")]
+        [SerializeField] [Range(0.02f, 0.2f)] private float _aimSyncInterval = 0.05f;
 
         // ── Private service refs ───────────────────────────────────────────────
         private IPlayerStatSystem  _statSystem;

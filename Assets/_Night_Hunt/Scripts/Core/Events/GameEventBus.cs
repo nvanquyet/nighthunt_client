@@ -13,10 +13,8 @@ namespace NightHunt.Core
     /// Centralized Event Bus for all game events
     /// Subscribe/Unsubscribe in one place, easier to manage and debug
     /// </summary>
-    public class GameEventBus : MonoBehaviour
+    public class GameEventBus : SingletonPersistent<GameEventBus>
     {
-        private static GameEventBus _instance;
-        public static GameEventBus Instance => _instance;
 
         // WebSocket Events (from GameWebSocketService)
         public event Action<RoomResponse> OnRoomUpdated;
@@ -27,6 +25,7 @@ namespace NightHunt.Core
         public event Action<GameWebSocketService.RoomStatusChangedEvent> OnRoomStatusChanged;
         public event Action<GameWebSocketService.SwapRequestEvent> OnSwapRequest;
         public event Action<GameWebSocketService.SwapRequestStatusEvent> OnSwapRequestStatus;
+        public event Action<GameWebSocketService.GameStartingEvent> OnGameStarting;
         public event Action OnForceLogout;
         public event Action OnSessionExpired;
         public event Action OnWebSocketDisconnected;
@@ -49,19 +48,10 @@ namespace NightHunt.Core
         public event Action OnUserLoggedIn;
         public event Action OnUserLoggedOut;
 
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-                // Delay subscription to ensure GameManager is initialized first
-                StartCoroutine(DelayedSubscribe());
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            // Delay subscription to ensure GameManager is initialized first
+            StartCoroutine(DelayedSubscribe());
         }
 
         private System.Collections.IEnumerator DelayedSubscribe()
@@ -93,6 +83,7 @@ namespace NightHunt.Core
                 ws.OnRoomStatusChanged += HandleRoomStatusChanged;
                 ws.OnSwapRequest += HandleSwapRequest;
                 ws.OnSwapRequestStatus += HandleSwapRequestStatus;
+                ws.OnGameStarting += HandleGameStarting;
                 ws.OnForceLogout += HandleForceLogout;
                 ws.OnSessionExpired += HandleSessionExpired;
                 ws.OnDisconnected += HandleWebSocketDisconnected;
@@ -142,6 +133,7 @@ namespace NightHunt.Core
                 ws.OnRoomStatusChanged -= HandleRoomStatusChanged;
                 ws.OnSwapRequest -= HandleSwapRequest;
                 ws.OnSwapRequestStatus -= HandleSwapRequestStatus;
+                ws.OnGameStarting -= HandleGameStarting;
                 ws.OnForceLogout -= HandleForceLogout;
                 ws.OnSessionExpired -= HandleSessionExpired;
                 ws.OnDisconnected -= HandleWebSocketDisconnected;
@@ -181,6 +173,7 @@ namespace NightHunt.Core
         private void HandleRoomStatusChanged(GameWebSocketService.RoomStatusChangedEvent evt) => OnRoomStatusChanged?.Invoke(evt);
         private void HandleSwapRequest(GameWebSocketService.SwapRequestEvent evt) => OnSwapRequest?.Invoke(evt);
         private void HandleSwapRequestStatus(GameWebSocketService.SwapRequestStatusEvent evt) => OnSwapRequestStatus?.Invoke(evt);
+        private void HandleGameStarting(GameWebSocketService.GameStartingEvent evt) => OnGameStarting?.Invoke(evt);
         private void HandleForceLogout() => OnForceLogout?.Invoke();
         private void HandleSessionExpired() => OnSessionExpired?.Invoke();
         private void HandleWebSocketDisconnected() => OnWebSocketDisconnected?.Invoke();

@@ -4,6 +4,7 @@ using FishNet.Connection;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -22,10 +23,12 @@ namespace NightHunt.GameplaySystems.Loot
         /// <summary>Fired server-side khi corpse bị despawn (looted hoặc hết thời gian).</summary>
         public event System.Action OnDespawned;
 
-        [Header("Settings")] [SerializeField]
-        private float maxInteractDistance = 3f; // fallback khi không có LootableConfig
+        [Header("Settings")]
+        [FormerlySerializedAs("maxInteractDistance")]
+        [SerializeField] private float _maxInteractDistance = 3f; // fallback khi không có LootableConfig
 
-        [SerializeField] private float despawnTime = 300f; // 5 phút
+        [FormerlySerializedAs("despawnTime")]
+        [SerializeField] private float _despawnTime = 300f; // 5 phút
 
         // Runtime config — inject khi spawn (không gán trên prefab).
         private LootableConfig _lootableConfig;
@@ -140,14 +143,14 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            if (Time.time - spawnTime > despawnTime)
+            if (Time.time - spawnTime > (_lootableConfig != null ? _lootableConfig.DespawnTime : _despawnTime))
             {
                 OnDespawned?.Invoke();
                 base.Despawn();
             }
         }
 
-        private float GetInteractDistance() => _lootableConfig?.MaxInteractDistance ?? maxInteractDistance;
+        private float GetInteractDistance() => _lootableConfig?.MaxInteractDistance ?? _maxInteractDistance;
 
         [Server]
         public void Initialize(List<ItemInstanceData> items, LootableConfig lootableConfig = null)

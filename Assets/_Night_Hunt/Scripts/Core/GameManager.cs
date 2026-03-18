@@ -1,450 +1,350 @@
-using System;
+﻿using System;
 using NightHunt.Networking;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;
+using NightHunt.Services.Friend;
+using NightHunt.Services.Party;
 using NightHunt.Services.Game;
 using NightHunt.Services.Room;
 using NightHunt.State;
 using NightHunt.Core;
+using NightHunt.UI;
 using UnityEngine;
 using NightHunt.Utilities;
+using NightHunt.GameplaySystems.Core.Configs;
 
 namespace NightHunt.Core
 {
     /// <summary>
-    /// GameManager - Persistent manager that survives scene changes
-    /// Contains all core services and should be loaded first
+    /// GameManager - Persistent manager tá»“n táº¡i xuyÃªn suá»‘t vÃ²ng Ä‘á»i app.
+    /// Single-scene setup: khÃ´ng cÃ²n phá»¥ thuá»™c SceneLoader / scene name check.
     /// </summary>
-    public class GameManager : MonoBehaviour
+    public class GameManager : SingletonPersistent<GameManager>
     {
-        public static GameManager Instance { get; private set; }
 
         [Header("Services")]
-        [SerializeField] private BackendHttpClient backendHttpClient;
-        [SerializeField] private AuthService authService;
-        [SerializeField] private RoomService roomService;
-        // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager thay thế
+        [SerializeField] private BackendHttpClient    backendHttpClient;
+        [SerializeField] private AuthService          authService;
+        [SerializeField] private FriendService        friendService;
+        [SerializeField] private PartyService         partyService;
+        [SerializeField] private RoomService          roomService;
         [SerializeField] private GameWebSocketService gameWebSocketService;
-        
+
         [Header("Config")]
         [SerializeField] private Config.InstanceConfig instanceConfig;
 
         [Header("State")]
         [SerializeField] private SessionState sessionState;
-        [SerializeField] private RoomState roomState;
+        [SerializeField] private RoomState    roomState;
+        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
-        // Public getters for services
-        public BackendHttpClient BackendClient => backendHttpClient;
-        public AuthService AuthService => authService;
-        public RoomService RoomService => roomService;
-        // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager.Instance thay thế
-        public GameWebSocketService GameWebSocket => gameWebSocketService;
-        public SessionState SessionState => sessionState;
-        public RoomState RoomState => roomState;
+        // â”€â”€ Public getters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        public BackendHttpClient    BackendClient  => backendHttpClient;
+        public AuthService          AuthService    => authService;
+        public FriendService        FriendService  => friendService;
+        public PartyService         PartyService   => partyService;
+        public RoomService          RoomService    => roomService;
+        public GameWebSocketService GameWebSocket  => gameWebSocketService;
+        public SessionState         SessionState   => sessionState;
+        public RoomState            RoomState      => roomState;
         public Config.InstanceConfig InstanceConfig => instanceConfig;
 
-        // App lifecycle events - observers can subscribe/unsubscribe
+        // â”€â”€ App lifecycle events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         public event Action OnAppFocusLost;
         public event Action OnAppFocusGained;
         public event Action OnAppPaused;
         public event Action OnAppResumed;
 
-        private void Awake()
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Lifecycle
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+        protected override void OnSingletonAwake()
         {
-            // Singleton pattern - only one GameManager should exist
-            if (Instance == null)
-            {
-                Instance = this;
-                DontDestroyOnLoad(gameObject);
-                InitializeServices();
-                
-                // Configure run in background based on config
-                ConfigureRunInBackground();
-                
-                // Đảm bảo PersistentUICanvas được tạo
-                EnsurePersistentUICanvas();
-                
-                // Đánh dấu GameManager đã khởi tạo
-                SceneLoader.MarkGameManagerInitialized();
-            }
-            else
-            {
-                // If another GameManager exists, destroy this one
-                Destroy(gameObject);
-            }
+            InitializeServices();
+            ConfigureRunInBackground();
+            EnsurePersistentUICanvas();
         }
 
-        /// <summary>
-        /// Configure whether app runs in background when losing focus
-        /// </summary>
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Init
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
         private void ConfigureRunInBackground()
         {
-            bool shouldRunInBackground = false;
-            if (instanceConfig != null)
-            {
-                shouldRunInBackground = instanceConfig.ShouldRunInBackground();
-            }
-            else
-            {
-                // Fallback: Auto-detect (Editor = true, Build = false)
-                shouldRunInBackground = Application.isEditor;
-            }
-            
-            Application.runInBackground = shouldRunInBackground;
-            Debug.Log($"[GameManager] Application.runInBackground set to: {shouldRunInBackground} (Editor: {Application.isEditor})");
+            bool runInBg = instanceConfig != null
+                ? instanceConfig.ShouldRunInBackground()
+                : Application.isEditor;
+
+            Application.runInBackground = runInBg;
+            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                Debug.Log($"[GameManager] runInBackground = {runInBg}");
         }
 
-        /// <summary>
-        /// Đảm bảo PersistentUICanvas được tạo nếu chưa có
-        /// </summary>
         private void EnsurePersistentUICanvas()
         {
             if (UI.PersistentUICanvas.Instance == null)
-            {
                 UI.PersistentUICanvas.GetOrCreate();
-            }
         }
 
         private void InitializeServices()
         {
-            // Ensure all services are initialized
-            if (backendHttpClient == null)
-            {
-                backendHttpClient = ComponentResolver.Find<BackendHttpClient>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] BackendHttpClient not found")
-        .Resolve();
-                if (backendHttpClient == null)
-                {
-                    backendHttpClient = gameObject.AddComponent<BackendHttpClient>();
-                }
-            }
+            backendHttpClient = ResolveOrAdd<BackendHttpClient>(backendHttpClient);
+            authService       = ResolveOrAdd<AuthService>(authService);
+            friendService     = ResolveOrAdd<FriendService>(friendService);
+            partyService      = ResolveOrAdd<PartyService>(partyService);
+            roomService       = ResolveOrAdd<RoomService>(roomService);
+            sessionState      = ResolveOrAdd<SessionState>(sessionState);
+            roomState         = ResolveOrAdd<RoomState>(roomState);
+            gameWebSocketService = ResolveOrAdd<GameWebSocketService>(gameWebSocketService);
 
-            if (authService == null)
-            {
-                authService = ComponentResolver.Find<AuthService>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] AuthService not found")
-        .Resolve();
-                if (authService == null)
-                {
-                    authService = gameObject.AddComponent<AuthService>();
-                }
-            }
-
-            if (roomService == null)
-            {
-                roomService = ComponentResolver.Find<RoomService>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] RoomService not found")
-        .Resolve();
-                if (roomService == null)
-                {
-                    roomService = gameObject.AddComponent<RoomService>();
-                }
-            }
-
-            // Note: NetworkBootstrap đã bị xóa, dùng NetworkGameManager thay thế
-            // NetworkGameManager là singleton và tự quản lý
-
-            if (sessionState == null)
-            {
-                sessionState = ComponentResolver.Find<SessionState>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] SessionState not found")
-        .Resolve();
-                if (sessionState == null)
-                {
-                    sessionState = gameObject.AddComponent<SessionState>();
-                }
-            }
-
-            if (roomState == null)
-            {
-                roomState = ComponentResolver.Find<RoomState>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] RoomState not found")
-        .Resolve();
-                if (roomState == null)
-                {
-                    roomState = gameObject.AddComponent<RoomState>();
-                }
-            }
-
-            // Initialize GameWebSocketService (unified WebSocket for all game events)
-            if (gameWebSocketService == null)
-            {
-                gameWebSocketService = ComponentResolver.Find<GameWebSocketService>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] GameWebSocketService not found")
-        .Resolve();
-                if (gameWebSocketService == null)
-                {
-                    gameWebSocketService = gameObject.AddComponent<GameWebSocketService>();
-                }
-            }
-
-            // Initialize GameEventBus (centralized event system)
+            // GameEventBus
             if (GameEventBus.Instance == null)
             {
-                GameObject eventBusObj = new GameObject("GameEventBus");
-                eventBusObj.AddComponent<GameEventBus>();
-                DontDestroyOnLoad(eventBusObj);
+                var go = new GameObject("GameEventBus");
+                go.AddComponent<GameEventBus>();
+                DontDestroyOnLoad(go);
             }
 
-            Debug.Log("GameManager initialized with all services");
+            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                Debug.Log("[GameManager] All services initialized");
         }
 
-        /// <summary>
-        /// Get a service by type (useful for dependency injection)
-        /// </summary>
+        /// <summary>Resolve component tá»« self/children hoáº·c AddComponent náº¿u khÃ´ng cÃ³.</summary>
+        private T ResolveOrAdd<T>(T existing) where T : Component
+        {
+            if (existing != null) return existing;
+
+            var found = ComponentResolver.Find<T>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning($"[Auto] {typeof(T).Name} not found")
+                .Resolve();
+
+            return found != null ? found : gameObject.AddComponent<T>();
+        }
+
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Generic service getter
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
         public T GetService<T>() where T : Component
         {
-            // Direct property access is preferred, but this method provides fallback
             return ComponentResolver.Find<T>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] T not found")
-        .Resolve();
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning($"[GetService] {typeof(T).Name} not found")
+                .Resolve();
         }
 
-        /// <summary>
-        /// Cleanup when application quits (PC/Desktop)
-        /// </summary>
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // App Lifecycle â€” Quit
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
         private async void OnApplicationQuit()
         {
-            Debug.Log("[GameManager] Application quitting - cleaning up...");
+            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                Debug.Log("[GameManager] Application quitting â€” cleaning up...");
             await CleanupOnExit();
-            
-            // Ensure WebSocket is fully disconnected without auto-reconnect
+
             if (gameWebSocketService != null)
             {
-                try
-                {
-                    gameWebSocketService.Disconnect(disableReconnect: true);
-                }
-                catch (System.Exception ex)
-                {
-                    Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on quit: {ex.Message}");
-                }
+                try { gameWebSocketService.Disconnect(disableReconnect: true); }
+                catch (Exception ex) { Debug.LogWarning($"[GameManager] WS disconnect error: {ex.Message}"); }
             }
         }
 
-        /// <summary>
-        /// Cleanup when application pauses (Mobile - when app goes to background)
-        /// </summary>
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // App Lifecycle â€” Pause / Focus (Mobile & PC)
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
         private void OnApplicationPause(bool pauseStatus)
         {
             if (pauseStatus)
             {
-                Debug.Log("[GameManager] Application paused (going to background) - disconnecting WebSocket only (keeping room)...");
-                // Only disconnect WebSocket, DON'T leave room
-                // User might switch apps but still want to be in room when they come back
-                if (gameWebSocketService != null)
-                {
-                    try
-                    {
-                        gameWebSocketService.Disconnect();
-                    }
-                    catch (System.Exception ex)
-                    {
-                        Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on pause: {ex.Message}");
-                    }
-                }
-
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] App paused â†’ disconnect WS (keep room)");
+                DisconnectWebSocket();
                 OnAppPaused?.Invoke();
             }
             else
             {
-                // App resumed from background
-                Debug.Log("[GameManager] Application resumed from background");
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] App resumed");
                 HandleApplicationResumed();
                 OnAppResumed?.Invoke();
             }
         }
 
-        /// <summary>
-        /// Cleanup when application loses focus (PC - when window loses focus, but app still running)
-        /// Note: On mobile, this is called when app goes to background
-        /// </summary>
         private void OnApplicationFocus(bool hasFocus)
         {
             if (!hasFocus)
             {
-                Debug.Log("[GameManager] Application lost focus - disconnecting WebSocket only (keeping room)...");
-                // Only disconnect WebSocket, DON'T leave room
-                // User might switch windows but still want to be in room
-                if (gameWebSocketService != null)
-                {
-                    try
-                    {
-                        gameWebSocketService.Disconnect();
-                    }
-                    catch (System.Exception ex)
-                    {
-                        Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on focus loss: {ex.Message}");
-                    }
-                }
-
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] App lost focus â†’ disconnect WS (keep room)");
+                DisconnectWebSocket();
                 OnAppFocusLost?.Invoke();
             }
             else
             {
-                // App regained focus
-                Debug.Log("[GameManager] Application regained focus");
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] App regained focus");
                 HandleApplicationResumed();
                 OnAppFocusGained?.Invoke();
             }
         }
 
-        /// <summary>
-        /// Handle application resumed (from pause or focus return)
-        /// Reconnect WebSocket and refresh current scene data
-        /// </summary>
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Resume handler
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
         private async void HandleApplicationResumed()
         {
-            bool shouldRefresh = instanceConfig != null ? instanceConfig.ShouldRefreshOnFocusReturn() : true;
+            bool shouldRefresh = instanceConfig != null
+                ? instanceConfig.ShouldRefreshOnFocusReturn()
+                : true;
+
             if (!shouldRefresh)
             {
-                Debug.Log("[GameManager] Refresh on focus return is disabled, skipping refresh");
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] Refresh on focus disabled â€” skipping");
                 return;
             }
 
-            // Wait a bit for app to fully resume
             await System.Threading.Tasks.Task.Delay(500);
 
-            // Reconnect WebSocket if user is authenticated
+            // Reconnect WebSocket
             if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
             {
                 if (gameWebSocketService != null && !gameWebSocketService.IsWsConnected)
                 {
-                    Debug.Log("[GameManager] Reconnecting GameWebSocket after resume...");
-                    _ = gameWebSocketService.Connect(); // Fire and forget
+                    if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                        Debug.Log("[GameManager] Reconnecting WebSocket...");
+                    _ = gameWebSocketService.Connect();
                 }
             }
 
-            // Refresh current scene data based on active scene
-            RefreshCurrentSceneData();
+            RefreshCurrentPanelData();
         }
 
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Refresh data â€” dÃ¹ng UINavigator thay vÃ¬ scene name
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
         /// <summary>
-        /// Refresh data for current active scene
+        /// Refresh dá»¯ liá»‡u dá»±a trÃªn panel Ä‘ang hiá»ƒn thá»‹.
+        /// Single-scene: khÃ´ng cÃ²n check SceneManager.GetActiveScene().name.
         /// </summary>
-        private async void RefreshCurrentSceneData()
+        private async void RefreshCurrentPanelData()
         {
-            string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-            Debug.Log($"[GameManager] Refreshing data for scene: {currentScene}");
+            if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated)
+            {
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] Not authenticated â€” skip refresh");
+                return;
+            }
+
+            var nav = UINavigator.Instance;
+            if (nav == null)
+            {
+                Debug.LogWarning("[GameManager] UINavigator not found â€” skip refresh");
+                return;
+            }
+
+            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                Debug.Log($"[GameManager] Refreshing data for panel: {nav.CurrentPanel?.ToString() ?? "none"}");
 
             try
             {
-                // Check if user is authenticated
-                if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated)
+                if (!nav.CurrentPanel.HasValue) return;
+                switch (nav.CurrentPanel.Value)
                 {
-                    Debug.Log("[GameManager] User not authenticated, skipping refresh");
-                    return;
-                }
-
-                // Refresh based on scene
-                switch (currentScene)
-                {
-                    case "03_Waiting":
-                    case "04_Waiting":
-                    case "Waiting":
-                        // Refresh lobby/room data
-                        if (roomState != null && roomState.IsInRoom && roomService != null)
-                        {
-                            Debug.Log($"[GameManager] Refreshing room data for room {roomState.RoomId}");
-                            var result = await roomService.GetRoom(roomState.RoomId);
-                            if (result.Success && result.Data != null)
-                            {
-                                Debug.Log("[GameManager] Room data refreshed successfully");
-                                
-                                // Trigger CustomLobbyView refresh if it exists
-                                var lobbyView = FindFirstObjectByType<UI.CustomLobbyView>();
-                                if (lobbyView != null)
-                                {
-                                    lobbyView.RefreshPlayerList();
-                                    Debug.Log("[GameManager] CustomLobbyView refresh triggered");
-                                }
-                            }
-                            else
-                            {
-                                Debug.LogWarning($"[GameManager] Failed to refresh room data: {result.Message}");
-                            }
-                        }
+                    case PanelType.Lobby:
+                        await RefreshLobbyData();
                         break;
 
-                    case "02_Home":
-                    case "Home":
-                        // Home scene - no specific refresh needed
-                        Debug.Log("[GameManager] Home scene - no refresh needed");
+                    case PanelType.Home:
+                        // Home khÃ´ng cáº§n refresh Ä‘áº·c biá»‡t
+                        if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                            Debug.Log("[GameManager] Home panel â€” no refresh needed");
                         break;
 
-                    case "01_Login":
-                    case "Login":
-                        // Login scene - no refresh needed
-                        Debug.Log("[GameManager] Login scene - no refresh needed");
+                    case PanelType.Login:
+                        if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                            Debug.Log("[GameManager] Login panel — no refresh needed");
                         break;
 
                     default:
-                        Debug.Log($"[GameManager] Unknown scene '{currentScene}' - no refresh logic defined");
+                        if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                            Debug.Log($"[GameManager] Panel {nav.CurrentPanel.Value} — no refresh logic defined");
                         break;
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                Debug.LogError($"[GameManager] Error refreshing scene data: {ex.Message}\n{ex.StackTrace}");
+                Debug.LogError($"[GameManager] Error refreshing panel data: {ex.Message}\n{ex.StackTrace}");
             }
         }
 
-        /// <summary>
-        /// Cleanup resources when app exits (ONLY called on actual quit, not focus/pause)
-        /// </summary>
+        private async System.Threading.Tasks.Task RefreshLobbyData()
+        {
+            if (roomState == null || !roomState.IsInRoom || roomService == null) return;
+
+            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                Debug.Log($"[GameManager] Refreshing room data: {roomState.RoomId}");
+            var result = await roomService.GetRoom(roomState.RoomId);
+
+            if (result.Success && result.Data != null)
+            {
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] Room data refreshed");
+                var lobbyView = FindFirstObjectByType<UI.CustomLobbyView>();
+                lobbyView?.RefreshPlayerList();
+            }
+            else
+            {
+                Debug.LogWarning($"[GameManager] Room refresh failed: {result.Message}");
+            }
+        }
+
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Cleanup on exit
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
         private async System.Threading.Tasks.Task CleanupOnExit()
         {
             try
             {
-                Debug.Log("[GameManager] Starting cleanup on app exit...");
-                
-                // 1. Leave room if in room (only on actual quit)
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] Starting exit cleanup...");
+
                 if (roomState != null && roomState.IsInRoom && roomService != null)
                 {
                     try
                     {
-                        Debug.Log($"[GameManager] Leaving room {roomState.RoomId} on app exit...");
+                        if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                            Debug.Log($"[GameManager] Leaving room {roomState.RoomId}...");
                         await roomService.LeaveRoom(roomState.RoomId);
                     }
-                    catch (System.Exception ex)
-                    {
-                        Debug.LogWarning($"[GameManager] Error leaving room on exit: {ex.Message}");
-                    }
+                    catch (Exception ex) { Debug.LogWarning($"[GameManager] LeaveRoom error: {ex.Message}"); }
                 }
 
-                // 2. Disconnect GameWebSocket
-                if (gameWebSocketService != null)
-                {
-                    try
-                    {
-                        gameWebSocketService.Disconnect();
-                    }
-                    catch (System.Exception ex)
-                    {
-                        Debug.LogWarning($"[GameManager] Error disconnecting WebSocket on exit: {ex.Message}");
-                    }
-                }
+                DisconnectWebSocket();
+                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] Exit cleanup done");
+            }
+            catch (Exception ex) { Debug.LogError($"[GameManager] Cleanup error: {ex.Message}"); }
+        }
 
-                Debug.Log("[GameManager] Cleanup completed");
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"[GameManager] Error during cleanup: {ex.Message}");
-            }
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Helpers
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+        private void DisconnectWebSocket()
+        {
+            if (gameWebSocketService == null) return;
+            try { gameWebSocketService.Disconnect(); }
+            catch (Exception ex) { Debug.LogWarning($"[GameManager] WS disconnect: {ex.Message}"); }
         }
     }
 }

@@ -43,7 +43,8 @@ namespace NightHunt.Gameplay.Beacon
         [SerializeField] private GameObject _beaconPrefabFallback;
 
         [Header("Settings")]
-        [SerializeField] private int _maxActivePerTeamFallback = 2;
+        [Tooltip("Config driving beacon limits and timing. If null, uses built-in defaults.")]
+        [SerializeField] private RespawnConfig _respawnConfig;
 
         // ── Runtime (server) ──────────────────────────────────────────────────
         /// <summary>teamId → list of active beacon NOs.</summary>
@@ -71,7 +72,7 @@ namespace NightHunt.Gameplay.Beacon
         {
             base.OnStartServer();
 
-            _maxActivePerTeam = _maxActivePerTeamFallback;
+            _maxActivePerTeam = _respawnConfig != null ? _respawnConfig.MaxBeaconsPerTeam : 2;
 
             _matchEndManager?.RegisterBeaconProvider(this);
         }

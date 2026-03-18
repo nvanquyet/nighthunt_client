@@ -1,6 +1,6 @@
 using UnityEngine;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Interfaces;
 
 namespace NightHunt.GameplaySystems.Aim

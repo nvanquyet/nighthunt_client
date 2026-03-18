@@ -12,36 +12,32 @@ namespace NightHunt.UI
     /// </summary>
     public class PersistentUICanvas : PersistentObject
     {
-        [Header("Canvas Settings")]
-        [SerializeField] private Canvas canvas;
+        [Header("Canvas Settings")] [SerializeField]
+        private Canvas canvas;
+
         [SerializeField] private CanvasScaler canvasScaler;
         [SerializeField] private GraphicRaycaster graphicRaycaster;
 
-        [Header("UI Components")]
-        [SerializeField] private LoadingManager loadingManager;
-        [SerializeField] private ReconnectPopup reconnectPopup;
-        [SerializeField] private PingDisplay pingDisplay;
-        [SerializeField] private NoticePopup noticePopup;
-        [SerializeField] private ToastService toastService;
-        [SerializeField] private UINotificationService notificationService;
+        [Header("UI Components")]        [SerializeField] private LoadingManager     loadingManager;
+        [SerializeField] private MatchLoadingOverlay matchLoadingOverlay;
+        [SerializeField] private PingDisplay         pingDisplay;
+        [SerializeField] private ToastService        toastService;
 
         // Public accessors
         public new static PersistentUICanvas Instance => (PersistentUICanvas)PersistentObject.Instance;
-        public Canvas Canvas => canvas;
-        public LoadingManager LoadingManager => loadingManager;
-        public ReconnectPopup ReconnectPopup => reconnectPopup;
-        public PingDisplay PingDisplay => pingDisplay;
-        public NoticePopup NoticePopup => noticePopup;
-        public ToastService ToastService => toastService;
-        public UINotificationService NotificationService => notificationService;
+        public Canvas              Canvas               => canvas;
+        public LoadingManager      LoadingManager       => loadingManager;
+        public MatchLoadingOverlay MatchLoadingOverlay  => matchLoadingOverlay;
+        public PingDisplay         PingDisplay          => pingDisplay;
+        public ToastService        ToastService         => toastService;
 
         protected override void OnPersistentAwake()
         {
             base.OnPersistentAwake();
-            
+
             // Đảm bảo Canvas setup đúng
             SetupCanvas();
-            
+
             // Initialize components
             InitializeComponents();
         }
@@ -52,10 +48,10 @@ namespace NightHunt.UI
             if (canvas == null)
             {
                 canvas = ComponentResolver.Find<Canvas>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] Canvas not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] Canvas not found")
+                    .Resolve();
                 if (canvas == null)
                 {
                     canvas = gameObject.AddComponent<Canvas>();
@@ -70,10 +66,10 @@ namespace NightHunt.UI
             if (canvasScaler == null)
             {
                 canvasScaler = ComponentResolver.Find<CanvasScaler>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] CanvasScaler not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] CanvasScaler not found")
+                    .Resolve();
                 if (canvasScaler == null)
                 {
                     canvasScaler = gameObject.AddComponent<CanvasScaler>();
@@ -89,10 +85,10 @@ namespace NightHunt.UI
             if (graphicRaycaster == null)
             {
                 graphicRaycaster = ComponentResolver.Find<GraphicRaycaster>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] GraphicRaycaster not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] GraphicRaycaster not found")
+                    .Resolve();
                 if (graphicRaycaster == null)
                 {
                     graphicRaycaster = gameObject.AddComponent<GraphicRaycaster>();
@@ -104,39 +100,12 @@ namespace NightHunt.UI
         {
             // Keep loading visible on first boot to cover service init + auto-login
             if (loadingManager != null)
-            {
                 loadingManager.gameObject.SetActive(true);
-            }
 
-            // Initialize ReconnectPopup
-            if (reconnectPopup != null)
-            {
-                reconnectPopup.Hide();
-            }
+            // MatchLoadingOverlay ẩn mặc định (tự ẩn trong Awake của nó)
+            // Không cần làm gì thêm ở đây
 
-            // Initialize NoticePopup
-            if (noticePopup != null)
-            {
-                noticePopup.Hide();
-            }
-
-            // Wire UINotificationService with all notification backends
-            if (notificationService == null)
-                notificationService = ComponentResolver.Find<UINotificationService>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .OrLogWarning("[Auto] UINotificationService not found")
-        .Resolve();
-            if (notificationService == null)
-            {
-                var go = new GameObject("UINotificationService");
-                go.transform.SetParent(transform, false);
-                notificationService = go.AddComponent<UINotificationService>();
-            }
-            notificationService.Configure(toastService, noticePopup, loadingManager);
-
-            // PingDisplay sẽ tự động start trong Start()
+            // PingDisplay tự start trong Start()
         }
 
         /// <summary>
@@ -152,10 +121,10 @@ namespace NightHunt.UI
             // Tạo mới
             GameObject canvasGO = new GameObject("PersistentUICanvas");
             PersistentUICanvas persistentCanvas = canvasGO.AddComponent<PersistentUICanvas>();
-            
+
             // Tạo các UI components
             persistentCanvas.CreateUIComponents();
-            
+
             return persistentCanvas;
         }
 
@@ -164,7 +133,6 @@ namespace NightHunt.UI
         /// </summary>
         private void CreateUIComponents()
         {
-            // Tạo LoadingManager
             if (loadingManager == null)
             {
                 GameObject loadingGO = new GameObject("LoadingManager");
@@ -172,36 +140,18 @@ namespace NightHunt.UI
                 loadingManager = loadingGO.AddComponent<LoadingManager>();
             }
 
-            // Tạo ReconnectPopup
-            if (reconnectPopup == null)
+            if (matchLoadingOverlay == null)
             {
-                GameObject reconnectGO = new GameObject("ReconnectPopup");
-                reconnectGO.transform.SetParent(transform, false);
-                reconnectPopup = reconnectGO.AddComponent<ReconnectPopup>();
+                GameObject go = new GameObject("MatchLoadingOverlay");
+                go.transform.SetParent(transform, false);
+                matchLoadingOverlay = go.AddComponent<MatchLoadingOverlay>();
             }
 
-            // Tạo PingDisplay
             if (pingDisplay == null)
             {
                 GameObject pingGO = new GameObject("PingDisplay");
                 pingGO.transform.SetParent(transform, false);
                 pingDisplay = pingGO.AddComponent<PingDisplay>();
-            }
-
-            // Tạo NoticePopup
-            if (noticePopup == null)
-            {
-                GameObject noticeGO = new GameObject("NoticePopup");
-                noticeGO.transform.SetParent(transform, false);
-                noticePopup = noticeGO.AddComponent<NoticePopup>();
-            }
-
-            // Tạo UINotificationService
-            if (notificationService == null)
-            {
-                GameObject notifGO = new GameObject("UINotificationService");
-                notifGO.transform.SetParent(transform, false);
-                notificationService = notifGO.AddComponent<UINotificationService>();
             }
         }
 
@@ -212,78 +162,48 @@ namespace NightHunt.UI
             if (canvas == null)
             {
                 canvas = ComponentResolver.Find<Canvas>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] Canvas not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] Canvas not found")
+                    .Resolve();
             }
 
             if (canvasScaler == null)
             {
                 canvasScaler = ComponentResolver.Find<CanvasScaler>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] CanvasScaler not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] CanvasScaler not found")
+                    .Resolve();
             }
 
             if (graphicRaycaster == null)
             {
                 graphicRaycaster = ComponentResolver.Find<GraphicRaycaster>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] GraphicRaycaster not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] GraphicRaycaster not found")
+                    .Resolve();
             }
 
             if (loadingManager == null)
             {
                 loadingManager = ComponentResolver.Find<LoadingManager>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .OrLogWarning("[Auto] LoadingManager not found")
-        .Resolve();
-            }
-
-            if (reconnectPopup == null)
-            {
-                reconnectPopup = ComponentResolver.Find<ReconnectPopup>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .OrLogWarning("[Auto] ReconnectPopup not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .InParent()
+                    .OrLogWarning("[Auto] LoadingManager not found")
+                    .Resolve();
             }
 
             if (pingDisplay == null)
             {
                 pingDisplay = ComponentResolver.Find<PingDisplay>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .OrLogWarning("[Auto] PingDisplay not found")
-        .Resolve();
-            }
-
-            if (noticePopup == null)
-            {
-                noticePopup = ComponentResolver.Find<NoticePopup>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .OrLogWarning("[Auto] NoticePopup not found")
-        .Resolve();
-            }
-
-            if (notificationService == null)
-            {
-                notificationService = ComponentResolver.Find<UINotificationService>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .OrLogWarning("[Auto] UINotificationService not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .InParent()
+                    .OrLogWarning("[Auto] PingDisplay not found")
+                    .Resolve();
             }
         }
 #endif

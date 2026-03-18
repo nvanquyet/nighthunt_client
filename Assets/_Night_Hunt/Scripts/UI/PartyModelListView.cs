@@ -1,0 +1,130 @@
+﻿using System;
+using System.Collections.Generic;
+using NightHunt.Data.DTOs;
+using UnityEngine;
+
+namespace NightHunt.UI
+{
+    /// <summary>
+    /// PartyModelListView - center party model display on the Home screen.
+    ///
+    /// Spawns exactly <c>members.Count</c> <see cref="PartyModelSlotView"/> GameObjects —
+    /// one per actual party member. There are NO empty/placeholder slots; the list
+    /// grows when a member joins and shrinks when one leaves.
+    ///
+    /// When a slot is clicked the view calls
+    /// <see cref="SharedPartyContextMenu.Show"/> on the shared context-menu
+    /// instance (a single GO placed as the last sibling of the Home panel root).
+    ///
+    /// Call <see cref="Refresh"/> every time the party or game mode changes.
+    ///
+    /// SETUP (Prefab hierarchy):
+    ///   PartyModelList (this script)
+    ///   +-- Container  <- HorizontalLayoutGroup, set in Inspector as <c>container</c>
+    ///       +-- (PartyModelSlot prefab clones spawned at runtime)
+    /// </summary>
+    public class PartyModelListView : MonoBehaviour
+    {
+        [Header("Spawning")]
+        [Tooltip("Prefab with PartyModelSlotView component on root or child.")]
+        [SerializeField] private GameObject slotPrefab;
+
+        [Tooltip("Parent transform for spawned slots (HorizontalLayoutGroup recommended).")]
+        [SerializeField] private Transform container;
+
+        [Header("Shared Context Menu")]
+        [Tooltip("Assign the SharedPartyContextMenu instance that lives as last sibling of the Home panel root.")]
+        [SerializeField] private SharedPartyContextMenu sharedContextMenu;
+
+        // -- Runtime ----------------------------------------------------------
+
+        private readonly List<PartyModelSlotView> _slots = new();
+        private Action<long> _onKick;
+        private Action       _onLeave;
+
+        // -- Public API -------------------------------------------------------
+
+        /// <summary>
+        /// Rebuild the center model display.
+        /// Only real members are shown — no empty/placeholder slots.
+        /// </summary>
+        /// <param name="party">Current party, or null if solo.</param>
+        /// <param name="iAmHost">True if the local player is the party host.</param>
+        /// <param name="onKick">Fires with userId when host kicks a member.</param>
+        /// <param name="onLeave">Fires when local player taps Leave.</param>
+        public void Refresh(PartyResponse party,
+                            bool         iAmHost = false,
+                            Action<long> onKick  = null,
+                            Action       onLeave = null)
+        {
+            _onKick  = onKick;
+            _onLeave = onLeave;
+
+            // Sort members by joinOrder so slot 0 = host
+            var members = new List<PartyMemberResponse>();
+            if (party?.members != null)
+            {
+                members.AddRange(party.members);
+                members.Sort((a, b) => a.joinOrder.CompareTo(b.joinOrder));
+            }
+
+            // Grow / shrink to exactly members.Count — no empty slots
+            EnsureSlotCount(members.Count);
+
+            for (int i = 0; i < _slots.Count; i++)
+                _slots[i].SetMember(members[i], iAmHost, OnModelSlotClicked);
+        }
+
+        // -- Private ----------------------------------------------------------
+
+        private void OnModelSlotClicked(PartyModelSlotView slot)
+        {
+            if (slot == null) return;
+
+            var anchor     = slot.GetComponent<RectTransform>();
+            bool showKick  = slot.IAmHost && !slot.IsLocalPlayer;
+            bool showLeave = slot.IsLocalPlayer;
+
+            sharedContextMenu?.Show(anchor, showKick, showLeave,
+                                    slot.MemberId, _onKick, _onLeave);
+        }
+
+        private void EnsureSlotCount(int count)
+        {
+            // Remove excess
+            while (_slots.Count > count)
+            {
+                var last = _slots[_slots.Count - 1];
+                _slots.RemoveAt(_slots.Count - 1);
+                if (last != null) Destroy(last.gameObject);
+            }
+
+            // Add missing
+            while (_slots.Count < count)
+            {
+                if (slotPrefab == null || container == null) break;
+
+                var go   = Instantiate(slotPrefab, container);
+                var slot = go.GetComponentInChildren<PartyModelSlotView>(includeInactive: true)
+                           ?? go.GetComponent<PartyModelSlotView>();
+
+                if (slot == null)
+                {
+                    Destroy(go);
+                    break;
+                }
+
+                slot.SetEmpty();
+                _slots.Add(slot);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            sharedContextMenu?.Hide();
+            foreach (var s in _slots)
+                if (s != null) Destroy(s.gameObject);
+            _slots.Clear();
+        }
+    }
+}

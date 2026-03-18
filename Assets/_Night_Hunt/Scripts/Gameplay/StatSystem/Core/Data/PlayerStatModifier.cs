@@ -1,7 +1,7 @@
 using UnityEngine;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 
-namespace NightHunt.StatSystem.Core.Data
+namespace NightHunt.Gameplay.StatSystem.Core.Data
 {
     /// <summary>
     /// Player stat modifier from equipment/weapons

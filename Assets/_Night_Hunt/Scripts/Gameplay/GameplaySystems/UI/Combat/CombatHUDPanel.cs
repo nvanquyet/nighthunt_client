@@ -2,11 +2,12 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Michsky.MUIP;
+using NightHunt.Gameplay.Input.Core;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -166,13 +167,16 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_aimController != null)
                 _aimController.Initialize(statSystem, quickSlotSystem, playerTransform);
 
-            // Bind fire-button range indicator to the local player so the ring is correctly
-            // positioned and sized (VisionRange) from the first fire tap.
-            if (_fireButton != null && playerTransform != null)
+            // Bind fire-button to the local player's combat handler and range indicator.
+            if (_fireButton != null)
             {
-                float vr = statSystem != null ? statSystem.GetStat(PlayerStatType.VisionRange) : 0f;
-                if (vr <= 0f) vr = 15f;
-                _fireButton.BindPlayerContext(playerTransform, vr);
+                _fireButton.Initialize(InputManager.Instance?.CombatHandler);
+                if (playerTransform != null)
+                {
+                    float vr = statSystem != null ? statSystem.GetStat(PlayerStatType.VisionRange) : 0f;
+                    if (vr <= 0f) vr = 15f;
+                    _fireButton.BindPlayerContext(playerTransform, vr);
+                }
             }
 
             WireSystemEvents();

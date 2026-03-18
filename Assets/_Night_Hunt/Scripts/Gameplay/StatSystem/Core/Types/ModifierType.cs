@@ -1,4 +1,4 @@
-namespace NightHunt.StatSystem.Core.Types
+namespace NightHunt.Gameplay.StatSystem.Core.Types
 {
     /// <summary>
     /// Defines how a modifier affects a stat

@@ -5,7 +5,7 @@ using FishNet.Object;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.QuickSlot

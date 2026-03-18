@@ -5,7 +5,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.StatSystem.Systems;
+using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Attachment

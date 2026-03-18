@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,6 +9,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
+using NightHunt.GameplaySystems.Core.Configs;
 
 namespace NightHunt.GameplaySystems.UI
 {
@@ -28,11 +29,11 @@ namespace NightHunt.GameplaySystems.UI
     /// </summary>
     public class LootContainerUI : MonoBehaviour
     {
-        // ── Singleton ────────────────────────────────────────────────────────
+        // â”€â”€ Singleton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         public static LootContainerUI Instance { get; private set; }
 
-        // ── Inspector ─────────────────────────────────────────────────────────
+        // â”€â”€ Inspector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         [Header("Panel")]
         [SerializeField] private GameObject  _containerPanel;
@@ -43,7 +44,7 @@ namespace NightHunt.GameplaySystems.UI
 
         [Header("Item list")]
         [SerializeField] private Transform  _slotsParent;
-        [SerializeField] private LootItemRow _itemRowPrefab; // optional — assign a prefab with LootItemRow component
+        [SerializeField] private LootItemRow _itemRowPrefab; // optional â€” assign a prefab with LootItemRow component
 
         [Header("Buttons")]
         [SerializeField] private Button _takeAllButton;
@@ -52,14 +53,15 @@ namespace NightHunt.GameplaySystems.UI
         [Header("Interaction")]
         [Tooltip("Max distance (world units) between player and container before the loot panel auto-closes.")]
         [SerializeField] private float _maxLootDistance = 4f;
+        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
-        // ── Runtime ───────────────────────────────────────────────────────────
+        // â”€â”€ Runtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private NetworkObject _localNob;
 
         /// <summary>
         /// Wraps the concrete RequestTakeItem call for the currently open lootable.
-        /// Signature: (storageIndex, quantity) → void.
+        /// Signature: (storageIndex, quantity) â†’ void.
         /// </summary>
         private Action<int, int> _takeItemAction;
 
@@ -72,14 +74,14 @@ namespace NightHunt.GameplaySystems.UI
 
         /// <summary>
         /// True when the panel was opened by the player explicitly holding E (interaction RPC).
-        /// In that case hover-exit should NOT close the panel — the player needs to click the buttons.
+        /// In that case hover-exit should NOT close the panel â€” the player needs to click the buttons.
         /// False when opened purely by hover-preview (already-open container).
         /// </summary>
         private bool _openedViaInteraction;
 
         private readonly List<GameObject> _spawnedRows = new List<GameObject>();
 
-        // ── Unity lifecycle ───────────────────────────────────────────────────
+        // â”€â”€ Unity lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void Awake()
         {
@@ -99,7 +101,8 @@ namespace NightHunt.GameplaySystems.UI
             string closeBtnInfo   = _closeButton      != null ? "ok" : "NULL";
             string prefabInfo     = _itemRowPrefab    != null ? "ok" : "NULL";
             string slotsInfo      = _slotsParent      != null ? _slotsParent.name : "NULL";
-            Debug.Log($"[LootContainerUI] Awake: panel={panelInfo} canvasGroup={cgInfo} takeAllBtn={takeAllInfo} closeBtn={closeBtnInfo} rowPrefab={prefabInfo} slotsParent={slotsInfo}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] Awake: panel={panelInfo} canvasGroup={cgInfo} takeAllBtn={takeAllInfo} closeBtn={closeBtnInfo} rowPrefab={prefabInfo} slotsParent={slotsInfo}");
         }
 
         private void OnEnable()
@@ -124,7 +127,7 @@ namespace NightHunt.GameplaySystems.UI
             WorldCorpse.OnAnyHoverExit           -= HandleCorpseHoverExit;
         }
 
-        // ── Public API ────────────────────────────────────────────────────────
+        // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>Call from GameHUD.Initialize() with the local NetworkPlayer's NetworkObject.</summary>
         public void SetLocalPlayer(NetworkPlayer player)
@@ -138,7 +141,8 @@ namespace NightHunt.GameplaySystems.UI
         {
             // OnOwnerReady fires only on the owning client, so this is always the local player.
             _localNob = player.NetworkObject;
-            Debug.Log($"[LootContainerUI] HandleOwnerReady: _localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} player={player.name}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] HandleOwnerReady: _localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} player={player.name}");
         }
 
         public void Hide()
@@ -164,13 +168,15 @@ namespace NightHunt.GameplaySystems.UI
             if (_openContainer != null &&
                 Vector3.Distance(playerPos, _openContainer.transform.position) > _maxLootDistance)
             {
-                Debug.Log("[LootContainerUI] Update: player walked too far from container — closing panel.");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log("[LootContainerUI] Update: player walked too far from container â€” closing panel.");
                 Hide();
             }
             else if (_openCorpse != null &&
                      Vector3.Distance(playerPos, _openCorpse.transform.position) > _maxLootDistance)
             {
-                Debug.Log("[LootContainerUI] Update: player walked too far from corpse — closing panel.");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log("[LootContainerUI] Update: player walked too far from corpse â€” closing panel.");
                 Hide();
             }
         }
@@ -189,7 +195,7 @@ namespace NightHunt.GameplaySystems.UI
             }
         }
 
-        // ── Handlers ─────────────────────────────────────────────────────────
+        // â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void HandleContainerOpened(WorldContainer container, FishNet.Connection.NetworkConnection conn)
         {
@@ -197,12 +203,14 @@ namespace NightHunt.GameplaySystems.UI
             // Only open for the local player who triggered the open.
             if (_localNob != null && conn != null && conn != _localNob.Owner)
             {
-                Debug.Log($"[LootContainerUI] HandleContainerOpened: SKIP — conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[LootContainerUI] HandleContainerOpened: SKIP â€” conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
                 return;
             }
 
             var storageList = container.GetStorage();
-            Debug.Log($"[LootContainerUI] HandleContainerOpened: SHOW — localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] HandleContainerOpened: SHOW â€” localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
 
             UnsubscribeOpenLootable();
             _openContainer = container;
@@ -219,12 +227,14 @@ namespace NightHunt.GameplaySystems.UI
             // Only open for the local player who triggered the open.
             if (_localNob != null && conn != null && conn != _localNob.Owner)
             {
-                Debug.Log($"[LootContainerUI] HandleCorpseOpened: SKIP — conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[LootContainerUI] HandleCorpseOpened: SKIP â€” conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
                 return;
             }
 
             var storageList = corpse.GetStorage();
-            Debug.Log($"[LootContainerUI] HandleCorpseOpened: SHOW — localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] HandleCorpseOpened: SHOW â€” localNob={(_localNob != null ? _localNob.ObjectId.ToString() : "NULL")} conn={conn?.ClientId} storage.Count={storageList.Count}");
 
             UnsubscribeOpenLootable();
             _openCorpse = corpse;
@@ -240,11 +250,12 @@ namespace NightHunt.GameplaySystems.UI
         private void HandleContainerHoverEnter(WorldContainer container)
         {
             if (container == null || container.IsLooted) return;
-            // Already showing this container — nothing to do.
+            // Already showing this container â€” nothing to do.
             if (_openContainer == container) return;
 
             var storageList = container.GetStorage();
-            Debug.Log($"[LootContainerUI] HandleContainerHoverEnter: storage.Count={storageList.Count}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] HandleContainerHoverEnter: storage.Count={storageList.Count}");
             UnsubscribeOpenLootable();
             _openContainer = container;
             _openContainer.OnClientStorageChanged += RebuildRows;
@@ -283,7 +294,7 @@ namespace NightHunt.GameplaySystems.UI
                 Hide();
         }
 
-        // ── Internal ──────────────────────────────────────────────────────────
+        // â”€â”€ Internal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void ShowLoot(string title, IReadOnlyList<ItemInstanceData> storage)
         {
@@ -297,11 +308,12 @@ namespace NightHunt.GameplaySystems.UI
 
             string showPanelInfo = _containerPanel != null ? "ok" : "NULL";
             string showCgInfo    = _canvasGroup    != null ? "ok" : "NULL";
-            Debug.Log($"[LootContainerUI] ShowLoot: title='{title}' items={storage?.Count ?? 0} panel={showPanelInfo} canvasGroup={showCgInfo}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] ShowLoot: title='{title}' items={storage?.Count ?? 0} panel={showPanelInfo} canvasGroup={showCgInfo}");
             BuildRows(storage);
         }
 
-        /// <summary>Called when the open lootable's SyncList changes — refreshes the item rows.</summary>
+        /// <summary>Called when the open lootable's SyncList changes â€” refreshes the item rows.</summary>
         private void RebuildRows()
         {
             IReadOnlyList<ItemInstanceData> src = null;
@@ -319,7 +331,8 @@ namespace NightHunt.GameplaySystems.UI
             if (storage == null) { Debug.LogWarning("[LootContainerUI] BuildRows: storage NULL"); return; }
 
             string prefabInfo = _itemRowPrefab != null ? "assigned" : "NULL";
-            Debug.Log($"[LootContainerUI] BuildRows: {storage.Count} item(s) — slotsParent={(_slotsParent != null ? _slotsParent.name : "NULL")} rowPrefab={prefabInfo}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] BuildRows: {storage.Count} item(s) â€” slotsParent={(_slotsParent != null ? _slotsParent.name : "NULL")} rowPrefab={prefabInfo}");
 
             for (int i = 0; i < storage.Count; i++)
             {
@@ -379,7 +392,7 @@ namespace NightHunt.GameplaySystems.UI
                 iconImg.enabled = icon != null;
             }
             if (nameText != null) nameText.text = itemName;
-            if (qtyText  != null) qtyText.text  = $"×{item.Quantity}";
+            if (qtyText  != null) qtyText.text  = $"Ã—{item.Quantity}";
 
             // Capture for closure
             int idx = storageIndex;
@@ -387,12 +400,13 @@ namespace NightHunt.GameplaySystems.UI
             if (takeBtn != null)
             {
                 takeBtn.onClick.AddListener(() => TakeItem(idx, qty));
-                Debug.Log($"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn wired — item='{itemName}' qty={qty} interactable={takeBtn.interactable}");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn wired â€” item='{itemName}' qty={qty} interactable={takeBtn.interactable}");
             }
             else
             {
                 string rowPrefabInfo = _itemRowPrefab != null ? "assigned" : "NULL";
-                Debug.LogWarning($"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn is NULL — button onClick will NOT fire! prefab={rowPrefabInfo}");
+                Debug.LogWarning($"[LootContainerUI] SpawnRow[{storageIndex}]: takeBtn is NULL â€” button onClick will NOT fire! prefab={rowPrefabInfo}");
             }
 
             return row;
@@ -401,7 +415,8 @@ namespace NightHunt.GameplaySystems.UI
         private void TakeItem(int storageIndex, int quantity)
         {
             string nobInfo = _localNob != null ? _localNob.ObjectId.ToString() : "NULL";
-            Debug.Log($"[LootContainerUI] ▶ TakeItem CALLED: idx={storageIndex} qty={quantity} localNob={nobInfo} action={_takeItemAction != null}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] â–¶ TakeItem CALLED: idx={storageIndex} qty={quantity} localNob={nobInfo} action={_takeItemAction != null}");
             if (_localNob == null) { Debug.LogWarning("[LootContainerUI] TakeItem: localNob not set"); return; }
             if (_takeItemAction == null) { Debug.LogWarning("[LootContainerUI] TakeItem: _takeItemAction null"); return; }
             _takeItemAction.Invoke(storageIndex, quantity);
@@ -409,10 +424,11 @@ namespace NightHunt.GameplaySystems.UI
 
         private void OnTakeAll()
         {
-            Debug.Log($"[LootContainerUI] ▶ OnTakeAll CALLED: action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] â–¶ OnTakeAll CALLED: action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
             if (_takeItemAction == null || _currentStorage == null || _localNob == null)
             {
-                Debug.LogWarning($"[LootContainerUI] OnTakeAll: SKIP — action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
+                Debug.LogWarning($"[LootContainerUI] OnTakeAll: SKIP â€” action={_takeItemAction != null} storage={_currentStorage != null} nob={_localNob != null}");
                 return;
             }
 
@@ -420,7 +436,8 @@ namespace NightHunt.GameplaySystems.UI
             // In host mode the server may process each RPC synchronously, mutating storage
             // mid-iteration if we read _currentStorage directly in the loop.
             int count = _currentStorage.Count;
-            Debug.Log($"[LootContainerUI] OnTakeAll: taking {count} item(s)");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[LootContainerUI] OnTakeAll: taking {count} item(s)");
             var snapshot = new (int idx, int qty)[count];
             for (int i = 0; i < count; i++)
                 snapshot[i] = (i, _currentStorage[i].Quantity);
@@ -437,7 +454,7 @@ namespace NightHunt.GameplaySystems.UI
             _spawnedRows.Clear();
         }
 
-        // ── Minimal uGUI helpers (used when no prefab is assigned) ────────────
+        // â”€â”€ Minimal uGUI helpers (used when no prefab is assigned) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static Image CreateIconSlot(Transform parent, string name, Vector2 size)
         {
@@ -488,3 +505,4 @@ namespace NightHunt.GameplaySystems.UI
         }
     }
 }
+

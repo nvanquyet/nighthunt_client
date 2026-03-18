@@ -1,5 +1,6 @@
 using FishNet.Managing;
 using FishNet.Transporting;
+using NightHunt.Core;
 using NightHunt.State;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -20,10 +21,9 @@ namespace NightHunt.Networking
     ///   The host player runs FishNet Host (Server + Client) bound to localhost;
     ///   the relay proxy exposes the session port to the internet.
     /// </summary>
-    public class NetworkGameManager : MonoBehaviour
+    public class NetworkGameManager : SingletonPersistent<NetworkGameManager>
     {
-        private static NetworkGameManager _instance;
-        public static NetworkGameManager Instance => _instance;
+
 
         [Header("Network Manager Reference")]
         [SerializeField] private NetworkManager networkManager;
@@ -36,19 +36,8 @@ namespace NightHunt.Networking
         public bool IsServer => networkManager != null && networkManager.IsServerStarted;
         public bool IsClient => networkManager != null && networkManager.IsClientStarted;
 
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-            }
-            else
-            {
-                Destroy(gameObject);
-                return;
-            }
-
             if (networkManager == null)
             {
                 networkManager = FindFirstObjectByType<NetworkManager>();

@@ -1,5 +1,5 @@
 using UnityEngine;
-using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 
 namespace NightHunt.GameplaySystems.Core.Interfaces
 {

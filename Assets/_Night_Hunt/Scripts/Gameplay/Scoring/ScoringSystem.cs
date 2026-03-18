@@ -1,8 +1,8 @@
+using System.Collections.Generic;
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Data;
-using System.Collections.Generic;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Match;
 using FishNet;
@@ -20,6 +20,10 @@ namespace NightHunt.Gameplay.Scoring
         [SerializeField] private Dictionary<int, TeamScore> teamScores = new Dictionary<int, TeamScore>();
         [SerializeField] private Dictionary<uint, PlayerScore> playerScores = new Dictionary<uint, PlayerScore>();
 
+        [Header("Score Action Configs")]
+        [Tooltip("Config cho từng action (Kill, Assist, BossKill, ...). Assign trong Inspector.")]
+        [SerializeField] private List<ScoreSystemData> _scoreConfigList = new List<ScoreSystemData>();
+
         // Synchronized scores
         private readonly SyncVar<string> scoreDataJson = new SyncVar<string>();
 
@@ -30,8 +34,8 @@ namespace NightHunt.Gameplay.Scoring
         {
             base.OnStartServer();
 
-            scoreConfigs = null; // TODO: load from new data source
-            phaseManager = FindObjectOfType<MatchPhaseManager>();
+            scoreConfigs = _scoreConfigList.Count > 0 ? _scoreConfigList : null;
+            phaseManager = FindFirstObjectByType<MatchPhaseManager>();
         }
 
         /// <summary>

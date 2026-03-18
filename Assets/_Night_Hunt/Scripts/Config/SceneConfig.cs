@@ -1,106 +1,135 @@
+using System.Collections.Generic;
 using UnityEngine;
+using NightHunt.Core; // ScriptableObjectSingleton<T>
 
 namespace NightHunt.Config
 {
     /// <summary>
-    /// SceneConfig - Configuration cho scene names
-    /// Tạo ScriptableObject instance trong Unity Editor để config scene names
+    /// SceneConfig — Singleton ScriptableObject quản lý scene names.
+    ///
+    /// Kế thừa <see cref="ScriptableObjectSingleton{T}"/> — dùng base có sẵn,
+    /// không tự implement singleton.
+    ///
+    /// Chỉ 2 loại scene thật trong game:
+    ///   • Home      = "01_Home"         — Entry point, chứa toàn bộ UI non-gameplay
+    ///   • GameMap_xx = "02_GameMap_01"… — Gameplay scenes (nhiều map)
+    ///
+    /// Để thêm map mới:
+    ///   1. Thêm enum value vào <see cref="SceneId"/> (e.g. GameMap_03 = 102)
+    ///   2. Thêm entry trong Inspector của SceneConfig.asset
+    ///   → Không cần sửa code ở bất kỳ đâu khác.
+    ///
+    /// SETUP: Đặt SceneConfig.asset trong thư mục Resources/ và
+    /// right-click → "Cache Resources Path" (một lần mỗi Editor session).
     /// </summary>
     [CreateAssetMenu(fileName = "SceneConfig", menuName = "NightHunt/Config/Scene Config")]
-    public class SceneConfig : ScriptableObject
+    public class SceneConfig : ScriptableObjectSingleton<SceneConfig>
     {
-        [Header("Scene Names")]
-        [Tooltip("Scene name: 01_FirstLoading")]
-        public string firstLoadingScene = "01_FirstLoading";
-        
-        [Tooltip("Scene name: 02_Login")]
-        public string loginScene = "02_Login";
-        
-        [Tooltip("Scene name: 03_Home")]
-        public string homeScene = "03_Home";
-        
-        [Tooltip("Scene name: 04_Waiting")]
-        public string waitingScene = "04_Waiting";
+        // ── Entry type ─────────────────────────────────────────────────────────
 
-        [Tooltip("Scene name: 05_CustomLobby")]
-        public string customLobbyScene = "05_CustomLobby";
-
-        [Tooltip("Scene name: 06_MatchLoading")]
-        public string matchLoadingScene = "06_MatchLoading";
-        
-        [Tooltip("Scene name: 07_Game")]
-        public string gameScene = "07_Game";
-        
-        // Singleton instance (set trong Unity Editor)
-        private static SceneConfig instance;
-        
-        /// <summary>
-        /// Get SceneConfig instance (load từ Resources hoặc tìm trong project)
-        /// </summary>
-        public static SceneConfig Instance
+        [System.Serializable]
+        public struct SceneEntry
         {
-            get
+            public SceneId id;
+            [Tooltip("Tên chính xác của scene file (không có .unity). " +
+                     "Phải khớp với tên trong Build Settings.")]
+            public string  sceneName;
+        }
+
+        // ── Inspector ──────────────────────────────────────────────────────────
+
+        [Header("Scene Name Mapping")]
+        [Tooltip("Mỗi entry map SceneId → tên scene thật.\n" +
+                 "Thêm map mới: thêm enum value + thêm entry ở đây.")]
+        [SerializeField]
+        private SceneEntry[] scenes = new SceneEntry[]
+        {
+            new() { id = SceneId.Home,      sceneName = "01_Home"   },
+            new() { id = SceneId.GameMap_01, sceneName = "06_Game 1" },
+            new() { id = SceneId.GameMap_02, sceneName = "06_Game 2" },
+        };
+
+        // ── Public API ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Trả về tên scene theo SceneId.
+        /// Fallback về Home scene name nếu không tìm thấy.
+        /// </summary>
+        public static string GetSceneName(SceneId id)
+        {
+            if (Instance == null)
             {
-                if (instance == null)
-                {
-                    // Try to load from Resources first
-                    instance = Resources.Load<SceneConfig>("SceneConfig");
-                    
-                    // If not found, try to find in project
-                    if (instance == null)
-                    {
-                        #if UNITY_EDITOR
-                        string[] guids = UnityEditor.AssetDatabase.FindAssets("t:SceneConfig");
-                        if (guids.Length > 0)
-                        {
-                            string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
-                            instance = UnityEditor.AssetDatabase.LoadAssetAtPath<SceneConfig>(path);
-                        }
-                        #endif
-                    }
-                    
-                    // Fallback to default values if still null
-                    if (instance == null)
-                    {
-                        Debug.LogWarning("SceneConfig not found! Using default scene names. Please create SceneConfig asset.");
-                        instance = CreateInstance<SceneConfig>();
-                    }
-                }
-                return instance;
+                Debug.LogError("[SceneConfig] Instance not found! " +
+                               "Đặt SceneConfig.asset trong Resources/ folder.");
+                return "01_Home";
+            }
+
+            foreach (var entry in Instance.scenes)
+                if (entry.id == id)
+                    return entry.sceneName;
+
+            Debug.LogWarning($"[SceneConfig] SceneId.{id} không có trong config → fallback Home.");
+            return GetSceneName(SceneId.Home);
+        }
+
+        /// <summary>Tên scene Home (shortcut hay dùng).</summary>
+        public static string HomeSceneName => GetSceneName(SceneId.Home);
+
+        /// <summary>
+        /// Trả về tất cả SceneId là GameMap.
+        /// Dùng cho UI chọn map hoặc matchmaking random map.
+        /// </summary>
+        public static SceneId[] GetAllGameMapIds()
+        {
+            if (Instance == null) return System.Array.Empty<SceneId>();
+
+            var result = new List<SceneId>();
+            foreach (var entry in Instance.scenes)
+                if (entry.id != SceneId.Home)
+                    result.Add(entry.id);
+            return result.ToArray();
+        }
+
+        // ── Editor validation ──────────────────────────────────────────────────
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            var seen = new HashSet<SceneId>();
+            foreach (var entry in scenes)
+            {
+                if (!seen.Add(entry.id))
+                    Debug.LogWarning($"[SceneConfig] Duplicate SceneId.{entry.id} " +
+                                     "trong scenes array!");
+                if (string.IsNullOrWhiteSpace(entry.sceneName))
+                    Debug.LogWarning($"[SceneConfig] SceneId.{entry.id} có sceneName rỗng!");
             }
         }
-        
-        /// <summary>
-        /// Get scene name by type
-        /// </summary>
-        public static string GetSceneName(SceneType sceneType)
-        {
-            return sceneType switch
-            {
-                SceneType.FirstLoading  => Instance.firstLoadingScene,
-                SceneType.Login         => Instance.loginScene,
-                SceneType.Home          => Instance.homeScene,
-                SceneType.Waiting       => Instance.waitingScene,
-                SceneType.CustomLobby   => Instance.customLobbyScene,
-                SceneType.MatchLoading  => Instance.matchLoadingScene,
-                SceneType.Game          => Instance.gameScene,
-                _                       => Instance.loginScene
-            };
-        }
+#endif
     }
-    
+
+    // ── SceneId Enum ───────────────────────────────────────────────────────────
+
     /// <summary>
-    /// Scene type enum
+    /// Định danh cho từng scene/map.
+    ///
+    /// Quy tắc:
+    ///   • Home = 0  (luôn cố định)
+    ///   • GameMap bắt đầu từ 100 → không bao giờ conflict với Home
+    ///   • Dùng explicit int values → thêm mới không bao giờ shift existing values
+    ///   • Đặt tên theo chức năng, không theo tên file (file có thể rename tự do)
     /// </summary>
-    public enum SceneType
+    public enum SceneId
     {
-        FirstLoading,
-        Login,
-        Home,
-        Waiting,
-        CustomLobby,   // Custom / friend mode lobby
-        MatchLoading,  // Pre-game loading screen (team info + progress)
-        Game
+        // ── Non-gameplay ────────────────────────────────────────────────
+        /// <summary>01_Home.unity — Entry point, chứa Login/Lobby/HUD panels.</summary>
+        Home        = 0,
+
+        // ── Gameplay Maps ───────────────────────────────────────────────
+        /// <summary>Map 1 — tên file scene config trong Inspector.</summary>
+        GameMap_01  = 100,
+        /// <summary>Map 2.</summary>
+        GameMap_02  = 101,
+        // Thêm mới: GameMap_03 = 102, GameMap_04 = 103, ...
     }
 }
-

@@ -1,6 +1,6 @@
 using FOW;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using UnityEngine;
 
 namespace NightHunt.Gameplay.FogOfWar

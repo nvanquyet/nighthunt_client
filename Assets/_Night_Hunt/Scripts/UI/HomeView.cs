@@ -1,308 +1,203 @@
-using System;
-using System.Threading.Tasks;
-using NightHunt.Core;
-using NightHunt.Networking;
+﻿using System.Threading.Tasks;
 using NightHunt.Common;
+using NightHunt.Core;
 using NightHunt.Data.DTOs;
-using NightHunt.Services.Auth;
+using NightHunt.Gameplay.Character.Data;
 using NightHunt.Services.Game;
 using NightHunt.Services.Room;
 using NightHunt.State;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Home View — PUBG-style main menu.
+    /// HomeView — deliberately narrow scope:
+    ///   • Profile display: character thumbnail, username, rank/ELO.
+    ///   • Top-bar exit toggle (Logout / Quit modal).
+    ///   • INavigableView: OnShow refreshes profile, triggers party refresh, hides loading.
+    ///   • WS session events: force_logout, session_expired.
+    ///   • WS friend events: forwarded to FriendPanelView (status change, request badge, refresh).
+    ///   • Reconnect check: if previously in a room → offer to reconnect.
     ///
-    /// Layout:
-    ///   • User info panel (top)
-    ///   • [CUSTOM GAME] button → loads CustomLobby scene
-    ///   • [RANKED] section:
-    ///       Idle      → "Find Ranked Match" button
-    ///       Searching → "Searching…" label + elapsed time + "Cancel" button
-    ///       MatchFound→ "Match Found!" + accept countdown + "Accept" / "Decline" buttons
+    /// Everything party-related (mode/map dropdowns, play button, party display,
+    /// matchmaking WS events) lives in <see cref="PartyController"/> on the same GameObject.
+    ///
+    /// Prefab hierarchy (top-level, all siblings):
+    ///   HomePanel (HomeView + PartyController)
+    ///   ├── TopBar             — btn_ExitToggle
+    ///   ├── Profile area       — characterThumbnail, profileNameText, rankText
+    ///   ├── PartyMemberListView  (bottom-left avatars)
+    ///   ├── PartyModelListView   (centre models)
+    ///   ├── FriendPanelView      (right panel — animation-driven)
+    ///   └── SharedPartyContextMenu (last sibling — renders above all party slots)
     /// </summary>
-    public class HomeView : MonoBehaviour
+    public class HomeView : MonoBehaviour, INavigableView
     {
-        // ── User Info ─────────────────────────────────────────────────────────
-        [Header("User Info")]
-        [SerializeField] private TextMeshProUGUI usernameText;
-        [SerializeField] private TextMeshProUGUI emailText;
-        [SerializeField] private TextMeshProUGUI userIdText;
-        [SerializeField] private TextMeshProUGUI rankTierText;
+        // ── Top Bar ───────────────────────────────────────────────────────────
+        [Header("Top Bar")]
+        [SerializeField] private Button btn_ExitToggle;
 
-        // ── Navigation Buttons ────────────────────────────────────────────────
-        [Header("Navigation")]
-        [SerializeField] private Button customGameButton;
-        [SerializeField] private Button logoutButton;
+        // ── Profile ───────────────────────────────────────────────────────────
+        [Header("Profile")]
+        [SerializeField] private Image           characterThumbnail;
+        [SerializeField] private TextMeshProUGUI profileNameText;
+        [Tooltip("Shown as 'GOLD | 1450 ELO'. Filled after async profile fetch from server.")]
+        [SerializeField] private TextMeshProUGUI rankText;
 
-        // ── Ranked Queue Panel ────────────────────────────────────────────────
-        [Header("Ranked Queue")]
-        [SerializeField] private GameObject rankedIdlePanel;
-        [SerializeField] private Button     findMatchButton;
+        // ── Sub-Controllers ───────────────────────────────────────────────────
+        [Header("Sub-Controllers")]
+        [Tooltip("Handles party display, mode/map dropdowns, play button, matchmaking WS events.")]
+        [SerializeField] private PartyController partyController;
+        [Tooltip("Right-side slide-in friend list panel (animation-driven).")]
+        [SerializeField] private FriendPanelView friendPanelView;
 
-        [SerializeField] private GameObject rankedSearchingPanel;
-        [SerializeField] private TextMeshProUGUI searchTimeText;
-        [SerializeField] private Button     cancelSearchButton;
+        // ── Events ────────────────────────────────────────────────────────────
+        [Header("Events")]
+        [Tooltip("Fired after HomeView fully finishes showing (profile loaded, party refreshed).")]
+        public UnityEvent onHomeShown;
 
-        [SerializeField] private GameObject rankedMatchFoundPanel;
-        [SerializeField] private TextMeshProUGUI matchFoundCountdownText;
-        [SerializeField] private Button     acceptMatchButton;
-        [SerializeField] private Button     declineMatchButton;
+        // ══════════════════════════════════════════════════════════════════════
+        // SERVICES
+        // ══════════════════════════════════════════════════════════════════════
 
-        // ── Services ──────────────────────────────────────────────────────────
-        private AuthService   _authService;
-        private RoomService   _roomService;
-        private SessionState  _sessionState;
-        private RoomState     _roomState;
+        private SessionState         _sessionState;
+        private RoomService          _roomService;
+        private RoomState            _roomState;
+        private GameWebSocketService _ws;
 
-        // ── Ranked Queue State ────────────────────────────────────────────────
-        private RankedQueueState _queueState = RankedQueueState.Idle;
-        private float _searchElapsed;
-        private float _acceptCountdown;
-        private const float AcceptWindow = 15f;
-        private string _pendingLobbyToken;
-        private string _pendingGameMode = Constants.MODE_2V2;
-
-        // ──────────────────────────────────────────────────────────────────────
-        #region Unity Lifecycle
+        // ══════════════════════════════════════════════════════════════════════
+        // LIFECYCLE
+        // ══════════════════════════════════════════════════════════════════════
 
         private void Awake()
         {
             if (GameManager.Instance != null)
             {
-                _authService  = GameManager.Instance.AuthService;
-                _roomService  = GameManager.Instance.RoomService;
                 _sessionState = GameManager.Instance.SessionState;
+                _roomService  = GameManager.Instance.RoomService;
             }
             _roomState = RoomState.Instance;
 
-            // Buttons
-            if (customGameButton  != null) customGameButton.onClick.AddListener(OnCustomGameClicked);
-            if (logoutButton      != null) logoutButton.onClick.AddListener(OnLogoutClicked);
-            if (findMatchButton   != null) findMatchButton.onClick.AddListener(OnFindMatchClicked);
-            if (cancelSearchButton!= null) cancelSearchButton.onClick.AddListener(OnCancelSearchClicked);
-            if (acceptMatchButton != null) acceptMatchButton.onClick.AddListener(OnAcceptMatchClicked);
-            if (declineMatchButton!= null) declineMatchButton.onClick.AddListener(OnDeclineMatchClicked);
+            if (btn_ExitToggle != null)
+                btn_ExitToggle.onClick.AddListener(OnExitToggleClicked);
         }
 
-        private async void Start()
+        private void Start()
         {
-            UpdateUserInfo();
-            SetQueueState(RankedQueueState.Idle);
-
-            // Subscribe to matchmaking WS events
-            var ws = GameWebSocketService.Instance;
-            if (ws != null)
-            {
-                ws.OnMatchFound     += HandleMatchFound;
-                ws.OnMatchReady     += HandleMatchReady;
-                ws.OnMatchCancelled += HandleMatchCancelled;
-            }
-
-            // Hide global loading overlay if present
-            var loading = PersistentUICanvas.Instance != null
-                ? PersistentUICanvas.Instance.LoadingManager : null;
-            if (loading != null && loading.IsShowing())
-                loading.Hide();
-
-            await CheckAndShowReconnectPopup();
+            _ws = GameWebSocketService.Instance;
+            SubscribeWSEvents();
         }
 
-        private void OnDestroy()
-        {
-            var ws = GameWebSocketService.Instance;
-            if (ws != null)
-            {
-                ws.OnMatchFound     -= HandleMatchFound;
-                ws.OnMatchReady     -= HandleMatchReady;
-                ws.OnMatchCancelled -= HandleMatchCancelled;
-            }
-        }
-
-        private void Update()
-        {
-            switch (_queueState)
-            {
-                case RankedQueueState.Searching:
-                    _searchElapsed += Time.deltaTime;
-                    if (searchTimeText != null)
-                        searchTimeText.text = FormatTime(_searchElapsed);
-                    break;
-
-                case RankedQueueState.MatchFound:
-                    _acceptCountdown -= Time.deltaTime;
-                    if (matchFoundCountdownText != null)
-                        matchFoundCountdownText.text = $"{Mathf.CeilToInt(_acceptCountdown)}s";
-                    if (_acceptCountdown <= 0f)
-                        OnDeclineMatchClicked();   // auto-decline on timeout
-                    break;
-            }
-        }
-
-        #endregion
-
-        // ──────────────────────────────────────────────────────────────────────
-        #region Queue state machine
-
-        private void SetQueueState(RankedQueueState newState)
-        {
-            _queueState = newState;
-
-            if (rankedIdlePanel       != null) rankedIdlePanel.SetActive(newState == RankedQueueState.Idle);
-            if (rankedSearchingPanel  != null) rankedSearchingPanel.SetActive(newState == RankedQueueState.Searching);
-            if (rankedMatchFoundPanel != null) rankedMatchFoundPanel.SetActive(newState == RankedQueueState.MatchFound);
-        }
-
-        private async void OnFindMatchClicked()
-        {
-            SetQueueState(RankedQueueState.Searching);
-            _searchElapsed = 0f;
-
-            var result = await GameManager.Instance.BackendClient.PostAsync<object>(
-                Constants.API_MATCHMAKING_QUEUE,
-                new MatchmakingQueueRequest { gameMode = _pendingGameMode });
-
-            if (!result.Success)
-            {
-                Debug.LogError($"[HomeView] Queue join failed: {result.Message}");
-                SetQueueState(RankedQueueState.Idle);
-            }
-            else
-            {
-                Debug.Log($"[HomeView] Ranked matchmaking queue started (mode={_pendingGameMode}).");
-            }
-        }
-
-        private async void OnCancelSearchClicked()
-        {
-            await GameManager.Instance.BackendClient.DeleteAsync<object>(Constants.API_MATCHMAKING_QUEUE);
-            _pendingLobbyToken = null;
-            SetQueueState(RankedQueueState.Idle);
-        }
+        // ─────────────────────────────────────────────────────────────────────
+        // INavigableView — called by UINavigator on panel transition
+        // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Called externally (by WS event handler) when the backend sends MATCH_FOUND.
+        /// Called by UINavigator right before the Home panel fades in.
+        /// Safe to call multiple times (e.g. returning from Lobby).
         /// </summary>
-        public void ShowMatchFound()
+        public async void OnShow()
         {
-            _acceptCountdown = AcceptWindow;
-            SetQueueState(RankedQueueState.MatchFound);
+            RefreshProfile();
+            _ = RefreshProfileFromServer();
+
+            await CheckAndShowReconnectPopup();
+
+            friendPanelView?.RefreshFriendList();
+            partyController?.OnHomeShown();
+
+            var loading = PersistentUICanvas.Instance?.LoadingManager;
+            if (loading != null && loading.IsShowing()) loading.Hide();
+
+            onHomeShown?.Invoke();
         }
 
-        private async void OnAcceptMatchClicked()
+        /// <summary>Called by UINavigator right before the Home panel fades out.</summary>
+        public void OnHide() { /* WS stays active — party invite modal works from any panel */ }
+
+        private void OnDestroy() => UnsubscribeWSEvents();
+
+        // ══════════════════════════════════════════════════════════════════════
+        // TOP BAR
+        // ══════════════════════════════════════════════════════════════════════
+
+        private void OnExitToggleClicked()
         {
-            if (string.IsNullOrEmpty(_pendingLobbyToken)) return;
-
-            var result = await GameManager.Instance.BackendClient.PostAsync<object>(
-                Constants.API_MATCHMAKING_ACCEPT,
-                new MatchmakingAcceptRequest { lobbyToken = _pendingLobbyToken });
-
-            if (!result.Success)
-            {
-                Debug.LogError($"[HomeView] Accept failed: {result.Message}");
-                SetQueueState(RankedQueueState.Idle);
-            }
-            // Stay in MatchFound state — navigate only on match_ready WS event
+            GameModalWindow.Instance?.ShowMulti(
+                title:           "Tho\u00e1t",
+                desc:            "B\u1ea1n mu\u1ed1n l\u00e0m g\u00ec?",
+                btn1Text:        "\u0110\u0103ng xu\u1ea5t",
+                btn1Callback:    OnLogoutConfirmed,
+                btn2Text:        "Tho\u00e1t game",
+                btn2Callback:    OnQuitGameConfirmed,
+                dismissText:     "H\u1ee7y",
+                dismissCallback: null);
         }
 
-        private async void OnDeclineMatchClicked()
-        {
-            if (!string.IsNullOrEmpty(_pendingLobbyToken))
-            {
-                await GameManager.Instance.BackendClient.PostAsync<object>(
-                    Constants.API_MATCHMAKING_DECLINE,
-                    new MatchmakingDeclineRequest { lobbyToken = _pendingLobbyToken });
-            }
-            _pendingLobbyToken = null;
-            SetQueueState(RankedQueueState.Idle);
-        }
+        private void OnLogoutConfirmed()   => LoginView.Logout();
+        private void OnQuitGameConfirmed() => Application.Quit();
 
-        #endregion
+        // ══════════════════════════════════════════════════════════════════════
+        // PROFILE
+        // ══════════════════════════════════════════════════════════════════════
 
-        // ──────────────────────────────────────────────────────────────────────
-        #region Matchmaking WS handlers
-
-        private void HandleMatchFound(GameWebSocketService.MatchFoundEvent evt)
-        {
-            _pendingLobbyToken = evt.lobbyToken;
-            _pendingGameMode   = !string.IsNullOrEmpty(evt.gameMode) ? evt.gameMode : _pendingGameMode;
-            ShowMatchFound();
-        }
-
-        private void HandleMatchReady(GameWebSocketService.MatchReadyEvent evt)
-        {
-            _pendingLobbyToken = null;
-            // RoomState.SetDedicatedServer already called inside GameWebSocketService
-            Debug.Log($"[HomeView] Match ready! room={evt.roomCode}, ds={evt.dsIp}:{evt.dsPort}");
-            SetQueueState(RankedQueueState.Idle);
-            SceneLoader.LoadMatchLoading();
-        }
-
-        private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent evt)
-        {
-            _pendingLobbyToken = null;
-            SetQueueState(RankedQueueState.Idle);
-            Debug.Log($"[HomeView] Match cancelled: {evt.reason}");
-        }
-
-        #endregion
-
-        // ──────────────────────────────────────────────────────────────────────
-        #region Navigation
-
-        private void OnCustomGameClicked()
-        {
-            SceneLoader.LoadCustomLobby();
-        }
-
-        private void OnLogoutClicked()
-        {
-            _authService?.Logout();
-            SceneLoader.LoadLogin();
-        }
-
-        #endregion
-
-        // ──────────────────────────────────────────────────────────────────────
-        #region User info
-
-        private void UpdateUserInfo()
+        private void RefreshProfile()
         {
             if (_sessionState == null) return;
-            if (usernameText != null) usernameText.text = $"Username: {_sessionState.Username}";
-            if (emailText    != null) emailText.text    = $"Email: {_sessionState.Email}";
-            if (userIdText   != null) userIdText.text   = $"ID: {_sessionState.UserId}";
-
-            // Rank tier — will be populated after BE-29 adds ELO to SessionState
-            if (rankTierText != null) rankTierText.text = "Rank: ---";
+            if (profileNameText != null) profileNameText.text = _sessionState.Username ?? "";
+            RefreshCharacterThumbnail();
+            if (rankText != null) rankText.text = "---";
         }
 
-        #endregion
+        private void RefreshCharacterThumbnail()
+        {
+            if (characterThumbnail == null) return;
+            string charId = _sessionState?.SelectedCharacterId;
+            if (!string.IsNullOrEmpty(charId))
+            {
+                var def = CharacterDatabase.Instance?.GetById(charId);
+                if (def?.Thumbnail != null) { characterThumbnail.sprite = def.Thumbnail; return; }
+            }
+            var fallback = CharacterDatabase.Instance?.GetByIndex(0);
+            if (fallback?.Thumbnail != null) characterThumbnail.sprite = fallback.Thumbnail;
+        }
 
-        // ──────────────────────────────────────────────────────────────────────
-        #region Reconnect check
+        private async Task RefreshProfileFromServer()
+        {
+            var result = await GameManager.Instance?.BackendClient
+                .GetAsync<ProfileResponse>(Constants.API_PROFILE_GET);
+            if (result?.Success == true && result.Data != null)
+            {
+                if (rankText != null)
+                    rankText.text = $"{result.Data.tier} | {result.Data.elo} ELO";
+                if (!string.IsNullOrEmpty(result.Data.selectedCharacterId))
+                {
+                    _sessionState?.SetSelectedCharacterId(result.Data.selectedCharacterId);
+                    RefreshCharacterThumbnail();
+                }
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // RECONNECT CHECK
+        // ══════════════════════════════════════════════════════════════════════
 
         private async Task CheckAndShowReconnectPopup()
         {
-            if (_roomState == null || !_roomState.IsInRoom || _roomService == null)
-                return;
-
-            var reconnectPopup = PersistentUICanvas.Instance != null
-                ? PersistentUICanvas.Instance.ReconnectPopup : null;
-            if (reconnectPopup == null) return;
-
+            if (_roomState == null || !_roomState.IsInRoom || _roomService == null) return;
             var result = await _roomService.Reconnect(_roomState.RoomId);
             if (result.Success && result.Data != null)
             {
-                reconnectPopup.Show(
-                    message: $"You are still in room {result.Data.roomCode}. Reconnect?",
-                    onReconnectCallback: SceneLoader.LoadCustomLobby,
-                    onLeaveCallback: _roomState.ClearRoom
-                );
+                GameModalWindow.Instance?.ShowConfirm(
+                    title:       "K\u1ebft n\u1ed1i l\u1ea1i",
+                    desc:        $"B\u1ea1n \u0111ang trong room <b>{result.Data.roomCode}</b>. K\u1ebft n\u1ed1i l\u1ea1i?",
+                    onConfirm:   () => UINavigator.Instance?.GoLobby(),
+                    onCancel:    _roomState.ClearRoom,
+                    confirmText: "K\u1ebft n\u1ed1i l\u1ea1i",
+                    cancelText:  "R\u1eddi ph\u00f2ng");
             }
             else
             {
@@ -310,20 +205,64 @@ namespace NightHunt.UI
             }
         }
 
-        #endregion
+        // ══════════════════════════════════════════════════════════════════════
+        // WS — SESSION EVENTS + FRIEND FORWARDING
+        // ══════════════════════════════════════════════════════════════════════
 
-        // ──────────────────────────────────────────────────────────────────────
-        #region Helpers
-
-        private static string FormatTime(float seconds)
+        private void SubscribeWSEvents()
         {
-            int m = (int)(seconds / 60f);
-            int s = (int)(seconds % 60f);
-            return m > 0 ? $"{m}:{s:D2}" : $"{s}s";
+            if (_ws == null) _ws = GameWebSocketService.Instance;
+            if (_ws == null) return;
+
+            // Session lifecycle
+            _ws.OnForceLogout    += HandleForceLogout;
+            _ws.OnSessionExpired += HandleSessionExpired;
+
+            // Friend events — forward to FriendPanelView
+            _ws.OnFriendStatusChanged   += HandleFriendStatusChanged;
+            _ws.OnFriendRequestReceived += HandleFriendRequestReceived;
+            _ws.OnFriendRequestAccepted += HandleFriendRequestAccepted;
         }
 
-        #endregion
-    }
+        private void UnsubscribeWSEvents()
+        {
+            if (_ws == null) return;
+            _ws.OnForceLogout    -= HandleForceLogout;
+            _ws.OnSessionExpired -= HandleSessionExpired;
+            _ws.OnFriendStatusChanged   -= HandleFriendStatusChanged;
+            _ws.OnFriendRequestReceived -= HandleFriendRequestReceived;
+            _ws.OnFriendRequestAccepted -= HandleFriendRequestAccepted;
+        }
 
-    public enum RankedQueueState { Idle, Searching, MatchFound }
+        private void HandleForceLogout()
+        {
+            GameModalWindow.Instance?.ShowNotice(
+                "\u0110\u0103ng xu\u1ea5t b\u1eaft bu\u1ed9c",
+                "T\u00e0i kho\u1ea3n c\u1ee7a b\u1ea1n \u0111\u00e3 \u0111\u0103ng nh\u1eadp \u1edf n\u01a1i kh\u00e1c.",
+                closeText: "OK",
+                onClose:   LoginView.Logout);
+        }
+
+        private void HandleSessionExpired()
+        {
+            GameModalWindow.Instance?.ShowNotice(
+                "Phi\u00ean h\u1ebft h\u1ea1n",
+                "Phi\u00ean \u0111\u0103ng nh\u1eadp \u0111\u00e3 h\u1ebft h\u1ea1n. Vui l\u00f2ng \u0111\u0103ng nh\u1eadp l\u1ea1i.",
+                closeText: "OK",
+                onClose:   LoginView.Logout);
+        }
+
+        private void HandleFriendStatusChanged(GameWebSocketService.FriendStatusChangedEvent e)
+            => friendPanelView?.OnFriendStatusChanged(e.userId, e.status, e.currentPartyId);
+
+        private void HandleFriendRequestReceived(GameWebSocketService.FriendRequestEvent e)
+        {
+            friendPanelView?.OnFriendRequestBadge(+1);
+            var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+            toast?.Show(title: "K\u1ebft b\u1ea1n", message: $"{e.fromUsername} mu\u1ed1n k\u1ebft b\u1ea1n v\u1edbi b\u1ea1n.");
+        }
+
+        private void HandleFriendRequestAccepted(GameWebSocketService.FriendRequestAcceptedEvent e)
+            => friendPanelView?.RefreshFriendList();
+    }
 }

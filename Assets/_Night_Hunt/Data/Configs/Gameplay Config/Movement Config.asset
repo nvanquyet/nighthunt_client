@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ffed0042bc6b478c8f077080ffb46ab2, type: 3}
+  m_Name: Movement Config
+  m_EditorClassIdentifier: 
+  baseSpeed: 5
+  sprintSpeedMultiplier: 1.6
+  crouchMultiplier: 0.6
+  acceleration: 25
+  deceleration: 30
+  gravity: 20
+  fallGravityMultiplier: 2.5
+  jumpHeight: 1.2
+  groundedStickDownVelocity: 2
+  enableJump: 0
+  maxStamina: 100
+  staminaDrainRate: 20
+  staminaRegenRate: 15
+  minStaminaToSprint: 10
+  rollStaminaCost: 20
+  rollDistance: 4
+  rollDuration: 0.2
+  rollEaseOutFraction: 0.25
+  rollMode: 1
+  rollLeapHeight: 1.2
+  enableRoll: 1
+  rotationDeadzoneDegrees: 8
+  rotationSpeed: 10
+  moveInputThreshold: 0.1

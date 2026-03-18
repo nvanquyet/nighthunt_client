@@ -36,6 +36,10 @@ namespace NightHunt.Gameplay.Respawn
         private RespawnConfigData config;
         private MatchPhaseManager phaseManager;
 
+        [Header("Respawn Config Data")]
+        [Tooltip("Config data cho beacon. Nếu gán thì override giá trị serialized fields ở trên.")]
+        [SerializeField] private RespawnConfigData _configOverride;
+
         public int CurrentHP => currentHP.Value;
         public int OwnerTeamId => ownerTeamId.Value;
         public bool IsPlaced => isPlaced.Value;
@@ -48,12 +52,7 @@ namespace NightHunt.Gameplay.Respawn
         {
             base.OnStartNetwork();
 
-            GameConfigData configData = null; // TODO: load from new data source
-            if (configData != null && configData.RespawnConfig != null && configData.RespawnConfig.Count > 0)
-            {
-                config = configData.RespawnConfig[0];
-            }
-
+            config = _configOverride;
             if (config != null)
             {
                 maxHP = config.BeaconHP;
@@ -65,7 +64,7 @@ namespace NightHunt.Gameplay.Respawn
             currentHP.Value = maxHP;
 
             // Find phase manager
-            phaseManager = FindObjectOfType<MatchPhaseManager>();
+            phaseManager = FindFirstObjectByType<MatchPhaseManager>();
 
             // Subscribe to HP changes
             currentHP.OnChange += OnHPChanged;

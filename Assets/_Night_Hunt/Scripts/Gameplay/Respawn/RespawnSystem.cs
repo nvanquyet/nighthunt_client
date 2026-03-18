@@ -7,8 +7,8 @@ using NightHunt.Gameplay.Spawn;
 using NightHunt.Networking;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Player;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Respawn
@@ -18,11 +18,9 @@ namespace NightHunt.Gameplay.Respawn
     /// </summary>
     public class RespawnSystem : NetworkBehaviour, IRespawnProvider
     {
-        [Header("Respawn Settings")] [SerializeField]
-        private float respawnDelay = 5f;
-
-        /// <summary>Phase-3 respawn delay in seconds.</summary>
-        [SerializeField] private float phase3RespawnDelay = 10f;
+        [Header("Respawn Settings")]
+        [Tooltip("Config source for all respawn delays and beacon limits. If null, falls back to defaults.")]
+        [SerializeField] private RespawnConfig _respawnConfig;
 
         [Header("Dependencies")]
         [Tooltip("Reference to SpawnSystem for team-based fallback spawn points.")]
@@ -173,7 +171,7 @@ namespace NightHunt.Gameplay.Respawn
                 .InChildren()
                 .OrLogWarning("[Auto] IPlayerStatSystem not found")
                 .Resolve();
-            if (statSystem is NightHunt.StatSystem.Systems.PlayerStatSystem concrete)
+            if (statSystem is NightHunt.Gameplay.StatSystem.Systems.PlayerStatSystem concrete)
             {
                 float maxHealth = concrete.GetStat(PlayerStatType.MaxHealth);
                 concrete.SetCurrentStat(PlayerStatType.Health, maxHealth);
@@ -285,16 +283,19 @@ namespace NightHunt.Gameplay.Respawn
         }
 
         /// <summary>
-        /// Get respawn delay based on phase
+        /// Get respawn delay based on phase (reads from RespawnConfig; falls back to hardcoded defaults)
         /// </summary>
         private float GetRespawnDelay()
         {
             if (phaseManager != null && phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
             {
-                return phase3RespawnDelay;
+                return _respawnConfig != null ? _respawnConfig.Phase3RespawnDelay : 10f;
             }
 
-            return respawnDelay;
+            if (phaseManager != null && phaseManager.CurrentPhase == MatchPhaseState.Hunt)
+                return _respawnConfig != null ? _respawnConfig.Phase2RespawnDelay : 5f;
+
+            return _respawnConfig != null ? _respawnConfig.Phase1RespawnDelay : 5f;
         }
 
         /// <summary>

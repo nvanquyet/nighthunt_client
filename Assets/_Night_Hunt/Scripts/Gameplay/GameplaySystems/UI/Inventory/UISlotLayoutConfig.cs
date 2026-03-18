@@ -5,25 +5,12 @@ using NightHunt.GameplaySystems.Core.Data;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Item rarity levels
-    /// </summary>
-    public enum ItemRarity
-    {
-        Common,     // Xám/Trắng
-        Uncommon,   // Xanh lá
-        Rare,       // Xanh dương
-        Epic,       // Tím
-        Legendary,  // Vàng/Cam
-        Mythic      // Đỏ/Hồng
-    }
-
-    /// <summary>
     /// Unified UI layout config cho tất cả slot types.
     /// Reference InventoryConfig cho gameplay data, chỉ chứa UI-specific settings (prefabs, backgrounds).
     /// </summary>
     [CreateAssetMenu(
         fileName = "UISlotLayoutConfig",
-        menuName = "GameplaySystems/UI/Slot Layout")]
+        menuName = "NightHunt/UI/Slot Layout Config")]
     public class UISlotLayoutConfig : ScriptableObject
     {
         [Header("Core Config Reference")]
@@ -98,6 +85,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public int QuickSlotCount => InventoryConfig != null ? InventoryConfig.QuickSlotConfig.SlotCount : 4;
         public int EquipmentCount => InventoryConfig != null ? InventoryConfig.EquipmentCount : 0;
         public int WeaponCount => InventoryConfig != null ? InventoryConfig.WeaponCount : 0;
+
+        [Header("Empty Slot Padding")]
+        [Tooltip("Số empty slots mặc định spawn thêm trong UI.")]
+        [Range(10, 50)]
+        public int DefaultExtraEmptySlots = 20;
+
+        [Tooltip("Số empty slots tối thiểu luôn hiển thị.")]
+        [Range(5, 30)]
+        public int MinimumEmptySlots = 10;
+
+        [Header("Slot Dimensions")]
+        [Tooltip("Default slot size in pixels used by inventory grids.")]
+        public Vector2 DefaultSlotSize = new Vector2(100f, 100f);
     }
 
     /// <summary>

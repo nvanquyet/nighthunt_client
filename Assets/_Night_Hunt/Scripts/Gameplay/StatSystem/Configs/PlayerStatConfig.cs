@@ -1,7 +1,7 @@
 using UnityEngine;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 
-namespace NightHunt.StatSystem.Configs
+namespace NightHunt.Gameplay.StatSystem.Configs
 {
     /// <summary>
     /// Gameplay configuration for player stats.

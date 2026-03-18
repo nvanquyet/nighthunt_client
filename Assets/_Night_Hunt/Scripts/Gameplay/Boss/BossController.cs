@@ -91,9 +91,15 @@ namespace NightHunt.Gameplay.Boss
             _maxHp     = config.MaxHP > 0 ? config.MaxHP : _maxHp;
             _currentHp.Value = _maxHp;
 
+            // Wire AI params from config; fall back to Inspector defaults if not set
+            if (config.AggroRadius   > 0f) _aggroRadius    = config.AggroRadius;
+            if (config.AttackRadius  > 0f) _attackRadius   = config.AttackRadius;
+            if (config.AttackDamage  > 0f) _attackDamage   = config.AttackDamage;
+            if (config.AttackCooldown > 0f) _attackCooldown = config.AttackCooldown;
+
             if (_agent != null)
             {
-                _agent.speed        = 5f;
+                _agent.speed            = config.MoveSpeed > 0f ? config.MoveSpeed : _agent.speed;
                 _agent.stoppingDistance = _attackRadius * 0.8f;
             }
         }
@@ -169,16 +175,16 @@ namespace NightHunt.Gameplay.Boss
             if (_target == null) return;
 
             // Damage target via stat system
-            var statSystem = ComponentResolver.Find<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>(_target)
+            var statSystem = ComponentResolver.Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(_target)
                                                 .OnSelf()
                                                 .InChildren()
-                                                .OrLogWarning("[Auto] NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
+                                                .OrLogWarning("[Auto] NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
                                                 .Resolve();
             if (statSystem != null)
             {
-                var modifier = NightHunt.StatSystem.Core.Data.StatModifier.CreateFlat(
+                var modifier = NightHunt.Gameplay.StatSystem.Core.Data.StatModifier.CreateFlat(
                     $"Boss_{_bossId}", -_attackDamage);
-                statSystem.AddModifier(NightHunt.StatSystem.Core.Types.PlayerStatType.Health, modifier);
+                statSystem.AddModifier(NightHunt.Gameplay.StatSystem.Core.Types.PlayerStatType.Health, modifier);
             }
 
             RpcPlayAttackVFX();
@@ -237,7 +243,8 @@ namespace NightHunt.Gameplay.Boss
             Died?.Invoke(this);
 
             // Despawn after a short delay so death animation plays
-            Invoke(nameof(DespawnBoss), 3f);
+            float despawnDelay = _config != null && _config.DespawnDelay > 0f ? _config.DespawnDelay : 3f;
+            Invoke(nameof(DespawnBoss), despawnDelay);
         }
 
         private void SpawnDropChest()

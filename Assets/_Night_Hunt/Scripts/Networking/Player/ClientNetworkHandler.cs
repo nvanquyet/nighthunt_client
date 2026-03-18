@@ -1,4 +1,5 @@
 ﻿using FishNet.Object;
+using NightHunt.Common;
 using NightHunt.Gameplay.Character.Data;
 using NightHunt.Networking.Player;
 using NightHunt.State;
@@ -75,7 +76,7 @@ namespace NightHunt.Networking
             var session = SessionState.Instance;
 
             // Resolve selected character: string ID from character-select screen → array index
-            string savedCharacterId = PlayerPrefs.GetString("SelectedCharacterId", "");
+            string savedCharacterId = PlayerPrefs.GetString(Constants.PREFS_SELECTED_CHARACTER_ID, "");
             int characterModelIndex = 0;
 
             if (!string.IsNullOrEmpty(savedCharacterId) && CharacterDatabase.Instance != null)

@@ -1,4 +1,5 @@
 ﻿using System.Linq;
+using NightHunt.Core;
 using UnityEngine;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
@@ -10,9 +11,8 @@ namespace NightHunt.Gameplay.Spectator
     /// UI components use this to determine which player's data to display.
     /// Follows Singleton pattern for global access.
     /// </summary>
-    public class SpectateManager : MonoBehaviour
+    public class SpectateManager : SingletonPersistent<SpectateManager>
     {
-        public static SpectateManager Instance { get; private set; }
 
         [Header("Debug")] [SerializeField] private bool enableDebugLogs = false;
 
@@ -29,17 +29,7 @@ namespace NightHunt.Gameplay.Spectator
         /// </summary>
         public event System.Action<NetworkPlayer> OnLocalPlayerSet;
 
-        void Awake()
-        {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
 
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-        }
 
         public NetworkPlayer GetCurrentPlayer()
         {

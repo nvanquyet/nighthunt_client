@@ -1,13 +1,13 @@
 using System;
+using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Networking;
 using UnityEngine;
 
 namespace NightHunt.State
 {
-    public class RoomState : MonoBehaviour
+    public class RoomState : SingletonPersistent<RoomState>
     {
-        public static RoomState Instance { get; private set; }
 
         public RoomResponse CurrentRoom { get; private set; }
         public bool IsInRoom => CurrentRoom != null;
@@ -40,18 +40,7 @@ namespace NightHunt.State
         public event Action OnRoomLeft;
         public event Action<RoomResponse> OnRoomStateChanged;
 
-        private void Awake()
-        {
-            if (Instance == null)
-            {
-                Instance = this;
-                DontDestroyOnLoad(gameObject);
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
-        }
+
 
         public void SetRoom(RoomResponse room)
         {

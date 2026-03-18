@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 using NightHunt.Gameplay.Input.Core;
 
 namespace NightHunt.Gameplay.Input.Handlers.Camera
@@ -11,8 +12,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
     public class CameraInputHandler : MonoBehaviour, IInputHandler
     {
         [Header("Camera Settings")]
-        [SerializeField] private float rotationSpeed = 90f;
-        [SerializeField] private float zoomSpeed = 5f;
+        [FormerlySerializedAs("rotationSpeed")]
+        [SerializeField] private float _rotationSpeed = 90f;
+        [FormerlySerializedAs("zoomSpeed")]
+        [SerializeField] private float _zoomSpeed = 5f;
 
         private InputActionMap cameraActionMap;
         private InputAction rotateLeftAction;
@@ -170,18 +173,18 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
 
         private void OnRotateLeftPerformed(InputAction.CallbackContext context)
         {
-            currentRotationY = -rotationSpeed * Time.deltaTime;
+            currentRotationY = -_rotationSpeed * Time.deltaTime;
         }
 
         private void OnRotateRightPerformed(InputAction.CallbackContext context)
         {
-            currentRotationY = rotationSpeed * Time.deltaTime;
+            currentRotationY = _rotationSpeed * Time.deltaTime;
         }
 
         private void OnLookPerformed(InputAction.CallbackContext context)
         {
             Vector2 lookDelta = context.ReadValue<Vector2>();
-            currentRotationY += lookDelta.x * rotationSpeed * Time.deltaTime;
+            currentRotationY += lookDelta.x * _rotationSpeed * Time.deltaTime;
         }
 
         private void OnZoomPerformed(InputAction.CallbackContext context)

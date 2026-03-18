@@ -49,20 +49,6 @@ namespace NightHunt.GameplaySystems.Core.Configs
         
         #endregion
         
-        #region Debug
-        
-        [Header("Debug")]
-        [Tooltip("Bật debug logs cho stat system")]
-        public bool EnableStatDebugLogs = false;
-        
-        [Tooltip("Bật debug logs cho inventory system")]
-        public bool EnableInventoryDebugLogs = false;
-        
-        [Tooltip("Hiển thị gizmos trong scene view")]
-        public bool ShowDebugGizmos = false;
-        
-        #endregion
-        
         #region Weight Calculation Methods
         
         /// <summary>
@@ -151,6 +137,27 @@ namespace NightHunt.GameplaySystems.Core.Configs
         
         #endregion
         
+        #region Anti-Camping
+
+        [Header("Anti-Camping")]
+        [Tooltip("Seconds a player must stay within positionThreshold before being flagged as camping.")]
+        [Min(1f)]
+        public float CampingTimeThreshold = 90f;
+
+        [Tooltip("Meters — player movement within this radius counts as 'stationary'.")]
+        [Min(0.1f)]
+        public float CampingPositionThreshold = 5f;
+
+        [Tooltip("Radius (meters) around camping player that gets revealed to enemies.")]
+        [Min(1f)]
+        public float CampingRevealRadius = 30f;
+
+        [Tooltip("Seconds between camping detection ticks (lower = more responsive, higher = cheaper).")]
+        [Min(0.5f)]
+        public float CampingUpdateInterval = 5f;
+
+        #endregion
+
         #region Validation
         
 #if UNITY_EDITOR
@@ -162,6 +169,10 @@ namespace NightHunt.GameplaySystems.Core.Configs
             MinMovementSpeedPercent = Mathf.Clamp(MinMovementSpeedPercent, 0.01f, 1f);
             WeightWarningThreshold = Mathf.Clamp(WeightWarningThreshold, 0.5f, 1f);
             MaxUsageMovementDistance = Mathf.Max(0f, MaxUsageMovementDistance);
+            CampingTimeThreshold = Mathf.Max(1f, CampingTimeThreshold);
+            CampingPositionThreshold = Mathf.Max(0.1f, CampingPositionThreshold);
+            CampingRevealRadius = Mathf.Max(1f, CampingRevealRadius);
+            CampingUpdateInterval = Mathf.Max(0.5f, CampingUpdateInterval);
         }
         
         [ContextMenu("Test Weight Calculations")]

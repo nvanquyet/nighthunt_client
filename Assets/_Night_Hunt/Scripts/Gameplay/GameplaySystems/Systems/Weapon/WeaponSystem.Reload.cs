@@ -1,14 +1,14 @@
-﻿using System.Collections;
+using System.Collections;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
     public partial class WeaponSystem
     {
-        // ── IWeaponSystem — Reload API ─────────────────────────────────────────
+        // -- IWeaponSystem � Reload API -----------------------------------------
 
         /// <summary>Owner-client calls this (e.g. press R). Runs reload coroutine locally,
         /// and broadcasts state change to remote clients via NetworkSync.</summary>
@@ -42,7 +42,7 @@ namespace NightHunt.GameplaySystems.Weapon
             return true;
         }
 
-        // ── Server-side forced reload (called by server code / admin) ──────────
+        // -- Server-side forced reload (called by server code / admin) ----------
         public void Reload(WeaponSlotType slot)
         {
             if (!IsServerInitialized) return;
@@ -66,7 +66,7 @@ namespace NightHunt.GameplaySystems.Weapon
             OnWeaponReloaded?.Invoke(slot, newMag);
         }
 
-        // ── Internal coroutine ─────────────────────────────────────────────────
+        // -- Internal coroutine -------------------------------------------------
 
         /// <summary>
         /// Runs on the owner client. Broadcasts reload state to all remote clients
@@ -91,14 +91,14 @@ namespace NightHunt.GameplaySystems.Weapon
             int needed = (int)magCap - (int)inst.GetCurrentValue(ItemStatType.MagazineSize);
             if (needed <= 0) yield break;
 
-            // ── Start reload ──
+            // -- Start reload --
             _isReloading = true;
             OnReloadStateChanged?.Invoke(true);
-            if (IsOwner) BroadcastReloadStateServerRpc(true);     // → remote animators
+            if (IsOwner) BroadcastReloadStateServerRpc(true);     // ? remote animators
 
             yield return new WaitForSeconds(reloadTime);
 
-            // ── Complete ──
+            // -- Complete --
             int reserve = (int)inst.GetCurrentValue(ItemStatType.MaxAmmo);
             int actual  = Mathf.Min(needed, reserve);
             inst.AdjustCurrentValue(ItemStatType.MagazineSize, actual);
@@ -110,7 +110,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
             _isReloading = false;
             OnReloadStateChanged?.Invoke(false);
-            if (IsOwner) BroadcastReloadStateServerRpc(false);    // → remote animators
+            if (IsOwner) BroadcastReloadStateServerRpc(false);    // ? remote animators
 
             if (DebugLogs) Debug.Log($"[WeaponSystem] Reload done: {newMag}/{magCap}");
         }

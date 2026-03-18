@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a64d04af30def8a418e90d6c4b0f5cc4, type: 3}
+  m_Name: EquipmentStatConfig_Vest
+  m_EditorClassIdentifier: 
+  Stats:
+  - Type: 30
+    DefaultValue: 80
+    MinValue: 0
+    MaxValue: 500
+  - Type: 31
+    DefaultValue: 150
+    MinValue: 0
+    MaxValue: 1000
+  PlayerModifiers:
+  - StatType: 7
+    Value: 80
+    ModifierType: 0
+    Description: Vest armor
+  - StatType: 4
+    Value: -10
+    ModifierType: 1
+    Description: Heavy vest penalty
+  ItemModifiers: []

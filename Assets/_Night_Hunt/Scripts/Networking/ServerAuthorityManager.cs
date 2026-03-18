@@ -1,5 +1,6 @@
+using FishNet;
+using NightHunt.Core;
 using UnityEngine;
-using FishNet.Managing;
 
 namespace NightHunt.Networking
 {
@@ -7,35 +8,18 @@ namespace NightHunt.Networking
     /// Centralized server authority manager
     /// Ensures all server logic is separated and can work with both host and dedicated server
     /// </summary>
-    public class ServerAuthorityManager : MonoBehaviour
+    public class ServerAuthorityManager : SingletonPersistent<ServerAuthorityManager>
     {
-        private static ServerAuthorityManager _instance;
-        public static ServerAuthorityManager Instance => _instance;
 
         [Header("Server Settings")]
         [SerializeField] private bool isDedicatedServer = false;
         [SerializeField] private bool enableServerLogging = true;
 
-        private NetworkManager networkManager;
-
         public bool IsDedicatedServer => isDedicatedServer;
-        public bool IsServerRunning => networkManager != null && networkManager.IsServerStarted;
+        public bool IsServerRunning => InstanceFinder.NetworkManager != null && InstanceFinder.NetworkManager.IsServerStarted;
 
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-            }
-            else
-            {
-                Destroy(gameObject);
-                return;
-            }
-
-            networkManager = FindObjectOfType<NetworkManager>();
-            
             // Detect if running as dedicated server
             #if UNITY_SERVER || UNITY_EDITOR_LINUX || UNITY_EDITOR_OSX
             isDedicatedServer = true;
@@ -45,7 +29,7 @@ namespace NightHunt.Networking
         private void Start()
         {
             // Check if server started
-            if (networkManager != null && networkManager.IsServerStarted)
+            if (InstanceFinder.NetworkManager != null && InstanceFinder.NetworkManager.IsServerStarted)
             {
                 if (enableServerLogging)
                 {
@@ -72,13 +56,7 @@ namespace NightHunt.Networking
         /// </summary>
         public static bool IsServer()
         {
-            if (_instance != null)
-            {
-                return _instance.IsServerRunning;
-            }
-            
-            var networkManager = FindObjectOfType<NetworkManager>();
-            return networkManager != null && networkManager.IsServerStarted;
+            return InstanceFinder.NetworkManager != null && InstanceFinder.NetworkManager.IsServerStarted;
         }
 
         /// <summary>
@@ -86,13 +64,8 @@ namespace NightHunt.Networking
         /// </summary>
         public static bool IsClientOnly()
         {
-            if (_instance != null)
-            {
-                return !_instance.IsDedicatedServer && !_instance.IsServerRunning;
-            }
-            
-            var networkManager = FindObjectOfType<NetworkManager>();
-            return networkManager != null && networkManager.IsClientStarted && !networkManager.IsServerStarted;
+            var nm = InstanceFinder.NetworkManager;
+            return nm != null && nm.IsClientStarted && !nm.IsServerStarted;
         }
     }
 }

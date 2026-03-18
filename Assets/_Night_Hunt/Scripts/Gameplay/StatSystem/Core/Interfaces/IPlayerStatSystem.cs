@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Core.Data;
-using NightHunt.StatSystem.Configs;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Configs;
 
-namespace NightHunt.StatSystem.Core.Interfaces
+namespace NightHunt.Gameplay.StatSystem.Core.Interfaces
 {
     /// <summary>
     /// Interface for player stat management system

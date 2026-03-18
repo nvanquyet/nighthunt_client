@@ -68,11 +68,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             base.Awake();
 
             if (_combatInputHandler == null)
-                _combatInputHandler = FindObjectOfType<CombatInputHandler>();
-
-            if (_combatInputHandler == null)
-                Debug.LogWarning("[FireButton] No CombatInputHandler found in scene. " +
-                                 "Assign it manually or ensure it exists before this Awake.");
+                Debug.LogWarning("[FireButton] CombatInputHandler not assigned. " +
+                                 "Call Initialize(handler) after the local player spawns.");
 
             if (_pulseRing == null)
                 _pulseRing = ComponentResolver.Find<ButtonPulseRing>(this)
@@ -83,6 +80,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             // Joystick must start hidden so it does not capture pointer events instead of this button.
             if (_joystick != null) _joystick.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// Bind this button to the local player’s CombatInputHandler.
+        /// Must be called by the HUD orchestrator (CombatHUDPanel) after the local player spawns.
+        /// </summary>
+        public void Initialize(CombatInputHandler handler)
+        {
+            _combatInputHandler = handler;
         }
 
         // ─────────────────────────────────────────────────────────────────────

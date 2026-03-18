@@ -25,6 +25,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private UIDomainBridge _domainBridge;
         private bool _inventoryVisible;
         private bool _subscribedToSpectate;
+        private bool _hasReceivedPlayerEvent;
 
         private void Awake()
         {
@@ -46,7 +47,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void Start()
         {
-            // Guard: if SpectateManager wasn't instantiated yet during OnEnable (script
+            // Guard: if SpectateManager wasn’t instantiated yet during OnEnable (script
             // execution-order race), subscribe now — by Start() all Awake() calls
             // in the scene have already completed.
             if (!_subscribedToSpectate && SpectateManager.Instance != null)
@@ -59,9 +60,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             // Edge-case: UIRootController was enabled AFTER the local player already spawned
             // (e.g. additive scene load). Synthesise the callback so CombatHUD gets its
             // first real init without waiting for a future player-change event.
-            var existing = SpectateManager.Instance?.GetCurrentPlayer();
-            if (existing != null)
-                OnCurrentPlayerChanged(existing);
+            // Guard: skip if OnCurrentPlayerChanged was already invoked via subscription.
+            if (!_hasReceivedPlayerEvent)
+            {
+                var existing = SpectateManager.Instance?.GetCurrentPlayer();
+                if (existing != null)
+                    OnCurrentPlayerChanged(existing);
+            }
         }
 
         private void OnEnable()
@@ -115,6 +120,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void OnCurrentPlayerChanged(NetworkPlayer player)
         {
+            _hasReceivedPlayerEvent = true;
             Debug.Log($"[UIRootController] OnCurrentPlayerChanged: player={player?.name ?? "null"}");
 
             // Đổi player hiển thị UI → reset mọi drag-drop đang diễn ra

@@ -6,8 +6,8 @@ using NightHunt.Gameplay.Character.Movement;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking.Prediction.FishNet;
 using Unity.Cinemachine;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character

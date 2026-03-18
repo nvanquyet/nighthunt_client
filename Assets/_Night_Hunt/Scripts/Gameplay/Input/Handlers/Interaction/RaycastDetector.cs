@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
@@ -23,7 +24,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
     {
         [Header("Settings")] [SerializeField] private UnityEngine.Camera playerCamera;
         [SerializeField] private LayerMask interactableLayerMask = -1;
-        [SerializeField] private float maxDistance = 5f;
+        [FormerlySerializedAs("maxDistance")]
+        [SerializeField] private float _maxDistance = 5f;
         [SerializeField] private bool ignorePlayerLayer = true;
 
         [Header("Debug")] [SerializeField] private bool showDebugRay = false;
@@ -117,7 +119,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
             IInteractable hit = null;
 
-            if (Physics.Raycast(ray, out RaycastHit hitInfo, maxDistance, mask,
+            if (Physics.Raycast(ray, out RaycastHit hitInfo, _maxDistance, mask,
                     QueryTriggerInteraction.Collide))
             {
                 // Try interface first (works for all types implementing IInteractable)
@@ -195,7 +197,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             }
 
             Gizmos.DrawRay(playerCamera.transform.position,
-                playerCamera.transform.forward * maxDistance);
+                playerCamera.transform.forward * _maxDistance);
         }
     }
 }

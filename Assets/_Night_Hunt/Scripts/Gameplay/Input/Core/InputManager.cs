@@ -1,4 +1,5 @@
 using UnityEngine;
+using NightHunt.Core;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.Gameplay.Input.Handlers.Combat;
@@ -15,9 +16,8 @@ namespace NightHunt.Gameplay.Input.Core
     /// Dùng <see cref="InputLayerManager"/> – đây là Single Source of Truth.</para>
     /// <para><b>Không bao giờ</b> gọi <c>map.Enable()</c> / <c>map.Disable()</c> từ đây.</para>
     /// </summary>
-    public class InputManager : MonoBehaviour
+    public class InputManager : Singleton<InputManager>
     {
-        public static InputManager Instance { get; private set; }
 
         [Header("Handler References")]
         [SerializeField] private MovementInputHandler movementHandler;
@@ -31,14 +31,8 @@ namespace NightHunt.Gameplay.Input.Core
 
         #region Lifecycle
 
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-            Instance = this;
             InitializeHandlers();
         }
 
@@ -48,13 +42,7 @@ namespace NightHunt.Gameplay.Input.Core
             InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
         }
 
-        private void OnDestroy()
-        {
-            if (Instance == this)
-                Instance = null;
-        }
-
-        #endregion
+#endregion
 
         #region Initialization
 

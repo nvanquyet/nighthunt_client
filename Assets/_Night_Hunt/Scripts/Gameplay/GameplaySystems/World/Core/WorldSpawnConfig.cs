@@ -15,7 +15,7 @@ namespace NightHunt.GameplaySystems.World
     /// Usage: Tạo asset qua menu "World/World Spawn Config"
     ///        và gán vào WorldItemSpawnPoint trên scene.
     /// </summary>
-    [CreateAssetMenu(fileName = "WorldSpawnConfig", menuName = "World/World Spawn Config")]
+    [CreateAssetMenu(fileName = "WorldSpawnConfig", menuName = "NightHunt/Gameplay/World Spawn Config")]
     public class WorldSpawnConfig : ScriptableObject
     {
         [Header("Spawn Type")]

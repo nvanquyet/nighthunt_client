@@ -46,6 +46,8 @@ namespace NightHunt.UI
         private MatchPhaseManager phaseManager;
         private float updateInterval = 0.1f;
         private float lastUpdateTime;
+        private float _phaseManagerRetryTime;
+        private const float PhaseManagerRetryInterval = 1f;
         private Coroutine _warningCoroutine;
 
         private void Awake()
@@ -63,7 +65,7 @@ namespace NightHunt.UI
 
         private void Start()
         {
-            phaseManager = FindObjectOfType<MatchPhaseManager>();
+            phaseManager = FindFirstObjectByType<MatchPhaseManager>();
         }
 
         private void Update()
@@ -82,7 +84,11 @@ namespace NightHunt.UI
         {
             if (phaseManager == null)
             {
-                phaseManager = FindObjectOfType<MatchPhaseManager>();
+                if (Time.time >= _phaseManagerRetryTime)
+                {
+                    phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+                    _phaseManagerRetryTime = Time.time + PhaseManagerRetryInterval;
+                }
                 return;
             }
 

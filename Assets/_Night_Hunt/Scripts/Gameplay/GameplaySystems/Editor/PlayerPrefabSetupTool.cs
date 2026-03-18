@@ -2,8 +2,8 @@
 using UnityEngine;
 using UnityEditor;
 using FishNet.Object;
-using NightHunt.StatSystem.Systems;
-using NightHunt.StatSystem.Configs;
+using NightHunt.Gameplay.StatSystem.Systems;
+using NightHunt.Gameplay.StatSystem.Configs;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Equipment;

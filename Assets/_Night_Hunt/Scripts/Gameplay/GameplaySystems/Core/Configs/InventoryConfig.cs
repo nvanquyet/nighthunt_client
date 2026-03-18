@@ -70,14 +70,6 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Tooltip("Tự động merge stacks khi move/drag")]
         public bool AutoMergeOnMove = true;
         
-        [Tooltip("Số empty slots mặc định spawn thêm trong UI")]
-        [Range(10, 50)]
-        public int DefaultExtraEmptySlots = 20;
-        
-        [Tooltip("Số empty slots tối thiểu luôn hiển thị")]
-        [Range(5, 30)]
-        public int MinimumEmptySlots = 10;
-        
         #endregion
         
         #region ========== DROP SETTINGS ==========

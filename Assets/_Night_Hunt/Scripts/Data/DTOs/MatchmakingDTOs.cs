@@ -6,6 +6,7 @@ namespace NightHunt.Data.DTOs
     public class MatchmakingQueueRequest
     {
         public string gameMode;
+        public string mapId;      // optional — null = any map
     }
 
     [Serializable]

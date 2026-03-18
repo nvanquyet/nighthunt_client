@@ -1,3 +1,4 @@
+using NightHunt.Config;
 using NightHunt.Core;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.State;
@@ -123,7 +124,8 @@ namespace NightHunt.UI
 
         private void LoadGameScene()
         {
-            SceneLoader.LoadGame();
+            SceneId mapId = ResolveTargetMap();
+            SceneLoader.LoadGame(mapId);
         }
 
         #endregion
@@ -137,6 +139,18 @@ namespace NightHunt.UI
             if (teamALabel != null) teamALabel.text = "Team A";
             if (teamBLabel != null) teamBLabel.text = "Team B";
             if (vsLabel    != null) vsLabel.text    = "VS";
+        }
+
+        private static SceneId ResolveTargetMap()
+        {
+            string mapId = RoomState.Instance?.CurrentRoom?.mapId;
+            if (!string.IsNullOrWhiteSpace(mapId)
+                && MapConfig.TryGetById(mapId, out MapEntry entry))
+            {
+                return entry.sceneId;
+            }
+
+            return SceneId.GameMap_01;
         }
 
         private void SetStatus(string msg)

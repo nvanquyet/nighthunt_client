@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NightHunt.Core;
 using UnityEngine;
 
 namespace NightHunt.Networking.Prediction.Utils
@@ -7,10 +8,8 @@ namespace NightHunt.Networking.Prediction.Utils
     /// Network statistics cho prediction system.
     /// Track RTT, packet loss, reconciliation frequency, v.v.
     /// </summary>
-    public class NetworkStats : MonoBehaviour
+    public class NetworkStats : SingletonPersistent<NetworkStats>
     {
-        private static NetworkStats _instance;
-        public static NetworkStats Instance => _instance;
 
         [Header("Stats Settings")]
         [SerializeField] private int maxSamples = 100;
@@ -45,17 +44,7 @@ namespace NightHunt.Networking.Prediction.Utils
         /// </summary>
         public float CurrentRTT { get; private set; }
 
-        private void Awake()
-        {
-            if (_instance != null && _instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
 
-            _instance = this;
-            DontDestroyOnLoad(gameObject);
-        }
 
         private void Update()
         {

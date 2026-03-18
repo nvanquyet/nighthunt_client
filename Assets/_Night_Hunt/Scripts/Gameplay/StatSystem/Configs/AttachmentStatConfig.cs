@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace NightHunt.StatSystem.Configs
+namespace NightHunt.Gameplay.StatSystem.Configs
 {
     /// <summary>
     /// Attachment stat config - Stats + ItemModifiers

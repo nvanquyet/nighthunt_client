@@ -1,18 +1,18 @@
-﻿using System.Collections;
+using System.Collections;
 using UnityEngine;
 using FishNet.Object;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.StatSystem.Core.Data;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
     public partial class WeaponSystem
     {
-        // ── IWeaponSystem — Public equip API ───────────────────────────────────
+        // -- IWeaponSystem � Public equip API -----------------------------------
 
         public void EquipWeapon(string instanceID)
         {
@@ -50,7 +50,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (IsOwner) HolsterWeaponServerRpc();
         }
 
-        // ── Server implementations ─────────────────────────────────────────────
+        // -- Server implementations ---------------------------------------------
 
         [Server]
         private void EquipWeaponServer(string instanceID)
@@ -82,7 +82,7 @@ namespace NightHunt.GameplaySystems.Weapon
             AssignToSlot(targetSlot, instanceID, inst, def);
         }
 
-        /// <summary>Common slot assignment — shared by both equip paths.</summary>
+        /// <summary>Common slot assignment � shared by both equip paths.</summary>
         [Server]
         private void AssignToSlot(WeaponSlotType slot, string instanceID, ItemInstance inst, WeaponDefinition def)
         {
@@ -105,7 +105,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_activeSlot.Value == null)
                 _activeSlot.Value = slot;
 
-            if (DebugLogs) Debug.Log($"[WeaponSystem] Equipped '{def.DisplayName}' → {slot}");
+            if (DebugLogs) Debug.Log($"[WeaponSystem] Equipped '{def.DisplayName}' ? {slot}");
         }
 
         [ServerRpc(RequireOwnership = true)]
@@ -172,7 +172,7 @@ namespace NightHunt.GameplaySystems.Weapon
             _activeSlot.Value = null;
         }
 
-        // ── Stat modifiers ─────────────────────────────────────────────────────
+        // -- Stat modifiers -----------------------------------------------------
 
         [Server]
         private void ApplyWeaponModifiers(string instanceID, WeaponDefinition weaponDef)
@@ -180,7 +180,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_statSystem == null) return;
             foreach (var m in (IEnumerable)weaponDef.GetPlayerModifiers() ?? System.Array.Empty<object>())
             {
-                // Cast to your modifier type here — kept generic to compile without full type refs.
+                // Cast to your modifier type here � kept generic to compile without full type refs.
                 // _statSystem.AddModifier(m.StatType, new StatModifier { ... });
             }
         }

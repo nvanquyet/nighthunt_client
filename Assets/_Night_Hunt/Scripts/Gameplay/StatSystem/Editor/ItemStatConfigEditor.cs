@@ -1,9 +1,9 @@
 #if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
-using NightHunt.StatSystem.Configs;
+using NightHunt.Gameplay.StatSystem.Configs;
 
-namespace NightHunt.StatSystem.Editor
+namespace NightHunt.Gameplay.StatSystem.Editor
 {
     [CustomEditor(typeof(ItemStatConfig))]
     public class ItemStatConfigEditor : UnityEditor.Editor

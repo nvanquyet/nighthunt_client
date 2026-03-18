@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.Data;
 using NightHunt.Gameplay.Core.Events;
@@ -7,6 +8,7 @@ using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.GameplaySystems.Core.Configs;
 
 namespace NightHunt.Gameplay.Match
 {
@@ -23,7 +25,12 @@ namespace NightHunt.Gameplay.Match
         [SerializeField] private float phaseStartTime;
         [SerializeField] private float phaseDuration;
 
-        // ✅ Event system - decoupled communication
+        [Header("Phase Config Data")]
+        [Tooltip("Config data cho tá»«ng phase (Preparation, Hunt, Lockdown). Assign trong Inspector.")]
+        [SerializeField] private List<MatchPhaseConfigData> phaseConfigs = new List<MatchPhaseConfigData>();
+        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
+
+        // âœ… Event system - decoupled communication
         public event Action<MatchPhaseState, string> OnPhaseStarted; // (newPhase, phaseName)
         public event Action<MatchPhaseState, MatchPhaseState> OnPhaseTransitioned; // (oldPhase, newPhase)
 
@@ -67,7 +74,8 @@ namespace NightHunt.Gameplay.Match
         public override void OnStartServer()
         {
             base.OnStartServer();
-            Debug.Log("[MatchPhaseManager] Server started");
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log("[MatchPhaseManager] Server started");
         }
 
         public override void OnStartNetwork()
@@ -103,9 +111,10 @@ namespace NightHunt.Gameplay.Match
         /// </summary>
         private void OnPhaseStateChanged(MatchPhaseState previousState, MatchPhaseState newState)
         {
-            Debug.Log($"[MatchPhaseManager] Phase state changed: {previousState} -> {newState}");
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log($"[MatchPhaseManager] Phase state changed: {previousState} -> {newState}");
 
-            // ✅ Trigger event cho subscribers (ServerGameManager, Bootstrap, etc.)
+            // âœ… Trigger event cho subscribers (ServerGameManager, Bootstrap, etc.)
             OnPhaseTransitioned?.Invoke(previousState, newState);
         }
 
@@ -140,17 +149,24 @@ namespace NightHunt.Gameplay.Match
             }
 
             string phaseName = GetPhaseName(phase);
-            MatchPhaseConfigData config = null; // TODO: load from new data source
+            MatchPhaseConfigData config = phaseConfigs.Find(c => c.Phase == phaseName);
             if (config == null)
             {
-                Debug.LogError($"[MatchPhaseManager] Phase config not found: {phaseName}");
-                return;
+                // Fallback: use first available config to avoid hard stop in development
+                config = phaseConfigs.Count > 0 ? phaseConfigs[0] : null;
+                if (config == null)
+                {
+                    Debug.LogError($"[MatchPhaseManager] Phase config not found: {phaseName}. Add entries to phaseConfigs in Inspector.");
+                    return;
+                }
+                Debug.LogWarning($"[MatchPhaseManager] No config for phase {phaseName}, using fallback config.");
             }
 
             currentPhaseConfig = config;
             _warningSent = false;
 
-            Debug.Log($"[MatchPhaseManager] Starting phase: {phaseName}");
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log($"[MatchPhaseManager] Starting phase: {phaseName}");
 
             // Store old phase for event
             MatchPhaseState oldPhase = CurrentPhase;
@@ -168,7 +184,8 @@ namespace NightHunt.Gameplay.Match
             // Random duration within min/max
             networkPhaseDuration.Value = UnityEngine.Random.Range(config.DurationMin, config.DurationMax) * 60f;
 
-            Debug.Log($"[MatchPhaseManager] Started phase: {phaseName} (Duration: {networkPhaseDuration.Value}s)");
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log($"[MatchPhaseManager] Started phase: {phaseName} (Duration: {networkPhaseDuration.Value}s)");
 
             // Apply phase-specific logic
             ApplyPhaseLogic(phase);
@@ -176,8 +193,19 @@ namespace NightHunt.Gameplay.Match
             // Mark first phase as started
             hasStartedFirstPhase = true;
 
-            // ✅ Trigger event - ServerGameManager sẽ subscribe và handle
+            // âœ… Trigger event - ServerGameManager sáº½ subscribe vÃ  handle
             OnPhaseStarted?.Invoke(phase, phaseName);
+        }
+
+        /// <summary>
+        /// Canonical phase name constants — used by MatchPhaseManager, BossSpawnManager,
+        /// ScoringSystem and any other system that needs to key off phase identity.
+        /// </summary>
+        public static class PhaseNames
+        {
+            public const string Preparation = "Phase1_Preparation";
+            public const string Hunt        = "Phase2_HuntObjectives";
+            public const string Lockdown    = "Phase3_FinalLockdown";
         }
 
         /// <summary>
@@ -187,14 +215,10 @@ namespace NightHunt.Gameplay.Match
         {
             switch (phase)
             {
-                case MatchPhaseState.Preparation:
-                    return "Phase1_Preparation";
-                case MatchPhaseState.Hunt:
-                    return "Phase2_HuntObjectives";
-                case MatchPhaseState.Lockdown:
-                    return "Phase3_FinalLockdown";
-                default:
-                    return "Phase1_Preparation";
+                case MatchPhaseState.Preparation: return PhaseNames.Preparation;
+                case MatchPhaseState.Hunt:        return PhaseNames.Hunt;
+                case MatchPhaseState.Lockdown:    return PhaseNames.Lockdown;
+                default:                          return PhaseNames.Preparation;
             }
         }
 
@@ -215,7 +239,8 @@ namespace NightHunt.Gameplay.Match
                 if (remaining <= warningTime)
                 {
                     _warningSent = true;
-                    Debug.Log($"[MatchPhaseManager] ⚠ Phase warning: {CurrentPhase} ends in {remaining:F0}s");
+                    if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                        Debug.Log($"[MatchPhaseManager] âš  Phase warning: {CurrentPhase} ends in {remaining:F0}s");
                     RpcPhaseWarning(CurrentPhase, remaining);
                 }
             }
@@ -249,11 +274,13 @@ namespace NightHunt.Gameplay.Match
             // Avoid transition when already in final phase
             if (CurrentPhase == MatchPhaseState.Lockdown)
             {
-                Debug.Log("[MatchPhaseManager] Already in final phase (Lockdown)");
+                if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                    Debug.Log("[MatchPhaseManager] Already in final phase (Lockdown)");
                 return;
             }
 
-            Debug.Log($"[MatchPhaseManager] Auto-transitioning from {CurrentPhase} to {nextPhase}");
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log($"[MatchPhaseManager] Auto-transitioning from {CurrentPhase} to {nextPhase}");
             StartPhase(nextPhase);
         }
 
@@ -296,14 +323,16 @@ namespace NightHunt.Gameplay.Match
 
         private void OnPhase1Start()
         {
-            Debug.Log("[MatchPhaseManager] Phase 1: Preparation - Players can place beacons, loot items");
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log("[MatchPhaseManager] Phase 1: Preparation - Players can place beacons, loot items");
             // Enable beacon placement
             // Spawn initial loot
         }
 
         private void OnPhase2Start()
         {
-            Debug.Log("[MatchPhaseManager] Phase 2: Hunt & Objectives - Boss spawns, capture zones active");
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log("[MatchPhaseManager] Phase 2: Hunt & Objectives - Boss spawns, capture zones active");
             // Spawn AI boss
             // Activate capture zones
             // Spawn rare loot
@@ -311,7 +340,8 @@ namespace NightHunt.Gameplay.Match
 
         private void OnPhase3Start()
         {
-            Debug.Log("[MatchPhaseManager] Phase 3: Final Lockdown - Beacons disabled, zone closing");
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log("[MatchPhaseManager] Phase 3: Final Lockdown - Beacons disabled, zone closing");
             // Disable beacons
             // Start zone closing
             // Apply predator/prey buffs/nerfs
@@ -355,7 +385,7 @@ namespace NightHunt.Gameplay.Match
         public MatchPhaseConfigData GetCurrentPhaseConfig()
         {
             string phaseName = GetPhaseName((MatchPhaseState)networkPhase.Value);
-            return null; // TODO: load from new data source
+            return phaseConfigs.Find(c => c.Phase == phaseName);
         }
     }
 }

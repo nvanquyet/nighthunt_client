@@ -1,17 +1,17 @@
-﻿using System.Collections;
+using System.Collections;
 using NightHunt.Data;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
     public partial class WeaponSystem
     {
-        // ── IWeaponSystem — Fire API ───────────────────────────────────────────
+        // -- IWeaponSystem � Fire API -------------------------------------------
 
         /// <summary>Begin firing (owner-side). Auto mode spawns the auto-fire coroutine.</summary>
         public void StartFire()
@@ -30,7 +30,7 @@ namespace NightHunt.GameplaySystems.Weapon
             }
         }
 
-        /// <summary>Release fire input — stops auto-fire.</summary>
+        /// <summary>Release fire input � stops auto-fire.</summary>
         public void StopFire()
         {
             _isFiring = false;
@@ -86,7 +86,7 @@ namespace NightHunt.GameplaySystems.Weapon
             PlayerPrefs.SetInt($"firemode_{(int)slot.Value}", (int)mode);
         }
 
-        // ── Private fire internals ─────────────────────────────────────────────
+        // -- Private fire internals ---------------------------------------------
 
         private IEnumerator AutoFireCoroutine()
         {

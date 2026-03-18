@@ -1,8 +1,8 @@
 using System.Collections;
 using NightHunt.GameplaySystems.Core.Data;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Data;
 using UnityEngine;
 
 namespace NightHunt.GameplaySystems.QuickSlot

@@ -1,7 +1,6 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 
 namespace NightHunt.Gameplay.Input.Handlers.Movement

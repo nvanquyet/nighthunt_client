@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a64d04af30def8a418e90d6c4b0f5cc4, type: 3}
+  m_Name: EquipmentStatConfig_Helmet
+  m_EditorClassIdentifier: 
+  Stats:
+  - Type: 30
+    DefaultValue: 40
+    MinValue: 0
+    MaxValue: 200
+  - Type: 31
+    DefaultValue: 100
+    MinValue: 0
+    MaxValue: 500
+  PlayerModifiers:
+  - StatType: 7
+    Value: 40
+    ModifierType: 0
+    Description: Helmet protection
+  ItemModifiers: []

@@ -8,172 +8,109 @@ using NightHunt.Utilities;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Player Slot View - Represents a single slot in lobby
-    /// Can be empty (shows +) or occupied (shows player info)
+    /// Player Slot View — single slot in the lobby team grid.
+    ///
+    /// States:
+    ///   Empty    → dataContainer hidden; slotText shows "+"
+    ///   Occupied → dataContainer visible; shows username + ready indicator
+    ///
+    /// Context menu lives in CustomLobbyView (one shared menu, not per-slot prefab).
+    /// Clicking any interactable slot calls onSlotClicked(team, slot).
+    /// CustomLobbyView decides: empty → ChangeTeam, occupied → show context menu.
+    ///
+    /// Interactability:
+    ///   Empty slot          → interactable (move self to this slot)
+    ///   Own occupied slot   → NOT interactable
+    ///   Other player's slot → interactable (opens context menu in manager)
+    ///
+    /// SETUP (Prefab hierarchy):
+    ///   PlayerSlot (this script)
+    ///   ├── SlotText       (TMP — "+" when empty, "Slot N" when occupied)
+    ///   ├── SlotButton     (Button — covers whole slot)
+    ///   └── DataContainer  (GameObject — active only when occupied)
+    ///       ├── UsernameText   (TMP)
+    ///       └── ReadyIndicator (Image — green/red)
     /// </summary>
     public class PlayerSlotView : MonoBehaviour
     {
         [Header("UI References")]
         [SerializeField] private TextMeshProUGUI usernameText;
         [SerializeField] private TextMeshProUGUI slotText;
-        [SerializeField] private Image readyIndicator;
-        [SerializeField] private Button slotButton; // Clickable slot
-        [SerializeField] private Button kickButton; // Only for owner
-        [SerializeField] private Button transferOwnerButton; // Only for owner, to transfer ownership
-        [SerializeField] private GameObject emptySlotIndicator; // Shows "+" when empty
+        [SerializeField] private Image           readyIndicator;
+        [SerializeField] private Button          slotButton;
+        [Tooltip("Container for occupied-state visuals (username, ready indicator).\n"
+               + "Active when slot is occupied; hidden when empty.")]
+        [SerializeField] private GameObject      dataContainer;
 
-        private RoomPlayerResponse player; // null if empty
-        private bool isOwner;
-        private int team;
-        private int slot;
-        private System.Action<int, int> onSlotClicked; // Callback: (team, slot)
-        private System.Action<long> onTransferOwnerClicked; // Callback: (targetUserId)
+        private RoomPlayerResponse      _player;
+        private int                     _team;
+        private int                     _slot;
+        private System.Action<int, int> _onSlotClicked;
 
         private void Awake()
         {
-            if (slotButton != null)
-                slotButton.onClick.AddListener(OnSlotClicked);
-            
-            if (transferOwnerButton != null)
-                transferOwnerButton.onClick.AddListener(OnTransferOwnerClicked);
+            if (slotButton != null) slotButton.onClick.AddListener(OnSlotClicked);
         }
 
         /// <summary>
-        /// Set slot data - can be empty or occupied
+        /// Bind slot data. Pass <c>null</c> for <paramref name="player"/> to render as empty.
         /// </summary>
-        public void SetSlot(int team, int slot, RoomPlayerResponse player, bool isOwner, 
-                           System.Action<int, int> onSlotClicked, System.Action<long> onTransferOwnerClicked = null)
+        public void SetSlot(int team, int slot, RoomPlayerResponse player, bool isOwner,
+                            System.Action<int, int> onSlotClicked)
         {
-            this.team = team;
-            this.slot = slot;
-            this.player = player;
-            this.isOwner = isOwner;
-            this.onSlotClicked = onSlotClicked;
-            this.onTransferOwnerClicked = onTransferOwnerClicked;
+            _team          = team;
+            _slot          = slot;
+            _player        = player;
+            _onSlotClicked = onSlotClicked;
 
             bool isEmpty = player == null;
 
-            // Show/hide empty indicator
-            if (emptySlotIndicator != null)
-                emptySlotIndicator.SetActive(isEmpty);
+            // dataContainer visible only when occupied
+            if (dataContainer != null) dataContainer.SetActive(!isEmpty);
 
-            // Show/hide player info
-            if (usernameText != null)
+            if (slotText != null) slotText.text = isEmpty ? "+" : $"Slot {slot + 1}";
+
+            if (!isEmpty)
             {
-                usernameText.gameObject.SetActive(!isEmpty);
-                usernameText.text = isEmpty ? "" : player.username;
+                if (usernameText   != null) usernameText.text        = player.username;
+                if (readyIndicator != null) readyIndicator.color     = player.isReady ? Color.green : Color.red;
             }
 
-            if (slotText != null)
-            {
-                slotText.text = isEmpty ? "+" : $"Slot {slot + 1}";
-            }
-
-            if (readyIndicator != null)
-            {
-                readyIndicator.gameObject.SetActive(!isEmpty);
-                if (!isEmpty)
-                    readyIndicator.color = player.isReady ? Color.green : Color.red;
-            }
-
-            // Kick button only for owner and occupied slots (not own slot)
-            if (kickButton != null)
-            {
-                kickButton.gameObject.SetActive(!isEmpty && isOwner && player.userId != GetCurrentUserId());
-            }
-            
-            // Transfer Owner button only for owner and occupied slots (not own slot)
-            if (transferOwnerButton != null)
-            {
-                transferOwnerButton.gameObject.SetActive(!isEmpty && isOwner && player.userId != GetCurrentUserId());
-            }
-
-            // Slot button: disable if this is current player's slot
             if (slotButton != null)
             {
-                long currentUserId = GetCurrentUserId();
-                bool isCurrentPlayerSlot = !isEmpty && player.userId == currentUserId;
-                slotButton.interactable = !isCurrentPlayerSlot; // Disable if it's own slot
+                bool isSelf = !isEmpty && player.userId == GetCurrentUserId();
+                slotButton.interactable = isEmpty || !isSelf;
             }
         }
 
-        private void OnSlotClicked()
-        {
-            onSlotClicked?.Invoke(team, slot);
-        }
-        
-        private void OnTransferOwnerClicked()
-        {
-            if (player != null)
-            {
-                onTransferOwnerClicked?.Invoke(player.userId);
-            }
-        }
-
-        private long GetCurrentUserId()
-        {
-            if (SessionState.Instance != null)
-                return SessionState.Instance.UserId;
-            return 0;
-        }
-
-        /// <summary>
-        /// Update ready status without full refresh
-        /// </summary>
+        /// <summary>Refresh only the ready indicator without full rebind.</summary>
         public void UpdateReadyStatus(bool isReady)
         {
-            if (player != null)
-            {
-                player.isReady = isReady;
-                
-                if (readyIndicator != null)
-                {
-                    readyIndicator.color = isReady ? Color.green : Color.red;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Lightweight display-only bind — used by CustomLobbyView when only
-        /// basic info (name, ready, host flag) is available without full slot indices.
-        /// </summary>
-        public void SetData(string displayName, bool isReady, bool isHost)
-        {
-            if (usernameText != null)
-            {
-                usernameText.gameObject.SetActive(true);
-                usernameText.text = displayName;
-            }
-            if (slotText != null)
-                slotText.text = string.Empty;
+            if (_player == null) return;
+            _player.isReady = isReady;
             if (readyIndicator != null)
-            {
-                readyIndicator.gameObject.SetActive(true);
                 readyIndicator.color = isReady ? Color.green : Color.red;
-            }
-            if (emptySlotIndicator != null)
-                emptySlotIndicator.SetActive(false);
-            if (kickButton != null)
-                kickButton.gameObject.SetActive(false);
-            if (transferOwnerButton != null)
-                transferOwnerButton.gameObject.SetActive(isHost);
         }
 
-        public bool IsEmpty => player == null;
-        public RoomPlayerResponse Player => player;
-        public int Team => team;
-        public int Slot => slot;
+        private void OnSlotClicked() => _onSlotClicked?.Invoke(_team, _slot);
+
+        private long GetCurrentUserId()
+            => SessionState.Instance != null ? SessionState.Instance.UserId : 0L;
+
+        public bool               IsEmpty => _player == null;
+        public RoomPlayerResponse Player  => _player;
+        public int                Team    => _team;
+        public int                Slot    => _slot;
 
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            // Auto-assign references in editor
             if (slotButton == null)
                 slotButton = ComponentResolver.Find<Button>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] Button not found")
-        .Resolve();
+                    .OnSelf()
+                    .InChildren()
+                    .OrLogWarning("[Auto] Button not found")
+                    .Resolve();
         }
 #endif
     }

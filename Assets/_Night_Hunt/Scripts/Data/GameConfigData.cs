@@ -235,6 +235,18 @@ namespace NightHunt.Data
         public bool RespawnAfterKill;
         public float RespawnDelay;       // seconds before boss respawns (0 = no respawn)
         public List<BossDropEntryData> DropTable;
+
+        // ── AI params ──────────────────────────────────────────────────────────
+        [Tooltip("Radius within which boss detects players.")]
+        public float AggroRadius = 20f;
+        [Tooltip("Radius within which boss performs melee attack.")]
+        public float AttackRadius = 3f;
+        [Tooltip("Damage per hit.")]
+        public float AttackDamage = 50f;
+        [Tooltip("Seconds between attacks.")]
+        public float AttackCooldown = 2f;
+        [Tooltip("Seconds after death before the NetworkObject is despawned (lets death anim play).")]
+        public float DespawnDelay = 3f;
     }
 
     [Serializable]

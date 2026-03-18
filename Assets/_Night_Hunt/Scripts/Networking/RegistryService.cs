@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using NightHunt.Core;
 using NightHunt.Networking.Player;
 using UnityEngine;
 
@@ -9,9 +10,8 @@ namespace NightHunt.Networking
     /// RegistryService - Lưu trữ PlayerRegistryData (private server data)
     /// Server-side only - clients không access
     /// </summary>
-    public class RegistryService : MonoBehaviour
+    public class RegistryService : SingletonPersistent<RegistryService>
     {
-        public static RegistryService Instance { get; private set; }
         
         // ===== PRIVATE DATA STORAGE =====
         
@@ -34,27 +34,9 @@ namespace NightHunt.Networking
         
         // ===== LIFECYCLE =====
         
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Debug.LogWarning("[RegistryService] Duplicate instance, destroying...");
-                Destroy(gameObject);
-                return;
-            }
-            
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-            
             Debug.Log("[RegistryService] ✅ Initialized");
-        }
-        
-        private void OnDestroy()
-        {
-            if (Instance == this)
-            {
-                Instance = null;
-            }
         }
         
         // ===== REGISTRATION =====

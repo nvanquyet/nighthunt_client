@@ -5,7 +5,7 @@ namespace NightHunt.Networking.Prediction.Utils
     /// <summary>
     /// Scriptable config for prediction settings.
     /// </summary>
-    [CreateAssetMenu(fileName = "PredictionConfig", menuName = "FishNet/Prediction Config")]
+    [CreateAssetMenu(fileName = "PredictionConfig", menuName = "NightHunt/Gameplay/Prediction Config")]
     public class PredictionConfig : ScriptableObject
     {
         [Header("Prediction")]

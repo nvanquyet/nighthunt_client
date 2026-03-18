@@ -1,8 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Configs;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Configs;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {

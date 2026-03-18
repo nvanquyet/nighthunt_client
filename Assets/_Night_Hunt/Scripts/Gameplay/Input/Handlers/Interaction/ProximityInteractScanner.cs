@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.Utilities;
@@ -26,16 +27,19 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         [Header("Scan Settings")]
         [Tooltip("Radius of the overlap-sphere used to find interactables.")]
-        [SerializeField] private float scanRadius = 4f;
+        [FormerlySerializedAs("scanRadius")]
+        [SerializeField] private float _scanRadius = 4f;
 
         [Tooltip("Seconds between scans. Lower = more responsive, higher = cheaper.")]
-        [SerializeField] private float scanInterval = 0.15f;
+        [FormerlySerializedAs("scanInterval")]
+        [SerializeField] private float _scanInterval = 0.15f;
 
         [Tooltip("Layer mask for interactable colliders.")]
         [SerializeField] private LayerMask interactableLayerMask = ~0;
 
         [Tooltip("Max objects checked per scan (pre-allocated buffer).")]
-        [SerializeField] private int maxResults = 16;
+        [FormerlySerializedAs("maxResults")]
+        [SerializeField] private int _maxResults = 16;
 
         [Header("Debug")]
         [Tooltip("Print the nearby list to console on every change.")]
@@ -52,8 +56,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         /// <summary>Adjust at runtime if needed (e.g. perk system increases range).</summary>
         public float ScanRadius
         {
-            get => scanRadius;
-            set => scanRadius = Mathf.Max(0f, value);
+            get => _scanRadius;
+            set => _scanRadius = Mathf.Max(0f, value);
         }
 
         /// <summary>All IInteractable objects currently within radius, sorted closest-first.</summary>
@@ -99,13 +103,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         private void Awake()
         {
-            _overlapBuffer = new Collider[Mathf.Max(1, maxResults)];
+            _overlapBuffer = new Collider[Mathf.Max(1, _maxResults)];
         }
 
         private void Update()
         {
             if (Time.time < _nextScanTime) return;
-            _nextScanTime = Time.time + scanInterval;
+            _nextScanTime = Time.time + _scanInterval;
             PerformScan();
         }
 
@@ -119,7 +123,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         private void PerformScan()
         {
             int hitCount = Physics.OverlapSphereNonAlloc(
-                transform.position, scanRadius, _overlapBuffer, interactableLayerMask,
+                transform.position, _scanRadius, _overlapBuffer, interactableLayerMask,
                 QueryTriggerInteraction.Collide);
 
             // Collect unique IInteractable references from the hit colliders
@@ -316,9 +320,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
             // Outer scan radius — green
             Gizmos.color = new Color(0.2f, 1f, 0.4f, 0.15f);
-            Gizmos.DrawSphere(transform.position, scanRadius);
+            Gizmos.DrawSphere(transform.position, _scanRadius);
             Gizmos.color = new Color(0.2f, 1f, 0.4f, 0.8f);
-            Gizmos.DrawWireSphere(transform.position, scanRadius);
+            Gizmos.DrawWireSphere(transform.position, _scanRadius);
 
             // Lines to nearby items
             if (!Application.isPlaying) return;

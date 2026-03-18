@@ -3,7 +3,7 @@ using FishNet.Connection;
 using FishNet.Object.Synchronizing;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Interfaces;
-using NightHunt.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking.Player;
@@ -36,16 +36,8 @@ namespace NightHunt.Networking
         /// </summary>
         public static event System.Action<NetworkPlayer> OnOwnerReady;
 
-        #region Serialized References
-
-        //[SerializeField] private PlayerInventoryNetwork inventorySystem;
-
-        #endregion
-
-
         #region Public Accessors
 
-        //public PlayerInventoryNetwork Inventory => inventorySystem;
         public string DisplayName => PlayerData.DisplayName;
         public int TeamId => PlayerData.TeamId;
         public bool IsLocalPlayer => IsOwner;
@@ -303,18 +295,18 @@ namespace NightHunt.Networking
             var aimSystem = UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.Aim.AimSystem>();
             if (aimSystem != null)
             {
-                var statSystem = ComponentResolver.Find<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
+                var statSystem = ComponentResolver.Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
                                      .OnSelf()
                                      .InChildren()
                                      .OrLogWarning(
-                                         "[Auto] NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
+                                         "[Auto] NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
                                      .Resolve()
-                                 ?? ComponentResolver.Find<NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
+                                 ?? ComponentResolver.Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
                                      .OnSelf()
                                      .InChildren()
                                      .InParent()
                                      .OrLogWarning(
-                                         "[Auto] NightHunt.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
+                                         "[Auto] NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
                                      .Resolve();
                 if (statSystem == null)
                     Debug.LogWarning(

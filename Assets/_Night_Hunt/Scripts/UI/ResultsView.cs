@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using NightHunt.Core;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Networking;
@@ -191,10 +191,11 @@ namespace NightHunt.UI
             var mode = RoomState.Instance?.CurrentGameMode ?? NightHunt.Networking.GameMode.None;
             RoomState.Instance?.ClearRoom();
 
-            if (mode == NightHunt.Networking.GameMode.Custom_Relay)
-                SceneLoader.LoadCustomLobby();
-            else
-                SceneLoader.LoadHome();
+            // Đang ở gameplay scene → luôn dùng SceneLoader.LoadHome() để về 01_Home.
+            // UINavigator trong 01_Home sẽ tự điều hướng đến đúng panel.
+            // (Custom_Relay cũng về Home trước, Home panel có reconnect check)
+            Debug.Log($"[ResultsView] Match ended (mode={mode}) → LoadHome");
+            SceneLoader.LoadHome();
         }
 
         #endregion

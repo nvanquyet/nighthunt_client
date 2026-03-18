@@ -215,7 +215,7 @@ namespace NightHunt.Networking
         private void LoadHome()
         {
             RoomState.Instance?.ClearRoom();
-            SceneLoader.LoadHome();
+            //Todo: SceneLoader.LoadHome();
         }
     }
 }

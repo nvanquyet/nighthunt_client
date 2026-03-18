@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d19e8ae06c145af4db6252c1239bea9b, type: 3}
+  m_Name: GameModeConfig
+  m_EditorClassIdentifier: 
+  modes:
+  - modeKey: 1v1
+    displayName: 1 vs 1
+    description: Solo duel
+    playersPerTeam: 1
+    allowFill: 0
+    isEnabled: 1
+  - modeKey: 2v2
+    displayName: 2 vs 2
+    description: "Team of 2 \u2014 fill allowed"
+    playersPerTeam: 2
+    allowFill: 1
+    isEnabled: 1
+  - modeKey: 2v2
+    displayName: 2 vs 2 (No Fill)
+    description: "Team of 2 \u2014 party only"
+    playersPerTeam: 2
+    allowFill: 0
+    isEnabled: 1
+  - modeKey: 4v4
+    displayName: 4 vs 4
+    description: "Team of 4 \u2014 fill allowed"
+    playersPerTeam: 4
+    allowFill: 1
+    isEnabled: 1
+  - modeKey: 4v4
+    displayName: 4 vs 4 (No Fill)
+    description: "Team of 4 \u2014 party only"
+    playersPerTeam: 4
+    allowFill: 0
+    isEnabled: 1

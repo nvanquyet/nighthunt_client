@@ -52,6 +52,7 @@ namespace NightHunt.Data.DTOs
         public long roomId;
         public string roomCode;
         public string mode;
+        public string mapId;
         public string status;
         public bool isPublic;
         public bool isLocked;
@@ -95,13 +96,21 @@ namespace NightHunt.Data.DTOs
         public string status;
     }
 
+    /// <summary>
+    /// POST /api/rooms/{id}/update-settings
+    /// Always send the full current state — use BuildSettings() in CustomLobbyView.
+    /// JsonUtility does NOT serialize Nullable&lt;bool&gt; so all fields must be non-nullable.
+    /// Server performs partial update: only non-null fields are changed — but since C#
+    /// always sends all fields, the server will apply them all as expected.
+    /// </summary>
     [Serializable]
     public class UpdateRoomSettingsRequest
     {
-        public string mode; // Optional: 2v2, 3v3, 5v5
-        public bool? isPublic; // Optional: true/false
-        public bool? isLocked; // Optional: true/false
-        public string password; // Optional: new password (null to remove, empty to keep current)
+        public string mode;             // required — always send current or new value
+        public string mapId;            // required — always send current or new value
+        public bool   isPublic = true;  // required — always send current or new value
+        public bool   isLocked = false; // required — always send current or new value
+        public string password;         // optional — null/empty = keep existing password
     }
 
     [Serializable]

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NightHunt.Core;
 using UnityEngine;
 
 namespace NightHunt.Gameplay.Core.Config
@@ -6,38 +7,13 @@ namespace NightHunt.Gameplay.Core.Config
     /// <summary>
     /// Runtime config modifications (phase-based, zone-based)
     /// </summary>
-    public class RuntimeConfig : MonoBehaviour
+    public class RuntimeConfig : SingletonPersistent<RuntimeConfig>
     {
-        private static RuntimeConfig _instance;
-        public static RuntimeConfig Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    GameObject go = new GameObject("RuntimeConfig");
-                    _instance = go.AddComponent<RuntimeConfig>();
-                    DontDestroyOnLoad(go);
-                }
-                return _instance;
-            }
-        }
 
         private readonly Dictionary<string, float> phaseModifiers = new Dictionary<string, float>();
         private readonly Dictionary<string, float> zoneModifiers = new Dictionary<string, float>();
 
-        private void Awake()
-        {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-            }
-            else if (_instance != this)
-            {
-                Destroy(gameObject);
-            }
-        }
+
 
         /// <summary>
         /// Set phase modifier for a stat

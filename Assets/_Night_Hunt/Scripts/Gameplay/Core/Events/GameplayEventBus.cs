@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NightHunt.Core;
 using UnityEngine;
 
 namespace NightHunt.Gameplay.Core.Events
@@ -8,61 +9,14 @@ namespace NightHunt.Gameplay.Core.Events
     /// Centralized event bus for gameplay events
     /// Singleton pattern với proper cleanup
     /// </summary>
-    public class GameplayEventBus : MonoBehaviour
+    public class GameplayEventBus : Singleton<GameplayEventBus>
     {
-        private static GameplayEventBus _instance;
-        public static GameplayEventBus Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    // Tìm trong scene trước
-                    _instance = FindFirstObjectByType<GameplayEventBus>();
-                    
-                    // Nếu không có, tạo mới
-                    if (_instance == null)
-                    {
-                        GameObject go = new GameObject("GameplayEventBus");
-                        _instance = go.AddComponent<GameplayEventBus>();
-                        DontDestroyOnLoad(go);
-                    }
-                }
-                return _instance;
-            }
-        }
-
         private Dictionary<Type, List<Delegate>> subscribers = new Dictionary<Type, List<Delegate>>();
 
-        private void Awake()
+        protected override void OnDestroy()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-            }
-            else if (_instance != this)
-            {
-                Destroy(gameObject);
-            }
-        }
-
-        private void OnApplicationQuit()
-        {
-            // Cleanup khi application quit
-            _instance = null;
-        }
-
-        private void OnDestroy()
-        {
-            // Clear subscribers khi destroy
             ClearAllSubscribers();
-            
-            // Reset static instance nếu đây là instance chính
-            if (_instance == this)
-            {
-                _instance = null;
-            }
+            base.OnDestroy();
         }
 
         /// <summary>
@@ -122,10 +76,9 @@ namespace NightHunt.Gameplay.Core.Events
         /// </summary>
         public static void DestroySingleton()
         {
-            if (_instance != null)
+            if (HasInstance)
             {
-                Destroy(_instance.gameObject);
-                _instance = null;
+                Destroy(Instance.gameObject);
             }
         }
     }

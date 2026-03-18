@@ -1,4 +1,4 @@
-using FishNet.Object;
+﻿using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System;
 using System.Collections;
@@ -30,7 +30,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
         private IInventorySystem _inventorySystem;
         private IItemUseSystem _itemUseSystem;
 
-        [Header("Debug")] [SerializeField] private bool _enableDebugLogs = false;
+        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         #endregion
 
@@ -195,7 +195,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
             if (slotCount <= 0)
             {
                 Debug.LogError("[QuickSlotSystem] SlotCount = 0 after config lookup! " +
-                               "Fix: open your InventoryConfig ScriptableObject → QuickSlotConfig → SlotCount " +
+                               "Fix: open your InventoryConfig ScriptableObject â†’ QuickSlotConfig â†’ SlotCount " +
                                "and set it to the number of quickslot buttons on your HUD (e.g. 3). Falling back to 4.");
                 slotCount = 4;
             }
@@ -204,7 +204,8 @@ namespace NightHunt.GameplaySystems.QuickSlot
             for (int i = 0; i < slotCount; i++)
                 _quickSlots.Add(string.Empty);
 
-            Debug.Log($"[QuickSlotSystem] InitializeQuickSlots: initialised {slotCount} slots.");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[QuickSlotSystem] InitializeQuickSlots: initialised {slotCount} slots.");
         }
 
         #endregion
@@ -273,7 +274,8 @@ namespace NightHunt.GameplaySystems.QuickSlot
 
         public void AssignToQuickSlot(string instanceID, int slotIndex)
         {
-            Debug.Log(
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log(
                 $"[QuickSlotSystem][QS] AssignToQuickSlot: instanceID={instanceID}, slot={slotIndex}, IsServer={IsServerInitialized}, IsOwner={IsOwner}");
             if (IsServerInitialized)
                 AssignToQuickSlotServer(instanceID, slotIndex);
@@ -284,14 +286,16 @@ namespace NightHunt.GameplaySystems.QuickSlot
         [ServerRpc(RequireOwnership = true)]
         private void AssignToQuickSlotServerRpc(string instanceID, int slotIndex)
         {
-            Debug.Log(
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log(
                 $"[QuickSlotSystem][QS] AssignToQuickSlotServerRpc received: instanceID={instanceID}, slot={slotIndex}");
             AssignToQuickSlotServer(instanceID, slotIndex);
         }
 
         private void AssignToQuickSlotServer(string instanceID, int slotIndex)
         {
-            Debug.Log(
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log(
                 $"[QuickSlotSystem][QS] AssignToQuickSlotServer entered: instanceID={instanceID}, slot={slotIndex}, count={_quickSlots.Count}");
             if (slotIndex < 0 || slotIndex >= _quickSlots.Count)
             {
@@ -316,8 +320,9 @@ namespace NightHunt.GameplaySystems.QuickSlot
             }
 
             _quickSlots[slotIndex] = instanceID;
-            Debug.Log(
-                $"[QuickSlotSystem][QS] Server: Assigned '{itemDef?.DisplayName}' ({instanceID}) → slot {slotIndex} — SyncList will propagate to clients");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log(
+                $"[QuickSlotSystem][QS] Server: Assigned '{itemDef?.DisplayName}' ({instanceID}) â†’ slot {slotIndex} â€” SyncList will propagate to clients");
         }
 
         public void RemoveFromQuickSlot(int slotIndex)
@@ -335,7 +340,8 @@ namespace NightHunt.GameplaySystems.QuickSlot
         [ServerRpc(RequireOwnership = true)]
         private void RemoveFromQuickSlotServerRpc(int slotIndex)
         {
-            Debug.Log($"[QuickSlotSystem][QS] RemoveFromQuickSlotServerRpc received: slot={slotIndex}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[QuickSlotSystem][QS] RemoveFromQuickSlotServerRpc received: slot={slotIndex}");
             RemoveFromQuickSlotServer(slotIndex);
         }
 
@@ -350,7 +356,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
 
             _quickSlots[slotIndex] = string.Empty;
 
-            if (_enableDebugLogs)
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                 Debug.Log($"[QuickSlotSystem] Removed item from slot {slotIndex}");
         }
 
@@ -443,9 +449,9 @@ namespace NightHunt.GameplaySystems.QuickSlot
                 bool sameItem = _itemUseSystem.CurrentItem?.InstanceID == instanceID;
                 if (sameItem && def is ThrowableDefinition)
                 {
-                    // Same slot pressed again while in throw-mode → cancel
+                    // Same slot pressed again while in throw-mode â†’ cancel
                     _itemUseSystem.CancelUse();
-                    if (_enableDebugLogs)
+                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                         Debug.Log($"[QuickSlotSystem] Cancelled throw for slot {slotIndex}");
                 }
                 else
@@ -492,7 +498,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
             if (updated == null)
                 RemoveFromQuickSlotServer(slotIndex);
 
-            if (_enableDebugLogs)
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                 Debug.Log($"[QuickSlotSystem] Used {def?.DisplayName} from slot {slotIndex}");
         }
 
@@ -578,7 +584,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
                     {
                         RemoveFromQuickSlotServer(slotIndex);
 
-                        if (_enableDebugLogs)
+                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                             Debug.Log($"[QuickSlotSystem] Auto-removed consumed item from slot {slotIndex}");
                     }
 
@@ -629,7 +635,8 @@ namespace NightHunt.GameplaySystems.QuickSlot
         private void OnQuickSlotsChanged(SyncListOperation op, int index, string oldValue, string newValue,
             bool asServer)
         {
-            Debug.Log(
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log(
                 $"[QuickSlotSystem][QS] OnQuickSlotsChanged: op={op}, index={index}, old='{oldValue}', new='{newValue}', asServer={asServer}");
             if (asServer)
                 return;
@@ -643,21 +650,23 @@ namespace NightHunt.GameplaySystems.QuickSlot
                     var item = _inventorySystem?.GetItemByInstanceID(newValue);
                     if (item != null)
                     {
-                        Debug.Log(
+                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                            Debug.Log(
                             $"[QuickSlotSystem][QS] Firing OnQuickSlotAssigned: slot={index}, item={item.DefinitionID}");
                         OnQuickSlotAssigned?.Invoke(index, item);
                     }
                     else
                     {
                         Debug.LogWarning(
-                            $"[QuickSlotSystem][QS] Item '{newValue}' not yet in inventory cache — deferring...");
+                            $"[QuickSlotSystem][QS] Item '{newValue}' not yet in inventory cache â€” deferring...");
                         StartCoroutine(DeferredQuickSlotAssigned(index, newValue));
                     }
                 }
                 else if (op == SyncListOperation.Set)
                 {
                     // Set to empty string means slot was cleared.
-                    Debug.Log($"[QuickSlotSystem][QS] Slot {index} cleared — firing OnQuickSlotRemoved");
+                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                        Debug.Log($"[QuickSlotSystem][QS] Slot {index} cleared â€” firing OnQuickSlotRemoved");
                     OnQuickSlotRemoved?.Invoke(index);
                 }
             }
@@ -692,7 +701,8 @@ namespace NightHunt.GameplaySystems.QuickSlot
                 var item = _inventorySystem?.GetItemByInstanceID(instanceID);
                 if (item != null)
                 {
-                    Debug.Log(
+                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                        Debug.Log(
                         $"[QuickSlotSystem][QS] Deferred fire OnQuickSlotAssigned after {f + 1} frame(s): slot={slotIndex}, item={item.DefinitionID}");
                     OnQuickSlotAssigned?.Invoke(slotIndex, item);
                     yield break;
@@ -710,7 +720,8 @@ namespace NightHunt.GameplaySystems.QuickSlot
         [ContextMenu("Log QuickSlot State")]
         public void LogQuickSlotState()
         {
-            Debug.Log($"=== QuickSlots ({_quickSlots.Count}) ===");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"=== QuickSlots ({_quickSlots.Count}) ===");
 
             for (int i = 0; i < _quickSlots.Count; i++)
             {
@@ -718,15 +729,18 @@ namespace NightHunt.GameplaySystems.QuickSlot
                 if (item != null)
                 {
                     var def = ItemDatabase.GetDefinition(item.DefinitionID);
-                    Debug.Log($"  [{i}] {def?.DisplayName} x{item.Quantity}");
+                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                        Debug.Log($"  [{i}] {def?.DisplayName} x{item.Quantity}");
                 }
                 else
                 {
-                    Debug.Log($"  [{i}] [Empty]");
+                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                        Debug.Log($"  [{i}] [Empty]");
                 }
             }
 
-            Debug.Log($"Active handlers: {_activeCompletionHandlers.Count}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"Active handlers: {_activeCompletionHandlers.Count}");
         }
 
         #endregion

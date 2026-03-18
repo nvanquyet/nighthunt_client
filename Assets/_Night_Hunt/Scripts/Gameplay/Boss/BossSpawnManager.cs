@@ -22,6 +22,10 @@ namespace NightHunt.Gameplay.Boss
         [Header("References")]
         [SerializeField] private MatchPhaseManager _phaseManager;
 
+        [Header("Boss Spawn Config")]
+        [Tooltip("Config data cho từng boss spawn entry. Assign trong Inspector.")]
+        [SerializeField] private List<BossSpawnConfigData> _bossSpawnConfigs = new List<BossSpawnConfigData>();
+
         [Header("Boss Prefabs")]
         [Tooltip("Map each BossId string to a prefab. Order must match config BossId values.")]
         [SerializeField] private List<BossPrefabEntry> _bossPrefabs = new();
@@ -70,7 +74,7 @@ namespace NightHunt.Gameplay.Boss
         [Server]
         private void SpawnAllBosses()
         {
-            List<BossSpawnConfigData> configs = null; // TODO: load from new data source
+            List<BossSpawnConfigData> configs = _bossSpawnConfigs.Count > 0 ? _bossSpawnConfigs : null;
             if (configs == null || configs.Count == 0)
             {
                 Debug.LogWarning("[BossSpawnManager] No boss configs found.");

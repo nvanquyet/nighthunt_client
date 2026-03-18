@@ -1,4 +1,4 @@
-using FishNet.Connection;
+﻿using FishNet.Connection;
 using FishNet.Managing;
 using FishNet.Object;
 using NightHunt.Gameplay.Input.Core;
@@ -8,6 +8,7 @@ using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
 using UnityEngine;
 using NightHunt.Utilities;
+using NightHunt.GameplaySystems.Core.Configs;
 
 namespace NightHunt.GameplaySystems.Interaction
 {
@@ -35,13 +36,13 @@ namespace NightHunt.GameplaySystems.Interaction
         [SerializeField] private bool pickupAllMode = false;
 
         [Header("Debug")]
-        [SerializeField] private bool debugInputLogs = true;
+        [SerializeField] private NightHuntDebugConfig _debugConfig;
 
-        // ── Hold state ─────────────────────────────────────────────────────────────
+        // â”€â”€ Hold state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private bool _isHolding;
         private float _holdTimer;
-        /// <summary>Current hold target — any IHoldInteractable (WorldContainer, WorldDoor, WorldSwitch...).</summary>
+        /// <summary>Current hold target â€” any IHoldInteractable (WorldContainer, WorldDoor, WorldSwitch...).</summary>
         private IHoldInteractable _holdingInteractable;
 
         // Networking
@@ -57,7 +58,7 @@ namespace NightHunt.GameplaySystems.Interaction
             }
         }
 
-        // ── Unity lifecycle ──────────────────────────────────────────────────────
+        // â”€â”€ Unity lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void Awake()
         {
@@ -109,11 +110,11 @@ namespace NightHunt.GameplaySystems.Interaction
             HandleHoldInteract(Time.deltaTime);
         }
 
-        // ── Public API (called by InteractionInputHandler via events) ────────────
+        // â”€â”€ Public API (called by InteractionInputHandler via events) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         public void HandleInteractPerformed()
         {
-            if (debugInputLogs)
+            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] InteractPerformed received.");
 
             // Primary path: use IInteractable from RaycastDetector
@@ -121,17 +122,19 @@ namespace NightHunt.GameplaySystems.Interaction
             if (target != null && target.CanInteract(gameObject))
             {
             // IHoldInteractable: WorldContainer, WorldDoor, WorldSwitch, etc.
-            // HoldDuration == 0 → Instant mode (call Interact immediately).
+            // HoldDuration == 0 â†’ Instant mode (call Interact immediately).
             if (target is IHoldInteractable holdTarget && holdTarget.HoldDuration > 0)
             {
                 _isHolding = true;
                 _holdTimer = 0f;
                 _holdingInteractable = holdTarget;
-                Debug.Log($"[Interact] Hold started ({holdTarget.HoldDuration:F1}s): {target.InteractLabel}");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log($"[Interact] Hold started ({holdTarget.HoldDuration:F1}s): {target.InteractLabel}");
                 return;
             }
 
-                Debug.Log($"[Interact] {target.InteractLabel}");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log($"[Interact] {target.InteractLabel}");
                 target.Interact(gameObject);
                 return;
             }
@@ -139,7 +142,8 @@ namespace NightHunt.GameplaySystems.Interaction
             // No valid interact (for debugging: distinguish between no target vs blocked)
             if (target == null)
             {
-                Debug.Log("[Interact] InteractPerformed received but no interactable under crosshair.");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log("[Interact] InteractPerformed received but no interactable under crosshair.");
             }
             else
             {
@@ -166,11 +170,13 @@ namespace NightHunt.GameplaySystems.Interaction
                     if (!float.IsNaN(maxDist))
                         Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m, max={maxDist:F2}m)");
                     else
-                        Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m)");
+                        if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                            Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m)");
                 }
                 else
                 {
-                    Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel}");
+                    if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                        Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel}");
                 }
             }
 
@@ -183,13 +189,14 @@ namespace NightHunt.GameplaySystems.Interaction
                 _isHolding = false;
                 _holdTimer = 0f;
                 _holdingInteractable = null;
-                Debug.Log("[Interact] Hold canceled.");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log("[Interact] Hold canceled.");
             }
         }
 
         public void HandlePickupPerformed()
         {
-            if (debugInputLogs)
+            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] PickupPerformed received.");
 
             if (pickupAllMode && proximityScanner != null)
@@ -200,19 +207,21 @@ namespace NightHunt.GameplaySystems.Interaction
 
         public void HandleLogNearbyPerformed()
         {
-            if (debugInputLogs)
+            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] LogNearbyPerformed received.");
 
             if (proximityScanner != null)
                 proximityScanner.LogNearby();
             else
-                Debug.Log("[Interact] ProximityScanner not assigned.");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log("[Interact] ProximityScanner not assigned.");
         }
 
         public void TogglePickupAllMode()
         {
             pickupAllMode = !pickupAllMode;
-            Debug.Log($"[Interact] Pickup mode: {(pickupAllMode ? "ALL nearby" : "Single (aimed)")}");
+            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                Debug.Log($"[Interact] Pickup mode: {(pickupAllMode ? "ALL nearby" : "Single (aimed)")}");
         }
 
         public bool IsPickupAllMode => pickupAllMode;
@@ -234,7 +243,7 @@ namespace NightHunt.GameplaySystems.Interaction
             }
         }
 
-        // ── Hold interact ────────────────────────────────────────────────────────
+        // â”€â”€ Hold interact â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void HandleHoldInteract(float deltaTime)
         {
@@ -245,7 +254,8 @@ namespace NightHunt.GameplaySystems.Interaction
 
             if (_holdTimer >= _holdingInteractable.HoldDuration)
             {
-                Debug.Log($"[Interact] Hold complete: {_holdingInteractable.InteractLabel}");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log($"[Interact] Hold complete: {_holdingInteractable.InteractLabel}");
                 (_holdingInteractable as IInteractable)?.Interact(gameObject);
 
                 _isHolding = false;
@@ -254,7 +264,7 @@ namespace NightHunt.GameplaySystems.Interaction
             }
         }
 
-        // ── Pickup helpers ───────────────────────────────────────────────────────
+        // â”€â”€ Pickup helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>Pick up the single item currently aimed at (raycast target).</summary>
         private void PickupSingle()
@@ -263,7 +273,8 @@ namespace NightHunt.GameplaySystems.Interaction
             var target = raycastDetector?.CurrentInteractable;
             if (target != null && target.CanInteract(gameObject))
             {
-                Debug.Log($"[Pickup] Single: {target.InteractLabel}");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log($"[Pickup] Single: {target.InteractLabel}");
                 target.Interact(gameObject);
                 return;
             }
@@ -292,11 +303,13 @@ namespace NightHunt.GameplaySystems.Interaction
                     if (!float.IsNaN(maxDist))
                         Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m, max={maxDist:F2}m)");
                     else
-                        Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m)");
+                        if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                            Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m)");
                 }
                 else
                 {
-                    Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel}");
+                    if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                        Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel}");
                 }
             }
 
@@ -307,7 +320,8 @@ namespace NightHunt.GameplaySystems.Interaction
                 var playerNob = GetLocalPlayerNob();
                 if (playerNob != null)
                 {
-                    Debug.Log($"[Pickup] Legacy path: {pickup.ItemDefinitionID} x{pickup.Quantity}");
+                    if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                        Debug.Log($"[Pickup] Legacy path: {pickup.ItemDefinitionID} x{pickup.Quantity}");
                     pickup.RequestPickup(playerNob);
                 }
             }
@@ -326,7 +340,8 @@ namespace NightHunt.GameplaySystems.Interaction
             var nearby = proximityScanner.NearbyInteractables;
             if (nearby.Count == 0)
             {
-                Debug.Log("[Pickup] PickupAll: nothing nearby.");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log("[Pickup] PickupAll: nothing nearby.");
                 return;
             }
 
@@ -340,12 +355,13 @@ namespace NightHunt.GameplaySystems.Interaction
                 }
             }
 
-            Debug.Log($"[Pickup] PickupAll: triggered {count} pickup(s).");
+            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                Debug.Log($"[Pickup] PickupAll: triggered {count} pickup(s).");
         }
 
-        // ── Helper ───────────────────────────────────────────────────────────────
+        // â”€â”€ Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-        // PlayerInteractionSystem luôn nằm trên player GameObject — GetComponent<NetworkObject>() là chính xác.
+        // PlayerInteractionSystem luÃ´n náº±m trÃªn player GameObject â€” GetComponent<NetworkObject>() lÃ  chÃ­nh xÃ¡c.
         private NetworkObject GetLocalPlayerNob() => ComponentResolver.Find<NetworkObject>(this)
         .OnSelf()
         .InChildren()
@@ -369,14 +385,14 @@ namespace NightHunt.GameplaySystems.Interaction
             return null;
         }
 
-        // ── Input subscription helpers ──────────────────────────────────────────
+        // â”€â”€ Input subscription helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void HandleOwnerReady(NetworkPlayer player)
         {
             if (player == _networkPlayer)
             {
-                if (debugInputLogs)
-                    Debug.Log("[PlayerInteractionSystem] NetworkPlayer owner ready → trying to subscribe input.");
+                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    Debug.Log("[PlayerInteractionSystem] NetworkPlayer owner ready â†’ trying to subscribe input.");
                 TrySubscribeInput();
             }
         }
@@ -404,7 +420,7 @@ namespace NightHunt.GameplaySystems.Interaction
 
             _inputSubscribed = true;
 
-            if (debugInputLogs)
+            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] Subscribed to InteractionInputHandler events (local player).");
         }
 
@@ -430,9 +446,11 @@ namespace NightHunt.GameplaySystems.Interaction
 
             _inputSubscribed = false;
 
-            if (debugInputLogs)
+            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] Unsubscribed from InteractionInputHandler events.");
         }
     }
 }
+
+
 

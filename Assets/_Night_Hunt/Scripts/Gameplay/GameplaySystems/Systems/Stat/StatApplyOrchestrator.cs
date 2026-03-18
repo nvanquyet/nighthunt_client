@@ -7,10 +7,10 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Equipment;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Weapon;
-using NightHunt.StatSystem.Core.Data;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Systems;
+using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Systems;
 
 namespace NightHunt.GameplaySystems.Stat
 {

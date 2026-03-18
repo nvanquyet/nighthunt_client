@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using NightHunt.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.GameplaySystems.Core.Data;
 
 namespace NightHunt.GameplaySystems.Core.Interfaces

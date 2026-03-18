@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NightHunt.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input;
@@ -37,9 +38,8 @@ namespace NightHunt.Gameplay.Input.Core
     // Execution order: must Awake() BEFORE any IInputHandler so Instance is ready
     // when handlers call InitializeActions() in their own Awake().
     [UnityEngine.DefaultExecutionOrder(-100)]
-    public class InputLayerManager : MonoBehaviour
+    public class InputLayerManager : Singleton<InputLayerManager>
     {
-        public static InputLayerManager Instance { get; private set; }
 
         // ── Inspector ─────────────────────────────────────────────────────────────
         [Header("Configuration")]
@@ -70,10 +70,6 @@ namespace NightHunt.Gameplay.Input.Core
                 InputState.Paused,
                 InputLayer.UI
             },
-            // {
-            //     InputState.DroneControl,
-            //     InputLayer.Devices | InputLayer.Camera | InputLayer.UI
-            // },
             {
                 InputState.Spectating,
                 InputLayer.Spectator | InputLayer.UI | InputLayer.Team
@@ -163,20 +159,9 @@ namespace NightHunt.Gameplay.Input.Core
         #region Unity Lifecycle
         // ─────────────────────────────────────────────────────────────────────────
 
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
-            if (Instance != null && Instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
-            Instance = this;
             BuildLayerCache();
-        }
-
-        private void OnDestroy()
-        {
-            if (Instance == this) Instance = null;
         }
 
         #endregion

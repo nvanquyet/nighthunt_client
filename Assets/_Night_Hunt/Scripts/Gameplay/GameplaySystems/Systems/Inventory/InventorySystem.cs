@@ -6,9 +6,9 @@ using UnityEngine;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Utilities;
 
@@ -1004,7 +1004,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             if (itemDef is WeaponDefinition weaponDef)
                 newItem.CurrentMagazine =
-                    Mathf.RoundToInt(weaponDef.GetStatValue(NightHunt.StatSystem.Core.Types.ItemStatType.MagazineSize));
+                    Mathf.RoundToInt(weaponDef.GetStatValue(NightHunt.Gameplay.StatSystem.Core.Types.ItemStatType.MagazineSize));
 
             if (itemDef.AttachmentSlots != null && itemDef.AttachmentSlots.Length > 0)
                 newItem.AttachedItems = new string[itemDef.AttachmentSlots.Length];

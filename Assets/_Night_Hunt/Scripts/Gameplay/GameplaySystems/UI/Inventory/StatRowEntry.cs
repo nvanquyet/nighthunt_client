@@ -1,14 +1,14 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
     /// One stat row in the PlayerHUDPanel.
     /// Spawned at runtime by PlayerHUDPanel for every stat that has ShowInUI = true
-    /// in <see cref="NightHunt.StatSystem.Configs.PlayerStatUIConfig"/>.
+    /// in <see cref="NightHunt.Gameplay.StatSystem.Configs.PlayerStatUIConfig"/>.
     ///
     /// Prefab layout (suggested):
     ///   StatRow (StatRowEntry)

@@ -1,100 +1,104 @@
-using FishNet.Object;
+﻿using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Serialization;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Networking;
 using NightHunt.Utilities;
+using NightHunt.GameplaySystems.Core.Configs;
 
 namespace NightHunt.GameplaySystems.Loot
 {
     /// <summary>
-    /// Item rơi trên đất — player có thể pickup.
-    /// NETWORK: Server-authoritative. Client calls Interact() → ServerRpc fires.
+    /// Item rÆ¡i trÃªn Ä‘áº¥t â€” player cÃ³ thá»ƒ pickup.
+    /// NETWORK: Server-authoritative. Client calls Interact() â†’ ServerRpc fires.
     ///
-    /// ═══════════════════════════════════════════════════════════════════════════
-    /// ROOT CAUSE CỦA BUG "MODEL KHÔNG XUẤT HIỆN":
+    /// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    /// ROOT CAUSE Cá»¦A BUG "MODEL KHÃ”NG XUáº¤T HIá»†N":
     ///
-    ///   Thứ tự cũ (SAI):
-    ///     ServerManager.Spawn(netObj)   ← FishNet gọi OnStartClient() NGAY TRONG lệnh này
-    ///     worldItem.Initialize(data)    ← quá trễ! OnStartClient đã xong, SyncVar vẫn rỗng
+    ///   Thá»© tá»± cÅ© (SAI):
+    ///     ServerManager.Spawn(netObj)   â† FishNet gá»i OnStartClient() NGAY TRONG lá»‡nh nÃ y
+    ///     worldItem.Initialize(data)    â† quÃ¡ trá»…! OnStartClient Ä‘Ã£ xong, SyncVar váº«n rá»—ng
     ///
-    ///   Host mode: OnStartClient() chạy synchronously BÊN TRONG ServerManager.Spawn()
-    ///   → Tại thời điểm OnStartClient chạy, _syncItemData.Value = default (rỗng)
-    ///   → Không có defID → SpawnModelLocal bị skip → không có model.
+    ///   Host mode: OnStartClient() cháº¡y synchronously BÃŠN TRONG ServerManager.Spawn()
+    ///   â†’ Táº¡i thá»i Ä‘iá»ƒm OnStartClient cháº¡y, _syncItemData.Value = default (rá»—ng)
+    ///   â†’ KhÃ´ng cÃ³ defID â†’ SpawnModelLocal bá»‹ skip â†’ khÃ´ng cÃ³ model.
     ///
-    ///   Dedicated server: SyncVar value embed vào spawn packet khi Spawn() được gọi.
-    ///   Nếu SyncVar chưa set → packet không có data → client miss model.
+    ///   Dedicated server: SyncVar value embed vÃ o spawn packet khi Spawn() Ä‘Æ°á»£c gá»i.
+    ///   Náº¿u SyncVar chÆ°a set â†’ packet khÃ´ng cÃ³ data â†’ client miss model.
     ///
-    /// SOLUTION — InitializeBeforeSpawn():
-    ///   WorldSpawnManager gọi:
-    ///     worldItem.InitializeBeforeSpawn(data)   ← set _itemData + _syncItemData TRƯỚC
-    ///     ServerManager.Spawn(netObj)             ← FishNet embed SyncVar vào spawn packet
+    /// SOLUTION â€” InitializeBeforeSpawn():
+    ///   WorldSpawnManager gá»i:
+    ///     worldItem.InitializeBeforeSpawn(data)   â† set _itemData + _syncItemData TRÆ¯á»šC
+    ///     ServerManager.Spawn(netObj)             â† FishNet embed SyncVar vÃ o spawn packet
     ///
-    ///   Khi OnStartClient() chạy (host) hoặc client nhận packet (dedicated):
-    ///   _syncItemData.Value đã có data → SpawnModelLocal() thành công ✓
-    /// ═══════════════════════════════════════════════════════════════════════════
+    ///   Khi OnStartClient() cháº¡y (host) hoáº·c client nháº­n packet (dedicated):
+    ///   _syncItemData.Value Ä‘Ã£ cÃ³ data â†’ SpawnModelLocal() thÃ nh cÃ´ng âœ“
+    /// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     ///
     /// SPAWN FLOW sau fix:
     ///
     ///   HOST:
-    ///     InitializeBeforeSpawn() → _itemData set, _syncItemData.Value set
+    ///     InitializeBeforeSpawn() â†’ _itemData set, _syncItemData.Value set
     ///     ServerManager.Spawn()
-    ///       └─ OnStartNetwork() server + client
-    ///       └─ OnStartClient() ← chạy TRONG Spawn(), _syncItemData đã có value
-    ///             → SpawnModelLocal("OnStartClient") ✓
-    ///       └─ OnSyncItemDataChanged(asServer=true)  → SpawnModelLocal SKIP (ded.srv guard)
-    ///       └─ OnSyncItemDataChanged(asServer=false) → SpawnModelLocal SKIP (_modelSpawned=true)
+    ///       â””â”€ OnStartNetwork() server + client
+    ///       â””â”€ OnStartClient() â† cháº¡y TRONG Spawn(), _syncItemData Ä‘Ã£ cÃ³ value
+    ///             â†’ SpawnModelLocal("OnStartClient") âœ“
+    ///       â””â”€ OnSyncItemDataChanged(asServer=true)  â†’ SpawnModelLocal SKIP (ded.srv guard)
+    ///       â””â”€ OnSyncItemDataChanged(asServer=false) â†’ SpawnModelLocal SKIP (_modelSpawned=true)
     ///
-    ///   DEDICATED SERVER → CLIENT:
-    ///     Client nhận spawn packet (SyncVar value embedded)
-    ///       └─ OnStartNetwork() → subscribe
-    ///       └─ OnSyncItemDataChanged(asServer=false) → SpawnModelLocal("OnSyncItemDataChanged") ✓
-    ///       └─ OnStartClient() → _modelSpawned=true → SKIP
+    ///   DEDICATED SERVER â†’ CLIENT:
+    ///     Client nháº­n spawn packet (SyncVar value embedded)
+    ///       â””â”€ OnStartNetwork() â†’ subscribe
+    ///       â””â”€ OnSyncItemDataChanged(asServer=false) â†’ SpawnModelLocal("OnSyncItemDataChanged") âœ“
+    ///       â””â”€ OnStartClient() â†’ _modelSpawned=true â†’ SKIP
     /// </summary>
     public class WorldItem : NetworkBehaviour, IPickupable
     {
-        /// <summary>Fired server-side khi WorldItem bị despawn (pickup hoặc expired).</summary>
+        /// <summary>Fired server-side khi WorldItem bá»‹ despawn (pickup hoáº·c expired).</summary>
         public event System.Action OnDespawned;
 
         [Header("Settings")]
-        [Tooltip("Maximum distance to pickup — fallback khi không có LootableConfig.")]
+        [Tooltip("Maximum distance to pickup â€” fallback khi khÃ´ng cÃ³ LootableConfig.")]
+        [FormerlySerializedAs("maxPickupDistance")]
         [SerializeField]
-        private float maxPickupDistance = 3f;
+        private float _maxPickupDistance = 3f;
+        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
-        // Runtime config — inject từ WorldSpawnManager.
+        // Runtime config â€” inject tá»« WorldSpawnManager.
         private NightHunt.GameplaySystems.Core.Configs.LootableConfig _lootableConfig;
 
-        // ── SyncVar ───────────────────────────────────────────────────────────────
-        // PHẢI được set TRƯỚC ServerManager.Spawn() (dùng InitializeBeforeSpawn)
-        // để value được embed vào spawn packet → clients nhận data ngay lần đầu.
+        // â”€â”€ SyncVar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // PHáº¢I Ä‘Æ°á»£c set TRÆ¯á»šC ServerManager.Spawn() (dÃ¹ng InitializeBeforeSpawn)
+        // Ä‘á»ƒ value Ä‘Æ°á»£c embed vÃ o spawn packet â†’ clients nháº­n data ngay láº§n Ä‘áº§u.
         private readonly SyncVar<ItemInstanceData> _syncItemData = new SyncVar<ItemInstanceData>();
 
-        // ── Local state ───────────────────────────────────────────────────────────
+        // â”€â”€ Local state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private ItemInstanceData _itemData;
         private GameObject _modelInstance;
         private bool _initialized;
-        private bool _modelSpawned; // guard: SpawnModelLocal chỉ chạy 1 lần
+        private bool _modelSpawned; // guard: SpawnModelLocal chá»‰ cháº¡y 1 láº§n
         private Coroutine _waitDataCoroutine; // fallback polling coroutine
 
-        // ── Properties ────────────────────────────────────────────────────────────
+        // â”€â”€ Properties â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private bool IsDataReady => !string.IsNullOrEmpty(_itemData.DefinitionID);
 
         public ItemInstanceData ItemData => _itemData;
         public bool IsLootable => true;
 
-        // ── IPickupable ───────────────────────────────────────────────────────────
+        // â”€â”€ IPickupable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         public string ItemDefinitionID => _itemData.DefinitionID;
         public int Quantity => _itemData.Quantity;
         public bool IsPickedUp { get; private set; }
         private bool _isPickupPending;
 
-        // ── IInteractable ─────────────────────────────────────────────────────────
+        // â”€â”€ IInteractable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         public string InteractLabel
         {
@@ -106,7 +110,7 @@ namespace NightHunt.GameplaySystems.Loot
             }
         }
 
-        private float GetInteractDistance() => _lootableConfig?.MaxInteractDistance ?? maxPickupDistance;
+        private float GetInteractDistance() => _lootableConfig?.MaxInteractDistance ?? _maxPickupDistance;
 
         public bool CanInteract(GameObject interactor)
         {
@@ -127,7 +131,7 @@ namespace NightHunt.GameplaySystems.Loot
                 .Resolve();
             if (playerNob == null)
             {
-                Debug.LogError($"[WorldItem] Interact: '{interactor.name}' không có NetworkObject!");
+                Debug.LogError($"[WorldItem] Interact: '{interactor.name}' khÃ´ng cÃ³ NetworkObject!");
                 return;
             }
 
@@ -143,50 +147,55 @@ namespace NightHunt.GameplaySystems.Loot
         {
         }
 
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         // NETWORK LIFECYCLE
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
             _syncItemData.OnChange += OnSyncItemDataChanged;
 
-            Debug.Log($"[WorldItem] ── OnStartNetwork ── ObjId={ObjectId} " +
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ OnStartNetwork â”€â”€ ObjId={ObjectId} " +
                       $"IsServer={IsServerStarted} IsClient={IsClientStarted} " +
                       $"syncVal='{_syncItemData.Value.DefinitionID}' " +
                       $"_itemData='{_itemData.DefinitionID}'");
         }
 
-        // OnSpawnServer: fires SERVER-SIDE khi một connection trở thành observer của object này.
-        // Nếu log này KHÔNG xuất hiện khi client connect → observer/WriteSpawn chưa được gọi
-        // (problem nằm ở FishNet observer layer, không phải WorldItem code)
-        // Nếu log này XUẤT HIỆN nhưng client vẫn không thấy model → problem phía client
+        // OnSpawnServer: fires SERVER-SIDE khi má»™t connection trá»Ÿ thÃ nh observer cá»§a object nÃ y.
+        // Náº¿u log nÃ y KHÃ”NG xuáº¥t hiá»‡n khi client connect â†’ observer/WriteSpawn chÆ°a Ä‘Æ°á»£c gá»i
+        // (problem náº±m á»Ÿ FishNet observer layer, khÃ´ng pháº£i WorldItem code)
+        // Náº¿u log nÃ y XUáº¤T HIá»†N nhÆ°ng client váº«n khÃ´ng tháº¥y model â†’ problem phÃ­a client
         public override void OnSpawnServer(NetworkConnection connection)
         {
             base.OnSpawnServer(connection);
-            Debug.Log($"[WorldItem] ── OnSpawnServer ── conn={connection.ClientId} " +
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ OnSpawnServer â”€â”€ conn={connection.ClientId} " +
                       $"ObjId={ObjectId} defID='{_itemData.DefinitionID}'");
         }
 
         public override void OnStartClient()
         {
-            // !! ENTRY: nếu log này không xuất hiện → FishNet không gọi OnStartClient
-            Debug.Log($"[WorldItem] ── OnStartClient ENTRY ── ObjId={ObjectId} " +
+            // !! ENTRY: náº¿u log nÃ y khÃ´ng xuáº¥t hiá»‡n â†’ FishNet khÃ´ng gá»i OnStartClient
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ OnStartClient ENTRY â”€â”€ ObjId={ObjectId} " +
                       $"IsServer={IsServerStarted} IsClient={IsClientStarted}");
 
             base.OnStartClient();
 
-            // Dedicated server không cần render gì
+            // Dedicated server khÃ´ng cáº§n render gÃ¬
             if (IsServerStarted && !IsClientStarted)
             {
-                Debug.Log($"[WorldItem] ── OnStartClient ── SKIP (dedicated server) ObjId={ObjectId}");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldItem] â”€â”€ OnStartClient â”€â”€ SKIP (dedicated server) ObjId={ObjectId}");
                 return;
             }
 
             var syncVal = _syncItemData.Value;
 
-            Debug.Log($"[WorldItem] ── OnStartClient ── ObjId={ObjectId} " +
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ OnStartClient â”€â”€ ObjId={ObjectId} " +
                       $"syncVal='{syncVal.DefinitionID}' " +
                       $"_itemData='{_itemData.DefinitionID}' " +
                       $"_modelSpawned={_modelSpawned} " +
@@ -194,16 +203,18 @@ namespace NightHunt.GameplaySystems.Loot
 
             if (_modelSpawned)
             {
-                Debug.Log($"[WorldItem] OnStartClient: _modelSpawned=true → skip ObjId={ObjectId}");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldItem] OnStartClient: _modelSpawned=true â†’ skip ObjId={ObjectId}");
                 return;
             }
 
-            // Ưu tiên syncVal (đã embed từ spawn packet / set từ InitializeBeforeSpawn)
+            // Æ¯u tiÃªn syncVal (Ä‘Ã£ embed tá»« spawn packet / set tá»« InitializeBeforeSpawn)
             string defID = !string.IsNullOrEmpty(syncVal.DefinitionID)
                 ? syncVal.DefinitionID
                 : _itemData.DefinitionID;
 
-            Debug.Log($"[WorldItem] OnStartClient: resolved defID='{defID}' ObjId={ObjectId}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] OnStartClient: resolved defID='{defID}' ObjId={ObjectId}");
 
             if (!string.IsNullOrEmpty(defID))
             {
@@ -211,17 +222,18 @@ namespace NightHunt.GameplaySystems.Loot
                 {
                     _itemData = syncVal;
                     _initialized = true;
-                    Debug.Log($"[WorldItem] OnStartClient: synced _itemData từ syncVal ObjId={ObjectId}");
+                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                        Debug.Log($"[WorldItem] OnStartClient: synced _itemData tá»« syncVal ObjId={ObjectId}");
                 }
 
                 SpawnModelLocal("OnStartClient");
             }
             else
             {
-                // Edge case: data chưa arrive → poll
+                // Edge case: data chÆ°a arrive â†’ poll
                 Debug.LogWarning(
-                    $"[WorldItem] OnStartClient: defID rỗng → start WaitForDataCoroutine ObjId={ObjectId}. " +
-                    "Nếu thấy log này thường xuyên → InitializeBeforeSpawn() chưa được gọi trước Spawn()!");
+                    $"[WorldItem] OnStartClient: defID rá»—ng â†’ start WaitForDataCoroutine ObjId={ObjectId}. " +
+                    "Náº¿u tháº¥y log nÃ y thÆ°á»ng xuyÃªn â†’ InitializeBeforeSpawn() chÆ°a Ä‘Æ°á»£c gá»i trÆ°á»›c Spawn()!");
                 if (_waitDataCoroutine != null) StopCoroutine(_waitDataCoroutine);
                 _waitDataCoroutine = StartCoroutine(WaitForDataCoroutine());
             }
@@ -247,77 +259,83 @@ namespace NightHunt.GameplaySystems.Loot
                 _modelInstance = null;
             }
 
-            Debug.Log($"[WorldItem] ── OnStopNetwork ── ObjId={ObjectId}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ OnStopNetwork â”€â”€ ObjId={ObjectId}");
         }
 
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         // SERVER API
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
         /// <summary>
-        /// Gọi TRƯỚC ServerManager.Spawn() để data được embed vào spawn packet.
+        /// Gá»i TRÆ¯á»šC ServerManager.Spawn() Ä‘á»ƒ data Ä‘Æ°á»£c embed vÃ o spawn packet.
         ///
-        /// VÌ SAO PHẢI DÙNG METHOD NÀY (không dùng Initialize sau Spawn):
-        ///   FishNet embed SyncVar value vào spawn packet khi Spawn() được gọi.
-        ///   Host mode: OnStartClient() chạy synchronously BÊN TRONG Spawn() —
-        ///   nếu SyncVar chưa set thì OnStartClient thấy data rỗng → không có model.
+        /// VÃŒ SAO PHáº¢I DÃ™NG METHOD NÃ€Y (khÃ´ng dÃ¹ng Initialize sau Spawn):
+        ///   FishNet embed SyncVar value vÃ o spawn packet khi Spawn() Ä‘Æ°á»£c gá»i.
+        ///   Host mode: OnStartClient() cháº¡y synchronously BÃŠN TRONG Spawn() â€”
+        ///   náº¿u SyncVar chÆ°a set thÃ¬ OnStartClient tháº¥y data rá»—ng â†’ khÃ´ng cÃ³ model.
         ///
-        /// KHÔNG gọi method này sau Spawn — dùng UpdateData() nếu cần update sau.
+        /// KHÃ”NG gá»i method nÃ y sau Spawn â€” dÃ¹ng UpdateData() náº¿u cáº§n update sau.
         ///
-        /// LƯU Ý: KHÔNG ĐƯỢC dùng [Server] attribute VÀ KHÔNG guard NetworkManager ở đây!
+        /// LÆ¯U Ã: KHÃ”NG ÄÆ¯á»¢C dÃ¹ng [Server] attribute VÃ€ KHÃ”NG guard NetworkManager á»Ÿ Ä‘Ã¢y!
         ///   [Server] inject: if (!IsServerInitialized = IsSpawned && IsServerStarted) return;
-        ///   NetworkManager property chỉ được FishNet gán TRONG SpawnWithoutChecks,
-        ///   trước đó = null → bất kỳ guard nào dùng NetworkManager đều early-return.
-        ///   Caller (WorldSpawnManager) đã có [Server] guard → không cần check lại.
+        ///   NetworkManager property chá»‰ Ä‘Æ°á»£c FishNet gÃ¡n TRONG SpawnWithoutChecks,
+        ///   trÆ°á»›c Ä‘Ã³ = null â†’ báº¥t ká»³ guard nÃ o dÃ¹ng NetworkManager Ä‘á»u early-return.
+        ///   Caller (WorldSpawnManager) Ä‘Ã£ cÃ³ [Server] guard â†’ khÃ´ng cáº§n check láº¡i.
         /// </summary>
         public void InitializeBeforeSpawn(
             ItemInstanceData data,
             NightHunt.GameplaySystems.Core.Configs.LootableConfig lootableConfig = null)
         {
-            Debug.Log($"[WorldItem] ── InitializeBeforeSpawn ENTRY ── defID='{data.DefinitionID}'");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ InitializeBeforeSpawn ENTRY â”€â”€ defID='{data.DefinitionID}'");
 
             _itemData = data;
             _lootableConfig = lootableConfig;
             _initialized = true;
 
-            // Set SyncVar TRƯỚC Spawn → FishNet embed value vào spawn packet
+            // Set SyncVar TRÆ¯á»šC Spawn â†’ FishNet embed value vÃ o spawn packet
             _syncItemData.Value = data;
 
-            Debug.Log($"[WorldItem] ── InitializeBeforeSpawn ── " +
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ InitializeBeforeSpawn â”€â”€ " +
                       $"defID='{data.DefinitionID}' qty={data.Quantity} " +
                       $"syncVal='{_syncItemData.Value.DefinitionID}' ObjId={ObjectId}");
         }
 
-        /// <summary>Update data SAU khi đã spawn (ví dụ: thay đổi quantity).</summary>
+        /// <summary>Update data SAU khi Ä‘Ã£ spawn (vÃ­ dá»¥: thay Ä‘á»•i quantity).</summary>
         [Server]
         public void UpdateData(ItemInstanceData data)
         {
             _itemData = data;
             _syncItemData.Value = data;
-            Debug.Log($"[WorldItem] ── UpdateData ── defID='{data.DefinitionID}' ObjId={ObjectId}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ UpdateData â”€â”€ defID='{data.DefinitionID}' ObjId={ObjectId}");
         }
 
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         // SYNCVAR CALLBACK
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
         /// <summary>
-        /// Fires trên MỌI side khi _syncItemData thay đổi.
-        ///   asServer=true  → server side (dedicated server hoặc host-server)
-        ///   asServer=false → client side (remote client hoặc host-client)
+        /// Fires trÃªn Má»ŒI side khi _syncItemData thay Ä‘á»•i.
+        ///   asServer=true  â†’ server side (dedicated server hoáº·c host-server)
+        ///   asServer=false â†’ client side (remote client hoáº·c host-client)
         ///
-        /// HOST: fires 2 lần (asServer=true, asServer=false).
-        /// DEDICATED CLIENT: fires 1 lần (asServer=false).
+        /// HOST: fires 2 láº§n (asServer=true, asServer=false).
+        /// DEDICATED CLIENT: fires 1 láº§n (asServer=false).
         /// </summary>
         private void OnSyncItemDataChanged(ItemInstanceData oldData, ItemInstanceData newData, bool asServer)
         {
-            Debug.Log($"[WorldItem] ── OnSyncItemDataChanged ── asServer={asServer} " +
-                      $"old='{oldData.DefinitionID}' → new='{newData.DefinitionID}' " +
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] â”€â”€ OnSyncItemDataChanged â”€â”€ asServer={asServer} " +
+                      $"old='{oldData.DefinitionID}' â†’ new='{newData.DefinitionID}' " +
                       $"ObjId={ObjectId} _modelSpawned={_modelSpawned}");
 
             if (string.IsNullOrEmpty(newData.DefinitionID))
             {
-                Debug.Log($"[WorldItem] OnSyncItemDataChanged: newData.DefinitionID rỗng → skip ObjId={ObjectId}");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldItem] OnSyncItemDataChanged: newData.DefinitionID rá»—ng â†’ skip ObjId={ObjectId}");
                 return;
             }
 
@@ -327,76 +345,80 @@ namespace NightHunt.GameplaySystems.Loot
             SpawnModelLocal($"OnSyncItemDataChanged(asServer={asServer})");
         }
 
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
         // MODEL SPAWNING
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
         /// <summary>
-        /// Instantiate DroppedPrefab làm visual child (non-networked, client-side only).
+        /// Instantiate DroppedPrefab lÃ m visual child (non-networked, client-side only).
         ///
-        /// GUARDS (theo thứ tự):
-        ///   1. Dedicated server → skip (không cần renderer)
-        ///   2. _modelSpawned    → skip (đã có rồi)
-        ///   3. DefinitionID rỗng → skip (data chưa sẵn sàng)
-        ///   4. ItemDefinition null → error + skip
-        ///   5. DroppedPrefab null  → error + skip
+        /// GUARDS (theo thá»© tá»±):
+        ///   1. Dedicated server â†’ skip (khÃ´ng cáº§n renderer)
+        ///   2. _modelSpawned    â†’ skip (Ä‘Ã£ cÃ³ rá»“i)
+        ///   3. DefinitionID rá»—ng â†’ skip (data chÆ°a sáºµn sÃ ng)
+        ///   4. ItemDefinition null â†’ error + skip
+        ///   5. DroppedPrefab null  â†’ error + skip
         /// </summary>
         private void SpawnModelLocal(string caller)
         {
-            // !! ENTRY: nếu log này không xuất hiện → SpawnModelLocal chưa được gọi
-            Debug.Log($"[WorldItem] SpawnModelLocal ENTRY [{caller}]: " +
+            // !! ENTRY: náº¿u log nÃ y khÃ´ng xuáº¥t hiá»‡n â†’ SpawnModelLocal chÆ°a Ä‘Æ°á»£c gá»i
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] SpawnModelLocal ENTRY [{caller}]: " +
                       $"ObjId={ObjectId} IsServer={IsServerStarted} IsClient={IsClientStarted} " +
                       $"_modelSpawned={_modelSpawned} defID='{_itemData.DefinitionID}'");
 
-            // ── Guard 1 ───────────────────────────────────────────────────────────
+            // â”€â”€ Guard 1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (IsServerStarted && !IsClientStarted)
             {
-                Debug.Log($"[WorldItem] SpawnModelLocal [{caller}]: SKIP — dedicated server. ObjId={ObjectId}");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldItem] SpawnModelLocal [{caller}]: SKIP â€” dedicated server. ObjId={ObjectId}");
                 return;
             }
 
-            // ── Guard 2 ───────────────────────────────────────────────────────────
+            // â”€â”€ Guard 2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (_modelSpawned)
             {
-                Debug.Log($"[WorldItem] SpawnModelLocal [{caller}]: SKIP — already spawned. ObjId={ObjectId}");
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldItem] SpawnModelLocal [{caller}]: SKIP â€” already spawned. ObjId={ObjectId}");
                 return;
             }
 
-            // ── Guard 3 ───────────────────────────────────────────────────────────
+            // â”€â”€ Guard 3 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (string.IsNullOrEmpty(_itemData.DefinitionID))
             {
-                Debug.LogWarning($"[WorldItem] SpawnModelLocal [{caller}]: SKIP — _itemData.DefinitionID rỗng. " +
+                Debug.LogWarning($"[WorldItem] SpawnModelLocal [{caller}]: SKIP â€” _itemData.DefinitionID rá»—ng. " +
                                  $"ObjId={ObjectId} IsServer={IsServerStarted} IsClient={IsClientStarted}");
                 return;
             }
 
-            // ── Guard 4 ───────────────────────────────────────────────────────────
+            // â”€â”€ Guard 4 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             var def = ItemDatabase.GetDefinition(_itemData.DefinitionID);
             if (def == null)
             {
                 Debug.LogError(
                     $"[WorldItem] SpawnModelLocal [{caller}]: ItemDatabase.GetDefinition('{_itemData.DefinitionID}') = NULL! " +
-                    $"ObjId={ObjectId} — Kiểm tra: 1) ItemDatabase đã init chưa? " +
-                    $"2) DefinitionID '{_itemData.DefinitionID}' có tồn tại không?");
+                    $"ObjId={ObjectId} â€” Kiá»ƒm tra: 1) ItemDatabase Ä‘Ã£ init chÆ°a? " +
+                    $"2) DefinitionID '{_itemData.DefinitionID}' cÃ³ tá»“n táº¡i khÃ´ng?");
                 return;
             }
 
-            // ── Guard 5 ───────────────────────────────────────────────────────────
+            // â”€â”€ Guard 5 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (def.DroppedPrefab == null)
             {
                 Debug.LogError(
                     $"[WorldItem] SpawnModelLocal [{caller}]: def.DroppedPrefab = NULL cho '{_itemData.DefinitionID}'! " +
-                    $"ObjId={ObjectId} — Vào Inspector ItemDefinition '{_itemData.DefinitionID}' và gán DroppedPrefab.");
+                    $"ObjId={ObjectId} â€” VÃ o Inspector ItemDefinition '{_itemData.DefinitionID}' vÃ  gÃ¡n DroppedPrefab.");
                 return;
             }
 
-            // ── Instantiate ───────────────────────────────────────────────────────
-            Debug.Log($"[WorldItem] SpawnModelLocal [{caller}]: instantiating '{def.DroppedPrefab.name}' " +
+            // â”€â”€ Instantiate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] SpawnModelLocal [{caller}]: instantiating '{def.DroppedPrefab.name}' " +
                       $"for '{_itemData.DefinitionID}' at {transform.position} ObjId={ObjectId}");
 
             _modelInstance = Instantiate(def.DroppedPrefab, transform.position, transform.rotation, transform);
 
-            // DroppedPrefab phải là pure visual — không được có NetworkObject
+            // DroppedPrefab pháº£i lÃ  pure visual â€” khÃ´ng Ä‘Æ°á»£c cÃ³ NetworkObject
             var modelNetObj = ComponentResolver.Find<NetworkObject>(_modelInstance)
                 .OnSelf()
                 .InChildren()
@@ -404,23 +426,24 @@ namespace NightHunt.GameplaySystems.Loot
                 .Resolve();
             if (modelNetObj != null)
             {
-                Debug.LogWarning($"[WorldItem] DroppedPrefab '{def.ItemID}' có NetworkObject — removing. " +
-                                 "DroppedPrefab phải là pure visual.");
+                Debug.LogWarning($"[WorldItem] DroppedPrefab '{def.ItemID}' cÃ³ NetworkObject â€” removing. " +
+                                 "DroppedPrefab pháº£i lÃ  pure visual.");
                 Destroy(modelNetObj);
             }
 
-            // Force-enable tất cả renderer
+            // Force-enable táº¥t cáº£ renderer
             var renderers = _modelInstance.GetComponentsInChildren<Renderer>(true);
             foreach (var r in renderers)
                 r.enabled = true;
 
             _modelSpawned = true;
 
-            Debug.Log($"[WorldItem] SpawnModelLocal SUCCESS [{caller}]: " +
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] SpawnModelLocal SUCCESS [{caller}]: " +
                       $"defID='{_itemData.DefinitionID}' model='{_modelInstance.name}' " +
                       $"renderers={renderers.Length} ObjId={ObjectId}");
 
-            // Delay 1 frame → UpdateRenderers → force-enable lại
+            // Delay 1 frame â†’ UpdateRenderers â†’ force-enable láº¡i
             if (IsSpawned)
                 StartCoroutine(DelayedUpdateRenderers());
         }
@@ -440,13 +463,14 @@ namespace NightHunt.GameplaySystems.Loot
                 count++;
             }
 
-            Debug.Log($"[WorldItem] DelayedUpdateRenderers: {count} renderer(s) force-enabled. ObjId={ObjectId}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log($"[WorldItem] DelayedUpdateRenderers: {count} renderer(s) force-enabled. ObjId={ObjectId}");
         }
 
         /// <summary>
-        /// Fallback: poll data tối đa 3 giây.
-        /// Lý tưởng là KHÔNG BAO GIỜ vào đây nếu InitializeBeforeSpawn được dùng đúng.
-        /// Log warning để dễ phát hiện nếu flow sai.
+        /// Fallback: poll data tá»‘i Ä‘a 3 giÃ¢y.
+        /// LÃ½ tÆ°á»Ÿng lÃ  KHÃ”NG BAO GIá»œ vÃ o Ä‘Ã¢y náº¿u InitializeBeforeSpawn Ä‘Æ°á»£c dÃ¹ng Ä‘Ãºng.
+        /// Log warning Ä‘á»ƒ dá»… phÃ¡t hiá»‡n náº¿u flow sai.
         /// </summary>
         private IEnumerator WaitForDataCoroutine()
         {
@@ -473,22 +497,23 @@ namespace NightHunt.GameplaySystems.Loot
                         _initialized = true;
                     }
 
-                    Debug.Log(
+                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                        Debug.Log(
                         $"[WorldItem] WaitForDataCoroutine: found defID='{defID}' after {elapsed:F2}s ObjId={ObjectId}");
                     SpawnModelLocal("WaitForDataCoroutine");
                     yield break;
                 }
             }
 
-            Debug.LogError($"[WorldItem] WaitForDataCoroutine: TIMEOUT {kTimeout}s ObjId={ObjectId} — " +
-                           "KHÔNG CÓ MODEL! Root cause: InitializeBeforeSpawn() chưa được gọi " +
-                           "TRƯỚC ServerManager.Spawn() trong WorldSpawnManager.");
+            Debug.LogError($"[WorldItem] WaitForDataCoroutine: TIMEOUT {kTimeout}s ObjId={ObjectId} â€” " +
+                           "KHÃ”NG CÃ“ MODEL! Root cause: InitializeBeforeSpawn() chÆ°a Ä‘Æ°á»£c gá»i " +
+                           "TRÆ¯á»šC ServerManager.Spawn() trong WorldSpawnManager.");
             _waitDataCoroutine = null;
         }
 
-        // ═════════════════════════════════════════════════════════════════════════
-        // SERVER RPC — PICKUP
-        // ═════════════════════════════════════════════════════════════════════════
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+        // SERVER RPC â€” PICKUP
+        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
         [ServerRpc(RequireOwnership = false)]
         public void RequestPickup(NetworkObject playerNob, NetworkConnection conn = null)
@@ -527,7 +552,7 @@ namespace NightHunt.GameplaySystems.Loot
                 .Resolve();
             if (player == null)
             {
-                Debug.LogError($"[WorldItem] RequestPickup: không có NetworkPlayer trên '{playerNob.name}'.");
+                Debug.LogError($"[WorldItem] RequestPickup: khÃ´ng cÃ³ NetworkPlayer trÃªn '{playerNob.name}'.");
                 return;
             }
 
@@ -535,7 +560,7 @@ namespace NightHunt.GameplaySystems.Loot
             float maxDist = GetInteractDistance();
             if (dist > maxDist)
             {
-                Debug.LogWarning($"[WorldItem] RequestPickup: quá xa ({dist:F2}m > {maxDist}m).");
+                Debug.LogWarning($"[WorldItem] RequestPickup: quÃ¡ xa ({dist:F2}m > {maxDist}m).");
                 return;
             }
 
@@ -552,7 +577,7 @@ namespace NightHunt.GameplaySystems.Loot
                                 .Resolve();
             if (inventory == null)
             {
-                Debug.LogError($"[WorldItem] RequestPickup: IInventorySystem không tìm thấy trên '{player.name}'.");
+                Debug.LogError($"[WorldItem] RequestPickup: IInventorySystem khÃ´ng tÃ¬m tháº¥y trÃªn '{player.name}'.");
                 return;
             }
 
@@ -564,8 +589,9 @@ namespace NightHunt.GameplaySystems.Loot
 
             inventory.AddItem(_itemData.DefinitionID, _itemData.Quantity);
             IsPickedUp = true;
-            Debug.Log(
-                $"[WorldItem] ✓ Pickup: '{_itemData.DefinitionID}' ×{_itemData.Quantity} ClientId={conn.ClientId}");
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log(
+                $"[WorldItem] âœ“ Pickup: '{_itemData.DefinitionID}' Ã—{_itemData.Quantity} ClientId={conn.ClientId}");
             DespawnPickup();
         }
 
@@ -582,12 +608,12 @@ namespace NightHunt.GameplaySystems.Loot
             base.Despawn();
         }
 
-        // ── Gizmos ───────────────────────────────────────────────────────────────
+        // â”€â”€ Gizmos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void OnDrawGizmos()
         {
             Gizmos.color = Color.green;
-            Gizmos.DrawWireSphere(transform.position, maxPickupDistance);
+            Gizmos.DrawWireSphere(transform.position, _maxPickupDistance);
         }
     }
 }

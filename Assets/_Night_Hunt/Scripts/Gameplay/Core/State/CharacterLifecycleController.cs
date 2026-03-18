@@ -3,8 +3,8 @@ using FishNet.Object;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Respawn;
 using NightHunt.Networking;
-using NightHunt.StatSystem.Core.Interfaces;
-using NightHunt.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using UnityEngine;
 using NightHunt.Utilities;
 
@@ -146,7 +146,7 @@ namespace NightHunt.Gameplay.Core.State
             // nên ta cast sang concrete nếu có để lấy event.
             if (_statSystem is Component comp)
             {
-                var concrete = comp as NightHunt.StatSystem.Systems.PlayerStatSystem;
+                var concrete = comp as NightHunt.Gameplay.StatSystem.Systems.PlayerStatSystem;
                 if (concrete != null)
                 {
                     concrete.OnStatChanged += HandleStatChanged;
@@ -158,7 +158,7 @@ namespace NightHunt.Gameplay.Core.State
         {
             if (_statSystem is Component comp)
             {
-                var concrete = comp as NightHunt.StatSystem.Systems.PlayerStatSystem;
+                var concrete = comp as NightHunt.Gameplay.StatSystem.Systems.PlayerStatSystem;
                 if (concrete != null)
                 {
                     concrete.OnStatChanged -= HandleStatChanged;

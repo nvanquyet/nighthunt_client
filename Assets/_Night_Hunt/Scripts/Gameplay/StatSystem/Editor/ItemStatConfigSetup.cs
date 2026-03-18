@@ -1,13 +1,13 @@
 #if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
-using NightHunt.StatSystem.Configs;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Configs;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 
-namespace NightHunt.StatSystem.Editor
+namespace NightHunt.Gameplay.StatSystem.Editor
 {
     /// <summary>
     /// Static helpers to setup ItemStatConfig values. Used by definition editors.

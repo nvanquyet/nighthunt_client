@@ -3,15 +3,6 @@ using UnityEngine;
 namespace NightHunt.GameplaySystems.Core.Configs
 {
     /// <summary>
-    /// Interaction mode for lootable objects
-    /// </summary>
-    public enum LootInteractionMode
-    {
-        Instant,    // Bấm 1 phát là loot/interact
-        Hold        // Giữ nút để loot/interact
-    }
-
-    /// <summary>
     /// Configuration for lootable/interactable objects
     /// Defines how players interact with WorldItem, WorldContainer, WorldCorpse, etc.
     /// </summary>
@@ -42,5 +33,10 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Tooltip("Khoảng cách tối đa để interact (meters)")]
         [Min(0.5f)]
         public float MaxInteractDistance = 3f;
+
+        [Header("Despawn")]
+        [Tooltip("Seconds until a lootable object (corpse, container) auto-despawns. 0 = never.")]
+        [Min(0f)]
+        public float DespawnTime = 300f;
     }
 }

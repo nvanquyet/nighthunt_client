@@ -1,14 +1,13 @@
 using UnityEngine;
-using NightHunt.StatSystem.Core.Types;
-using NightHunt.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Core.Data;
 
-namespace NightHunt.StatSystem.Configs
+namespace NightHunt.Gameplay.StatSystem.Configs
 {
     /// <summary>
     /// Base config for item stats. Contains Stats + PlayerModifiers + ItemModifiers.
     /// Equipment/Weapon use PlayerModifiers. Attachment uses ItemModifiers.
     /// </summary>
-    [CreateAssetMenu(fileName = "ItemStatConfig", menuName = "NightHunt/StatSystem/Item Stat Config")]
     public class ItemStatConfig : ScriptableObject
     {
         [Header("Base Stats")]

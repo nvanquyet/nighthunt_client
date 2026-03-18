@@ -1,38 +1,66 @@
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using NightHunt.Data;
 using NightHunt.Gameplay.Match;
 
 namespace NightHunt.Gameplay.Scoring
 {
     /// <summary>
-    /// Phase-based score multipliers
+    /// Phase-based score multipliers.
+    /// Prefer the config-aware overload <see cref="GetPhaseMultiplier(MatchPhaseState, IEnumerable{MatchPhaseConfigData})"/>
+    /// so values come from designer data rather than code.
     /// </summary>
     public static class ScoreMultiplier
     {
+        // ── Config-aware (preferred) ──────────────────────────────────────────
         /// <summary>
-        /// Get score multiplier for current phase
+        /// Returns the ScoreMultiplier from the matching MatchPhaseConfigData entry.
+        /// Falls back to hardcoded defaults if configs is null or no entry matches.
+        /// </summary>
+        public static float GetPhaseMultiplier(MatchPhaseState phase, IEnumerable<MatchPhaseConfigData> configs)
+        {
+            if (configs != null)
+            {
+                string phaseName = MatchPhaseManager.PhaseNames.Preparation;
+                switch (phase)
+                {
+                    case MatchPhaseState.Preparation: phaseName = MatchPhaseManager.PhaseNames.Preparation; break;
+                    case MatchPhaseState.Hunt:        phaseName = MatchPhaseManager.PhaseNames.Hunt;        break;
+                    case MatchPhaseState.Lockdown:    phaseName = MatchPhaseManager.PhaseNames.Lockdown;    break;
+                }
+                var entry = configs.FirstOrDefault(c => c.Phase == phaseName);
+                if (entry != null) return entry.ScoreMultiplier;
+            }
+            return GetPhaseMultiplier(phase);
+        }
+
+        /// <summary>
+        /// Apply phase multiplier to score (config-aware).
+        /// </summary>
+        public static int ApplyMultiplier(int baseScore, MatchPhaseState phase, IEnumerable<MatchPhaseConfigData> configs)
+            => Mathf.RoundToInt(baseScore * GetPhaseMultiplier(phase, configs));
+
+        // ── Fallback (hardcoded defaults) ─────────────────────────────────────
+        /// <summary>
+        /// Hardcoded fallback multipliers — use only when no config data is available.
         /// </summary>
         public static float GetPhaseMultiplier(MatchPhaseState phase)
         {
             switch (phase)
             {
-                case MatchPhaseState.Preparation:
-                    return 1f; // No bonus in preparation
-                case MatchPhaseState.Hunt:
-                    return 1.2f; // 20% bonus in hunt phase
-                case MatchPhaseState.Lockdown:
-                    return 1.5f; // 50% bonus in lockdown
-                default:
-                    return 1f;
+                case MatchPhaseState.Preparation: return 1f;
+                case MatchPhaseState.Hunt:        return 1.2f;
+                case MatchPhaseState.Lockdown:    return 1.5f;
+                default:                          return 1f;
             }
         }
 
         /// <summary>
-        /// Apply phase multiplier to score
+        /// Apply phase multiplier to score (hardcoded fallback).
         /// </summary>
         public static int ApplyMultiplier(int baseScore, MatchPhaseState phase)
-        {
-            return Mathf.RoundToInt(baseScore * GetPhaseMultiplier(phase));
-        }
+            => Mathf.RoundToInt(baseScore * GetPhaseMultiplier(phase));
     }
 }
 

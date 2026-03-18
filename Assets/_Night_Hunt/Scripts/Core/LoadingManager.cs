@@ -1,69 +1,90 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.Networking;
+using NightHunt.Config;
 using NightHunt.Core;
-using NightHunt.Services.Auth;
 using NightHunt.State;
 using NightHunt.UI;
+using NightHunt.Utils;
 
 namespace NightHunt.Core
 {
     /// <summary>
-    /// LoadingManager - Manages loading screen and initializes GameManager
-    /// Scene: FirstLoading (chứa cả GameManager và PersistentUICanvas)
-    /// Flow: FirstLoading → Login (auto-login check happens in LoginView)
-    /// Sử dụng Singleton pattern để dễ access
+    /// LoadingManager — App startup bootstrap. Chạy một lần khi 01_Home load.
+    ///
+    /// Flow (theo thứ tự):
+    ///   1. Chờ GameManager khởi tạo (DontDestroyOnLoad)
+    ///   2. Chờ PersistentUICanvas sẵn sàng
+    ///   3. Services warm-up (ngắn)
+    ///   4. Internet check → nếu OFFLINE: block + hiện Retry button (KHÔNG xoá token)
+    ///                     → nếu ONLINE: tiếp tục
+    ///   5. AutoLogin check:
+    ///        - Không có token  → UINavigator.GoLogin()
+    ///        - AutoLogin OK    → UINavigator.GoHome() hoặc GoLobby()
+    ///        - AutoLogin FAIL  → xoá token → UINavigator.GoLogin()
+    ///
+    /// Khác với MatchLoadingOverlay: LoadingManager chỉ chạy khi app khởi động,
+    /// MatchLoadingOverlay chạy trước mỗi lần vào gameplay.
     /// </summary>
     public class LoadingManager : MonoBehaviour
     {
-        private static LoadingManager instance;
-        
+        // ─── PlayerPrefs keys ───────────────────────────────────────────────
+        public const string KEY_REFRESH_TOKEN = "auth_refresh_token";
+        public const string KEY_REMEMBER_ME   = "auth_remember_me";
+
+        // ─── Singleton ──────────────────────────────────────────────────────
+        private static LoadingManager _instance;
         public static LoadingManager Instance
         {
             get
             {
-                if (instance == null)
+                if (_instance == null)
                 {
-                    // Try to find in PersistentUICanvas first
                     if (PersistentUICanvas.Instance != null)
-                    {
-                        instance = PersistentUICanvas.Instance.LoadingManager;
-                    }
-                    
-                    // If still null, find in scene
-                    if (instance == null)
-                    {
-                        instance = FindFirstObjectByType<LoadingManager>();
-                    }
+                        _instance = PersistentUICanvas.Instance.LoadingManager;
+
+                    if (_instance == null)
+                        _instance = FindFirstObjectByType<LoadingManager>();
                 }
-                return instance;
+                return _instance;
             }
         }
 
+        // ─── Inspector ──────────────────────────────────────────────────────
         [Header("UI References")]
-        [SerializeField] private GameObject loadingPanel;
-        [SerializeField] private UnityEngine.UI.Slider progressBar;
-        [SerializeField] private TMPro.TextMeshProUGUI loadingText;
-        [SerializeField] private float minLoadingTime = 1f;
+        [SerializeField] private GameObject           loadingPanel;
+        [SerializeField] private UnityEngine.UI.Slider        progressBar;
+        [SerializeField] private TMPro.TextMeshProUGUI         loadingText;
+        [SerializeField] private UnityEngine.UI.Button         retryButton;  // Hie\u0323n khi offline
 
-        private static string targetScene; // Will be set to SceneLoader.SCENE_LOGIN if empty
-        private bool isShowing = false;
+        [Header("Settings")]
+        [SerializeField] private float minLoadingTime  = 1.2f;
+        [SerializeField] private float internetTimeout = 5f;   // Giây ping / health check timeout
+
+        [Header("Backend Health")]
+        [Tooltip("Config chứa apiHost để ping health endpoint.")]
+        [SerializeField] private BackendConfig _backendConfig;
+        [Tooltip("Path của health endpoint. Default: /health")]
+        [SerializeField] private string        _healthPath = "/health";
+
+        // ─── State ──────────────────────────────────────────────────────────
+        private bool      _isShowing;
+        private bool      _retryRequested;
+        private PanelType _targetPanel = PanelType.Login; // default fallback
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Lifecycle
+        // ─────────────────────────────────────────────────────────────────────
 
         private void Awake()
         {
-            // Set instance
-            if (instance == null)
-            {
-                instance = this;
-            }
+            if (_instance == null)
+                _instance = this;
         }
 
         private void OnDestroy()
         {
-            if (instance == this)
-            {
-                instance = null;
-            }
+            if (_instance == this) _instance = null;
         }
 
         private void Start()
@@ -71,256 +92,353 @@ namespace NightHunt.Core
             if (loadingPanel != null)
             {
                 loadingPanel.SetActive(true);
-                isShowing = true;
+                _isShowing = true;
             }
-            StartCoroutine(InitializeAndLoad());
+
+            // Retry button ẩn mặc định, chỉ hiện khi offline
+            if (retryButton != null)
+            {
+                retryButton.gameObject.SetActive(false);
+                retryButton.onClick.AddListener(OnRetryClicked);
+            }
+
+            StartCoroutine(InitFlow());
         }
 
-        /// <summary>
-        /// Set target scene to load after initialization
-        /// </summary>
-        public static void SetTargetScene(string sceneName)
-        {
-            targetScene = sceneName;
-        }
+        // ─────────────────────────────────────────────────────────────────────
+        // Main Init Flow
+        // ─────────────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Initialize GameManager và PersistentUICanvas, check auto login, sau đó load target scene
-        /// </summary>
-        private IEnumerator InitializeAndLoad()
+        private IEnumerator InitFlow()
         {
             float startTime = Time.time;
-            
-            // Step 1: Initialize GameManager (đã có trong scene)
-            UpdateLoadingText("Initializing game...");
-            UpdateProgress(0.1f);
+
+            // ── Step 1: Chờ GameManager ──────────────────────────────────────
+            UpdateLoadingUI("Khởi động game...", 0.05f);
             yield return StartCoroutine(WaitForGameManager());
 
-            // Step 2: Initialize PersistentUICanvas (GameManager sẽ tự động tạo)
-            UpdateLoadingText("Initializing UI...");
-            UpdateProgress(0.3f);
+            // ── Step 2: Chờ PersistentUICanvas ──────────────────────────────
+            UpdateLoadingUI("Khởi tạo giao diện...", 0.25f);
             yield return StartCoroutine(WaitForPersistentUICanvas());
 
-            // Step 3: Initialize services
-            UpdateLoadingText("Loading services...");
-            UpdateProgress(0.5f);
-            yield return new WaitForSeconds(0.2f); // Give services time to initialize
+            // ── Step 3: Services warm-up ─────────────────────────────────
+            UpdateLoadingUI("Tải dịch vụ...", 0.40f);
+            yield return new WaitForSeconds(0.1f);
 
-            // Step 4: Check auto login and decide target scene
-            UpdateLoadingText("Checking session...");
-            UpdateProgress(0.6f);
-            yield return StartCoroutine(CheckAutoLoginAndDecideScene());
+            // ── Step 4: Kiểm tra kết nối internet (OS-level) ─────────────────
+            yield return StartCoroutine(WaitForInternet());
 
-            // Step 5: Ensure minimum loading time
-            float elapsedTime = Time.time - startTime;
-            if (elapsedTime < minLoadingTime)
+            // ── Step 5: Kiểm tra backend có hoạt động không ─────────────────
+            yield return StartCoroutine(WaitForBackendHealth());
+
+            // ── Step 6: Remember Me / Auto-Login check ───────────────────
+            yield return StartCoroutine(CheckAutoLoginFlow());
+
+            // ── Step 7: Đảm bảo thời gian tối thiểu ────────────────────────
+            float elapsed = Time.time - startTime;
+            if (elapsed < minLoadingTime)
+                yield return new WaitForSeconds(minLoadingTime - elapsed);
+
+            // ── Step 8: Điều hướng ───────────────────────────────────────────
+            UpdateLoadingUI("Hoàn tất!", 1.0f);
+            yield return new WaitForSeconds(0.15f);
+
+            Navigate();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Auto-Login Flow
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Kiểm tra refreshToken local.
+        /// Nếu có → gọi API AutoLogin → lấy accessToken mới.
+        /// Nếu không / thất bại → về LoginPanel.
+        /// </summary>
+        private IEnumerator CheckAutoLoginFlow()
+        {
+            // ── Đọc token local ──────────────────────────────────────────────
+            string refreshToken = SecureStorage.GetString(KEY_REFRESH_TOKEN, "");
+
+            if (string.IsNullOrEmpty(refreshToken))
             {
-                yield return new WaitForSeconds(minLoadingTime - elapsedTime);
+                UpdateLoadingUI("Vui lòng đăng nhập...", 0.85f);
+                _targetPanel = PanelType.Login;
+                yield break;
             }
 
-            // Step 6: Load target scene
-            UpdateLoadingText("Loading game...");
-            UpdateProgress(0.7f);
-            yield return StartCoroutine(LoadTargetScene());
+            // ── Gọi AutoLogin API ────────────────────────────────────────────
+            UpdateLoadingUI("Đang xác thực tài khoản...", 0.60f);
 
-            // Step 7: Hide loading after scene is loaded
-            UpdateProgress(1.0f);
-            yield return new WaitForSeconds(0.2f); // Small delay to ensure scene is ready
+            bool completed = false;
+            bool success   = false;
+
+            if (GameManager.Instance?.AuthService != null)
+            {
+                GameManager.Instance.AuthService
+                    .AutoLogin()
+                    .ContinueWith(task =>
+                    {
+                        success   = task.Result.Success;
+                        completed = true;
+                    });
+            }
+            else
+            {
+                // AuthService không có → về Login
+                Debug.LogWarning("[LoadingManager] AuthService null — skipping AutoLogin");
+                PlayerPrefs.DeleteKey(KEY_REFRESH_TOKEN);
+                PlayerPrefs.Save();
+                _targetPanel = PanelType.Login;
+                yield break;
+            }
+
+            // ── Chờ kết quả (progress tăng dần 60% → 82%) ───────────────────
+            float timeout = 10f, waited = 0f;
+            while (!completed && waited < timeout)
+            {
+                waited += Time.deltaTime;
+                float t = Mathf.Clamp01(waited / timeout);
+                UpdateLoadingUI("Đang xác thực tài khoản...", Mathf.Lerp(0.60f, 0.82f, t));
+                yield return null;
+            }
+
+            // ── Xử lý kết quả ───────────────────────────────────────────────
+            if (success)
+            {
+                UpdateLoadingUI("Đăng nhập thành công!", 0.88f);
+                yield return new WaitForSeconds(0.1f);
+
+                // Còn trong room → vào thẳng Lobby
+                bool wasInRoom = GameManager.Instance?.RoomState != null
+                              && GameManager.Instance.RoomState.IsInRoom
+                              && !string.IsNullOrEmpty(GameManager.Instance.RoomState.RoomId.ToString());
+
+                _targetPanel = wasInRoom ? PanelType.Lobby : PanelType.Home;
+                Debug.Log($"[LoadingManager] AutoLogin OK → target={_targetPanel}");
+            }
+            else
+            {
+                // Token hết hạn hoặc API lỗi → xóa token, về Login
+                Debug.Log("[LoadingManager] AutoLogin failed — clearing token");
+                SecureStorage.DeleteKey(KEY_REFRESH_TOKEN);
+
+                UpdateLoadingUI("Phiên đăng nhập hết hạn...", 0.88f);
+                yield return new WaitForSeconds(0.1f);
+
+                _targetPanel = PanelType.Login;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Internet check (block + retry)
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Block flow đến khi có kết nối mạng.
+        /// Dùng Application.internetReachability — nhanh, không cần ping thực.
+        /// QUAN TRỌNG: KHÔNG bao giờ xóa token khi offline.
+        /// </summary>
+        private IEnumerator WaitForInternet()
+        {
+            if (Application.internetReachability != NetworkReachability.NotReachable)
+            {
+                UpdateLoadingUI("Kết nối sẵn sàng...", 0.44f);
+                yield break;
+            }
+
+            Debug.LogWarning("[LoadingManager] Offline detected — blocking until internet returns.");
+            ShowRetryButton(true);
+
+            while (Application.internetReachability == NetworkReachability.NotReachable)
+            {
+                UpdateLoadingUI("⚠️ Mất kết nối internet. Kiểm tra mạng rồi bấm Thử lại.", 0.42f);
+
+                _retryRequested = false;
+                float waited = 0f;
+                while (!_retryRequested && waited < 2f)
+                {
+                    waited += Time.deltaTime;
+                    yield return null;
+                }
+
+                if (_retryRequested && Application.internetReachability == NetworkReachability.NotReachable)
+                    ToastService.Instance?.Show("Vẫn mất mạng", "Chưa phát hiện kết nối internet.");
+
+                _retryRequested = false;
+            }
+
+            ShowRetryButton(false);
+            UpdateLoadingUI("Kết nối đã khôi phục!", 0.44f);
+            yield return new WaitForSeconds(0.3f);
+            Debug.Log("[LoadingManager] Internet restored — continuing.");
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Backend health check
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Ping GET {_healthPath} để xác nhận server đang chạy.
+        /// Block flow nếu server không phản hồi, cho phép retry thủ công hoặc tự động sau 5s.
+        /// Phân biệt rõ: "không kết nối được" vs "server trả lỗi 5xx (bảo trì)".
+        /// </summary>
+        private IEnumerator WaitForBackendHealth()
+        {
+            while (true)
+            {
+                UpdateLoadingUI("Kiểm tra server...", 0.50f);
+
+                string url = _backendConfig != null
+                    ? $"{_backendConfig.GetApiBaseUrl()}{_healthPath}"
+                    : $"http://localhost:8080{_healthPath}";
+
+                using var req = UnityWebRequest.Get(url);
+                req.timeout = Mathf.Max(1, (int)internetTimeout);
+                yield return req.SendWebRequest();
+
+                bool ok = req.result == UnityWebRequest.Result.Success
+                       && (req.responseCode == 200 || req.responseCode == 204);
+
+                if (ok)
+                {
+                    ShowRetryButton(false);
+                    UpdateLoadingUI("Server sẵn sàng!", 0.58f);
+                    yield break;
+                }
+
+                // Xác định loại lỗi cho Toast rõ ràng hơn
+                bool serverError = req.responseCode >= 500;
+                string errorMsg = serverError
+                    ? "⚠️ Server đang bảo trì. Vui lòng thử lại sau."
+                    : "⚠️ Không kết nối được server.";
+
+                UpdateLoadingUI(errorMsg, 0.50f);
+                ShowRetryButton(true);
+
+                Debug.LogWarning($"[LoadingManager] Backend health failed: result={req.result} code={req.responseCode} err={req.error}");
+
+                // Tự retry sau 5s hoặc ngay khi user bấm Retry
+                _retryRequested = false;
+                float waited = 0f;
+                while (!_retryRequested && waited < 5f)
+                {
+                    waited += Time.deltaTime;
+                    yield return null;
+                }
+                _retryRequested = false;
+
+                UpdateLoadingUI("Đang thử lại...", 0.50f);
+                yield return new WaitForSeconds(0.2f);
+            }
+        }
+
+        private void OnRetryClicked()
+        {
+            _retryRequested = true;
+            ToastService.Instance?.Show("Đang thử lại", "Đang kiểm tra kết nối...");
+            Debug.Log("[LoadingManager] Retry requested.");
+        }
+
+        private void ShowRetryButton(bool show)
+        {
+            if (retryButton != null)
+                retryButton.gameObject.SetActive(show);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Navigate
+        // ─────────────────────────────────────────────────────────────────────
+
+        private void Navigate()
+        {
+            if (UINavigator.Instance == null)
+            {
+                Debug.LogError("[LoadingManager] UINavigator.Instance is null!");
+                Hide();
+                return;
+            }
+
+            UINavigator.Instance.ShowPanel(_targetPanel, forceInstant: false);
             Hide();
         }
 
-        /// <summary>
-        /// Đợi GameManager khởi tạo (đã có trong scene)
-        /// </summary>
+        // ─────────────────────────────────────────────────────────────────────
+        // Wait helpers
+        // ─────────────────────────────────────────────────────────────────────
+
         private IEnumerator WaitForGameManager()
         {
-            float timeout = 5f;
-            float elapsed = 0f;
-
+            float timeout = 5f, elapsed = 0f;
             while (GameManager.Instance == null && elapsed < timeout)
             {
                 elapsed += Time.deltaTime;
-                UpdateProgress(0.1f + (elapsed / timeout) * 0.2f);
+                UpdateLoadingUI("Khởi động game...", Mathf.Lerp(0.05f, 0.22f, elapsed / timeout));
                 yield return null;
             }
 
             if (GameManager.Instance == null)
-            {
-                Debug.LogError("GameManager failed to initialize!");
-                yield break;
-            }
+                Debug.LogError("[LoadingManager] GameManager failed to initialize!");
 
-            yield return new WaitForSeconds(0.1f);
+            yield return new WaitForSeconds(0.05f);
         }
 
-        /// <summary>
-        /// Đợi PersistentUICanvas khởi tạo (GameManager sẽ tự động tạo)
-        /// </summary>
         private IEnumerator WaitForPersistentUICanvas()
         {
-            float timeout = 3f;
-            float elapsed = 0f;
-
+            float timeout = 3f, elapsed = 0f;
             while (PersistentUICanvas.Instance == null && elapsed < timeout)
             {
                 elapsed += Time.deltaTime;
-                UpdateProgress(0.3f + (elapsed / timeout) * 0.2f);
+                UpdateLoadingUI("Khởi tạo giao diện...", Mathf.Lerp(0.25f, 0.42f, elapsed / timeout));
                 yield return null;
             }
 
             if (PersistentUICanvas.Instance == null)
             {
-                Debug.LogWarning("PersistentUICanvas failed to initialize, creating manually...");
+                Debug.LogWarning("[LoadingManager] PersistentUICanvas not found — creating manually");
                 PersistentUICanvas.GetOrCreate();
             }
 
-            yield return new WaitForSeconds(0.1f);
+            yield return new WaitForSeconds(0.05f);
         }
 
-        /// <summary>
-        /// Check auto login and decide which scene to load
-        /// </summary>
-        private IEnumerator CheckAutoLoginAndDecideScene()
-        {
-            // If target scene is already set, use it
-            if (!string.IsNullOrEmpty(targetScene))
-            {
-                yield break;
-            }
+        // ─────────────────────────────────────────────────────────────────────
+        // Public API
+        // ─────────────────────────────────────────────────────────────────────
 
-            // Check if user has saved session
-            if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
-            {
-                // Try auto login
-                if (GameManager.Instance != null && GameManager.Instance.AuthService != null)
-                {
-                    var authService = GameManager.Instance.AuthService;
-                    bool autoLoginCompleted = false;
-                    bool autoLoginSuccess = false;
-
-                    // Call auto login asynchronously
-                    authService.AutoLogin().ContinueWith(task =>
-                    {
-                        autoLoginSuccess = task.Result.Success;
-                        autoLoginCompleted = true;
-                    });
-
-                    // Wait for auto login to complete
-                    float timeout = 10f;
-                    float elapsed = 0f;
-                    while (!autoLoginCompleted && elapsed < timeout)
-                    {
-                        elapsed += Time.deltaTime;
-                        yield return null;
-                    }
-
-                    if (autoLoginSuccess)
-                    {
-                        // Auto login successful, go to Home
-                        targetScene = SceneLoader.SCENE_HOME;
-                        Debug.Log("[LoadingManager] Auto login successful, loading Home scene");
-                    }
-                    else
-                    {
-                        // Auto login failed, go to Login
-                        targetScene = SceneLoader.SCENE_LOGIN;
-                        Debug.Log("[LoadingManager] Auto login failed, loading Login scene");
-                    }
-                }
-                else
-                {
-                    // AuthService not available, go to Login
-                    targetScene = SceneLoader.SCENE_LOGIN;
-                    Debug.Log("[LoadingManager] AuthService not available, loading Login scene");
-                }
-            }
-            else
-            {
-                // No saved session, go to Login
-                targetScene = SceneLoader.SCENE_LOGIN;
-                Debug.Log("[LoadingManager] No saved session, loading Login scene");
-            }
-        }
-
-        /// <summary>
-        /// Load target scene (Login, Home, etc.)
-        /// </summary>
-        private IEnumerator LoadTargetScene()
-        {
-            if (string.IsNullOrEmpty(targetScene))
-            {
-                targetScene = SceneLoader.SCENE_LOGIN; // Default fallback
-            }
-
-            if (!Application.CanStreamedLevelBeLoaded(targetScene))
-            {
-                Debug.LogError($"Target scene '{targetScene}' not found in Build Settings!");
-                targetScene = SceneLoader.SCENE_LOGIN;
-            }
-
-            AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(targetScene);
-            asyncLoad.allowSceneActivation = false;
-
-            while (asyncLoad.progress < 0.9f)
-            {
-                UpdateProgress(0.7f + asyncLoad.progress * 0.3f);
-                yield return null;
-            }
-
-            asyncLoad.allowSceneActivation = true;
-            UpdateProgress(1.0f);
-
-            while (!asyncLoad.isDone)
-            {
-                yield return null;
-            }
-        }
-
-        private void UpdateProgress(float progress)
-        {
-            if (progressBar != null)
-            {
-                progressBar.value = progress;
-            }
-        }
-
-        private void UpdateLoadingText(string text)
-        {
-            if (loadingText != null)
-            {
-                loadingText.text = text;
-            }
-            Debug.Log($"[Loading] {text}");
-        }
-
-        /// <summary>
-        /// Public API to show loading panel (for target scenes to reuse).
-        /// Optionally override the loading label text.
-        /// </summary>
+        /// <summary>Hiện loading overlay với message tuỳ chọn.</summary>
         public void Show(string message = null)
         {
             if (loadingPanel != null)
             {
                 loadingPanel.SetActive(true);
-                isShowing = true;
+                _isShowing = true;
             }
-
-            if (!string.IsNullOrEmpty(message) && loadingText != null)
-                loadingText.text = message;
+            if (!string.IsNullOrEmpty(message))
+                UpdateLoadingUI(message, progressBar != null ? progressBar.value : 0f);
         }
 
-        /// <summary>
-        /// Public API to hide loading panel (call from LoginView after auto-login check)
-        /// </summary>
+        /// <summary>Ẩn loading overlay.</summary>
         public void Hide()
         {
             if (loadingPanel != null)
             {
                 loadingPanel.SetActive(false);
-                isShowing = false;
+                _isShowing = false;
             }
         }
 
-        public bool IsShowing() => isShowing;
+        public bool IsShowing() => _isShowing;
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Internal helpers
+        // ─────────────────────────────────────────────────────────────────────
+
+        private void UpdateLoadingUI(string message, float progress)
+        {
+            if (loadingText  != null) loadingText.text  = message;
+            if (progressBar  != null) progressBar.value = progress;
+            Debug.Log($"[Loading] {progress:P0}  {message}");
+        }
     }
 }
