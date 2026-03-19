@@ -8,9 +8,9 @@ namespace NightHunt.UI
     /// <summary>
     /// Persistent UI Canvas - DontDestroyOnLoad canvas chứa Loading, Reconnect, Ping
     /// Tự động tạo nếu chưa tồn tại
-    /// Sử dụng Singleton pattern để dễ access các UI components
+    /// Sử dụng SingletonPersistent generic pattern để tránh cross-class singleton collision
     /// </summary>
-    public class PersistentUICanvas : PersistentObject
+    public class PersistentUICanvas : SingletonPersistent<PersistentUICanvas>
     {
         [Header("Canvas Settings")] [SerializeField]
         private Canvas canvas;
@@ -23,18 +23,15 @@ namespace NightHunt.UI
         [SerializeField] private PingDisplay         pingDisplay;
         [SerializeField] private ToastService        toastService;
 
-        // Public accessors
-        public new static PersistentUICanvas Instance => (PersistentUICanvas)PersistentObject.Instance;
+        // Public accessors (use Instance instead of needing type cast)
         public Canvas              Canvas               => canvas;
         public LoadingManager      LoadingManager       => loadingManager;
         public MatchLoadingOverlay MatchLoadingOverlay  => matchLoadingOverlay;
         public PingDisplay         PingDisplay          => pingDisplay;
         public ToastService        ToastService         => toastService;
 
-        protected override void OnPersistentAwake()
+        protected override void OnSingletonAwake()
         {
-            base.OnPersistentAwake();
-
             // Đảm bảo Canvas setup đúng
             SetupCanvas();
 
@@ -78,8 +75,8 @@ namespace NightHunt.UI
 
             // Setup CanvasScaler
             canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            canvasScaler.referenceResolution = new Vector2(1920, 1080);
-            canvasScaler.matchWidthOrHeight = 0.5f;
+            // canvasScaler.referenceResolution = new Vector2(1920, 1080);
+            // canvasScaler.matchWidthOrHeight = 0.5f;
 
             // Tự động tạo GraphicRaycaster nếu chưa có
             if (graphicRaycaster == null)
@@ -158,6 +155,9 @@ namespace NightHunt.UI
 #if UNITY_EDITOR
         private void OnValidate()
         {
+            // Only auto-assign in edit mode — at runtime components are created dynamically in CreateUIComponents()
+            if (Application.isPlaying) return;
+
             // Auto-assign references nếu chưa có
             if (canvas == null)
             {

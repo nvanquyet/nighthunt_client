@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using NightHunt.Data.DTOs;
+using NightHunt.State;
 using UnityEngine;
 
 namespace NightHunt.UI
@@ -62,11 +63,30 @@ namespace NightHunt.UI
 
             // Sort members by joinOrder so slot 0 = host
             var members = new List<PartyMemberResponse>();
-            if (party?.members != null)
+            if (party?.members != null && party.members.Count > 0)
             {
                 members.AddRange(party.members);
                 members.Sort((a, b) => a.joinOrder.CompareTo(b.joinOrder));
             }
+            else
+            {
+                // Solo (no party) — always show the local player so the model area is never empty.
+                var session = SessionState.Instance;
+                var selfSlot = new PartyMemberResponse
+                {
+                    userId              = session?.UserId ?? 0L,
+                    username            = session?.Username ?? "Me",
+                    isHost              = true,
+                    joinOrder           = 0,
+                    onlineStatus        = "ONLINE",
+                    selectedCharacterId = session?.SelectedCharacterId ?? "",
+                };
+                members.Add(selfSlot);
+                iAmHost = true; // solo player is always "host"
+                Debug.Log($"[PartyModelListView] Solo mode — injecting local player slot: userId={selfSlot.userId} username={selfSlot.username} charId={selfSlot.selectedCharacterId}");
+            }
+
+            Debug.Log($"[PartyModelListView] Refresh — slots={members.Count} party={(party == null ? "null" : party.partyId.ToString())}");
 
             // Grow / shrink to exactly members.Count — no empty slots
             EnsureSlotCount(members.Count);

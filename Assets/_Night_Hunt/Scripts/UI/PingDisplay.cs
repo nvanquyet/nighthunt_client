@@ -233,8 +233,8 @@ namespace NightHunt.UI
             var stopwatch = Stopwatch.StartNew();
 
             // Send a lightweight request to measure ping
-            // Using a health check or ping endpoint if available
-            string pingEndpoint = "/health"; // Adjust based on your backend API
+            // Using the actuator health endpoint from Spring Boot (with /api prefix)
+            string pingEndpoint = "/api/actuator/health"; // GetApiBaseUrl() returns https://localhost:8443 (no /api)
             
             string baseUrl = backendClient.GetBaseUrl();
             if (string.IsNullOrEmpty(baseUrl))
@@ -247,7 +247,7 @@ namespace NightHunt.UI
             UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequest.Get(
                 baseUrl + pingEndpoint
             );
-            
+
             yield return request.SendWebRequest();
 
             stopwatch.Stop();
@@ -298,5 +298,6 @@ namespace NightHunt.UI
             }
         }
 #endif
+
     }
 }

@@ -199,13 +199,14 @@ namespace NightHunt.Data.DTOs
     [Serializable]
     public class GameModeResponse
     {
+        // Server fields (GameModeDTO) — mirrored exactly:
         public long   id;
         public string modeKey;        // "2v2" | "3v3" | "4v4" | "5v5"
         public string displayName;
-        public int    maxPlayers;
         public int    playersPerTeam;
-        public bool   isRanked;
-        public bool   isEnabled;
-        public string status;         // "ACTIVE" | "COMING_SOON" | "DISABLED"
+        public int    totalPlayers;   // total players in match (playersPerTeam * 2)
+        public string modeStatus;     // "AVAILABLE" | "LOCKED" | "COMING_SOON" | "DISABLED"
+        public int    displayOrder;
+        public bool   active;         // Java isActive boolean → serialized as "active" by Jackson
     }
 }

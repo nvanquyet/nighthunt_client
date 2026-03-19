@@ -89,6 +89,10 @@ namespace NightHunt.UI
         {
             _ws = GameWebSocketService.Instance;
             SubscribeWSEvents();
+            // Fallback: if UINavigator.Notify() doesn't reach this component (e.g. panelObject not
+            // wired in Inspector), OnShow() is triggered directly when the user logs in.
+            if (_sessionState != null)
+                _sessionState.OnUserLoggedIn += OnUserLoggedInFallback;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -96,29 +100,54 @@ namespace NightHunt.UI
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
+        /// Fallback called when UINavigator.Notify() cannot reach this component (panelObject
+        /// not wired in Inspector). OnShow() is effectively idempotent — safe to call twice.
+        /// </summary>
+        private void OnUserLoggedInFallback()
+        {
+            Debug.Log("[HomeView] OnUserLoggedIn fired — calling OnShow() as UINavigator fallback");
+            if (gameObject.activeInHierarchy) OnShow();
+        }
+
+        /// <summary>
         /// Called by UINavigator right before the Home panel fades in.
         /// Safe to call multiple times (e.g. returning from Lobby).
         /// </summary>
         public async void OnShow()
         {
+            Debug.Log("[HomeView] OnShow — starting home screen initialization");
+
+            Debug.Log("[HomeView] Step 1: RefreshProfile (local cache — username, thumbnail)");
             RefreshProfile();
+
+            Debug.Log("[HomeView] Step 2: RefreshProfileFromServer → GET /api/profile (rank, ELO, selectedCharacterId)");
             _ = RefreshProfileFromServer();
 
+            Debug.Log("[HomeView] Step 3: CheckAndShowReconnectPopup");
             await CheckAndShowReconnectPopup();
 
+            Debug.Log("[HomeView] Step 4: FriendPanelView.RefreshFriendList → GET /api/friends");
             friendPanelView?.RefreshFriendList();
+
+            Debug.Log("[HomeView] Step 5: PartyController.OnHomeShown → GET /api/party/current");
             partyController?.OnHomeShown();
 
             var loading = PersistentUICanvas.Instance?.LoadingManager;
             if (loading != null && loading.IsShowing()) loading.Hide();
 
+            Debug.Log("[HomeView] OnShow complete");
             onHomeShown?.Invoke();
         }
 
         /// <summary>Called by UINavigator right before the Home panel fades out.</summary>
         public void OnHide() { /* WS stays active — party invite modal works from any panel */ }
 
-        private void OnDestroy() => UnsubscribeWSEvents();
+        private void OnDestroy()
+        {
+            UnsubscribeWSEvents();
+            if (_sessionState != null)
+                _sessionState.OnUserLoggedIn -= OnUserLoggedInFallback;
+        }
 
         // ══════════════════════════════════════════════════════════════════════
         // TOP BAR
@@ -167,17 +196,26 @@ namespace NightHunt.UI
 
         private async Task RefreshProfileFromServer()
         {
+            Debug.Log("[HomeView] RefreshProfileFromServer → GET /api/profile ...");
             var result = await GameManager.Instance?.BackendClient
                 .GetAsync<ProfileResponse>(Constants.API_PROFILE_GET);
             if (result?.Success == true && result.Data != null)
             {
+                Debug.Log($"[HomeView] /api/profile response — userId={result.Data.userId} username='{result.Data.username}' tier={result.Data.tier} elo={result.Data.elo} selectedCharacterId='{result.Data.selectedCharacterId}'");
                 if (rankText != null)
                     rankText.text = $"{result.Data.tier} | {result.Data.elo} ELO";
                 if (!string.IsNullOrEmpty(result.Data.selectedCharacterId))
                 {
                     _sessionState?.SetSelectedCharacterId(result.Data.selectedCharacterId);
+                    Debug.Log($"[HomeView] SessionState.SelectedCharacterId updated to '{result.Data.selectedCharacterId}'");
                     RefreshCharacterThumbnail();
+                    // Re-render party model slots now that the character ID is known
+                    partyController?.RefreshPartyDisplay();
                 }
+            }
+            else
+            {
+                Debug.LogWarning($"[HomeView] /api/profile failed — Success={result?.Success} msg='{result?.Message}'");
             }
         }
 

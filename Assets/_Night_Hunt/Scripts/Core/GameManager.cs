@@ -252,12 +252,12 @@ namespace NightHunt.Core
             }
 
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                Debug.Log($"[GameManager] Refreshing data for panel: {nav.CurrentPanel?.ToString() ?? "none"}");
+                Debug.Log($"[GameManager] Refreshing data for panel: {nav.CurrentPanel}");
 
             try
             {
-                if (!nav.CurrentPanel.HasValue) return;
-                switch (nav.CurrentPanel.Value)
+                if (nav.CurrentPanel == PanelType.None) return;
+                switch (nav.CurrentPanel)
                 {
                     case PanelType.Lobby:
                         await RefreshLobbyData();
@@ -276,7 +276,7 @@ namespace NightHunt.Core
 
                     default:
                         if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                            Debug.Log($"[GameManager] Panel {nav.CurrentPanel.Value} — no refresh logic defined");
+                            Debug.Log($"[GameManager] Panel {nav.CurrentPanel} — no refresh logic defined");
                         break;
                 }
             }

@@ -189,6 +189,8 @@ namespace NightHunt.State
             long.TryParse(userIdStr, out long userId);
             UserId = userId;
             Username = PlayerPrefs.GetString(usernameKey, "");
+            // Restore last-known character so UI can show avatar immediately (before profile API returns)
+            SelectedCharacterId = PlayerPrefs.GetString(Common.Constants.PREFS_SELECTED_CHARACTER_ID, "");
             
             var cfg = ResolveConfig();
             bool isMultiInstance = cfg != null ? cfg.IsMultiInstanceEnabled() : Application.isEditor;

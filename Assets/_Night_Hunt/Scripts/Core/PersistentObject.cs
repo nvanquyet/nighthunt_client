@@ -3,9 +3,30 @@ using UnityEngine;
 namespace NightHunt.Core
 {
     /// <summary>
-    /// Generic script để tạo object DontDestroyOnLoad
-    /// Sử dụng Singleton pattern để đảm bảo chỉ có 1 instance
+    /// ⚠️ DEPRECATED — Use SingletonPersistent&lt;T&gt; instead!
+    /// 
+    /// This class uses a non-generic shared static instance, which causes cross-class
+    /// singleton collisions (e.g., PersistentUICanvas gets destroyed if GameManager inits first).
+    /// 
+    /// MIGRATION PATH:
+    ///   OLD:  public class MyService : PersistentObject { ... }
+    ///   NEW:  public class MyService : SingletonPersistent&lt;MyService&gt; { ... }
+    ///   
+    ///   Replace OnPersistentAwake() with OnSingletonAwake()
+    ///   Replace PersistentObject.Instance with MyService.Instance
+    /// 
+    /// WHY?
+    ///   - Generic base (SingletonPersistent&lt;T&gt;) uses separate instance field per type
+    ///   - No collision between different services
+    ///   - Proper duplicate detection
+    ///   - Same functionality, zero duplication
+    /// 
+    /// KEEP THIS FILE?
+    ///   - Only if you have custom logic not covered by the generic base
+    ///   - Mark [Obsolete] in your custom subclass
+    ///   - Plan migration for next refactor sprint
     /// </summary>
+    [System.Obsolete("Use SingletonPersistent<T> instead. This class has non-generic shared static instance causing cross-class collisions.")]
     public class PersistentObject : MonoBehaviour
     {
         [Header("Settings")]
@@ -18,6 +39,7 @@ namespace NightHunt.Core
         private static PersistentObject instance;
 
         /// <summary>
+        /// ⚠️ DEPRECATED — Use SingletonPersistent&lt;T&gt;.Instance instead
         /// Instance của PersistentObject (nếu là singleton)
         /// </summary>
         public static PersistentObject Instance => instance;
@@ -48,6 +70,7 @@ namespace NightHunt.Core
         }
 
         /// <summary>
+        /// ⚠️ DEPRECATED — Override OnSingletonAwake() in SingletonPersistent&lt;T&gt; instead
         /// Được gọi khi object được set làm persistent (chỉ instance chính)
         /// Override để thực hiện initialization
         /// </summary>

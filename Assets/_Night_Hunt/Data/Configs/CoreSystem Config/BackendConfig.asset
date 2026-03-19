@@ -12,7 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: df449b3e8d345a54aabd1ebc60057b22, type: 3}
   m_Name: BackendConfig
   m_EditorClassIdentifier: 
-  apiHost: localhost:8080
-  useHttps: 0
-  ignoreSslCertificate: 1
-  requestTimeoutSeconds: 30
+  environment: 2
+  apiHost: localhost:8443
+  useHttps: 1
+  forceHttpsInProduction: 1
+  ignoreSslCertificate: 0
+  forceSecureEverywhere: 1
+  requestTimeoutSeconds: 10
+  wsPath: /api/ws/game
+  overrideWsBaseUrl: 

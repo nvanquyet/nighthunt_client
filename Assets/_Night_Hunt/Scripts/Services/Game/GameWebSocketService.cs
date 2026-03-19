@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NativeWebSocket;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using NightHunt.Common;
 using NightHunt.Core;
@@ -35,6 +36,13 @@ namespace NightHunt.Services.Game
         private bool isShuttingDown = false;
         private int reconnectAttempts = 0;
         private const int MAX_RECONNECT_ATTEMPTS = 5;
+        /// <summary>UTC time when the current connection was last confirmed open. Used to determine
+        /// whether a close was a "stable" disconnect (reset counter) or an immediate failure (keep counting).</summary>
+        private DateTime _connectedSince = DateTime.MinValue;
+        /// <summary>Cancels any pending backoff Task.Delay reconnect when Connect() is called explicitly (prevents double-connect race).</summary>
+        private CancellationTokenSource _reconnectCts;
+        /// <summary>Cancels the '60 s stable → reset counter' timer when the connection drops before that window.</summary>
+        private CancellationTokenSource _stableResetCts;
         private const int MAX_MESSAGES_PER_FRAME = 5; // PERF: Limit message processing to prevent frame drops
 
         public bool IsWsConnected => isConnected;
@@ -130,6 +138,10 @@ namespace NightHunt.Services.Game
                 return isConnected;
             }
 
+            // Cancel any pending backoff reconnect so it doesn't fire a second concurrent Connect()
+            _reconnectCts?.Cancel();
+            _reconnectCts = null;
+
             if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated)
             {
                 ConditionalLogger.LogWarning("GameWebSocketService", "Cannot connect - user not authenticated");
@@ -154,7 +166,9 @@ namespace NightHunt.Services.Game
                 if (isConnected && thisToken == connectionToken)
                 {
                     ConditionalLogger.Log("GameWebSocketService", "Game WebSocket connected successfully");
-                    reconnectAttempts = 0; // reset on success
+                    // NOTE: reconnectAttempts is intentionally NOT reset here.
+                    // It is reset inside OnClose only when the connection was stable (>= 10 s).
+                    // Resetting here caused the infinite-loop: connect→close→reconnectAttempts became 0 immediately.
                     return true;
                 }
                 else
@@ -198,6 +212,22 @@ namespace NightHunt.Services.Game
                     ConditionalLogger.Log("GameWebSocketService", "WebSocket opened");
                     isConnected = true;
                     isConnecting = false;
+                    _connectedSince = DateTime.UtcNow;
+
+                    // Start a 60 s stability timer — if the connection survives this long,
+                    // the session is genuinely re-established and the retry counter is reset.
+                    // The timer is cancelled in OnClose if the connection drops before 60 s.
+                    _stableResetCts?.Cancel();
+                    _stableResetCts = new CancellationTokenSource();
+                    var stableCts = _stableResetCts;
+                    _ = Task.Delay(60000, stableCts.Token).ContinueWith(t =>
+                    {
+                        if (!t.IsCanceled)
+                        {
+                            reconnectAttempts = 0;
+                            ConditionalLogger.Log("GameWebSocketService", "Connection stable for 60 s — reconnect counter reset.");
+                        }
+                    });
                 };
 
                 webSocket.OnMessage += (bytes) =>
@@ -219,23 +249,53 @@ namespace NightHunt.Services.Game
                 webSocket.OnClose += (code) =>
                 {
                     if (token != connectionToken) return;
-                    ConditionalLogger.Log("GameWebSocketService", $"WebSocket closed: {code}");
-                    isConnected = false;
+
+                    // Cancel the stability timer — connection dropped before the grace period.
+                    _stableResetCts?.Cancel();
+
+                    bool wasStable = _connectedSince != DateTime.MinValue &&
+                                     (DateTime.UtcNow - _connectedSince).TotalSeconds >= 10.0;
+                    _connectedSince = DateTime.MinValue;
+
+                    ConditionalLogger.Log("GameWebSocketService",
+                        $"WebSocket closed: {code} (stableConnection={wasStable})");
+                    isConnected  = false;
                     isConnecting = false;
                     OnDisconnected?.Invoke();
-                    
-                    // Try to reconnect if session is still valid
-                    if (allowAutoReconnect && SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
+
+                    if (!allowAutoReconnect) return;
+                    if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated) return;
+
+                    // Normal (1000) = intentional server-side close (e.g. server restart or session eviction).
+                    // Still reconnect, but use a longer initial delay to avoid spamming a restarting server.
+                    int baseDelayMs = (code == WebSocketCloseCode.Normal) ? 5000 : 1000;
+
+                    // NOTE: reconnectAttempts is NO LONGER reset here on wasStable.
+                    // Resetting here caused an infinite loop: every stable drop reset the counter to 0,
+                    // so reconnectAttempts was always 1 and the MAX_RECONNECT_ATTEMPTS cap was never reached.
+                    // The counter is now reset only after 60 s of continuous stability (see OnOpen timer).
+
+                    reconnectAttempts++;
+                    if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS)
                     {
-                        reconnectAttempts++;
-                        if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS)
-                        {
-                            ConditionalLogger.LogError("GameWebSocketService", $"Reconnect attempts exceeded limit ({MAX_RECONNECT_ATTEMPTS}). Stopping auto-reconnect.");
-                            return;
-                        }
-                        ConditionalLogger.Log("GameWebSocketService", $"Attempting to reconnect... (attempt {reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS})");
-                        _ = Connect(); // Fire and forget
+                        ConditionalLogger.LogError("GameWebSocketService",
+                            $"Reconnect attempts exceeded limit ({MAX_RECONNECT_ATTEMPTS}). Stopping auto-reconnect.");
+                        return;
                     }
+
+                    // Exponential backoff: baseDelay * 2^(attempt-1), capped at 60 s
+                    int delayMs = Mathf.Min(baseDelayMs * (1 << (reconnectAttempts - 1)), 60000);
+                    ConditionalLogger.Log("GameWebSocketService",
+                        $"Reconnecting in {delayMs}ms... (attempt {reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS}, closeCode={code})");
+
+                    _reconnectCts?.Cancel();
+                    _reconnectCts = new CancellationTokenSource();
+                    var cts = _reconnectCts;
+                    _ = Task.Delay(delayMs, cts.Token).ContinueWith(t =>
+                    {
+                        if (!t.IsCanceled && allowAutoReconnect && SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
+                            _ = Connect();
+                    });
                 };
 
                 // Connect with timeout
@@ -295,22 +355,22 @@ namespace NightHunt.Services.Game
                 }
                 else
                 {
-                    // SEC-FIX: Use new ShouldUseSecureConnection() method for consistent HTTPS/WSS logic
                     bool useSecure = cfg.ShouldUseSecureConnection();
-                    string host = cfg.apiHost.TrimEnd('/');
 
+                    string host = cfg.apiHost.TrimEnd('/');
                     string scheme = useSecure ? "wss://" : "ws://";
                     baseUrl = scheme + host;
-                    
+
                     Debug.Log($"[GameWebSocketService] Building WebSocket URL: {scheme}{host} (Environment: {cfg.environment}, Secure: {useSecure})");
                 }
             }
 
             if (string.IsNullOrEmpty(baseUrl))
             {
-                // Fallback for dev
-                baseUrl = "ws://localhost:8080";
-                Debug.LogWarning("[GameWebSocketService] Using fallback WebSocket URL: ws://localhost:8080");
+                // Fallback should stay secure by default. Production builds must not silently route to
+                // a dev-only insecure WebSocket endpoint.
+                baseUrl = "wss://localhost:8443";
+                Debug.LogWarning("[GameWebSocketService] Using fallback WebSocket URL: wss://localhost:8443");
             }
 
             baseUrl = baseUrl.TrimEnd('/');

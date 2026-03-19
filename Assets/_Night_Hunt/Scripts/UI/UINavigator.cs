@@ -1,53 +1,80 @@
-﻿using System.Collections;
-using System.Collections.Generic;
 using NightHunt.Core;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Cac panel chinh trong 01_Home scene.
-    /// Loading boot (DDOL) va MatchLoadingOverlay nam tren PersistentUICanvas — khong o day.
+    /// Panel types được dùng trong toàn bộ codebase để identify màn hình hiện tại.
     /// </summary>
     public enum PanelType
     {
+        None,
         Login,
         Home,
         Lobby
     }
 
     /// <summary>
-    /// UINavigator - Thay the SceneLoader trong single-scene setup.
-    /// Quan ly show/hide panel bang CanvasGroup thay vi load scene.
-    /// Gan vao UIRoot GameObject trong scene.
+    /// UINavigator — Event-driven navigation hub.
     ///
-    /// Sau khi chuyen panel, UINavigator goi INavigableView.OnShow() tren panel moi
-    /// va INavigableView.OnHide() tren panel cu — vi CanvasGroup khong goi SetActive
-    /// nen OnEnable/OnDisable cua cac view KHONG tuong ung voi trang thai "hien/an".
+    /// THIẾT KẾ:
+    ///   UINavigator KHÔNG tự quản lý panel nào cả.
+    ///   Nó chỉ fire UnityEvent tương ứng → bạn wire trong Inspector với
+    ///   bất kỳ hành động nào: Play animator, SetActive, gọi method, v.v.
+    ///
+    /// SETUP TRONG INSPECTOR (ví dụ với Shift UI):
+    ///   OnGoLogin  → SplashScreenAnimator.Play("Login")
+    ///                hoặc LoginPanel.SetActive(true)
+    ///   OnGoHome   → MainPanelManager.OpenFirstTab()
+    ///                + SplashScreen.SetActive(false)
+    ///                + MainPanels.SetActive(true)
+    ///                + MainPanelsAnimator.Play("Start")
+    ///   OnGoLobby  → tương tự OnGoHome nhưng navigate đến Lobby tab
+    ///   OnGoNone   → hide tất cả (optional)
+    ///
+    /// TRONG CODE:
+    ///   UINavigator.Instance.GoLogin();   // fired từ LoadingManager
+    ///   UINavigator.Instance.GoHome();    // fired sau login thành công
+    ///   UINavigator.Instance.GoLobby();   // fired khi join room
+    ///
+    /// TRUY VẤN TRẠNG THÁI:
+    ///   UINavigator.Instance.CurrentPanel  → PanelType hiện tại
+    ///   UINavigator.Instance.OnPanelChanged += handler;
     /// </summary>
     public class UINavigator : Singleton<UINavigator>
     {
-        [System.Serializable]
-        public class PanelEntry
-        {
-            public PanelType type;
-            public CanvasGroup canvasGroup;
+        // ─────────────────────────────────────────────
+        // Events — wire trong Inspector
+        // ─────────────────────────────────────────────
 
-            [Tooltip("Thoi gian fade in/out (giay). 0 = instant")]
-            public float fadeDuration = 0.25f;
-        }
+        [Header("Navigation Events — Wire in Inspector")]
 
-        [Header("Panels")]
-        [SerializeField] private List<PanelEntry> panels = new();
+        [Tooltip("Fired khi navigate tới Login screen.\n" +
+                 "Ví dụ: SplashScreenAnimator.Play(\"Login\") hoặc LoginPanel.SetActive(true)")]
+        public UnityEvent OnGoLogin = new();
 
-        [Header("Settings")]
-        [SerializeField] private bool useFade = true;
+        [Tooltip("Fired khi navigate tới Home screen.\n" +
+                 "Ví dụ: MainPanels.SetActive(true) + MainPanelsAnimator.Play(\"Start\") + MainPanelManager.OpenFirstTab()")]
+        public UnityEvent OnGoHome = new();
 
-        // null = chua hien panel nao
-        private PanelType? _currentPanel = null;
-        private Coroutine _fadeCoroutine;
+        [Tooltip("Fired khi navigate tới Lobby screen.\n" +
+                 "Ví dụ: MainPanels.SetActive(true) + MainPanelManager.OpenPanel(\"Lobby\")")]
+        public UnityEvent OnGoLobby = new();
 
-        public PanelType? CurrentPanel => _currentPanel;
+        [Tooltip("Fired khi reset / hide tất cả (optional — dùng khi logout hoặc về trạng thái ban đầu).")]
+        public UnityEvent OnGoNone = new();
+
+        // ─────────────────────────────────────────────
+        // State (read-only từ bên ngoài)
+        // ─────────────────────────────────────────────
+
+        private PanelType _currentPanel = PanelType.None;
+
+        /// <summary>Panel hiện tại đang hiển thị.</summary>
+        public PanelType CurrentPanel => _currentPanel;
+
+        /// <summary>Fired mỗi khi panel thay đổi. Param = panel mới.</summary>
         public event System.Action<PanelType> OnPanelChanged;
 
         // ─────────────────────────────────────────────
@@ -56,143 +83,90 @@ namespace NightHunt.UI
 
         protected override void OnSingletonAwake()
         {
-            foreach (var p in panels)
-                ApplyCanvasGroup(p.canvasGroup, 0f, false);
+            // Không cần setup gì — toàn bộ UI được wire bởi Inspector
         }
 
         // ─────────────────────────────────────────────
-        // Public API
+        // Public navigation API
         // ─────────────────────────────────────────────
 
+        /// <summary>
+        /// Navigate tới Login screen.
+        /// Fire OnGoLogin UnityEvent — bạn wire hành động trong Inspector.
+        /// </summary>
+        public void GoLogin()
+        {
+            if (_currentPanel == PanelType.Login) return;
+            _currentPanel = PanelType.Login;
+            Debug.Log("[UINavigator] → Login");
+            OnGoLogin?.Invoke();
+            OnPanelChanged?.Invoke(PanelType.Login);
+        }
+
+        /// <summary>
+        /// Navigate tới Home screen.
+        /// Fire OnGoHome UnityEvent — bạn wire hành động trong Inspector.
+        /// </summary>
+        public void GoHome()
+        {
+            if (_currentPanel == PanelType.Home) return;
+            _currentPanel = PanelType.Home;
+            Debug.Log("[UINavigator] → Home");
+            OnGoHome?.Invoke();
+            OnPanelChanged?.Invoke(PanelType.Home);
+        }
+
+        /// <summary>
+        /// Navigate tới Lobby screen.
+        /// Fire OnGoLobby UnityEvent — bạn wire hành động trong Inspector.
+        /// </summary>
+        public void GoLobby()
+        {
+            if (_currentPanel == PanelType.Lobby) return;
+            _currentPanel = PanelType.Lobby;
+            Debug.Log("[UINavigator] → Lobby");
+            OnGoLobby?.Invoke();
+            OnPanelChanged?.Invoke(PanelType.Lobby);
+        }
+
+        /// <summary>
+        /// Force navigate dù đang ở cùng panel (bypass guard).
+        /// Dùng khi cần refresh / re-trigger event trên cùng panel.
+        /// </summary>
+        public void GoForce(PanelType target)
+        {
+            _currentPanel = PanelType.None; // reset guard
+            switch (target)
+            {
+                case PanelType.Login: GoLogin();  break;
+                case PanelType.Home:  GoHome();   break;
+                case PanelType.Lobby: GoLobby();  break;
+                default:
+                    _currentPanel = PanelType.None;
+                    OnGoNone?.Invoke();
+                    OnPanelChanged?.Invoke(PanelType.None);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Navigate bằng PanelType enum.
+        /// Dùng từ LoadingManager: ShowPanel(_targetPanel)
+        /// </summary>
         public void ShowPanel(PanelType target, bool forceInstant = false)
         {
-            if (_currentPanel.HasValue && _currentPanel.Value == target) return;
-
-            PanelType? previous = _currentPanel;
-            _currentPanel = target;
-
-            if (_fadeCoroutine != null)
-                StopCoroutine(_fadeCoroutine);
-
-            if (useFade && !forceInstant)
-                _fadeCoroutine = StartCoroutine(TransitionPanels(previous, target));
-            else
-                TransitionInstant(previous, target);
-
-            OnPanelChanged?.Invoke(target);
-            Debug.Log($"[UINavigator] {previous?.ToString() ?? "none"} -> {target}");
-        }
-
-        public void GoLogin() => ShowPanel(PanelType.Login);
-        public void GoHome()  => ShowPanel(PanelType.Home);
-        public void GoLobby() => ShowPanel(PanelType.Lobby);
-
-        // ─────────────────────────────────────────────
-        // Internal
-        // ─────────────────────────────────────────────
-
-        private void TransitionInstant(PanelType? hide, PanelType show)
-        {
-            if (hide.HasValue)
+            // forceInstant không dùng trong event-driven design — giữ để tương thích API cũ
+            switch (target)
             {
-                var hideEntry = GetEntry(hide.Value);
-                if (hideEntry != null)
-                {
-                    NotifyHide(hideEntry.canvasGroup);
-                    ApplyCanvasGroup(hideEntry.canvasGroup, 0f, false);
-                }
+                case PanelType.Login: GoLogin();  break;
+                case PanelType.Home:  GoHome();   break;
+                case PanelType.Lobby: GoLobby();  break;
+                default:
+                    _currentPanel = PanelType.None;
+                    OnGoNone?.Invoke();
+                    OnPanelChanged?.Invoke(PanelType.None);
+                    break;
             }
-            var showEntry = GetEntry(show);
-            if (showEntry != null)
-            {
-                NotifyShow(showEntry.canvasGroup);
-                ApplyCanvasGroup(showEntry.canvasGroup, 1f, true);
-            }
-        }
-
-        private IEnumerator TransitionPanels(PanelType? hidePanelType, PanelType showPanelType)
-        {
-            var hideEntry = hidePanelType.HasValue ? GetEntry(hidePanelType.Value) : null;
-            var showEntry = GetEntry(showPanelType);
-
-            float duration = showEntry?.fadeDuration ?? 0.25f;
-
-            // Notify hide truoc khi fade out
-            if (hideEntry != null)
-                NotifyHide(hideEntry.canvasGroup);
-
-            // Fade out panel cu (neu co)
-            if (hideEntry?.canvasGroup != null)
-                yield return StartCoroutine(FadeCanvasGroup(hideEntry.canvasGroup, 1f, 0f, duration * 0.5f));
-
-            if (hideEntry != null)
-                ApplyCanvasGroup(hideEntry.canvasGroup, 0f, false);
-
-            // Notify show truoc khi fade in
-            if (showEntry != null)
-                NotifyShow(showEntry.canvasGroup);
-
-            // Fade in panel moi
-            if (showEntry?.canvasGroup != null)
-            {
-                ApplyCanvasGroup(showEntry.canvasGroup, 0f, true); // bat interaction truoc khi fade
-                yield return StartCoroutine(FadeCanvasGroup(showEntry.canvasGroup, 0f, 1f, duration));
-            }
-        }
-
-        private IEnumerator FadeCanvasGroup(CanvasGroup cg, float from, float to, float duration)
-        {
-            if (duration <= 0f)
-            {
-                cg.alpha = to;
-                yield break;
-            }
-
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                elapsed += Time.unscaledDeltaTime;
-                cg.alpha = Mathf.Lerp(from, to, elapsed / duration);
-                yield return null;
-            }
-            cg.alpha = to;
-        }
-
-        private static void ApplyCanvasGroup(CanvasGroup cg, float alpha, bool interactable)
-        {
-            if (cg == null) return;
-            cg.alpha          = alpha;
-            cg.interactable   = interactable;
-            cg.blocksRaycasts = interactable;
-        }
-
-        // ─────────────────────────────────────────────
-        // INavigableView callbacks
-        // ─────────────────────────────────────────────
-
-        /// <summary>
-        /// Goi OnShow() tren tat ca INavigableView gan tren CanvasGroup GameObject.
-        /// </summary>
-        private static void NotifyShow(CanvasGroup cg)
-        {
-            if (cg == null) return;
-            foreach (var v in cg.GetComponents<INavigableView>())
-                v.OnShow();
-        }
-
-        /// <summary>
-        /// Goi OnHide() tren tat ca INavigableView gan tren CanvasGroup GameObject.
-        /// </summary>
-        private static void NotifyHide(CanvasGroup cg)
-        {
-            if (cg == null) return;
-            foreach (var v in cg.GetComponents<INavigableView>())
-                v.OnHide();
-        }
-
-        private PanelEntry GetEntry(PanelType type)
-        {
-            return panels.Find(p => p.type == type);
         }
     }
 }

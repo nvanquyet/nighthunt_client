@@ -7,8 +7,8 @@ using NightHunt.Utilities;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// [DEV TOOL ONLY] Network Start Menu — manual FishNet connection helper for editor testing.
-    /// Not part of the production scene flow; do not reference from game scenes.
+    /// Network Start Menu — manual FishNet connection helper for controlled localhost testing.
+    /// This is not part of the main production UI flow.
     /// Buttons: StartServer / StartClientLocal / StartClient.
     /// </summary>
     public class NetworkStartMenu : MonoBehaviour

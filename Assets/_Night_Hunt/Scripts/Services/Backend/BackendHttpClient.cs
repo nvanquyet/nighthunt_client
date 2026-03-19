@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,34 +18,12 @@ namespace NightHunt.Services.Backend
         [SerializeField] private BackendConfig config;
         public BackendConfig Config => config;
 
-        private bool sslCertificateInitialized = false;
-
         // SEC-4: Use atomic int to prevent double-trigger of force logout coroutine
         private int _forceLogoutFlag = 0;
         private const string SessionHeader = "X-Session-Id";
 
         private void Awake()
         {
-            // Initialize SSL certificate handling for local development
-            if (config != null && config.ignoreSslCertificate)
-            {
-                InitializeSslCertificateIgnore();
-            }
-        }
-
-        private void InitializeSslCertificateIgnore()
-        {
-            if (sslCertificateInitialized) return;
-
-            // Unity doesn't have a direct way to ignore SSL certificates
-            // This is handled at the UnityWebRequest level
-            // For production, make sure ignoreSslCertificate is false
-            if (Application.isEditor || Debug.isDebugBuild)
-            {
-                Debug.LogWarning("SSL certificate validation is disabled. Only use this in development!");
-            }
-
-            sslCertificateInitialized = true;
         }
 
         // ARCH-1: Token single source of truth is SessionState.AccessToken
@@ -132,15 +109,6 @@ namespace NightHunt.Services.Backend
 
             request.timeout = config.requestTimeoutSeconds;
 
-            // Handle SSL certificate validation for local development
-            if (config.ignoreSslCertificate && config.useHttps)
-            {
-                // UnityWebRequest doesn't directly support ignoring SSL certificates
-                // This is a limitation - for production, use proper SSL certificates
-                // For local dev with self-signed certs, you may need to configure Unity's certificate handling
-                // or use a reverse proxy with valid certificates
-            }
-
             var operation = request.SendWebRequest();
 
             while (!operation.isDone)
@@ -150,13 +118,7 @@ namespace NightHunt.Services.Backend
 
             try
             {
-                // Handle SSL certificate errors for development
-                if (request.result == UnityWebRequest.Result.ConnectionError &&
-                    config != null && config.ignoreSslCertificate && config.useHttps)
-                {
-                    // Log warning but continue - in production this should not happen
-                    Debug.LogWarning($"SSL connection error (ignored for dev): {request.error}");
-                }
+                // SSL errors now handled at request level via CertificateHandler.
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {

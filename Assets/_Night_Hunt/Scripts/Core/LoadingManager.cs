@@ -64,8 +64,8 @@ namespace NightHunt.Core
         [Header("Backend Health")]
         [Tooltip("Config chứa apiHost để ping health endpoint.")]
         [SerializeField] private BackendConfig _backendConfig;
-        [Tooltip("Path của health endpoint. Default: /health")]
-        [SerializeField] private string        _healthPath = "/health";
+        [Tooltip("Path của health endpoint (full path with /api prefix).")]
+        [SerializeField] private string        _healthPath = "/api/actuator/health"; // Spring Boot Actuator path with /api context
 
         // ─── State ──────────────────────────────────────────────────────────
         private bool      _isShowing;
@@ -89,10 +89,58 @@ namespace NightHunt.Core
 
         private void Start()
         {
+            // Auto-load BackendConfig from Resources if not assigned in inspector
+            if (_backendConfig == null)
+            {
+                // Try to find in scene first
+                _backendConfig = FindFirstObjectByType<BackendConfig>();
+                
+                if (_backendConfig == null)
+                {
+                    // Try to load from Resources folder (must be in Assets/Resources/Configs/)
+                    _backendConfig = Resources.Load<BackendConfig>("Configs/BackendConfig");
+                }
+
+                if (_backendConfig == null)
+                {
+                    Debug.LogError("[LoadingManager] ❌ CRITICAL: BackendConfig not found!");
+                    Debug.LogError("[LoadingManager] Please either:");
+                    Debug.LogError("  1. Assign BackendConfig asset in LoadingManager inspector");
+                    Debug.LogError("  2. Place BackendConfig.asset in Assets/Resources/Configs/");
+                    Debug.LogError("  3. Place BackendConfig.asset in scene as a component");
+                    
+                    // Use hardcoded fallback for now
+                    Debug.LogWarning("[LoadingManager] ⚠️ Using fallback config (HTTPS localhost:8443)");
+                    // Will proceed with null and rely on fallback URL
+                }
+                else
+                {
+                    Debug.Log($"[LoadingManager] ✅ BackendConfig auto-loaded: {_backendConfig.apiHost}");
+                }
+            }
+
+            // Auto-find loadingPanel nếu chưa được assign trong Inspector
+            if (loadingPanel == null)
+            {
+                // Tìm child có tên "LoadingPanel" (hoặc "Loading Panel")
+                var found = transform.Find("LoadingPanel") ?? transform.Find("Loading Panel");
+                if (found != null)
+                {
+                    loadingPanel = found.gameObject;
+                    Debug.LogWarning($"[LoadingManager] ⚠️ loadingPanel tự động tìm thấy: '{found.name}'. Hãy gán vào Inspector.");
+                }
+                else
+                {
+                    Debug.LogError("[LoadingManager] ❌ loadingPanel chưa được gán trong Inspector và không tìm thấy child 'LoadingPanel'.");
+                    Debug.LogError("[LoadingManager]    Gán GameObject chứa loading UI vào field 'Loading Panel' trong Inspector.");
+                }
+            }
+
             if (loadingPanel != null)
             {
                 loadingPanel.SetActive(true);
                 _isShowing = true;
+                Debug.Log($"[LoadingManager] ✅ loadingPanel SetActive(true): '{loadingPanel.name}'");
             }
 
             // Retry button ẩn mặc định, chỉ hiện khi offline
@@ -289,12 +337,35 @@ namespace NightHunt.Core
             {
                 UpdateLoadingUI("Kiểm tra server...", 0.50f);
 
+                // Ensure health path has /api prefix (defensive check)
+                string healthPath = _healthPath;
+                if (!healthPath.StartsWith("/api/"))
+                {
+                    healthPath = "/api" + (healthPath.StartsWith("/") ? healthPath : "/" + healthPath);
+                    Debug.LogWarning($"[LoadingManager] ⚠️ Health path corrected: {_healthPath} → {healthPath}");
+                }
+
                 string url = _backendConfig != null
-                    ? $"{_backendConfig.GetApiBaseUrl()}{_healthPath}"
-                    : $"http://localhost:8080{_healthPath}";
+                    ? $"{_backendConfig.GetApiBaseUrl()}{healthPath}"
+                    : "https://localhost:8443" + healthPath; // Fallback: HTTPS localhost (self-signed cert)
 
                 using var req = UnityWebRequest.Get(url);
                 req.timeout = Mathf.Max(1, (int)internetTimeout);
+
+                // 📋 DEBUG LOG: Health check request details
+                Debug.Log($"[LoadingManager] 🔍 Health Check Request:");
+                Debug.Log($"  URL: {url}");
+                Debug.Log($"  Timeout: {req.timeout}s");
+                // HTTPS luon duoc su dung — khong co fallback HTTP
+                if (_backendConfig != null)
+                {
+                    Debug.Log($"  Host: {_backendConfig.apiHost} (HTTPS)");
+                }
+                else
+                {
+                    Debug.Log($"  Config: NULL (using fallback HTTPS localhost)");
+                }
+
                 yield return req.SendWebRequest();
 
                 bool ok = req.result == UnityWebRequest.Result.Success
@@ -304,6 +375,7 @@ namespace NightHunt.Core
                 {
                     ShowRetryButton(false);
                     UpdateLoadingUI("Server sẵn sàng!", 0.58f);
+                    Debug.Log($"[LoadingManager] ✅ Backend health check PASSED - Status: {req.responseCode}");
                     yield break;
                 }
 
@@ -316,7 +388,49 @@ namespace NightHunt.Core
                 UpdateLoadingUI(errorMsg, 0.50f);
                 ShowRetryButton(true);
 
-                Debug.LogWarning($"[LoadingManager] Backend health failed: result={req.result} code={req.responseCode} err={req.error}");
+                // 📋 ENHANCED DEBUG LOG: Detailed error info
+                Debug.LogWarning($"[LoadingManager] ❌ Backend health FAILED:");
+                Debug.LogWarning($"  Result: {req.result}");
+                Debug.LogWarning($"  Status Code: {req.responseCode}");
+                Debug.LogWarning($"  Error: {req.error}");
+                
+                // Log response body if available (might contain useful error info)
+                if (!string.IsNullOrEmpty(req.downloadHandler?.text))
+                {
+                    Debug.LogWarning($"  Response Body: {req.downloadHandler.text}");
+                }
+
+                // Diagnose specific connection issues
+                if (req.result == UnityWebRequest.Result.ConnectionError)
+                {
+                    bool isSslError = req.error != null &&
+                        (req.error.Contains("SSL") || req.error.Contains("certificate") || req.error.Contains("CA"));
+
+                    if (isSslError)
+                    {
+                        Debug.LogError($"[LoadingManager] SSL CERT ERROR — Nguyen nhan: mkcert CA chua duoc install vao Windows");
+                        Debug.LogError($"  Fix: Chay dev-start.bat (hoac .dev-start.ps1) trong thu muc NightHuntServer");
+                        Debug.LogError($"  Hoac chay thu cong: mkcert -install  (trong PowerShell)");
+                        Debug.LogError($"  Sau do RESTART Unity Editor");
+                    }
+                    else
+                    {
+                        Debug.LogError($"[LoadingManager] CONNECTION ERROR:");
+                        Debug.LogError($"  1. Server chua chay tren {_backendConfig?.apiHost ?? "localhost:8443"}");
+                        Debug.LogError($"  2. SSL cert chua duoc setup — chay dev-start.bat");
+                        Debug.LogError($"  3. Port 8443 bi block boi Firewall");
+                    }
+                }
+                else if (req.result == UnityWebRequest.Result.ProtocolError)
+                {
+                    Debug.LogError($"[LoadingManager] 🔴 PROTOCOL ERROR - HTTP {req.responseCode}");
+                    if (req.responseCode == 404)
+                    {
+                        Debug.LogError($"  Health path problem! Check if path is correct: {url}");
+                        Debug.LogError($"  Expected: https://localhost:8443/api/actuator/health");
+                        Debug.LogError($"  Actual: {url}");
+                    }
+                }
 
                 // Tự retry sau 5s hoặc ngay khi user bấm Retry
                 _retryRequested = false;
@@ -359,8 +473,9 @@ namespace NightHunt.Core
                 return;
             }
 
-            UINavigator.Instance.ShowPanel(_targetPanel, forceInstant: false);
+            // Hide loading panel BEFORE showing target panel to ensure it doesn't block raycasts
             Hide();
+            UINavigator.Instance.ShowPanel(_targetPanel, forceInstant: false);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -425,6 +540,11 @@ namespace NightHunt.Core
             {
                 loadingPanel.SetActive(false);
                 _isShowing = false;
+                Debug.Log("[LoadingManager] ✅ loadingPanel SetActive(false) — ẩn loading UI.");
+            }
+            else
+            {
+                Debug.LogError("[LoadingManager] ❌ Hide() gọi nhưng loadingPanel là null! Loading UI sẽ không tắt.");
             }
         }
 

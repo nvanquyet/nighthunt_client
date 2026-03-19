@@ -254,13 +254,31 @@ namespace NightHunt.UI
 
         private async Task RefreshParty()
         {
-            if (_partyService == null) { RefreshPartyDisplay(); return; }
+            Debug.Log("[PartyController] RefreshParty → calling GET /api/party/current ...");
+            if (_partyService == null) { Debug.LogWarning("[PartyController] _partyService is null — skipping GetParty"); RefreshPartyDisplay(); return; }
             var result = await _partyService.GetParty();
-            _currentParty = (result.Success && result.Data != null) ? result.Data : null;
+            if (result.Success && result.Data != null)
+            {
+                _currentParty = result.Data;
+                Debug.Log($"[PartyController] GetParty response OK — partyId={_currentParty.partyId} hostUserId={_currentParty.hostUserId} status={_currentParty.partyStatus} members={_currentParty.members?.Count ?? 0}");
+                if (_currentParty.members != null)
+                {
+                    for (int i = 0; i < _currentParty.members.Count; i++)
+                    {
+                        var m = _currentParty.members[i];
+                        Debug.Log($"[PartyController]   member[{i}] userId={m.userId} username='{m.username}' isHost={m.isHost} joinOrder={m.joinOrder} onlineStatus={m.onlineStatus} selectedCharacterId='{m.selectedCharacterId}'");
+                    }
+                }
+            }
+            else
+            {
+                _currentParty = null;
+                Debug.Log($"[PartyController] GetParty response — no active party (Success={result.Success} msg='{result.Message}')");
+            }
             RefreshPartyDisplay();
         }
 
-        private void RefreshPartyDisplay()
+        public void RefreshPartyDisplay()
         {
             int maxSlots = SelectedMode.modeKey != null ? SelectedMode.playersPerTeam : 3;
             if (maxSlots <= 0) maxSlots = 3;
@@ -535,9 +553,11 @@ namespace NightHunt.UI
         private static void PopulateDropdown(CustomDropdown dd, List<string> names, int selectIndex)
         {
             dd.items.Clear();
+            if (names == null || names.Count == 0) return;
             foreach (var name in names) dd.CreateNewItem(name, notify: false);
             dd.SetupDropdown();
-            dd.SetDropdownIndex(selectIndex);
+            int safeIndex = Mathf.Clamp(selectIndex, 0, names.Count - 1);
+            dd.SetDropdownIndex(safeIndex);
         }
 
         private static string FormatTime(float seconds)

@@ -18,7 +18,7 @@ MonoBehaviour:
     description: Solo duel
     playersPerTeam: 1
     allowFill: 0
-    isEnabled: 1
+    isEnabled: 0
   - modeKey: 2v2
     displayName: 2 vs 2
     description: "Team of 2 \u2014 fill allowed"

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Threading.Tasks;
 using Michsky.UI.Shift;
 using NightHunt.Core;
@@ -16,14 +16,17 @@ namespace NightHunt.UI
     /// LoginView - Xử lý form đăng nhập và đăng ký.
     /// Single-scene: dùng UINavigator thay vì SceneLoader.
     /// Hỗ trợ "Ghi nhớ đăng nhập" → lưu refreshToken vào PlayerPrefs.
+    ///
+    /// KHÔNG implement INavigableView — dùng OnEnable() tự nhiên của Unity.
+    /// Shift UI dùng SetActive(true) để show panel → OnEnable tự fire.
     /// </summary>
-    public class LoginView : MonoBehaviour, INavigableView
+    public class LoginView : MonoBehaviour
     {
         // ─── Login Form ─────────────────────────────────────────────
         [Header("Login Form")]
         [SerializeField] private TMP_InputField usernameInput;
         [SerializeField] private TMP_InputField passwordInput;
-        [Tooltip("ShiftUI SwitchManager trên switch Gó nhớ đăng nhập.")]
+        [Tooltip("ShiftUI SwitchManager trên switch Ghi nhớ đăng nhập.")]
         [SerializeField] private SwitchManager  rememberMeSwitch;
         [SerializeField] private Button         loginButton;
 
@@ -98,29 +101,20 @@ namespace NightHunt.UI
             RestoreRememberMeToggle();
         }
 
-private void OnEnable()
+        private void OnEnable()
         {
-            // CanvasGroup navigation does NOT trigger OnEnable on nav transitions.
-            // Show logic is in INavigableView.OnShow().
-        }
-
-        // ─────────────────────────────────────────────
-        // INavigableView — called by UINavigator
-        // ─────────────────────────────────────────────
-
-        public void OnShow()
-        {
-            // Restore RememberMe toggle and hide any stale loading screen.
-            StartCoroutine(RestoreAfterFrame());
-
+            // Khi Shift UI / UINavigator.OnGoLogin fire SetActive(true) → OnEnable chạy.
+            // Ẩn stale loading screen nếu còn đang show.
             if (_loadingManager != null && _loadingManager.IsShowing())
                 _loadingManager.Hide();
+
+            // Restore RememberMe toggle sau 1 frame (chờ SwitchManager.OnEnable xong).
+            StartCoroutine(RestoreAfterFrame());
         }
 
-        public void OnHide() { }
         private IEnumerator RestoreAfterFrame()
         {
-            yield return null; // chờ 1 frame sau SwitchManager.OnEnable()
+            yield return null;
             RestoreRememberMeToggle();
         }
 
@@ -277,13 +271,13 @@ private void OnEnable()
             PlayerPrefs.DeleteKey(LoadingManager.KEY_REMEMBER_ME);
             PlayerPrefs.Save();
 
-            // Clear session state (FIX: đúng tên method)
+            // Clear session state
             SessionState.Instance?.ClearSession();
 
-            // Clear room state (FIX: đúng tên method)
+            // Clear room state
             GameManager.Instance?.RoomState?.ClearRoom();
 
-            // Navigate về Login panel
+            // Navigate về Login panel — fire UINavigator.OnGoLogin event
             UINavigator.Instance?.GoLogin();
             Debug.Log("[LoginView] Logged out — all tokens & state cleared.");
         }

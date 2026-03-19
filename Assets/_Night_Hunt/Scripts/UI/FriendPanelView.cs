@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
@@ -120,6 +120,17 @@ namespace NightHunt.UI
         private void Start()
         {
             if (GameManager.Instance != null)
+                _friendService = GameManager.Instance.FriendService;
+
+            // Khong goi LoadFriends() o day — goi trong OnEnable()
+            // de dam bao chi load khi panel duoc show (user da login).
+        }
+
+        private void OnEnable()
+        {
+            // Fired khi Shift UI SetActive(true) FriendPanel.
+            // Luc nay user da authenticated (nam trong HomePanel) → safe to load.
+            if (_friendService == null && GameManager.Instance != null)
                 _friendService = GameManager.Instance.FriendService;
 
             SwitchTabData(FriendTab.Friends);

@@ -6,126 +6,88 @@ namespace NightHunt.Config
     public class BackendConfig : ScriptableObject
     {
         [Header("Environment")]
-        [Tooltip("Select environment profile")]
+        [Tooltip("Chỉ để hiển thị / debug — URL được quyết định bởi build target")]
         public EnvironmentProfile environment = EnvironmentProfile.Development;
-        
+
         public enum EnvironmentProfile
         {
-            Development,  // localhost, HTTP, no cert validation
-            Staging,      // staging server, HTTPS, cert validation
-            Production    // production server, HTTPS, strict cert validation
+            Development,
+            Staging,
+            Production
         }
-        
-        [Header("API Configuration")]
-        [Tooltip("API Base URL (without protocol). Example: localhost:8080 or api.yourdomain.com")]
-        public string apiHost = "localhost:8080";
-        
-        [Tooltip("Use HTTPS instead of HTTP")]
-        public bool useHttps = false;
-        
-        [Tooltip("Force HTTPS in production builds (ignore useHttps flag)")]
-        public bool forceHttpsInProduction = true;
-        
-        [Header("Security Settings")]
-        [Tooltip("Ignore SSL certificate validation (ONLY for local development with self-signed certs)")]
-        public bool ignoreSslCertificate = true;
-        
-        [Tooltip("Force secure connections (HTTPS/WSS) even for localhost")]
-        public bool forceSecureEverywhere = false;
-        
-        [Header("Development Settings")]
-        [Tooltip("Allow HTTP on localhost in development")]
-        public bool allowInsecureLocalhost = true;
-        
-        
-        [Header("Timeout Settings")]
-        [Tooltip("HTTP request timeout in seconds")]
-        public int requestTimeoutSeconds = 10; // Changed from 30 to 10 for better UX
 
-        [Header("WebSocket Settings")]
-        [Tooltip("WS path on server")]
-        public string wsPath = "/ws/game";
-        [Tooltip("Override full WS base URL (e.g., wss://api.example.com). Leave empty to auto-build from apiHost/useHttps.")]
+        // ── Dev settings (Editor / Development Build) ────────────────────────
+        [Header("Dev Settings (Editor / Development Build)")]
+        [Tooltip("Host khi chạy Editor hoặc Development build — localhost với mkcert cert")]
+        public string devApiHost = "localhost:8443";
+
+        // ── Production settings ──────────────────────────────────────────────
+        [Header("Production Settings")]
+        [Tooltip("Host khi build Release — domain thật với Let's Encrypt cert")]
+        public string prodApiHost = "api.nighthunt.com";
+
+        // ── Common Settings ──────────────────────────────────────────────────
+        [Header("Common")]
+        [Tooltip("WS endpoint path — phải khớp với server config")]
+        public string wsPath = "/api/ws/game";
+
+        [Tooltip("(Optional) Override toàn bộ WebSocket base URL, ví dụ: wss://custom-host:9000. Để trống để dùng giá trị tự động từ apiHost.")]
         public string overrideWsBaseUrl = "";
-        [Tooltip("If true, use useHttps to decide wss/ws. If false, rely on forceSecure/allowInsecureFallback rules.")]
-        public bool respectBackendHttps = true;
-        [Tooltip("Force secure WebSocket (wss) even if useHttps = false (except localhost when allowInsecureFallback = true).")]
-        public bool forceSecure = false;
-        [Tooltip("Allow ws:// on localhost/dev even if forceSecure is true.")]
-        public bool allowInsecureFallback = true;
+
+        [Tooltip("Timeout HTTP request (giây)")]
+        public int requestTimeoutSeconds = 10;
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Runtime resolved properties
+        // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Get the full API base URL with protocol
-        /// SEC-FIX: Enforce HTTPS in production builds
-        /// ENV-FIX: Support environment profiles
+        /// API host được resolve tự động theo build target:
+        ///   UNITY_EDITOR / DEVELOPMENT_BUILD → devApiHost (localhost:8443 với mkcert)
+        ///   Release Build                    → prodApiHost (api.nighthunt.com Let's Encrypt)
+        /// KHÔNG cần đổi asset khi build. Tự động.
         /// </summary>
-        public string GetApiBaseUrl()
+        public string apiHost
         {
-            // Environment-based configuration
-            bool shouldUseHttps = useHttps;
-            bool isLocalhost = apiHost.Contains("localhost") || apiHost.Contains("127.0.0.1") || apiHost.Contains("0.0.0.0");
-            
-            // Apply environment profile
-            switch (environment)
+            get
             {
-                case EnvironmentProfile.Development:
-                    // Development: Allow HTTP for localhost
-                    if (isLocalhost && allowInsecureLocalhost)
-                        shouldUseHttps = false;
-                    break;
-                    
-                case EnvironmentProfile.Staging:
-                case EnvironmentProfile.Production:
-                    // Staging/Production: Force HTTPS (even for localhost if forceSecureEverywhere)
-                    shouldUseHttps = true;
-                    if (isLocalhost && !forceSecureEverywhere && allowInsecureLocalhost)
-                        shouldUseHttps = false;
-                    break;
-            }
-            
-#if UNITY_EDITOR
-            // Development build: Respect useHttps flag
-            // Allow HTTP for localhost testing
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                return devApiHost;
 #else
-            // Production build: ALWAYS use HTTPS (unless explicitly allowed)
-            if (forceHttpsInProduction && !isLocalhost)
-            {
-                shouldUseHttps = true;
-                if (!useHttps)
-                {
-                    Debug.LogWarning("[BackendConfig] Production build - forcing HTTPS for non-localhost");
-                }
-            }
+                return prodApiHost;
 #endif
-            
-            string protocol = shouldUseHttps ? "https" : "http";
-            return $"{protocol}://{apiHost}";
-        }
-        
-        /// <summary>
-        /// Check if HTTPS should be used (for WebSocket wss:// determination)
-        /// </summary>
-        public bool ShouldUseSecureConnection()
-        {
-            bool isLocalhost = apiHost.Contains("localhost") || apiHost.Contains("127.0.0.1") || apiHost.Contains("0.0.0.0");
-            
-            // Apply environment profile
-            switch (environment)
-            {
-                case EnvironmentProfile.Development:
-                    if (isLocalhost && allowInsecureLocalhost)
-                        return false;
-                    return useHttps;
-                    
-                case EnvironmentProfile.Staging:
-                case EnvironmentProfile.Production:
-                    if (isLocalhost && !forceSecureEverywhere && allowInsecureLocalhost)
-                        return false;
-                    return true;
             }
-            
-            return useHttps;
         }
+
+        // Legacy compat — một số code cũ có thể đọc useHttps trực tiếp
+        public bool useHttps => true;
+
+        /// <summary>
+        /// Full API base URL với protocol.
+        /// Luôn HTTPS — Dev dùng mkcert cert, Production dùng Let's Encrypt.
+        /// </summary>
+        public string GetApiBaseUrl() => $"https://{apiHost}";
+
+        /// <summary>Luôn dùng secure connection (HTTPS/WSS).</summary>
+        public bool ShouldUseSecureConnection() => true;
+
+        /// <summary>
+        /// Không bao giờ bypass SSL validation.
+        /// Dev:  mkcert -install đảm bảo cert được trust bởi Windows/macOS
+        /// Prod: Let's Encrypt cert được trust bởi tất cả OS
+        /// </summary>
+        public bool ShouldBypassSslCertificateValidation() => false;
+
+#if UNITY_EDITOR
+        [ContextMenu("Log Current Config")]
+        private void LogCurrentConfig()
+        {
+            Debug.Log($"[BackendConfig] Environment: EDITOR");
+            Debug.Log($"[BackendConfig] Resolved apiHost: {apiHost}");
+            Debug.Log($"[BackendConfig] Resolved URL: {GetApiBaseUrl()}");
+            Debug.Log($"[BackendConfig] devApiHost: {devApiHost}");
+            Debug.Log($"[BackendConfig] prodApiHost: {prodApiHost}");
+        }
+#endif
     }
 }
-

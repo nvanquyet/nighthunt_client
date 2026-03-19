@@ -3,10 +3,10 @@ namespace NightHunt.Common
     public static class Constants
     {
         // API Endpoints (relative paths - base URL comes from BackendConfig)
-        // Base URL = http://{apiHost} (no /api suffix). Context-path on server = /api.
-        // AuthController:         @RequestMapping("/auth")          → actual: /api/auth/...
-        // ProfileController:      @RequestMapping("/api/profile")   → actual: /api/api/profile (double prefix)
-        // MatchmakingController:  @RequestMapping("/api/matchmaking/queue") → actual: /api/api/matchmaking/queue
+        // Base URL = http(s)://{apiHost} (no /api suffix). Context-path on server = /api.
+        // AuthController:            @RequestMapping("/auth")          → /api/auth/...
+        // ProfileController:         @RequestMapping("/profile")       → /api/profile/...
+        // MatchmakingQueueController:@RequestMapping("/matchmaking/queue") → /api/matchmaking/queue/...
         public const string API_AUTH_REGISTER        = "/api/auth/register";
         public const string API_AUTH_LOGIN            = "/api/auth/login";
         public const string API_AUTH_REFRESH_TOKEN    = "/api/auth/refresh-token";
@@ -14,10 +14,9 @@ namespace NightHunt.Common
         public const string API_AUTH_LOGOUT           = "/api/auth/logout";
         public const string API_AUTH_CHANGE_PASSWORD  = "/api/auth/change-password";
 
-        // Profile endpoints — ProfileController has /api/profile in its own @RequestMapping
-        // + context-path /api → actual server URL is /api/api/profile
-        public const string API_PROFILE_GET           = "/api/api/profile";
-        public const string API_PROFILE_SET_CHARACTER = "/api/api/profile/character";
+        // Profile endpoints — ProfileController @RequestMapping("/profile") + context-path /api → /api/profile/...
+        public const string API_PROFILE_GET           = "/api/profile";
+        public const string API_PROFILE_SET_CHARACTER = "/api/profile/character";
         
         // Room endpoints — RoomController @RequestMapping("/rooms") + context-path /api → /api/rooms/...
         public const string API_ROOMS_CREATE          = "/api/rooms/create";
@@ -39,11 +38,11 @@ namespace NightHunt.Common
         public const string API_ROOMS_UPDATE_SETTINGS = "/api/rooms/{0}/update-settings";
         public const string API_ROOMS_TRANSFER_OWNER  = "/api/rooms/{0}/transfer-owner";
 
-        // Matchmaking — MatchmakingQueueController has /api/matchmaking/queue in its own @RequestMapping
-        // + context-path /api → actual server URLs are /api/api/matchmaking/queue/...
-        public const string API_MATCHMAKING_QUEUE   = "/api/api/matchmaking/queue";
-        public const string API_MATCHMAKING_ACCEPT  = "/api/api/matchmaking/queue/accept";
-        public const string API_MATCHMAKING_DECLINE = "/api/api/matchmaking/queue/decline";
+        // Matchmaking — MatchmakingQueueController @RequestMapping("/matchmaking/queue")
+        // + context-path /api → /api/matchmaking/queue/...
+        public const string API_MATCHMAKING_QUEUE   = "/api/matchmaking/queue";
+        public const string API_MATCHMAKING_ACCEPT  = "/api/matchmaking/queue/accept";
+        public const string API_MATCHMAKING_DECLINE = "/api/matchmaking/queue/decline";
 
         // Friend System
         // Server: FriendController @RequestMapping("/friends") + context-path /api
@@ -63,16 +62,16 @@ namespace NightHunt.Common
         // Party System
         // Server: PartyController @RequestMapping("/party") + context-path /api
         // → all party URLs are /api/party/...
-        public const string API_PARTY                      = "/api/party/current";              // GET current party [WAS: /api/party — FIXED]
+        public const string API_PARTY                      = "/api/party/current";              // GET current party
         public const string API_PARTY_CREATE               = "/api/party/create";
         public const string API_PARTY_LEAVE                = "/api/party/leave";
-        public const string API_PARTY_DISBAND              = "/api/party/disband";              // [NEW]
+        public const string API_PARTY_DISBAND              = "/api/party/disband";
         public const string API_PARTY_INVITE               = "/api/party/invite";               // POST — body: { inviteeUserId }
-        public const string API_PARTY_INVITATIONS          = "/api/party/invitations";          // GET  [WAS: /api/party/invites/pending — FIXED]
+        public const string API_PARTY_INVITATIONS          = "/api/party/invitations";          // GET pending invitations
         public const string API_PARTY_ACCEPT_INVITATION    = "/api/party/invitations/{0}/accept";
-        public const string API_PARTY_DECLINE_INVITATION   = "/api/party/invitations/{0}/decline"; // [WAS: reject — FIXED to decline]
-        public const string API_PARTY_CANCEL_INVITE        = "/api/party/invite/{0}";          // DELETE cancel sent invite
-        public const string API_PARTY_KICK                 = "/api/party/kick/{0}";             // POST path param [WAS: body — FIXED]
+        public const string API_PARTY_DECLINE_INVITATION   = "/api/party/invitations/{0}/decline";
+        public const string API_PARTY_CANCEL_INVITE        = "/api/party/invitations/{0}/cancel"; // DELETE cancel sent invite
+        public const string API_PARTY_KICK                 = "/api/party/kick/{0}";             // POST path param
         public const string API_PARTY_QUEUE                = "/api/party/queue";
         public const string API_PARTY_CANCEL_QUEUE         = "/api/party/cancel-queue";
         public const string API_PARTY_JOIN_ROOM            = "/api/party/join-room";

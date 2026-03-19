@@ -23,10 +23,10 @@ namespace NightHunt.Server
         [Header("References")]
         [SerializeField] private NetworkManager networkManager;
 
-        [Header("Fallback (Editor / Local Test)")]
+        [Header("Fallback (Production-Localhost)")]
         [SerializeField] private ushort  fallbackPort       = 7777;
-        [SerializeField] private string  fallbackBackendUrl = "http://localhost:8080";
-        [SerializeField] private string  fallbackServerId   = "editor-local-test";
+        [SerializeField] private string  fallbackBackendUrl = "https://localhost:8443";
+        [SerializeField] private string  fallbackServerId   = "localhost-production-test";
         [SerializeField] private int     fallbackMaxPlayers  = 16;
 
         // Được parse từ CLI args (Docker truyền vào qua entrypoint.sh)
@@ -47,13 +47,13 @@ namespace NightHunt.Server
 #if UNITY_SERVER
             ParseCommandLineArgs();
 #else
-            // Editor / Development mode
+            // Editor fallback uses the same localhost production endpoint.
             _serverId     = fallbackServerId;
             _gamePort     = fallbackPort;
             _backendUrl   = fallbackBackendUrl;
-            _serverSecret = "dev-secret-editor";
+            _serverSecret = "replace-this-production-ds-admin-secret";
             _maxPlayers   = fallbackMaxPlayers;
-            Debug.LogWarning("[ServerBootstrap] Running in EDITOR mode with fallback config.");
+            Debug.LogWarning("[ServerBootstrap] Running in editor with localhost production fallback config.");
 #endif
 
             if (networkManager == null)

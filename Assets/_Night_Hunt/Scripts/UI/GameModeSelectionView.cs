@@ -175,10 +175,10 @@ namespace NightHunt.UI
         {
             _gameModes = new List<GameModeResponse>
             {
-                new GameModeResponse { modeKey = "2v2", displayName = "2v2", maxPlayers = 4, playersPerTeam = 2, isEnabled = true, status = "ACTIVE" },
-                new GameModeResponse { modeKey = "3v3", displayName = "3v3", maxPlayers = 6, playersPerTeam = 3, isEnabled = false, status = "COMING_SOON" },
-                new GameModeResponse { modeKey = "4v4", displayName = "4v4", maxPlayers = 8, playersPerTeam = 4, isEnabled = false, status = "COMING_SOON" },
-                new GameModeResponse { modeKey = "5v5", displayName = "5v5", maxPlayers = 10, playersPerTeam = 5, isEnabled = false, status = "COMING_SOON" }
+                new GameModeResponse { modeKey = "2v2", displayName = "2v2", totalPlayers = 4, playersPerTeam = 2, active = true,  modeStatus = "AVAILABLE" },
+                new GameModeResponse { modeKey = "3v3", displayName = "3v3", totalPlayers = 6, playersPerTeam = 3, active = false, modeStatus = "COMING_SOON" },
+                new GameModeResponse { modeKey = "4v4", displayName = "4v4", totalPlayers = 8, playersPerTeam = 4, active = false, modeStatus = "COMING_SOON" },
+                new GameModeResponse { modeKey = "5v5", displayName = "5v5", totalPlayers = 10, playersPerTeam = 5, active = false, modeStatus = "COMING_SOON" }
             };
             DisplayGameModes(_gameModes);
         }
@@ -210,9 +210,9 @@ namespace NightHunt.UI
 
         private void OnModeButtonClicked(GameModeResponse mode)
         {
-            if (!mode.isEnabled)
+            if (!mode.active || mode.modeStatus != "AVAILABLE")
             {
-                Debug.Log($"[GameModeSelection] Mode {mode.modeKey} is not enabled");
+                Debug.Log($"[GameModeSelection] Mode {mode.modeKey} is not available (status: {mode.modeStatus})");
                 return;
             }
 

@@ -33,25 +33,27 @@ namespace NightHunt.UI
             if (modeNameText    != null) modeNameText.text = mode.displayName;
             if (statusBadgeText != null)
             {
-                statusBadgeText.text  = mode.status;
-                statusBadgeText.color = GetStatusColor(mode.status);
+                statusBadgeText.text  = mode.modeStatus;
+                statusBadgeText.color = GetStatusColor(mode.modeStatus);
             }
 
-            if (lockedOverlay != null) lockedOverlay.SetActive(!mode.isEnabled);
+            bool isEnabled = mode.active && mode.modeStatus == "AVAILABLE";
+            if (lockedOverlay != null) lockedOverlay.SetActive(!isEnabled);
 
             if (button != null)
             {
                 button.onClick.RemoveAllListeners();
                 button.onClick.AddListener(() => _onClick?.Invoke(_mode));
-                button.interactable = mode.isEnabled;
+                button.interactable = isEnabled;
             }
         }
 
         private static Color GetStatusColor(string status) => status switch
         {
-            "ACTIVE"      => Color.green,
+            "AVAILABLE"   => Color.green,
             "COMING_SOON" => Color.yellow,
             "DISABLED"    => Color.red,
+            "LOCKED"      => Color.gray,
             _             => Color.gray
         };
     }
