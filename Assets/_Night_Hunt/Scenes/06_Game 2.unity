@@ -307,6 +307,11 @@ PrefabInstance:
       propertyPath: m_Name
       value: Variable Joystick
       objectReference: {fileID: 0}
+    - target: {fileID: 3881087803549984439, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: handleRange
+      value: 1.5
+      objectReference: {fileID: 0}
     - target: {fileID: 3881087803815115471, guid: ec536a7718376554185e4a856d5ae230,
         type: 3}
       propertyPath: m_AnchorMax.x
@@ -329,6 +334,16 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3881087803815115471, guid: ec536a7718376554185e4a856d5ae230,
         type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 384
+      objectReference: {fileID: 0}
+    - target: {fileID: 3881087803815115471, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 384
+      objectReference: {fileID: 0}
+    - target: {fileID: 3881087803815115471, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
       propertyPath: m_AnchoredPosition.x
       value: 0
       objectReference: {fileID: 0}
@@ -336,6 +351,27 @@ PrefabInstance:
         type: 3}
       propertyPath: m_AnchoredPosition.y
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3881087804030458057, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: bbb15593675c14783b3c8b79b16fa422,
+        type: 3}
+    - target: {fileID: 3881087804030458062, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.92387956
+      objectReference: {fileID: 0}
+    - target: {fileID: 3881087804030458062, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0.38268343
+      objectReference: {fileID: 0}
+    - target: {fileID: 3881087804030458062, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 45
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -612,7 +648,7 @@ GameObject:
   - component: {fileID: 17961775}
   - component: {fileID: 17961777}
   - component: {fileID: 17961776}
-  m_Layer: 5
+  m_Layer: 0
   m_Name: AimTargetMesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2618,8 +2654,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a137fac61a294d5eb7c9c23b6820a9eb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rotationSpeed: 90
-  zoomSpeed: 5
+  _rotationSpeed: 90
+  _zoomSpeed: 5
 --- !u!1 &69465028
 GameObject:
   m_ObjectHideFlags: 0
@@ -3493,7 +3529,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 344, y: 344}
+  m_SizeDelta: {x: 172, y: 172}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &85609385
 MonoBehaviour:
@@ -5248,7 +5284,7 @@ GameObject:
   - component: {fileID: 146527829}
   - component: {fileID: 146527831}
   - component: {fileID: 146527830}
-  m_Layer: 5
+  m_Layer: 0
   m_Name: PlayerSelection
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5984,6 +6020,7 @@ MonoBehaviour:
   _addedNetworkObject: {fileID: 469974967}
   _networkObjectCache: {fileID: 0}
   _phaseManager: {fileID: 742155683}
+  _bossSpawnConfigs: []
   _bossPrefabs: []
 --- !u!1 &167018697
 GameObject:
@@ -11485,7 +11522,7 @@ MonoBehaviour:
   _ghostPrefab: {fileID: 1090350918}
   _dragCanvas: {fileID: 1267468729}
   _dropQuantityDialog: {fileID: 173787055}
-  _enableDebugLogs: 0
+  _debugConfig: {fileID: 0}
   _raycaster: {fileID: 1267468727}
 --- !u!1 &331253833
 GameObject:
@@ -15368,9 +15405,10 @@ MonoBehaviour:
   _selectedHighlight: {fileID: 0}
   _slotIndex: 0
   _aimController: {fileID: 848601000}
-  _joystick: {fileID: 1791265416}
   _pulseRing: {fileID: 85609387}
   _rangeIndicator: {fileID: 1270455730}
+  _joystick: {fileID: 1791265416}
+  _holdDelay: 0.25
 --- !u!225 &490199121
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -16443,6 +16481,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 469974967}
   _networkObjectCache: {fileID: 0}
+  _scoreConfigList: []
 --- !u!1 &510516644
 GameObject:
   m_ObjectHideFlags: 0
@@ -19426,7 +19465,7 @@ GameObject:
   - component: {fileID: 581798340}
   - component: {fileID: 581798339}
   - component: {fileID: 581798338}
-  m_Layer: 5
+  m_Layer: 0
   m_Name: Canvas
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -22909,7 +22948,7 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 0}
   _matchEndManager: {fileID: 1121968025}
   _beaconPrefabFallback: {fileID: 0}
-  _maxActivePerTeamFallback: 2
+  _respawnConfig: {fileID: 0}
 --- !u!1 &706008168
 GameObject:
   m_ObjectHideFlags: 0
@@ -24766,6 +24805,8 @@ MonoBehaviour:
   initialState: 0
   phaseStartTime: 0
   phaseDuration: 120
+  phaseConfigs: []
+  _debugConfig: {fileID: 0}
 --- !u!4 &742155684
 Transform:
   m_ObjectHideFlags: 0
@@ -28271,7 +28312,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _playerRoot: {fileID: 0}
   _camera: {fileID: 0}
-  _playerStatSystemMB: {fileID: 0}
   _groundHeight: 0
   _groundLayerMask:
     serializedVersion: 2
@@ -28279,6 +28319,7 @@ MonoBehaviour:
   _minAimRadius: 0.5
   _fallbackVisionRange: 15
   _worldAimCursor: {fileID: 17961775}
+  _cursorYOffset: 0.02
   _cursorFacingAxis: 2
 --- !u!1 &848705326
 GameObject:
@@ -28569,6 +28610,7 @@ GameObject:
   - component: {fileID: 863822115}
   - component: {fileID: 863822113}
   - component: {fileID: 863822114}
+  - component: {fileID: 863822116}
   m_Layer: 0
   m_Name: SpawnSystem
   m_TagString: Untagged
@@ -28628,6 +28670,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 469974968}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &863822116
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 863822112}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9309d58e77a9fd44aa3ef085de0324b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 469974967}
+  _networkObjectCache: {fileID: 0}
+  _showOnScreenOverlay: 1
 --- !u!1 &865333003
 GameObject:
   m_ObjectHideFlags: 0
@@ -32278,14 +32336,19 @@ MonoBehaviour:
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _weaponSlotPrefab: {fileID: 1858335422}
   _weaponSlotsContainer: {fileID: 1082321963}
+  _showQuickSlotsUI: 1
+  _quickSlotLayout: 0
   _quickSlotPrefab: {fileID: 490199120}
   _quickSlotsRoot: {fileID: 730148694}
   _radialRadius: 300
   _arcCenterAngle: 135
   _arcSpread: 150
+  _quickSlotsRootList: {fileID: 0}
   _reloadProgressBar: {fileID: 1340420781}
+  _showFireButton: 1
   _fireButton: {fileID: 2050517247}
   _aimController: {fileID: 848601000}
+  _cancelItemUseButton: {fileID: 0}
   _audioSource: {fileID: 0}
   _depletedClip: {fileID: 0}
 --- !u!114 &981453787
@@ -38439,7 +38502,7 @@ GameObject:
   - component: {fileID: 1139137662}
   - component: {fileID: 1139137664}
   - component: {fileID: 1139137663}
-  m_Layer: 5
+  m_Layer: 0
   m_Name: Image
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -57695,6 +57758,11 @@ PrefabInstance:
       propertyPath: m_Name
       value: Variable Joystick
       objectReference: {fileID: 0}
+    - target: {fileID: 3881087803549984439, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: handleRange
+      value: 1.5
+      objectReference: {fileID: 0}
     - target: {fileID: 3881087803815115471, guid: ec536a7718376554185e4a856d5ae230,
         type: 3}
       propertyPath: m_AnchorMax.x
@@ -57714,6 +57782,16 @@ PrefabInstance:
         type: 3}
       propertyPath: m_AnchorMin.y
       value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3881087803815115471, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 384
+      objectReference: {fileID: 0}
+    - target: {fileID: 3881087803815115471, guid: ec536a7718376554185e4a856d5ae230,
+        type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 384
       objectReference: {fileID: 0}
     - target: {fileID: 3881087803815115471, guid: ec536a7718376554185e4a856d5ae230,
         type: 3}
@@ -58407,6 +58485,7 @@ MonoBehaviour:
   _takeAllButton: {fileID: 2074264709}
   _closeButton: {fileID: 1387220317}
   _maxLootDistance: 4
+  _debugConfig: {fileID: 0}
 --- !u!1 &1809917078
 GameObject:
   m_ObjectHideFlags: 0
@@ -58890,7 +58969,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1828269305}
   - component: {fileID: 1828269306}
-  m_Layer: 5
+  m_Layer: 0
   m_Name: AimFinalPos
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -62403,7 +62482,7 @@ Camera:
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
-    m_Bits: 55
+    m_Bits: 9957143
   m_RenderingPath: -1
   m_TargetTexture: {fileID: 0}
   m_TargetDisplay: 0
@@ -64982,6 +65061,7 @@ MonoBehaviour:
   clientNetworkHandlerPrefab: {fileID: 5359618603319872427, guid: 23374191f5ee8534bb98f97a4336e8b9,
     type: 3}
   _expectedPlayerCount: 2
+  _debugConfig: {fileID: 0}
 --- !u!114 &1982108121
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -65764,7 +65844,7 @@ GameObject:
   - component: {fileID: 2022061785}
   - component: {fileID: 2022061784}
   - component: {fileID: 2022061783}
-  m_Layer: 5
+  m_Layer: 0
   m_Name: AimTarget2D
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -67974,8 +68054,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 469974967}
   _networkObjectCache: {fileID: 0}
-  respawnDelay: 5
-  phase3RespawnDelay: 10
+  _respawnConfig: {fileID: 0}
   _spawnSystem: {fileID: 863822113}
   _matchEndManager: {fileID: 1121968025}
 --- !u!1 &2090259901

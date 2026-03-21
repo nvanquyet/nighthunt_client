@@ -66,7 +66,7 @@ namespace NightHunt.GameplaySystems.Loot
             {
                 if (isLocked) return "[E] Locked";
                 if (IsLooted) return "[E] Empty";
-                if (!IsOpen) return "[E] Open Container";
+                if (!IsOpen) return HoldDuration > 0 ? "[Hold E] Open Container" : "[E] Open Container";
                 return "[E] Loot Container";
             }
         }
@@ -90,9 +90,10 @@ namespace NightHunt.GameplaySystems.Loot
 
         public void Interact(GameObject interactor)
         {
+            Debug.Log($"[WorldContainer] Interact: IsOpen={IsOpen} isLocked={isLocked} _isOpenPending={_isOpenPending} storage={storage.Count}");
             var playerNob = ComponentResolver.Find<NetworkObject>(interactor)
                 .OnSelf()
-                .InChildren()
+                .InParent()
                 .OrLogWarning("[Auto] NetworkObject not found")
                 .Resolve();
             if (playerNob == null) return;
@@ -215,6 +216,7 @@ namespace NightHunt.GameplaySystems.Loot
             if (playerNob == null)
             {
                 Debug.LogWarning("[WorldContainer] RequestOpen: playerNob NULL.");
+                RpcOnOpenRejected(conn);
                 return;
             }
 
@@ -227,6 +229,7 @@ namespace NightHunt.GameplaySystems.Loot
             if (playerNob.Owner != conn)
             {
                 Debug.LogWarning($"[WorldContainer] RequestOpen: ownership mismatch ClientId={conn?.ClientId}.");
+                RpcOnOpenRejected(conn);
                 return;
             }
 
@@ -238,6 +241,7 @@ namespace NightHunt.GameplaySystems.Loot
             if (player == null)
             {
                 Debug.LogWarning("[WorldContainer] RequestOpen: NetworkPlayer không tìm thấy.");
+                RpcOnOpenRejected(conn);
                 return;
             }
 
@@ -245,12 +249,14 @@ namespace NightHunt.GameplaySystems.Loot
             if (dist > GetInteractDistance())
             {
                 Debug.LogWarning($"[WorldContainer] RequestOpen: quá xa ({dist:F2}m).");
+                RpcOnOpenRejected(conn);
                 return;
             }
 
             if (isLocked)
             {
                 Debug.LogWarning("[WorldContainer] RequestOpen: container bị khóa.");
+                RpcOnOpenRejected(conn);
                 return;
             }
 
@@ -269,6 +275,18 @@ namespace NightHunt.GameplaySystems.Loot
                 $"[WorldContainer] RequestOpen: opening ObjId={ObjectId} storage={storage.Count} items → ClientId={conn?.ClientId}");
             syncIsOpen.Value = true;
             RpcOnContainerOpened(conn);
+        }
+
+        /// <summary>
+        /// Server → requesting client: server từ chối mở container.
+        /// Reset _isOpenPending để client có thể thử lại (vd. vừa hết tầm, nay lại gần).
+        /// </summary>
+        [TargetRpc]
+        private void RpcOnOpenRejected(NetworkConnection conn)
+        {
+            _isOpenPending = false;
+            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                Debug.Log("[WorldContainer] RpcOnOpenRejected: _isOpenPending reset — có thể thử lại.");
         }
 
         /// <summary>

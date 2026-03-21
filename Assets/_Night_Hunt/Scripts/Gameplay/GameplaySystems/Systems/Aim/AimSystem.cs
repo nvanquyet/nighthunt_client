@@ -20,9 +20,12 @@ namespace NightHunt.GameplaySystems.Aim
     ///   SetThrowableAim(Vector2.zero) to return to mouse-aim.
     ///
     /// WIRING:
-    ///   Attach to the local player GameObject.
-    ///   Assign _playerStatSystemMB (PlayerStatSystem on the same object).
-    ///   _camera defaults to Camera.main if left null.
+    ///   Place this component anywhere in the scene (not on the player prefab).
+    ///   Call Initialize(playerRoot, statSystem) from NetworkPlayer after the
+    ///   local player spawns — it auto-wires itself to the correct player.
+    ///   DO NOT assign _playerStatSystemMB in the Inspector; that field has been
+    ///   removed because PlayerStatSystem is a NetworkBehaviour spawned at runtime
+    ///   and cannot be pre-assigned to a scene object.
     /// </summary>
     public class AimSystem : MonoBehaviour, IAimSystem
     {
@@ -31,14 +34,12 @@ namespace NightHunt.GameplaySystems.Aim
         // ─────────────────────────────────────────────────────────────────────
 
         [Header("References")]
-        [Tooltip("Root transform used as the aim origin (usually the player root).")]
+        [Tooltip("Root transform used as the aim origin (usually the player root). " +
+                 "Leave null — Initialize() assigns it from the spawned player.")]
         [SerializeField] private Transform _playerRoot;
 
         [Tooltip("Camera used for screen-to-world raycasts. Defaults to Camera.main.")]
         [SerializeField] private UnityEngine.Camera _camera;
-
-        [Tooltip("Implements IPlayerStatSystem – used to read VisionRange.")]
-        [SerializeField] private MonoBehaviour _playerStatSystemMB;
 
         [Header("Ground Plane")]
         [Tooltip("World-space Y coordinate of the aiming plane.")]
@@ -57,6 +58,10 @@ namespace NightHunt.GameplaySystems.Aim
         [Header("World Cursor")]
         [Tooltip("Optional world-space Transform (flat disc, decal, or ring) that is repositioned to FinalAimPos every frame.")]
         [SerializeField] private Transform _worldAimCursor;
+
+        [Tooltip("Y-lift above _groundHeight applied to the visual cursor to avoid z-fighting with the floor mesh. " +
+                 "Does NOT affect FinalAimPos (gameplay logic uses the unlifted value).")]
+        [SerializeField] private float _cursorYOffset = 0.02f;
 
         public enum CursorFacingAxis { X, Y, Z }
         [Tooltip("Which local axis of the cursor mesh is rotated to face toward the player.\n" +
@@ -93,7 +98,9 @@ namespace NightHunt.GameplaySystems.Aim
 
         private void Awake()
         {
-            _playerStats = _playerStatSystemMB as IPlayerStatSystem;
+            // NOTE: IPlayerStatSystem is NOT resolved here. AimSystem is a scene object;
+            // PlayerStatSystem is a NetworkBehaviour on the player prefab spawned at runtime.
+            // _playerStats is set via Initialize(playerRoot, statSystem) called by NetworkPlayer.
 
             if (_camera == null)
                 _camera = UnityEngine.Camera.main;
@@ -110,7 +117,18 @@ namespace NightHunt.GameplaySystems.Aim
         public void Initialize(Transform playerRoot, IPlayerStatSystem statSystem)
         {
             _playerRoot  = playerRoot;
-            _playerStats = statSystem;
+
+            // Prefer the explicitly passed stat system.
+            // Fallback: auto-find on the player's hierarchy (handles edge cases where
+            // NetworkPlayer passes null because ComponentResolver failed).
+            _playerStats = statSystem
+                ?? playerRoot?.GetComponentInChildren<IPlayerStatSystem>()
+                ?? playerRoot?.GetComponent<IPlayerStatSystem>();
+
+            if (_playerStats == null)
+                Debug.LogWarning("[AimSystem] IPlayerStatSystem not found — VisionRange will use fallback value.");
+            else
+                Debug.Log($"[AimSystem] Bound to stat system: {_playerStats.GetType().Name}");
 
             if (_camera == null)
                 _camera = UnityEngine.Camera.main;
@@ -138,6 +156,7 @@ namespace NightHunt.GameplaySystems.Aim
 
         private void Update()
         {
+            if (_playerRoot == null) return; // guard: _playerRoot destroyed (player despawned)
             if (_isThrowableMode)
                 ResolveThrowableAim();
             else
@@ -197,7 +216,7 @@ namespace NightHunt.GameplaySystems.Aim
             if (groundPlane.Raycast(ray, out float dist))
                 return ray.GetPoint(dist);
 
-            return _playerRoot.position; // last resort
+            return _playerRoot != null ? _playerRoot.position : Vector3.zero; // last resort
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -226,6 +245,7 @@ namespace NightHunt.GameplaySystems.Aim
 
         private void ApplyToTarget(Vector3 worldPoint)
         {
+            if (_playerRoot == null) return;
             Vector3 origin    = _playerRoot.position;
             Vector3 toTarget  = worldPoint - origin;
             toTarget.y        = 0f; // enforce horizontal plane
@@ -246,7 +266,11 @@ namespace NightHunt.GameplaySystems.Aim
             // Only the configured axis angle is changed; the other two keep their designer-set values.
             if (_worldAimCursor != null)
             {
-                _worldAimCursor.position = FinalAimPos;
+                // FIX: Place cursor at configured ground plane (+ small lift to avoid z-fighting),
+                // NOT at origin.y (player pivot may be at capsule centre, causing cursor to float).
+                // FinalAimPos.y intentionally stays at origin.y for weapon/ability game logic.
+                Vector3 cursorPos = new Vector3(FinalAimPos.x, _groundHeight + _cursorYOffset, FinalAimPos.z);
+                _worldAimCursor.position = cursorPos;
                 if (FinalAimDir.sqrMagnitude > 0.001f)
                 {
                     // angle in degrees that points FROM cursor TOWARD player on the horizontal plane

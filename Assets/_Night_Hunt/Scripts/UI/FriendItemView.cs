@@ -57,8 +57,33 @@ namespace NightHunt.UI
             Friend     = friend;
             _onSelected = onSelected;
 
-            if (usernameText != null) usernameText.text = friend.username;
+            if (usernameText == null)
+            {
+                Debug.LogWarning($"[FriendItemView] usernameText is not assigned on '{name}'. Trying fallback lookup.");
+                usernameText = ResolveFallbackText("name");
+            }
+            else if (!usernameText.transform.IsChildOf(transform))
+            {
+                Debug.LogWarning($"[FriendItemView] usernameText on '{name}' points outside row prefab ('{usernameText.gameObject.name}'). Rebinding locally.");
+                usernameText = ResolveFallbackText("name");
+            }
+
+            if (statusText == null)
+            {
+                statusText = ResolveFallbackText("status");
+            }
+            else if (!statusText.transform.IsChildOf(transform))
+            {
+                Debug.LogWarning($"[FriendItemView] statusText on '{name}' points outside row prefab ('{statusText.gameObject.name}'). Rebinding locally.");
+                statusText = ResolveFallbackText("status");
+            }
+
+            if (usernameText != null)
+                usernameText.text = string.IsNullOrEmpty(friend?.username) ? "Unknown" : friend.username;
+
             ApplyStatus(friend.onlineStatus);
+
+            Debug.Log($"[FriendItemView] Bind row='{gameObject.name}' friendUserId={friend?.userId} username='{friend?.username}' displayedName='{usernameText?.text}' status='{friend?.onlineStatus}'");
         }
 
         /// <summary>
@@ -99,6 +124,18 @@ namespace NightHunt.UI
                 "AWAY"    => new Color(1f,   0.8f, 0.2f),
                 _         => new Color(0.5f, 0.5f, 0.5f)
             };
+        }
+
+        private TextMeshProUGUI ResolveFallbackText(string keyword)
+        {
+            var allTexts = GetComponentsInChildren<TextMeshProUGUI>(true);
+            foreach (var t in allTexts)
+            {
+                if (t == null) continue;
+                if (t.gameObject.name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return t;
+            }
+            return null;
         }
     }
 }

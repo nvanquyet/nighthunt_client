@@ -97,7 +97,10 @@ namespace NightHunt.Networking
                     DisplayName         = !string.IsNullOrEmpty(session.Username)
                                               ? session.Username
                                               : $"Player_{session.UserId}",
-                    TeamId              = 0,
+                    // TeamId = -1: yêu cầu server tự gán team qua load-balancing (GetSmallestTeam).
+                    // Không được hardcode 0 vì ResolveTeam chấp nhận 0 là valid → load-balancing bị bỏ qua.
+                    // Khi có matchmaking / team-select screen, backend sẽ truyền teamId thực qua SessionState.
+                    TeamId              = -1,
                     Status              = PlayerConnectionStatus.Connected,
                     CharacterModelIndex = characterModelIndex
                 };
@@ -108,7 +111,7 @@ namespace NightHunt.Networking
             {
                 BackendPlayerId     = $"guest_{Random.Range(1000, 9999)}",
                 DisplayName         = $"Guest_{Random.Range(1, 100)}",
-                TeamId              = 0,
+                TeamId              = -1, // -1 = auto-assign by server load-balancing
                 Status              = PlayerConnectionStatus.Connected,
                 CharacterModelIndex = characterModelIndex
             };

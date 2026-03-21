@@ -6,7 +6,6 @@ using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Networking;
 using System.Collections.Generic;
-using NightHunt.Gameplay.Player;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Utilities;
@@ -205,8 +204,8 @@ namespace NightHunt.Gameplay.Respawn
                 }
             }
 
-            // Default: Use spawn point
-            return GetDefaultSpawnPosition();
+            // Default: Use team-aware spawn point
+            return GetDefaultSpawnPosition(player);
         }
 
         /// <summary>
@@ -238,17 +237,24 @@ namespace NightHunt.Gameplay.Respawn
         }
 
         /// <summary>
-        /// Get default spawn position — delegates to SpawnSystem if available
+        /// Get default spawn position — delegates to SpawnSystem if available.
+        /// Ưu tiên spawn point của đúng team player, fallback sang neutral (-1).
         /// </summary>
-        private Vector3 GetDefaultSpawnPosition()
+        private Vector3 GetDefaultSpawnPosition(NetworkPlayer player = null)
         {
-            // Prefer SpawnSystem so the player goes to a real team spawn point
             if (_spawnSystem == null)
                 _spawnSystem = SpawnSystem.Instance;
 
             if (_spawnSystem != null)
             {
-                SpawnPoint sp = _spawnSystem.GetRandomSpawnPointForTeam(-1); // neutral fallback
+                // Thử team của player trước (vd. Team 0 → team-0 spawn zone)
+                int teamId = player != null ? player.TeamId : -1;
+                SpawnPoint sp = _spawnSystem.GetRandomSpawnPointForTeam(teamId);
+
+                // Fallback sang neutral nếu team không có spawn point riêng
+                if (sp == null && teamId != -1)
+                    sp = _spawnSystem.GetRandomSpawnPointForTeam(-1);
+
                 if (sp != null)
                     return sp.GetSpawnPosition();
             }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Michsky.MUIP;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
@@ -11,6 +12,17 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
+    /// <summary>
+    /// Determines how quick-slot buttons are arranged in the HUD.
+    /// </summary>
+    public enum QuickSlotLayoutMode
+    {
+        /// <summary>Radial arc around the fire button (default MOBA style).</summary>
+        Circle,
+        /// <summary>Horizontal list — parent root should have a HorizontalLayoutGroup.</summary>
+        HorizontalList,
+    }
+
     /// <summary>
     /// Config-driven Combat HUD panel.
     ///
@@ -47,11 +59,19 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [Tooltip("Parent with HorizontalLayoutGroup — weapon slot buttons land here.")]
         [SerializeField] private Transform _weaponSlotsContainer;
 
+        [Header("Quick Slots — Layout")]
+        [Tooltip("Show or hide the entire quick-slot UI. Set false for game modes that don't need quick items.")]
+        [SerializeField] private bool _showQuickSlotsUI = true;
+
+        [Tooltip("Circle = radial arc around the fire button.  HorizontalList = plain left-to-right row.")]
+        [SerializeField] private QuickSlotLayoutMode _quickSlotLayout = QuickSlotLayoutMode.Circle;
+
         [Header("Quick Slots — Radial Arc around Fire Button")]
         [Tooltip("Prefab with QuickSlotHUDButton component.")]
         [SerializeField] private QuickSlotHUDButton _quickSlotPrefab;
 
-        [Tooltip("Empty RectTransform placed at the fire button center — origin of the radial layout.")]
+        [Tooltip("Empty RectTransform placed at the fire button center — origin of the radial layout. " +
+                 "Used when layout = Circle.")]
         [SerializeField] private RectTransform _quickSlotsRoot;
 
         [Tooltip("Radius in pixels from fire button center to each quick-slot button.")]
@@ -63,6 +83,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [Tooltip("Total spread of the arc in degrees. E.g. 80 = buttons span 40° each side of center.")]
         [SerializeField] private float _arcSpread = 80f;
 
+        [Header("Quick Slots — Horizontal List")]
+        [Tooltip("Parent RectTransform with a HorizontalLayoutGroup. " +
+                 "Used when layout = HorizontalList. Buttons are simply instantiated here; " +
+                 "no manual anchored-position is applied — the layout group handles spacing.")]
+        [SerializeField] private RectTransform _quickSlotsRootList;
+
         // ─────────────────────────────────────────────────────────────────────
         //  Inspector — Shared HUD Labels (fixed — not config-driven)
         // ─────────────────────────────────────────────────────────────────────
@@ -71,13 +97,22 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [Tooltip("MUIP ProgressBar shown while reloading. Assign the ProgressBar component placed at screen centre.")]
         [SerializeField] private ProgressBar _reloadProgressBar;
 
-        [Header("Mobile Fire Button (optional)")]
+        [Header("Mobile Fire Button")]
+        [Tooltip("Show or hide the on-screen fire button. Set false for PC-only builds or game modes that hide the button.")]
+        [SerializeField] private bool _showFireButton = true;
+
         [Tooltip("On-screen fire button for mobile / controller. Auto-finds CombatInputHandler if not pre-assigned.")]
         [SerializeField] private FireButton _fireButton;
 
         [Header("Quickslot Aim Controller (optional)")]
         [Tooltip("Assign the scene QuickSlotAimController so throwable slots show range/aim UI.")]
         [SerializeField] private QuickSlotAimController _aimController;
+
+        [Header("Cancel Item Use Button (optional)")]
+        [Tooltip("Single button shared by all 4 quick slots. " +
+                 "Shown during any active item-use to abort it (throwable hold or consumable channel)." +
+                 "Calls CancelAim() on the AimController and RequestCancelUse() on the server.")]
+        [SerializeField] private UnityEngine.UI.Button _cancelItemUseButton;
 
         [Header("Audio")]
         [Tooltip("AudioSource to play sound effects. Add AudioSource component on this GameObject.")]
@@ -92,6 +127,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private IWeaponSystem    _weaponSystem;
         private IQuickSlotSystem _quickSlotSystem;
+        private IItemUseSystem   _itemUseSystem;
         private bool             _slotsSpawned;     // true after Awake spawn pass
         private bool             _isInitialized;    // true after first data bind
         private Coroutine        _reloadProgressCoroutine;
@@ -119,12 +155,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_slotsSpawned) return;
             SpawnWeaponSlots();
             SpawnQuickSlots();
+            ApplyFireButtonVisibility();
             _slotsSpawned = true;
         }
 
         private void OnDestroy()
         {
             UnwireSystemEvents();
+            UnwireCancelButton();
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -138,10 +176,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// assigns live system references — it never destroys / recreates GOs.
         /// </summary>
         public void Initialize(
-            IWeaponSystem     weaponSystem,
-            IQuickSlotSystem  quickSlotSystem,
-            IPlayerStatSystem statSystem      = null,
-            Transform         playerTransform = null)
+            IWeaponSystem      weaponSystem,
+            IQuickSlotSystem   quickSlotSystem,
+            IPlayerStatSystem  statSystem           = null,
+            Transform          playerTransform      = null,
+            IAimSystem         aimSystem            = null,
+            IItemUseSystem     itemUseSystem        = null,
+            CombatInputHandler combatInputHandler   = null)
         {
             Debug.Log($"[CombatHUDPanel] Initialize: quickSlotSystem={(quickSlotSystem != null ? quickSlotSystem.ToString() : "null")} ({quickSlotSystem?.GetHashCode() ?? 0})");
             // If slots were never spawned (edge-case: Initialize called before Awake),
@@ -163,12 +204,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
             RebindWeaponSlots();
             RebindQuickSlots();
 
-            // Wire the optional aim controller with player systems so it can read VisionRange.
+            // Wire the optional aim controller with player systems so it can read VisionRange + aim.
             if (_aimController != null)
-                _aimController.Initialize(statSystem, quickSlotSystem, playerTransform);
+                _aimController.Initialize(statSystem, quickSlotSystem, playerTransform, aimSystem, itemUseSystem, combatInputHandler);
+
+            // Store itemUseSystem reference for cancel-button subscription.
+            UnwireCancelButton();
+            _itemUseSystem = itemUseSystem;
+            WireCancelButton();
 
             // Bind fire-button to the local player's combat handler and range indicator.
-            if (_fireButton != null)
+            ApplyFireButtonVisibility();
+            if (_showFireButton && _fireButton != null)
             {
                 _fireButton.Initialize(InputManager.Instance?.CombatHandler);
                 if (playerTransform != null)
@@ -221,32 +268,57 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void SpawnQuickSlots()
         {
             // Destroy only previously TRACKED buttons (from a prior call to this method).
-            // Pre-placed designer children are kept unless we have a prefab to replace them.
             foreach (var btn in _spawnedQuickSlotButtons)
                 if (btn != null) Destroy(btn.gameObject);
             _spawnedQuickSlotButtons.Clear();
 
-            if (_quickSlotPrefab == null || _quickSlotsRoot == null)
+            // ── Apply show/hide to both roots ─────────────────────────────────
+            // Roots are hidden/shown regardless of whether a prefab is assigned,
+            // so the designer can control visibility from the Inspector bool alone.
+            if (_quickSlotsRoot     != null) _quickSlotsRoot.gameObject.SetActive(_showQuickSlotsUI && _quickSlotLayout == QuickSlotLayoutMode.Circle);
+            if (_quickSlotsRootList != null) _quickSlotsRootList.gameObject.SetActive(_showQuickSlotsUI && _quickSlotLayout == QuickSlotLayoutMode.HorizontalList);
+
+            if (!_showQuickSlotsUI)
             {
-                // Fallback: register any designer-placed QuickSlotHUDButton children.
-                // These were NOT destroyed above, so they are still present.
-                if (_quickSlotsRoot != null)
+                Debug.Log("[CombatHUDPanel] Quick slot UI hidden (_showQuickSlotsUI = false).");
+                return;
+            }
+
+            // Determine active root based on selected layout.
+            RectTransform activeRoot = _quickSlotLayout == QuickSlotLayoutMode.HorizontalList
+                ? _quickSlotsRootList
+                : _quickSlotsRoot;
+
+            if (_quickSlotPrefab == null || activeRoot == null)
+            {
+                // Fallback: register any designer-placed QuickSlotHUDButton children in
+                // the relevant root (pre-placed buttons stay owned by the designer).
+                if (activeRoot != null)
                 {
-                    var prePlaced = _quickSlotsRoot.GetComponentsInChildren<QuickSlotHUDButton>(true);
+                    var prePlaced = activeRoot.GetComponentsInChildren<QuickSlotHUDButton>(true);
                     foreach (var p in prePlaced)
                         _spawnedQuickSlotButtons.Add(p);   // register for later rebind
                 }
                 else
                 {
-                    Debug.LogWarning("[CombatHUDPanel] _quickSlotPrefab or _quickSlotsRoot is null — quick slots not spawned.");
+                    Debug.LogWarning($"[CombatHUDPanel] _quickSlotPrefab or active root for layout " +
+                                     $"'{_quickSlotLayout}' is null — quick slots not spawned.");
                 }
                 return;
             }
 
-            // Prefab spawner path: remove any un-tracked designer-placed children that
-            // would stack on top of the freshly instantiated buttons.
-            foreach (var e in _quickSlotsRoot.GetComponentsInChildren<QuickSlotHUDButton>(true))
-                if (e != null) e.gameObject.SetActive(false);;
+            // Prefab spawner path: hide any un-tracked designer-placed children in the active
+            // root so they don't stack on top of freshly instantiated buttons.
+            foreach (var e in activeRoot.GetComponentsInChildren<QuickSlotHUDButton>(true))
+                if (e != null) e.gameObject.SetActive(false);
+
+            // Also ensure the inactive root's children are hidden.
+            RectTransform inactiveRoot = _quickSlotLayout == QuickSlotLayoutMode.HorizontalList
+                ? _quickSlotsRoot
+                : _quickSlotsRootList;
+            if (inactiveRoot != null)
+                foreach (var e in inactiveRoot.GetComponentsInChildren<QuickSlotHUDButton>(true))
+                    if (e != null) e.gameObject.SetActive(false);
 
             // Slot count is fixed in the config ScriptableObject — known at Awake time.
             int count = _inventoryConfig != null ? _inventoryConfig.QuickSlotConfig.SlotCount : 0;
@@ -258,24 +330,58 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             for (int i = 0; i < count; i++)
             {
-                var btn = Instantiate(_quickSlotPrefab, _quickSlotsRoot);
+                var btn = Instantiate(_quickSlotPrefab, activeRoot);
                 btn.name = $"QuickSlot_{i}";
 
-                // Radial position in quadrant II (upper-left from fire button).
-                float t        = count > 1 ? (float)i / (count - 1) : 0.5f;
-                float angleDeg = _arcCenterAngle - _arcSpread * 0.5f + t * _arcSpread;
-                float angleRad = angleDeg * Mathf.Deg2Rad;
-                var   rt       = btn.GetComponent<RectTransform>();
-                if (rt != null)
-                    rt.anchoredPosition = new Vector2(
-                        Mathf.Cos(angleRad) * _radialRadius,
-                        Mathf.Sin(angleRad) * _radialRadius);
+                if (_quickSlotLayout == QuickSlotLayoutMode.Circle)
+                {
+                    // Radial position in quadrant II (upper-left from fire button).
+                    float t        = count > 1 ? (float)i / (count - 1) : 0.5f;
+                    float angleDeg = _arcCenterAngle - _arcSpread * 0.5f + t * _arcSpread;
+                    float angleRad = angleDeg * Mathf.Deg2Rad;
+                    var   rt       = btn.GetComponent<RectTransform>();
+                    if (rt != null)
+                        rt.anchoredPosition = new Vector2(
+                            Mathf.Cos(angleRad) * _radialRadius,
+                            Mathf.Sin(angleRad) * _radialRadius);
+                }
+                // HorizontalList: no manual positioning — HorizontalLayoutGroup handles it.
 
                 btn.Bind(i, null);                          // null system → placeholder
                 btn.SetAimController(_aimController);
                 _spawnedQuickSlotButtons.Add(btn);
                 btn.gameObject.SetActive(true);
             }
+        }
+
+        /// <summary>
+        /// Show or hide the entire quick-slot UI at runtime (e.g. game-mode specific HUD).
+        /// Reflects the same logic as the <see cref="_showQuickSlotsUI"/> inspector field.
+        /// </summary>
+        public void SetQuickSlotUIVisible(bool visible)
+        {
+            _showQuickSlotsUI = visible;
+            if (_quickSlotsRoot     != null) _quickSlotsRoot.gameObject.SetActive(visible && _quickSlotLayout == QuickSlotLayoutMode.Circle);
+            if (_quickSlotsRootList != null) _quickSlotsRootList.gameObject.SetActive(visible && _quickSlotLayout == QuickSlotLayoutMode.HorizontalList);
+        }
+
+        /// <summary>
+        /// Show or hide the on-screen fire button at runtime.
+        /// When hiding, also stops any in-progress fire via <see cref="FireButton.Bind"/>(null).
+        /// </summary>
+        public void SetFireButtonVisible(bool visible)
+        {
+            _showFireButton = visible;
+            ApplyFireButtonVisibility();
+        }
+
+        private void ApplyFireButtonVisibility()
+        {
+            if (_fireButton == null) return;
+            _fireButton.gameObject.SetActive(_showFireButton);
+            // If hiding while fire is in progress, safely stop the fire state.
+            if (!_showFireButton)
+                _fireButton.Bind(null);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -410,6 +516,75 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             StopReloadProgress();
         }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  Cancel Item Use Button
+        // ─────────────────────────────────────────────────────────────────
+
+        private void WireCancelButton()
+        {
+            if (_itemUseSystem != null)
+            {
+                _itemUseSystem.OnItemUseStarted   += HandleItemUseStartedForCancel;
+                _itemUseSystem.OnItemUseCompleted += HandleItemUseCompletedForCancel;
+                _itemUseSystem.OnItemUseCancelled += HandleItemUseCancelledForCancel;
+            }
+
+            if (_cancelItemUseButton == null) return;
+            // Remove before re-adding to prevent double-subscribe on re-init.
+            _cancelItemUseButton.onClick.RemoveListener(OnCancelItemUsePressed);
+            _cancelItemUseButton.onClick.AddListener(OnCancelItemUsePressed);
+            // Only show the button while an item use is in progress.
+            UpdateCancelButtonVisibility();
+        }
+
+        private void UnwireCancelButton()
+        {
+            if (_itemUseSystem != null)
+            {
+                _itemUseSystem.OnItemUseStarted   -= HandleItemUseStartedForCancel;
+                _itemUseSystem.OnItemUseCompleted -= HandleItemUseCompletedForCancel;
+                _itemUseSystem.OnItemUseCancelled -= HandleItemUseCancelledForCancel;
+            }
+
+            if (_cancelItemUseButton != null)
+                _cancelItemUseButton.onClick.RemoveListener(OnCancelItemUsePressed);
+        }
+
+        private void OnCancelItemUsePressed()
+        {
+            Debug.Log("[CombatHUDPanel] Cancel item-use button pressed.");
+            // Cancel the aim-mode visuals (hides ring, cursor, resets mobile joystick).
+            if (_aimController != null)
+                _aimController.CancelAim();
+            else
+                // No aim controller (e.g. consumable with no throwable aim mode)
+                // — still send the server cancel.
+                _itemUseSystem?.RequestCancelUse();
+        }
+
+        private void UpdateCancelButtonVisibility()
+        {
+            if (_cancelItemUseButton == null) return;
+            bool active = _itemUseSystem != null && _itemUseSystem.IsUsingItem;
+            _cancelItemUseButton.gameObject.SetActive(active);
+        }
+
+        private void HandleItemUseStartedForCancel(ItemInstance _)
+        {
+            UpdateCancelButtonVisibility();
+        }
+
+        private void HandleItemUseCompletedForCancel(ItemInstance _)
+        {
+            UpdateCancelButtonVisibility();
+        }
+
+        private void HandleItemUseCancelledForCancel(ItemInstance _)
+        {
+            UpdateCancelButtonVisibility();
+        }
+
     }
 }
 

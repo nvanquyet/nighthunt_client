@@ -5,6 +5,7 @@ using NightHunt.Gameplay.Core.State;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Weapon;
+using NightHunt.Gameplay.FogOfWar;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -36,6 +37,7 @@ namespace NightHunt.Gameplay.Character
         private IWeaponSystem                _weaponSystem;
         private PlayerModelLoader            _modelLoader;
         private WeaponModelController        _weaponModelController;
+        private FogVisionBinder              _fogVisionBinder;
 
         // Model-side refs (bound in BindModel once mesh is ready).
         private PrCharacterRagdoll _ragdoll;
@@ -74,6 +76,11 @@ namespace NightHunt.Gameplay.Character
             _weaponModelController = ComponentResolver.Find<WeaponModelController>(this)
                 .OnSelf().InChildren().InRootChildren()
                 .OrLogWarning("[CharacterVisualController] WeaponModelController not found")
+                .Resolve();
+
+            _fogVisionBinder = ComponentResolver.Find<FogVisionBinder>(this)
+                .OnSelf().InChildren().InRootChildren()
+                .OrLogWarning("[CharacterVisualController] FogVisionBinder not found — FOW will not be toggled on death")
                 .Resolve();
 
             if (_modelLoader != null)
@@ -187,6 +194,8 @@ namespace NightHunt.Gameplay.Character
             if (_actorUtils?.charAnimator != null)
                 _actorUtils.charAnimator.enabled = false;
             _ragdoll?.ActivateRagdoll();
+            // Disable FOW revealer — dead player should not reveal the map.
+            if (_fogVisionBinder != null) _fogVisionBinder.enabled = false;
         }
 
         private void SetAliveVisuals()
@@ -197,6 +206,8 @@ namespace NightHunt.Gameplay.Character
                 _actorUtils.charAnimator.enabled = true;
 
             if (_charIK != null) _charIK.ikActive = true;
+            // Re-enable FOW revealer on respawn.
+            if (_fogVisionBinder != null) _fogVisionBinder.enabled = true;
 
             // Re-apply whichever IK target the current weapon has (null if holstered).
             SetIKTargetSmooth(_weaponModelController?.LeftHandIKTarget);

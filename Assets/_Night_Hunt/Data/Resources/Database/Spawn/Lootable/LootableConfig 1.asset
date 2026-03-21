@@ -18,3 +18,4 @@ MonoBehaviour:
   ShowPrompt: 1
   PromptText: Press E to Interact
   MaxInteractDistance: 4
+  DespawnTime: 300

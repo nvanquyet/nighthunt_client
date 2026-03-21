@@ -23,6 +23,8 @@ namespace NightHunt.Gameplay.Spawn
         private List<SpawnPoint> _spawnPoints = new();
 
         private Dictionary<int, List<SpawnPoint>> _teamSpawnPoints = new();
+        // Round-robin index per team — đảm bảo 2 player spawn liên tiếp không trùng vị trí.
+        private Dictionary<int, int> _spawnPointIndices = new();
 
         // ===== LIFECYCLE =====
 
@@ -133,13 +135,26 @@ namespace NightHunt.Gameplay.Spawn
             // Team-specific first, then neutral (-1) as fallback.
             if (_teamSpawnPoints.TryGetValue(teamId, out List<SpawnPoint> teamPoints) && teamPoints.Count > 0)
             {
-                return teamPoints[Random.Range(0, teamPoints.Count)];
+                // Round-robin: mỗi lần gọi lấy spawn point kế tiếp trong list.
+                // Đảm bảo 2 player cùng team không spawn trùng vị trí.
+                if (!_spawnPointIndices.ContainsKey(teamId))
+                    _spawnPointIndices[teamId] = 0;
+
+                int idx = _spawnPointIndices[teamId] % teamPoints.Count;
+                _spawnPointIndices[teamId] = idx + 1; // advance for next call
+                return teamPoints[idx];
             }
 
-            // Fallback: neutral spawn points
-            if (_teamSpawnPoints.TryGetValue(-1, out List<SpawnPoint> neutralPoints) && neutralPoints.Count > 0)
+            // Fallback: neutral spawn points (also round-robin)
+            const int neutralKey = -1;
+            if (_teamSpawnPoints.TryGetValue(neutralKey, out List<SpawnPoint> neutralPoints) && neutralPoints.Count > 0)
             {
-                return neutralPoints[Random.Range(0, neutralPoints.Count)];
+                if (!_spawnPointIndices.ContainsKey(neutralKey))
+                    _spawnPointIndices[neutralKey] = 0;
+
+                int idx = _spawnPointIndices[neutralKey] % neutralPoints.Count;
+                _spawnPointIndices[neutralKey] = idx + 1;
+                return neutralPoints[idx];
             }
 
             return null;

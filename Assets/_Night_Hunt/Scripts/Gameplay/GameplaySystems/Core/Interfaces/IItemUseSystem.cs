@@ -59,6 +59,23 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// - Server-only operation
         /// </summary>
         void ExecuteThrow();
+
+        /// <summary>
+        /// Request throw execution from the owning client.
+        /// Routes to server via ServerRpc — use this from client-side code
+        /// (e.g. CombatInputHandler, QuickSlotAimController mobile path).
+        /// FishNet guarantees ServerRpcs from the same client are ordered, so
+        /// calling UseQuickSlot(ServerRpc) then RequestExecuteThrow(ServerRpc)
+        /// always processes BeginThrowable before ExecuteThrow on the server.
+        /// </summary>
+        void RequestExecuteThrow();
+
+        /// <summary>
+        /// Request cancel of the in-progress item use from the owning client.
+        /// Routes to <see cref="CancelUse"/> on the server via ServerRpc.
+        /// Safe to call when no item is in use (no-op).
+        /// </summary>
+        void RequestCancelUse();
         
         #region Events
         
@@ -79,6 +96,12 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Parameters: (item)
         /// </summary>
         event Action<ItemInstance> OnItemUseCancelled;
+
+        /// <summary>
+        /// Event fired the instant a throw is executed (projectile spawned).
+        /// Subscribe in CharacterAnimationController to trigger the Throw animator parameter.
+        /// </summary>
+        event Action OnThrowExecuted;
         
         /// <summary>
         /// Event fired during item use progress

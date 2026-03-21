@@ -2,6 +2,7 @@ using UnityEngine;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Weapon;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Interfaces;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -61,10 +62,12 @@ namespace NightHunt.Gameplay.Character
         private static readonly int ShootHash     = Animator.StringToHash("Shoot");
         private static readonly int JumpHash      = Animator.StringToHash("Jump");
         private static readonly int RollHash      = Animator.StringToHash("Roll");
+        private static readonly int ThrowHash     = Animator.StringToHash("Throw");
 
         // ── Runtime refs (bound at runtime) ───────────────────────────────────
         private PrActorUtils                    _actorUtils;
         private WeaponSystem                    _weaponSystem;
+        private IItemUseSystem                  _itemUseSystem;
         private BaseCharacterPredictedMovement  _movement;
         private PlayerModelLoader               _modelLoader;
 
@@ -120,6 +123,14 @@ namespace NightHunt.Gameplay.Character
                 _movement.OnJumpTriggered += OnJump;
                 _movement.OnRollTriggered += OnRoll;
             }
+
+            _itemUseSystem = ComponentResolver.Find<IItemUseSystem>(this)
+                .OnSelf().InChildren().InRootChildren()
+                .OrLogWarning("[CharacterAnimationController] IItemUseSystem not found — throw animation disabled")
+                .Resolve();
+
+            if (_itemUseSystem != null)
+                _itemUseSystem.OnThrowExecuted += HandleThrowExecuted;
         }
 
         private void OnDestroy()
@@ -138,6 +149,9 @@ namespace NightHunt.Gameplay.Character
                 _movement.OnJumpTriggered -= OnJump;
                 _movement.OnRollTriggered -= OnRoll;
             }
+
+            if (_itemUseSystem != null)
+                _itemUseSystem.OnThrowExecuted -= HandleThrowExecuted;
         }
 
         private void Start()
@@ -273,6 +287,12 @@ namespace NightHunt.Gameplay.Character
         {
             var anim = _actorUtils?.charAnimator;
             if (anim != null && anim.enabled) anim.SetTrigger(RollHash);
+        }
+
+        private void HandleThrowExecuted()
+        {
+            var anim = _actorUtils?.charAnimator;
+            if (anim != null && anim.enabled) anim.SetTrigger(ThrowHash);
         }
 
         // ── Layer weight helper ────────────────────────────────────────────────

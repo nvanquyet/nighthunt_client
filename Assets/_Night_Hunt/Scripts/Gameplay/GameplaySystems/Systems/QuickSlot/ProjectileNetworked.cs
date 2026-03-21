@@ -28,12 +28,22 @@ namespace NightHunt.GameplaySystems.QuickSlot
     public class ProjectileNetworked : NetworkBehaviour
     {
         #region Runtime
-        
+
         private ThrowableDefinition _def;
         private Rigidbody _rb;
         private ProjectileBase _projectileBase;
         private bool _initialized;
         private bool _exploded;
+
+        // Shared static PhysicsMaterial — allocated once, reused by all non-bounce projectiles.
+        private static PhysicsMaterial s_noBounce;
+
+        // Pre-allocated overlap buffer for ProximityDetection — avoids a GC allocation every 0.1 s.
+        // 32 slots is generous; a grenade is unlikely to be within proximity of more.
+        private static readonly Collider[] s_proximityBuffer = new Collider[32];
+
+        // Pre-allocated overlap buffer for AoE damage — sized for realistic explosion area.
+        private static readonly Collider[] s_aoeBuffer = new Collider[64];
         
         #endregion
         
@@ -78,28 +88,37 @@ namespace NightHunt.GameplaySystems.QuickSlot
             _initialized = true;
             _def = def;
             
-            // Physics bounciness
+            // Physics bounciness — reuse shared static material to avoid a new allocation per spawn.
             if (!def.CanBounce)
             {
                 var col = GetComponent<Collider>();
                 if (col != null)
                 {
-                    var mat = new PhysicsMaterial("NoBounce")
-                    {
-                        bounciness = 0f,
-                        frictionCombine = PhysicsMaterialCombine.Maximum,
-                        bounceCombine = PhysicsMaterialCombine.Minimum,
-                    };
-                    col.material = mat;
+                    if (s_noBounce == null)
+                        s_noBounce = new PhysicsMaterial("NoBounce")
+                        {
+                            bounciness        = 0f,
+                            frictionCombine   = PhysicsMaterialCombine.Maximum,
+                            bounceCombine     = PhysicsMaterialCombine.Minimum,
+                        };
+                    col.material = s_noBounce;
                 }
             }
             
-            // Start fuse timer if applicable
-            if (def.FuseTime > 0f && def.ThrowableType != ThrowableType.Impact)
+            // Start fuse timer if applicable.
+            // Proximity type uses its own sensor loop; Impact type only fires on collision.
+            bool usesFuse = def.FuseTime > 0f
+                         && def.ThrowableType != ThrowableType.Impact
+                         && def.ThrowableType != ThrowableType.Proximity;
+
+            if (usesFuse)
                 StartCoroutine(FuseCountdown(def.FuseTime));
-            
-            Debug.Log($"[Projectile] Initialized '{def.DisplayName}' " +
-                     $"(type={def.ThrowableType}, fuse={def.FuseTime}s)");
+
+            // Proximity: detect enemies entering detection radius, then explode.
+            if (def.ThrowableType == ThrowableType.Proximity)
+                StartCoroutine(ProximityDetection());
+
+            // Intentionally no per-spawn debug log in production.
         }
         
         private IEnumerator FuseCountdown(float fuse)
@@ -109,7 +128,42 @@ namespace NightHunt.GameplaySystems.QuickSlot
             if (!_exploded)
                 Explode();
         }
-        
+
+        /// <summary>
+        /// Polls nearby colliders every 0.1 s (server-only).
+        /// Detonates when any <see cref="IDamageable"/> enters <see cref="ThrowableDefinition.ProximityDetectionRadius"/>.
+        /// Falls back to 50% of <see cref="ThrowableDefinition.ExplosionRadius"/> when detection radius is 0.
+        /// </summary>
+        [Server]
+        private IEnumerator ProximityDetection()
+        {
+            float detectionR = _def.ProximityDetectionRadius > 0f
+                ? _def.ProximityDetectionRadius
+                : _def.ExplosionRadius * 0.5f;
+
+            var wait = new WaitForSeconds(0.1f);
+
+            while (!_exploded)
+            {
+                // NonAlloc: writes into the shared static buffer — zero heap allocation per tick.
+                int count = Physics.OverlapSphereNonAlloc(transform.position, detectionR, s_proximityBuffer);
+                for (int i = 0; i < count; i++)
+                {
+                    var hit = s_proximityBuffer[i];
+                    if (hit.transform.IsChildOf(transform) || hit.transform == transform)
+                        continue;
+
+                    if (hit.TryGetComponent<IDamageable>(out _))
+                    {
+                        Explode();
+                        yield break;
+                    }
+                }
+
+                yield return wait;
+            }
+        }
+
         #endregion
         
         #region Collision
@@ -118,11 +172,11 @@ namespace NightHunt.GameplaySystems.QuickSlot
         {
             if (!_initialized || _exploded)
                 return;
-            
-            // Only server processes collision logic
+
+            // Only server processes collision logic.
             if (!IsServerInitialized)
                 return;
-            
+
             OnImpactHit?.Invoke(this, col);
             
             switch (_def.ThrowableType)
@@ -170,9 +224,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
             if (_exploded) return;
             
             _exploded = true;
-            
-            Debug.Log($"[Projectile] Exploding '{_def?.DisplayName}' at {transform.position}");
-            
+
             // Server: Apply damage
             if (_def != null && _def.ExplosionRadius > 0f)
                 DealAoeDamage();
@@ -218,35 +270,27 @@ namespace NightHunt.GameplaySystems.QuickSlot
         [Server]
         private void DealAoeDamage()
         {
-            var hits = Physics.OverlapSphere(transform.position, _def.ExplosionRadius);
-            int count = 0;
-            
-            foreach (var hit in hits)
+            // NonAlloc: reuse shared static buffer — no GC per explosion.
+            int count = Physics.OverlapSphereNonAlloc(transform.position, _def.ExplosionRadius, s_aoeBuffer);
+            Vector3 origin = transform.position;
+            float radius   = _def.ExplosionRadius;
+
+            for (int i = 0; i < count; i++)
             {
-                var damageable = hit.GetComponent<IDamageable>();
-                if (damageable == null)
+                var hit = s_aoeBuffer[i];
+                if (!hit.TryGetComponent<IDamageable>(out var damageable))
                     continue;
-                
-                float dist = Vector3.Distance(transform.position, hit.transform.position);
-                float falloff = Mathf.Clamp01(1f - dist / _def.ExplosionRadius);
-                float dmg = _def.Damage * falloff;
-                
-                damageable.TakeDamage(dmg);
-                count++;
-                
-                Debug.Log($"[Projectile] Dealt {dmg:F1} dmg to '{hit.name}' (falloff {falloff:P0})");
-                
-                // Physics impulse
-                var rb = hit.GetComponent<Rigidbody>();
-                if (rb != null && !rb.isKinematic)
+
+                float dist    = Vector3.Distance(origin, hit.transform.position);
+                float falloff = Mathf.Clamp01(1f - dist / radius);
+                damageable.TakeDamage(_def.Damage * falloff);
+
+                if (hit.TryGetComponent<Rigidbody>(out var rb) && !rb.isKinematic)
                 {
-                    Vector3 dir = (hit.transform.position - transform.position).normalized;
-                    float force = 500f * falloff;
-                    rb.AddForce(dir * force, ForceMode.Impulse);
+                    Vector3 dir = (hit.transform.position - origin).normalized;
+                    rb.AddForce(dir * (500f * falloff), ForceMode.Impulse);
                 }
             }
-            
-            Debug.Log($"[Projectile] AoE hit {count} target(s) in r={_def.ExplosionRadius}m");
         }
         
         #endregion

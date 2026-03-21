@@ -128,8 +128,7 @@ namespace NightHunt.GameplaySystems.Interaction
                 _isHolding = true;
                 _holdTimer = 0f;
                 _holdingInteractable = holdTarget;
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
-                    Debug.Log($"[Interact] Hold started ({holdTarget.HoldDuration:F1}s): {target.InteractLabel}");
+                Debug.Log($"[PlayerInteractionSystem] Hold started ({holdTarget.HoldDuration:F1}s): {target.InteractLabel}");
                 return;
             }
 

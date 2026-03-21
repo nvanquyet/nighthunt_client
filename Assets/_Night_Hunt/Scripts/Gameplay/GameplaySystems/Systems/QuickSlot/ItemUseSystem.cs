@@ -6,6 +6,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.Character;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.QuickSlot
@@ -32,6 +33,11 @@ namespace NightHunt.GameplaySystems.QuickSlot
         [SerializeField]
         private float _defaultUseTime = 3.5f;
 
+        [Header("Visual")]
+        [Tooltip("PrActorUtils in the player prefab — provides WeaponR hand bone. " +
+                 "Auto-resolved via GetComponentInChildren if not assigned.")]
+        [SerializeField] private PrActorUtils _actorUtils;
+
         #endregion
 
         #region Runtime State
@@ -43,6 +49,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
         private ItemInstance _currentItem;
         private WeaponSlotType? _previousWeaponSlot;
         private Coroutine _useCoroutine;
+        private GameObject _itemInHandModel;   // throwable model instantiated on WeaponR bone
 
         #endregion
 
@@ -59,6 +66,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
         public event Action<ItemInstance> OnItemUseCompleted;
         public event Action<ItemInstance> OnItemUseCancelled;
         public event Action<ItemInstance, float> OnItemUseProgress;
+        public event Action OnThrowExecuted;
 
         #endregion
 
@@ -144,6 +152,13 @@ namespace NightHunt.GameplaySystems.QuickSlot
                 _throwableHandler = gameObject.AddComponent<ThrowableHandler>();
                 _throwableHandler.Initialize(transform);
             }
+
+            // Auto-resolve PrActorUtils for hand-bone item model spawning.
+            if (_actorUtils == null)
+                _actorUtils = ComponentResolver.Find<PrActorUtils>(this)
+                    .OnSelf().InChildren().InRootChildren()
+                    .OrLogWarning("[ItemUseSystem] PrActorUtils not found — throwable hand model will be skipped")
+                    .Resolve();
         }
 
         #endregion
@@ -181,12 +196,19 @@ namespace NightHunt.GameplaySystems.QuickSlot
             if (def is ThrowableDefinition td)
                 return BeginThrowable(item, td);
 
+            if (def.Type == ItemType.Deployable)
+                return BeginDeployable(item, def);
+
             Debug.LogWarning($"[ItemUseSystem] Unsupported item type: {def.GetType().Name}");
             return false;
         }
 
         /// <summary>
-        /// Execute throw (called by input when Fire pressed during throw-mode)
+        /// Execute throw (called by input when Fire pressed during throw-mode).
+        /// Starts a coroutine that waits <see cref="ThrowableDefinition.PrepareTime"/> seconds
+        /// (pull-pin / wind-up animation window) before spawning the projectile.
+        /// The coroutine is stored in <see cref="_useCoroutine"/> so <see cref="CancelUse"/>
+        /// can abort mid-prepare via StopCoroutine.
         /// </summary>
         [Server]
         public void ExecuteThrow()
@@ -204,16 +226,56 @@ namespace NightHunt.GameplaySystems.QuickSlot
                 return;
             }
 
-            // Spawn projectile via handler — pass confirmed aim target from QuickSlotAimController.
-            // QuickSlotAimController.AimWorldTarget is set when the player confirms the throw direction.
-            _throwableHandler.SpawnProjectile(
-                def,
-                transform,
-                NightHunt.GameplaySystems.UI.Combat.QuickSlotAimController.AimWorldTarget);
+            // Capture aim target immediately — before the prepare delay.
+            Vector3 aimTarget = NightHunt.GameplaySystems.UI.Combat.QuickSlotAimController.AimWorldTarget;
 
-            // Consume item & complete
-            ConsumeItem(_currentItem);
-            CompleteUse(_currentItem);
+            // Reuse the shared _useCoroutine slot so CancelUse() can interrupt mid-prepare.
+            _useCoroutine = StartCoroutine(PrepareAndThrow(def, aimTarget));
+        }
+
+        [Server]
+        private IEnumerator PrepareAndThrow(ThrowableDefinition def, Vector3 aimTarget)
+        {
+            if (def.PrepareTime > 0f)
+            {
+                yield return new WaitForSeconds(def.PrepareTime);
+            }
+
+            // Guard: might have been cancelled during wind-up.
+            if (!_isUsingItem || _currentItem == null)
+                yield break;
+
+            _throwableHandler.SpawnProjectile(def, transform, aimTarget);
+            DetachItemFromHand();
+            OnThrowExecuted?.Invoke();
+
+            var item = _currentItem;
+            ConsumeItem(item);
+            CompleteUse(item);
+        }
+
+        /// <summary>
+        /// Called by the owning client (CombatInputHandler.BeginFire / QuickSlotAimController
+        /// mobile ConfirmAim) to trigger ExecuteThrow on the server.
+        /// FishNet ServerRpcs from the same client are ordered, so a prior
+        /// UseQuickSlotServerRpc (→ BeginThrowable) is guaranteed to complete
+        /// before this one processes.
+        /// </summary>
+        [ServerRpc(RequireOwnership = true)]
+        public void RequestExecuteThrow()
+        {
+            ExecuteThrow();
+        }
+
+        /// <summary>
+        /// Request cancel of the in-progress item use from the owning client.
+        /// Routes to <see cref="CancelUse"/> on the server. Safe to call when
+        /// no item is in use (no-op via CancelUse's guard).
+        /// </summary>
+        [ServerRpc(RequireOwnership = true)]
+        public void RequestCancelUse()
+        {
+            CancelUse();
         }
 
         /// <summary>
@@ -245,6 +307,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
             _currentItem = null;
 
             OnItemUseCancelled?.Invoke(item);
+            DestroyItemInHand();
             RestoreWeapon();
         }
 
@@ -296,10 +359,90 @@ namespace NightHunt.GameplaySystems.QuickSlot
             _currentItem = item;
             _isUsingItem = true;
 
+            // Spawn item model in right-hand bone so the player visually holds it while aiming.
+            SpawnItemInHand(def);
+
             OnItemUseStarted?.Invoke(item);
             Debug.Log($"[ItemUseSystem] Throw mode: '{def.DisplayName}'. Press Fire to throw.");
 
             return true;
+        }
+
+        #endregion
+
+        #region Deployable Flow
+
+        /// <summary>
+        /// Stub for deployable items (beacons, etc.).
+        /// TODO: implement placement-mode UI (range indicator + confirm/cancel).
+        ///
+        /// Item type distinctions to implement later:
+        ///   • Beacon (ReviveBeacon) — spawns a world object at the placed position;
+        ///     teammates can respawn at it.  Does NOT affect the placing player directly.
+        ///   • SupplyBeacon — spawns a loot crate or airdrop marker.
+        ///   • General Deployable — any trap / equipment placed in the world.
+        /// </summary>
+        private bool BeginDeployable(ItemInstance item, ItemDefinition def)
+        {
+            Debug.Log($"[ItemUseSystem] DEPLOYABLE '{def.DisplayName}': " +
+                      $"placement mode not yet implemented. " +
+                      $"TODO: show placement preview, confirm → spawn world object (NOT a player effect).");
+            return false;
+        }
+
+        #endregion
+
+        #region Hand Model
+
+        /// <summary>
+        /// Instantiate the throwable's EquippedPrefab on the right-hand bone (WeaponR) so
+        /// the player visually holds the item while in throw-aim mode.
+        /// Uses the same parent and local transform as WeaponModelController.
+        /// </summary>
+        private void SpawnItemInHand(ThrowableDefinition def)
+        {
+            DestroyItemInHand();
+            if (def.EquippedPrefab == null) return;
+            Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
+            _itemInHandModel = Instantiate(def.EquippedPrefab, parent);
+            _itemInHandModel.transform.localPosition = Vector3.zero;
+            _itemInHandModel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        }
+
+        private void DestroyItemInHand()
+        {
+            if (_itemInHandModel != null)
+            {
+                Destroy(_itemInHandModel);
+                _itemInHandModel = null;
+            }
+        }
+
+        /// <summary>
+        /// Unparent the hand model from WeaponR and launch it toward the throw target
+        /// for a visual "item flies away" effect after the throw is confirmed.
+        /// The real projectile is spawned separately by <see cref="ThrowableHandler"/>;
+        /// this model is purely cosmetic.
+        /// If the prefab has a <see cref="Rigidbody"/>, physics launch is applied.
+        /// </summary>
+        private void DetachItemFromHand()
+        {
+            if (_itemInHandModel == null) return;
+
+            // Detach from WeaponR bone so it is no longer parented to the hand.
+            _itemInHandModel.transform.SetParent(null, worldPositionStays: true);
+
+            // If a Rigidbody exists on the prefab, launch it toward the aim target.
+            if (_itemInHandModel.TryGetComponent<Rigidbody>(out var rb))
+            {
+                Vector3 toTarget = NightHunt.GameplaySystems.UI.Combat.QuickSlotAimController.AimWorldTarget
+                                   - _itemInHandModel.transform.position;
+                rb.linearVelocity = toTarget.normalized * 8f;
+                rb.useGravity     = true;
+            }
+
+            Destroy(_itemInHandModel, 1.5f);
+            _itemInHandModel = null;
         }
 
         #endregion
@@ -343,6 +486,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
             _useCoroutine = null;
 
             OnItemUseCompleted?.Invoke(item);
+            DestroyItemInHand();
             RestoreWeapon();
         }
 

@@ -200,8 +200,12 @@ namespace NightHunt.GameplaySystems.UI
         private void HandleContainerOpened(WorldContainer container, FishNet.Connection.NetworkConnection conn)
         {
             if (container == null) return;
+            // Strict null guard: nếu _localNob chưa được set → UI chưa sẵn sàng, bỏ qua.
+            // Nếu không có guard này, khi _localNob == null condition "_localNob != null && ... " = false
+            // → không skip → LootUI bật trên TẤT CẢ clients.
+            if (_localNob == null) return;
             // Only open for the local player who triggered the open.
-            if (_localNob != null && conn != null && conn != _localNob.Owner)
+            if (conn != null && conn != _localNob.Owner)
             {
                 if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                     Debug.Log($"[LootContainerUI] HandleContainerOpened: SKIP â€” conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");
@@ -224,8 +228,10 @@ namespace NightHunt.GameplaySystems.UI
         private void HandleCorpseOpened(WorldCorpse corpse, FishNet.Connection.NetworkConnection conn)
         {
             if (corpse == null) return;
+            // Strict null guard: chưa khởi tạo → bỏ qua.
+            if (_localNob == null) return;
             // Only open for the local player who triggered the open.
-            if (_localNob != null && conn != null && conn != _localNob.Owner)
+            if (conn != null && conn != _localNob.Owner)
             {
                 if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                     Debug.Log($"[LootContainerUI] HandleCorpseOpened: SKIP â€” conn.ClientId={conn?.ClientId} != localOwner={_localNob.Owner?.ClientId}");

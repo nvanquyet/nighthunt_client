@@ -87,8 +87,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     return true;
 
                 case UISlotType.QuickSlot:
+                {
+                    var def = ItemDatabase.GetDefinition(sourceState.Item.DefinitionID);
+                    if (def == null || !def.CanPlaceInSlot(SlotLocationType.QuickSlot))
+                        return false;
                     action.Type = DropActionType.AssignQuickSlot;
                     return true;
+                }
 
                 case UISlotType.DropArea:
                     action.Type = DropActionType.DropToWorld;

@@ -46,15 +46,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0da04b92ed19424aacecdade27d99665, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 12
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _weaponSystemComponent: {fileID: 2421400275454736108}
   _statSystemComponent: {fileID: 2125858533983064380}
   _inventorySystemComponent: {fileID: 9196575011444076670}
   _consumableHandler: {fileID: 8124406180826427094}
   _throwableHandler: {fileID: 7424188612309130538}
   _defaultUseTime: 3.5
+  _actorUtils: {fileID: 0}
 --- !u!114 &7424188612309130538
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -385,7 +386,7 @@ GameObject:
   - component: {fileID: 7247431468042237731}
   - component: {fileID: 8384977444285074145}
   - component: {fileID: 2662351169934697946}
-  - component: {fileID: 8860959645119900201}
+  - component: {fileID: 7099914410178724403}
   m_Layer: 0
   m_Name: Vision
   m_TagString: Untagged
@@ -421,7 +422,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ViewRadius: 15
-  SoftenDistance: 3
+  SoftenDistance: 0
   ViewAngle: 145
   UnobscuredRadius: 1
   Opacity: 1
@@ -435,7 +436,7 @@ MonoBehaviour:
   CalculateHidersAtHiderHeight: 0
   ObstacleMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 297728
   StartRevealerAsStatic: 0
   StaticRevealer: 0
   MaxHidersSampledPerFrame: 50
@@ -476,7 +477,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   defaultViewRadius: 15
---- !u!114 &8860959645119900201
+--- !u!114 &7099914410178724403
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -485,14 +486,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 5037113679866570578}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a9ddf7bb091e42d2bf3ebedcc29eb67d, type: 3}
+  m_Script: {fileID: 11500000, guid: fa461ce007c34894a91e810c9d9171dd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
-  _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
-  networkPlayer: {fileID: 2698279300146127577}
-  fogOfWarRevealer3D: {fileID: 8384977444285074145}
+  _logDecisions: 0
 --- !u!1 &5340184794103508442
 GameObject:
   m_ObjectHideFlags: 0
@@ -539,14 +536,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 92844d221d9eb31459042b845ff931cf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 6
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _statSystemSource: {fileID: 2125858533983064380}
   _inventorySystemSource: {fileID: 9196575011444076670}
   _slotPriority: 000000000100000002000000
   _enableDebugLogs: 1
+  _aimSyncInterval: 0.05
 --- !u!114 &5823837622919229875
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -632,7 +630,7 @@ MonoBehaviour:
   raycastDetector: {fileID: 1375689637451955110}
   proximityScanner: {fileID: 3590875328794933448}
   pickupAllMode: 0
-  debugInputLogs: 1
+  _debugConfig: {fileID: 0}
 --- !u!114 &3590875328794933448
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -645,12 +643,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6a904f7097a99674c9bc0332cf26f98e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scanRadius: 4
-  scanInterval: 0.15
+  _scanRadius: 4
+  _scanInterval: 0.15
   interactableLayerMask:
     serializedVersion: 2
     m_Bits: 768
-  maxResults: 16
+  _maxResults: 16
   logOnChange: 0
   drawGizmos: 1
   showDebugUI: 1
@@ -670,7 +668,7 @@ MonoBehaviour:
   interactableLayerMask:
     serializedVersion: 2
     m_Bits: 26608384
-  maxDistance: 50
+  _maxDistance: 50
   ignorePlayerLayer: 1
   showDebugRay: 1
   logTargetChanges: 1
@@ -741,7 +739,20 @@ MonoBehaviour:
   <ComponentIndex>k__BackingField: 0
   <PredictedSpawn>k__BackingField: {fileID: 0}
   <PredictedOwner>k__BackingField: {fileID: 0}
-  NetworkBehaviours: []
+  NetworkBehaviours:
+  - {fileID: 5895629736225627408}
+  - {fileID: 2125858533983064380}
+  - {fileID: 2698279300146127577}
+  - {fileID: 5002469889206839817}
+  - {fileID: 5379918314552202696}
+  - {fileID: 9001051205302328292}
+  - {fileID: 2421400275454736108}
+  - {fileID: 0}
+  - {fileID: 9196575011444076670}
+  - {fileID: 4760286300081198091}
+  - {fileID: 656694106562604827}
+  - {fileID: 4470525218012556025}
+  - {fileID: 664824046625769896}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -766,15 +777,15 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 65535
+  <PrefabId>k__BackingField: 0
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 461856501702233449
   <SceneId>k__BackingField: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: 0, y: 0, z: 0, w: 0}
-    Scale: {x: 0, y: 0, z: 0}
-    IsValid: 0
+    Rotation: {x: 0, y: 0, z: 0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
 --- !u!54 &1872049894194976993
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -850,9 +861,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c709f529d75b39c4b8429ca95e8c0e54, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 0
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _statSystemSource: {fileID: 2125858533983064380}
   _stateMachine: {fileID: 5513345096377783494}
   _networkPlayer: {fileID: 2698279300146127577}
@@ -882,11 +893,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b22edd4ee605d404f822c008af9b2c50, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 1
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _statConfig: {fileID: 11400000, guid: e362e068a90ca7745936d961e2c722cd, type: 2}
   _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
+  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
   _showDebugUI: 1
 --- !u!114 &2698279300146127577
 MonoBehaviour:
@@ -900,9 +912,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0c5868c77457b549a494b085c21d290, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 2
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
 --- !u!114 &5002469889206839817
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -915,9 +927,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a4ab60d7b7e44d899da58ba7799055e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 3
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _tickCallbacks: 6
   movementSettings: {fileID: 11400000, guid: 97e9a5103d216084e81c63f1fdf7b650, type: 2}
   tankTurnSpeed: 10
@@ -964,9 +976,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d824930acfe38c54a9b4447c2209bf55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 4
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _statSystemSource: {fileID: 2125858533983064380}
   _lifecycle: {fileID: 5895629736225627408}
   _applyArmorReduction: 1
@@ -1018,9 +1030,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 650f626e92e042f1b9b39135fd9979a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 8
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _statSystemComponent: {fileID: 2125858533983064380}
@@ -1039,9 +1051,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8ff5803b4fb386144ac4b2cb73a6e23f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 9
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _statSystemComponent: {fileID: 2125858533983064380}
   _inventorySystemComponent: {fileID: 9196575011444076670}
@@ -1058,13 +1070,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e66babfccc405884580569f3a5418682, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 10
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _inventorySystemComponent: {fileID: 9196575011444076670}
   _itemUseSystemComponent: {fileID: 664824046625769896}
-  _enableDebugLogs: 1
+  _debugConfig: {fileID: 0}
 --- !u!114 &4470525218012556025
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1077,9 +1089,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c19eba99168c57e4c8ca0e97a8cae5f3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 11
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _inventorySystem: {fileID: 9196575011444076670}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _autoRecoverAttachments: 1
@@ -1150,9 +1162,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6446c7b19f8d6e34e882b9f1d89f5177, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 5
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _characterDatabase: {fileID: 11400000, guid: bb0e2b542f3b06248a3ae4ac7e051bf4, type: 2}
   _modelParent: {fileID: 8734720127442249217}
 --- !u!114 &5613274139488464996

@@ -69,6 +69,7 @@ namespace NightHunt.UI
         // ── Requests ──────────────────────────────────────────────────────────
         [Header("Incoming Requests")]
         [SerializeField] private Transform  incomingRequestContainer;
+        [SerializeField] private Transform  outgoingRequestContainer;  // sent invitations
         [SerializeField] private GameObject requestItemPrefab;  // FriendRequestItemView prefab
 
         // ── Search (embedded in MoreFriends tab) ──────────────────────────────
@@ -129,12 +130,16 @@ namespace NightHunt.UI
         private void OnEnable()
         {
             // Fired khi Shift UI SetActive(true) FriendPanel.
-            // Luc nay user da authenticated (nam trong HomePanel) → safe to load.
+            // Guard: only load data when user is authenticated.
+            // At game startup the panel may be active before login — skip to avoid
+            // a pointless "Not authenticated" error and a wasted API call.
+            // HomeView.RefreshFriendListAndBadge() covers first real load after login.
             if (_friendService == null && GameManager.Instance != null)
                 _friendService = GameManager.Instance.FriendService;
 
             SwitchTabData(FriendTab.Friends);
-            LoadFriends();
+            if (NightHunt.State.SessionState.Instance != null && NightHunt.State.SessionState.Instance.IsAuthenticated)
+                LoadFriends();
         }
 
         // ── Public API (called by HomeView / PartyController) ─────────────────
@@ -151,6 +156,19 @@ namespace NightHunt.UI
 
         /// <summary>Full reload of the friend list from the API.</summary>
         public void RefreshFriendList() => LoadFriends();
+
+        /// <summary>
+        /// Full reload of the friend list AND fetches incoming request count for the badge.
+        /// Call this from HomeView on login/return-to-home so the badge is correct immediately.
+        /// </summary>
+        public void RefreshFriendListAndBadge()
+        {
+            LoadFriends();
+            _ = RefreshIncomingBadge();
+            // Fallback: preload request rows at Home entry so data is available even if
+            // tab animation is wired but OnMoreFriendsTabClicked() was missed in Inspector.
+            LoadFriendRequests();
+        }
 
         /// <summary>
         /// Refresh both friend list and pending requests.
@@ -255,6 +273,8 @@ namespace NightHunt.UI
                 if (online) _onlineFriends.Add(f);
                 else        _offlineFriends.Add(f);
             }
+
+            Debug.Log($"[FriendPanel] Friends loaded: total={result.Data.Count}, online={_onlineFriends.Count}, offline={_offlineFriends.Count}");
             RebuildOnlineList();
             RebuildOfflineList();
         }
@@ -281,9 +301,24 @@ namespace NightHunt.UI
 
         private FriendItemView SpawnFriendItem(FriendResponse friend, Transform container)
         {
-            if (friendItemPrefab == null || container == null) return null;
+            if (friendItemPrefab == null)
+            {
+                Debug.LogError("[FriendPanel] friendItemPrefab is not assigned.");
+                return null;
+            }
+            if (container == null)
+            {
+                Debug.LogError("[FriendPanel] Friend list container is not assigned.");
+                return null;
+            }
+
             var go   = Instantiate(friendItemPrefab, container);
             var view = go.GetComponent<FriendItemView>();
+            if (view == null)
+            {
+                Debug.LogError("[FriendPanel] friendItemPrefab is missing FriendItemView component.");
+                return null;
+            }
             view?.Setup(friend, OnRowClicked);
             return view;
         }
@@ -306,20 +341,57 @@ namespace NightHunt.UI
                 Debug.LogError($"[FriendPanel] Failed to load requests: {result.Message}");
                 return;
             }
+
+            int incoming = result.Data.received?.Count ?? 0;
+            int outgoing = result.Data.sent?.Count ?? 0;
+            Debug.Log($"[FriendPanel] Requests loaded: incoming={incoming}, outgoing={outgoing}");
+
             PopulateRequests(incomingRequestContainer, result.Data.received, isIncoming: true);
+            PopulateRequests(outgoingRequestContainer, result.Data.sent, isIncoming: false);
+        }
+
+        /// <summary>
+        /// Fetch only the incoming request count and update the badge.
+        /// Lightweight: called at login time so the badge is visible without opening the tab.
+        /// </summary>
+        private async System.Threading.Tasks.Task RefreshIncomingBadge()
+        {
+            if (_friendService == null) return;
+            var result = await _friendService.GetPendingRequests();
+            if (result.Success && result.Data?.received != null)
+            {
+                _pendingCount = result.Data.received.Count;
+                RefreshBadge();
+            }
         }
 
         private void PopulateRequests(Transform container, List<FriendRequestResponse> requests, bool isIncoming)
         {
-            if (container == null) return;
+            if (container == null)
+            {
+                Debug.LogError($"[FriendPanel] {(isIncoming ? "incoming" : "outgoing")} request container is not assigned.");
+                return;
+            }
+
             foreach (Transform c in container) Destroy(c.gameObject);
             if (requests == null) return;
+
+            if (requestItemPrefab == null)
+            {
+                Debug.LogError("[FriendPanel] requestItemPrefab is not assigned.");
+                return;
+            }
+
             foreach (var req in requests)
             {
-                if (requestItemPrefab == null) continue;
                 var go   = Instantiate(requestItemPrefab, container);
                 var view = go.GetComponent<FriendRequestItemView>();
-                if (view == null) continue;
+                if (view == null)
+                {
+                    Debug.LogError("[FriendPanel] requestItemPrefab is missing FriendRequestItemView component.");
+                    Destroy(go);
+                    continue;
+                }
                 if (isIncoming) view.SetupIncoming(req, OnAcceptRequest, OnDeclineRequest);
                 else            view.SetupOutgoing(req, OnCancelRequest);
             }

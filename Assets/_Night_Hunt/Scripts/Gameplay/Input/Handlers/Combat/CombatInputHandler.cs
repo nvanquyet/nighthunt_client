@@ -3,6 +3,8 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.UI.Combat;   // QuickSlotAimController.IsAimingPC guard
 
 namespace NightHunt.Gameplay.Input.Handlers.Combat
 {
@@ -68,7 +70,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         // ── Combat system refs ────────────────────────────────────────────────────
         private MovementInputHandler _movementInputHandler;
-        private NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem _weaponSystem;        private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem _aimSystem;        /// <summary>Local player transform — origin cho ground-plane aim raycast.</summary>
+        private NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem _weaponSystem;        private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem _aimSystem;
+        private IItemUseSystem _itemUseSystem;        /// <summary>Local player transform — origin cho ground-plane aim raycast.</summary>
         private Transform _playerTransform;
         /// <summary>Camera lock state trước khi fire — restored khi EndFire.</summary>
         private bool _prevCameraLockBeforeFire;
@@ -352,6 +355,24 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private void BeginFire()
         {
             if (_isFiring) return;
+
+            // Throwable mode: fire button confirms the throw instead of shooting.
+            // FIX BUG 4: Guard với IsAimingPC để tránh double RequestExecuteThrow.
+            // Khi QuickSlotAimController.Update() đã gọi ConfirmAim() → RequestExecuteThrow()
+            // trong cùng frame với MouseButtonDown(0), BeginFire cũng sẽ được gọi do
+            // OnFirePerformed không qua IsPointerOverGameObject() check (click vào ground).
+            // IsAimingPC = false ngay sau ConfirmAim() (ResetAimState reset nó),
+            // nhưng trong vòng lặp ConfirmAim → ResetAimState → BeginFire cùng frame thì
+            // thứ tự là: Update() (ConfirmAim, IsAimingPC=false) → sau đó Input callbacks.
+            // Nên dùng flag riêng _throwConfirmedThisFrame để block an toàn.
+            if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
+            {
+                // Chỉ confirm throw từ BeginFire khi KHÔNG có QuickSlotAimController đang xử lý
+                // (PC mode: AimController.Update() chịu trách nhiệm confirm, không phải BeginFire).
+                if (!QuickSlotAimController.IsAimingPC)
+                    _itemUseSystem.RequestExecuteThrow();
+                return;
+            }
 
             // Guard: only fire when a weapon is actively equipped/drawn.
             // Prevents fire animation + camera lock triggering in empty hands.
@@ -660,6 +681,24 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         public void BindAimSystem(NightHunt.GameplaySystems.Core.Interfaces.IAimSystem aimSystem)
         {
             _aimSystem = aimSystem;
+        }
+
+        /// <summary>
+        /// Bind ItemUseSystem so fire input during throwable mode calls ExecuteThrow instead of shooting.
+        /// Call after BindCombatSystems when the local player spawns.
+        /// </summary>
+        public void BindItemUseSystem(IItemUseSystem itemUseSystem)
+        {
+            _itemUseSystem = itemUseSystem;
+        }
+
+        /// <summary>
+        /// Expose MovementInputHandler.SetCameraLockOverride so QuickSlotAimController can
+        /// force STRAFE mode while the player is in throwable aim mode (mirrors BeginFire).
+        /// </summary>
+        public void SetCameraLockOverride(bool active, bool forcedValue)
+        {
+            _movementInputHandler?.SetCameraLockOverride(active, forcedValue);
         }
     }
 }

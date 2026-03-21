@@ -1,6 +1,8 @@
 using FOW;
+using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using UnityEngine;
 using NightHunt.Utilities;
 
@@ -20,7 +22,9 @@ namespace NightHunt.Gameplay.FogOfWar
         [SerializeField] private bool _logDecisions;
 
         private FogOfWarHider _hider;
+        private HiderDisableRenderers _hiderBehavior;
         private NetworkPlayer _networkPlayer;
+        private PlayerModelLoader _modelLoader;
 
         private void Awake()
         {
@@ -34,10 +38,18 @@ namespace NightHunt.Gameplay.FogOfWar
         .InChildren()
         .OrLogWarning("[Auto] NetworkPlayer not found")
         .Resolve();
+
+            _modelLoader = ComponentResolver.Find<PlayerModelLoader>(this)
+        .OnSelf().OnRoot().InRootChildren()
+        .Resolve();
         }
 
         private void Start()
         {
+            // Subscribe to _networkPlayer.OnPublicDataChanged để re-run khi team thay đổi giữa game.
+            if (_networkPlayer != null)
+                _networkPlayer.OnPublicDataChanged += OnNetworkPlayerDataChanged;
+
             // Try to apply team visibility immediately.
             // If the local player isn't registered yet (late-join scenario where this
             // remote player's NetworkObject arrives before our own), subscribe to
@@ -47,12 +59,31 @@ namespace NightHunt.Gameplay.FogOfWar
                 if (SpectateManager.Instance != null)
                     SpectateManager.Instance.OnLocalPlayerSet += OnLocalPlayerAvailable;
             }
+
+            // Refresh renderer list when model finishes loading (model is loaded asynchronously).
+            if (_modelLoader != null)
+                _modelLoader.OnModelReady += OnModelReadyForFog;
         }
 
         private void OnDestroy()
         {
+            if (_networkPlayer != null)
+                _networkPlayer.OnPublicDataChanged -= OnNetworkPlayerDataChanged;
+
             if (SpectateManager.Instance != null)
                 SpectateManager.Instance.OnLocalPlayerSet -= OnLocalPlayerAvailable;
+
+            if (_modelLoader != null)
+                _modelLoader.OnModelReady -= OnModelReadyForFog;
+        }
+
+        /// <summary>
+        /// Gọi lại RefreshVisibilityForLocalTeam mỗi khi data của object này thay đổi (vd. team switch).
+        /// </summary>
+        private void OnNetworkPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next)
+        {
+            if (prev.TeamId != next.TeamId)
+                RefreshVisibilityForLocalTeam();
         }
 
         private void OnLocalPlayerAvailable(NightHunt.Networking.NetworkPlayer _)
@@ -143,19 +174,50 @@ namespace NightHunt.Gameplay.FogOfWar
 
         private void EnsureHiderExists()
         {
-            if (_hider == null)
-            {
-                _hider = gameObject.AddComponent<FogOfWarHider>();
-            }
+            if (_hider != null) return;
+
+            _hider = gameObject.AddComponent<FogOfWarHider>();
+
+            // Add renderer-toggling behavior so renderers are actually hidden/shown
+            // when the FOW system marks this object as revealed or concealed.
+            // Without this companion, FogOfWarHider fires OnActiveChanged but nothing acts on it.
+            _hiderBehavior = gameObject.AddComponent<HiderDisableRenderers>();
+            RefreshHiderRenderers();
         }
 
         private void RemoveHiderIfExists()
         {
-            if (_hider != null)
+            if (_hider == null) return;
+
+            // Explicitly disable the hider FIRST so FogOfWarHider.OnDisable() fires
+            // synchronously: it calls SetActive(true) → OnActiveChanged(true) →
+            // HiderBehavior.OnReveal() → renderers re-enabled BEFORE the behavior is destroyed.
+            _hider.enabled = false;
+
+            if (_hiderBehavior != null)
             {
-                Destroy(_hider);
-                _hider = null;
+                Destroy(_hiderBehavior);
+                _hiderBehavior = null;
             }
+
+            Destroy(_hider);
+            _hider = null;
+        }
+
+        /// <summary>
+        /// Called when the character model finishes loading. Re-captures all child renderers
+        /// so the HiderDisableRenderers behavior covers the freshly instantiated mesh.
+        /// </summary>
+        private void OnModelReadyForFog(GameObject _) => RefreshHiderRenderers();
+
+        /// <summary>
+        /// (Re-)populates HiderDisableRenderers with every Renderer currently on this
+        /// object and its children. Safe to call multiple times (e.g. after model swap).
+        /// </summary>
+        private void RefreshHiderRenderers()
+        {
+            if (_hiderBehavior == null) return;
+            _hiderBehavior.ModifyHiddenRenderers(GetComponentsInChildren<Renderer>(includeInactive: true));
         }
 
         private void Log(string msg)

@@ -200,12 +200,16 @@ namespace NightHunt.Networking
         }
 
         /// <summary>
-        /// Called on all clients whenever the server changes _playerData (e.g. team
+        /// Fired on all clients whenever the server changes _playerData (e.g. team
         /// reassignment, name update).  Keeps PlayerPublicRegistry in sync.
+        /// External systems (e.g. FogTeamVisibilityBinder) can subscribe to react to team changes.
         /// </summary>
+        public event System.Action<PlayerPublicData, PlayerPublicData> OnPublicDataChanged;
+
         private void OnPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next, bool asServer)
         {
             PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
+            OnPublicDataChanged?.Invoke(prev, next);
         }
 
         /// <summary>
@@ -227,6 +231,8 @@ namespace NightHunt.Networking
                 // all combat input so no further clicks register while ragdolled.
                 _cachedCombatHandler?.DisableInput();
                 _cachedAimSystem?.SetCursorVisible(false);
+                // Disable AimSystem to stop rotation/aim processing while dead.
+                if (_cachedAimSystem is MonoBehaviour aimMB) aimMB.enabled = false;
             }
             else
             {
@@ -234,6 +240,8 @@ namespace NightHunt.Networking
                 _cachedCombatHandler?.EnableInput();
                 if (!Application.isMobilePlatform)
                     _cachedAimSystem?.SetCursorVisible(true);
+                // Re-enable AimSystem after respawn.
+                if (_cachedAimSystem is MonoBehaviour aimMB) aimMB.enabled = true;
             }
         }
 
@@ -347,6 +355,14 @@ namespace NightHunt.Networking
             {
                 Debug.LogWarning("[NetworkPlayer] RangeIndicator not found in scene — vision ring will not appear.");
             }
+
+            // Bind ItemUseSystem so fire button calls ExecuteThrow during throwable mode.
+            var cachedItemUse = ComponentResolver.Find<IItemUseSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IItemUseSystem not found for CombatHandler binding")
+                .Resolve();
+            inputManager.CombatHandler?.BindItemUseSystem(cachedItemUse);
         }
 
         #endregion

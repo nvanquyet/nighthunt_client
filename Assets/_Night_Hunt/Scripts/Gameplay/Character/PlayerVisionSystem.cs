@@ -6,30 +6,17 @@ using NightHunt.Networking;
 namespace NightHunt.Gameplay.Player
 {
     /// <summary>
-    /// PLAYER VISION SYSTEM - Fog of war and visibility
-    /// 
-    /// Server Authority:
-    /// - Server tracks which players can see which entities
-    /// - Vision checks performed on server for anti-cheat
-    /// - Client receives visibility updates via VisionService
-    /// 
-    /// Responsibilities:
-    /// - Define vision parameters (range, angle, obstacles)
-    /// - Perform line-of-sight checks
-    /// - Register with VisionService for fog of war
+    /// OBSOLETE — placeholder stub, not connected to anything.
+    /// FOW vision is handled by FogVisionBinder (stat → ViewRadius) +
+    /// FogTeamVisibilityBinder (enemy hider) +
+    /// CharacterVisualController (death/respawn toggle).
+    /// This class can be removed when convenient.
     /// </summary>
+    [System.Obsolete("Not implemented. Use FogVisionBinder + FogTeamVisibilityBinder instead.")]
     public class PlayerVisionSystem : NetworkBehaviour
     {
-        [Header("References")]
+        [Header("References (unused)")]
         [SerializeField] private NetworkPlayer networkPlayer;
         [SerializeField] private FogOfWarRevealer3D fogOfWarRevealer3D;
-
-        //[SerializeField] 
-        
-        
-        public void Initialize()
-        {
-            
-        }
     }
 }

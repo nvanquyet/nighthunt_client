@@ -155,8 +155,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _combatInputHandler?.SetFireMobileJoystick(joystickDir, active: true);
         }
 
+        // IEndDragHandler — OnPointerUp fires TRƯỚC EndDrag (Unity EventSystem dispatch order).
+        // Mọi cleanup đã được xử lý trong OnPointerUp (joystick hide + SimulateFire(false)).
+        // OnEndDrag chỉ là safety net cho edge case drag kết thúc mà không có PointerUp
+        // (ví dụ: pointer rời khỏi màn hình trong khi drag).
         public void OnEndDrag(PointerEventData eventData)
         {
+            // _joystickStarted đã bị set = false trong OnPointerUp nên block này
+            // chỉ chạy ở edge case pointer-left-screen.
             if (_joystickStarted && _joystick != null)
             {
                 _joystick.OnPointerUp(eventData);
@@ -164,6 +170,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
             _joystickStarted = false;
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
+            // Gọi SimulateFire(false) nếu vẫn còn đang fire (edge case không có PointerUp).
+            _combatInputHandler?.SimulateFire(false);
         }
 
         private IEnumerator HoldTimerCo()

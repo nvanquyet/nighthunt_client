@@ -5,6 +5,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.Input.Handlers.Combat;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -59,6 +60,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private Transform         _playerTransform;
         private Camera            _cam;
         private IAimSystem        _aimSystem;
+        private IItemUseSystem    _itemUseSystem;
+        private CombatInputHandler _combatInputHandler;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Aim state
@@ -85,6 +88,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
         // ─────────────────────────────────────────────────────────────────────
 
         private bool IsMobile => _forceMobileMode || Application.isMobilePlatform;
+
+        /// <summary>
+        /// True khi controller đang trong aim mode (chờ confirm/cancel).
+        /// Dùng bởi <see cref="QuickSlotHUDButton"/> để quyết định có start hold-timer/joystick không.
+        /// </summary>
+        public bool IsInAimMode => _inAimMode;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle
@@ -127,15 +136,19 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// changes (mirrors the pattern in <c>UIRootController</c>).
         /// </summary>
         public void Initialize(
-            IPlayerStatSystem statSystem,
-            IQuickSlotSystem  quickSlotSystem,
-            Transform         playerTransform,
-            IAimSystem        aimSystem = null)
+            IPlayerStatSystem  statSystem,
+            IQuickSlotSystem   quickSlotSystem,
+            Transform          playerTransform,
+            IAimSystem         aimSystem            = null,
+            IItemUseSystem     itemUseSystem        = null,
+            CombatInputHandler combatInputHandler   = null)
         {
-            _statSystem      = statSystem;
-            _quickSlotSystem = quickSlotSystem;
-            _playerTransform = playerTransform;
-            _aimSystem       = aimSystem;
+            _statSystem          = statSystem;
+            _quickSlotSystem     = quickSlotSystem;
+            _playerTransform     = playerTransform;
+            _aimSystem           = aimSystem;
+            _itemUseSystem       = itemUseSystem;
+            _combatInputHandler  = combatInputHandler;
 
             if (_rangeIndicator != null)
                 _rangeIndicator.SetFollowTarget(playerTransform);
@@ -178,11 +191,22 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _activeSlot = slotIndex;
             _inAimMode  = true;
             IsAimingPC  = !IsMobile;
-
-            float range = GetVisionRange();
+            // Force STRAFE mode so the character rotates to face the throw direction
+            // while the player is in aim mode (mirrors BeginFire behaviour).
+            _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
+            float range = GetThrowRange();
             if (_rangeIndicator != null)
                 _rangeIndicator.ShowWithRange(range);
-
+            // FIX: Show the AimSystem world cursor on mobile when entering throwable aim.
+            // On PC the cursor is always visible (AimSystem.Initialize enables it);
+            // on mobile it is only shown by BeginFire/EndFire — we must do the same here.
+            if (IsMobile)
+                _aimSystem?.SetCursorVisible(true);
+            // Immediately tell the server to begin the throw (HolsterWeapon + SpawnItemInHand).
+            // We do NOT wait for ConfirmAim because the model-in-hand should appear as soon
+            // as the player picks up the item.  ConfirmAim will only send RequestExecuteThrow.
+            if (_quickSlotSystem != null && _quickSlotSystem.CanUseQuickSlot(slotIndex))
+                _quickSlotSystem.UseQuickSlot(slotIndex);
             if (!IsMobile)
             {
                 // PC: immediately do a raycast so the ring is ready on first frame.
@@ -199,7 +223,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (!_inAimMode || !IsMobile) return;
 
-            float   range    = GetVisionRange();
+            float   range    = GetThrowRange();
             Vector3 worldDir = Joystick01ToWorldDir(joystickDir, range);
 
             if (_playerTransform != null)
@@ -207,7 +231,26 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 AimWorldTarget = _playerTransform.position + worldDir;
                 AimDirection   = worldDir.magnitude > 0.001f ? worldDir.normalized : Vector3.forward;
                 MoveCursor(AimWorldTarget);
-                _aimSystem?.SetThrowableAim(joystickDir);
+
+                // FIX: Convert raw joystick → camera-relative world XZ before passing to AimSystem.
+                // AimSystem.ResolveThrowableAim maps input as (x→worldX, y→worldZ) with NO camera rotation.
+                // CombatInputHandler.SetFireMobileJoystick (via FireButton) already sends camera-relative;
+                // QuickSlotAimController must match that convention.
+                Vector2 camRelJoystick = joystickDir;  // fallback = raw (camera == null edge case)
+                if (_cam != null)
+                {
+                    Vector3 cr = _cam.transform.right;   cr.y = 0f; cr.Normalize();
+                    Vector3 cf = _cam.transform.forward; cf.y = 0f; cf.Normalize();
+                    Vector3 w  = cr * joystickDir.x + cf * joystickDir.y;
+                    camRelJoystick = new Vector2(w.x, w.z);
+                }
+                _aimSystem?.SetThrowableAim(camRelJoystick);
+
+                // Drive character rotation to face throw direction, same as FireButton mobile drag.
+                // FIX: pass camRelJoystick (camera-relative world XZ) — NOT raw joystickDir.
+                // SetFireMobileJoystick does new Vector3(x, 0, y) = world direction; raw joystick
+                // Y is screen-up which without camera rotation maps inverted when camera faces -Z.
+                _combatInputHandler?.SetFireMobileJoystick(camRelJoystick, active: true);
             }
         }
 
@@ -226,7 +269,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 CancelAim();
         }
 
-        // ─────────────────────────────────────────────────────────────────────
+        /// <summary>
+        /// Phiên bản phòng thủ của <see cref="OnMobileDragEnd"/> — chỉ thực thi nếu aim mode
+        /// vẫn còn active. Được gọi từ <see cref="QuickSlotHUDButton.OnEndDrag"/> để tránh
+        /// double-resolve khi <see cref="QuickSlotHUDButton.OnPointerUp"/> đã xử lý trước.
+        /// </summary>
+        public void OnMobileDragEndIfStillActive(float joystickMagnitude)
+        {
+            // _inAimMode đã được reset về false nếu OnPointerUp đã gọi OnMobileDragEnd trước.
+            // Guard này đảm bảo không có double Confirm/Cancel.
+            if (!_inAimMode) return;
+            OnMobileDragEnd(joystickMagnitude);
+        }        // ─────────────────────────────────────────────────────────────────────
         //  PC raycast
         // ─────────────────────────────────────────────────────────────────────
 
@@ -240,7 +294,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (!plane.Raycast(ray, out float dist)) return;
 
             Vector3 hit    = ray.GetPoint(dist);
-            float   range  = GetVisionRange();
+            float   range  = GetThrowRange();
             Vector3 offset = hit - _playerTransform.position;
 
             // Clamp to VisionRange radius.
@@ -259,17 +313,30 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void ConfirmAim()
         {
             if (!_inAimMode) return;
-
-            int slot = _activeSlot;
             ResetAimState();
 
-            if (_quickSlotSystem != null && _quickSlotSystem.CanUseQuickSlot(slot))
-                _quickSlotSystem.UseQuickSlot(slot);
+            // UseQuickSlot was already called in TryBeginAim (server started BeginThrowable).
+            // We only need to request the actual throw execution now.
+            if (_itemUseSystem != null)
+                _itemUseSystem.RequestExecuteThrow();
         }
 
-        private void CancelAim()
+        /// <summary>
+        /// Cancel aim mode and abort the in-progress item use on the server.
+        /// Called by PC right-click/Escape, mobile under-threshold release, or the
+        /// shared Cancel HUD button.
+        /// </summary>
+        public void CancelAim()
         {
-            ResetAimState();
+            // If currently aiming a throwable, clear aim visuals and controls.
+            if (_inAimMode)
+                ResetAimState();
+
+            // Always request server-side cancel so shared Cancel button works for both:
+            // - Throwable hold/aim state
+            // - Consumable channeling state
+            // RequestCancelUse is a no-op when no item is active.
+            _itemUseSystem?.RequestCancelUse();
         }
 
         private void ResetAimState()
@@ -282,6 +349,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
             HideCursor();
             // Exit throwable mode in AimSystem so it reverts to normal mouse aim.
             _aimSystem?.SetThrowableAim(Vector2.zero);
+            // FIX: Hide AimSystem world cursor on mobile (was shown in TryBeginAim).
+            // On PC the cursor is always visible — do not hide it here.
+            if (IsMobile)
+                _aimSystem?.SetCursorVisible(false);
+            // Clear mobile aim drive and restore movement lock state.
+            _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
+            _combatInputHandler?.SetCameraLockOverride(active: false, forcedValue: false);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -293,6 +367,30 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_statSystem == null) return 10f;                 // safe fallback
             float v = _statSystem.GetStat(PlayerStatType.VisionRange);
             return v > 0f ? v : 10f;
+        }
+
+        /// <summary>
+        /// Returns the effective aim clamp radius for the item currently in <see cref="_activeSlot"/>.
+        /// For throwables: physics-derived max throw distance from <see cref="ThrowableDefinition.GetMaxThrowDistance()">,
+        /// so the aim ring exactly matches what the ballistic arc can reach.
+        /// Falls back to VisionRange for non-throwables or when no item is loaded.
+        /// </summary>
+        private float GetThrowRange()
+        {
+            if (_quickSlotSystem == null || _activeSlot < 0)
+                return GetVisionRange();
+
+            var item = _quickSlotSystem.GetQuickSlotItem(_activeSlot);
+            if (item == null) return GetVisionRange();
+
+            var def = ItemDatabase.GetDefinition(item.DefinitionID) as NightHunt.GameplaySystems.Core.Data.ThrowableDefinition;
+            if (def == null) return GetVisionRange();
+
+            float throwRange = def.GetMaxThrowDistance();
+            float visionRange = GetVisionRange();
+            // Clamp to VisionRange: the aim ring must not extend beyond what is visible
+            // (prevents a second larger ring appearing outside the FOW visibility circle).
+            return throwRange > 0.1f ? Mathf.Min(throwRange, visionRange) : visionRange;
         }
 
         /// <summary>

@@ -99,6 +99,11 @@ namespace NightHunt.UI
         // INavigableView — called by UINavigator on panel transition
         // ─────────────────────────────────────────────────────────────────────
 
+        // Debounce: prevent double-invocation (UINavigator + OnUserLoggedInFallback can both
+        // fire within the same frame, causing 2× profile/friends/party API calls → 429).
+        private float _lastOnShowTime = float.MinValue;
+        private const float ON_SHOW_MIN_INTERVAL = 2f;
+
         /// <summary>
         /// Fallback called when UINavigator.Notify() cannot reach this component (panelObject
         /// not wired in Inspector). OnShow() is effectively idempotent — safe to call twice.
@@ -115,6 +120,14 @@ namespace NightHunt.UI
         /// </summary>
         public async void OnShow()
         {
+            float now = Time.unscaledTime;
+            if (now - _lastOnShowTime < ON_SHOW_MIN_INTERVAL)
+            {
+                Debug.Log("[HomeView] OnShow — debounced (called too recently, skipping duplicate)");
+                return;
+            }
+            _lastOnShowTime = now;
+
             Debug.Log("[HomeView] OnShow — starting home screen initialization");
 
             Debug.Log("[HomeView] Step 1: RefreshProfile (local cache — username, thumbnail)");
@@ -126,8 +139,8 @@ namespace NightHunt.UI
             Debug.Log("[HomeView] Step 3: CheckAndShowReconnectPopup");
             await CheckAndShowReconnectPopup();
 
-            Debug.Log("[HomeView] Step 4: FriendPanelView.RefreshFriendList → GET /api/friends");
-            friendPanelView?.RefreshFriendList();
+            Debug.Log("[HomeView] Step 4: FriendPanelView.RefreshFriendListAndBadge → GET /api/friends + /api/friends/requests/incoming");
+            friendPanelView?.RefreshFriendListAndBadge();
 
             Debug.Log("[HomeView] Step 5: PartyController.OnHomeShown → GET /api/party/current");
             partyController?.OnHomeShown();
@@ -260,6 +273,8 @@ namespace NightHunt.UI
             _ws.OnFriendStatusChanged   += HandleFriendStatusChanged;
             _ws.OnFriendRequestReceived += HandleFriendRequestReceived;
             _ws.OnFriendRequestAccepted += HandleFriendRequestAccepted;
+            _ws.OnFriendRequestDeclined += HandleFriendRequestDeclined;
+            _ws.OnFriendRemoved         += HandleFriendRemoved;
         }
 
         private void UnsubscribeWSEvents()
@@ -270,6 +285,8 @@ namespace NightHunt.UI
             _ws.OnFriendStatusChanged   -= HandleFriendStatusChanged;
             _ws.OnFriendRequestReceived -= HandleFriendRequestReceived;
             _ws.OnFriendRequestAccepted -= HandleFriendRequestAccepted;
+            _ws.OnFriendRequestDeclined -= HandleFriendRequestDeclined;
+            _ws.OnFriendRemoved         -= HandleFriendRemoved;
         }
 
         private void HandleForceLogout()
@@ -296,11 +313,24 @@ namespace NightHunt.UI
         private void HandleFriendRequestReceived(GameWebSocketService.FriendRequestEvent e)
         {
             friendPanelView?.OnFriendRequestBadge(+1);
+            friendPanelView?.RefreshAll();
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
             toast?.Show(title: "K\u1ebft b\u1ea1n", message: $"{e.fromUsername} mu\u1ed1n k\u1ebft b\u1ea1n v\u1edbi b\u1ea1n.");
         }
 
         private void HandleFriendRequestAccepted(GameWebSocketService.FriendRequestAcceptedEvent e)
+            => friendPanelView?.RefreshFriendList();
+
+        // Requester's outgoing request was declined — refresh requests list if tab is open.
+        private void HandleFriendRequestDeclined(GameWebSocketService.FriendRequestDeclinedEvent e)
+        {
+            var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+            toast?.Show(title: "Kết bạn", message: "Lời mời kết bạn đã bị từ chối.");
+            friendPanelView?.RefreshAll();
+        }
+
+        // A friend removed us (or we removed them via another device) — reload friend list.
+        private void HandleFriendRemoved(GameWebSocketService.FriendRemovedEvent e)
             => friendPanelView?.RefreshFriendList();
     }
 }

@@ -1,6 +1,7 @@
 using FOW;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Utilities;
 using UnityEngine;
 
 namespace NightHunt.Gameplay.FogOfWar
@@ -24,12 +25,13 @@ namespace NightHunt.Gameplay.FogOfWar
         private void Awake()
         {
             _revealer = GetComponent<FogOfWarRevealer3D>();
-            _statSystem = GetComponent<IPlayerStatSystem>();
 
-            if (_statSystem == null)
-            {
-                Debug.LogWarning("[FogVisionBinder] IPlayerStatSystem not found on object, using defaultViewRadius only.", this);
-            }
+            // IPlayerStatSystem lives on a different GO (player root or sibling child).
+            // Search up then across full root hierarchy via ComponentResolver (consistent with codebase pattern).
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+                .OnSelf().InParent().InRootChildren()
+                .OrLogWarning("[FogVisionBinder] IPlayerStatSystem not found — using defaultViewRadius only")
+                .Resolve();
         }
 
         private void OnEnable()
@@ -60,7 +62,9 @@ namespace NightHunt.Gameplay.FogOfWar
                 _revealer = GetComponent<FogOfWarRevealer3D>();
 
             if (_statSystem == null)
-                _statSystem = GetComponent<IPlayerStatSystem>();
+                _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+                    .OnSelf().InParent().InRootChildren()
+                    .Resolve();
 
             _initialized = true;
         }

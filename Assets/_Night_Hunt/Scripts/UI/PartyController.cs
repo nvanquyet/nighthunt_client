@@ -422,6 +422,7 @@ namespace NightHunt.UI
             _ws.OnPartyMemberKicked       += HandlePartyMemberKicked;
             _ws.OnPartyDisbanded          += HandlePartyDisbanded;
             _ws.OnPartyHostChanged        += HandlePartyHostChanged;
+            _ws.OnPartyStatusChanged      += HandlePartyStatusChanged;
         }
 
         private void UnsubscribeWSEvents()
@@ -436,6 +437,7 @@ namespace NightHunt.UI
             _ws.OnPartyMemberKicked       -= HandlePartyMemberKicked;
             _ws.OnPartyDisbanded          -= HandlePartyDisbanded;
             _ws.OnPartyHostChanged        -= HandlePartyHostChanged;
+            _ws.OnPartyStatusChanged      -= HandlePartyStatusChanged;
         }
 
         // ── Matchmaking ───────────────────────────────────────────────────────
@@ -532,6 +534,9 @@ namespace NightHunt.UI
         }
 
         private void HandlePartyHostChanged(GameWebSocketService.PartyHostChangedEvent e)
+            => _ = RefreshParty();
+
+        private void HandlePartyStatusChanged(GameWebSocketService.PartyStatusChangedEvent e)
             => _ = RefreshParty();
 
         // ══════════════════════════════════════════════════════════════════════

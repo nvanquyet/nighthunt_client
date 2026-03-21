@@ -102,7 +102,8 @@ MonoBehaviour:
   _componentIndexCache: 0
   _addedNetworkObject: {fileID: 1911459360187111797}
   _networkObjectCache: {fileID: 1911459360187111797}
-  maxPickupDistance: 4
+  _maxPickupDistance: 4
+  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
 --- !u!135 &7971256989803887784
 SphereCollider:
   m_ObjectHideFlags: 0

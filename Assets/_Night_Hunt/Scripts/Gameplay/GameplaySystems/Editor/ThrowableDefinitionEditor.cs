@@ -58,7 +58,6 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Throw Settings
             throwable.ThrowForce = 15f;
-            throwable.MaxRange = 30f;
             throwable.PrepareTime = 0.5f;
             
             // Projectile Behaviour
@@ -96,7 +95,6 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Throw Settings
             throwable.ThrowForce = 12f;
-            throwable.MaxRange = 25f;
             throwable.PrepareTime = 0.5f;
             
             // Projectile Behaviour
@@ -132,7 +130,6 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Throw Settings
             throwable.ThrowForce = 18f;
-            throwable.MaxRange = 25f;
             throwable.PrepareTime = 0.3f;
             
             // Projectile Behaviour
@@ -168,7 +165,6 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Throw Settings
             throwable.ThrowForce = 14f;
-            throwable.MaxRange = 28f;
             throwable.PrepareTime = 0.5f;
             
             // Projectile Behaviour
@@ -204,7 +200,6 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Throw Settings
             throwable.ThrowForce = 13f;
-            throwable.MaxRange = 25f;
             throwable.PrepareTime = 0.5f;
             
             // Projectile Behaviour
@@ -240,7 +235,6 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Throw Settings
             throwable.ThrowForce = 20f;
-            throwable.MaxRange = 30f;
             throwable.PrepareTime = 0.3f;
             
             // Projectile Behaviour
@@ -274,7 +268,6 @@ namespace NightHunt.GameplaySystems.Editor
                 throwable.CanCancelUsage = true;
                 throwable.UsageDuration = 0f;
                 throwable.ThrowForce = 15f;
-                throwable.MaxRange = 30f;
                 throwable.PrepareTime = 0.5f;
                 throwable.ThrowableType = ThrowableType.Grenade;
                 throwable.Damage = 100f;
@@ -303,7 +296,6 @@ namespace NightHunt.GameplaySystems.Editor
                 throwable.CanCancelUsage = true;
                 throwable.UsageDuration = 0f;
                 throwable.ThrowForce = 12f;
-                throwable.MaxRange = 25f;
                 throwable.PrepareTime = 0.5f;
                 throwable.ThrowableType = ThrowableType.Smoke;
                 throwable.Damage = 0f;

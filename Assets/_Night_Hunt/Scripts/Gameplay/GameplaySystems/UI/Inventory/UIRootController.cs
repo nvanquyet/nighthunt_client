@@ -3,6 +3,7 @@ using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking;
 using NightHunt.GameplaySystems.UI.Combat;
+using NightHunt.GameplaySystems.Aim;
 using UnityEngine;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
@@ -147,11 +148,15 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 
                 var playerT = SpectateManager.Instance?.GetCurrentPlayer()?.transform;
+                var aimSystemForHUD = UnityEngine.Object.FindFirstObjectByType<AimSystem>();
                 _combatHudPanel.Initialize(
                     _domainBridge.IsReady ? _domainBridge.Bridge.Weapon    : null,
                     _domainBridge.IsReady ? _domainBridge.Bridge.QuickSlot : null,
                     _domainBridge.IsReady ? _domainBridge.Bridge.Stat      : null,
-                    playerT);
+                    playerT,
+                    aimSystemForHUD,
+                    _domainBridge.IsReady ? _domainBridge.Bridge.ItemUse   : null,
+                    NightHunt.Gameplay.Input.Core.InputManager.Instance?.CombatHandler);
             }
         }
 

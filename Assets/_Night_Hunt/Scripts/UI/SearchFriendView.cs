@@ -1,6 +1,7 @@
 using System.Collections;
 using NightHunt.Core;
 using NightHunt.Services.Friend;
+using NightHunt.Utilities;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -37,6 +38,7 @@ namespace NightHunt.UI
         // ── Runtime ──────────────────────────────────────────────────────────
 
         private FriendService _friendService;
+        private FriendPanelView _friendPanelView;
         private Coroutine     _hideFeedbackCoroutine;
 
         // ── Lifecycle ────────────────────────────────────────────────────────
@@ -54,6 +56,12 @@ namespace NightHunt.UI
         {
             if (GameManager.Instance != null)
                 _friendService = GameManager.Instance.FriendService;
+
+            if (_friendPanelView == null)
+                _friendPanelView = ComponentResolver.Find<FriendPanelView>(this)
+                    .InParent()
+                    .OrLogWarning("[SearchFriendView] FriendPanelView not found in parent hierarchy")
+                    .Resolve();
         }
 
         // ── Private ──────────────────────────────────────────────────────────
@@ -71,18 +79,24 @@ namespace NightHunt.UI
 
             if (sendButton != null) sendButton.interactable = false;
 
-            var result = await _friendService.SendFriendRequest(username);
-
-            if (sendButton != null) sendButton.interactable = true;
-
-            if (result.Success)
+            try
             {
-                if (usernameInput != null) usernameInput.text = string.Empty;
-                ShowFeedback($"Friend request sent to {username}!", success: true);
+                var result = await _friendService.SendFriendRequest(username);
+
+                if (result.Success)
+                {
+                    if (usernameInput != null) usernameInput.text = string.Empty;
+                    ShowFeedback($"Friend request sent to {username}!", success: true);
+                    _friendPanelView?.RefreshAll();
+                }
+                else
+                {
+                    ShowFeedback(result.Message ?? "Failed to send request.", success: false);
+                }
             }
-            else
+            finally
             {
-                ShowFeedback(result.Message ?? "Failed to send request.", success: false);
+                if (sendButton != null) sendButton.interactable = true;
             }
         }
 

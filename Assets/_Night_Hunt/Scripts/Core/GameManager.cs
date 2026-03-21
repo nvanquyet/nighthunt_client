@@ -160,6 +160,7 @@ namespace NightHunt.Core
 
         private void OnApplicationPause(bool pauseStatus)
         {
+#if UNITY_ANDROID || UNITY_IOS
             if (pauseStatus)
             {
                 if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
@@ -174,10 +175,24 @@ namespace NightHunt.Core
                 HandleApplicationResumed();
                 OnAppResumed?.Invoke();
             }
+#else
+            // Desktop/editor: losing focus is common (alt-tab, multi-client testing).
+            // Keep WS connected to avoid false OFFLINE transitions and missed push events.
+            if (pauseStatus)
+            {
+                OnAppPaused?.Invoke();
+            }
+            else
+            {
+                HandleApplicationResumed();
+                OnAppResumed?.Invoke();
+            }
+#endif
         }
 
         private void OnApplicationFocus(bool hasFocus)
         {
+#if UNITY_ANDROID || UNITY_IOS
             if (!hasFocus)
             {
                 if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
@@ -192,6 +207,18 @@ namespace NightHunt.Core
                 HandleApplicationResumed();
                 OnAppFocusGained?.Invoke();
             }
+#else
+            // Desktop/editor: do not disconnect on focus changes.
+            if (!hasFocus)
+            {
+                OnAppFocusLost?.Invoke();
+            }
+            else
+            {
+                HandleApplicationResumed();
+                OnAppFocusGained?.Invoke();
+            }
+#endif
         }
 
         // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -220,6 +247,9 @@ namespace NightHunt.Core
                 {
                     if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
                         Debug.Log("[GameManager] Reconnecting WebSocket...");
+                    // Re-enable auto-reconnect (DisconnectWebSocket disabled it); now that we
+                    // are explicitly reconnecting, future server-initiated closes should retry.
+                    gameWebSocketService.Disconnect(disableReconnect: false);
                     _ = gameWebSocketService.Connect();
                 }
             }
@@ -343,7 +373,9 @@ namespace NightHunt.Core
         private void DisconnectWebSocket()
         {
             if (gameWebSocketService == null) return;
-            try { gameWebSocketService.Disconnect(); }
+            // disableReconnect: true — prevent OnClose from scheduling a competing
+            // backoff reconnect. HandleApplicationResumed() will reconnect on focus-return.
+            try { gameWebSocketService.Disconnect(disableReconnect: true); }
             catch (Exception ex) { Debug.LogWarning($"[GameManager] WS disconnect: {ex.Message}"); }
         }
     }

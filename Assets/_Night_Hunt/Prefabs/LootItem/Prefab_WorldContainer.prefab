@@ -264,3 +264,4 @@ MonoBehaviour:
   _componentIndexCache: 0
   _addedNetworkObject: {fileID: 6853833885511695776}
   _networkObjectCache: {fileID: 6853833885511695776}
+  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}

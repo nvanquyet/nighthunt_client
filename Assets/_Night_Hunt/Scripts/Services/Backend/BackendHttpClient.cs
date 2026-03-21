@@ -21,6 +21,7 @@ namespace NightHunt.Services.Backend
         // SEC-4: Use atomic int to prevent double-trigger of force logout coroutine
         private int _forceLogoutFlag = 0;
         private const string SessionHeader = "X-Session-Id";
+        private const int TraceBodyMaxLen = 1200;
 
         private void Awake()
         {
@@ -71,6 +72,12 @@ namespace NightHunt.Services.Backend
 
             string baseUrl = config.GetApiBaseUrl();
             string url = baseUrl + endpoint;
+            bool traceEndpoint = ShouldTraceEndpoint(endpoint);
+
+            if (traceEndpoint)
+            {
+                Debug.Log($"[BackendHttpClient][TRACE] Request => {method} {endpoint} (userId={SessionState.Instance?.UserId ?? 0}, auth={(SessionState.Instance != null && SessionState.Instance.IsAuthenticated)})");
+            }
 
             UnityWebRequest request;
 
@@ -118,11 +125,20 @@ namespace NightHunt.Services.Backend
 
             try
             {
+                if (traceEndpoint)
+                {
+                    Debug.Log($"[BackendHttpClient][TRACE] Response <= {method} {endpoint} status={request.responseCode} result={request.result}");
+                }
+
                 // SSL errors now handled at request level via CertificateHandler.
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     string jsonResponse = request.downloadHandler.text;
+                    if (traceEndpoint)
+                    {
+                        Debug.Log($"[BackendHttpClient][TRACE] Body {endpoint}: {TruncateForLog(jsonResponse, TraceBodyMaxLen)}");
+                    }
 
                     // IMPORTANT: Check responseCode even if result is Success
                     // Backend may return 401/403 with errorCode in response body
@@ -170,6 +186,12 @@ namespace NightHunt.Services.Backend
                         var apiResult = JsonUtility.FromJson<ApiResult<T>>(jsonResponse);
                         if (apiResult != null)
                         {
+                            if (traceEndpoint)
+                            {
+                                bool dataNull = (object)apiResult.data == null;
+                                Debug.Log($"[BackendHttpClient][TRACE] Parsed ApiResult<{typeof(T).Name}> success={apiResult.success}, dataNull={dataNull}, errorCode={apiResult.errorCode}, message={apiResult.message}");
+                            }
+
                             // Check if success field is set correctly
                             if (apiResult.success)
                             {
@@ -201,6 +223,11 @@ namespace NightHunt.Services.Backend
                     try
                     {
                         T resultData = JsonUtility.FromJson<T>(jsonResponse);
+                        if (traceEndpoint)
+                        {
+                            bool dataNull = (object)resultData == null;
+                            Debug.Log($"[BackendHttpClient][TRACE] Parsed direct<{typeof(T).Name}> dataNull={dataNull}");
+                        }
                         return ApiResult<T>.Ok(resultData);
                     }
                     catch (Exception ex)
@@ -219,6 +246,11 @@ namespace NightHunt.Services.Backend
 
                     Debug.LogWarning(
                         $"[BackendHttpClient] Error {request.responseCode}: {errorMessage}\nBody: {responseText}");
+
+                    if (traceEndpoint)
+                    {
+                        Debug.LogWarning($"[BackendHttpClient][TRACE] Error body {endpoint}: {TruncateForLog(responseText, TraceBodyMaxLen)}");
+                    }
 
                     // Try to parse as ApiResult to get message and errorCode from backend
                     if (!string.IsNullOrEmpty(responseText))
@@ -283,6 +315,22 @@ namespace NightHunt.Services.Backend
             {
                 request.Dispose();
             }
+        }
+
+        private static bool ShouldTraceEndpoint(string endpoint)
+        {
+            if (string.IsNullOrEmpty(endpoint)) return false;
+
+            return endpoint.StartsWith("/api/friends", StringComparison.OrdinalIgnoreCase)
+                   || endpoint.StartsWith("/api/party", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(endpoint, Constants.API_PROFILE_GET, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string TruncateForLog(string text, int maxLen)
+        {
+            if (string.IsNullOrEmpty(text)) return "<empty>";
+            if (text.Length <= maxLen) return text;
+            return text.Substring(0, maxLen) + $" ... (truncated, len={text.Length})";
         }
 
         private void HandleAuthError(long statusCode, string errorCode, string message)

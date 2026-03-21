@@ -31,12 +31,5 @@ MonoBehaviour:
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 0
-  StatConfig: {fileID: 11400000, guid: 9ad4e76a99505df44bc52015cd5e5590, type: 2}
+  StatConfig: {fileID: 11400000, guid: 9f1bb86d49ff343498dbc69ade051df8, type: 2}
   WeaponClass: 2
-  BallisticType: 0
-  DefaultFireMode: 0
-  AllowFireModeToggle: 1
-  DamageHeadMul: 2
-  CanTacticalReload: 1
-  DefaultBulletType: {fileID: 0}
-  ProjectilePrefab: {fileID: 0}

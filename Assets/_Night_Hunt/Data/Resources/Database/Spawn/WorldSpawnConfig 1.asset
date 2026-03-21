@@ -22,4 +22,4 @@ MonoBehaviour:
   SpawnLocked: 0
   ContainerAutoReset: 0
   ContainerResetDelay: 60
-  LootableConfig: {fileID: 11400000, guid: 009088bee968ecd40abe9e0a9a3cf1a2, type: 2}
+  LootableConfig: {fileID: 11400000, guid: c3850c7c45eeb6444bcd01d0b9f7d199, type: 2}

@@ -753,7 +753,7 @@ namespace FishNet.Component.Transforming.Beta
         /// <summary>
         /// Sets new rates based on next entries in transformProperties queue, against a supplied TransformProperties.
         /// </summary>
-        private void SetMoveRates(in TransformProperties prevValues)
+        private void SetMoveRates(TransformProperties prevValues)
         {
             if (_transformProperties.Count == 0)
             {

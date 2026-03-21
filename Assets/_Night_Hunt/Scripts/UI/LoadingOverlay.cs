@@ -255,10 +255,9 @@ namespace NightHunt.UI
             }
 
             // Disable UI interaction
-            if (EventSystem.current != null)
-            {
-                EventSystem.current.enabled = false;
-            }
+            // NOTE: Do NOT disable EventSystem globally — it would block ALL input permanently
+            // if HideCoroutine is interrupted mid-run. The overlay panel's full-screen Image
+            // with raycastTarget=true is the correct mechanism for blocking clicks behind the overlay.
 
             // Fade in
             if (canvasGroup != null)
@@ -329,10 +328,7 @@ namespace NightHunt.UI
             }
 
             // Re-enable UI interaction
-            if (EventSystem.current != null)
-            {
-                EventSystem.current.enabled = true;
-            }
+            // (EventSystem is no longer toggled here — see ShowCoroutine comment)
         }
 
         private IEnumerator SpinCoroutine()

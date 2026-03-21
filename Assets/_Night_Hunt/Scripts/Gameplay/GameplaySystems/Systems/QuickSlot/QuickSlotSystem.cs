@@ -413,12 +413,19 @@ namespace NightHunt.GameplaySystems.QuickSlot
 
         public void UseQuickSlot(int slotIndex)
         {
-            if (!IsServerInitialized)
+            if (IsServerInitialized)
             {
-                Debug.LogWarning("[QuickSlotSystem] UseQuickSlot: server-only!");
+                UseQuickSlotServer(slotIndex);
                 return;
             }
 
+            if (IsOwner)
+                UseQuickSlotServerRpc(slotIndex);
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void UseQuickSlotServerRpc(int slotIndex)
+        {
             UseQuickSlotServer(slotIndex);
         }
 

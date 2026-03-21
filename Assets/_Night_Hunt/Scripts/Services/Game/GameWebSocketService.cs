@@ -44,6 +44,8 @@ namespace NightHunt.Services.Game
         /// <summary>Cancels the '60 s stable → reset counter' timer when the connection drops before that window.</summary>
         private CancellationTokenSource _stableResetCts;
         private const int MAX_MESSAGES_PER_FRAME = 5; // PERF: Limit message processing to prevent frame drops
+        private const float PING_INTERVAL = 15f;         // Send ping every 15 s to prevent server stale-eviction
+        private float _pingTimer = PING_INTERVAL;
 
         public bool IsWsConnected => isConnected;
         public bool IsConnecting => isConnecting;
@@ -82,6 +84,7 @@ namespace NightHunt.Services.Game
         public event Action<PartyMemberKickedEvent> OnPartyMemberKicked;
         public event Action<PartyDisbandedEvent>    OnPartyDisbanded;
         public event Action<PartyHostChangedEvent>  OnPartyHostChanged;
+        public event Action<PartyStatusChangedEvent> OnPartyStatusChanged;
         
         // Connection Events
         public event Action OnDisconnected;
@@ -95,6 +98,14 @@ namespace NightHunt.Services.Game
             #if !UNITY_WEBGL || UNITY_EDITOR
             if (webSocket != null && webSocket.State == WebSocketState.Open)
             {
+                // Heartbeat ping — keeps server from evicting stale sessions (server timeout = 30 s)
+                _pingTimer -= Time.unscaledDeltaTime;
+                if (_pingTimer <= 0f)
+                {
+                    _pingTimer = PING_INTERVAL;
+                    _ = webSocket.SendText("{\"type\":\"ping\"}");
+                }
+
                 // PERF-FIX: Process max 5 messages per frame to prevent frame drops
                 // This ensures smooth 60fps even with message bursts (10+ messages)
                 // Example: 10 friends come online at once = 10 messages dispatched over 2 frames
@@ -718,6 +729,23 @@ namespace NightHunt.Services.Game
                         }
                         break;
 
+                    case "party_status_changed":
+                        var partyStatusChanged = JsonUtility.FromJson<PartyStatusChangedEvent>(messageData.data);
+                        if (partyStatusChanged != null)
+                        {
+                            ConditionalLogger.Log("GameWebSocketService", $"Party status changed: party={partyStatusChanged.partyId} {partyStatusChanged.oldStatus} -> {partyStatusChanged.newStatus}");
+                            OnPartyStatusChanged?.Invoke(partyStatusChanged);
+                            APICache.Invalidate(APICache.KEY_PARTY_STATE);
+                        }
+                        break;
+
+                    // friend_blocked: sent to the blocker — their friend list needs refresh.
+                    case "friend_blocked":
+                        APICache.InvalidateFriends();
+                        // Reuse OnFriendRemoved so HomeView refreshes the friend list display.
+                        OnFriendRemoved?.Invoke(new FriendRemovedEvent());
+                        break;
+
                     default:
                         ConditionalLogger.LogWarning("GameWebSocketService", $"Unknown message type: {messageData.type}");
                         break;
@@ -1045,6 +1073,14 @@ namespace NightHunt.Services.Game
             public long partyId;
             public long oldHostUserId;
             public long newHostUserId;
+        }
+
+        [Serializable]
+        public class PartyStatusChangedEvent
+        {
+            public long partyId;
+            public string oldStatus;
+            public string newStatus;
         }
 
         /// <summary>
