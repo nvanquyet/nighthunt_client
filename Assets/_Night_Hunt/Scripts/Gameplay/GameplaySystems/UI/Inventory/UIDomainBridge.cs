@@ -35,7 +35,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public event Action<UISlotId, UISlotState> OnInventorySlotChanged;
         public event Action<UISlotId, UISlotState> OnEquipmentSlotChanged;
         public event Action<UISlotId, UISlotState> OnWeaponSlotChanged;
-        public event Action<UISlotId, UISlotState> OnQuickSlotChanged;
+        public event Action<ItemInstance> OnItemSelected;
+        public event Action OnItemDeselected;
 
         public event Action<PlayerStatType, float, float> OnStatChanged;
         public event Action<float, float> OnWeightChanged;
@@ -73,7 +74,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             PushInitialInventorySnapshot();
             PushInitialEquipmentSnapshot();
             PushInitialWeaponSnapshot();
-            PushInitialQuickSlotSnapshot();
             PushInitialStatsSnapshot();
         }
 
@@ -94,7 +94,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             PushInitialInventorySnapshot();
             PushInitialEquipmentSnapshot();
             PushInitialWeaponSnapshot();
-            PushInitialQuickSlotSnapshot();
         }
 
         #endregion
@@ -119,8 +118,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _bridge.OnWeaponUnequipped += HandleWeaponUnequipped;
             _bridge.OnActiveWeaponChanged += HandleActiveWeaponChanged;
 
-            _bridge.OnQuickSlotAssigned += HandleQuickSlotAssigned;
-            _bridge.OnQuickSlotRemoved += HandleQuickSlotRemoved;
+            _bridge.OnItemSelected  += HandleItemSelected;
+            _bridge.OnItemDeselected += HandleItemDeselected;
 
             _bridge.OnStatChanged += HandleStatChanged;
             _bridge.OnWeightChanged += HandleWeightChanged;
@@ -144,8 +143,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _bridge.OnWeaponUnequipped -= HandleWeaponUnequipped;
             _bridge.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
 
-            _bridge.OnQuickSlotAssigned -= HandleQuickSlotAssigned;
-            _bridge.OnQuickSlotRemoved -= HandleQuickSlotRemoved;
+            _bridge.OnItemSelected  -= HandleItemSelected;
+            _bridge.OnItemDeselected -= HandleItemDeselected;
 
             _bridge.OnStatChanged -= HandleStatChanged;
             _bridge.OnWeightChanged -= HandleWeightChanged;
@@ -203,24 +202,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
         }
 
-        private void PushInitialQuickSlotSnapshot()
-        {
-            if (_bridge == null || _bridge.QuickSlot == null) return;
-
-            var slots = _bridge.GetAllQuickSlots();
-            if (slots == null) return;
-
-            for (int i = 0; i < slots.Length; i++)
-            {
-                var item = slots[i];
-                if (item == null) continue;
-
-                var id = UISlotId.QuickSlot(i);
-                var state = BuildSlotStateFromItem(item);
-                OnQuickSlotChanged?.Invoke(id, state);
-            }
-        }
-
         private void PushInitialStatsSnapshot()
         {
             if (_bridge == null || _bridge.Stat == null)
@@ -264,37 +245,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var id = UISlotId.Inventory(item.InventoryIndex);
             var state = BuildSlotStateFromItem(item);
             OnInventorySlotChanged?.Invoke(id, state);
-
-            // ROOT CAUSE E FIX: If this item is also referenced by a QuickSlot (as a link,
-            // not a copy), propagate the quantity change there too.
-            // This handles the case where stacking updates the item but QS shows stale qty.
-            RefreshQuickSlotsForItem(item);
-        }
-
-        /// <summary>Updates any QuickSlot views that reference the given item instance.</summary>
-        private void RefreshQuickSlotsForItem(ItemInstance item)
-        {
-            if (_bridge?.QuickSlot == null || item == null) return;
-
-            var slots = _bridge.GetAllQuickSlots();
-            if (slots == null) return;
-
-            for (int i = 0; i < slots.Length; i++)
-            {
-                if (slots[i] != null && slots[i].InstanceID == item.InstanceID)
-                {
-                    var qsId = UISlotId.QuickSlot(i);
-                    var qsState = BuildSlotStateFromItem(item);
-                    OnQuickSlotChanged?.Invoke(qsId, qsState);
-                }
-            }
         }
 
         private void HandleItemRemoved(ItemInstance item, int removedQty)
         {
             if (item == null || item.InventoryIndex < 0) return;
 
-            if (item.Quantity <= 0)
+            // Check via the cache: RemoveItemCompletely already evicted the item before firing
+            // OnItemRemoved, so GetItemByInstanceID returns null for a full removal.
+            // item.Quantity is NOT decremented in the full-removal path, so checking
+            // item.Quantity <= 0 would be incorrect — always use the cache presence instead.
+            bool fullyRemoved = _bridge.Inventory?.GetItemByInstanceID(item.InstanceID) == null;
+            if (fullyRemoved)
             {
                 var id = UISlotId.Inventory(item.InventoryIndex);
                 OnInventorySlotChanged?.Invoke(id, new UISlotState());
@@ -441,22 +403,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
         }
 
-        private void HandleQuickSlotAssigned(int slotIndex, ItemInstance item)
-        {
-            var id = UISlotId.QuickSlot(slotIndex);
-            var state = BuildSlotStateFromItem(item);
-            OnQuickSlotChanged?.Invoke(id, state);
-        }
-
-        private void HandleQuickSlotRemoved(int slotIndex)
-        {
-            var id = UISlotId.QuickSlot(slotIndex);
-            OnQuickSlotChanged?.Invoke(id, new UISlotState());
-
-            // FIX: Item được remove từ quickslot sẽ được add vào inventory
-            // Backend sẽ trigger OnItemAdded event, nhưng để đảm bảo, ta có thể check inventory
-            // Tuy nhiên, vì không có item reference ở đây, ta dựa vào backend event OnItemAdded
-        }
+        private void HandleItemSelected(ItemInstance item) => OnItemSelected?.Invoke(item);
+        private void HandleItemDeselected() => OnItemDeselected?.Invoke();
 
         /// <summary>
         /// Handle item moved event - update cả old và new slot
@@ -497,55 +445,15 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         #region Inventory Sorting
 
         /// <summary>
-        /// Yêu cầu sắp xếp inventory trên server bằng BatchAssignIndices để tránh
-        /// cascading swap khi dùng MoveItem tuần tự.
+        /// Yêu cầu sắp xếp inventory theo ItemType rồi DefinitionID trên server.
+        /// Routes qua ServerRpc để hoạt động từ cả client lẫn host.
         /// </summary>
         public void RequestSortInventory(InventorySortMode mode = InventorySortMode.Default)
         {
             if (_bridge == null || !_bridge.IsReady || _bridge.Inventory == null)
                 return;
 
-            var items = _bridge.GetAllItems();
-            if (items == null)
-                return;
-
-            // Lọc item đang nằm trong grid inventory
-            var list = items
-                .Where(i => i != null && i.InventoryIndex >= 0)
-                .ToList();
-
-            if (list.Count <= 1)
-                return;
-
-            // Sort đơn giản: theo ItemType rồi ItemID
-            list.Sort((a, b) =>
-            {
-                var defA = ItemDatabase.GetDefinition(a.DefinitionID);
-                var defB = ItemDatabase.GetDefinition(b.DefinitionID);
-
-                int typeA = defA != null ? (int)defA.Type : 0;
-                int typeB = defB != null ? (int)defB.Type : 0;
-
-                int cmp = typeA.CompareTo(typeB);
-                if (cmp != 0) return cmp;
-
-                string idA = defA != null ? defA.ItemID : a.DefinitionID;
-                string idB = defB != null ? defB.ItemID : b.DefinitionID;
-                return string.Compare(idA, idB, StringComparison.Ordinal);
-            });
-
-            // Build assignment map: only include items that actually need to move.
-            // Using BatchAssignIndices avoids the cascade-swap problem of sequential MoveItem.
-            var assignments = new Dictionary<string, int>();
-            for (int newIndex = 0; newIndex < list.Count; newIndex++)
-            {
-                var item = list[newIndex];
-                if (item.InventoryIndex != newIndex)
-                    assignments[item.InstanceID] = newIndex;
-            }
-
-            if (assignments.Count > 0)
-                _bridge.Inventory.BatchAssignIndices(assignments);
+            _bridge.Inventory.RequestSortByType();
         }
 
         #endregion

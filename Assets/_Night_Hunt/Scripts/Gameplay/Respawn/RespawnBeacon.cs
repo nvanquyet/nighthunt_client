@@ -68,12 +68,17 @@ namespace NightHunt.Gameplay.Respawn
 
             // Subscribe to HP changes
             currentHP.OnChange += OnHPChanged;
+            isPlaced.OnChange  += OnIsPlacedChanged;
+
+            // Apply initial visual state (owner has correct isPlaced value in spawn packet)
+            ApplyPlacedVisual(isPlaced.Value);
         }
 
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
             currentHP.OnChange -= OnHPChanged;
+            isPlaced.OnChange  -= OnIsPlacedChanged;
         }
 
         public override void OnStartServer()
@@ -227,11 +232,19 @@ namespace NightHunt.Gameplay.Respawn
 
         private void OnHPChanged(int oldHP, int newHP, bool asServer)
         {
-            // Update visual representation
-            if (beaconModel != null)
-            {
-                // Update health bar, etc.
-            }
+            // Update health bar, etc.
+        }
+
+        private void OnIsPlacedChanged(bool oldVal, bool newVal, bool asServer)
+        {
+            ApplyPlacedVisual(newVal);
+        }
+
+        /// <summary>Toggle between placement-indicator and final beacon model.</summary>
+        private void ApplyPlacedVisual(bool placed)
+        {
+            if (beaconModel        != null) beaconModel.SetActive(placed);
+            if (placementIndicator != null) placementIndicator.SetActive(!placed);
         }
 
         /// <summary>

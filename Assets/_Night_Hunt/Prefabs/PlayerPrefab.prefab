@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 664824046625769896}
   - component: {fileID: 7424188612309130538}
   - component: {fileID: 8124406180826427094}
+  - component: {fileID: 6893537453317171255}
   m_Layer: 9
   m_Name: ItemHandler
   m_TagString: Untagged
@@ -80,6 +81,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 98e8049c2239433fa38cbdb378bd684f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &6893537453317171255
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1923676027138443293}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d05c1e580e9d3948a0ed67701485e27, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 2932638389700231956}
+  _networkObjectCache: {fileID: 0}
+  _inventorySystemComponent: {fileID: 9196575011444076670}
+  _itemUseSystemComponent: {fileID: 0}
 --- !u!1 &2685421604083444283
 GameObject:
   m_ObjectHideFlags: 0
@@ -750,7 +768,7 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 9196575011444076670}
   - {fileID: 4760286300081198091}
-  - {fileID: 656694106562604827}
+  - {fileID: 0}
   - {fileID: 4470525218012556025}
   - {fileID: 664824046625769896}
   InitializedParentNetworkBehaviour: {fileID: 0}
@@ -994,7 +1012,6 @@ GameObject:
   - component: {fileID: 3333721600415421188}
   - component: {fileID: 9196575011444076670}
   - component: {fileID: 4760286300081198091}
-  - component: {fileID: 656694106562604827}
   - component: {fileID: 4470525218012556025}
   m_Layer: 0
   m_Name: InventorySystem
@@ -1058,25 +1075,6 @@ MonoBehaviour:
   _statSystemComponent: {fileID: 2125858533983064380}
   _inventorySystemComponent: {fileID: 9196575011444076670}
   _enableDebugLogs: 1
---- !u!114 &656694106562604827
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6529247948932358281}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e66babfccc405884580569f3a5418682, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _componentIndexCache: 10
-  _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 2932638389700231956}
-  _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
-  _inventorySystemComponent: {fileID: 9196575011444076670}
-  _itemUseSystemComponent: {fileID: 664824046625769896}
-  _debugConfig: {fileID: 0}
 --- !u!114 &4470525218012556025
 MonoBehaviour:
   m_ObjectHideFlags: 0

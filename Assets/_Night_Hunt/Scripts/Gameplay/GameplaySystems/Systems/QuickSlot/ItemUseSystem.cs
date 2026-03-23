@@ -6,10 +6,12 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Gameplay.Character;
+using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Utilities;
 
-namespace NightHunt.GameplaySystems.QuickSlot
+namespace NightHunt.GameplaySystems.ItemUse
 {
     /// <summary>
     /// Orchestrates item usage on the server, routing consumables to
@@ -20,10 +22,10 @@ namespace NightHunt.GameplaySystems.QuickSlot
         #region Serialized Fields
 
         [Header("References")] [SerializeField]
-        private MonoBehaviour _weaponSystemComponent;
+        private WeaponSystem _weaponSystemComponent;
 
-        [SerializeField] private MonoBehaviour _statSystemComponent;
-        [SerializeField] private MonoBehaviour _inventorySystemComponent;
+        [SerializeField] private PlayerStatSystem _statSystemComponent;
+        [SerializeField] private InventorySystem _inventorySystemComponent;
 
         [Header("Handlers")] [SerializeField] private ConsumableHandler _consumableHandler;
         [SerializeField] private ThrowableHandler _throwableHandler;
@@ -78,55 +80,50 @@ namespace NightHunt.GameplaySystems.QuickSlot
             InitializeHandlers();
         }
 
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            ValidateReferences();
+        }
+#endif
+
         private void ValidateReferences()
         {
-            // Get components and cast to interfaces
-            if (_weaponSystemComponent == null)
-                _weaponSystemComponent = ComponentResolver.Find<MonoBehaviour>(this)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] MonoBehaviour not found")
-                    .Resolve();
+            _weaponSystem = ComponentResolver.Find<IWeaponSystem>(this)
+                .UseExisting(_weaponSystemComponent)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrLogWarning("[ItemUseSystem] IWeaponSystem not found")
+                .Resolve();
 
-            _weaponSystem = _weaponSystemComponent as IWeaponSystem;
-            _statSystem = _statSystemComponent as IPlayerStatSystem;
-            _inventorySystem = _inventorySystemComponent as IInventorySystem;
+            if (_weaponSystem is WeaponSystem wsConcrete)
+                _weaponSystemComponent = wsConcrete;
 
-#if UNITY_EDITOR
-            // Auto-find if not assigned
-            if (_weaponSystem == null)
-            {
-                var ws = ComponentResolver.Find<IWeaponSystem>(this)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] IWeaponSystem not found")
-                    .Resolve();
-                if (ws != null) _weaponSystemComponent = ws as MonoBehaviour;
-                _weaponSystem = ws;
-            }
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+                .UseExisting(_statSystemComponent)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrLogWarning("[ItemUseSystem] IPlayerStatSystem not found")
+                .Resolve();
 
-            if (_statSystem == null)
-            {
-                var ss = ComponentResolver.Find<IPlayerStatSystem>(this)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] IPlayerStatSystem not found")
-                    .Resolve();
-                if (ss != null) _statSystemComponent = ss as MonoBehaviour;
-                _statSystem = ss;
-            }
+            if (_statSystem is PlayerStatSystem ssConcrete)
+                _statSystemComponent = ssConcrete;
 
-            if (_inventorySystem == null)
-            {
-                var inv = ComponentResolver.Find<IInventorySystem>(this)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] IInventorySystem not found")
-                    .Resolve();
-                if (inv != null) _inventorySystemComponent = inv as MonoBehaviour;
-                _inventorySystem = inv;
-            }
-#endif
+            _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
+                .UseExisting(_inventorySystemComponent)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrLogWarning("[ItemUseSystem] IInventorySystem not found")
+                .Resolve();
+
+            if (_inventorySystem is InventorySystem invConcrete)
+                _inventorySystemComponent = invConcrete;
 
             if (_weaponSystem == null)
                 Debug.LogError("[ItemUseSystem] IWeaponSystem is null!");
@@ -227,7 +224,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
             }
 
             // Capture aim target immediately — before the prepare delay.
-            Vector3 aimTarget = NightHunt.GameplaySystems.UI.Combat.QuickSlotAimController.AimWorldTarget;
+            Vector3 aimTarget = NightHunt.GameplaySystems.UI.Combat.ItemAimController.AimWorldTarget;
 
             // Reuse the shared _useCoroutine slot so CancelUse() can interrupt mid-prepare.
             _useCoroutine = StartCoroutine(PrepareAndThrow(def, aimTarget));
@@ -255,10 +252,10 @@ namespace NightHunt.GameplaySystems.QuickSlot
         }
 
         /// <summary>
-        /// Called by the owning client (CombatInputHandler.BeginFire / QuickSlotAimController
+        /// Called by the owning client (CombatInputHandler.BeginFire / ItemAimController
         /// mobile ConfirmAim) to trigger ExecuteThrow on the server.
         /// FishNet ServerRpcs from the same client are ordered, so a prior
-        /// UseQuickSlotServerRpc (→ BeginThrowable) is guaranteed to complete
+        /// item-selection RPC (→ BeginThrowable) is guaranteed to complete
         /// before this one processes.
         /// </summary>
         [ServerRpc(RequireOwnership = true)]
@@ -435,7 +432,7 @@ namespace NightHunt.GameplaySystems.QuickSlot
             // If a Rigidbody exists on the prefab, launch it toward the aim target.
             if (_itemInHandModel.TryGetComponent<Rigidbody>(out var rb))
             {
-                Vector3 toTarget = NightHunt.GameplaySystems.UI.Combat.QuickSlotAimController.AimWorldTarget
+                Vector3 toTarget = NightHunt.GameplaySystems.UI.Combat.ItemAimController.AimWorldTarget
                                    - _itemInHandModel.transform.position;
                 rb.linearVelocity = toTarget.normalized * 8f;
                 rb.useGravity     = true;

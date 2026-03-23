@@ -5,8 +5,9 @@ using TMPro;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// View thuần UI cho một ô item/equipment/quickslot.
-    /// Không chứa logic gameplay, chỉ render từ UISlotState.
+    /// Pure UI view for an item/equipment/weapon slot.
+    /// Renders from <see cref="UISlotState"/> – contains no gameplay logic.
+    /// Selection highlight is managed externally via <see cref="SetSelectedVisual"/>.
     /// </summary>
     public class ItemSlotView : MonoBehaviour
     {
@@ -14,8 +15,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [SerializeField] private Image _icon;
         [SerializeField] private Image _background;
         [SerializeField] private Image _highlightFrame;
+        [SerializeField] private Image _selectedFrame;
         [SerializeField] private TextMeshProUGUI _stackText;
-        [SerializeField] private GameObject _stackObj; // GameObject chứa stack text và background
+        [SerializeField] private GameObject _stackObj;
         [SerializeField] private CanvasGroup _canvasGroup;
 
         [Header("Config")]
@@ -23,6 +25,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         public UISlotId SlotId { get; private set; }
         public UISlotState State { get; private set; }
+        public bool IsSelectedVisually { get; private set; }
 
         /// <summary>
         /// Initialize với UI config và slot id
@@ -65,28 +68,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _background.color = state.BackgroundColor;
             }
 
-            // Show/hide stack object dựa trên stack count
-            if (_stackObj != null)
-            {
-                bool showStack = state.StackCount > 1;
-                _stackObj.SetActive(showStack);
-                
-                if (showStack && _stackText != null)
-                {
-                    _stackText.text = state.StackCount.ToString();
-                }
-            }
-            else if (_stackText != null)
-            {
-                // Fallback: nếu không có stackObj thì chỉ set text
-                _stackText.text = state.StackCount > 1 ? state.StackCount.ToString() : string.Empty;
-            }
+        // Show/hide stack count
+        if (_stackObj != null)
+        {
+            bool showStack = state.StackCount > 1;
+            _stackObj.SetActive(showStack);
+            if (showStack && _stackText != null)
+                _stackText.text = state.StackCount.ToString();
+        }
+        else if (_stackText != null)
+        {
+            _stackText.text = state.StackCount > 1 ? state.StackCount.ToString() : string.Empty;
+        }
 
             if (_highlightFrame != null)
-            {
-                // Ưu tiên highlight khi là target drop hợp lệ
                 _highlightFrame.enabled = state.IsHighlight || state.IsValidDropTarget;
-            }
+
+            // Selection frame is managed externally via SetSelectedVisual – do not touch it here.
 
             if (_canvasGroup != null)
             {
@@ -163,15 +161,26 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             if (_highlightFrame != null)
-            {
                 _highlightFrame.enabled = false;
-            }
+
+            // Clear selection visual when slot becomes empty.
+            SetSelectedVisual(false);
 
             if (_canvasGroup != null)
             {
                 _canvasGroup.alpha = 1f;
                 _canvasGroup.blocksRaycasts = true;
             }
+        }
+
+        /// <summary>
+        /// Toggles the selection frame overlay (driven by InventoryScreen, not by item data).
+        /// </summary>
+        public void SetSelectedVisual(bool selected)
+        {
+            IsSelectedVisually = selected;
+            if (_selectedFrame != null)
+                _selectedFrame.enabled = selected;
         }
 
         /// <summary>

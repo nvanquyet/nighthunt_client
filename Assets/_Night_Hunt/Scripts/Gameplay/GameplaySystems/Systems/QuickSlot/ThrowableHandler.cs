@@ -3,7 +3,7 @@ using UnityEngine;
 using NightHunt.Utilities;
 using FishNet;
 
-namespace NightHunt.GameplaySystems.QuickSlot
+namespace NightHunt.GameplaySystems.ItemUse
 {
     /// <summary>
     /// Handler for throwable projectiles (grenades, molotovs, etc.)

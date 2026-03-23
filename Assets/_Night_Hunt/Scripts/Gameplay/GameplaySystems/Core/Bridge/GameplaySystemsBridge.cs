@@ -31,7 +31,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
     /// - Events fire on both server and clients after sync
     /// 
     /// USAGE:
-    /// var bridge = new GameplaySystemsBridge(inventory, equipment, weapon, quickSlot, statSystem, itemUse);
+    /// var bridge = new GameplaySystemsBridge(inventory, equipment, weapon, itemSelection, statSystem, itemUse);
     /// bridge.AddItem("weapon_ak47", 1);
     /// </summary>
     public class GameplaySystemsBridge : IGameplayBridge, IDisposable
@@ -41,7 +41,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         private readonly IInventorySystem _inventory;
         private readonly IEquipmentSystem _equipment;
         private readonly IWeaponSystem _weapon;
-        private readonly IQuickSlotSystem _quickSlot;
+        private readonly IItemSelectionSystem _itemSelection;
         private readonly IPlayerStatSystem _statSystem;
         private readonly IItemUseSystem _itemUse;
         
@@ -54,7 +54,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         public IInventorySystem Inventory => _inventory;
         public IEquipmentSystem Equipment => _equipment;
         public IWeaponSystem Weapon => _weapon;
-        public IQuickSlotSystem QuickSlot => _quickSlot;
+        public IItemSelectionSystem ItemSelection => _itemSelection;
         public IPlayerStatSystem Stat => _statSystem;
         public IItemUseSystem ItemUse => _itemUse;
         
@@ -73,9 +73,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         public event Action<WeaponSlotType, ItemInstance> OnWeaponEquipped;
         public event Action<WeaponSlotType, ItemInstance> OnWeaponUnequipped;
         public event Action<WeaponSlotType?, WeaponSlotType?> OnActiveWeaponChanged;
-        public event Action<int, ItemInstance> OnQuickSlotAssigned;
-        public event Action<int> OnQuickSlotRemoved;
-        public event Action<int, ItemInstance> OnQuickSlotUsed;
+        public event Action<ItemInstance> OnItemSelected;
+        public event Action OnItemDeselected;
         public event Action<PlayerStatType, float, float> OnStatChanged;
         public event Action<float, float> OnWeightChanged;
         public event Action<ItemInstance> OnItemUseStarted;
@@ -94,7 +93,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         /// - inventory: Inventory system interface
         /// - equipment: Equipment system interface
         /// - weapon: Weapon system interface
-        /// - quickSlot: Quick slot system interface
+        /// - itemSelection: Item selection system interface
         /// - statSystem: Player stat system interface
         /// - itemUse: Item use system interface
         /// 
@@ -106,7 +105,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
             IInventorySystem inventory,
             IEquipmentSystem equipment,
             IWeaponSystem weapon,
-            IQuickSlotSystem quickSlot,
+            IItemSelectionSystem itemSelection,
             IPlayerStatSystem statSystem,
             IItemUseSystem itemUse)
         {
@@ -117,8 +116,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 Debug.LogError("[GameplaySystemsBridge] Equipment system is null!");
             if (weapon == null)
                 Debug.LogError("[GameplaySystemsBridge] Weapon system is null!");
-            if (quickSlot == null)
-                Debug.LogError("[GameplaySystemsBridge] Quick slot system is null!");
+            if (itemSelection == null)
+                Debug.LogWarning("[GameplaySystemsBridge] Item selection system is null!");
             if (statSystem == null)
                 Debug.LogError("[GameplaySystemsBridge] Stat system is null!");
             if (itemUse == null)
@@ -128,7 +127,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
             _inventory = inventory;
             _equipment = equipment;
             _weapon = weapon;
-            _quickSlot = quickSlot;
+            _itemSelection = itemSelection;
             _statSystem = statSystem;
             _itemUse = itemUse;
             
@@ -194,14 +193,13 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 _weapon.OnActiveWeaponChanged += HandleActiveWeaponChanged;
             }
             
-            // Quick slot events
-            if (_quickSlot != null)
+            // Item selection events
+            if (_itemSelection != null)
             {
-                _quickSlot.OnQuickSlotAssigned += HandleQuickSlotAssigned;
-                _quickSlot.OnQuickSlotRemoved += HandleQuickSlotRemoved;
-                _quickSlot.OnQuickSlotUsed += HandleQuickSlotUsed;
+                _itemSelection.OnItemSelected  += HandleItemSelected;
+                _itemSelection.OnItemDeselected += HandleItemDeselected;
             }
-            
+
             // Stat system events
             if (_statSystem != null)
             {
@@ -250,14 +248,13 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 _weapon.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
             }
             
-            // Quick slot events
-            if (_quickSlot != null)
+            // Item selection events
+            if (_itemSelection != null)
             {
-                _quickSlot.OnQuickSlotAssigned -= HandleQuickSlotAssigned;
-                _quickSlot.OnQuickSlotRemoved -= HandleQuickSlotRemoved;
-                _quickSlot.OnQuickSlotUsed -= HandleQuickSlotUsed;
+                _itemSelection.OnItemSelected  -= HandleItemSelected;
+                _itemSelection.OnItemDeselected -= HandleItemDeselected;
             }
-            
+
             // Stat system events
             if (_statSystem != null)
             {
@@ -290,9 +287,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         private void HandleWeaponEquipped(WeaponSlotType slot, ItemInstance weapon) => OnWeaponEquipped?.Invoke(slot, weapon);
         private void HandleWeaponUnequipped(WeaponSlotType slot, ItemInstance weapon) => OnWeaponUnequipped?.Invoke(slot, weapon);
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot) => OnActiveWeaponChanged?.Invoke(oldSlot, newSlot);
-        private void HandleQuickSlotAssigned(int slotIndex, ItemInstance item) => OnQuickSlotAssigned?.Invoke(slotIndex, item);
-        private void HandleQuickSlotRemoved(int slotIndex) => OnQuickSlotRemoved?.Invoke(slotIndex);
-        private void HandleQuickSlotUsed(int slotIndex, ItemInstance item) => OnQuickSlotUsed?.Invoke(slotIndex, item);
+        private void HandleItemSelected(ItemInstance item) => OnItemSelected?.Invoke(item);
+        private void HandleItemDeselected() => OnItemDeselected?.Invoke();
         private void HandleStatChanged(PlayerStatType type, float oldValue, float newValue) => OnStatChanged?.Invoke(type, oldValue, newValue);
         private void HandleWeightChanged(float current, float capacity) => OnWeightChanged?.Invoke(current, capacity);
         private void HandleItemUseStarted(ItemInstance item) => OnItemUseStarted?.Invoke(item);
@@ -477,52 +473,17 @@ namespace NightHunt.GameplaySystems.Core.Bridge
 
         #endregion
 
-        #region IGameplayBridge - QuickSlot
-        
-        public void AssignToQuickSlot(string instanceID, int slotIndex)
+        #region IGameplayBridge - ItemSelection
+
+        public void SelectItem(string instanceID)
         {
-            if (!ValidateSystem(_quickSlot, "QuickSlot")) return;
-            _quickSlot.AssignToQuickSlot(instanceID, slotIndex);
+            if (!ValidateSystem(_itemSelection, "ItemSelection")) return;
+            _itemSelection.SelectItem(instanceID);
         }
 
-        public void AddAndAssignQuickSlot(string defID, int slotIndex)
+        public void DeselectItem()
         {
-            AddItem(defID);
-            var list = GetItemsByDef(defID);
-            if (list == null || list.Count == 0)
-            {
-                Debug.LogWarning($"[GameplaySystemsBridge] AddAndAssignQuickSlot: {defID} not in inventory");
-                return;
-            }
-            AssignToQuickSlot(list[^1].InstanceID, slotIndex);
-        }
-
-        public void RemoveFromQuickSlot(int slotIndex)
-        {
-            if (!ValidateSystem(_quickSlot, "QuickSlot")) return;
-            if (!_quickSlot.IsSlotOccupied(slotIndex))
-            {
-                Debug.Log($"[GameplaySystemsBridge] RemoveFromQuickSlot: QS[{slotIndex}] already empty");
-                return;
-            }
-            _quickSlot.RemoveFromQuickSlot(slotIndex);
-        }
-
-        public void SwapQuickSlots(int slotIndex1, int slotIndex2)
-        {
-            if (!ValidateSystem(_quickSlot, "QuickSlot")) return;
-            _quickSlot.SwapQuickSlots(slotIndex1, slotIndex2);
-        }
-
-        public void UseQuickSlot(int slotIndex)
-        {
-            if (!ValidateSystem(_quickSlot, "QuickSlot")) return;
-            if (!_quickSlot.CanUseQuickSlot(slotIndex))
-            {
-                Debug.LogWarning($"[GameplaySystemsBridge] UseQuickSlot: QS[{slotIndex}] cannot be used (empty or not usable)");
-                return;
-            }
-            _quickSlot.UseQuickSlot(slotIndex);
+            _itemSelection?.DeselectItem();
         }
 
         public void CancelItemUse()
@@ -536,9 +497,6 @@ namespace NightHunt.GameplaySystems.Core.Bridge
             if (_itemUse != null)
                 _itemUse.ExecuteThrow();
         }
-
-        public ItemInstance[] GetAllQuickSlots()
-            => _quickSlot?.GetAllQuickSlots() ?? Array.Empty<ItemInstance>();
 
         #endregion
 
@@ -582,8 +540,6 @@ namespace NightHunt.GameplaySystems.Core.Bridge
             AddAndEquip("armor_helmet");
             AddAndEquip("armor_backpack");
             AddItem("consumable_medkit", 5);
-            var meds = GetItemsByDef("consumable_medkit");
-            if (meds?.Count > 0) AssignToQuickSlot(meds[0].InstanceID, 0);
             AddItem("attachment_reddot", 1);
             Debug.Log("<color=green>[GameplaySystemsBridge] Full loadout applied!</color>");
         }

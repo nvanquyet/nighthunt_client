@@ -5,7 +5,7 @@ using FishNet.Connection;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.Gameplay.Character.Combat.Weapons;
 
-namespace NightHunt.GameplaySystems.QuickSlot
+namespace NightHunt.GameplaySystems.ItemUse
 {
     /// <summary>
     /// PRODUCTION-READY Networked Projectile

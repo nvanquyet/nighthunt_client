@@ -272,7 +272,6 @@ namespace NightHunt.GameplaySystems.Core.Data
         Inventory,      // Main inventory grid
         Equipment,      // Equipment slots (head, chest, etc.)
         Weapon,         // Weapon slots (primary, secondary, melee)
-        QuickSlot,      // Quick access slots (1-4 hotkeys)
         Attachment      // Attachment slots on items
     }
     

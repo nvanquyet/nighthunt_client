@@ -35,8 +35,7 @@ MonoBehaviour:
   ProjectilePrefab: {fileID: 7342610198373781452, guid: 9807f3674ec38c44d8a2fa03e140b4ae,
     type: 3}
   ThrowForce: 15
-  MaxRange: 30
-  PrepareTime: 0.5
+  PrepareTime: 0.1
   LaunchAngleDeg: 45
   ThrowableType: 0
   Damage: 100

@@ -42,12 +42,16 @@ namespace NightHunt.Networking
         public int TeamId => PlayerData.TeamId;
         public bool IsLocalPlayer => IsOwner;
 
+        public int CharacterModelIndex => PlayerData.CharacterModelIndex;
+
         public IGameplayBridge GamePlaySystemBridge { get; private set; }
 
         // Cached owner-side refs — set in EnableInput(), used 
         // to cleanly disable / re-enable when IsAlive changes.
         private NightHunt.Gameplay.Input.Handlers.Combat.CombatInputHandler _cachedCombatHandler;
         private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem _cachedAimSystem;
+        private NightHunt.Gameplay.Input.Handlers.Movement.MovementInputHandler _cachedMovementHandler;
+        private NightHunt.Gameplay.Input.Handlers.Camera.CameraInputHandler _cachedCameraHandler;
 
 
         // ── PUBLIC PLAYER DATA ────────────────────────────────────────────────
@@ -107,10 +111,10 @@ namespace NightHunt.Networking
                 .InChildren()
                 .OrLogWarning("[Auto] IWeaponSystem not found")
                 .Resolve();
-            var quickSlot = ComponentResolver.Find<IQuickSlotSystem>(this)
+            var itemSelection = ComponentResolver.Find<IItemSelectionSystem>(this)
                 .OnSelf()
                 .InChildren()
-                .OrLogWarning("[Auto] IQuickSlotSystem not found")
+                .OrLogWarning("[Auto] IItemSelectionSystem not found")
                 .Resolve();
             var statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
                 .OnSelf()
@@ -125,10 +129,10 @@ namespace NightHunt.Networking
 
             // Create bridge with DI
             if (inventory != null && equipment != null && weapon != null &&
-                quickSlot != null && statSystem != null && itemUse != null)
+                itemSelection != null && statSystem != null && itemUse != null)
             {
                 GamePlaySystemBridge = new GameplaySystemsBridge(
-                    inventory, equipment, weapon, quickSlot, statSystem, itemUse);
+                    inventory, equipment, weapon, itemSelection, statSystem, itemUse);
             }
             else
             {
@@ -230,6 +234,8 @@ namespace NightHunt.Networking
                 // Dying: force EndFire (hides RangeIndicator, stops weapon) then disable
                 // all combat input so no further clicks register while ragdolled.
                 _cachedCombatHandler?.DisableInput();
+                _cachedMovementHandler?.DisableInput();
+                _cachedCameraHandler?.DisableInput();
                 _cachedAimSystem?.SetCursorVisible(false);
                 // Disable AimSystem to stop rotation/aim processing while dead.
                 if (_cachedAimSystem is MonoBehaviour aimMB) aimMB.enabled = false;
@@ -238,6 +244,8 @@ namespace NightHunt.Networking
             {
                 // Respawning: re-enable input and restore cursor.
                 _cachedCombatHandler?.EnableInput();
+                _cachedMovementHandler?.EnableInput();
+                _cachedCameraHandler?.EnableInput();
                 if (!Application.isMobilePlatform)
                     _cachedAimSystem?.SetCursorVisible(true);
                 // Re-enable AimSystem after respawn.
@@ -297,6 +305,8 @@ namespace NightHunt.Networking
                 cameraStateManager
             );
             _cachedCombatHandler = inputManager.CombatHandler; // cache for alive-state gating
+            _cachedMovementHandler = inputManager.MovementHandler; // cache for alive-state gating
+            _cachedCameraHandler   = inputManager.CameraHandler;   // cache for alive-state gating
 
             // Bind AimSystem — single source of aim direction (VisionRange-clamped cursor).
             // AimSystem.Initialize wires it to this player's transform + stat system.

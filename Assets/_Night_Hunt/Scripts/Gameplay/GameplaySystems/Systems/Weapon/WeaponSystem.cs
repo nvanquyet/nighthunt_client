@@ -11,6 +11,7 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
 using NightHunt.Data;
@@ -38,8 +39,8 @@ namespace NightHunt.GameplaySystems.Weapon
         [SerializeField] private InventoryConfig _inventoryConfig;
 
         [Header("References (auto-resolved if blank)")]
-        [SerializeField] private MonoBehaviour _statSystemSource;
-        [SerializeField] private MonoBehaviour _inventorySystemSource;
+        [SerializeField] private PlayerStatSystem _statSystemSource;
+        [SerializeField] private InventorySystem _inventorySystemSource;
 
         [Header("Slot Priority")]
         [SerializeField] private WeaponSlotType[] _slotPriority =
@@ -182,13 +183,13 @@ namespace NightHunt.GameplaySystems.Weapon
         private void ResolveReferences()
         {
             _statSystem ??= ComponentResolver.Find<IPlayerStatSystem>(this)
-                .UseExisting(_statSystemSource as IPlayerStatSystem)
+                .UseExisting(_statSystemSource)
                 .OnSelf().InChildren().InParent()
                 .OrLogWarning("[WeaponSystem] IPlayerStatSystem not found — stat modifiers disabled")
                 .Resolve();
 
             _inventorySystem ??= ComponentResolver.Find<IInventorySystem>(this)
-                .UseExisting(_inventorySystemSource as IInventorySystem)
+                .UseExisting(_inventorySystemSource)
                 .OnSelf().InChildren().InParent()
                 .OrLogError("[WeaponSystem] IInventorySystem not found")
                 .Resolve();
@@ -209,13 +210,13 @@ namespace NightHunt.GameplaySystems.Weapon
         protected override void OnValidate()
         {
             _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
-                .UseExisting(_statSystemSource as IPlayerStatSystem)
+                .UseExisting(_statSystemSource)
                 .OnSelf().InChildren().InParent().InRootChildren()
                 .OrLogWarning("[WeaponSystem] IPlayerStatSystem not found — stat modifiers disabled")
                 .Resolve();
 
             _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
-                .UseExisting(_inventorySystemSource as IInventorySystem)
+                .UseExisting(_inventorySystemSource)
                 .OnSelf().InChildren().InParent().InRootChildren()
                 .OrLogError("[WeaponSystem] IInventorySystem not found")
                 .Resolve();

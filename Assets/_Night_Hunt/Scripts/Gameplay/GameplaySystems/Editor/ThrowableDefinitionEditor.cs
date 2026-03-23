@@ -47,10 +47,9 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.IsStackable = true;
             throwable.MaxStackSize = 3;
             
-            // Usage System fields (QUAN TRỌNG cho QuickSlot)
+            // Usage System fields
             throwable.ValidSlots = new SlotLocationType[] { 
-                SlotLocationType.Inventory, 
-                SlotLocationType.QuickSlot 
+                SlotLocationType.Inventory
             };
             throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
@@ -86,8 +85,7 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Usage System fields
             throwable.ValidSlots = new SlotLocationType[] { 
-                SlotLocationType.Inventory, 
-                SlotLocationType.QuickSlot 
+                SlotLocationType.Inventory
             };
             throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
@@ -121,8 +119,7 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Usage System fields
             throwable.ValidSlots = new SlotLocationType[] { 
-                SlotLocationType.Inventory, 
-                SlotLocationType.QuickSlot 
+                SlotLocationType.Inventory
             };
             throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
@@ -156,8 +153,7 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Usage System fields
             throwable.ValidSlots = new SlotLocationType[] { 
-                SlotLocationType.Inventory, 
-                SlotLocationType.QuickSlot 
+                SlotLocationType.Inventory
             };
             throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
@@ -191,8 +187,7 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Usage System fields
             throwable.ValidSlots = new SlotLocationType[] { 
-                SlotLocationType.Inventory, 
-                SlotLocationType.QuickSlot 
+                SlotLocationType.Inventory
             };
             throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
@@ -226,8 +221,7 @@ namespace NightHunt.GameplaySystems.Editor
             
             // Usage System fields
             throwable.ValidSlots = new SlotLocationType[] { 
-                SlotLocationType.Inventory, 
-                SlotLocationType.QuickSlot 
+                SlotLocationType.Inventory
             };
             throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
@@ -261,8 +255,7 @@ namespace NightHunt.GameplaySystems.Editor
                 throwable.IsStackable = true;
                 throwable.MaxStackSize = 3;
                 throwable.ValidSlots = new SlotLocationType[] { 
-                    SlotLocationType.Inventory, 
-                    SlotLocationType.QuickSlot 
+                    SlotLocationType.Inventory
                 };
                 throwable.CanUseWhileMoving = true;
                 throwable.CanCancelUsage = true;
@@ -289,8 +282,7 @@ namespace NightHunt.GameplaySystems.Editor
                 throwable.IsStackable = true;
                 throwable.MaxStackSize = 3;
                 throwable.ValidSlots = new SlotLocationType[] { 
-                    SlotLocationType.Inventory, 
-                    SlotLocationType.QuickSlot 
+                    SlotLocationType.Inventory
                 };
                 throwable.CanUseWhileMoving = true;
                 throwable.CanCancelUsage = true;

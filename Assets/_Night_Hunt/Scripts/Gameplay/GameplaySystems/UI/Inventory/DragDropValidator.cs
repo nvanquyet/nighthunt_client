@@ -38,8 +38,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     return ValidateFromEquipment(source, target, sourceState, targetState, ref action);
                 case UISlotType.Weapon:
                     return ValidateFromWeapon(source, target, sourceState, targetState, ref action);
-                case UISlotType.QuickSlot:
-                    return ValidateFromQuickSlot(source, target, sourceState, targetState, ref action);
                 case UISlotType.Attachment:
                     return ValidateFromAttachment(source, target, sourceState, targetState, ref action);
                 default:
@@ -85,15 +83,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 case UISlotType.Equipment:
                     action.Type = DropActionType.Equip;
                     return true;
-
-                case UISlotType.QuickSlot:
-                {
-                    var def = ItemDatabase.GetDefinition(sourceState.Item.DefinitionID);
-                    if (def == null || !def.CanPlaceInSlot(SlotLocationType.QuickSlot))
-                        return false;
-                    action.Type = DropActionType.AssignQuickSlot;
-                    return true;
-                }
 
                 case UISlotType.DropArea:
                     action.Type = DropActionType.DropToWorld;
@@ -146,33 +135,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     action.Type = DropActionType.Swap;
                     return true;
                 // BUG 4 FIX: allow drop from equipment directly to world via DropArea
-                case UISlotType.DropArea:
-                    action.Type = DropActionType.DropToWorld;
-                    return true;
-                case UISlotType.Trash:
-                    action.Type = DropActionType.Trash;
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        private bool ValidateFromQuickSlot(
-            UISlotId source,
-            UISlotId target,
-            UISlotState sourceState,
-            UISlotState targetState,
-            ref DropAction action)
-        {
-            switch (target.Type)
-            {
-                case UISlotType.Inventory:
-                    action.Type = DropActionType.RemoveQuickSlot;
-                    return true;
-                case UISlotType.QuickSlot:
-                    action.Type = DropActionType.Swap;
-                    return true;
-                // BUG 4 FIX: drop item via QuickSlot shortcut directly to world
                 case UISlotType.DropArea:
                     action.Type = DropActionType.DropToWorld;
                     return true;

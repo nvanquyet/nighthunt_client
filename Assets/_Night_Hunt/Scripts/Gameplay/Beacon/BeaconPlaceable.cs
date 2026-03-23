@@ -12,8 +12,8 @@ namespace NightHunt.Gameplay.Beacon
     /// Client-side controller that manages the beacon placement workflow.
     ///
     /// FLOW:
-    ///   1. Player loots a beacon item → goes to inventory/quickslot.
-    ///   2. Player presses the quickslot key → QuickSlotSystem detects the
+    ///   1. Player loots a beacon item → goes to inventory.
+    ///   2. Player selects the deployable item → ItemSelectionSystem detects the
     ///      Deployable item type and fires RpcBeginDeployment back to the
     ///      owning client, which calls <see cref="BeginDeploy"/>.
     ///   3. This component shows a placement ghost preview until Confirm/Cancel.
@@ -113,8 +113,8 @@ namespace NightHunt.Gameplay.Beacon
         #region IDeployableHandler
 
         /// <summary>
-        /// Entry point called by QuickSlotSystem (via TargetRpc) when a Deployable
-        /// item is pressed in a quickslot.  Runs on the OWNING CLIENT only.
+        /// Entry point called by ItemSelectionSystem (via TargetRpc) when a Deployable
+        /// item is selected. Runs on the OWNING CLIENT only.
         /// </summary>
         public bool BeginDeploy(ItemInstance item, ItemDefinition def)
         {

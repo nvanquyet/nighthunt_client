@@ -18,7 +18,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public InventoryConfig InventoryConfig;
 
         [Header("Prefabs")]
-        [Tooltip("Prefab chung cho tất cả slot types (Inventory, Equipment, Weapon, QuickSlot). " +
+        [Tooltip("Prefab chung cho tất cả slot types (Inventory, Equipment, Weapon). " +
                  "Có thể dùng 1 prefab cho tất cả hoặc override riêng bên dưới.")]
         public GameObject DefaultSlotPrefab;
 
@@ -27,9 +27,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         [Tooltip("Prefab riêng cho Weapon slots (optional, nếu null sẽ dùng DefaultSlotPrefab)")]
         public GameObject WeaponSlotPrefab;
-
-        [Tooltip("Prefab riêng cho QuickSlot (optional, nếu null sẽ dùng DefaultSlotPrefab)")]
-        public GameObject QuickSlotPrefab;
 
         [Header("Rarity Backgrounds")]
         [Tooltip("Background icon/sprite cho từng rarity level của item")]
@@ -53,8 +50,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     return EquipmentSlotPrefab != null ? EquipmentSlotPrefab : DefaultSlotPrefab;
                 case UISlotType.Weapon:
                     return WeaponSlotPrefab != null ? WeaponSlotPrefab : DefaultSlotPrefab;
-                case UISlotType.QuickSlot:
-                    return QuickSlotPrefab != null ? QuickSlotPrefab : DefaultSlotPrefab;
                 case UISlotType.Attachment:
                     return AttachmentSlotPrefab != null ? AttachmentSlotPrefab : DefaultSlotPrefab;
                 default:
@@ -82,7 +77,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public int InventoryGridWidth => InventoryConfig != null ? InventoryConfig.Inventory.GridWidth : 5;
         public int InventoryGridHeight => InventoryConfig != null ? InventoryConfig.Inventory.GridHeight : 4;
         public int InventoryTotalSlots => InventoryConfig != null ? InventoryConfig.Inventory.TotalSlots : 20;
-        public int QuickSlotCount => InventoryConfig != null ? InventoryConfig.QuickSlotConfig.SlotCount : 4;
         public int EquipmentCount => InventoryConfig != null ? InventoryConfig.EquipmentCount : 0;
         public int WeaponCount => InventoryConfig != null ? InventoryConfig.WeaponCount : 0;
 

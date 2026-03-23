@@ -47,10 +47,10 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         IWeaponSystem Weapon { get; }
         
         /// <summary>
-        /// Direct access to quick slot system (read-only)
+        /// Direct access to item selection system (read-only)
         /// </summary>
-        IQuickSlotSystem QuickSlot { get; }
-        
+        IItemSelectionSystem ItemSelection { get; }
+
         /// <summary>
         /// Direct access to stat system (read-only)
         /// </summary>
@@ -103,17 +103,13 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         
         #endregion
 
-        #region QuickSlot Operations
-        
-        void AssignToQuickSlot(string instanceID, int slotIndex);
-        void AddAndAssignQuickSlot(string defID, int slotIndex);
-        void RemoveFromQuickSlot(int slotIndex);
-        void SwapQuickSlots(int slotIndex1, int slotIndex2);
-        void UseQuickSlot(int slotIndex);
+        #region ItemSelection Operations
+
+        void SelectItem(string instanceID);
+        void DeselectItem();
         void CancelItemUse();
         void ExecuteThrow();
-        ItemInstance[] GetAllQuickSlots();
-        
+
         #endregion
 
         #region Stat Operations
@@ -153,9 +149,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         event Action<WeaponSlotType, ItemInstance> OnWeaponEquipped;
         event Action<WeaponSlotType, ItemInstance> OnWeaponUnequipped;
         event Action<WeaponSlotType?, WeaponSlotType?> OnActiveWeaponChanged;
-        event Action<int, ItemInstance> OnQuickSlotAssigned;
-        event Action<int> OnQuickSlotRemoved;
-        event Action<int, ItemInstance> OnQuickSlotUsed;
+        event Action<ItemInstance> OnItemSelected;
+        event Action OnItemDeselected;
         event Action<PlayerStatType, float, float> OnStatChanged;
         event Action<float, float> OnWeightChanged;
         event Action<ItemInstance> OnItemUseStarted;

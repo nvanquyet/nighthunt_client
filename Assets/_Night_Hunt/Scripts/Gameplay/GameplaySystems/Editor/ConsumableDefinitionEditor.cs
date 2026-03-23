@@ -39,7 +39,7 @@ namespace NightHunt.GameplaySystems.Editor
             consumable.UsageDuration = 3.5f;
             consumable.CanCancelUsage = true;
             consumable.CanUseWhileMoving = false;
-            consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.QuickSlot };
+            consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
             EditorUtility.SetDirty(consumable);
             Debug.Log("[ConsumableDefinitionEditor] Medkit setup complete.");
@@ -57,7 +57,7 @@ namespace NightHunt.GameplaySystems.Editor
             consumable.UsageDuration = 2f;
             consumable.CanCancelUsage = true;
             consumable.CanUseWhileMoving = true;
-            consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.QuickSlot };
+            consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
             EditorUtility.SetDirty(consumable);
             Debug.Log("[ConsumableDefinitionEditor] Energy Drink setup complete.");
@@ -77,7 +77,7 @@ namespace NightHunt.GameplaySystems.Editor
                 consumable.UsageDuration = 3.5f;
                 consumable.CanCancelUsage = true;
                 consumable.CanUseWhileMoving = false;
-                consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.QuickSlot };
+                consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
                 EditorUtility.SetDirty(consumable);
             }
@@ -94,7 +94,7 @@ namespace NightHunt.GameplaySystems.Editor
                 consumable.UsageDuration = 2f;
                 consumable.CanCancelUsage = true;
                 consumable.CanUseWhileMoving = true;
-                consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.QuickSlot };
+                consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
                 EditorUtility.SetDirty(consumable);
             }

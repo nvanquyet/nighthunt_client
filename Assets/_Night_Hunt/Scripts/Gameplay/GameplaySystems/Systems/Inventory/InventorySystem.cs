@@ -9,6 +9,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Utilities;
 
@@ -28,7 +29,7 @@ namespace NightHunt.GameplaySystems.Inventory
         [SerializeField] private InventoryConfig _inventoryConfig;
 
         [Header("References")] [SerializeField]
-        private MonoBehaviour _statSystemComponent;
+        private PlayerStatSystem _statSystemComponent;
         private IPlayerStatSystem _statSystem;
 
         [Header("Performance")] [Tooltip("Batch weight updates (reduce stat recalculations)")] [SerializeField]
@@ -126,26 +127,17 @@ namespace NightHunt.GameplaySystems.Inventory
 
         private void ValidateReferences()
         {
-            // Get component and cast to interface
-            if (_statSystemComponent != null)
-                _statSystem = _statSystemComponent as IPlayerStatSystem;
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+                .UseExisting(_statSystemComponent)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrLogWarning("[Auto] IPlayerStatSystem not found")
+                .Resolve();
 
-#if UNITY_EDITOR
-            // Auto-find if not assigned
-            if (_statSystem == null)
-            {
-                var statSys = ComponentResolver.Find<IPlayerStatSystem>(this)
-                    .OnSelf()
-                    .InParent()
-                    .OrLogWarning("[Auto] IPlayerStatSystem not found")
-                    .Resolve();
-                if (statSys != null)
-                {
-                    _statSystemComponent = statSys as MonoBehaviour;
-                    _statSystem = statSys;
-                }
-            }
-#endif
+            if (_statSystem is PlayerStatSystem statConcrete)
+                _statSystemComponent = statConcrete;
 
             if (_gameplayConfig == null)
                 Debug.LogError("[InventorySystem] GameplayConfig is null!");
@@ -161,22 +153,7 @@ namespace NightHunt.GameplaySystems.Inventory
         [ContextMenu("Validate References")]
         protected override void OnValidate()
         {
-            if (_statSystemComponent != null)
-                _statSystem = _statSystemComponent as IPlayerStatSystem;
-
-            if (_statSystem == null)
-            {
-                var statSys = ComponentResolver.Find<IPlayerStatSystem>(this)
-                    .OnSelf()
-                    .InParent()
-                    .OrLogWarning("[Auto] IPlayerStatSystem not found")
-                    .Resolve();
-                if (statSys != null)
-                {
-                    _statSystemComponent = statSys as MonoBehaviour;
-                    _statSystem = statSys;
-                }
-            }
+            ValidateReferences();
         }
 #endif
 
@@ -844,6 +821,64 @@ namespace NightHunt.GameplaySystems.Inventory
 
             if (_enableDebugLogs)
                 Debug.Log($"[InventorySystem] BatchAssignIndices: reassigned {items.Count} items");
+        }
+
+        /// <inheritdoc/>
+        public void RequestSortByType()
+        {
+            if (!IsServerInitialized)
+            {
+                RequestSortByTypeRpc();
+                return;
+            }
+
+            SortByTypeServer();
+        }
+
+        /// <summary>
+        /// Client RPC to trigger a sort on the server. RequireOwnership = true (default)
+        /// so only the owning client can request a sort of their own inventory.
+        /// </summary>
+        [ServerRpc]
+        private void RequestSortByTypeRpc()
+        {
+            SortByTypeServer();
+        }
+
+        [Server]
+        private void SortByTypeServer()
+        {
+            // Collect all inventory-slotted items (exclude equipped/weapon slots).
+            var allItems = new List<ItemInstance>();
+            foreach (var item in _itemCache.Values)
+            {
+                if (item != null && item.InventoryIndex >= 0)
+                    allItems.Add(item);
+            }
+
+            if (allItems.Count == 0) return;
+
+            // Sort by ItemType (enum ordinal) then DefinitionID for stable ordering.
+            allItems.Sort((a, b) =>
+            {
+                var defA = ItemDatabase.GetDefinition(a.DefinitionID);
+                var defB = ItemDatabase.GetDefinition(b.DefinitionID);
+                int typeA = defA != null ? (int)defA.Type : int.MaxValue;
+                int typeB = defB != null ? (int)defB.Type : int.MaxValue;
+                int cmp = typeA.CompareTo(typeB);
+                if (cmp != 0) return cmp;
+                return string.CompareOrdinal(a.DefinitionID, b.DefinitionID);
+            });
+
+            // Build assignment map: sorted position → new index.
+            var assignments = new Dictionary<string, int>(allItems.Count);
+            for (int i = 0; i < allItems.Count; i++)
+                assignments[allItems[i].InstanceID] = i;
+
+            BatchAssignIndicesServer(assignments);
+
+            if (_enableDebugLogs)
+                Debug.Log($"[InventorySystem] SortByType: sorted {allItems.Count} items");
         }
 
         #endregion

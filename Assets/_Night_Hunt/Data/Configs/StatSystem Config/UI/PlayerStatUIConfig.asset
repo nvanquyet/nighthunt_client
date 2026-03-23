@@ -55,7 +55,7 @@ MonoBehaviour:
     ShowMaxValue: 0
   - Type: 4
     DisplayName: Move Speed
-    ShowInUI: 1
+    ShowInUI: 0
     Icon: {fileID: 0}
     DisplayColor: {r: 0.2, g: 0.6, b: 1, a: 1}
     TextColor: {r: 0.6, g: 0.85, b: 1, a: 1}
@@ -65,7 +65,7 @@ MonoBehaviour:
     ShowMaxValue: 0
   - Type: 5
     DisplayName: Weight Capacity
-    ShowInUI: 0
+    ShowInUI: 1
     Icon: {fileID: 0}
     DisplayColor: {r: 1, g: 0.8, b: 0.2, a: 1}
     TextColor: {r: 1, g: 0.9, b: 0.55, a: 1}
@@ -75,7 +75,7 @@ MonoBehaviour:
     ShowMaxValue: 0
   - Type: 6
     DisplayName: Weight
-    ShowInUI: 1
+    ShowInUI: 0
     Icon: {fileID: 0}
     DisplayColor: {r: 1, g: 0.8, b: 0.2, a: 1}
     TextColor: {r: 1, g: 0.9, b: 0.55, a: 1}
@@ -85,7 +85,7 @@ MonoBehaviour:
     ShowMaxValue: 1
   - Type: 7
     DisplayName: Armor
-    ShowInUI: 1
+    ShowInUI: 0
     Icon: {fileID: 0}
     DisplayColor: {r: 0.6, g: 0.6, b: 0.6, a: 1}
     TextColor: {r: 0.85, g: 0.85, b: 0.85, a: 1}

@@ -4,7 +4,7 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
 {
     /// <summary>
     /// Implemented by any component that handles placing/deploying an item
-    /// (e.g. BeaconPlaceable).  QuickSlotSystem routes Deployable items through
+    /// (e.g. BeaconPlaceable). ItemSelectionSystem routes Deployable items through
     /// this interface via TargetRpc so the server never tries to direct-consume
     /// a deployable while leaving the client-side placement preview running.
     /// </summary>

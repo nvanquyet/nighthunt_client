@@ -12,7 +12,7 @@ namespace NightHunt.Networking.Player
 
         private readonly Dictionary<int, PlayerPublicData> players
             = new(); // FishNetId → PublicData
-        
+
         private readonly Dictionary<int, NetworkPlayer> networkPlayers
             = new(); // FishNetId → PublicData 
 
@@ -31,7 +31,7 @@ namespace NightHunt.Networking.Player
         {
             players[fishNetId] = data;
         }
-        
+
         public void Unregister(int fishNetId)
         {
             players.Remove(fishNetId);
@@ -45,6 +45,16 @@ namespace NightHunt.Networking.Player
             networkPlayers.Values.CopyTo(result, 0);
             return result;
         }
-        
+
+        // Thêm vào PlayerPublicRegistry.cs
+        public List<NetworkPlayer> GetPlayersByTeam(int teamId)
+        {
+            var result = new List<NetworkPlayer>();
+            foreach (var kvp in networkPlayers)
+                if (kvp.Value != null && kvp.Value.TeamId == teamId)
+                    result.Add(kvp.Value);
+            return result;
+        }
+
     }
 }

@@ -8,7 +8,8 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Equipment;
 using NightHunt.GameplaySystems.Weapon;
-using NightHunt.GameplaySystems.QuickSlot;
+using NightHunt.GameplaySystems.ItemUse;
+using NightHunt.GameplaySystems.ItemSelection;
 using NightHunt.GameplaySystems.Attachment;
 
 namespace NightHunt.GameplaySystems.Editor
@@ -104,7 +105,8 @@ namespace NightHunt.GameplaySystems.Editor
             DrawComponentCheck<InventorySystem>("InventorySystem");
             DrawComponentCheck<EquipmentSystem>("EquipmentSystem");
             DrawComponentCheck<WeaponSystem>("WeaponSystem");
-            DrawComponentCheck<QuickSlotSystem>("QuickSlotSystem");
+            DrawComponentCheck<ItemUseSystem>("ItemUseSystem");
+            DrawComponentCheck<ItemSelectionSystem>("ItemSelectionSystem");
             DrawComponentCheck<AttachmentSystem>("AttachmentSystem");
         }
         
@@ -147,7 +149,8 @@ namespace NightHunt.GameplaySystems.Editor
             componentsAdded += SetupInventorySystem(gameplayConfig, inventoryConfig);
             componentsAdded += SetupEquipmentSystem(inventoryConfig);
             componentsAdded += SetupWeaponSystem(inventoryConfig);
-            componentsAdded += SetupQuickSlotSystem(inventoryConfig);
+            componentsAdded += SetupItemUseSystem();
+            componentsAdded += SetupItemSelectionSystem();
             componentsAdded += SetupAttachmentSystem();
             
             // Mark as dirty
@@ -244,24 +247,46 @@ namespace NightHunt.GameplaySystems.Editor
             Debug.Log("Setup: WeaponSystem");
             return 1;
         }
-        
-        private int SetupQuickSlotSystem(InventoryConfig inventoryConfig)
+
+        private int SetupItemUseSystem()
         {
-            var component = _selectedPrefab.GetComponent<QuickSlotSystem>();
+            var component = _selectedPrefab.GetComponent<ItemUseSystem>();
             if (component == null)
             {
-                component = _selectedPrefab.AddComponent<QuickSlotSystem>();
+                component = _selectedPrefab.AddComponent<ItemUseSystem>();
+            }
+
+            var weaponSystem = _selectedPrefab.GetComponent<WeaponSystem>();
+            var statSystem = _selectedPrefab.GetComponent<PlayerStatSystem>();
+            var inventorySystem = _selectedPrefab.GetComponent<InventorySystem>();
+
+            var so = new SerializedObject(component);
+            so.FindProperty("_weaponSystemComponent").objectReferenceValue = weaponSystem;
+            so.FindProperty("_statSystemComponent").objectReferenceValue = statSystem;
+            so.FindProperty("_inventorySystemComponent").objectReferenceValue = inventorySystem;
+            so.ApplyModifiedProperties();
+
+            Debug.Log("Setup: ItemUseSystem");
+            return 1;
+        }
+        
+        private int SetupItemSelectionSystem()
+        {
+            var component = _selectedPrefab.GetComponent<ItemSelectionSystem>();
+            if (component == null)
+            {
+                component = _selectedPrefab.AddComponent<ItemSelectionSystem>();
             }
             
             var inventorySystem = _selectedPrefab.GetComponent<InventorySystem>();
+            var itemUseComponent = _selectedPrefab.GetComponent("ItemUseSystem") as MonoBehaviour;
             
             var so = new SerializedObject(component);
-            so.FindProperty("_inventoryConfig").objectReferenceValue = inventoryConfig;
-            so.FindProperty("_inventorySystem").objectReferenceValue = inventorySystem;
-            so.FindProperty("_showDebugUI").boolValue = _enableDebugUI;
+            so.FindProperty("_inventorySystemComponent").objectReferenceValue = inventorySystem;
+            so.FindProperty("_itemUseSystemComponent").objectReferenceValue = itemUseComponent;
             so.ApplyModifiedProperties();
             
-            Debug.Log("Setup: QuickSlotSystem");
+            Debug.Log("Setup: ItemSelectionSystem");
             return 1;
         }
         
@@ -295,7 +320,8 @@ namespace NightHunt.GameplaySystems.Editor
    - InventorySystem
    - EquipmentSystem
    - WeaponSystem
-   - QuickSlotSystem
+    - ItemUseSystem
+    - ItemSelectionSystem
    - AttachmentSystem
 
 2. ASSIGN REFERENCES:
@@ -323,10 +349,14 @@ WeaponSystem:
    - Inventory System → (auto-assigned)
    - Show Debug UI → Check if needed
 
-QuickSlotSystem:
-   - Inventory Config → Assets/Resources/Configs/InventoryConfig
-   - Inventory System → (auto-assigned)
-   - Show Debug UI → Check if needed
+ItemUseSystem:
+    - Weapon System Component → (auto-assigned)
+    - Stat System Component → (auto-assigned)
+    - Inventory System Component → (auto-assigned)
+
+ItemSelectionSystem:
+    - Inventory System Component → (auto-assigned)
+    - Item Use System Component → (auto-assigned)
 
 AttachmentSystem:
    - Inventory System → (auto-assigned)

@@ -63,9 +63,9 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// <summary>
         /// Request throw execution from the owning client.
         /// Routes to server via ServerRpc — use this from client-side code
-        /// (e.g. CombatInputHandler, QuickSlotAimController mobile path).
+        /// (e.g. CombatInputHandler, ItemAimController mobile path).
         /// FishNet guarantees ServerRpcs from the same client are ordered, so
-        /// calling UseQuickSlot(ServerRpc) then RequestExecuteThrow(ServerRpc)
+        /// selecting an item (ServerRpc path) then RequestExecuteThrow(ServerRpc)
         /// always processes BeginThrowable before ExecuteThrow on the server.
         /// </summary>
         void RequestExecuteThrow();

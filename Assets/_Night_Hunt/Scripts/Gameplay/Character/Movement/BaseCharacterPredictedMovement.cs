@@ -94,6 +94,11 @@ namespace NightHunt.Gameplay.Character
         public event System.Action OnJumpTriggered;
         public event System.Action OnRollTriggered;
 
+        // ===== DEATH STATE =====
+        // Resolved lazily in GatherInput() to avoid Awake ordering issues.
+        private NightHunt.Gameplay.Core.State.CharacterLifecycleController _lifecycle;
+        private bool _lifecycleResolved;
+
         // ===== NON OWNER INTERPOLATION =====
         protected Vector3 _targetPosition;
         protected Quaternion _targetRotation;
@@ -213,6 +218,27 @@ namespace NightHunt.Gameplay.Character
         protected virtual void GatherInput()
         {
             if (!IsOwner || !IsSpawned) return;
+
+            // ── Death guard ──────────────────────────────────────────────────────
+            // Lazily resolve CharacterLifecycleController so Awake ordering is not
+            // a problem (the controller may not yet be initialized during Awake).
+            if (!_lifecycleResolved)
+            {
+                _lifecycle = NightHunt.Utilities.ComponentResolver
+                    .Find<NightHunt.Gameplay.Core.State.CharacterLifecycleController>(this)
+                    .OnSelf().InChildren().InParent()
+                    .Resolve();
+                _lifecycleResolved = true;
+            }
+
+            if (_lifecycle != null && _lifecycle.IsDead)
+            {
+                // Zero all inputs so the simulation produces zero movement / no rotation.
+                _moveInput = Vector2.zero;
+                _sprint    = false;
+                _crouch    = false;
+                return;
+            }
 
             var inputManager = InputManager.Instance;
             if (inputManager == null)

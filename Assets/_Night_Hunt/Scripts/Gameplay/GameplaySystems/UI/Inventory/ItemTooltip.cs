@@ -22,6 +22,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Header("UI Elements")] [SerializeField]
         private GameObject _tooltipRoot;
 
+        [Tooltip("Optional label showing slot position info (e.g. 'Primary Weapon Slot'). Hide via inspector if not needed.")]
+        [SerializeField] private TextMeshProUGUI _slotLabelText;
         [SerializeField] private TextMeshProUGUI _itemNameText;
         [SerializeField] private TextMeshProUGUI _itemDescriptionText;
         [SerializeField] private RectTransform _itemStatsContainer;
@@ -57,7 +59,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _domainBridge = bridge;
         }
 
-        public void Show(ItemInstance item, Vector3 screenPosition)
+        /// <param name="slotLabel">Optional slot position info (e.g. "Primary Weapon Slot"). Pass null to hide.</param>
+        public void Show(ItemInstance item, Vector3 screenPosition, string slotLabel = null)
         {
             if (item == null)
             {
@@ -66,6 +69,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             _currentItem = item;
+            if (_slotLabelText != null)
+            {
+                bool hasLabel = !string.IsNullOrEmpty(slotLabel);
+                _slotLabelText.gameObject.SetActive(hasLabel);
+                if (hasLabel) _slotLabelText.text = slotLabel;
+            }
+
             BuildTooltip(item);
             if (_followMouse) UpdatePosition(screenPosition);
 

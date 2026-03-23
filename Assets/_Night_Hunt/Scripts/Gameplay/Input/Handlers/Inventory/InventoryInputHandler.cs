@@ -6,7 +6,7 @@ using NightHunt.Gameplay.Input.Core;
 namespace NightHunt.Gameplay.Input.Handlers.Inventory
 {
     /// <summary>
-    /// Handles ONLY Inventory action-map input (OpenInventory, DropItem, QuickSlots, UseConsumable).
+    /// Handles ONLY Inventory action-map input (OpenInventory, DropItem, UseConsumable).
     ///
     /// DESIGN (SRP):
     ///   - Owns ONLY InputSystem wiring (InputActionMap, callbacks).
@@ -18,35 +18,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
         // ── Events ────────────────────────────────────────────────────────────────
         public event Action OpenInventoryPerformed;
         public event Action DropItemPerformed;
-        public event Action<int> QuickSlotPerformed; // 0..3
         public event Action UseConsumablePerformed;
 
         // ── Cached map/actions ───────────────────────────────────────────────────
         private InputActionMap _inventoryMap;
         private InputAction _openInventoryAction;
         private InputAction _dropItemAction;
-        private InputAction _quickSlot1Action;
-        private InputAction _quickSlot2Action;
-        private InputAction _quickSlot3Action;
-        private InputAction _quickSlot4Action;
         private InputAction _useConsumableAction;
-
-        // Delegate fields (để unsubscribe đúng, tránh lambda leak)
-        private Action<InputAction.CallbackContext> _onQuickSlot1;
-        private Action<InputAction.CallbackContext> _onQuickSlot2;
-        private Action<InputAction.CallbackContext> _onQuickSlot3;
-        private Action<InputAction.CallbackContext> _onQuickSlot4;
 
         private bool _inputEnabled;
 
         // ── Lifecycle ────────────────────────────────────────────────────────────
-        private void Awake()
-        {
-            _onQuickSlot1 = _ => QuickSlotPerformed?.Invoke(0);
-            _onQuickSlot2 = _ => QuickSlotPerformed?.Invoke(1);
-            _onQuickSlot3 = _ => QuickSlotPerformed?.Invoke(2);
-            _onQuickSlot4 = _ => QuickSlotPerformed?.Invoke(3);
-        }
 
         private void OnEnable()
         {
@@ -86,20 +68,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
             // Cache actions (safe if null; some projects disable specific actions)
             _openInventoryAction = _inventoryMap.FindAction("OpenInventory");
             _dropItemAction      = _inventoryMap.FindAction("DropItem");
-            _quickSlot1Action    = _inventoryMap.FindAction("QuickSlot1");
-            _quickSlot2Action    = _inventoryMap.FindAction("QuickSlot2");
-            _quickSlot3Action    = _inventoryMap.FindAction("QuickSlot3");
-            _quickSlot4Action    = _inventoryMap.FindAction("QuickSlot4");
             _useConsumableAction = _inventoryMap.FindAction("UseConsumable");
 
             _inputEnabled = true;
 
             if (_openInventoryAction != null) _openInventoryAction.performed += OnOpenInventory;
             if (_dropItemAction      != null) _dropItemAction.performed      += OnDropItem;
-            if (_quickSlot1Action    != null) _quickSlot1Action.performed    += _onQuickSlot1;
-            if (_quickSlot2Action    != null) _quickSlot2Action.performed    += _onQuickSlot2;
-            if (_quickSlot3Action    != null) _quickSlot3Action.performed    += _onQuickSlot3;
-            if (_quickSlot4Action    != null) _quickSlot4Action.performed    += _onQuickSlot4;
             if (_useConsumableAction != null) _useConsumableAction.performed += OnUseConsumable;
         }
 
@@ -110,10 +84,6 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
 
             if (_openInventoryAction != null) _openInventoryAction.performed -= OnOpenInventory;
             if (_dropItemAction      != null) _dropItemAction.performed      -= OnDropItem;
-            if (_quickSlot1Action    != null) _quickSlot1Action.performed    -= _onQuickSlot1;
-            if (_quickSlot2Action    != null) _quickSlot2Action.performed    -= _onQuickSlot2;
-            if (_quickSlot3Action    != null) _quickSlot3Action.performed    -= _onQuickSlot3;
-            if (_quickSlot4Action    != null) _quickSlot4Action.performed    -= _onQuickSlot4;
             if (_useConsumableAction != null) _useConsumableAction.performed -= OnUseConsumable;
         }
 

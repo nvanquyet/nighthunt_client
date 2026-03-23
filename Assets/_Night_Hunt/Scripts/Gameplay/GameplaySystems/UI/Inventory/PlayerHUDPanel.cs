@@ -4,21 +4,21 @@ using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Configs;
-using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Config-driven HUD panel for player stats.
+    /// In-game HUD panel for player stats.
     ///
-    /// At runtime, Initialize() reads <see cref="PlayerStatUIConfig.Stats"/> and
-    /// spawns one <see cref="StatRowEntry"/> prefab per stat that has ShowInUI = true.
-    /// Adding or removing a stat requires only an SO change — no code, no scene edits.
+    /// Two modes:
+    ///   Scene rows  — assign <see cref="_sceneStatRows"/> with pre-placed StatRowEntry components.
+    ///                 The panel uses exactly those rows (no spawning). StatType on each entry
+    ///                 determines which stat it tracks. Colors/format still read from _statUIConfig.
+    ///   Spawn mode  — leave _sceneStatRows empty. Rows are spawned from _statRowPrefab for every
+    ///                 stat with ShowInUI=true in _statUIConfig (legacy behaviour).
     ///
-    /// Inspector setup:
-    ///   • _statUIConfig  – assign PlayerStatUIConfig SO
-    ///   • _statRowPrefab – assign a prefab with a StatRowEntry component
-    ///   • _rowContainer  – assign a Transform with VerticalLayoutGroup
+    /// The inventory stat panel (PlayerStatUIPanel) always shows all ShowInUI stats;
+    /// the in-game HUD is controlled independently via _sceneStatRows or ShowInUI.
     /// </summary>
     public class PlayerHUDPanel : MonoBehaviour
     {
@@ -27,11 +27,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         [Header("Dynamic Row Spawning")]
         [Tooltip("Prefab instantiated once per visible stat. Must have a StatRowEntry component.")]
-        [SerializeField]
-        private StatRowEntry _statRowPrefab;
+        [SerializeField] private StatRowEntry _statRowPrefab;
 
-        [Tooltip("Parent transform (VerticalLayoutGroup) where stat rows are spawned.")] [SerializeField]
-        private Transform _rowContainer;
+        [Tooltip("Parent transform (VerticalLayoutGroup) where stat rows are spawned.")]
+        [SerializeField] private Transform _rowContainer;
+
+        [Header("Scene Stat Rows (optional)")]
+        [Tooltip("Pre-placed StatRowEntry components already in the scene.\n" +
+                 "If populated these are used directly instead of spawning from the prefab. " +
+                 "Each row must have its StatType set.")]
+        [SerializeField] private StatRowEntry[] _sceneStatRows;
 
         // ── Runtime ───────────────────────────────────────────────────────────
         private readonly Dictionary<PlayerStatType, StatRowEntry> _rows =
@@ -71,16 +76,28 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void BuildRows()
         {
-            // Destroy previously spawned rows
+            _rows.Clear();
+
+            // Use pre-placed scene rows when provided — no spawning needed.
+            if (_sceneStatRows != null && _sceneStatRows.Length > 0)
+            {
+                foreach (var row in _sceneStatRows)
+                {
+                    if (row == null) continue;
+                    ApplyRowStyle(row);
+                    _rows[row.StatType] = row;
+                }
+                return;
+            }
+
+            // Fallback: spawn from prefab using ShowInUI flag from config.
             if (_rowContainer != null)
                 foreach (Transform child in _rowContainer)
                     Destroy(child.gameObject);
-            _rows.Clear();
 
             if (_statRowPrefab == null || _rowContainer == null || _statUIConfig == null)
             {
-                Debug.LogWarning(
-                    "[PlayerHUDPanel] Missing _statRowPrefab, _rowContainer, or _statUIConfig — no rows built.");
+                Debug.LogWarning("[PlayerHUDPanel] Missing _statRowPrefab, _rowContainer, or _statUIConfig — no rows built.");
                 return;
             }
 
@@ -88,31 +105,30 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 if (!uiDef.ShowInUI) continue;
 
-                var row = Instantiate(_statRowPrefab, _rowContainer);
-                row.name = $"Row_{uiDef.Type}";
-                row.StatType = uiDef.Type;
+                var row       = Instantiate(_statRowPrefab, _rowContainer);
+                row.name      = $"Row_{uiDef.Type}";
+                row.StatType  = uiDef.Type;
 
-                // Apply accent color from config to slider fill and accent image
-                if (row.Slider != null && row.Slider.fillRect != null)
-                {
-                    var fill = ComponentResolver.Find<UnityEngine.UI.Image>(row.Slider.fillRect)
-                        .OnSelf()
-                        .InChildren()
-                        .OrLogWarning("[Auto] UnityEngine.UI.Image not found")
-                        .Resolve();
-                    if (fill != null) fill.color = uiDef.DisplayColor;
-                }
-
-                if (row.AccentImage != null)
-                    row.AccentImage.color = uiDef.DisplayColor;
-                if (row.ValueText != null)
-                    row.ValueText.color = uiDef.TextColor.a < 0.01f ? uiDef.DisplayColor : uiDef.TextColor;
-
+                ApplyRowStyle(row);
                 _rows[uiDef.Type] = row;
-
-                //Active the row gameobject after setup to avoid showing uninitialized values
                 row.gameObject.SetActive(true);
             }
+        }
+
+        private void ApplyRowStyle(StatRowEntry row)
+        {
+            if (_statUIConfig == null || !_statUIConfig.HasUIDefinition(row.StatType)) return;
+            var uiDef = _statUIConfig.GetUIDefinition(row.StatType);
+
+            if (row.Slider?.fillRect != null)
+            {
+                var fill = row.Slider.fillRect.GetComponent<UnityEngine.UI.Image>();
+                if (fill != null) fill.color = uiDef.DisplayColor;
+            }
+            if (row.AccentImage != null)
+                row.AccentImage.color = uiDef.DisplayColor;
+            if (row.ValueText != null)
+                row.ValueText.color = uiDef.TextColor.a < 0.01f ? uiDef.DisplayColor : uiDef.TextColor;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -121,13 +137,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void PushInitialSnapshot()
         {
-            if (_domainBridge == null || !_domainBridge.IsReady || _statUIConfig == null) return;
-
-            foreach (var uiDef in _statUIConfig.Stats)
+            if (_domainBridge == null || !_domainBridge.IsReady) return;
+            foreach (var type in _rows.Keys)
             {
-                if (!uiDef.ShowInUI) continue;
-                float val = _domainBridge.Bridge.GetStat(uiDef.Type);
-                RefreshStatUI(uiDef.Type, val);
+                float val = _domainBridge.Bridge.GetStat(type);
+                RefreshStatUI(type, val);
             }
         }
 
@@ -189,9 +203,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_statUIConfig == null) return;
             foreach (var uiDef in _statUIConfig.Stats)
             {
-                if (uiDef.ShowInUI &&
-                    uiDef.RelatedMaxStatType == changedType &&
-                    uiDef.Type != changedType)
+                if (uiDef.RelatedMaxStatType == changedType && uiDef.Type != changedType)
                 {
                     float val = _domainBridge.Bridge.GetStat(uiDef.Type);
                     RefreshStatUI(uiDef.Type, val);
@@ -201,18 +213,20 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void RefreshStatUI(PlayerStatType type, float newValue)
         {
-            if (_statUIConfig == null || !_rows.TryGetValue(type, out var row)) return;
+            if (!_rows.TryGetValue(type, out var row)) return;
+            if (_statUIConfig == null) return;
 
             var uiDef = _statUIConfig.GetUIDefinition(type);
-            if (!uiDef.ShowInUI) return;
 
             switch (uiDef.DisplayType)
             {
                 case StatDisplayType.SliderWithMax:
                 {
                     float max = GetRelatedMaxValue(uiDef);
-                    if (row.Slider != null)
-                        row.Slider.value = max > 0f ? newValue / max : 0f;
+                    if (row.Slider != null && max > 0f)
+                        row.Slider.value = newValue / max;
+                    // If max == 0, max-stat hasn't synced yet — skip slider update to avoid showing 0%.
+                    // RefreshRelatedCurrentStats will re-drive this row once the max-stat arrives.
                     if (row.ValueText != null)
                     {
                         row.ValueText.text = uiDef.ShowMaxValue && max > 0f

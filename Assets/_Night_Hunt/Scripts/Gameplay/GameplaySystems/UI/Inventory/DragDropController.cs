@@ -437,33 +437,7 @@ private DropQuantityDialog GetDropQuantityDialog()
                     if (sourceView != null) sourceView.SetEmptyState();
                     break;
 
-                case DropActionType.AssignQuickSlot:
-                    // FIX Bug 2b: QuickSlot is a REFERENCE â€“ the item physically stays in inventory.
-                    // Do NOT clear the source inventory slot; just preview the item in the target QS.
-                    if (targetView != null && sourceState != null)
-                    {
-                        var previewState = CloneState(sourceState);
-                        targetView.SetState(previewState);
-                    }
-
-                    // Server confirmation (OnQuickSlotAssigned event) will finalize both slots.
-                    break;
-
-                case DropActionType.RemoveQuickSlot:
-                    // QuickSlot chá»‰ lÃ  reference â€“ item váº«n náº±m trong inventory.
-                    // Khi kÃ©o tá»« QuickSlot â†’ Inventory thÃ¬:
-                    // - Clear QuickSlot source ngay (optimistic)
-                    // - Preview: show item á»Ÿ Ã´ inventory target (chá» server confirm MoveItem)
-                    if (sourceView != null)
-                        sourceView.SetEmptyState();
-
-                    if (action.Target.Type == UISlotType.Inventory && targetView != null && sourceState != null)
-                    {
-                        var movedState = CloneState(sourceState);
-                        targetView.SetState(movedState);
-                    }
-
-                    break;
+                
             }
         }
 
@@ -552,22 +526,6 @@ private DropQuantityDialog GetDropQuantityDialog()
                             action.Source.WeaponSlot.Value,
                             action.Target.WeaponSlot.Value);
                     }
-                    else if (action.Source.Type == UISlotType.QuickSlot &&
-                             action.Target.Type == UISlotType.QuickSlot)
-                    {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UIâ†’Server][SwapQuickSlots] " +
-                                      $"slot1={action.Source.Index} " +
-                                      $"slot2={action.Target.Index} " +
-                                      $"from={action.Source} to={action.Target}");
-                        }
-
-                        bridge.QuickSlot.SwapQuickSlots(
-                            action.Source.Index,
-                            action.Target.Index);
-                    }
                     else if (action.Source.Type == UISlotType.Attachment &&
                              action.Target.Type == UISlotType.Attachment &&
                              !string.IsNullOrEmpty(action.Source.ParentInstanceID) &&
@@ -655,52 +613,7 @@ private DropQuantityDialog GetDropQuantityDialog()
 
                     break;
 
-                case DropActionType.AssignQuickSlot:
-                    if (action.Target.Type == UISlotType.QuickSlot)
-                    {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                            Debug.Log(
-                            $"[DragDropController][QS] Calling bridge.AssignToQuickSlot: item={item.DefinitionID} ({item.InstanceID}) â†’ slot={action.Target.Index}");
-                        bridge.AssignToQuickSlot(item.InstanceID, action.Target.Index);
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UIâ†’Server][AssignQuickSlot] " +
-                                      $"item={item.DefinitionID} ({item.InstanceID}) " +
-                                      $"to QuickSlot[{action.Target.Index}] from={action.Source}");
-                        }
-                    }
-
-                    break;
-
-                case DropActionType.RemoveQuickSlot:
-                    if (action.Source.Type == UISlotType.QuickSlot)
-                    {
-                        // Náº¿u target lÃ  inventory cell â†’ vá»«a clear quickslot, vá»«a move item tá»›i index má»›i.
-                        if (action.Target.Type == UISlotType.Inventory)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                            {
-                                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                    Debug.Log($"[DragDropController] [UIâ†’Server][QuickSlotâ†’Inventory] " +
-                                          $"item={item.DefinitionID} ({item.InstanceID}) " +
-                                          $"QS[{action.Source.Index}] â†’ Inventory[{action.Target.Index}]");
-                            }
-
-                            bridge.Inventory.MoveItem(item.InstanceID, action.Target.Index);
-                        }
-
-                        bridge.RemoveFromQuickSlot(action.Source.Index);
-
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UIâ†’Server][RemoveQuickSlot] " +
-                                      $"QuickSlot[{action.Source.Index}] cleared (source={action.Source}, target={action.Target})");
-                        }
-                    }
-
-                    break;
+                
 
                 case DropActionType.DropToWorld:
                     // Náº¿u stack Ä‘á»§ lá»›n (>=3), má»Ÿ dialog chá»n sá»‘ lÆ°á»£ng drop thay vÃ¬ luÃ´n drop full stack.
@@ -827,12 +740,6 @@ private DropQuantityDialog GetDropQuantityDialog()
 
                     break;
 
-                case UISlotType.QuickSlot:
-                    // QuickSlot is a reference; item lives in inventory â€“ just drop it
-                    bridge.RemoveFromQuickSlot(source.Index);
-                    bridge.DropItem(item.InstanceID, quantity);
-                    break;
-
                 case UISlotType.Attachment:
                     // Detach to inventory first, then drop
                     var attachSys = GetAttachmentSystem();
@@ -858,7 +765,6 @@ private DropQuantityDialog GetDropQuantityDialog()
             // Trash cáº§n xá»­ lÃ½ khÃ¡c nhau tuá»³ nguá»“n:
             // - Inventory: xoÃ¡ trá»±c tiáº¿p khá»i inventory.
             // - Equipment / Weapon: unequip trÆ°á»›c rá»“i xoÃ¡ khá»i inventory.
-            // - QuickSlot: xoÃ¡ khá»i inventory + clear quickslot reference.
             // - Attachment: detach vá» inventory (náº¿u cÃ³ system) â€“ user cÃ³ thá»ƒ trash tiáº¿p tá»« inventory.
             switch (source.Type)
             {
@@ -912,20 +818,6 @@ private DropQuantityDialog GetDropQuantityDialog()
                         bridge.RemoveItem(item.InstanceID, quantity);
                     }
 
-                    break;
-
-                case UISlotType.QuickSlot:
-                    // QuickSlot chá»‰ giá»¯ reference â†’ cáº§n xoÃ¡ item khá»i inventory + clear quickslot.
-                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                    {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                            Debug.Log($"[DragDropController] [UIâ†’Server][Trash QuickSlot] " +
-                                  $"QS[{source.Index}], item={item.DefinitionID} ({item.InstanceID}) " +
-                                  $"from={source} qty={quantity}");
-                    }
-
-                    bridge.RemoveItem(item.InstanceID, quantity);
-                    bridge.RemoveFromQuickSlot(source.Index);
                     break;
 
                 case UISlotType.Attachment:

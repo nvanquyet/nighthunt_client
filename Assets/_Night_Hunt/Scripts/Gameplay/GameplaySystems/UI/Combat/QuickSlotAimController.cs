@@ -6,6 +6,7 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.Input.Handlers.Combat;
+using NightHunt.Gameplay.Spectator;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -55,12 +56,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
         //  Runtime refs
         // ─────────────────────────────────────────────────────────────────────
 
-        private IPlayerStatSystem _statSystem;
-        private IQuickSlotSystem  _quickSlotSystem;
-        private Transform         _playerTransform;
-        private Camera            _cam;
-        private IAimSystem        _aimSystem;
-        private IItemUseSystem    _itemUseSystem;
+        private IPlayerStatSystem   _statSystem;
+        private IItemSelectionSystem _itemSelectionSystem;
+        private Transform           _playerTransform;
+        private Camera              _cam;
+        private IAimSystem          _aimSystem;
+        private IItemUseSystem      _itemUseSystem;
         private CombatInputHandler _combatInputHandler;
 
         // ─────────────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         // ─────────────────────────────────────────────────────────────────────
 
         private bool    _inAimMode;
-        private int     _activeSlot  = -1;
+        private string  _activeItemInstanceId;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Static output (read by ThrowableHandler)
@@ -137,14 +138,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void Initialize(
             IPlayerStatSystem  statSystem,
-            IQuickSlotSystem   quickSlotSystem,
+            IItemSelectionSystem itemSelectionSystem,
             Transform          playerTransform,
             IAimSystem         aimSystem            = null,
             IItemUseSystem     itemUseSystem        = null,
             CombatInputHandler combatInputHandler   = null)
         {
             _statSystem          = statSystem;
-            _quickSlotSystem     = quickSlotSystem;
+            _itemSelectionSystem = itemSelectionSystem;
             _playerTransform     = playerTransform;
             _aimSystem           = aimSystem;
             _itemUseSystem       = itemUseSystem;
@@ -167,11 +168,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// If the item in <paramref name="slotIndex"/> is a <c>Throwable</c>, enters aim mode.
         /// Otherwise falls back to direct <see cref="IQuickSlotSystem.UseQuickSlot"/>.
         /// </summary>
-        public void TryBeginAim(int slotIndex)
+        public void TryBeginAim(string instanceID)
         {
-            if (_quickSlotSystem == null) return;
+            if (_itemSelectionSystem == null || string.IsNullOrEmpty(instanceID)) return;
 
-            var item = _quickSlotSystem.GetQuickSlotItem(slotIndex);
+            var bridge = SpectateManager.Instance?.GetCurrentPlayer()?.GamePlaySystemBridge;
+            var item = bridge?.GetItemByInstanceID(instanceID);
             if (item == null) return;
 
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
@@ -180,15 +182,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (!isThrowable)
             {
                 // Direct use – no aiming needed.
-                if (_quickSlotSystem.CanUseQuickSlot(slotIndex))
-                    _quickSlotSystem.UseQuickSlot(slotIndex);
+                _itemSelectionSystem.SelectItem(instanceID);
                 return;
             }
 
             // ── Enter aim mode ──────────────────────────────────────────────
             if (_inAimMode) CancelAim();   // cancel previous aim if any
 
-            _activeSlot = slotIndex;
+            _activeItemInstanceId = instanceID;
             _inAimMode  = true;
             IsAimingPC  = !IsMobile;
             // Force STRAFE mode so the character rotates to face the throw direction
@@ -205,8 +206,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             // Immediately tell the server to begin the throw (HolsterWeapon + SpawnItemInHand).
             // We do NOT wait for ConfirmAim because the model-in-hand should appear as soon
             // as the player picks up the item.  ConfirmAim will only send RequestExecuteThrow.
-            if (_quickSlotSystem != null && _quickSlotSystem.CanUseQuickSlot(slotIndex))
-                _quickSlotSystem.UseQuickSlot(slotIndex);
+            _itemSelectionSystem.SelectItem(instanceID);
             if (!IsMobile)
             {
                 // PC: immediately do a raycast so the ring is ready on first frame.
@@ -343,7 +343,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             _inAimMode  = false;
             IsAimingPC  = false;
-            _activeSlot = -1;
+            _activeItemInstanceId = null;
 
             if (_rangeIndicator != null) _rangeIndicator.Hide();
             HideCursor();
@@ -377,10 +377,11 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         private float GetThrowRange()
         {
-            if (_quickSlotSystem == null || _activeSlot < 0)
+            if (string.IsNullOrEmpty(_activeItemInstanceId))
                 return GetVisionRange();
 
-            var item = _quickSlotSystem.GetQuickSlotItem(_activeSlot);
+            var bridge = SpectateManager.Instance?.GetCurrentPlayer()?.GamePlaySystemBridge;
+            var item = bridge?.GetItemByInstanceID(_activeItemInstanceId);
             if (item == null) return GetVisionRange();
 
             var def = ItemDatabase.GetDefinition(item.DefinitionID) as NightHunt.GameplaySystems.Core.Data.ThrowableDefinition;

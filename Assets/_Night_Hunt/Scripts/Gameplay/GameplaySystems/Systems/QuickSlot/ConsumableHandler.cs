@@ -5,7 +5,7 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Data;
 using UnityEngine;
 
-namespace NightHunt.GameplaySystems.QuickSlot
+namespace NightHunt.GameplaySystems.ItemUse
 {
     /// <summary>
     /// Handler for consumable effects (health, stamina, buffs, etc.)

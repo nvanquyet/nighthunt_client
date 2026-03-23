@@ -1,231 +1,203 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Networking;
+using NightHunt.Networking.Player;
 
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Match UI showing phase, timer, score, etc.
-    /// Also shows a full-screen phase warning banner when <see cref="PhaseWarningEvent"/> fires.
+    /// Match HUD: phase name, countdown timer, score, two-team member lists.
+    ///
+    /// Team list populate DUY NHẤT 1 LẦN khi nhận AllPlayersReadyEvent.
+    /// Source: PlayerPublicRegistry (dict sẵn có, không FindObjectsByType).
+    /// Alive/dead tự cập nhật qua NetworkPlayer.OnAliveChanged bên trong TeamMemberRow.
     /// </summary>
     public class MatchUI : MonoBehaviour
     {
+        // ── Phase ─────────────────────────────────────────────────────────────
         [Header("Phase Display")]
         [SerializeField] private TextMeshProUGUI phaseText;
-        [SerializeField] private TextMeshProUGUI phaseDescriptionText;
 
+        // ── Timer ─────────────────────────────────────────────────────────────
         [Header("Timer")]
         [SerializeField] private TextMeshProUGUI timerText;
-        [SerializeField] private TextMeshProUGUI phaseTimerText;
 
+        // ── Score ─────────────────────────────────────────────────────────────
         [Header("Score Display")]
         [SerializeField] private TextMeshProUGUI teamScoreText;
         [SerializeField] private TextMeshProUGUI personalScoreText;
 
+        // ── Team Display ──────────────────────────────────────────────────────
         [Header("Team Display")]
-        [SerializeField] private Transform teamListParent;
-        [SerializeField] private GameObject teamMemberPrefab;
+        [SerializeField] private Transform       teamAListParent;
+        [SerializeField] private Transform       teamBListParent;
+        [SerializeField] private TextMeshProUGUI teamAHeaderText;
+        [SerializeField] private TextMeshProUGUI teamBHeaderText;
+        [SerializeField] private GameObject      teamMemberPrefab;
+
+        [Tooltip("Avatar sprites indexed by CharacterModelIndex.")]
+        [SerializeField] private Sprite[]        characterAvatars;
 
         // ── Phase Warning Banner ──────────────────────────────────────────────
         [Header("Phase Warning Banner")]
-        [Tooltip("Root panel — shown briefly when a phase is about to end.")]
-        [SerializeField] private GameObject  warningPanel;
-        [Tooltip("e.g. 'PHASE 2 ENDING IN 30s'")]
+        [SerializeField] private GameObject      warningPanel;
         [SerializeField] private TextMeshProUGUI warningText;
-        [Tooltip("Optional background image — its alpha is faded in/out.")]
-        [SerializeField] private Image       warningBackground;
-        [Tooltip("How many seconds the banner stays fully visible at its peak.")]
-        [SerializeField] private float       warningHoldDuration = 3f;
-        [Tooltip("Fade in/out duration (each way).")]
-        [SerializeField] private float       warningFadeDuration = 0.4f;
-        // ──────────────────────────────────────────────────────────────────────
+        [SerializeField] private Image           warningBackground;
+        [SerializeField] private float           warningHoldDuration = 3f;
+        [SerializeField] private float           warningFadeDuration = 0.4f;
 
-        private MatchPhaseManager phaseManager;
-        private float updateInterval = 0.1f;
-        private float lastUpdateTime;
-        private float _phaseManagerRetryTime;
-        private const float PhaseManagerRetryInterval = 1f;
-        private Coroutine _warningCoroutine;
+        // ── Runtime ───────────────────────────────────────────────────────────
+        private MatchPhaseManager _phaseManager;
+        private float             _lastUpdateTime;
+        private const float       UpdateInterval            = 0.1f;
+        private float             _phaseManagerRetryTime;
+        private const float       PhaseManagerRetryInterval = 1f;
+        private Coroutine         _warningCoroutine;
+
+        // Rows — allocated once, never touched again after populate
+        private readonly List<TeamMemberRow> _teamARows = new();
+        private readonly List<TeamMemberRow> _teamBRows = new();
+
+        // ── Unity Lifecycle ───────────────────────────────────────────────────
 
         private void Awake()
         {
-            if (warningPanel != null)
-                warningPanel.SetActive(false);
+            if (warningPanel    != null) warningPanel.SetActive(false);
+            if (teamAHeaderText != null) teamAHeaderText.text = "TEAM A";
+            if (teamBHeaderText != null) teamBHeaderText.text = "TEAM B";
+        }
 
+        private void OnEnable()
+        {
+            GameplayEventBus.Instance?.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
             GameplayEventBus.Instance?.Subscribe<PhaseWarningEvent>(OnPhaseWarning);
         }
 
-        private void OnDestroy()
+        private void OnDisable()
         {
+            GameplayEventBus.Instance?.Unsubscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
             GameplayEventBus.Instance?.Unsubscribe<PhaseWarningEvent>(OnPhaseWarning);
         }
 
         private void Start()
         {
-            phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+            _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
         }
 
         private void Update()
         {
-            if (Time.time - lastUpdateTime >= updateInterval)
+            if (Time.time - _lastUpdateTime < UpdateInterval) return;
+            _lastUpdateTime = Time.time;
+            UpdateDisplay();
+        }
+
+        // ── Team Populate — chỉ chạy 1 lần ──────────────────────────────────
+
+        private void OnAllPlayersReady(AllPlayersReadyEvent _)
+        {
+            var registry = PlayerPublicRegistry.Instance;
+            if (registry == null)
             {
-                UpdateDisplay();
-                lastUpdateTime = Time.time;
+                Debug.LogWarning("[MatchUI] PlayerPublicRegistry not found.");
+                return;
+            }
+
+            PopulateTeam(registry.GetPlayersByTeam(0), teamAListParent, _teamARows);
+            PopulateTeam(registry.GetPlayersByTeam(1), teamBListParent, _teamBRows);
+        }
+
+        private void PopulateTeam(List<NetworkPlayer> players,
+                                   Transform           parent,
+                                   List<TeamMemberRow> rows)
+        {
+            if (parent == null || teamMemberPrefab == null) return;
+
+            foreach (var player in players)
+            {
+                if (player == null) continue;
+
+                var go  = Instantiate(teamMemberPrefab, parent);
+                var row = go.GetComponent<TeamMemberRow>();
+
+                if (row == null)
+                {
+                    Debug.LogWarning("[MatchUI] teamMemberPrefab missing TeamMemberRow component.");
+                    Destroy(go);
+                    continue;
+                }
+
+                row.Bind(player, characterAvatars);
+                rows.Add(row);
             }
         }
 
-        /// <summary>
-        /// Update all UI elements
-        /// </summary>
+        // ── Display ───────────────────────────────────────────────────────────
+
         private void UpdateDisplay()
         {
-            if (phaseManager == null)
+            if (_phaseManager == null)
             {
                 if (Time.time >= _phaseManagerRetryTime)
                 {
-                    phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+                    _phaseManager          = FindFirstObjectByType<MatchPhaseManager>();
                     _phaseManagerRetryTime = Time.time + PhaseManagerRetryInterval;
                 }
                 return;
             }
 
-            UpdatePhaseDisplay();
-            UpdateTimer();
+            UpdatePhase();
+            UpdateCountdown();
             UpdateScore();
         }
 
-        /// <summary>
-        /// Update phase display
-        /// </summary>
-        private void UpdatePhaseDisplay()
+        private void UpdatePhase()
         {
-            if (phaseManager == null) return;
-
-            string currentPhase = phaseManager.CurrentPhaseName;
-            var phaseConfig = phaseManager.GetCurrentPhaseConfig();
-
             if (phaseText != null)
-            {
-                // Format phase name
-                string phaseName = FormatPhaseName(currentPhase);
-                phaseText.text = phaseName;
-            }
-
-            if (phaseDescriptionText != null && phaseConfig != null)
-            {
-                phaseDescriptionText.text = GetPhaseDescription(currentPhase);
-            }
+                phaseText.text = FormatPhaseName(_phaseManager.CurrentPhaseName);
         }
 
-        /// <summary>
-        /// Update timer display
-        /// </summary>
-        private void UpdateTimer()
+        private void UpdateCountdown()
         {
-            if (phaseManager == null) return;
-
-            float remainingTime = phaseManager.PhaseRemainingTime;
-
-            if (timerText != null)
-            {
-                int minutes = Mathf.FloorToInt(remainingTime / 60f);
-                int seconds = Mathf.FloorToInt(remainingTime % 60f);
-                timerText.text = $"{minutes:00}:{seconds:00}";
-            }
-
-            if (phaseTimerText != null)
-            {
-                float elapsed = phaseManager.PhaseElapsedTime;
-                int minutes = Mathf.FloorToInt(elapsed / 60f);
-                int seconds = Mathf.FloorToInt(elapsed % 60f);
-                phaseTimerText.text = $"Phase Time: {minutes:00}:{seconds:00}";
-            }
+            if (timerText == null) return;
+            float remaining = Mathf.Max(0f, _phaseManager.PhaseRemainingTime);
+            int   minutes   = Mathf.FloorToInt(remaining / 60f);
+            int   seconds   = Mathf.FloorToInt(remaining % 60f);
+            timerText.text  = $"{minutes:00}:{seconds:00}";
         }
 
-        /// <summary>
-        /// Update score display
-        /// </summary>
         private void UpdateScore()
         {
-            // Would integrate with scoring system
-            if (teamScoreText != null)
-            {
-                teamScoreText.text = "Team Score: 0";
-            }
-
-            if (personalScoreText != null)
-            {
-                personalScoreText.text = "Your Score: 0";
-            }
+            // TODO: wire to actual scoring system
+            if (teamScoreText     != null) teamScoreText.text     = "Team Score: 0";
+            if (personalScoreText != null) personalScoreText.text = "Your Score: 0";
         }
 
-        /// <summary>
-        /// Format phase name for display
-        /// </summary>
-        private string FormatPhaseName(string phase)
-        {
-            switch (phase)
-            {
-                case "Phase1_Preparation":
-                    return "PHASE 1: PREPARATION";
-                case "Phase2_HuntObjectives":
-                    return "PHASE 2: HUNT & OBJECTIVES";
-                case "Phase3_FinalLockdown":
-                    return "PHASE 3: FINAL LOCKDOWN";
-                default:
-                    return phase;
-            }
-        }
-
-        /// <summary>
-        /// Get phase description
-        /// </summary>
-        private string GetPhaseDescription(string phase)
-        {
-            switch (phase)
-            {
-                case "Phase1_Preparation":
-                    return "Loot items and place beacons. Prepare for the hunt.";
-                case "Phase2_HuntObjectives":
-                    return "Boss has spawned. Capture zones are active. Hunt or be hunted.";
-                case "Phase3_FinalLockdown":
-                    return "Beacons disabled. Zone closing. Last team standing wins.";
-                default:
-                    return "";
-            }
-        }
-
-        // ── Phase Warning ──────────────────────────────────────────────────────
+        // ── Phase Warning ─────────────────────────────────────────────────────
 
         private void OnPhaseWarning(PhaseWarningEvent evt)
         {
-            if (_warningCoroutine != null)
-                StopCoroutine(_warningCoroutine);
+            if (_warningCoroutine != null) StopCoroutine(_warningCoroutine);
 
-            string phaseName = FormatPhaseName(evt.CurrentPhase.ToString());
-            string msg       = $"{phaseName}\nENDING IN {Mathf.CeilToInt(evt.SecondsRemaining):F0}s";
+            string msg = $"{FormatPhaseName(evt.CurrentPhase.ToString())}\n" +
+                         $"ENDING IN {Mathf.CeilToInt(evt.SecondsRemaining)}s";
 
-            _warningCoroutine = StartCoroutine(ShowWarningBanner(msg, evt.SecondsRemaining));
+            _warningCoroutine = StartCoroutine(ShowWarningBanner(msg));
         }
 
-        private IEnumerator ShowWarningBanner(string message, float displaySeconds)
+        private IEnumerator ShowWarningBanner(string message)
         {
             if (warningPanel == null) yield break;
 
             if (warningText != null) warningText.text = message;
             warningPanel.SetActive(true);
 
-            // Fade in
             yield return StartCoroutine(FadeWarning(0f, 1f, warningFadeDuration));
-
-            // Hold for the lesser of warningHoldDuration or remaining time
-            float hold = Mathf.Min(warningHoldDuration, displaySeconds);
-            yield return new WaitForSeconds(hold);
-
-            // Fade out
+            yield return new WaitForSeconds(warningHoldDuration);
             yield return StartCoroutine(FadeWarning(1f, 0f, warningFadeDuration));
 
             warningPanel.SetActive(false);
@@ -237,7 +209,7 @@ namespace NightHunt.UI
             if (warningBackground == null) yield break;
 
             float elapsed = 0f;
-            Color c = warningBackground.color;
+            Color c       = warningBackground.color;
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
@@ -248,6 +220,15 @@ namespace NightHunt.UI
             c.a = to;
             warningBackground.color = c;
         }
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+
+        private static string FormatPhaseName(string phase) => phase switch
+        {
+            "Phase1_Preparation"    => "PHASE 1: PREPARATION",
+            "Phase2_HuntObjectives" => "PHASE 2: HUNT & OBJECTIVES",
+            "Phase3_FinalLockdown"  => "PHASE 3: FINAL LOCKDOWN",
+            _                       => phase
+        };
     }
 }
-

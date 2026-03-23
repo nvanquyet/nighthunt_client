@@ -3,8 +3,10 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
+using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
-using NightHunt.GameplaySystems.UI.Combat;   // QuickSlotAimController.IsAimingPC guard
+using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.UI.Combat;   // ItemAimController.IsAimingPC guard
 
 namespace NightHunt.Gameplay.Input.Handlers.Combat
 {
@@ -45,6 +47,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private InputAction _weaponSlot2Action;
         private InputAction _weaponSlot3Action;
         private InputAction _throwGrenadeAction;
+        private InputAction _consumablePanelAction;  // optional — maps to "ConsumablePanel" action if defined
         private InputAction _switchWeaponAction;
         private InputAction _mousePositionAction; // Track mouse position via Input System
 
@@ -71,7 +74,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         // ── Combat system refs ────────────────────────────────────────────────────
         private MovementInputHandler _movementInputHandler;
         private NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem _weaponSystem;        private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem _aimSystem;
-        private IItemUseSystem _itemUseSystem;        /// <summary>Local player transform — origin cho ground-plane aim raycast.</summary>
+        private IItemUseSystem _itemUseSystem;
+        private NightHunt.GameplaySystems.Core.Interfaces.IItemSelectionSystem _itemSelectionSystem;        /// <summary>Local player transform — origin cho ground-plane aim raycast.</summary>
         private Transform _playerTransform;
         /// <summary>Camera lock state trước khi fire — restored khi EndFire.</summary>
         private bool _prevCameraLockBeforeFire;
@@ -98,6 +102,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         public event System.Action       OnReload;
         public event System.Action<int>  OnWeaponSlotChanged;
         public event System.Action       OnThrowGrenade;
+        /// <summary>Fired when the ConsumablePanel shortcut key is pressed.</summary>
+        public event System.Action       OnConsumablePanel;
 
         // ── IInputHandler ─────────────────────────────────────────────────────────
         public bool IsInputEnabled => _inputEnabled;
@@ -181,6 +187,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 _weaponSlot2Action   = _combatActionMap.FindAction("WeaponSlot2");
                 _weaponSlot3Action   = _combatActionMap.FindAction("WeaponSlot3");
                 _throwGrenadeAction  = _combatActionMap.FindAction("ThrowGrenade");
+                _consumablePanelAction = _combatActionMap.FindAction("ConsumablePanel");
                 _switchWeaponAction  = _combatActionMap.FindAction("SwitchWeapon");
                 // MousePosition action mới thêm vào .inputactions
                 _mousePositionAction = _combatActionMap.FindAction("MousePosition");
@@ -222,6 +229,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_weaponSlot2Action  != null) _weaponSlot2Action.performed  += _onSlot2;
             if (_weaponSlot3Action  != null) _weaponSlot3Action.performed  += _onSlot3;
             if (_throwGrenadeAction != null) _throwGrenadeAction.performed += OnThrowGrenadePerformed;
+            if (_consumablePanelAction != null) _consumablePanelAction.performed += OnConsumablePanelPerformed;
             if (_switchWeaponAction != null) _switchWeaponAction.performed += OnSwitchWeaponPerformed;
             // MousePosition: không cần subscribe event — polling trong UpdateAimDirection() đủ.
             // Action chỉ cần được enable (handled by InputLayerManager).
@@ -249,6 +257,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_weaponSlot2Action  != null) _weaponSlot2Action.performed  -= _onSlot2;
             if (_weaponSlot3Action  != null) _weaponSlot3Action.performed  -= _onSlot3;
             if (_throwGrenadeAction != null) _throwGrenadeAction.performed -= OnThrowGrenadePerformed;
+            if (_consumablePanelAction != null) _consumablePanelAction.performed -= OnConsumablePanelPerformed;
             if (_switchWeaponAction != null) _switchWeaponAction.performed -= OnSwitchWeaponPerformed;
 
             // Nếu đang fire khi bị disable (ví dụ mở inventory), force EndFire để restore state.
@@ -326,7 +335,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnFirePerformed(InputAction.CallbackContext ctx)
         {
-            // Skip if the pointer is currently over a UI element (e.g. FireButton, QuickSlot).
+            // Skip if the pointer is currently over a UI element (e.g. FireButton, item selector).
             // Those buttons call SimulateFire() directly via EventSystem — the Input System
             // action must NOT also trigger BeginFire() for the same press.
             if (IsPointerOverAnyUI()) return;
@@ -356,21 +365,59 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         {
             if (_isFiring) return;
 
-            // Throwable mode: fire button confirms the throw instead of shooting.
-            // FIX BUG 4: Guard với IsAimingPC để tránh double RequestExecuteThrow.
-            // Khi QuickSlotAimController.Update() đã gọi ConfirmAim() → RequestExecuteThrow()
-            // trong cùng frame với MouseButtonDown(0), BeginFire cũng sẽ được gọi do
-            // OnFirePerformed không qua IsPointerOverGameObject() check (click vào ground).
-            // IsAimingPC = false ngay sau ConfirmAim() (ResetAimState reset nó),
-            // nhưng trong vòng lặp ConfirmAim → ResetAimState → BeginFire cùng frame thì
-            // thứ tự là: Update() (ConfirmAim, IsAimingPC=false) → sau đó Input callbacks.
-            // Nên dùng flag riêng _throwConfirmedThisFrame để block an toàn.
+            // Throwable/deployable already armed: re-enter aim state so EndFire executes throw on release.
             if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
             {
-                // Chỉ confirm throw từ BeginFire khi KHÔNG có QuickSlotAimController đang xử lý
-                // (PC mode: AimController.Update() chịu trách nhiệm confirm, không phải BeginFire).
-                if (!QuickSlotAimController.IsAimingPC)
-                    _itemUseSystem.RequestExecuteThrow();
+                _isFiring = true;
+                if (_cameraStateManager != null)
+                {
+                    _prevCameraStateBeforeFire = _cameraStateManager.CurrentState;
+                    _cameraStateManager.ForceState(NightHunt.Gameplay.Camera.CameraState.Locked);
+                }
+                if (_movementInputHandler != null)
+                {
+                    _prevCameraLockBeforeFire = _movementInputHandler.IsCameraLocked();
+                    _movementInputHandler.SetCameraLockOverride(active: true, forcedValue: true);
+                }
+                if (_rangeIndicator != null)
+                    _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
+                if (Application.isMobilePlatform)
+                    _aimSystem?.SetCursorVisible(true);
+                return;
+            }
+
+            // Item selected: arm throwable/deployable (hold to aim, release to throw)
+            // or immediately use consumable.
+            if (_itemSelectionSystem != null && _itemSelectionSystem.HasSelection)
+            {
+                var selectedItem = _itemSelectionSystem.SelectedItem;
+                var def = selectedItem != null ? ItemDatabase.GetDefinition(selectedItem.DefinitionID) : null;
+                bool isThrowableOrDeployable = def != null &&
+                    (def.Type == ItemType.Throwable || def.Type == ItemType.Deployable);
+
+                _itemSelectionSystem.UseSelectedItem();
+
+                if (isThrowableOrDeployable)
+                {
+                    // Enter aim state — range indicator visible, camera locked, strafe on.
+                    // Fire NOT invoked (weapon holstered). Throw executes on EndFire.
+                    _isFiring = true;
+                    if (_cameraStateManager != null)
+                    {
+                        _prevCameraStateBeforeFire = _cameraStateManager.CurrentState;
+                        _cameraStateManager.ForceState(NightHunt.Gameplay.Camera.CameraState.Locked);
+                    }
+                    if (_movementInputHandler != null)
+                    {
+                        _prevCameraLockBeforeFire = _movementInputHandler.IsCameraLocked();
+                        _movementInputHandler.SetCameraLockOverride(active: true, forcedValue: true);
+                    }
+                    if (_rangeIndicator != null)
+                        _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
+                    if (Application.isMobilePlatform)
+                        _aimSystem?.SetCursorVisible(true);
+                }
+                // Consumable: UseSelectedItem() handles use immediately; no aim state needed.
                 return;
             }
 
@@ -429,6 +476,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         /// </summary>
         private void EndFire()
         {
+            // Execute throw on fire-release when a throwable is armed and in aim state.
+            if (_isFiring && _itemUseSystem != null && _itemUseSystem.IsUsingItem && !ItemAimController.IsAimingPC)
+                _itemUseSystem.RequestExecuteThrow();
+
             if (!_isFiring) return;
             _isFiring = false;
 
@@ -495,6 +546,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         }
 
         private void OnThrowGrenadePerformed(InputAction.CallbackContext ctx) => OnThrowGrenade?.Invoke();
+        private void OnConsumablePanelPerformed(InputAction.CallbackContext ctx) => OnConsumablePanel?.Invoke();
 
         // ── Public API ────────────────────────────────────────────────────────────
 
@@ -693,7 +745,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         }
 
         /// <summary>
-        /// Expose MovementInputHandler.SetCameraLockOverride so QuickSlotAimController can
+        /// Bind the item selection system so BeginFire can call UseSelectedItem
+        /// when a consumable or throwable is selected.
+        /// </summary>
+        public void BindItemSelectionSystem(NightHunt.GameplaySystems.Core.Interfaces.IItemSelectionSystem itemSelectionSystem)
+        {
+            _itemSelectionSystem = itemSelectionSystem;
+        }
+
+        /// <summary>
+        /// Expose MovementInputHandler.SetCameraLockOverride so ItemAimController can
         /// force STRAFE mode while the player is in throwable aim mode (mirrors BeginFire).
         /// </summary>
         public void SetCameraLockOverride(bool active, bool forcedValue)

@@ -64,7 +64,7 @@ namespace NightHunt.GameplaySystems.Core.Data
         /// <summary>
         /// Calculate the maximum horizontal throw distance on flat ground for this item
         /// using the projectile motion formula: d = v² × sin(2θ) / g.
-        /// This is used by <see cref="QuickSlotAimController"/> to clamp how far the
+        /// This is used by <see cref="ItemAimController"/> to clamp how far the
         /// player can aim — keeps aim radius in sync with actual physics reach.
         /// </summary>
         public float GetMaxThrowDistance()

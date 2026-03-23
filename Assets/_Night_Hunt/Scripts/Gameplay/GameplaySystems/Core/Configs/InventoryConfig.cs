@@ -7,7 +7,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
 {
     /// <summary>
     /// Unified configuration for inventory system
-    /// Contains all settings for inventory, equipment, weapons, quickslots, UI, and behavior
+    /// Contains all settings for inventory, equipment, weapons, item selection, UI, and behavior
     /// </summary>
     [CreateAssetMenu(fileName = "InventoryConfig",
         menuName = "NightHunt/Gameplay/Inventory Config")]
@@ -46,13 +46,6 @@ namespace NightHunt.GameplaySystems.Core.Configs
         
         #endregion
         
-        #region ========== QUICKSLOT CONFIG ==========
-        
-        [Header("QuickSlot")]
-        public QuickSlotConfigStruct QuickSlotConfig;
-        
-        #endregion
-
         #region ========== ATTACHMENT UI ==========
         
         [Header("Attachment UI")]
@@ -172,9 +165,6 @@ namespace NightHunt.GameplaySystems.Core.Configs
                     }
                     break;
                     
-                case UISlotType.QuickSlot:
-                    return QuickSlotConfig.DefaultEmptyIcon;
-                
                 case UISlotType.Attachment:
                     return AttachmentUI.DefaultEmptyIcon;
             }
@@ -282,13 +272,6 @@ namespace NightHunt.GameplaySystems.Core.Configs
                 Debug.LogWarning("[InventoryConfig] WeaponConfig is empty. Use 'Setup Default Weapon Slots' context menu.");
             }
             
-            // Validate quickslot
-            if (QuickSlotConfig.SlotCount < 1 || QuickSlotConfig.SlotCount > 10)
-            {
-                Debug.LogError($"[InventoryConfig] QuickSlotConfig.SlotCount must be 1-10, current: {QuickSlotConfig.SlotCount}");
-                hasErrors = true;
-            }
-            
             if (!hasErrors)
             {
                 Debug.Log("[InventoryConfig] Validation passed!");
@@ -350,51 +333,6 @@ namespace NightHunt.GameplaySystems.Core.Configs
     
     #endregion
     
-    #region ========== QUICKSLOT CONFIG STRUCT ==========
-    
-    [System.Serializable]
-    public struct QuickSlotConfigStruct
-    {
-        [Header("Slot Count")]
-        [Tooltip("Number of quick slots")]
-        [Range(1, 10)]
-        public int SlotCount;
-        
-        [Header("UI")]
-        [Tooltip("Icon mặc định cho quickslot trống (khi chưa có item)")]
-        public Sprite DefaultEmptyIcon;
-        
-        [Header("Behavior")]
-        [Tooltip("Auto-remove slot when item consumed")]
-        public bool AutoRemoveOnConsume;
-        
-        [Tooltip("Auto-assign new items to empty slots")]
-        public bool AutoAssignNewItems;
-        
-        [Tooltip("Allow slot swapping via drag-drop")]
-        public bool AllowSlotSwapping;
-        
-        [Header("Restrictions")]
-        [Tooltip("Allowed item types in quick slots")]
-        public ItemType[] AllowedTypes;
-        
-        [Header("UI Display")]
-        [Tooltip("Show item count on slot")]
-        public bool ShowItemCount;
-        
-        [Tooltip("Show cooldown indicator")]
-        public bool ShowCooldown;
-        
-        [Tooltip("Pulse slot on use")]
-        public bool PulseOnUse;
-        
-        // NOTE: Hotkeys are configured in InputActionAsset (InputSystem)
-        // Action names: "QuickSlot1", "QuickSlot2", "QuickSlot3", "QuickSlot4"
-        // Managed by UIInputHandler via InputLayerManager
-    }
-    
-    #endregion
-
     #region ========== ATTACHMENT UI CONFIG STRUCT ==========
 
     [System.Serializable]

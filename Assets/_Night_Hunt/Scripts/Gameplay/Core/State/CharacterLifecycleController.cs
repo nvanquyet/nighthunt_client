@@ -5,6 +5,7 @@ using NightHunt.Gameplay.Respawn;
 using NightHunt.Networking;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Systems;
 using UnityEngine;
 using NightHunt.Utilities;
 
@@ -19,7 +20,7 @@ namespace NightHunt.Gameplay.Core.State
     public sealed class CharacterLifecycleController : NetworkBehaviour
     {
         [Header("References")]
-        [SerializeField] private MonoBehaviour _statSystemSource;
+        [SerializeField] private PlayerStatSystem _statSystemSource;
         [SerializeField] private CharacterStateMachine _stateMachine;
         [SerializeField] private NetworkPlayer _networkPlayer;
         [SerializeField] private RespawnSystem _respawnSystem;
@@ -77,15 +78,15 @@ namespace NightHunt.Gameplay.Core.State
             if (_respawnSystem == null)
                 _respawnSystem = FindFirstObjectByType<RespawnSystem>();
 
-            if (_statSystemSource == null)
-                _statSystemSource = ComponentResolver.Find<MonoBehaviour>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] MonoBehaviour not found")
-        .Resolve() as IPlayerStatSystem as MonoBehaviour;
-
             ResolveStatSystem();
         }
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            ResolveStatSystem();
+        }
+#endif
 
         public override void OnStartNetwork()
         {
@@ -119,19 +120,17 @@ namespace NightHunt.Gameplay.Core.State
             if (_statSystem != null)
                 return;
 
-            if (_statSystemSource != null)
-            {
-                _statSystem = _statSystemSource as IPlayerStatSystem;
-            }
-
-            if (_statSystem == null)
-            {
-                _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+        .UseExisting(_statSystemSource)
         .OnSelf()
         .InChildren()
+        .InParent()
+        .InRootChildren()
         .OrLogWarning("[Auto] IPlayerStatSystem not found")
         .Resolve();
-            }
+
+            if (_statSystem is PlayerStatSystem statConcrete)
+                _statSystemSource = statConcrete;
         }
 
         private void SubscribeToStats()

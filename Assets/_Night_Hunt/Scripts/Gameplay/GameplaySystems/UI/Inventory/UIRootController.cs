@@ -151,12 +151,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 var aimSystemForHUD = UnityEngine.Object.FindFirstObjectByType<AimSystem>();
                 _combatHudPanel.Initialize(
                     _domainBridge.IsReady ? _domainBridge.Bridge.Weapon    : null,
-                    _domainBridge.IsReady ? _domainBridge.Bridge.QuickSlot : null,
+                    _domainBridge.IsReady ? _domainBridge.Bridge.ItemSelection : null,
                     _domainBridge.IsReady ? _domainBridge.Bridge.Stat      : null,
                     playerT,
                     aimSystemForHUD,
                     _domainBridge.IsReady ? _domainBridge.Bridge.ItemUse   : null,
-                    NightHunt.Gameplay.Input.Core.InputManager.Instance?.CombatHandler);
+                    NightHunt.Gameplay.Input.Core.InputManager.Instance?.CombatHandler,
+                    _domainBridge.IsReady ? _domainBridge.Bridge.Inventory : null);
             }
         }
 

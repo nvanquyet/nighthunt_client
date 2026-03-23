@@ -398,7 +398,7 @@ namespace NightHunt.GameplaySystems.UI
                 iconImg.enabled = icon != null;
             }
             if (nameText != null) nameText.text = itemName;
-            if (qtyText  != null) qtyText.text  = $"Ã—{item.Quantity}";
+            if (qtyText  != null) qtyText.text  = item.Quantity.ToString();
 
             // Capture for closure
             int idx = storageIndex;

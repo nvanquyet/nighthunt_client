@@ -5,7 +5,9 @@ using NightHunt.Utilities;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Input layer cho slot – forward các sự kiện drag/drop lên DragDropController.
+    /// Input layer for a slot – forwards drag/drop events to DragDropController
+    /// and surfaces pointer events as typed events for InventoryScreen.
+    /// Detects double-click within <see cref="DoubleClickThreshold"/> seconds.
     /// </summary>
     [RequireComponent(typeof(ItemSlotView))]
     public class ItemSlotInput : MonoBehaviour,
@@ -18,10 +20,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         IPointerExitHandler
     {
         private ItemSlotView _view;
-        
-        // Event để InventoryScreen subscribe
+        private float _lastClickTime = -1f;
+        private const float DoubleClickThreshold = 0.3f;
+
         public event System.Action<ItemSlotView> OnSlotHoverEnter;
         public event System.Action<ItemSlotView> OnSlotHoverExit;
+        public event System.Action<ItemSlotView> OnSlotPressed;
+        public event System.Action<ItemSlotView> OnSlotDoubleClicked;
 
         private void Awake()
         {
@@ -34,7 +39,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         public void OnPointerDown(PointerEventData eventData)
         {
-            // Reserved cho select / context menu nếu cần sau này.
+            float now = Time.unscaledTime;
+            if (now - _lastClickTime < DoubleClickThreshold)
+            {
+                _lastClickTime = -1f;
+                OnSlotDoubleClicked?.Invoke(_view);
+            }
+            else
+            {
+                _lastClickTime = now;
+                OnSlotPressed?.Invoke(_view);
+            }
         }
 
         public void OnPointerEnter(PointerEventData eventData)

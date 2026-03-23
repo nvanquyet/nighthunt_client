@@ -6,7 +6,7 @@ using System;
 namespace NightHunt.Gameplay.Input.Handlers.UI
 {
     /// <summary>
-    /// Handles UI input: QuickSlots, Cancel, OpenMenu, ToggleMap.
+    /// Handles UI input: item selection panel interactions, Cancel, OpenMenu, ToggleMap.
     /// <para>Action map "UI" được <see cref="InputLayerManager"/> bật/tắt theo context.
     /// Handler này chỉ subscribe/unsubscribe callbacks, KHÔNG tự enable/disable ActionMap.</para>
     ///

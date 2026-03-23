@@ -8,7 +8,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         Inventory,
         Equipment,
         Weapon,
-        QuickSlot,
         DropArea,
         Attachment,
         Trash
@@ -45,12 +44,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             Type = UISlotType.Weapon,
             Index = -1,
             WeaponSlot = slot
-        };
-
-        public static UISlotId QuickSlot(int index) => new UISlotId
-        {
-            Type = UISlotType.QuickSlot,
-            Index = index
         };
 
         public static UISlotId DropArea() => new UISlotId
@@ -100,14 +93,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             switch (Type)
             {
-                case UISlotType.Inventory: return $"Inventory[{Index}]";
-                case UISlotType.QuickSlot: return $"QuickSlot[{Index}]";
-                case UISlotType.Equipment: return $"Equip[{EquipmentSlot}]";
-                case UISlotType.Weapon:    return $"Weapon[{WeaponSlot}]";
-                case UISlotType.DropArea:  return "DropArea";
-                case UISlotType.Trash:     return "Trash";
+                case UISlotType.Inventory:  return $"Inventory[{Index}]";
+                case UISlotType.Equipment:  return $"Equip[{EquipmentSlot}]";
+                case UISlotType.Weapon:     return $"Weapon[{WeaponSlot}]";
+                case UISlotType.DropArea:   return "DropArea";
+                case UISlotType.Trash:      return "Trash";
                 case UISlotType.Attachment: return $"Attachment[{ParentInstanceID}][{Index}]";
-                default:                   return Type.ToString();
+                default:                    return Type.ToString();
             }
         }
     }
@@ -140,8 +132,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         EquipWeapon,
         Unequip,
         UnequipWeapon,
-        AssignQuickSlot,
-        RemoveQuickSlot,
         DropToWorld,
         Attach,
         Detach,

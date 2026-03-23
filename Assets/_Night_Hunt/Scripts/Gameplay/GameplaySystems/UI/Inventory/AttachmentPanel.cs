@@ -4,6 +4,8 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Attachment;
+using NightHunt.Networking;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
@@ -20,9 +22,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Header("Config")] [SerializeField] private UISlotLayoutConfig _uiConfig;
 
         [Header("References")] [SerializeField]
-        private MonoBehaviour _attachmentSystemComponent;
+        private AttachmentSystem _attachmentSystemComponent;
 
-        [SerializeField] private MonoBehaviour _gameplayBridgeComponent;
+        [SerializeField] private NetworkPlayer _networkPlayerSource;
 
         private IAttachmentSystem _attachmentSystem;
         private IGameplayBridge _gameplayBridge;
@@ -35,11 +37,42 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void Awake()
         {
-            if (_attachmentSystemComponent != null)
-                _attachmentSystem = _attachmentSystemComponent as IAttachmentSystem;
+            ValidateReferences();
+        }
 
-            if (_gameplayBridgeComponent != null)
-                _gameplayBridge = _gameplayBridgeComponent as IGameplayBridge;
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            ValidateReferences();
+        }
+#endif
+
+        private void ValidateReferences()
+        {
+            _attachmentSystem = ComponentResolver.Find<IAttachmentSystem>(this)
+                .UseExisting(_attachmentSystemComponent)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrDefault(null)
+                .Resolve();
+
+            if (_attachmentSystem is AttachmentSystem attachmentConcrete)
+                _attachmentSystemComponent = attachmentConcrete;
+
+            if (_networkPlayerSource == null)
+            {
+                _networkPlayerSource = ComponentResolver.Find<NetworkPlayer>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .InParent()
+                    .InRootChildren()
+                    .OrDefault(null)
+                    .Resolve();
+            }
+
+            _gameplayBridge = _networkPlayerSource != null ? _networkPlayerSource.GamePlaySystemBridge : _gameplayBridge;
         }
 
         public void Initialize(UISlotLayoutConfig uiConfig, IAttachmentSystem attachmentSystem,

@@ -16,8 +16,8 @@ MonoBehaviour:
   FixedEntries: []
   RandomEntries:
   - Item: {fileID: 11400000, guid: 27e18dbf58e0ada42a3b57ab4cfa0254, type: 2}
-    MinQuantity: 1
-    MaxQuantity: 1
+    MinQuantity: 4
+    MaxQuantity: 4
     Chance: 1
   MinRandomCount: 1
   MaxRandomCount: 1

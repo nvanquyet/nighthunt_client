@@ -10,6 +10,7 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Equipment
@@ -26,8 +27,8 @@ namespace NightHunt.GameplaySystems.Equipment
         [SerializeField] private InventoryConfig _inventoryConfig;
         
         [Header("References")]
-        [SerializeField] private MonoBehaviour _statSystemComponent;
-        [SerializeField] private MonoBehaviour _inventorySystemComponent;
+        [SerializeField] private PlayerStatSystem _statSystemComponent;
+        [SerializeField] private InventorySystem _inventorySystemComponent;
         private IPlayerStatSystem _statSystem;
         private IInventorySystem _inventorySystem;
         
@@ -99,43 +100,29 @@ namespace NightHunt.GameplaySystems.Equipment
         
         private void ValidateReferences()
         {
-            // Get components and cast to interfaces
-            if (_statSystemComponent != null)
-                _statSystem = _statSystemComponent as IPlayerStatSystem;
-            
-            if (_inventorySystemComponent != null)
-                _inventorySystem = _inventorySystemComponent as IInventorySystem;
-            
-#if UNITY_EDITOR
-            // Auto-find if not assigned
-            if (_statSystem == null)
-            {
-                var statSys = ComponentResolver.Find<IPlayerStatSystem>(this)
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+        .UseExisting(_statSystemComponent)
         .OnSelf()
         .InChildren()
+        .InParent()
+        .InRootChildren()
         .OrLogWarning("[Auto] IPlayerStatSystem not found")
         .Resolve();
-                if (statSys != null)
-                {
-                    _statSystemComponent = statSys as MonoBehaviour;
-                    _statSystem = statSys;
-                }
-            }
-            
-            if (_inventorySystem == null)
-            {
-                var invSys = ComponentResolver.Find<IInventorySystem>(this)
+
+            if (_statSystem is PlayerStatSystem statConcrete)
+                _statSystemComponent = statConcrete;
+
+            _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
+        .UseExisting(_inventorySystemComponent)
         .OnSelf()
         .InChildren()
+        .InParent()
+        .InRootChildren()
         .OrLogWarning("[Auto] IInventorySystem not found")
         .Resolve();
-                if (invSys != null)
-                {
-                    _inventorySystemComponent = invSys as MonoBehaviour;
-                    _inventorySystem = invSys;
-                }
-            }
-#endif
+
+            if (_inventorySystem is InventorySystem invConcrete)
+                _inventorySystemComponent = invConcrete;
             
             if (_inventoryConfig == null)
                 Debug.LogError("[EquipmentSystem] InventoryConfig is null!");
@@ -151,39 +138,7 @@ namespace NightHunt.GameplaySystems.Equipment
         [ContextMenu("Validate References")]
         protected override void OnValidate()
         {
-            if (_statSystemComponent != null)
-                _statSystem = _statSystemComponent as IPlayerStatSystem;
-            
-            if (_inventorySystemComponent != null)
-                _inventorySystem = _inventorySystemComponent as IInventorySystem;
-            
-            if (_statSystem == null)
-            {
-                var statSys = ComponentResolver.Find<IPlayerStatSystem>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] IPlayerStatSystem not found")
-        .Resolve();
-                if (statSys != null)
-                {
-                    _statSystemComponent = statSys as MonoBehaviour;
-                    _statSystem = statSys;
-                }
-            }
-            
-            if (_inventorySystem == null)
-            {
-                var invSys = ComponentResolver.Find<IInventorySystem>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] IInventorySystem not found")
-        .Resolve();
-                if (invSys != null)
-                {
-                    _inventorySystemComponent = invSys as MonoBehaviour;
-                    _inventorySystem = invSys;
-                }
-            }
+            ValidateReferences();
         }
 #endif
         

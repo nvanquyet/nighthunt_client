@@ -3,6 +3,7 @@ using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.Gameplay.Character.Combat.Weapons;
+using NightHunt.GameplaySystems.Aim;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
@@ -26,7 +27,7 @@ namespace NightHunt.GameplaySystems.Weapon
     {
         [Header("Aim Trail")]
         [SerializeField] private LineRenderer _aimTrailLine;
-        [SerializeField] private MonoBehaviour _aimSystemSource;
+        [SerializeField] private AimSystem _aimSystemSource;
         [SerializeField] private float _aimTrailFallbackLength = 15f;
         [SerializeField] private float _aimTrailLingerDuration = 0.12f;
         [SerializeField] private Color _aimTrailStartColor  = new Color(1f, 0.4f, 0f, 0.85f);
@@ -51,7 +52,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 .Resolve();
 
             _aimSystem = ComponentResolver.Find<IAimSystem>(this)
-                .UseExisting(_aimSystemSource as IAimSystem)
+                .UseExisting(_aimSystemSource)
                 .OnSelf().InParent()
                 .OrDefault(null)   // optional — injected later via Initialize()
                 .Resolve();

@@ -1,4 +1,5 @@
 using FOW;
+using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Utilities;
@@ -10,6 +11,7 @@ namespace NightHunt.Gameplay.FogOfWar
     /// Binds player VisionRange stat to FogOfWarRevealer3D.ViewRadius.
     /// - Đọc stat qua IPlayerStatSystem (GetStat / OnStatChanged).
     /// - Chỉ dùng cho local client (fog là visual client-side).
+    /// - Khi player chết, tắt revealer để không reveal FOW qua fog.
     /// </summary>
     [RequireComponent(typeof(FogOfWarRevealer3D))]
     public class FogVisionBinder : MonoBehaviour
@@ -20,6 +22,7 @@ namespace NightHunt.Gameplay.FogOfWar
 
         private FogOfWarRevealer3D _revealer;
         private IPlayerStatSystem _statSystem;
+        private CharacterLifecycleController _lifecycle;
         private bool _initialized;
 
         private void Awake()
@@ -32,6 +35,12 @@ namespace NightHunt.Gameplay.FogOfWar
                 .OnSelf().InParent().InRootChildren()
                 .OrLogWarning("[FogVisionBinder] IPlayerStatSystem not found — using defaultViewRadius only")
                 .Resolve();
+
+            // CharacterLifecycleController is on the player root.
+            _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(this)
+                .OnSelf().InParent().InRootChildren()
+                .OrLogWarning("[FogVisionBinder] CharacterLifecycleController not found — death vision disable will not work")
+                .Resolve();
         }
 
         private void OnEnable()
@@ -40,16 +49,24 @@ namespace NightHunt.Gameplay.FogOfWar
             ApplyVisionFromStats();
 
             if (_statSystem != null)
-            {
                 _statSystem.OnStatChanged += HandleStatChanged;
+
+            if (_lifecycle != null)
+            {
+                _lifecycle.OnDied      += OnPlayerDied;
+                _lifecycle.OnRespawned += OnPlayerRespawned;
             }
         }
 
         private void OnDisable()
         {
             if (_statSystem != null)
-            {
                 _statSystem.OnStatChanged -= HandleStatChanged;
+
+            if (_lifecycle != null)
+            {
+                _lifecycle.OnDied      -= OnPlayerDied;
+                _lifecycle.OnRespawned -= OnPlayerRespawned;
             }
         }
 
@@ -66,8 +83,38 @@ namespace NightHunt.Gameplay.FogOfWar
                     .OnSelf().InParent().InRootChildren()
                     .Resolve();
 
+            if (_lifecycle == null)
+                _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(this)
+                    .OnSelf().InParent().InRootChildren()
+                    .Resolve();
+
             _initialized = true;
         }
+
+        // ── Death / Respawn ──────────────────────────────────────────────────────
+
+        /// <summary>Disable FOW revealer so the dead player doesn't reveal fog.</summary>
+        private void OnPlayerDied()
+        {
+            if (_revealer != null)
+            {
+                _revealer.enabled = false;
+                Debug.Log("[FogVisionBinder] Player died — FogOfWarRevealer3D disabled.");
+            }
+        }
+
+        /// <summary>Re-enable FOW revealer when player respawns.</summary>
+        private void OnPlayerRespawned()
+        {
+            if (_revealer != null)
+            {
+                _revealer.enabled = true;
+                ApplyVisionFromStats(); // restore correct radius
+                Debug.Log("[FogVisionBinder] Player respawned — FogOfWarRevealer3D re-enabled.");
+            }
+        }
+
+        // ── Stat Handling ────────────────────────────────────────────────────────
 
         private void HandleStatChanged(PlayerStatType type, float oldValue, float newValue)
         {
@@ -104,4 +151,3 @@ namespace NightHunt.Gameplay.FogOfWar
         }
     }
 }
-

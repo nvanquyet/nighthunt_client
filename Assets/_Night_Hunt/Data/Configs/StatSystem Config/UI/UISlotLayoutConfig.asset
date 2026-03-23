@@ -13,44 +13,26 @@ MonoBehaviour:
   m_Name: UISlotLayoutConfig
   m_EditorClassIdentifier: 
   InventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
-  DefaultSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c, type: 3}
-  EquipmentSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c, type: 3}
-  WeaponSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c, type: 3}
-  QuickSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c, type: 3}
+  DefaultSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c,
+    type: 3}
+  EquipmentSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c,
+    type: 3}
+  WeaponSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c,
+    type: 3}
   RarityBackgrounds:
   - Rarity: 0
-    BackgroundIcon: {fileID: 21300000, guid: cdbd08e5720df46fd8976300c1385ebb, type: 3}
+    BackgroundIcon: {fileID: 21300000, guid: 5dcb803f0961d03488b500ccff2dfdab, type: 3}
   - Rarity: 2
-    BackgroundIcon: {fileID: 21300000, guid: 83e78b7af97b74bd78c68a3161b7dbd2, type: 3}
+    BackgroundIcon: {fileID: 21300000, guid: 5a784dde5be2d994c96170dbad272656, type: 3}
   - Rarity: 3
-    BackgroundIcon: {fileID: 21300000, guid: 3ba6c07fea15444b4be42631765f6601, type: 3}
+    BackgroundIcon: {fileID: 21300000, guid: d0bc4614441f2444b8b9de8f70868bae, type: 3}
   - Rarity: 4
-    BackgroundIcon: {fileID: 21300000, guid: 6b808320e78cf4284ba6da11c9e36330, type: 3}
-  DefaultBackground: {fileID: 21300000, guid: cdbd08e5720df46fd8976300c1385ebb, type: 3}
-  AttachmentSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c, type: 3}
-  AttachmentSlotIcons:
-  - SlotType: 1
-    Icon: {fileID: 21300000, guid: 3a6567b9fa2434fc39b7abd05567341a, type: 3}
-  - SlotType: 2
-    Icon: {fileID: 21300000, guid: 19b2b49c098a045d18abf15b0aad0ac7, type: 3}
-  - SlotType: 3
-    Icon: {fileID: 21300000, guid: 735df97bad1294ff0b64657db9450b8b, type: 3}
-  - SlotType: 4
-    Icon: {fileID: 21300000, guid: 41ee73a4f78b04fec828aad016a6b1fd, type: 3}
-  - SlotType: 5
-    Icon: {fileID: 21300000, guid: b00bb7a68a27b48f994f466c42012099, type: 3}
-  - SlotType: 7
-    Icon: {fileID: 21300000, guid: 12ebdb63976d54953895e1023948cb00, type: 3}
-  - SlotType: 8
-    Icon: {fileID: 21300000, guid: 2f5f2ef2ff37e4e2caa248c42e398156, type: 3}
-  - SlotType: 9
-    Icon: {fileID: 21300000, guid: 5c3b5af4226a944c2b38fb1a34402ee1, type: 3}
-  - SlotType: 10
-    Icon: {fileID: 21300000, guid: f7e12d72469a346239560426159acd60, type: 3}
-  - SlotType: 11
-    Icon: {fileID: 21300000, guid: c57236891f67445dda75d017d6418dbc, type: 3}
-  - SlotType: 11
-    Icon: {fileID: 21300000, guid: c57236891f67445dda75d017d6418dbc, type: 3}
-  DefaultAttachmentSlotIcon: {fileID: 21300000, guid: 51308a105c1fd47adadaf1d59f9a85f7, type: 3}
-  ShowAttachmentPanelOnHover: 1
-  ShowAttachmentPanelOnSelect: 1
+    BackgroundIcon: {fileID: 21300000, guid: 6ba508f5ad7d2a149998d6ee73d5aac1, type: 3}
+  - Rarity: 5
+    BackgroundIcon: {fileID: 21300000, guid: 69f759219ac5ce543959feefaf09442c, type: 3}
+  DefaultBackground: {fileID: 21300000, guid: 5dcb803f0961d03488b500ccff2dfdab, type: 3}
+  AttachmentSlotPrefab: {fileID: 7577841577897867870, guid: cddddd0e3ab24be49b4b7c87e8d9b71c,
+    type: 3}
+  DefaultExtraEmptySlots: 20
+  MinimumEmptySlots: 10
+  DefaultSlotSize: {x: 100, y: 100}

@@ -6,6 +6,7 @@ using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Utilities;
 
@@ -32,7 +33,7 @@ namespace NightHunt.Gameplay.Character.Combat
     {
         [Header("References")]
         [Tooltip("PlayerStatSystem on this player. Auto-resolved if null.")]
-        [SerializeField] private MonoBehaviour _statSystemSource;
+        [SerializeField] private PlayerStatSystem _statSystemSource;
 
         [Tooltip("CharacterLifecycleController for death/respawn events. Auto-resolved if null.")]
         [SerializeField] private CharacterLifecycleController _lifecycle;
@@ -72,15 +73,7 @@ namespace NightHunt.Gameplay.Character.Combat
         .OrLogWarning("[Auto] NetworkPlayer not found")
         .Resolve();
 
-            if (_statSystemSource != null)
-                _statSystem = _statSystemSource as IPlayerStatSystem;
-
-            if (_statSystem == null)
-                _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] IPlayerStatSystem not found")
-        .Resolve();
+            ResolveReferences();
 
             if (_lifecycle == null)
                 _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(this)
@@ -88,6 +81,28 @@ namespace NightHunt.Gameplay.Character.Combat
         .InChildren()
         .OrLogWarning("[Auto] CharacterLifecycleController not found")
         .Resolve();
+        }
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            ResolveReferences();
+        }
+#endif
+
+        private void ResolveReferences()
+        {
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+        .UseExisting(_statSystemSource)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .InRootChildren()
+        .OrLogWarning("[Auto] IPlayerStatSystem not found")
+        .Resolve();
+
+            if (_statSystem is PlayerStatSystem statConcrete)
+                _statSystemSource = statConcrete;
         }
 
         public override void OnStartServer()

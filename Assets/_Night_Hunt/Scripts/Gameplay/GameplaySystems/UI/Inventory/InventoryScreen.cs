@@ -26,7 +26,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Header("Roots")] [SerializeField] private RectTransform _inventoryGridRoot;
         [SerializeField] private RectTransform _equipmentRoot;
         [SerializeField] private RectTransform _weaponRoot;
-        [SerializeField] private RectTransform _quickSlotRoot;
         [SerializeField] private RectTransform _trashSlotRoot;
 
         [Header("Trash Slot")] [Tooltip("Prefab cho trash slot (setup thủ công trong Inspector)")] [SerializeField]
@@ -38,6 +37,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         [Header("Buttons")] [SerializeField] private UnityEngine.UI.Button _sortButton;
 
+        [Header("Item Context Menu")]
+        [Tooltip("Floating context menu shown when an item slot is selected. Lives outside slot prefabs.")]
+        [SerializeField] private ItemContextMenu _itemContextMenu;
+
         [Header("Attachment Panel")] [SerializeField]
         private AttachmentPanel _attachmentPanel;
 
@@ -47,6 +50,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private DropQuantityDialog _dropQuantityDialog;
 
         private ItemSlotView _hoveredSlot;
+        private ItemSlotView _selectedSlot;
 
         private void Awake()
         {
@@ -268,34 +272,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
             }
 
-            // QuickSlot
-            if (_quickSlotRoot != null)
-            {
-                var prefab = _uiConfig.GetSlotPrefab(UISlotType.QuickSlot);
-                if (prefab != null)
-                {
-                    for (int i = 0; i < _uiConfig.QuickSlotCount; i++)
-                    {
-                        var go = Instantiate(prefab, _quickSlotRoot, false);
-                        SetupSlotRectTransform(go);
-                        var view = ComponentResolver.Find<ItemSlotView>(go)
-                            .OnSelf()
-                            .InChildren()
-                            .OrLogWarning("[Auto] ItemSlotView not found")
-                            .Resolve();
-                        if (view != null)
-                        {
-                            var id = UISlotId.QuickSlot(i);
-                            view.Initialize(_uiConfig, id);
-                            // Force reset về empty state để đảm bảo icon được set đúng
-                            view.SetEmptyState();
-                            _slotViews[id] = view;
-                            DragDropController.Instance?.RegisterSlotView(view);
-                        }
-                    }
-                }
-            }
-
             // Trash Slot
             if (_trashSlotRoot != null && _trashSlotPrefab != null)
             {
@@ -326,8 +302,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_equipmentRoot);
             if (_weaponRoot != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_weaponRoot);
-            if (_quickSlotRoot != null)
-                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_quickSlotRoot);
             if (_trashSlotRoot != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_trashSlotRoot);
 
@@ -442,14 +416,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _domainBridge.OnInventorySlotChanged += HandleInventorySlotChanged;
                 _domainBridge.OnEquipmentSlotChanged += HandleEquipmentSlotChanged;
                 _domainBridge.OnWeaponSlotChanged += HandleWeaponSlotChanged;
-                _domainBridge.OnQuickSlotChanged += HandleQuickSlotChanged;
             }
             else
             {
                 _domainBridge.OnInventorySlotChanged -= HandleInventorySlotChanged;
                 _domainBridge.OnEquipmentSlotChanged -= HandleEquipmentSlotChanged;
                 _domainBridge.OnWeaponSlotChanged -= HandleWeaponSlotChanged;
-                _domainBridge.OnQuickSlotChanged -= HandleQuickSlotChanged;
             }
         }
 
@@ -468,22 +440,26 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             UpdateSlot(id, state);
         }
 
-        private void HandleQuickSlotChanged(UISlotId id, UISlotState state)
-        {
-            UpdateSlot(id, state);
-        }
-
         private void UpdateSlot(UISlotId id, UISlotState state)
         {
             if (_slotViews.TryGetValue(id, out var view))
-            {
                 view.SetState(state);
-            }
+
+            // If the updated slot is currently selected and item is gone, dismiss context menu.
+            if (_selectedSlot != null && _selectedSlot.SlotId.Equals(id) && state?.Item == null)
+                ClearSelection();
         }
 
         private void OnSortClicked()
         {
             _domainBridge?.RequestSortInventory(InventorySortMode.Default);
+        }
+
+        private void ClearSelection()
+        {
+            _selectedSlot?.SetSelectedVisual(false);
+            _selectedSlot = null;
+            _itemContextMenu?.Hide();
         }
 
         #region Attachment Panel Hover Logic
@@ -501,16 +477,75 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 {
                     if (subscribe)
                     {
-                        input.OnSlotHoverEnter += OnSlotHoverEnter;
-                        input.OnSlotHoverExit += OnSlotHoverExit;
+                        input.OnSlotHoverEnter    += OnSlotHoverEnter;
+                        input.OnSlotHoverExit     += OnSlotHoverExit;
+                        input.OnSlotPressed       += OnSlotPressed;
+                        input.OnSlotDoubleClicked += OnSlotDoubleClicked;
                     }
                     else
                     {
-                        input.OnSlotHoverEnter -= OnSlotHoverEnter;
-                        input.OnSlotHoverExit -= OnSlotHoverExit;
+                        input.OnSlotHoverEnter    -= OnSlotHoverEnter;
+                        input.OnSlotHoverExit     -= OnSlotHoverExit;
+                        input.OnSlotPressed       -= OnSlotPressed;
+                        input.OnSlotDoubleClicked -= OnSlotDoubleClicked;
                     }
                 }
             }
+        }
+
+        private void OnSlotPressed(ItemSlotView slotView)
+        {
+            // Toggle off if same slot is pressed again.
+            if (_selectedSlot == slotView && _itemContextMenu != null && _itemContextMenu.IsVisible)
+            {
+                ClearSelection();
+                return;
+            }
+
+            ClearSelection();
+
+            // Empty slot → only hide, no context menu.
+            if (slotView?.State?.Item == null)
+                return;
+
+            _selectedSlot = slotView;
+            slotView.SetSelectedVisual(true);
+
+            if (_itemContextMenu != null)
+            {
+                var slotRect = slotView.transform as RectTransform;
+                _itemContextMenu.Show(slotView.State.Item, slotView.SlotId, slotRect, _domainBridge, _dropQuantityDialog);
+            }
+        }
+
+        private void OnSlotDoubleClicked(ItemSlotView slotView)
+        {
+            var item = slotView?.State?.Item;
+            if (item == null || _domainBridge?.Bridge == null) return;
+
+            bool isEquipSlot = slotView.SlotId.Type == UISlotType.Equipment
+                            || slotView.SlotId.Type == UISlotType.Weapon;
+            if (isEquipSlot)
+            {
+                // Double-click on equipped slot → unequip.
+                if (slotView.SlotId.Type == UISlotType.Weapon && slotView.SlotId.WeaponSlot.HasValue)
+                    _domainBridge.Bridge.UnequipWeapon(slotView.SlotId.WeaponSlot.Value);
+                else if (slotView.SlotId.EquipmentSlot.HasValue)
+                    _domainBridge.Bridge.UnequipItem(slotView.SlotId.EquipmentSlot.Value);
+            }
+            else
+            {
+                // Double-click on inventory slot → equip immediately.
+                var def = ItemDatabase.GetDefinition(item.DefinitionID);
+                if (def == null) return;
+
+                if (def.Type == ItemType.Weapon)
+                    _domainBridge.Bridge.EquipWeapon(item.InstanceID);
+                else if (def.Type == ItemType.Equipment)
+                    _domainBridge.Bridge.EquipItem(item.InstanceID);
+            }
+
+            ClearSelection();
         }
 
         private void OnSlotHoverEnter(ItemSlotView slotView)
@@ -522,11 +557,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 var def = ItemDatabase.GetDefinition(slotView.State.Item.DefinitionID);
 
-                // Show tooltip với Item Stats (sử dụng mouse position để tooltip follow mouse)
                 if (_itemTooltip != null)
                 {
                     Vector3 mousePos = Input.mousePosition;
-                    _itemTooltip.Show(slotView.State.Item, mousePos);
+                    string slotLabel = GetSlotLabel(slotView.SlotId);
+                    _itemTooltip.Show(slotView.State.Item, mousePos, slotLabel);
                 }
 
                 // Show attachment panel nếu item có attachment slots và config cho phép hover
@@ -573,6 +608,25 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 // FIX: Chỉ hide attachment panel nếu không pinned
                 if (_attachmentPanel != null && !_attachmentPanel.IsPinned)
                     _attachmentPanel.Hide();
+            }
+        }
+
+        private static string GetSlotLabel(UISlotId slotId)
+        {
+            switch (slotId.Type)
+            {
+                case UISlotType.Equipment:
+                    return slotId.EquipmentSlot.HasValue
+                        ? $"{slotId.EquipmentSlot.Value} Slot"
+                        : "Equipment Slot";
+                case UISlotType.Weapon:
+                    return slotId.WeaponSlot.HasValue
+                        ? $"{slotId.WeaponSlot.Value} Weapon Slot"
+                        : "Weapon Slot";
+                case UISlotType.Attachment:
+                    return $"Attachment [{slotId.Index}]";
+                default:
+                    return null;
             }
         }
 

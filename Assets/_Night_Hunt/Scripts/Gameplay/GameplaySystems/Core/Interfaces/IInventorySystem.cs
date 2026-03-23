@@ -151,6 +151,12 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Server-side only.
         /// </summary>
         void BatchAssignIndices(Dictionary<string, int> assignments);
+
+        /// <summary>
+        /// Request a server-side sort of the inventory by item type then definition ID.
+        /// Safe to call from the owning client — routes to the server via ServerRpc.
+        /// </summary>
+        void RequestSortByType();
         
         #endregion
         

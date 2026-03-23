@@ -21,7 +21,6 @@ namespace NightHunt.GameplaySystems.Loot
 
         [SerializeField] private MonoBehaviour inventorySystemComponent;
         [SerializeField] private MonoBehaviour equipmentSystemComponent;
-        [SerializeField] private MonoBehaviour quickSlotSystemComponent;
         [SerializeField] private MonoBehaviour attachmentSystemComponent;
 
         [Header("Prefab")] [Tooltip("Corpse prefab with WorldCorpse component")] [SerializeField]
@@ -29,7 +28,6 @@ namespace NightHunt.GameplaySystems.Loot
 
         private IInventorySystem inventorySystem;
         private IEquipmentSystem equipmentSystem;
-        private IQuickSlotSystem quickSlotSystem;
         private IAttachmentSystem attachmentSystem;
 
         private void Awake()
@@ -47,9 +45,6 @@ namespace NightHunt.GameplaySystems.Loot
 
             if (equipmentSystemComponent != null)
                 equipmentSystem = equipmentSystemComponent as IEquipmentSystem;
-
-            if (quickSlotSystemComponent != null)
-                quickSlotSystem = quickSlotSystemComponent as IQuickSlotSystem;
 
             if (attachmentSystemComponent != null)
                 attachmentSystem = attachmentSystemComponent as IAttachmentSystem;
@@ -76,17 +71,6 @@ namespace NightHunt.GameplaySystems.Loot
                     .Resolve();
                 if (equipmentSystem != null)
                     equipmentSystemComponent = equipmentSystem as MonoBehaviour;
-            }
-
-            if (quickSlotSystem == null)
-            {
-                quickSlotSystem = ComponentResolver.Find<IQuickSlotSystem>(this)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] IQuickSlotSystem not found")
-                    .Resolve();
-                if (quickSlotSystem != null)
-                    quickSlotSystemComponent = quickSlotSystem as MonoBehaviour;
             }
 
             if (attachmentSystem == null)
@@ -138,7 +122,7 @@ namespace NightHunt.GameplaySystems.Loot
         }
 
         /// <summary>
-        /// SERVER: Collect all items from player (inventory + equipment + quickslot)
+        /// SERVER: Collect all items from player (inventory + equipment + selected-use state)
         /// </summary>
         [Server]
         private List<ItemInstanceData> CollectAllItems()
@@ -176,21 +160,6 @@ namespace NightHunt.GameplaySystems.Loot
                 {
                     items.Add(item.ToData());
                 }
-            }
-
-            // 3. QuickSlot items (clear trước)
-            if (quickSlotSystem != null)
-            {
-                var slots = quickSlotSystem.GetAllQuickSlots();
-                foreach (var item in slots)
-                {
-                    if (item != null)
-                    {
-                        items.Add(item.ToData());
-                    }
-                }
-
-                quickSlotSystem.ClearAllQuickSlots();
             }
 
             return items;

@@ -15,7 +15,7 @@ namespace NightHunt.Gameplay.Input
         Player      = 1 << 0,   // Move, Sprint, Crouch, Interact, Pickup, LogNearby
         Combat      = 1 << 1,   // Fire, AimDownSights, Reload, SwitchWeapon, WeaponSlots, Grenade
         Camera      = 1 << 2,   // RotateLeft/Right, Look, Zoom
-        Inventory   = 1 << 3,   // OpenInventory, DropItem, QuickSlots, UseConsumable
+        Inventory   = 1 << 3,   // OpenInventory, DropItem, ItemSelection, UseConsumable
         Team        = 1 << 4,   // Ping, RequestHelp, Revive, VoiceChat, Scoreboard
         UI          = 1 << 5,   // Navigate, Submit, Cancel, Point, Click, OpenMenu
         Spectator   = 1 << 6,   // NextPlayer, PreviousPlayer, FreeCamera
