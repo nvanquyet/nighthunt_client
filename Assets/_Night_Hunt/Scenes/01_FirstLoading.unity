@@ -911,7 +911,11 @@ MonoBehaviour:
   loadingPanel: {fileID: 522072718}
   progressBar: {fileID: 549642942}
   loadingText: {fileID: 1912977629}
+  retryButton: {fileID: 0}
   minLoadingTime: 1
+  internetTimeout: 5
+  _backendConfig: {fileID: 0}
+  _healthPath: /api/actuator/health
 --- !u!1 &592464437
 GameObject:
   m_ObjectHideFlags: 0
@@ -1167,17 +1171,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 27e7f779806827c4a81b91413b6b4f88, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  destroyDuplicates: 1
-  autoCreateIfMissing: 0
   canvas: {fileID: 606956023}
   canvasScaler: {fileID: 606956022}
   graphicRaycaster: {fileID: 606956021}
   loadingManager: {fileID: 583709529}
-  reconnectPopup: {fileID: 1816754772}
+  matchLoadingOverlay: {fileID: 0}
   pingDisplay: {fileID: 1874384387}
-  noticePopup: {fileID: 91197793}
   toastService: {fileID: 0}
-  notificationService: {fileID: 0}
 --- !u!1 &614230712
 GameObject:
   m_ObjectHideFlags: 0
@@ -1211,11 +1211,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   backendHttpClient: {fileID: 190463136}
   authService: {fileID: 829442989}
+  friendService: {fileID: 0}
+  partyService: {fileID: 0}
   roomService: {fileID: 1823424517}
   gameWebSocketService: {fileID: 490791447}
   instanceConfig: {fileID: 11400000, guid: 0f5f819c031caaf48a42a6c061541fb5, type: 2}
   sessionState: {fileID: 614230716}
   roomState: {fileID: 614230715}
+  _debugConfig: {fileID: 0}
 --- !u!4 &614230714
 Transform:
   m_ObjectHideFlags: 0

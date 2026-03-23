@@ -1781,21 +1781,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 70792212c81e76c4b83701cf0b9030f5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  usernameText: {fileID: 921329705}
-  emailText: {fileID: 2045977119}
-  userIdText: {fileID: 1081230313}
-  rankTierText: {fileID: 0}
-  customGameButton: {fileID: 0}
-  logoutButton: {fileID: 798660787}
-  rankedIdlePanel: {fileID: 0}
-  findMatchButton: {fileID: 0}
-  rankedSearchingPanel: {fileID: 0}
-  searchTimeText: {fileID: 0}
-  cancelSearchButton: {fileID: 0}
-  rankedMatchFoundPanel: {fileID: 0}
-  matchFoundCountdownText: {fileID: 0}
-  acceptMatchButton: {fileID: 0}
-  declineMatchButton: {fileID: 0}
+  btn_ExitToggle: {fileID: 0}
+  characterThumbnail: {fileID: 0}
+  profileNameText: {fileID: 0}
+  rankText: {fileID: 0}
+  partyController: {fileID: 0}
+  friendPanelView: {fileID: 0}
+  onHomeShown:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &611306048
 GameObject:
   m_ObjectHideFlags: 0

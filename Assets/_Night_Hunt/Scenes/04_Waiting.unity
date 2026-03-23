@@ -8677,9 +8677,7 @@ MonoBehaviour:
   slotText: {fileID: 1902367343}
   readyIndicator: {fileID: 1043123266}
   slotButton: {fileID: 2002661032}
-  kickButton: {fileID: 59274756}
-  transferOwnerButton: {fileID: 1004226363}
-  emptySlotIndicator: {fileID: 1834398722}
+  dataContainer: {fileID: 0}
 --- !u!224 &2002661031
 RectTransform:
   m_ObjectHideFlags: 0

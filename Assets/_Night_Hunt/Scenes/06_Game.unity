@@ -1234,6 +1234,8 @@ MonoBehaviour:
   initialState: 0
   phaseStartTime: 0
   phaseDuration: 0
+  phaseConfigs: []
+  _debugConfig: {fileID: 0}
 --- !u!4 &135357891
 Transform:
   m_ObjectHideFlags: 0
@@ -2480,6 +2482,7 @@ MonoBehaviour:
   clientNetworkHandlerPrefab: {fileID: 7694985338745521037, guid: 23374191f5ee8534bb98f97a4336e8b9,
     type: 3}
   _expectedPlayerCount: 2
+  _debugConfig: {fileID: 0}
 --- !u!4 &565773267
 Transform:
   m_ObjectHideFlags: 0
@@ -8501,13 +8504,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   phaseText: {fileID: 0}
-  phaseDescriptionText: {fileID: 0}
   timerText: {fileID: 0}
-  phaseTimerText: {fileID: 0}
   teamScoreText: {fileID: 0}
   personalScoreText: {fileID: 0}
-  teamListParent: {fileID: 0}
+  teamAListParent: {fileID: 0}
+  teamBListParent: {fileID: 0}
+  teamAHeaderText: {fileID: 0}
+  teamBHeaderText: {fileID: 0}
   teamMemberPrefab: {fileID: 0}
+  characterAvatars: []
   warningPanel: {fileID: 0}
   warningText: {fileID: 0}
   warningBackground: {fileID: 0}
@@ -9066,10 +9071,7 @@ MonoBehaviour:
   _componentIndexCache: 255
   _addedNetworkObject: {fileID: 1663079585}
   _networkObjectCache: {fileID: 0}
-  campingTimeThreshold: 90
-  positionThreshold: 5
-  revealRadius: 30
-  updateInterval: 5
+  _gameplayConfig: {fileID: 0}
   revealIndicatorPrefab: {fileID: 0}
 --- !u!4 &1663079587
 Transform:

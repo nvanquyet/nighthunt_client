@@ -3220,20 +3220,30 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 887f7045eda45bd4d8e19f994790d940, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  loginPanel: {fileID: 0}
-  registerPanel: {fileID: 0}
-  goToRegisterButton: {fileID: 0}
-  backToLoginButton: {fileID: 0}
   usernameInput: {fileID: 125581723}
   passwordInput: {fileID: 1308477397}
+  rememberMeSwitch: {fileID: 0}
   loginButton: {fileID: 458946474}
-  errorText: {fileID: 2110432369}
   regUsernameInput: {fileID: 0}
   emailInput: {fileID: 1267870548}
   regPasswordInput: {fileID: 0}
   confirmPasswordInput: {fileID: 608284898}
+  agreeToTermsSwitch: {fileID: 0}
   registerButton: {fileID: 1836443729}
-  regErrorText: {fileID: 0}
+  onLoginSuccess:
+    m_PersistentCalls:
+      m_Calls: []
+  onLoginFailed:
+    m_PersistentCalls:
+      m_Calls: []
+  onRegisterSuccess:
+    m_PersistentCalls:
+      m_Calls: []
+  onRegisterFailed:
+    m_PersistentCalls:
+      m_Calls: []
+  loginLoadingIndicator: {fileID: 0}
+  registerLoadingIndicator: {fileID: 0}
   authService: {fileID: 0}
 --- !u!1 &2110432368
 GameObject:
