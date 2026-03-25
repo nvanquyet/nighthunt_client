@@ -62,6 +62,8 @@
   <Project Path="UnityEngine.Purchasing.AppleMacosStub.csproj" />
   <Project Path="Unity.AI.Navigation.Updater.csproj" />
   <Project Path="UnityEngine.Purchasing.Codeless.csproj" />
+  <Project Path="ShaderCrew.SeeThroughShader.Core.Runtime.csproj" />
+  <Project Path="ShaderCrew.SeeThroughShader.Core.Editor.csproj" />
   <Project Path="UnityEditor.UI.csproj" />
   <Project Path="Unity.Analytics.DataPrivacy.csproj" />
   <Project Path="Unity.AI.Navigation.Editor.csproj" />
@@ -69,6 +71,7 @@
   <Project Path="Unity.FishNet.Codegen.csproj" />
   <Project Path="UnityEngine.Advertisements.DevX.Editor.csproj" />
   <Project Path="Unity.Services.Core.Configuration.Editor.csproj" />
+  <Project Path="ShaderCrew.SeeThroughShader.Core.ShaderGraph.Editor.csproj" />
   <Project Path="Unity.Services.Core.Configuration.csproj" />
   <Project Path="Unity.Multiplayer.Center.Common.csproj" />
   <Project Path="DOTween.Modules.csproj" />
@@ -125,6 +128,7 @@
   <Project Path="Unity.Services.Core.Environments.csproj" />
   <Project Path="Unity.Collections.Editor.csproj" />
   <Project Path="Unity.RenderPipelines.Universal.Config.Runtime.csproj" />
+  <Project Path="ShaderCrew.SeeThroughShader.Core.StackableForBetterShaders.Editor.csproj" />
   <Project Path="Unity.RenderPipelines.ShaderGraph.ShaderGraphLibrary.csproj" />
   <Project Path="Unity.RenderPipelines.Core.ShaderLibrary.csproj" />
   <Project Path="Unity.RenderPipelines.Core.Editor.Shared.csproj" />

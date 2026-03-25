@@ -126,13 +126,18 @@ namespace NightHunt.Networking
                 .InChildren()
                 .OrLogWarning("[Auto] IItemUseSystem not found")
                 .Resolve();
+            var attachment = ComponentResolver.Find<IAttachmentSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .OrLogWarning("[Auto] IAttachmentSystem not found")
+                .Resolve();
 
             // Create bridge with DI
             if (inventory != null && equipment != null && weapon != null &&
                 itemSelection != null && statSystem != null && itemUse != null)
             {
                 GamePlaySystemBridge = new GameplaySystemsBridge(
-                    inventory, equipment, weapon, itemSelection, statSystem, itemUse);
+                    inventory, equipment, weapon, itemSelection, statSystem, itemUse, attachment);
             }
             else
             {

@@ -1,29 +1,26 @@
-using System.Collections;
 using UnityEngine;
 using FishNet.Object;
-using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
     public partial class WeaponSystem
     {
-        // -- IWeaponSystem — Public equip API -----------------------------------
+        // -- IWeaponSystem ï¿½ Public equip API -----------------------------------
 
         public void EquipWeapon(string instanceID)
         {
-            if (!IsServerInitialized) return;
-            EquipWeaponServer(instanceID);
+            if (IsServerInitialized) { EquipWeaponServer(instanceID); return; }
+            if (IsOwner) EquipWeaponServerRpc(instanceID);
         }
 
         public void EquipWeaponToSlot(string instanceID, WeaponSlotType targetSlot)
         {
-            if (!IsServerInitialized) return;
-            EquipWeaponToSlotServer(instanceID, targetSlot);
+            if (IsServerInitialized) { EquipWeaponToSlotServer(instanceID, targetSlot); return; }
+            if (IsOwner) EquipWeaponToSlotServerRpc(instanceID, targetSlot);
         }
 
         public void UnequipWeapon(WeaponSlotType slot)
@@ -82,7 +79,13 @@ namespace NightHunt.GameplaySystems.Weapon
             AssignToSlot(targetSlot, instanceID, inst, def);
         }
 
-        /// <summary>Common slot assignment — shared by both equip paths.</summary>
+        [ServerRpc(RequireOwnership = true)]
+        private void EquipWeaponServerRpc(string instanceID) => EquipWeaponServer(instanceID);
+
+        [ServerRpc(RequireOwnership = true)]
+        private void EquipWeaponToSlotServerRpc(string instanceID, WeaponSlotType targetSlot) => EquipWeaponToSlotServer(instanceID, targetSlot);
+
+        /// <summary>Common slot assignment ï¿½ shared by both equip paths.</summary>
         [Server]
         private void AssignToSlot(WeaponSlotType slot, string instanceID, ItemInstance inst, WeaponDefinition def)
         {
@@ -99,7 +102,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 Debug.LogError($"[WeaponSystem] MaxAmmo stat missing for '{def.DisplayName}'.");
 
             _inventorySystem.SyncItemState(instanceID);
-            ApplyWeaponModifiers(instanceID, def);
+            // Stat modifier application is handled by StatApplyOrchestrator.
 
             // Auto-select if nothing is active.
             if (_activeSlot.Value == null)
@@ -122,15 +125,9 @@ namespace NightHunt.GameplaySystems.Weapon
 
             // Detach attachments if configured.
             if (InventoryConfig != null && InventoryConfig.DetachAttachmentsOnUnequip)
-            {
-                var attachSys = ComponentResolver.Find<IAttachmentSystem>(this)
-                    .OnSelf().InChildren().InParent()
-                    .OrLogWarning($"[WeaponSystem] DetachAttachmentsOnUnequip=true but IAttachmentSystem not found on '{gameObject.name}'")
-                    .Resolve();
-                attachSys?.DetachAllFromItem(id);
-            }
+                _attachmentSystem?.DetachAllFromItem(id);
+            // Stat modifier removal is handled by StatApplyOrchestrator.
 
-            RemoveWeaponModifiers(id);
             _weapons.Remove(slot);
             _weaponCache.Remove(slot);
             inst.InventoryIndex = FindNextAvailableInventoryIndex();
@@ -172,23 +169,6 @@ namespace NightHunt.GameplaySystems.Weapon
             _activeSlot.Value = null;
         }
 
-        // -- Stat modifiers -----------------------------------------------------
 
-        [Server]
-        private void ApplyWeaponModifiers(string instanceID, WeaponDefinition weaponDef)
-        {
-            if (_statSystem == null) return;
-            foreach (var m in (IEnumerable)weaponDef.GetPlayerModifiers() ?? System.Array.Empty<object>())
-            {
-                // Cast to your modifier type here — kept generic to compile without full type refs.
-                // _statSystem.AddModifier(m.StatType, new StatModifier { ... });
-            }
-        }
-
-        [Server]
-        private void RemoveWeaponModifiers(string instanceID)
-        {
-            _statSystem?.RemoveAllModifiersFromSource(instanceID);
-        }
     }
 }

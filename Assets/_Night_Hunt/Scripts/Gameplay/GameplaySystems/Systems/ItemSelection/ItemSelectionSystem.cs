@@ -71,6 +71,11 @@ namespace NightHunt.GameplaySystems.ItemSelection
 
         private void Awake()
         {
+            // Subscribe to SyncVar changes so events fire on ALL connections
+            // (server via asServer=true, remote clients via asServer=false).
+            // This replaces the old inline OnItemSelected / OnItemDeselected calls
+            // which only ran inside server-only guards and never reached pure clients.
+            _selectedInstanceId.OnChange += OnSelectedInstanceIdChanged;
             ValidateReferences();
         }
 
@@ -109,9 +114,12 @@ namespace NightHunt.GameplaySystems.ItemSelection
         {
             if (!IsServerInitialized) return;
 
+            Debug.Log($"[ItemSelectionSystem] SelectItem('{instanceID}') — current='{_selectedInstanceId.Value}'");
+
             // Toggle: selecting the current item cancels it.
             if (_selectedInstanceId.Value == instanceID && !string.IsNullOrEmpty(instanceID))
             {
+                Debug.Log($"[ItemSelectionSystem] SelectItem: same item already selected → CancelSelection");
                 CancelSelection();
                 return;
             }
@@ -138,10 +146,14 @@ namespace NightHunt.GameplaySystems.ItemSelection
 
             // Cancel any previous use before starting new one.
             if (!string.IsNullOrEmpty(_selectedInstanceId.Value))
+            {
+                Debug.Log($"[ItemSelectionSystem] SelectItem: cancelling previous use of '{_selectedInstanceId.Value}'");
                 _itemUseSystem?.CancelUse();
+            }
 
+            Debug.Log($"[ItemSelectionSystem] SelectItem: selecting '{item.InstanceID}' ({def.DisplayName})");
             _selectedInstanceId.Value = instanceID;
-            OnItemSelected?.Invoke(item);
+            // OnSelectedInstanceIdChanged callback fires automatically via SyncVar.OnChange.
         }
 
         /// <summary>
@@ -153,8 +165,17 @@ namespace NightHunt.GameplaySystems.ItemSelection
         {
             if (!IsServerInitialized) return;
             var item = SelectedItem;
-            if (item == null) return;
-            if (_itemUseSystem?.IsUsingItem == true) return;
+            if (item == null)
+            {
+                Debug.LogWarning($"[ItemSelectionSystem] UseSelectedItem: no item selected (SelectedItem = null).");
+                return;
+            }
+            if (_itemUseSystem?.IsUsingItem == true)
+            {
+                Debug.LogWarning($"[ItemSelectionSystem] UseSelectedItem: already using an item, ignoring.");
+                return;
+            }
+            Debug.Log($"[ItemSelectionSystem] UseSelectedItem: '{item.InstanceID}'");
             _itemUseSystem?.UseItem(item);
         }
 
@@ -162,22 +183,84 @@ namespace NightHunt.GameplaySystems.ItemSelection
         {
             if (!IsServerInitialized || string.IsNullOrEmpty(_selectedInstanceId.Value)) return;
 
+            Debug.Log($"[ItemSelectionSystem] DeselectItem: clearing '{_selectedInstanceId.Value}'");
             _selectedInstanceId.Value = string.Empty;
-            OnItemDeselected?.Invoke();
+            // OnSelectedInstanceIdChanged fires automatically.
         }
 
         public void CancelSelection()
         {
             if (!IsServerInitialized) return;
 
+            Debug.Log($"[ItemSelectionSystem] CancelSelection: cancelling use + clearing '{_selectedInstanceId.Value}'");
             _itemUseSystem?.CancelUse();
             _selectedInstanceId.Value = string.Empty;
-            OnItemDeselected?.Invoke();
+            // OnSelectedInstanceIdChanged fires automatically.
+        }
+
+        // ─── ServerRpc Wrappers ───────────────────────────────────────────────────
+        // Safe to call from client UI. RequireOwnership = true ensures only the
+        // owning player can trigger selection changes on their own character.
+
+        /// <summary>ServerRpc: select an item by instance ID from client UI.</summary>
+        [ServerRpc(RequireOwnership = true)]
+        public void RequestSelectItem(string instanceID)
+        {
+            Debug.Log($"[ItemSelectionSystem] RequestSelectItem('{instanceID}') received on server");
+            SelectItem(instanceID);
+        }
+
+        /// <summary>ServerRpc: deselect without cancelling active use.</summary>
+        [ServerRpc(RequireOwnership = true)]
+        public void RequestDeselectItem()
+        {
+            Debug.Log($"[ItemSelectionSystem] RequestDeselectItem received on server");
+            DeselectItem();
+        }
+
+        /// <summary>ServerRpc: arm the currently selected item.</summary>
+        [ServerRpc(RequireOwnership = true)]
+        public void RequestUseSelectedItem()
+        {
+            Debug.Log($"[ItemSelectionSystem] RequestUseSelectedItem received on server");
+            UseSelectedItem();
+        }
+
+        /// <summary>ServerRpc: cancel active use and deselect.</summary>
+        [ServerRpc(RequireOwnership = true)]
+        public void RequestCancelSelection()
+        {
+            Debug.Log($"[ItemSelectionSystem] RequestCancelSelection received on server");
+            CancelSelection();
         }
 
         #endregion
 
         #region Event Handlers
+
+        /// <summary>
+        /// Called by FishNet whenever _selectedInstanceId syncs.
+        /// • asServer = true  → value was set locally on the server (also fires on host).
+        /// • asServer = false → value arrived via network on a remote client.
+        /// Replacing the old inline OnItemSelected/OnItemDeselected calls so events
+        /// now reach ALL connections, not just the server.
+        /// </summary>
+        private void OnSelectedInstanceIdChanged(string prev, string next, bool asServer)
+        {
+            Debug.Log($"[ItemSelectionSystem] SyncVar changed: '{prev}' → '{next}'  asServer={asServer}");
+            if (string.IsNullOrEmpty(next))
+            {
+                OnItemDeselected?.Invoke();
+            }
+            else
+            {
+                var item = _inventorySystem?.GetItemByInstanceID(next);
+                if (item != null)
+                    OnItemSelected?.Invoke(item);
+                else
+                    Debug.LogWarning($"[ItemSelectionSystem] OnChange: item '{next}' not found in inventory on this connection.");
+            }
+        }
 
         /// <summary>
         /// After a use completes: if the item is fully depleted, clear the selection;
@@ -193,9 +276,10 @@ namespace NightHunt.GameplaySystems.ItemSelection
             var updated = _inventorySystem?.GetItemByInstanceID(completedItem.InstanceID);
             if (updated == null || updated.Quantity <= 0)
             {
+                Debug.Log($"[ItemSelectionSystem] HandleItemUseCompleted: '{completedItem.InstanceID}' depleted → clearing selection");
                 // Item fully depleted — clear selection (UI will auto-switch).
+                // OnSelectedInstanceIdChanged callback fires automatically.
                 _selectedInstanceId.Value = string.Empty;
-                OnItemDeselected?.Invoke();
             }
             // else: quantity remains — keep selection, player fires again to reuse.
         }

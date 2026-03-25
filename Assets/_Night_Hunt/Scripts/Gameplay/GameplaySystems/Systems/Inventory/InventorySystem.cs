@@ -64,8 +64,7 @@ namespace NightHunt.GameplaySystems.Inventory
         private Dictionary<string, int> _syncIndexCache = new Dictionary<string, int>(64);
 
         // BATCH UPDATE STATE
-        private bool _isUpdatingWeight = false;
-        private float _pendingWeightUpdate = 0f;
+        private bool _weightDirty;
 
         #endregion
 
@@ -1173,33 +1172,16 @@ namespace NightHunt.GameplaySystems.Inventory
                 return;
             }
 
-            if (!_isUpdatingWeight)
-            {
-                _isUpdatingWeight = true;
-                _pendingWeightUpdate = CalculateTotalWeight();
-
-                // Defer update to end of frame
-                StartCoroutine(ApplyBatchedWeightUpdate());
-            }
+            _weightDirty = true;
         }
 
-        private System.Collections.IEnumerator ApplyBatchedWeightUpdate()
+        private void LateUpdate()
         {
-            yield return new WaitForEndOfFrame();
-
-            if (_statSystem != null)
+            if (_weightDirty && IsServerInitialized)
             {
-                var weightMod = StatModifier.CreateFlat(
-                    "Inventory",
-                    _pendingWeightUpdate,
-                    0,
-                    "Total inventory weight"
-                );
-
-                _statSystem.AddModifier(PlayerStatType.CurrentWeight, weightMod);
+                _weightDirty = false;
+                UpdateTotalWeight();
             }
-
-            _isUpdatingWeight = false;
         }
 
         [Server]
@@ -1395,6 +1377,12 @@ namespace NightHunt.GameplaySystems.Inventory
                         // FIX: After a removal all subsequent SyncList entries shift down by 1.
                         // Rebuild the sync index cache so subsequent Set callbacks use correct indices.
                         RebuildSyncIndexCache();
+
+                        // BUG 3 FIX: Fire OnItemRemoved so client-side UI (ItemFilterPanel, etc.)
+                        // can update selection and visible list when an item is fully consumed.
+                        // On pure clients this event is only sourced from the SyncList callback
+                        // (the server's RemoveItemServer fires on the server instance only).
+                        OnItemRemoved?.Invoke(removedItem, removedItem.Quantity);
                     }
 
                     break;

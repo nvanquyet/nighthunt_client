@@ -6,7 +6,7 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Configs;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Data;
-using NightHunt.Gameplay.StatSystem.Systems;
+using NightHunt.GameplaySystems.Stat;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
@@ -173,8 +173,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             if (_itemStatsContainer == null || _statRowPrefab == null) return false;
 
-            // Get all item stats từ ItemStatSystem
-            var allStats = ItemStatSystem.GetAllItemStats(item);
+            // Use the instance's pre-computed stats (populated by ItemStatComputer via SAO).
+            // Fall back to an immediate compute if the tooltip is shown before SAO has run
+            // (e.g. on a freshly-created item before the first equip cycle).
+            if (!item.HasValidComputedStats)
+                ItemStatComputer.Compute(item);
+            var allStats = item.GetComputedStatsSnapshot();
 
             if (allStats == null || allStats.Count == 0) return false;
 

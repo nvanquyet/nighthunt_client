@@ -7,10 +7,6 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.Gameplay.StatSystem.Core.Interfaces;
-using NightHunt.Gameplay.StatSystem.Core.Types;
-using NightHunt.Gameplay.StatSystem.Core.Data;
-using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Equipment
@@ -27,10 +23,9 @@ namespace NightHunt.GameplaySystems.Equipment
         [SerializeField] private InventoryConfig _inventoryConfig;
         
         [Header("References")]
-        [SerializeField] private PlayerStatSystem _statSystemComponent;
         [SerializeField] private InventorySystem _inventorySystemComponent;
-        private IPlayerStatSystem _statSystem;
         private IInventorySystem _inventorySystem;
+        private IAttachmentSystem _attachmentSystem;
         
         [Header("Debug")]
         [SerializeField] private bool _enableDebugLogs = false;
@@ -100,18 +95,6 @@ namespace NightHunt.GameplaySystems.Equipment
         
         private void ValidateReferences()
         {
-            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
-        .UseExisting(_statSystemComponent)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .InRootChildren()
-        .OrLogWarning("[Auto] IPlayerStatSystem not found")
-        .Resolve();
-
-            if (_statSystem is PlayerStatSystem statConcrete)
-                _statSystemComponent = statConcrete;
-
             _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
         .UseExisting(_inventorySystemComponent)
         .OnSelf()
@@ -123,12 +106,17 @@ namespace NightHunt.GameplaySystems.Equipment
 
             if (_inventorySystem is InventorySystem invConcrete)
                 _inventorySystemComponent = invConcrete;
-            
+
+            _attachmentSystem = ComponentResolver.Find<IAttachmentSystem>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .InRootChildren()
+        .OrLogWarning("[EquipmentSystem] IAttachmentSystem not found — DetachAttachmentsOnUnequip will be skipped")
+        .Resolve();
+
             if (_inventoryConfig == null)
                 Debug.LogError("[EquipmentSystem] InventoryConfig is null!");
-            
-            if (_statSystem == null)
-                Debug.LogWarning("[EquipmentSystem] IPlayerStatSystem is null - stat modifiers will not work!");
             
             if (_inventorySystem == null)
                 Debug.LogError("[EquipmentSystem] IInventorySystem is null!");
@@ -181,14 +169,12 @@ namespace NightHunt.GameplaySystems.Equipment
         
         public void EquipItem(string instanceID)
         {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[EquipmentSystem] EquipItem: server-only!");
-                return;
-            }
-            
-            EquipItemServer(instanceID);
+            if (IsServerInitialized) { EquipItemServer(instanceID); return; }
+            if (IsOwner) EquipItemServerRpc(instanceID);
         }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void EquipItemServerRpc(string instanceID) => EquipItemServer(instanceID);
         
         [Server]
         private void EquipItemServer(string instanceID)
@@ -265,37 +251,14 @@ namespace NightHunt.GameplaySystems.Equipment
             }
             
             if (_inventoryConfig != null && _inventoryConfig.DetachAttachmentsOnUnequip)
-            {
-                var attachmentSystem = ComponentResolver.Find<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem not found")
-        .Resolve();
-                if (attachmentSystem == null)
-                {
-                    // Try to find in parent or siblings
-                    attachmentSystem = ComponentResolver.Find<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>(this)
-        .InParent()
-        .InRootChildren()
-        .OrLogWarning("[Auto] NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem not found")
-        .Resolve();
-                }
-                
-                if (attachmentSystem != null)
-                {
-                    attachmentSystem.DetachAllFromItem(instanceID);
-                }
-            }
+                _attachmentSystem?.DetachAllFromItem(instanceID);
             
             // Remove from equipment
             _equippedItems.Remove(slotType);
             
             // Return to inventory
-            item.InventoryIndex = FindNextAvailableInventoryIndex();
+            item.InventoryIndex = _inventorySystem.GetNextFreeInventoryIndex();
             _inventorySystem.SyncItemState(instanceID);
-
-            // [SAO] StatApplyOrchestrator handles modifier removal — disabled to prevent double-apply
-            // RemoveEquipmentModifiers(instanceID);
 
             if (_enableDebugLogs)
                 Debug.Log($"[EquipmentSystem] Unequipped {equipmentDef.DisplayName} from {slotType}.");
@@ -347,98 +310,10 @@ namespace NightHunt.GameplaySystems.Equipment
         
         #endregion
         
-        #region Stat Modifiers
-
-        [Server]
-        private void ApplyEquipmentModifiers(string instanceID, EquipmentDefinition equipmentDef)
-        {
-            if (_statSystem == null)
-                return;
-            
-            // Apply player stat modifiers from StatConfig
-            var playerModifiers = equipmentDef.GetPlayerModifiers();
-            if (playerModifiers != null)
-            {
-                foreach (var modifier in playerModifiers)
-                {
-                    var statMod = new StatModifier
-                    {
-                        SourceID = instanceID,
-                        Type = modifier.ModifierType,
-                        Value = modifier.Value,
-                        Priority = 0,
-                        Description = modifier.Description
-                    };
-                    
-                    _statSystem.AddModifier(modifier.StatType, statMod);
-                }
-            }
-            
-            // Apply weight modification if needed
-            if (equipmentDef.ModifyWeightWhenEquipped)
-            {
-                var weightMod = StatModifier.CreateFlat(
-                    $"{instanceID}_weight",
-                    equipmentDef.EquippedWeightModifier,
-                    0,
-                    $"{equipmentDef.DisplayName} weight modifier"
-                );
-                
-                _statSystem.AddModifier(PlayerStatType.CurrentWeight, weightMod);
-            }
-            
-            // Apply attachment PlayerModifiers (e.g. flashlight VisionRange)
-            var equipmentItem = _inventorySystem.GetItemByInstanceID(instanceID);
-            if (equipmentItem?.AttachedItems != null)
-            {
-                foreach (var attachmentInstanceID in equipmentItem.AttachedItems)
-                {
-                    if (string.IsNullOrEmpty(attachmentInstanceID)) continue;
-                    var attachInstance = ItemDatabase.GetInstance(attachmentInstanceID);
-                    if (attachInstance == null) continue;
-                    var attachDef = ItemDatabase.GetDefinition(attachInstance.DefinitionID) as AttachmentDefinition;
-                    if (attachDef?.StatConfig?.PlayerModifiers == null) continue;
-                    foreach (var mod in attachDef.StatConfig.PlayerModifiers)
-                    {
-                        var statMod = new StatModifier { SourceID = instanceID, Type = mod.ModifierType, Value = mod.Value, Priority = 0, Description = mod.Description };
-                        _statSystem.AddModifier(mod.StatType, statMod);
-                    }
-                }
-            }
-            
-            if (_enableDebugLogs)
-            {
-                int modCount = (equipmentDef.GetPlayerModifiers()?.Length ?? 0) + 
-                              (equipmentDef.ModifyWeightWhenEquipped ? 1 : 0);
-                Debug.Log($"[EquipmentSystem] Applied {modCount} modifiers from {equipmentDef.DisplayName}");
-            }
-        }
-        
-        [Server]
-        private void RemoveEquipmentModifiers(string instanceID)
-        {
-            if (_statSystem == null)
-                return;
-            
-            // Remove all modifiers from this equipment
-            _statSystem.RemoveAllModifiersFromSource(instanceID);
-            
-            // Remove weight modifier
-            _statSystem.RemoveModifier(PlayerStatType.CurrentWeight, $"{instanceID}_weight");
-            
-            if (_enableDebugLogs)
-                Debug.Log($"[EquipmentSystem] Removed modifiers from {instanceID}");
-        }
-        
-        #endregion
+        // Stat modifier application is handled entirely by StatApplyOrchestrator.
         
         #region Helper Methods
-        
-        private int FindNextAvailableInventoryIndex()
-        {
-            return _inventorySystem?.GetNextFreeInventoryIndex() ?? 0;
-        }
-        
+
         private void RebuildEquipmentCache()
         {
             _equipmentCache.Clear();

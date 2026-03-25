@@ -13,6 +13,12 @@ namespace NightHunt.GameplaySystems.Core.Configs
         menuName = "NightHunt/Gameplay/Inventory Config")]
     public class InventoryConfig : ScriptableObject
     {
+        // ── Singleton accessor — automatically populated when the asset is loaded/enabled ──
+        private static InventoryConfig _instance;
+        /// <summary>Global accessor. Valid whenever the asset has been loaded by Unity.</summary>
+        public static InventoryConfig Instance => _instance;
+        private void OnEnable() => _instance = this;
+
         #region ========== INVENTORY CONFIG ==========
         
         [Header("Inventory")]

@@ -1,16 +1,13 @@
 using System;
 using System.Collections.Generic;
-using NightHunt.GameplaySystems.Attachment;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
-using NightHunt.GameplaySystems.Equipment;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
-using NightHunt.Gameplay.StatSystem.Systems;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Stat
 {
@@ -35,13 +32,6 @@ namespace NightHunt.GameplaySystems.Stat
         // ── Source-ID prefix so we can identify and clean up our modifiers ────
         private const string SOURCE_PREFIX = "sao:";
 
-        // ── Inspector wiring (MonoBehaviour references cast to interfaces) ────
-        [Header("Required Systems")]
-        [SerializeField] private PlayerStatSystem _playerStatSystemMB;
-        [SerializeField] private EquipmentSystem _equipmentSystemMB;
-        [SerializeField] private WeaponSystem _weaponSystemMB;
-        [SerializeField] private AttachmentSystem _attachmentSystemMB;
-
         // ── Runtime interfaces ────────────────────────────────────────────────
         private IPlayerStatSystem  _playerStats;
         private IEquipmentSystem   _equipment;
@@ -59,12 +49,22 @@ namespace NightHunt.GameplaySystems.Stat
 
         private void Awake()
         {
-            _playerStats  = _playerStatSystemMB  as IPlayerStatSystem;
-            _equipment    = _equipmentSystemMB   as IEquipmentSystem;
-            _weapons      = _weaponSystemMB      as IWeaponSystem;
-            _attachments  = _attachmentSystemMB  as IAttachmentSystem;
-
-            LogMissing();
+            _playerStats = ComponentResolver.Find<IPlayerStatSystem>(this)
+                .OnSelf().InChildren().InParent()
+                .OrLogError("[StatApplyOrchestrator] IPlayerStatSystem not found!")
+                .Resolve();
+            _equipment = ComponentResolver.Find<IEquipmentSystem>(this)
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[StatApplyOrchestrator] IEquipmentSystem not found — equipment stats won't apply.")
+                .Resolve();
+            _weapons = ComponentResolver.Find<IWeaponSystem>(this)
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[StatApplyOrchestrator] IWeaponSystem not found — weapon stats won't apply.")
+                .Resolve();
+            _attachments = ComponentResolver.Find<IAttachmentSystem>(this)
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[StatApplyOrchestrator] IAttachmentSystem not found — attachment stats won't apply.")
+                .Resolve();
         }
 
         private void OnEnable()
@@ -229,21 +229,6 @@ namespace NightHunt.GameplaySystems.Stat
                 AttachmentDefinition ad => ad.GetPlayerModifiers(),
                 _ => null
             };
-        }
-
-        #endregion
-
-        // ─────────────────────────────────────────────────────────────────────
-        #region Debug
-
-        private void LogMissing()
-        {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (_playerStats  == null) Debug.LogError("[StatApplyOrchestrator] IPlayerStatSystem not found!", this);
-            if (_equipment    == null) Debug.LogWarning("[StatApplyOrchestrator] IEquipmentSystem not found — equipment stats won't apply.", this);
-            if (_weapons      == null) Debug.LogWarning("[StatApplyOrchestrator] IWeaponSystem not found — weapon stats won't apply.", this);
-            if (_attachments  == null) Debug.LogWarning("[StatApplyOrchestrator] IAttachmentSystem not found — attachment stats won't apply.", this);
-#endif
         }
 
         #endregion

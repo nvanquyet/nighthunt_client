@@ -29,7 +29,11 @@ namespace NightHunt.GameplaySystems.UI.Combat
     ///   Call Bind(slotType, weaponSystem) once after the local player's
     ///   WeaponSystem subscribes to events; call Unbind() on destroy.
     /// </summary>
-    public class WeaponSlotButton : ActionButton
+    /// <summary>
+    /// <para>Inherits double-click detection, <see cref="CombatInputHandler"/> fire-blocking,
+    /// and DOTween press animation from <see cref="SlotHUDButton"/>.</para>
+    /// </summary>
+    public class WeaponSlotButton : SlotHUDButton
     {
         // ─────────────────────────────────────────────────────────────────────
         //  Inspector
@@ -45,18 +49,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [Header("Slot Config")]
         [SerializeField] private WeaponSlotType _slotType;
 
-        [Header("Double-click")]
-        [Tooltip("Max seconds between two taps to register a double-click (holster).")]
-        [SerializeField] private float _doubleClickThreshold = 0.3f;
-
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime
         // ─────────────────────────────────────────────────────────────────────
 
         private IWeaponSystem _weaponSystem;
-        private CombatInputHandler _combatInputHandler;
         private bool _isBound;
-        private float _lastClickTime = -999f;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Binding
@@ -91,15 +89,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
             RefreshAll();
         }
 
-        /// <summary>
-        /// Bind the CombatInputHandler so OnPointerDown can notify it to block concurrent fire events.
-        /// Call once after the local player spawns.
-        /// </summary>
-        public void BindCombatHandler(CombatInputHandler handler)
-        {
-            _combatInputHandler = handler;
-        }
-
         public void Unbind()
         {
             if (!_isBound) return;
@@ -129,15 +118,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public override void OnPointerDown(UnityEngine.EventSystems.PointerEventData eventData)
         {
+            // base calls DOTween animation AND NotifyUIConsumedPress (via SlotHUDButton).
             base.OnPointerDown(eventData);
-            // Notify CombatInputHandler to block the concurrent Input System LMB-performed event.
-            _combatInputHandler?.NotifyUIConsumedPress();
 
             if (_weaponSystem == null) return;
 
-            float now = Time.unscaledTime;
-            bool isDoubleClick = (now - _lastClickTime) <= _doubleClickThreshold;
-            _lastClickTime = now;
+            bool isDoubleClick = ConsumeDoubleClick();
 
             if (isDoubleClick)
             {

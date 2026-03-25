@@ -15,15 +15,12 @@ MonoBehaviour:
   ItemID: armor_vest
   DisplayName: 
   Description: 
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: fb111413c0e539e438d6b210bdc63b88, type: 3}
   IsStackable: 0
   MaxStackSize: 1
   Weight: 8
   ModifyWeightWhenEquipped: 1
   EquippedWeightModifier: -3
-  ResourceType: 1
-  MaxResource: 150
-  DefaultResource: 150
   AttachmentSlots: 07000000080000000800000009000000
   CanAttachTo: 
   ValidSlots: 0000000001000000
@@ -34,6 +31,4 @@ MonoBehaviour:
   CanUseWhileMoving: 0
   StatConfig: {fileID: 0}
   EquipmentSlot: 2
-  MaxDurability: 150
-  DefaultDurability: 150
   DurabilityLossRate: 1

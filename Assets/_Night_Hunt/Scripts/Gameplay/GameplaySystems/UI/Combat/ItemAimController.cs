@@ -84,6 +84,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// <summary>True while the controller is in aim mode (for ThrowableHandler / input guards).</summary>
         public static bool    IsAimingPC     { get; private set; }
 
+        /// <summary>
+        /// Called by <see cref="CombatInputHandler"/> during the fire-hold throwable path
+        /// (armed via FilterPanel, not via TryBeginAim). Keeps the visual aim cursor in sync
+        /// with the already-clamped ground hit point so both paths show the same target.
+        /// No-op when TryBeginAim is active (IsAimingPC=true) since that path owns its raycast.
+        /// </summary>
+        public static void SetExternalAimTarget(Vector3 worldPos)
+        {
+            if (IsAimingPC) return;  // TryBeginAim path is authoritative
+            AimWorldTarget = worldPos;
+        }
+
         // ─────────────────────────────────────────────────────────────────────
         //  Properties
         // ─────────────────────────────────────────────────────────────────────
@@ -181,8 +193,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (!isThrowable)
             {
-                // Direct use – no aiming needed.
-                _itemSelectionSystem.SelectItem(instanceID);
+                // Direct use – no aiming needed. Use ServerRpc so it works on any connection.
+                Debug.Log($"[ItemAimController] TryBeginAim: non-throwable '{instanceID}' → RequestSelectItem + RequestUseSelectedItem");
+                _itemSelectionSystem.RequestSelectItem(instanceID);
+                _itemSelectionSystem.RequestUseSelectedItem();
                 return;
             }
 
@@ -203,10 +217,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
             // on mobile it is only shown by BeginFire/EndFire — we must do the same here.
             if (IsMobile)
                 _aimSystem?.SetCursorVisible(true);
-            // Immediately tell the server to begin the throw (HolsterWeapon + SpawnItemInHand).
-            // We do NOT wait for ConfirmAim because the model-in-hand should appear as soon
-            // as the player picks up the item.  ConfirmAim will only send RequestExecuteThrow.
-            _itemSelectionSystem.SelectItem(instanceID);
+            // Select + arm the item via ServerRpc — safe to call on any connection.
+            // RequestSelectItem selects without arming; RequestUseSelectedItem arms (BeginThrowable).
+            // Both are no-ops if the item is already in that state.
+            Debug.Log($"[ItemAimController] TryBeginAim: RequestSelectItem + RequestUseSelectedItem for '{instanceID}'");
+            _itemSelectionSystem.RequestSelectItem(instanceID);
+            _itemSelectionSystem.RequestUseSelectedItem();
             if (!IsMobile)
             {
                 // PC: immediately do a raycast so the ring is ready on first frame.
@@ -313,12 +329,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void ConfirmAim()
         {
             if (!_inAimMode) return;
+            Vector3 throwTarget = AimWorldTarget;  // capture before ResetAimState clears _inAimMode
             ResetAimState();
 
             // Selection was already started in TryBeginAim (server started BeginThrowable).
             // We only need to request the actual throw execution now.
             if (_itemUseSystem != null)
-                _itemUseSystem.RequestExecuteThrow();
+                _itemUseSystem.RequestExecuteThrow(throwTarget);
         }
 
         /// <summary>

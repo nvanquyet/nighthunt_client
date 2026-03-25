@@ -10,10 +10,8 @@ namespace NightHunt.GameplaySystems.Core.Data
     ///
     /// DESIGN:
     /// - VALUE TYPE (struct) — FishNet SyncVar / SyncList yêu cầu.
-    /// - Equals() so sánh InstanceID + DefinitionID + Quantity để SyncVar dirty
-    ///   detection hoạt động đúng khi Initialize() được gọi với data mới.
-    ///   (Chỉ so sánh InstanceID như cũ khiến SyncVar không fire nếu cùng InstanceID
-    ///   nhưng DefinitionID / Quantity khác nhau — ví dụ respawn cùng slot.)
+    /// - Equals() so sánh toàn bộ runtime-relevant fields để FishNet SyncList
+    ///   dirty-detection hoạt động đúng (ammo, resource, index, attachments).
     /// </summary>
     [System.Serializable]
     public struct ItemInstanceData
@@ -69,32 +67,44 @@ namespace NightHunt.GameplaySystems.Core.Data
         #region Equality
 
         /// <summary>
-        /// So sánh đầy đủ để FishNet SyncVar dirty-detection hoạt động đúng.
+        /// So sánh toàn bộ runtime-relevant fields để FishNet SyncList dirty-detection hoạt động đúng.
         ///
-        /// QUAN TRỌNG: FishNet gọi Equals() trước khi mark SyncVar dirty.
-        /// Nếu chỉ so InstanceID (như cũ), hai ItemInstanceData khác DefinitionID
-        /// nhưng cùng InstanceID sẽ bị coi là BẰNG NHAU → SyncVar không fire
-        /// → OnItemDataChanged không được gọi → model không spawn.
-        ///
-        /// Fix: so sánh InstanceID + DefinitionID + Quantity — đủ để detect
-        /// mọi thay đổi có ý nghĩa với gameplay mà không quá nặng.
+        /// FishNet gọi Equals() trước khi mark SyncList element dirty.
+        /// Nếu thiếu field (CurrentMagazine, CurrentResource, InventoryIndex, AttachedItems),
+        /// các thay đổi đó sẽ không được broadcast tới clients.
         /// </summary>
         public override bool Equals(object obj)
         {
             if (!(obj is ItemInstanceData other)) return false;
 
-            return InstanceID    == other.InstanceID
-                && DefinitionID  == other.DefinitionID
-                && Quantity      == other.Quantity;
+            return InstanceID      == other.InstanceID
+                && DefinitionID    == other.DefinitionID
+                && Quantity        == other.Quantity
+                && CurrentMagazine == other.CurrentMagazine
+                && UnityEngine.Mathf.Approximately(CurrentResource, other.CurrentResource)
+                && InventoryIndex  == other.InventoryIndex
+                && AttachedItemsEqual(AttachedItems, other.AttachedItems);
+        }
+
+        private static bool AttachedItemsEqual(string[] a, string[] b)
+        {
+            if (ReferenceEquals(a, b)) return true;
+            if (a == null || b == null) return false;
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
+                if (a[i] != b[i]) return false;
+            return true;
         }
 
         public override int GetHashCode()
         {
             unchecked
             {
-                int hash = InstanceID   != null ? InstanceID.GetHashCode()   : 0;
+                int hash = InstanceID  != null ? InstanceID.GetHashCode()  : 0;
                 hash = (hash * 397) ^ (DefinitionID != null ? DefinitionID.GetHashCode() : 0);
                 hash = (hash * 397) ^ Quantity.GetHashCode();
+                hash = (hash * 397) ^ CurrentMagazine.GetHashCode();
+                hash = (hash * 397) ^ InventoryIndex.GetHashCode();
                 return hash;
             }
         }

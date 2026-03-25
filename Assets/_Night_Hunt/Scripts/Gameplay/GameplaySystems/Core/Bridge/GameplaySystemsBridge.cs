@@ -44,6 +44,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         private readonly IItemSelectionSystem _itemSelection;
         private readonly IPlayerStatSystem _statSystem;
         private readonly IItemUseSystem _itemUse;
+        private readonly IAttachmentSystem _attachment;
         
         #endregion
         
@@ -57,6 +58,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         public IItemSelectionSystem ItemSelection => _itemSelection;
         public IPlayerStatSystem Stat => _statSystem;
         public IItemUseSystem ItemUse => _itemUse;
+        public IAttachmentSystem Attachment => _attachment;
         
         #endregion
         
@@ -81,6 +83,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         public event Action<ItemInstance> OnItemUseCompleted;
         public event Action<ItemInstance> OnItemUseCancelled;
         public event Action<ItemInstance, float> OnItemUseProgress;
+        public event Action<string, int, ItemInstance> OnAttachmentAttached;
+        public event Action<string, int, ItemInstance> OnAttachmentDetached;
         
         #endregion
         
@@ -107,7 +111,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
             IWeaponSystem weapon,
             IItemSelectionSystem itemSelection,
             IPlayerStatSystem statSystem,
-            IItemUseSystem itemUse)
+            IItemUseSystem itemUse,
+            IAttachmentSystem attachment = null)
         {
             // Validate all dependencies
             if (inventory == null)
@@ -122,6 +127,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 Debug.LogError("[GameplaySystemsBridge] Stat system is null!");
             if (itemUse == null)
                 Debug.LogWarning("[GameplaySystemsBridge] Item use system is null - item usage will not work!");
+            if (attachment == null)
+                Debug.LogWarning("[GameplaySystemsBridge] Attachment system is null - attachment events will not fire!");
             
             // Store references
             _inventory = inventory;
@@ -130,6 +137,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
             _itemSelection = itemSelection;
             _statSystem = statSystem;
             _itemUse = itemUse;
+            _attachment = attachment;
             
             // Wire up events
             WireEvents();
@@ -215,6 +223,13 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 _itemUse.OnItemUseCancelled += HandleItemUseCancelled;
                 _itemUse.OnItemUseProgress += HandleItemUseProgress;
             }
+
+            // Attachment events
+            if (_attachment != null)
+            {
+                _attachment.OnAttachmentAttached += HandleAttachmentAttached;
+                _attachment.OnAttachmentDetached += HandleAttachmentDetached;
+            }
         }
         
         /// <summary>
@@ -270,6 +285,13 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 _itemUse.OnItemUseCancelled -= HandleItemUseCancelled;
                 _itemUse.OnItemUseProgress -= HandleItemUseProgress;
             }
+
+            // Attachment events
+            if (_attachment != null)
+            {
+                _attachment.OnAttachmentAttached -= HandleAttachmentAttached;
+                _attachment.OnAttachmentDetached -= HandleAttachmentDetached;
+            }
         }
         
         #endregion
@@ -295,6 +317,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         private void HandleItemUseCompleted(ItemInstance item) => OnItemUseCompleted?.Invoke(item);
         private void HandleItemUseCancelled(ItemInstance item) => OnItemUseCancelled?.Invoke(item);
         private void HandleItemUseProgress(ItemInstance item, float progress) => OnItemUseProgress?.Invoke(item, progress);
+        private void HandleAttachmentAttached(string parentID, int slotIndex, ItemInstance attachment) => OnAttachmentAttached?.Invoke(parentID, slotIndex, attachment);
+        private void HandleAttachmentDetached(string parentID, int slotIndex, ItemInstance attachment) => OnAttachmentDetached?.Invoke(parentID, slotIndex, attachment);
         
         #endregion
         
@@ -492,10 +516,10 @@ namespace NightHunt.GameplaySystems.Core.Bridge
                 _itemUse.CancelUse();
         }
 
-        public void ExecuteThrow()
+        public void ExecuteThrow(Vector3 aimTarget)
         {
             if (_itemUse != null)
-                _itemUse.ExecuteThrow();
+                _itemUse.ExecuteThrow(aimTarget);
         }
 
         #endregion

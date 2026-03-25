@@ -60,6 +60,7 @@ namespace NightHunt.GameplaySystems.Weapon
         // ── Private service refs ───────────────────────────────────────────────
         private IPlayerStatSystem  _statSystem;
         private IInventorySystem   _inventorySystem;
+        private IAttachmentSystem  _attachmentSystem;
 
         // ── Network-synced state ───────────────────────────────────────────────
         // Server-authoritative slot→instanceID map, replicated to all observers.
@@ -192,6 +193,11 @@ namespace NightHunt.GameplaySystems.Weapon
                 .UseExisting(_inventorySystemSource)
                 .OnSelf().InChildren().InParent()
                 .OrLogError("[WeaponSystem] IInventorySystem not found")
+                .Resolve();
+
+            _attachmentSystem ??= ComponentResolver.Find<IAttachmentSystem>(this)
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[WeaponSystem] IAttachmentSystem not found — attachment detach on unequip disabled")
                 .Resolve();
 
             if (_inventoryConfig == null)

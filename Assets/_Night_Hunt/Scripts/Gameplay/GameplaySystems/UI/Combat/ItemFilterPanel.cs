@@ -1,119 +1,111 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.ItemUse;
+using NightHunt.Gameplay.Input.Handlers.Combat;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
     /// <summary>
-    /// Compact item-selection panel for a single ItemType (Consumable or Throwable).
+    /// Container managing the expand/collapse flow for a single item-type filter slot.
     ///
-    /// ── Visual States ────────────────────────────────────────────────────────────
-    /// Collapsed  — shows selected item icon + quantity + expand-arrow.
-    ///              Tapping the icon:
-    ///                • Consumable → UseSelectedItem() immediately.
-    ///                • Throwable  → UseSelectedItem() = enter aim/arm mode
-    ///                               (fire button then executes the throw).
-    ///              Tapping the icon when nothing is selected → open expanded list.
+    /// â”€â”€ Roles after refactor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ///
-    /// Expanded   — scrollable list of all items of this type.
-    ///              Single-click  → SelectItem + collapse.
-    ///              Double-click  → SelectItem + UseSelectedItem (consumable shortcut).
+    /// <see cref="SelectableItemButton"/> (_slotButton)
+    ///   â€” The permanent collapsed icon button the player sees in the HUD.
+    ///   â€” Manages its own icon / quantity display and auto-fill from inventory.
+    ///   â€” Click state machine: select â†’ arm â†’ cancel (double-click = cancel).
+    ///   â€” Fires <see cref="SelectableItemButton.OnExpandRequested"/> when clicked
+    ///     while empty so this panel can open the list.
     ///
-    /// ── Auto-Select Rules ────────────────────────────────────────────────────────
-    /// • First item of this type is picked up and nothing is selected → auto-select.
-    /// • Currently selected item fully depletes → auto-select next available.
-    /// • None remain → deselect (only if this panel owned the selection).
+    /// <see cref="ItemFilterButton"/> (_filterButtonPrefab)
+    ///   â€” One row per inventory item in the expanded list.
+    ///   â€” Single press â†’ RequestSelectItem + collapse panel.
+    ///   â€” Selection marker shows the currently active item.
     ///
-    /// ── SpectateManager Usage ────────────────────────────────────────────────────
-    /// GetAllItems() always reads via SpectateManager.GetCurrentPlayer() so the panel
-    /// stays correct when playing locally AND when spectating another player.
-    /// _inventorySystem is injected only to subscribe to inventory change events.
+    /// This panel (ItemFilterPanel):
+    ///   â€” Manages the expand / collapse transition.
+    ///   â€” Rebuilds the ItemFilterButton list on inventory changes.
+    ///   â€” Updates selection markers on ItemFilterButtons on selection changes.
     ///
-    /// ── Inspector ────────────────────────────────────────────────────────────────
-    /// _selectedIcon         – Image for the selected item icon (collapsed view).
-    /// _selectedQuantityText – TMP text for quantity.
-    /// _selectedItemButton   – Button over the icon area; tap = use / arm.
-    /// _emptyIndicator       – Shown when no item is selected.
-    /// _listRoot             – Parent toggled on/off for the expanded list.
-    /// _contentRoot          – Transform receiving SelectableItemButton instances.
-    /// _expandButton         – Arrow/toggle button to expand/collapse.
-    /// _buttonPrefab         – Prefab with SelectableItemButton component.
+    /// â”€â”€ Inspector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    ///   _slotButton          â€“ The SelectableItemButton that acts as the HUD icon.
+    ///   _listRoot            â€“ Root GameObject toggled on/off for the expanded list.
+    ///   _contentRoot         â€“ Parent transform for spawned ItemFilterButton instances.
+    ///   _expandButton        â€“ Arrow / chevron button to manually expand / collapse.
+    ///   _filterButtonPrefab  â€“ Prefab with an ItemFilterButton component.
     /// </summary>
     public class ItemFilterPanel : MonoBehaviour
     {
-        // ── Inspector ─────────────────────────────────────────────────────────────
+        // â”€â”€ Inspector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-        [Header("Collapsed View")]
-        [SerializeField] private Image      _selectedIcon;
-        [SerializeField] private TMP_Text   _selectedQuantityText;
-        [Tooltip("Button overlaid on the selected-item icon.\n" +
-                 "Tap = UseSelectedItem (consumable: immediate; throwable: enter aim mode).")]
-        [SerializeField] private Button     _selectedItemButton;
-        [SerializeField] private GameObject _emptyIndicator;
+        [Header("Collapsed Slot Button")]
+        [Tooltip("The SelectableItemButton displayed as the collapsed HUD icon for this filter type.")]
+        [SerializeField] private SelectableItemButton _slotButton;
 
         [Header("Expanded List")]
-        [SerializeField] private GameObject           _listRoot;
-        [SerializeField] private Transform            _contentRoot;
-        [SerializeField] private Button               _expandButton;
-        [SerializeField] private SelectableItemButton _buttonPrefab;
+        [SerializeField] private GameObject       _listRoot;
+        [SerializeField] private Transform        _contentRoot;
+        [SerializeField] private Button           _expandButton;
+        [SerializeField] private ItemFilterButton _filterButtonPrefab;
 
-        // ── Runtime ───────────────────────────────────────────────────────────────
+        // â”€â”€ Runtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-        private readonly List<SelectableItemButton> _spawnedButtons = new();
+        private readonly List<ItemFilterButton> _spawnedButtons = new();
 
         private ItemType             _filterType;
         private IItemSelectionSystem _selectionSystem;
-        private IInventorySystem     _inventorySystem;   // event subscription only
-
-        /// <summary>
-        /// Cached instance ID of the last selected item.
-        /// Required because SelectedItem can return null the instant an item is
-        /// removed from inventory — which happens before OnItemDeselected fires
-        /// (ConsumeItem runs inside CompleteUse, before the event).
-        /// </summary>
-        private string _lastSelectedInstanceID;
+        private IInventorySystem     _inventorySystem;
 
         public bool IsExpanded { get; private set; }
 
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //  Public API
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>
         /// Bind this panel to a filter type and the current player's systems.
         /// Safe to call multiple times (re-init on player / spectate change).
+        /// Passes all relevant system refs down to <see cref="SelectableItemButton"/>.
         /// </summary>
         public void Initialize(
             ItemType             filterType,
             IItemSelectionSystem selectionSystem,
-            IInventorySystem     inventorySystem = null)
+            IInventorySystem     inventorySystem    = null,
+            IItemUseSystem       itemUseSystem      = null,
+            CombatInputHandler   combatInputHandler = null)
         {
+            Debug.Log($"[ItemFilterPanel:{filterType}] Initialize");
             Unsubscribe();
 
             _filterType      = filterType;
             _selectionSystem = selectionSystem;
             _inventorySystem = inventorySystem;
 
+            // â”€â”€ Expand button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (_expandButton != null)
             {
                 _expandButton.onClick.RemoveListener(ToggleList);
                 _expandButton.onClick.AddListener(ToggleList);
             }
 
-            if (_selectedItemButton != null)
+            // â”€â”€ Slot button (SelectableItemButton) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            if (_slotButton != null)
             {
-                _selectedItemButton.onClick.RemoveListener(OnSelectedIconPressed);
-                _selectedItemButton.onClick.AddListener(OnSelectedIconPressed);
+                // Wire expand request so clicking an empty slot opens the list.
+                _slotButton.OnExpandRequested -= ExpandList;
+                _slotButton.OnExpandRequested += ExpandList;
+
+                _slotButton.BindCombatHandler(combatInputHandler);
+                _slotButton.Initialize(filterType, selectionSystem, itemUseSystem, inventorySystem);
             }
 
             Subscribe();
             CollapseList();
-            RefreshSelectedDisplay();
         }
 
         public void ExpandList()
@@ -121,6 +113,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IsExpanded = true;
             RebuildList();
             if (_listRoot != null) _listRoot.SetActive(true);
+            Debug.Log($"[ItemFilterPanel:{_filterType}] ExpandList â€” {_spawnedButtons.Count} buttons");
         }
 
         public void CollapseList()
@@ -129,9 +122,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_listRoot != null) _listRoot.SetActive(false);
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //  Unity Lifecycle
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void OnDestroy()
         {
@@ -140,13 +133,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_expandButton != null)
                 _expandButton.onClick.RemoveListener(ToggleList);
 
-            if (_selectedItemButton != null)
-                _selectedItemButton.onClick.RemoveListener(OnSelectedIconPressed);
+            if (_slotButton != null)
+                _slotButton.OnExpandRequested -= ExpandList;
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //  Event Subscriptions
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void Subscribe()
         {
@@ -178,59 +171,29 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Collapsed Icon — Tap to Use / Arm
-        // ─────────────────────────────────────────────────────────────────────────
-
-        private void OnSelectedIconPressed()
-        {
-            if (_selectionSystem == null) return;
-
-            // Nothing selected → open list so the player can pick something.
-            if (string.IsNullOrEmpty(_lastSelectedInstanceID))
-            {
-                ExpandList();
-                return;
-            }
-
-            // Re-confirm selection (handles case where another panel owns it).
-            _selectionSystem.SelectItem(_lastSelectedInstanceID);
-
-            // UseSelectedItem:
-            //   Consumable  → starts use coroutine immediately.
-            //   Throwable   → enters aim/arm mode; fire button executes the throw.
-            _selectionSystem.UseSelectedItem();
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Selection System Events
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        //  Selection Events
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void HandleItemSelected(ItemInstance item)
         {
-            // Only react to items belonging to this panel's type.
             var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
             if (def == null || def.Type != _filterType) return;
 
-            _lastSelectedInstanceID = item.InstanceID;
-            RefreshSelectedDisplay();
+            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleItemSelected '{item.InstanceID}' â†’ collapse + refresh markers");
             RefreshSelectionMarkersOnButtons();
-            CollapseList();     // always collapse when a selection is made
+            CollapseList();
         }
 
         private void HandleItemDeselected()
         {
-            // Only clear if this panel owned the selection.
-            if (string.IsNullOrEmpty(_lastSelectedInstanceID)) return;
-
-            _lastSelectedInstanceID = null;
-            RefreshSelectedDisplay();
+            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleItemDeselected â†’ refresh markers");
             RefreshSelectionMarkersOnButtons();
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Inventory System Events
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        //  Inventory Events (list rebuild only â€” auto-fill is in SelectableItemButton)
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void HandleInventoryItemAdded(ItemInstance item)
         {
@@ -238,11 +201,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
             if (def == null || def.Type != _filterType) return;
 
+            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleInventoryItemAdded '{item.InstanceID}'");
             if (IsExpanded) RebuildList();
-
-            // Auto-select first item of this type when nothing is selected yet.
-            if (_selectionSystem != null && !_selectionSystem.HasSelection)
-                TryAutoSelectFirst();
         }
 
         private void HandleInventoryItemRemoved(ItemInstance item, int quantityRemoved)
@@ -251,63 +211,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
             if (def == null || def.Type != _filterType) return;
 
+            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleInventoryItemRemoved '{item.InstanceID}'");
             if (IsExpanded) RebuildList();
-
-            // _lastSelectedInstanceID is checked here because SelectedItem may already
-            // return null (item removed from inventory before this event fires).
-            bool wasSelected = !string.IsNullOrEmpty(_lastSelectedInstanceID)
-                            && _lastSelectedInstanceID == item.InstanceID;
-            bool fullyGone   = item.Quantity - quantityRemoved <= 0;
-
-            if (wasSelected && fullyGone)
-            {
-                _lastSelectedInstanceID = null;     // clear before searching
-                TryAutoSelectFirst();
-            }
-
-            RefreshSelectedDisplay();
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Auto-Select
-        // ─────────────────────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Selects the first available item of <see cref="_filterType"/> with qty > 0.
-        /// Uses SpectateManager so it works correctly in spectate mode.
-        /// Deselects if none remain and this panel currently owns the selection.
-        /// </summary>
-        private void TryAutoSelectFirst()
-        {
-            if (_selectionSystem == null) return;
-
-            var items = GetCurrentPlayerItems();
-            if (items != null)
-            {
-                foreach (var inv in items)
-                {
-                    if (inv == null || inv.InventoryIndex < 0 || inv.Quantity <= 0) continue;
-                    var def = ItemDatabase.GetDefinition(inv.DefinitionID);
-                    if (def == null || def.Type != _filterType) continue;
-
-                    _selectionSystem.SelectItem(inv.InstanceID);
-                    return;
-                }
-            }
-
-            // Nothing left of this type — deselect only if we own the selection.
-            if (_selectionSystem.HasSelection)
-            {
-                var current    = _selectionSystem.SelectedItem;
-                var currentDef = current != null ? ItemDatabase.GetDefinition(current.DefinitionID) : null;
-                if (currentDef?.Type == _filterType)
-                    _selectionSystem.DeselectItem();
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //  Expand / Collapse Toggle
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void ToggleList()
         {
@@ -315,15 +225,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
             else            ExpandList();
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //  Expanded List Builder
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void RebuildList()
         {
             ClearSpawnedButtons();
 
-            if (_contentRoot == null || _buttonPrefab == null || _selectionSystem == null) return;
+            if (_contentRoot == null || _filterButtonPrefab == null || _selectionSystem == null) return;
 
             var items = GetCurrentPlayerItems();
             if (items == null) return;
@@ -334,8 +244,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 var def = ItemDatabase.GetDefinition(item.DefinitionID);
                 if (def == null || def.Type != _filterType) continue;
 
-                var btn = Instantiate(_buttonPrefab, _contentRoot);
-                btn.Bind(item, _selectionSystem);
+                var btn = Instantiate(_filterButtonPrefab, _contentRoot);
+                btn.Bind(item, _selectionSystem, this);
                 _spawnedButtons.Add(btn);
             }
         }
@@ -353,47 +263,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 btn?.RefreshSelectedMarker();
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Collapsed View — Selected Item Display
-        // ─────────────────────────────────────────────────────────────────────────
-
-        private void RefreshSelectedDisplay()
-        {
-            var selected = _selectionSystem?.SelectedItem;
-            var def      = selected != null ? ItemDatabase.GetDefinition(selected.DefinitionID) : null;
-
-            // Only show items that belong to this panel's filter type.
-            bool hasSelection = selected != null && def != null && def.Type == _filterType;
-
-            if (_selectedIcon != null)
-            {
-                _selectedIcon.sprite  = hasSelection ? def.Icon : null;
-                _selectedIcon.enabled = hasSelection && def.Icon != null;
-            }
-
-            if (_selectedQuantityText != null)
-                _selectedQuantityText.text = hasSelection && selected.Quantity > 1
-                    ? selected.Quantity.ToString()
-                    : string.Empty;
-
-            // Tap-to-use only makes sense when something is selected.
-            // When nothing is selected the button still works (opens the list).
-            if (_selectedItemButton != null)
-                _selectedItemButton.interactable = true;
-
-            if (_emptyIndicator != null)
-                _emptyIndicator.SetActive(!hasSelection);
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //  Helpers
-        // ─────────────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-        /// <summary>
-        /// Returns all items for whoever is currently being viewed (local or spectated).
-        /// This is a READ-ONLY data path — no actions are taken here — so SpectateManager
-        /// is the correct source of truth rather than a fixed _inventorySystem reference.
-        /// </summary>
         private IReadOnlyList<ItemInstance> GetCurrentPlayerItems()
         {
             return SpectateManager.Instance

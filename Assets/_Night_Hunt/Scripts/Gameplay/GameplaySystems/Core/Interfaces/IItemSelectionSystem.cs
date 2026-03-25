@@ -48,6 +48,20 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// </summary>
         void UseSelectedItem();
 
+        // ─── ServerRpc wrappers (safe to call from UI on any connection) ─────
+
+        /// <summary>ServerRpc: select the item with this instanceID. Safe to call from client UI.</summary>
+        void RequestSelectItem(string instanceID);
+
+        /// <summary>ServerRpc: deselect without cancelling active use. Safe to call from client UI.</summary>
+        void RequestDeselectItem();
+
+        /// <summary>ServerRpc: arm the currently selected item. Safe to call from client UI.</summary>
+        void RequestUseSelectedItem();
+
+        /// <summary>ServerRpc: cancel active use and deselect. Safe to call from client UI.</summary>
+        void RequestCancelSelection();
+
         // ─── Events ──────────────────────────────────────────────────────────
 
         /// <summary>Fired when an item is selected. Parameter: the selected ItemInstance.</summary>

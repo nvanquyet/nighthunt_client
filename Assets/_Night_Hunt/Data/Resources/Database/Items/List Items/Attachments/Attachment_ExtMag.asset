@@ -15,15 +15,12 @@ MonoBehaviour:
   ItemID: attachment_extmag
   DisplayName: Extended Magazine
   Description: Increases magazine capacity but adds weight
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: f407111a391aad043aa899d34d1a94d1, type: 3}
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.3
   ModifyWeightWhenEquipped: 0
   EquippedWeightModifier: 0
-  ResourceType: 0
-  MaxResource: 0
-  DefaultResource: 0
   AttachmentSlots: 
   CanAttachTo: 04000000
   ValidSlots: 00000000

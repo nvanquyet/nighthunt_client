@@ -208,7 +208,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// can abort mid-prepare via StopCoroutine.
         /// </summary>
         [Server]
-        public void ExecuteThrow()
+        public void ExecuteThrow(Vector3 aimTarget)
         {
             if (!_isUsingItem || _currentItem == null)
             {
@@ -222,9 +222,6 @@ namespace NightHunt.GameplaySystems.ItemUse
                 Debug.LogError("[ItemUseSystem] Current item is not throwable");
                 return;
             }
-
-            // Capture aim target immediately — before the prepare delay.
-            Vector3 aimTarget = NightHunt.GameplaySystems.UI.Combat.ItemAimController.AimWorldTarget;
 
             // Reuse the shared _useCoroutine slot so CancelUse() can interrupt mid-prepare.
             _useCoroutine = StartCoroutine(PrepareAndThrow(def, aimTarget));
@@ -258,10 +255,13 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// item-selection RPC (→ BeginThrowable) is guaranteed to complete
         /// before this one processes.
         /// </summary>
+        // BUG 2 FIX: aimTarget is the client-side world position of the cursor.
+        // The server cannot read ItemAimController.AimWorldTarget (client-only static);
+        // passing it as a ServerRpc parameter sends the correct position to the server.
         [ServerRpc(RequireOwnership = true)]
-        public void RequestExecuteThrow()
+        public void RequestExecuteThrow(Vector3 aimTarget)
         {
-            ExecuteThrow();
+            ExecuteThrow(aimTarget);
         }
 
         /// <summary>

@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
 
 namespace NightHunt.GameplaySystems.Core.Interfaces
@@ -58,7 +59,7 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// NETWORK:
         /// - Server-only operation
         /// </summary>
-        void ExecuteThrow();
+        void ExecuteThrow(Vector3 aimTarget);
 
         /// <summary>
         /// Request throw execution from the owning client.
@@ -68,7 +69,7 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// selecting an item (ServerRpc path) then RequestExecuteThrow(ServerRpc)
         /// always processes BeginThrowable before ExecuteThrow on the server.
         /// </summary>
-        void RequestExecuteThrow();
+        void RequestExecuteThrow(Vector3 aimTarget);
 
         /// <summary>
         /// Request cancel of the in-progress item use from the owning client.

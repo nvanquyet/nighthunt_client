@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
@@ -62,6 +62,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private bool    _isReloading;
         private int     _currentWeaponSlot = 0;
         private Vector3 _aimDirection;          // internal — luôn track cursor
+        private Vector3 _lastGroundHitPoint;    // last cursor-to-ground hit (PC) — passed to RequestExecuteThrow
         private bool    _inputEnabled = false;
         private bool    _uiConsumedThisPress;   // set by WeaponSlotButton etc. to block the concurrent LMB fire event
         // ── Camera ref (PC raycast) ───────────────────────────────────────────────
@@ -312,6 +313,22 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 if (ground.Raycast(ray, out float distance))
                 {
                     Vector3 hitPoint  = ray.GetPoint(distance);
+
+                    // When a throwable/deployable is armed via the FilterPanel path
+                    // (not via ItemAimController.TryBeginAim), clamp the hit to the
+                    // throwable vision range so the actual throw target matches the
+                    // visual ring indicator. Also update ItemAimController's static
+                    // AimWorldTarget so any aim cursor stays in sync.
+                    if (_itemUseSystem != null && _itemUseSystem.IsUsingItem && !ItemAimController.IsAimingPC)
+                    {
+                        Vector3 offset   = hitPoint - groundOrigin;
+                        float   maxRange = _aimSystem?.GetVisionRange() ?? 15f;
+                        if (offset.sqrMagnitude > maxRange * maxRange)
+                            hitPoint = groundOrigin + offset.normalized * maxRange;
+                        ItemAimController.SetExternalAimTarget(hitPoint);
+                    }
+
+                    _lastGroundHitPoint = hitPoint;
                     Vector3 dir       = hitPoint - groundOrigin;
                     dir.y = 0f;
                     if (dir.sqrMagnitude > 0.001f)
@@ -386,8 +403,35 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 return;
             }
 
-            // Item selected: arm throwable/deployable (hold to aim, release to throw)
-            // or immediately use consumable.
+            // BUG 1 FIX: Weapon always fires first — even when a throwable is selected in the
+            // HUD. To throw, players press the throwable HUD button (TryBeginAim) and then LMB.
+            if (_weaponSystem != null && _weaponSystem.GetActiveWeaponSlot() != null)
+            {
+                _isFiring = true;
+
+                // ── Freeze camera at current yaw ──────────────────────────────────
+                if (_cameraStateManager != null)
+                {
+                    _prevCameraStateBeforeFire = _cameraStateManager.CurrentState;
+                    _cameraStateManager.ForceState(NightHunt.Gameplay.Camera.CameraState.Locked);
+                }
+
+                // ── Force STRAFE so the character rotates to face the cursor ──────
+                if (_movementInputHandler != null)
+                {
+                    _prevCameraLockBeforeFire = _movementInputHandler.IsCameraLocked();
+                    _movementInputHandler.SetCameraLockOverride(active: true, forcedValue: true);
+                }
+
+                OnFire?.Invoke();
+                if (_rangeIndicator != null)
+                    _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
+                if (Application.isMobilePlatform)
+                    _aimSystem?.SetCursorVisible(true);
+                return;
+            }
+
+            // No weapon active: use selected item (throwable / consumable) on fire press.
             if (_itemSelectionSystem != null && _itemSelectionSystem.HasSelection)
             {
                 var selectedItem = _itemSelectionSystem.SelectedItem;
@@ -420,50 +464,6 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 // Consumable: UseSelectedItem() handles use immediately; no aim state needed.
                 return;
             }
-
-            // Guard: only fire when a weapon is actively equipped/drawn.
-            // Prevents fire animation + camera lock triggering in empty hands.
-            if (_weaponSystem != null && _weaponSystem.GetActiveWeaponSlot() == null)
-                return;
-
-            _isFiring = true;
-
-            // ── Bước 1: Freeze camera tại góc hiện tại ────────────────────────────
-            // Lưu state để restore khi EndFire.
-            // ForceState(Locked) → disable CinemachineInputAxisController → camera đứng yên.
-            // Camera đứng yên + character xoay theo cursor = MOBA aim feel.
-            if (_cameraStateManager != null)
-            {
-                _prevCameraStateBeforeFire = _cameraStateManager.CurrentState;
-                _cameraStateManager.ForceState(NightHunt.Gameplay.Camera.CameraState.Locked);
-            }
-
-            // ── Bước 2: Force STRAFE mode trong movement ──────────────────────────
-            // _cameraLocked = true → SimulateMovement dùng STRAFE:
-            //   character model xoay nhìn theo _aimYaw (cursor direction)
-            //   WASD di chuyển relative với góc camera đang bị freeze
-            if (_movementInputHandler != null)
-            {
-                _prevCameraLockBeforeFire = _movementInputHandler.IsCameraLocked();
-                _movementInputHandler.SetCameraLockOverride(active: true, forcedValue: true);
-            }
-
-            // ── Bước 3: Kể từ đây GetAimDirection() ≠ zero ───────────────────────
-            // _isFiring = true → GetAimDirection() expose _aimDirection
-            // GatherInput() Priority 1 sẽ resolve → _aimYaw = cursor direction
-            // → character xoay nhìn theo cursor
-
-            OnFire?.Invoke();
-            // Update range to live value each time the ring is shown.
-            // This avoids the init-timing race (stat cache not ready at spawn)
-            // and ensures the ring matches the actual AimSystem clamp every fire.
-            if (_rangeIndicator != null)
-                _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
-
-            // Mobile: show world aim cursor so it’s visible while holding the FireButton.
-            // PC: cursor is always visible (set in AimSystem.Initialize).
-            if (Application.isMobilePlatform)
-                _aimSystem?.SetCursorVisible(true);
         }
 
         /// <summary>
@@ -477,8 +477,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private void EndFire()
         {
             // Execute throw on fire-release when a throwable is armed and in aim state.
+            // BUG 2 FIX: pass the current cursor ground position so the server receives the
+            // correct world target (ItemAimController.AimWorldTarget is client-only).
             if (_isFiring && _itemUseSystem != null && _itemUseSystem.IsUsingItem && !ItemAimController.IsAimingPC)
-                _itemUseSystem.RequestExecuteThrow();
+                _itemUseSystem.RequestExecuteThrow(_lastGroundHitPoint);
 
             if (!_isFiring) return;
             _isFiring = false;

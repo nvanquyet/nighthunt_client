@@ -313,12 +313,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void ConfirmAim()
         {
             if (!_inAimMode) return;
+            Vector3 throwTarget = AimWorldTarget;  // capture before ResetAimState clears _inAimMode
             ResetAimState();
 
             // UseQuickSlot was already called in TryBeginAim (server started BeginThrowable).
             // We only need to request the actual throw execution now.
             if (_itemUseSystem != null)
-                _itemUseSystem.RequestExecuteThrow();
+                _itemUseSystem.RequestExecuteThrow(throwTarget);
         }
 
         /// <summary>

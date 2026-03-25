@@ -15,7 +15,7 @@ MonoBehaviour:
   ItemID: throwable_smokegrenade
   DisplayName: Smoke Grenade
   Description: Deploys smoke screen for 15 s. No damage.
-  Icon: {fileID: 21300000, guid: 87bab8761be522443bfb6327a272a9db, type: 3}
+  Icon: {fileID: 21300000, guid: dd261f4df49b886428c464e68407b835, type: 3}
   IsStackable: 1
   MaxStackSize: 3
   Weight: 1
@@ -31,16 +31,17 @@ MonoBehaviour:
   UsageDuration: 0
   CanCancelUsage: 1
   CanUseWhileMoving: 1
-  StatConfig: {fileID: 11400000, guid: bdbf5e04646a62641a93c421859f8abe, type: 2}
+  StatConfig: {fileID: 0}
   ProjectilePrefab: {fileID: 7342610198373781452, guid: e00f019115681e64b9995585ae6e55b4,
     type: 3}
   ThrowForce: 12
-  MaxRange: 25
   PrepareTime: 0.5
+  LaunchAngleDeg: 45
   ThrowableType: 2
   Damage: 0
   ExplosionRadius: 0
   FuseTime: 2
+  ProximityDetectionRadius: 0
   CanBounce: 0
   ThrowSound: {fileID: 0}
   ImpactSound: {fileID: 0}

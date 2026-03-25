@@ -305,6 +305,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (btn == null) continue;
                 var type = i < _spawnedWeaponTypes.Count ? _spawnedWeaponTypes[i] : default;
                 btn.Bind(type, _weaponSystem);
+                btn.BindCombatHandler(_combatInputHandler);
             }
         }
 
@@ -312,7 +313,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (_filterPanels == null) return;
             foreach (var entry in _filterPanels)
-                if (entry.Panel != null) entry.Panel.Initialize(entry.FilterType, _itemSelectionSystem, _inventorySystem);
+                if (entry.Panel != null) entry.Panel.Initialize(entry.FilterType, _itemSelectionSystem, _inventorySystem, _itemUseSystem, _combatInputHandler);
         }
 
         // ─────────────────────────────────────────────────────────────────────

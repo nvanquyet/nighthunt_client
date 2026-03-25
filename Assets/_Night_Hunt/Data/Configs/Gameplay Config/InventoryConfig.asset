@@ -15,31 +15,21 @@ MonoBehaviour:
   Inventory:
     GridWidth: 5
     GridHeight: 5
-    DefaultEmptyIcon: {fileID: 21300000, guid: 51308a105c1fd47adadaf1d59f9a85f7, type: 3}
+    DefaultEmptyIcon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
   EquipmentConfig:
   - Type: 0
-    DefaultIcon: {fileID: 21300000, guid: 657ab9dd0875f489486e4c003b264667, type: 3}
+    DefaultIcon: {fileID: 21300000, guid: ad69a0597e9b00542a17ceafe615e09f, type: 3}
   - Type: 3
-    DefaultIcon: {fileID: 21300000, guid: 7036584bb0e2a4777bb13420856d5746, type: 3}
+    DefaultIcon: {fileID: 21300000, guid: 57fddd8b9308e014ca623b7e8a612e1f, type: 3}
   - Type: 2
-    DefaultIcon: {fileID: 21300000, guid: 074a3bca6f7414ed19430b7d56be2282, type: 3}
+    DefaultIcon: {fileID: 21300000, guid: c0e79d2a577ef2a48a3c44716d4f3bf0, type: 3}
   WeaponConfig:
   - Type: 0
-    DefaultIcon: {fileID: 21300000, guid: 86ac6f413bd544030b03ff0880b0aa86, type: 3}
+    DefaultIcon: {fileID: 21300000, guid: 89c94b010a5928f4a9b03d41d3a4d4c1, type: 3}
   - Type: 1
-    DefaultIcon: {fileID: 21300000, guid: c2dc501fc87c24498aabe8110c81e57c, type: 3}
-  QuickSlotConfig:
-    SlotCount: 4
-    DefaultEmptyIcon: {fileID: 21300000, guid: 51308a105c1fd47adadaf1d59f9a85f7, type: 3}
-    AutoRemoveOnConsume: 1
-    AutoAssignNewItems: 1
-    AllowSlotSwapping: 1
-    AllowedTypes: 020000000600000005000000
-    ShowItemCount: 1
-    ShowCooldown: 1
-    PulseOnUse: 1
+    DefaultIcon: {fileID: 21300000, guid: 89c94b010a5928f4a9b03d41d3a4d4c1, type: 3}
   AttachmentUI:
-    DefaultEmptyIcon: {fileID: 21300000, guid: 51308a105c1fd47adadaf1d59f9a85f7, type: 3}
+    DefaultEmptyIcon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
     ShowAttachmentPanelOnHover: 0
     ShowAttachmentPanelOnSelect: 0
   AutoStackOnAdd: 1

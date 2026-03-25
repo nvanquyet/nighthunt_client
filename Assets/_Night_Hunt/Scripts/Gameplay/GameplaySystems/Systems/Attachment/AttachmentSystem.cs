@@ -5,7 +5,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.Gameplay.StatSystem.Systems;
+using NightHunt.GameplaySystems.Stat;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Attachment
@@ -223,9 +223,9 @@ namespace NightHunt.GameplaySystems.Attachment
             // Remove from inventory slots but keep in ItemDatabase (for ItemStatSystem modifier lookup)
             _inventorySystem.RemoveItemFromSlotsOnly(attachmentInstanceID);
             
-            // Invalidate item stat cache (attachments changed)
-            ItemStatSystem.InvalidateCache(parentInstanceID);
-            
+            // Recompute item stats so attachment modifiers are immediately reflected.
+            RecomputeItemStats(parentInstanceID);
+
             OnAttachmentAttached?.Invoke(parentInstanceID, slotIndex, attachment);
             
             if (_enableDebugLogs)
@@ -277,8 +277,8 @@ namespace NightHunt.GameplaySystems.Attachment
                 Debug.LogWarning($"[AttachmentSystem] DetachItemServer: attachment instance not found: {attachmentID}");
             }
 
-            // Invalidate item stat cache so modifiers from this attachment are removed
-            ItemStatSystem.InvalidateCache(parentInstanceID);
+            // Recompute item stats so removed attachment modifiers are no longer applied.
+            RecomputeItemStats(parentInstanceID);
 
             if (_enableDebugLogs)
                 Debug.Log($"[AttachmentSystem] Detached attachment from {parentInstanceID}[{slotIndex}]");
@@ -340,9 +340,9 @@ namespace NightHunt.GameplaySystems.Attachment
             parent1.SetAttachment(slotIndex1, attach2);
             parent2.SetAttachment(slotIndex2, attach1);
 
-            // Invalidate stat caches for both parents
-            ItemStatSystem.InvalidateCache(parentID1);
-            ItemStatSystem.InvalidateCache(parentID2);
+            // Recompute stat caches for both parents after swap.
+            RecomputeItemStats(parentID1);
+            RecomputeItemStats(parentID2);
 
             if (_enableDebugLogs)
                 Debug.Log($"[AttachmentSystem] Swapped {parentID1}[{slotIndex1}] ↔ {parentID2}[{slotIndex2}]");
@@ -435,6 +435,17 @@ namespace NightHunt.GameplaySystems.Attachment
             }
         }
         
+        #endregion
+
+        #region Helpers
+
+        private void RecomputeItemStats(string instanceID)
+        {
+            var item = _inventorySystem?.GetItemByInstanceID(instanceID)
+                    ?? ItemDatabase.GetInstance(instanceID);
+            if (item != null) ItemStatComputer.Compute(item);
+        }
+
         #endregion
     }
 }

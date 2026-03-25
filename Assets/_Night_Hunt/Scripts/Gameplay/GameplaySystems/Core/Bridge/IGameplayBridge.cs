@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
@@ -60,6 +61,11 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         /// Direct access to item use system (read-only)
         /// </summary>
         IItemUseSystem ItemUse { get; }
+
+        /// <summary>
+        /// Direct access to attachment system (read-only)
+        /// </summary>
+        IAttachmentSystem Attachment { get; }
         
         #endregion
 
@@ -108,7 +114,7 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         void SelectItem(string instanceID);
         void DeselectItem();
         void CancelItemUse();
-        void ExecuteThrow();
+        void ExecuteThrow(Vector3 aimTarget);
 
         #endregion
 
@@ -157,6 +163,8 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         event Action<ItemInstance> OnItemUseCompleted;
         event Action<ItemInstance> OnItemUseCancelled;
         event Action<ItemInstance, float> OnItemUseProgress;
+        event Action<string, int, ItemInstance> OnAttachmentAttached;
+        event Action<string, int, ItemInstance> OnAttachmentDetached;
         
         #endregion
     }

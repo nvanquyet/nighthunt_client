@@ -15,15 +15,12 @@ MonoBehaviour:
   ItemID: armor_helmet
   DisplayName: 
   Description: 
-  Icon: {fileID: 21300000, guid: 292d1409190994faf8974ce6267f60c7, type: 3}
+  Icon: {fileID: 21300000, guid: 10b64ede9a66119419847a8d6a2c068b, type: 3}
   IsStackable: 0
   MaxStackSize: 1
   Weight: 1.5
   ModifyWeightWhenEquipped: 0
   EquippedWeightModifier: 0
-  ResourceType: 1
-  MaxResource: 100
-  DefaultResource: 100
   AttachmentSlots: 07000000
   CanAttachTo: 
   ValidSlots: 0000000001000000
@@ -34,6 +31,4 @@ MonoBehaviour:
   CanUseWhileMoving: 0
   StatConfig: {fileID: 0}
   EquipmentSlot: 0
-  MaxDurability: 100
-  DefaultDurability: 100
   DurabilityLossRate: 1
