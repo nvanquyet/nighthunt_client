@@ -50,6 +50,11 @@ namespace NightHunt.Gameplay.Character
         [SerializeField] protected float slowMovementThreshold = 1.0f;
 
         [Header("Debug")] [SerializeField] protected bool enableDebugLogs = false;
+        [Tooltip("Bật để log chuyên sâu: tại sao character move khi KHÔNG có input. Throttle 2/giây để không spam.")]
+        [SerializeField] protected bool diagnoseMysteryMove = false;
+
+        // Throttle diagnostic log to avoid console spam (2 logs/sec)
+        private float _diagTimer = 0f;
 
         // Components
 
@@ -194,7 +199,8 @@ namespace NightHunt.Gameplay.Character
 
             _targetPosition = transform.position;
             _targetRotation = transform.rotation;
-            _verticalVelocity = -(movementSettings?.groundedStickDownVelocity ?? 2f);
+            // Start at 0 — SimulateMovement sets the correct grounded/airborne value on the first tick.
+            _verticalVelocity = 0f;
             _cameraLocked = startWithCameraLock;
             _staminaRecoveryTimer = 0f;
 
@@ -440,8 +446,30 @@ namespace NightHunt.Gameplay.Character
             Quaternion aimRot = Quaternion.Euler(0f, data.AimYaw, 0f);
             Vector3 moveDir   = Vector3.zero;
 
+            // ── [DIAG] Throttle counter ───────────────────────────────────────────
+            bool diagLog = false;
+            if (diagnoseMysteryMove && IsOwner)
+            {
+                _diagTimer -= dt;
+                if (_diagTimer <= 0f) { _diagTimer = 0.5f; diagLog = true; }
+            }
+
+            // ── [DIAG] INPUT SNAPSHOT ─────────────────────────────────────────────
+            if (diagLog)
+            {
+                Debug.Log(
+                    $"[DIAG][INPUT] move=({data.Move.x:F3},{data.Move.y:F3}) " +
+                    $"yaw={data.Yaw:F1} aimYaw={data.AimYaw:F1} " +
+                    $"sprint={data.Sprint} crouch={data.Crouch} " +
+                    $"jump={data.Jump} roll={data.Roll} camLock={data.CameraLocked} " +
+                    $"grounded={grounded} pos={transform.position:F2}");
+            }
+
+            Quaternion rotBefore = transform.rotation;
+
             if (data.CameraLocked)
             {
+                // STRAFE mode: character model always faces aim direction (cursor/aim).
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, aimRot, lockTurnSpeed * dt * 100f);
                 if (inputDir.sqrMagnitude > 0.001f) moveDir = camRot * inputDir;
             }
@@ -449,15 +477,27 @@ namespace NightHunt.Gameplay.Character
             {
                 if (inputDir.sqrMagnitude > 0.001f)
                 {
+                    // TANK mode + có input: quay theo hướng di chuyển.
                     moveDir = camRot * inputDir;
                     transform.rotation = Quaternion.RotateTowards(
                         transform.rotation, Quaternion.LookRotation(moveDir), tankTurnSpeed * dt * 100f);
                 }
-                else if (Quaternion.Angle(transform.rotation, aimRot) > 5f)
-                {
-                    transform.rotation = Quaternion.RotateTowards(
-                        transform.rotation, aimRot, tankTurnSpeed * 0.5f * dt * 100f);
-                }
+                // ── ROT_DRIFT FIX ─────────────────────────────────────────────────────
+                // BỎ PHẦN else-if tự quay về aimRot khi KHÔNG có input.
+                // Lý do: khi idle trên slope, rotation thay đổi → slope projection có XZ
+                // component → PhysX depenetrate dọc slope → nhân vật trượt dù không input.
+                // TANK mode: direction of travel drives facing, NOT the camera aim.
+                // Nếu muốn auto-face khi fire, để CombatSystem handle riêng qua SetCameraLock(true).
+            }
+
+
+            // ── [DIAG] ROTATION CHANGE ────────────────────────────────────────────
+            if (diagLog)
+            {
+                float rotDelta = Quaternion.Angle(rotBefore, transform.rotation);
+                if (rotDelta > 0.01f)
+                    Debug.Log($"[DIAG][ROT] Rotation changed {rotDelta:F2}° this tick | " +
+                              $"curYaw={transform.eulerAngles.y:F1} mode={(data.CameraLocked ? "STRAFE" : "TANK")}");
             }
 
             // ── Roll ─────────────────────────────────────────────────────────────
@@ -515,6 +555,7 @@ namespace NightHunt.Gameplay.Character
                 OnJumpTriggered?.Invoke(); // Fire animation event
             }
 
+            float vertVelBefore = _verticalVelocity;
             if (grounded && _verticalVelocity <= 0f)
             {
                 // Snap to small stick-down; no accumulation → no PhysX floor-push jitter.
@@ -524,11 +565,50 @@ namespace NightHunt.Gameplay.Character
             {
                 float mult = _verticalVelocity < 0f ? Mathf.Max(1f, movementSettings.fallGravityMultiplier) : 1f;
                 _verticalVelocity -= movementSettings.gravity * mult * dt;
+                // Clamp to terminal velocity — prevents unbounded accumulation on long falls.
+                _verticalVelocity = Mathf.Max(_verticalVelocity, -movementSettings.maxFallSpeed);
+            }
+
+            // ── [DIAG] FINAL MOVEMENT ─────────────────────────────────────────────
+            Vector3 finalMovement = new Vector3(moveDir.x * speed, _verticalVelocity, moveDir.z * speed);
+            if (diagLog)
+            {
+                Debug.Log(
+                    $"[DIAG][MOVE] moveDir=({moveDir.x:F3},{moveDir.z:F3}) speed={speed:F2} " +
+                    $"vertVel={_verticalVelocity:F3} (was {vertVelBefore:F3}) " +
+                    $"rolling={_isRolling} grounded={grounded}\n" +
+                    $"           → finalMovement=({finalMovement.x:F3},{finalMovement.y:F3},{finalMovement.z:F3})");
+            }
+
+            // ── [DIAG] SUSPICIOUS: no input nhưng finalMovement có horizontal ────
+            if (diagnoseMysteryMove && IsOwner
+                && inputDir.sqrMagnitude < 0.001f
+                && !_isRolling
+                && (Mathf.Abs(finalMovement.x) > 0.01f || Mathf.Abs(finalMovement.z) > 0.01f))
+            {
+                Debug.LogError(
+                    $"[DIAG][⚠️ MYSTERY MOVE] Không có input nhưng horizontal != 0! " +
+                    $"finalMovement=({finalMovement.x:F3},{finalMovement.y:F3},{finalMovement.z:F3}) " +
+                    $"moveDir=({moveDir.x:F3},{moveDir.z:F3}) speed={speed:F2} rolling={_isRolling}");
             }
 
             // ── Apply ─────────────────────────────────────────────────────────────
-            ApplyMovement(new Vector3(moveDir.x * speed, _verticalVelocity, moveDir.z * speed), dt);
+            ApplyMovement(finalMovement, dt);
             _velocity = GetCurrentVelocity();
+
+            // ── [DIAG] POSITION CHANGE ────────────────────────────────────────────
+            if (diagnoseMysteryMove && IsOwner && inputDir.sqrMagnitude < 0.001f && !_isRolling)
+            {
+                // So sánh vị trí trước/sau ApplyMovement (chỉ hữu ích nếu log position trước)
+                // → Để đơn giản, log velocity trả về.
+                Vector3 appliedVel = GetCurrentVelocity();
+                if (Mathf.Abs(appliedVel.x) > 0.01f || Mathf.Abs(appliedVel.z) > 0.01f)
+                {
+                    Debug.LogError(
+                        $"[DIAG][⚠️ VEL POST-APPLY] Sau ApplyMovement: velocity=({appliedVel.x:F3},{appliedVel.y:F3},{appliedVel.z:F3}) " +
+                        $"dù không có input! Check ApplyMovement log bên dưới.");
+                }
+            }
         }
 
         #endregion
@@ -744,7 +824,7 @@ namespace NightHunt.Gameplay.Character
             transform.position = position;
             transform.rotation = rotation;
             _velocity = Vector3.zero;
-            _verticalVelocity = -2f;
+            _verticalVelocity = 0f; // SimulateMovement sets correct value on first tick post-teleport.
             ResetPhysicsState();
 
             if (enableDebugLogs)

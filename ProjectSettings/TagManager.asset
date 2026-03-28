@@ -44,9 +44,9 @@ TagManager:
   - Items
   - Minimap
   - 
-  - Pickup
-  - Interactable
-  - PlayerHitbox
+  - Wall
+  - 
+  - 
   - 
   - 
   - 

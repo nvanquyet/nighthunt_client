@@ -1670,8 +1670,6 @@ public class PrCharacterController : MonoBehaviour
             }
 
         }
-        
-        
     }
 
     //This function it´s used only for Aiming and Jumping states. Those anims doesn´t have root motion so we move the player by script

@@ -47,7 +47,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0da04b92ed19424aacecdade27d99665, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 12
+  _componentIndexCache: 10
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _weaponSystemComponent: {fileID: 2421400275454736108}
@@ -93,9 +93,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8d05c1e580e9d3948a0ed67701485e27, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 11
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 2932638389700231956}
   _inventorySystemComponent: {fileID: 9196575011444076670}
   _itemUseSystemComponent: {fileID: 664824046625769896}
 --- !u!1 &2685421604083444283
@@ -668,8 +668,8 @@ MonoBehaviour:
     m_Bits: 768
   _maxResults: 16
   logOnChange: 0
-  drawGizmos: 1
-  showDebugUI: 1
+  drawGizmos: 0
+  showDebugUI: 0
 --- !u!114 &1375689637451955110
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -688,8 +688,8 @@ MonoBehaviour:
     m_Bits: 26608384
   _maxDistance: 50
   ignorePlayerLayer: 1
-  showDebugRay: 1
-  logTargetChanges: 1
+  showDebugRay: 0
+  logTargetChanges: 0
 --- !u!1 &6186874985291187823
 GameObject:
   m_ObjectHideFlags: 0
@@ -711,7 +711,6 @@ GameObject:
   - component: {fileID: 3472814331583980281}
   - component: {fileID: 5379918314552202696}
   - component: {fileID: 8370610283817252759}
-  - component: {fileID: 107071303962007605}
   m_Layer: 9
   m_Name: PlayerPrefab
   m_TagString: Untagged
@@ -767,12 +766,11 @@ MonoBehaviour:
   - {fileID: 5379918314552202696}
   - {fileID: 9001051205302328292}
   - {fileID: 2421400275454736108}
-  - {fileID: 0}
   - {fileID: 9196575011444076670}
   - {fileID: 4760286300081198091}
-  - {fileID: 0}
   - {fileID: 4470525218012556025}
   - {fileID: 664824046625769896}
+  - {fileID: 6893537453317171255}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -828,8 +826,8 @@ Rigidbody:
     m_Bits: 0
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
-  m_UseGravity: 1
-  m_IsKinematic: 0
+  m_UseGravity: 0
+  m_IsKinematic: 1
   m_Interpolate: 1
   m_Constraints: 112
   m_CollisionDetection: 1
@@ -960,14 +958,19 @@ MonoBehaviour:
   staminaRecoveryDelay: 1.5
   slowMovementThreshold: 1
   enableDebugLogs: 0
-  groundCheckDistance: 0.1
+  diagnoseMysteryMove: 1
+  groundCheckDistance: 0.15
   groundLayer:
     serializedVersion: 2
     m_Bits: 4294967295
-  maxFallSpeed: -40
+  groundCheckRadiusFactor: 0.8
   drag: 0
   angularDrag: 0.05
+  diagGrounding: 1
+  diagApply: 1
   wallCheckSkinWidth: 0.08
+  maxStepHeight: 0.5
+  maxSlopeAngle: 60
 --- !u!114 &3472814331583980281
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1011,19 +1014,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 38aa822c0bed7b24d8ea16820a3b0498, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &107071303962007605
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6186874985291187823}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3247ddacd08587547b53e00d6906fcd5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  showDebugRays: 0
 --- !u!1 &6529247948932358281
 GameObject:
   m_ObjectHideFlags: 0
@@ -1070,7 +1060,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 650f626e92e042f1b9b39135fd9979a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 8
+  _componentIndexCache: 7
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
@@ -1091,7 +1081,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8ff5803b4fb386144ac4b2cb73a6e23f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 9
+  _componentIndexCache: 8
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
@@ -1109,7 +1099,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c19eba99168c57e4c8ca0e97a8cae5f3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 11
+  _componentIndexCache: 9
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _inventorySystem: {fileID: 9196575011444076670}

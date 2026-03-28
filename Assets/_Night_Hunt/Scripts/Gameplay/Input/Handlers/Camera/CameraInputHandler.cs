@@ -26,6 +26,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
         private float currentRotationY = 0f;
         private bool inputEnabled = false;
 
+        // Raw look value polled every Update (works for both mouse delta and analog stick).
+        private Vector2 _rawLookValue;
+
         // Events
         public event System.Action<float> OnRotate; // Rotation delta
         public event System.Action<float> OnZoom;   // Zoom delta
@@ -52,7 +55,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
         {
             if (!inputEnabled) return;
 
-            // Apply rotation if any
+            // Poll lookAction every frame so analog stick (OnScreenStick → rightStick)
+            // produces continuous rotation while held, and mouse delta works identically.
+            if (lookAction != null)
+                _rawLookValue = lookAction.ReadValue<Vector2>();
+
+            currentRotationY += _rawLookValue.x * _rotationSpeed * Time.deltaTime;
+
             if (currentRotationY != 0f)
             {
                 OnRotate?.Invoke(currentRotationY);
@@ -135,8 +144,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
             if (rotateRightAction != null)
                 rotateRightAction.performed += OnRotateRightPerformed;
 
-            if (lookAction != null)
-                lookAction.performed += OnLookPerformed;
+            // lookAction is polled in Update — no callback subscription needed.
 
             if (zoomAction != null)
                 zoomAction.performed += OnZoomPerformed;
@@ -156,13 +164,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
             if (rotateRightAction != null)
                 rotateRightAction.performed -= OnRotateRightPerformed;
 
-            if (lookAction != null)
-                lookAction.performed -= OnLookPerformed;
+            // lookAction was not subscribed — nothing to unsubscribe.
 
             if (zoomAction != null)
                 zoomAction.performed -= OnZoomPerformed;
 
             currentRotationY = 0f;
+            _rawLookValue = Vector2.zero;
 
             Debug.Log("[CameraInputHandler] Input disabled");
         }
@@ -181,12 +189,6 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
             currentRotationY = _rotationSpeed * Time.deltaTime;
         }
 
-        private void OnLookPerformed(InputAction.CallbackContext context)
-        {
-            Vector2 lookDelta = context.ReadValue<Vector2>();
-            currentRotationY += lookDelta.x * _rotationSpeed * Time.deltaTime;
-        }
-
         private void OnZoomPerformed(InputAction.CallbackContext context)
         {
             // ZoomInOut is an Axis (float)
@@ -195,5 +197,6 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
         }
 
         #endregion
+
     }
 }

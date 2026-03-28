@@ -258,6 +258,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         public bool IsSprinting() => isSprinting;
         public bool IsCrouching() => isCrouching;
 
+        // ── Camera Lock Override ─────────────────────────────────────────────────────
+
         /// <summary>
         /// Returns true once if Jump was pressed since last call (consumes the flag).
         /// Called by CharacterPredictedMovement.GatherInput() every prediction tick.

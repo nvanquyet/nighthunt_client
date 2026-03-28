@@ -4,8 +4,6 @@ using UnityEngine;
 
 public class AutomaticFootIK : MonoBehaviour
 {
-    [Tooltip("Layer(s) used for ground raycasts. Leave at 0 to fall back to Layer 8 (default PR value).")]
-    public LayerMask groundLayerMask = 0;
 
     public AnimationCurve torsoLoop;
     public float torsoYOrig = 0.0f;
@@ -57,7 +55,9 @@ public class AutomaticFootIK : MonoBehaviour
         }
         torsoYOrig = transform.localPosition.y;
         RaycastHit hit;
-        int finalMask = groundLayerMask.value != 0 ? (int)groundLayerMask.value : (1 << 8);
+        int objectInt = 8;
+        int objectLayer = 1 << objectInt;
+        int finalMask = objectLayer;
         if (Physics.Raycast(transform.position, Vector3.down, out hit, 2.0f, finalMask))
         {
             characterHeight = Vector3.Distance(hit.point, transform.position) - heightOffset;
@@ -85,7 +85,9 @@ public class AutomaticFootIK : MonoBehaviour
 
         //RayCheck
         RaycastHit hit;
-        int finalMask = groundLayerMask.value != 0 ? (int)groundLayerMask.value : (1 << 8);
+        int objectInt = 8;
+        int objectLayer = 1 << objectInt;
+        int finalMask = objectLayer;
         if (Physics.Raycast(transform.position, Vector3.down, out hit, 2.0f, finalMask))
         {
             float dist = Vector3.Distance(hit.point, transform.position);
@@ -142,7 +144,9 @@ public class AutomaticFootIK : MonoBehaviour
 
                         //RayCheck
                         RaycastHit hit;
-                        int finalMask = groundLayerMask.value != 0 ? (int)groundLayerMask.value : (1 << 8);
+                        int objectInt = 8;
+                        int objectLayer = 1 << objectInt;
+                        int finalMask = objectLayer;
                         if (Physics.Raycast(footPos[x].position + (Vector3.up), Vector3.down, out hit, 1.5f, finalMask))
                         {
                             footPos[x].position = new Vector3(footPos[x].position.x, hit.point.y + stepHeight, footPos[x].position.z);
