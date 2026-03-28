@@ -225,6 +225,14 @@ namespace NightHunt.Gameplay.Core.State
 
             OnRespawned?.Invoke();
 
+            // GLOBAL EVENT
+            NightHunt.Gameplay.Core.Events.GameplayEventBus.Raise(new NightHunt.Gameplay.Core.Events.PlayerRespawnedEvent
+            {
+                PlayerName = _networkPlayer != null ? _networkPlayer.DisplayName : string.Empty,
+                TeamId = _networkPlayer != null ? _networkPlayer.TeamId : -1,
+                Position = transform.position
+            });
+
             if (IsServer)
                 _networkPlayer?.SetAlive(true);
         }

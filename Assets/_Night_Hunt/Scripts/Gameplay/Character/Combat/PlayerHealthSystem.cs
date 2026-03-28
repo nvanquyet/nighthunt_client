@@ -290,12 +290,22 @@ namespace NightHunt.Gameplay.Character.Combat
         private void NotifyKillObserversRpc(string killerName, string weaponId)
         {
             string victimName = _networkPlayer?.DisplayName ?? string.Empty;
+            int victimTeam = _networkPlayer != null ? _networkPlayer.TeamId : -1;
 
             Debug.Log($"[PlayerHealthSystem] DEATH event on client — victim: {victimName}" +
                       $", killed by: {killerName}, weapon: {weaponId}");
 
             OnPlayerDied?.Invoke(killerName);
             OnAnyPlayerDied?.Invoke(victimName, killerName, weaponId);
+
+            // GLOBAL EVENT FOR KILL FEED / MATCH LOGIC:
+            NightHunt.Gameplay.Core.Events.GameplayEventBus.Raise(new NightHunt.Gameplay.Core.Events.PlayerKilledEvent
+            {
+                VictimName = victimName,
+                KillerName = killerName,
+                WeaponId = weaponId,
+                VictimTeamId = victimTeam
+            });
         }
     }
 }

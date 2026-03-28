@@ -107,4 +107,25 @@ namespace NightHunt.Gameplay.Core.Events
         public UnityEngine.Vector3 ChestPosition;
         public int KillerTeamId;
     }
+
+    // ── Player Lifecycle ─────────────────────────────────────────────────────
+
+    /// <summary>A player has died/been killed. Useful for global KillFeed or notifications.</summary>
+    public struct PlayerKilledEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        public string VictimName;
+        public string KillerName;
+        public string WeaponId;
+        public int VictimTeamId;
+    }
+
+    /// <summary>A player has respawned.</summary>
+    public struct PlayerRespawnedEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        public string PlayerName;
+        public int TeamId;
+        public UnityEngine.Vector3 Position;
+    }
 }

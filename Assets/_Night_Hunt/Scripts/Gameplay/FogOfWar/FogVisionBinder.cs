@@ -23,6 +23,7 @@ namespace NightHunt.Gameplay.FogOfWar
         private FogOfWarRevealer3D _revealer;
         private IPlayerStatSystem _statSystem;
         private CharacterLifecycleController _lifecycle;
+        private FogTeamVisibilityBinder _teamBinder;
         private bool _initialized;
 
         private void Awake()
@@ -41,6 +42,10 @@ namespace NightHunt.Gameplay.FogOfWar
                 .OnSelf().InParent().InRootChildren()
                 .OrLogWarning("[FogVisionBinder] CharacterLifecycleController not found — death vision disable will not work")
                 .Resolve();
+
+            _teamBinder = ComponentResolver.Find<FogTeamVisibilityBinder>(this)
+                .OnSelf().InParent().InRootChildren()
+                .Resolve();
         }
 
         private void OnEnable()
@@ -53,9 +58,16 @@ namespace NightHunt.Gameplay.FogOfWar
 
             if (_lifecycle != null)
             {
-                _lifecycle.OnDied      += OnPlayerDied;
-                _lifecycle.OnRespawned += OnPlayerRespawned;
+                _lifecycle.OnDied      += RefreshRevealerState;
+                _lifecycle.OnRespawned += RefreshRevealerState;
             }
+
+            if (_teamBinder != null)
+            {
+                _teamBinder.OnEnemyStateChanged += HandleEnemyStateChanged;
+            }
+
+            RefreshRevealerState();
         }
 
         private void OnDisable()
@@ -65,8 +77,13 @@ namespace NightHunt.Gameplay.FogOfWar
 
             if (_lifecycle != null)
             {
-                _lifecycle.OnDied      -= OnPlayerDied;
-                _lifecycle.OnRespawned -= OnPlayerRespawned;
+                _lifecycle.OnDied      -= RefreshRevealerState;
+                _lifecycle.OnRespawned -= RefreshRevealerState;
+            }
+
+            if (_teamBinder != null)
+            {
+                _teamBinder.OnEnemyStateChanged -= HandleEnemyStateChanged;
             }
         }
 
@@ -88,30 +105,37 @@ namespace NightHunt.Gameplay.FogOfWar
                     .OnSelf().InParent().InRootChildren()
                     .Resolve();
 
+            if (_teamBinder == null)
+                _teamBinder = ComponentResolver.Find<FogTeamVisibilityBinder>(this)
+                    .OnSelf().InParent().InRootChildren()
+                    .Resolve();
+
             _initialized = true;
         }
 
-        // ── Death / Respawn ──────────────────────────────────────────────────────
+        // ── State Handling ──────────────────────────────────────────────────────
 
-        /// <summary>Disable FOW revealer so the dead player doesn't reveal fog.</summary>
-        private void OnPlayerDied()
+        private void HandleEnemyStateChanged(bool isEnemy)
         {
-            if (_revealer != null)
-            {
-                _revealer.enabled = false;
-                Debug.Log("[FogVisionBinder] Player died — FogOfWarRevealer3D disabled.");
-            }
+            RefreshRevealerState();
         }
 
-        /// <summary>Re-enable FOW revealer when player respawns.</summary>
-        private void OnPlayerRespawned()
+        private void RefreshRevealerState()
         {
-            if (_revealer != null)
+            if (_revealer == null) return;
+
+            bool isAlive = _lifecycle == null || _lifecycle.IsAlive;
+            bool isAlly = _teamBinder == null || !_teamBinder.IsEnemyToLocal;
+
+            _revealer.enabled = isAlive && isAlly;
+
+            // Only update stats radius if we're actually enabling it
+            if (_revealer.enabled)
             {
-                _revealer.enabled = true;
-                ApplyVisionFromStats(); // restore correct radius
-                Debug.Log("[FogVisionBinder] Player respawned — FogOfWarRevealer3D re-enabled.");
+                ApplyVisionFromStats();
             }
+
+            Debug.Log($"[FogVisionBinder] RefreshRevealerState: isAlive={isAlive}, isAlly={isAlly} -> Enabled={_revealer.enabled}");
         }
 
         // ── Stat Handling ────────────────────────────────────────────────────────

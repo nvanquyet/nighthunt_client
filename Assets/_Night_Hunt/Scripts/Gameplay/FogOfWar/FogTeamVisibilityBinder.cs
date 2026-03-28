@@ -26,6 +26,9 @@ namespace NightHunt.Gameplay.FogOfWar
         private NetworkPlayer _networkPlayer;
         private PlayerModelLoader _modelLoader;
 
+        public bool IsEnemyToLocal { get; private set; }
+        public event System.Action<bool> OnEnemyStateChanged;
+
         private void Awake()
         {
             _hider = ComponentResolver.Find<FogOfWarHider>(this)
@@ -111,6 +114,7 @@ namespace NightHunt.Gameplay.FogOfWar
                 // player spawns and registers with SpectateManager.
                 Log("No local team available — defaulting to visible and waiting for OnLocalPlayerSet.");
                 RemoveHiderIfExists();
+                SetEnemyState(false);
                 return false;
             }
 
@@ -120,10 +124,12 @@ namespace NightHunt.Gameplay.FogOfWar
                 // Nếu object không có team (neutral) → tuỳ design, ở đây cho luôn visible.
                 Log("No object team detected, treating as neutral (visible).");
                 RemoveHiderIfExists();
+                SetEnemyState(false);
                 return true; // resolved: neutral objects are always visible
             }
 
             bool isEnemyToLocal = objectTeamId != localTeamId;
+            SetEnemyState(isEnemyToLocal);
 
             if (isEnemyToLocal)
             {
@@ -137,6 +143,15 @@ namespace NightHunt.Gameplay.FogOfWar
             }
 
             return true;
+        }
+
+        private void SetEnemyState(bool isEnemy)
+        {
+            if (IsEnemyToLocal != isEnemy)
+            {
+                IsEnemyToLocal = isEnemy;
+                OnEnemyStateChanged?.Invoke(IsEnemyToLocal);
+            }
         }
 
         private bool TryGetLocalTeamId(out int teamId)

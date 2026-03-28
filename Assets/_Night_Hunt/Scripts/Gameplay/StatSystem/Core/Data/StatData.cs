@@ -63,26 +63,37 @@ namespace NightHunt.Gameplay.StatSystem.Core.Data
             };
         }
         
-        /// <summary>
-        /// Check equality for sync comparisons
-        /// </summary>
         public override bool Equals(object obj)
         {
             if (!(obj is StatData))
                 return false;
             
             var other = (StatData)obj;
-            return Type == other.Type;
+            // FISHNET SYNC LIST BUG FIX: Must compare all fields to trigger SyncList update
+            return Type == other.Type &&
+                   UnityEngine.Mathf.Approximately(BaseValue, other.BaseValue) &&
+                   UnityEngine.Mathf.Approximately(CurrentValue, other.CurrentValue) &&
+                   UnityEngine.Mathf.Approximately(MinValue, other.MinValue) &&
+                   UnityEngine.Mathf.Approximately(MaxValue, other.MaxValue);
         }
         
         public override int GetHashCode()
         {
-            return (int)Type;
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 23 + Type.GetHashCode();
+                hash = hash * 23 + BaseValue.GetHashCode();
+                hash = hash * 23 + CurrentValue.GetHashCode();
+                hash = hash * 23 + MinValue.GetHashCode();
+                hash = hash * 23 + MaxValue.GetHashCode();
+                return hash;
+            }
         }
         
         public static bool operator ==(StatData a, StatData b)
         {
-            return a.Type == b.Type;
+            return a.Equals(b);
         }
         
         public static bool operator !=(StatData a, StatData b)

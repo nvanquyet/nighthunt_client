@@ -506,9 +506,7 @@ namespace NightHunt.Gameplay.Character
             // Tick active roll.
             if (_isRolling)
             {
-                bool wall = IsRollBlocked(_rollDir, rollHSpeed * dt);
-
-                bool done = wall || (movementSettings.rollMode == RollMode.Leap
+                bool done = (movementSettings.rollMode == RollMode.Leap
                     ? grounded && _verticalVelocity <= 0f     // Leap ends on landing
                     : ((_rollTimer -= dt) <= 0f));             // Dash ends on timer
 
@@ -691,7 +689,8 @@ namespace NightHunt.Gameplay.Character
                 _velocity,
                 _stamina,
                 _isRolling,
-                _rollTimer
+                _rollTimer,
+                _rollDir
             );
 
             Reconcile(data, Channel.Unreliable);
@@ -705,7 +704,8 @@ namespace NightHunt.Gameplay.Character
                 _velocity,
                 _stamina,
                 _isRolling,
-                _rollTimer
+                _rollTimer,
+                _rollDir
             );
         }
 
@@ -728,6 +728,7 @@ namespace NightHunt.Gameplay.Character
                 _stamina = data.Stamina;
                 _isRolling = data.IsRolling;
                 _rollTimer = data.RollTimer;
+                _rollDir = data.RollDir;
 
                 // Restore vertical velocity from reconcile data.
                 // _verticalVelocity is a separate accumulator used by SimulateMovement for

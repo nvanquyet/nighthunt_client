@@ -341,9 +341,38 @@ namespace NightHunt.Gameplay.Character
                     stepUpY = ComputeStepUp(moveDir);
                     if (stepUpY <= 0f)
                     {
-                        horizontal = Vector3.zero;
-                        if (enableDebugLogs)
-                            Debug.Log($"[Move] Blocked by '{wallHit.collider.name}' (no step-up)");
+                        // ── Wall Slide ───────────────────────────────────────────────
+                        // Instead of a hard stop, project movement along the wall surface.
+                        Vector3 wallNormalXZ = new Vector3(wallHit.normal.x, 0f, wallHit.normal.z).normalized;
+                        if (wallNormalXZ.sqrMagnitude > 0.001f)
+                        {
+                            horizontal = Vector3.ProjectOnPlane(horizontal, wallNormalXZ);
+
+                            if (horizontal.sqrMagnitude > 0.0001f)
+                            {
+                                Vector3 slideDir = horizontal.normalized;
+                                float slideDist = horizontal.magnitude * dt;
+                                
+                                // Second pass: check corner
+                                if (IsBlockedHorizontally(slideDir, slideDist, out RaycastHit cornerHit))
+                                {
+                                    if (Vector3.Dot(cornerHit.normal, wallHit.normal) < 0.95f)
+                                    {
+                                        Vector3 cornerNormalXZ = new Vector3(cornerHit.normal.x, 0f, cornerHit.normal.z).normalized;
+                                        horizontal = Vector3.ProjectOnPlane(horizontal, cornerNormalXZ);
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            horizontal = Vector3.zero;
+                        }
+
+                        if (enableDebugLogs && horizontal.sqrMagnitude < 0.0001f)
+                            Debug.Log($"[Move] Blocked by '{wallHit.collider.name}' (corner or head-on)");
+                        else if (enableDebugLogs)
+                            Debug.Log($"[Move] Sliding along '{wallHit.collider.name}'");
                     }
                     else
                     {
@@ -363,23 +392,83 @@ namespace NightHunt.Gameplay.Character
             // bool groundedIdle = _isGroundedCached && horizontal.sqrMagnitude <= 0.0001f && movement.y <= 0f;
             // float vertDisp = groundedIdle ? 0f : movement.y * dt;
 
-            bool groundedIdle = _isGroundedCached && movement.y <= 0f;
-            float vertDisp = groundedIdle ? 0f : movement.y * dt;
+            // ── Vertical & Ground Snapping (Depenetration & Stick) ──────────────────
+            bool isJumping = movement.y > 0f;
+            float vertDisp = (_isGroundedCached && !isJumping) ? 0f : movement.y * dt;
+
+            Vector3 targetPos = _rigidbody.position 
+                + horizontal * dt 
+                + Vector3.up * vertDisp 
+                + Vector3.up * stepUpY;
+
+            if (_isGroundedCached && !isJumping)
+            {
+                // Ground snapping ensures we rest exactly on the collision surface,
+                // without applying fake gravity that causes 'sinking' into the floor.
+                Vector3 capsuleCenter = targetPos + _capsule.center;
+                float bottomSphereYOffset = Mathf.Max(0f, _capsule.height * 0.5f - _capsule.radius);
+                Vector3 footBase = capsuleCenter - Vector3.up * bottomSphereYOffset;
+
+                // Cast from slightly above to catch small bumps and slopes
+                float castOffset = maxStepHeight + 0.1f;
+                Vector3 castOrigin = footBase + Vector3.up * castOffset;
+                float castRadius = _capsule.radius * groundCheckRadiusFactor;
+
+                int hitCount = Physics.SphereCastNonAlloc(
+                    castOrigin,
+                    castRadius,
+                    Vector3.down,
+                    _raycastBuffer,
+                    castOffset + 0.5f, // Reach just below the feet
+                    groundLayer,
+                    QueryTriggerInteraction.Ignore
+                );
+
+                float bestDist = float.MaxValue;
+                bool bestFound = false;
+
+                for (int i = 0; i < hitCount; i++)
+                {
+                    RaycastHit h = _raycastBuffer[i];
+                    if (h.collider.transform.IsChildOf(transform.root)) continue;
+                    
+                    // ==========================================
+                    // CRITICAL FIX: Prevent corner-wall levitation!
+                    // If distance == 0, the cast origin is inside a collider (hugging a wall).
+                    // Ignored to prevent targetPos.y jumping up to the roof.
+                    // ==========================================
+                    if (h.distance <= 0.001f) continue;
+                    
+                    float hitAngle = Vector3.Angle(Vector3.up, h.normal);
+                    // Filter out walls that SphereCast might graze
+                    if (hitAngle > maxSlopeAngle) continue;
+
+                    if (h.distance < bestDist)
+                    {
+                        bestDist = h.distance;
+                        bestFound = true;
+                    }
+                }
+
+                if (bestFound)
+                {
+                    // Snap! The new Y exactly aligns the bottom sphere with the hit surface.
+                    float snapYDiff = castOffset - bestDist;
+                    targetPos.y += snapYDiff;
+                }
+            }
 
             if (diagApply)
             {
                 float sa = Vector3.Angle(Vector3.up, _groundNormal);
-                Debug.Log($"[DIAG][APPLY] grounded={_isGroundedCached} idle={groundedIdle} " +
+                Debug.Log($"[DIAG][APPLY] grounded={_isGroundedCached} " +
                           $"h=({horizontal.x:F3},{horizontal.z:F3}) vertDisp={vertDisp:F4} " +
-                          $"step={stepUpY:F3} slope={sa:F1}°");
+                          $"step={stepUpY:F3} slope={sa:F1}° targetY={targetPos.y:F3}");
             }
 
             _lastAppliedMovement = new Vector3(horizontal.x, movement.y, horizontal.z);
 
-            _rigidbody.MovePosition(_rigidbody.position
-                + horizontal   * dt
-                + Vector3.up   * vertDisp
-                + Vector3.up   * stepUpY);
+            _rigidbody.MovePosition(targetPos);
 
             _rigidbody.linearVelocity  = Vector3.zero;
             _rigidbody.angularVelocity = Vector3.zero;

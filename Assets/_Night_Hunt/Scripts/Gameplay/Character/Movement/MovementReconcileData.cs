@@ -11,6 +11,7 @@ namespace NightHunt.Gameplay.Character.Movement
         public float Stamina;
         public bool IsRolling;
         public float RollTimer;
+        public Vector3 RollDir;
 
         private uint _tick;
 
@@ -20,7 +21,8 @@ namespace NightHunt.Gameplay.Character.Movement
             Vector3 velocity,
             float stamina,
             bool isRolling = false,
-            float rollTimer = 0f)
+            float rollTimer = 0f,
+            Vector3 rollDir = default)
         {
             Position = position;
             Rotation = rotation;
@@ -28,6 +30,7 @@ namespace NightHunt.Gameplay.Character.Movement
             Stamina = stamina;
             IsRolling = isRolling;
             RollTimer = rollTimer;
+            RollDir = rollDir;
             _tick = 0;
         }
 
