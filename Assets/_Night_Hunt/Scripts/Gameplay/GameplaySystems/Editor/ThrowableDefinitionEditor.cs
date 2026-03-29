@@ -51,7 +51,6 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.ValidSlots = new SlotLocationType[] { 
                 SlotLocationType.Inventory
             };
-            throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
             throwable.UsageDuration = 0f; // Không có progress bar, chờ Fire button
             
@@ -87,7 +86,6 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.ValidSlots = new SlotLocationType[] { 
                 SlotLocationType.Inventory
             };
-            throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
             throwable.UsageDuration = 0f;
             
@@ -121,7 +119,6 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.ValidSlots = new SlotLocationType[] { 
                 SlotLocationType.Inventory
             };
-            throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
             throwable.UsageDuration = 0f;
             
@@ -155,7 +152,6 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.ValidSlots = new SlotLocationType[] { 
                 SlotLocationType.Inventory
             };
-            throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
             throwable.UsageDuration = 0f;
             
@@ -189,7 +185,6 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.ValidSlots = new SlotLocationType[] { 
                 SlotLocationType.Inventory
             };
-            throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
             throwable.UsageDuration = 0f;
             
@@ -223,7 +218,6 @@ namespace NightHunt.GameplaySystems.Editor
             throwable.ValidSlots = new SlotLocationType[] { 
                 SlotLocationType.Inventory
             };
-            throwable.CanUseWhileMoving = true;
             throwable.CanCancelUsage = true;
             throwable.UsageDuration = 0f;
             
@@ -257,7 +251,6 @@ namespace NightHunt.GameplaySystems.Editor
                 throwable.ValidSlots = new SlotLocationType[] { 
                     SlotLocationType.Inventory
                 };
-                throwable.CanUseWhileMoving = true;
                 throwable.CanCancelUsage = true;
                 throwable.UsageDuration = 0f;
                 throwable.ThrowForce = 15f;
@@ -284,7 +277,6 @@ namespace NightHunt.GameplaySystems.Editor
                 throwable.ValidSlots = new SlotLocationType[] { 
                     SlotLocationType.Inventory
                 };
-                throwable.CanUseWhileMoving = true;
                 throwable.CanCancelUsage = true;
                 throwable.UsageDuration = 0f;
                 throwable.ThrowForce = 12f;

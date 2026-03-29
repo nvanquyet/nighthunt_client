@@ -1,4 +1,4 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using System.Collections;
@@ -345,12 +345,12 @@ namespace NightHunt.GameplaySystems.Loot
             SpawnModelLocal($"OnSyncItemDataChanged(asServer={asServer})");
         }
 
-        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+        // â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
         // MODEL SPAWNING
-        // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+        // â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
 
         /// <summary>
-        /// Instantiate DroppedPrefab lÃ m visual child (non-networked, client-side only).
+        /// Instantiate GroundPrefab lÃ m visual child (non-networked, client-side only).
         ///
         /// GUARDS (theo thá»© tá»±):
         ///   1. Dedicated server â†’ skip (khÃ´ng cáº§n renderer)
@@ -403,22 +403,22 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             // â”€â”€ Guard 5 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            if (def.DroppedPrefab == null)
+            if (def.GroundPrefab == null)
             {
                 Debug.LogError(
-                    $"[WorldItem] SpawnModelLocal [{caller}]: def.DroppedPrefab = NULL cho '{_itemData.DefinitionID}'! " +
-                    $"ObjId={ObjectId} â€” VÃ o Inspector ItemDefinition '{_itemData.DefinitionID}' vÃ  gÃ¡n DroppedPrefab.");
+                    $"[WorldItem] SpawnModelLocal [{caller}]: def.GroundPrefab = NULL cho '{_itemData.DefinitionID}'! " +
+                    $"ObjId={ObjectId} â€” VÃ o Inspector ItemDefinition '{_itemData.DefinitionID}' vÃ  gÃ¡n GroundPrefab.");
                 return;
             }
 
             // â”€â”€ Instantiate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                Debug.Log($"[WorldItem] SpawnModelLocal [{caller}]: instantiating '{def.DroppedPrefab.name}' " +
+                Debug.Log($"[WorldItem] SpawnModelLocal [{caller}]: instantiating '{def.GroundPrefab.name}' " +
                       $"for '{_itemData.DefinitionID}' at {transform.position} ObjId={ObjectId}");
 
-            _modelInstance = Instantiate(def.DroppedPrefab, transform.position, transform.rotation, transform);
+            _modelInstance = Instantiate(def.GroundPrefab, transform.position, transform.rotation, transform);
 
-            // DroppedPrefab pháº£i lÃ  pure visual â€” khÃ´ng Ä‘Æ°á»£c cÃ³ NetworkObject
+            // GroundPrefab pháº£i lÃ  pure visual â€” khÃ´ng Ä‘Æ°á»£c cÃ³ NetworkObject
             var modelNetObj = ComponentResolver.Find<NetworkObject>(_modelInstance)
                 .OnSelf()
                 .InChildren()
@@ -426,8 +426,8 @@ namespace NightHunt.GameplaySystems.Loot
                 .Resolve();
             if (modelNetObj != null)
             {
-                Debug.LogWarning($"[WorldItem] DroppedPrefab '{def.ItemID}' cÃ³ NetworkObject â€” removing. " +
-                                 "DroppedPrefab pháº£i lÃ  pure visual.");
+                Debug.LogWarning($"[WorldItem] GroundPrefab '{def.ItemID}' cÃ³ NetworkObject â€” removing. " +
+                                 "GroundPrefab pháº£i lÃ  pure visual.");
                 Destroy(modelNetObj);
             }
 

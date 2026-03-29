@@ -685,7 +685,7 @@ MonoBehaviour:
   playerCamera: {fileID: 0}
   interactableLayerMask:
     serializedVersion: 2
-    m_Bits: 26608384
+    m_Bits: 9831168
   _maxDistance: 50
   ignorePlayerLayer: 1
   showDebugRay: 0
@@ -958,7 +958,7 @@ MonoBehaviour:
   staminaRecoveryDelay: 1.5
   slowMovementThreshold: 1
   enableDebugLogs: 0
-  diagnoseMysteryMove: 1
+  diagnoseMysteryMove: 0
   groundCheckDistance: 0.15
   groundLayer:
     serializedVersion: 2

@@ -128,4 +128,22 @@ namespace NightHunt.Gameplay.Core.Events
         public int TeamId;
         public UnityEngine.Vector3 Position;
     }
+
+    // ── Respawn UI ───────────────────────────────────────────────────
+
+    /// <summary>Server started a respawn countdown. HUD shows a timer.</summary>
+    public struct RespawnTimerEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        /// <summary>Total delay in seconds. UI counts down from this value.</summary>
+        public float DelaySeconds;
+    }
+
+    /// <summary>Respawn was cancelled (e.g. beacon destroyed during timer).</summary>
+    public struct RespawnCancelledEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        /// <summary>"beacon_destroyed" or other reason string.</summary>
+        public string Reason;
+    }
 }

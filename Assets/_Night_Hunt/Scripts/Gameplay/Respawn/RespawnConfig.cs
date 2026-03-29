@@ -8,17 +8,8 @@ namespace NightHunt.Gameplay.Respawn
     [CreateAssetMenu(fileName = "RespawnConfig", menuName = "NightHunt/Gameplay/Respawn Config")]
     public class RespawnConfig : ScriptableObject
     {
-        [Header("Respawn Delays")]
-        public float Phase1RespawnDelay = 5f;
-        public float Phase2RespawnDelay = 5f;
-        public float Phase3RespawnDelay = 3f;
-
-        [Header("Beacon Settings")]
-        public float BeaconPlacementTime = 3f;
-        public float BeaconLifetime = 300f; // 5 minutes
-        public int MaxBeaconsPerTeam = 3;
-
-        [Header("Zone Settings")]
+        [Header("Global Respawn Positioning")]
+        [Tooltip("Bán kính tối thiểu của Safe Zone khi Hồi sinh trong Phase-3")]
         public float SafeZoneRespawnRadius = 20f;
     }
 }

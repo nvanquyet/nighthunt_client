@@ -399,9 +399,9 @@ namespace NightHunt.GameplaySystems.ItemUse
         private void SpawnItemInHand(ThrowableDefinition def)
         {
             DestroyItemInHand();
-            if (def.EquippedPrefab == null) return;
+            if (def.HeldPrefab == null) return;
             Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
-            _itemInHandModel = Instantiate(def.EquippedPrefab, parent);
+            _itemInHandModel = Instantiate(def.HeldPrefab, parent);
             _itemInHandModel.transform.localPosition = Vector3.zero;
             _itemInHandModel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
         }

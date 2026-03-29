@@ -1,58 +1,65 @@
 using UnityEngine;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 
 namespace NightHunt.Gameplay.Objective
 {
     /// <summary>
-    /// Radar station objective
+    /// Radar station objective - Server Authoritative
     /// </summary>
-    public class RadarStationObjective : MonoBehaviour, IObjective
+    public class RadarStationObjective : NetworkBehaviour, IObjective
     {
         [Header("Radar Station Settings")]
         [SerializeField] private string objectiveId = "RADAR_STATION";
         [SerializeField] private string objectiveName = "Activate Radar Station";
         [SerializeField] private float activationTime = 5f;
-        [SerializeField] private bool isActivated = false;
+
+        private readonly SyncVar<bool> _syncIsActivated = new SyncVar<bool>();
+        private readonly SyncVar<float> _syncProgress = new SyncVar<float>();
 
         public string ObjectiveId => objectiveId;
         public string ObjectiveName => objectiveName;
-        public bool IsCompleted => isActivated;
-        public float Progress { get; private set; }
+        public bool IsCompleted => _syncIsActivated.Value;
+        public float Progress => _syncProgress.Value;
 
-        private float activationProgress = 0f;
         private bool isInteracting = false;
 
         public void OnStart()
         {
-            isActivated = false;
-            Progress = 0f;
-            activationProgress = 0f;
+            if (!IsServerStarted) return;
+            _syncIsActivated.Value = false;
+            _syncProgress.Value = 0f;
+            isInteracting = false;
         }
 
         public void OnUpdate()
         {
-            if (isInteracting && !isActivated)
-            {
-                activationProgress += Time.deltaTime / activationTime;
-                activationProgress = Mathf.Clamp01(activationProgress);
-                Progress = activationProgress;
+            if (!IsServerStarted || _syncIsActivated.Value) return;
 
-                if (activationProgress >= 1f)
+            if (isInteracting)
+            {
+                _syncProgress.Value += Time.deltaTime / activationTime;
+                _syncProgress.Value = Mathf.Clamp01(_syncProgress.Value);
+
+                if (_syncProgress.Value >= 1f)
                 {
                     OnComplete();
                 }
             }
-            else if (!isInteracting && !isActivated)
+            else if (_syncProgress.Value > 0f)
             {
                 // Decay progress if not interacting
-                activationProgress = Mathf.Max(0f, activationProgress - Time.deltaTime / activationTime);
-                Progress = activationProgress;
+                _syncProgress.Value = Mathf.Max(0f, _syncProgress.Value - Time.deltaTime / activationTime);
             }
         }
 
+        [Server]
         public void OnComplete()
         {
-            isActivated = true;
-            Progress = 1f;
+            if (_syncIsActivated.Value) return;
+            
+            _syncIsActivated.Value = true;
+            _syncProgress.Value = 1f;
             Debug.Log($"[RadarStationObjective] Radar station activated: {objectiveName}");
         }
 
@@ -64,6 +71,7 @@ namespace NightHunt.Gameplay.Objective
         /// <summary>
         /// Start interaction
         /// </summary>
+        [Server]
         public void StartInteraction()
         {
             isInteracting = true;
@@ -72,6 +80,7 @@ namespace NightHunt.Gameplay.Objective
         /// <summary>
         /// Stop interaction
         /// </summary>
+        [Server]
         public void StopInteraction()
         {
             isInteracting = false;

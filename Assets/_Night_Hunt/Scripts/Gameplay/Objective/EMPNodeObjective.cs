@@ -1,47 +1,59 @@
 using UnityEngine;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 
 namespace NightHunt.Gameplay.Objective
 {
     /// <summary>
-    /// EMP node objective
+    /// EMP node objective - Server Authoritative
     /// </summary>
-    public class EMPNodeObjective : MonoBehaviour, IObjective
+    public class EMPNodeObjective : NetworkBehaviour, IObjective
     {
         [Header("EMP Node Settings")]
         [SerializeField] private string objectiveId = "EMP_NODE";
         [SerializeField] private string objectiveName = "Destroy EMP Node";
-        [SerializeField] private float health = 100f;
         [SerializeField] private float maxHealth = 100f;
+
+        private readonly SyncVar<float> _syncHealth = new SyncVar<float>();
+        private readonly SyncVar<bool> _syncIsCompleted = new SyncVar<bool>();
 
         public string ObjectiveId => objectiveId;
         public string ObjectiveName => objectiveName;
-        public bool IsCompleted { get; private set; }
-        public float Progress { get; private set; }
+        public bool IsCompleted => _syncIsCompleted.Value;
+        
+        public float Progress 
+        {
+            get
+            {
+                if (maxHealth <= 0) return 0f;
+                return 1f - (_syncHealth.Value / maxHealth);
+            }
+        }
 
         public void OnStart()
         {
-            IsCompleted = false;
-            health = maxHealth;
-            Progress = 0f;
+            if (!IsServerStarted) return;
+            _syncIsCompleted.Value = false;
+            _syncHealth.Value = maxHealth;
         }
 
         public void OnUpdate()
         {
-            if (!IsCompleted)
+            if (!IsServerStarted || _syncIsCompleted.Value) return;
+
+            if (_syncHealth.Value <= 0f)
             {
-                Progress = 1f - (health / maxHealth);
-                
-                if (health <= 0f)
-                {
-                    OnComplete();
-                }
+                OnComplete();
             }
         }
 
+        [Server]
         public void OnComplete()
         {
-            IsCompleted = true;
-            Progress = 1f;
+            if (_syncIsCompleted.Value) return;
+
+            _syncIsCompleted.Value = true;
+            _syncHealth.Value = 0f;
             Debug.Log($"[EMPNodeObjective] EMP node destroyed: {objectiveName}");
         }
 
@@ -53,11 +65,12 @@ namespace NightHunt.Gameplay.Objective
         /// <summary>
         /// Take damage
         /// </summary>
+        [Server]
         public void TakeDamage(float damage)
         {
-            if (!IsCompleted)
+            if (!_syncIsCompleted.Value)
             {
-                health = Mathf.Max(0f, health - damage);
+                _syncHealth.Value = Mathf.Max(0f, _syncHealth.Value - damage);
             }
         }
     }

@@ -19,17 +19,14 @@ MonoBehaviour:
   IsStackable: 0
   MaxStackSize: 1
   Weight: 3.5
-  ModifyWeightWhenEquipped: 0
-  EquippedWeightModifier: 0
   AttachmentSlots: 0100000003000000040000000200000006000000
   CanAttachTo: 
   ValidSlots: 0000000002000000
-  EquippedPrefab: {fileID: 6326673001157521716, guid: 79a86a91ff5c87f4c8911924595e0ac4,
+  HeldPrefab: {fileID: 6326673001157521716, guid: 79a86a91ff5c87f4c8911924595e0ac4,
     type: 3}
-  DroppedPrefab: {fileID: 6326673001157521716, guid: 79a86a91ff5c87f4c8911924595e0ac4,
+  GroundPrefab: {fileID: 6326673001157521716, guid: 79a86a91ff5c87f4c8911924595e0ac4,
     type: 3}
   UsageDuration: 0
   CanCancelUsage: 1
-  CanUseWhileMoving: 0
   StatConfig: {fileID: 11400000, guid: 9f1bb86d49ff343498dbc69ade051df8, type: 2}
   WeaponClass: 2

@@ -11,10 +11,9 @@ namespace NightHunt.Gameplay.Boss
 {
     /// <summary>
     /// Spawns boss(es) when Phase 2 (Hunt) starts, based on
-    /// <see cref="BossSpawnConfigData"/> entries. TODO: wire in new data source.
-    ///
-    /// Map designers tag boss spawn points with the tag defined in each entry's
-    /// <c>SpawnPointTag</c> field (default "BossSpawn").
+    /// Spawns boss(es) when Phase 2 (Hunt) starts.
+    /// Prefab-driven architecture heavily utilizes the World Container SpawnTable natively.
+    /// Map designers tag boss spawn points with the configured SpawnPointTag (default "BossSpawn").
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class BossSpawnManager : NetworkBehaviour
@@ -22,13 +21,9 @@ namespace NightHunt.Gameplay.Boss
         [Header("References")]
         [SerializeField] private MatchPhaseManager _phaseManager;
 
-        [Header("Boss Spawn Config")]
-        [Tooltip("Config data cho từng boss spawn entry. Assign trong Inspector.")]
-        [SerializeField] private List<BossSpawnConfigData> _bossSpawnConfigs = new List<BossSpawnConfigData>();
-
-        [Header("Boss Prefabs")]
-        [Tooltip("Map each BossId string to a prefab. Order must match config BossId values.")]
-        [SerializeField] private List<BossPrefabEntry> _bossPrefabs = new();
+        [Header("Boss Spawns Configuration")]
+        [Tooltip("Config data map for boss spawns. Map designers provide prefab and spawn points.")]
+        [SerializeField] private List<BossSpawnEntry> _bossSpawns = new List<BossSpawnEntry>();
 
         // ── Runtime ───────────────────────────────────────────────────────────
         private readonly List<BossController> _spawnedBosses = new();
@@ -62,8 +57,7 @@ namespace NightHunt.Gameplay.Boss
 
         private void OnPhaseStarted(MatchPhaseState phase, string phaseName)
         {
-            if (phase == MatchPhaseState.Hunt)
-                SpawnAllBosses();
+            SpawnBossesForPhase(phase);
         }
 
         #endregion
@@ -72,49 +66,47 @@ namespace NightHunt.Gameplay.Boss
         #region Spawn
 
         [Server]
-        private void SpawnAllBosses()
+        private void SpawnBossesForPhase(MatchPhaseState currentPhase)
         {
-            List<BossSpawnConfigData> configs = _bossSpawnConfigs.Count > 0 ? _bossSpawnConfigs : null;
-            if (configs == null || configs.Count == 0)
-            {
-                Debug.LogWarning("[BossSpawnManager] No boss configs found.");
-                return;
-            }
+            if (_bossSpawns == null || _bossSpawns.Count == 0) return;
 
-            foreach (var cfg in configs)
+            foreach (var cfg in _bossSpawns)
             {
-                SpawnBoss(cfg);
+                if (cfg.SpawnPhase == currentPhase)
+                {
+                    SpawnBoss(cfg);
+                }
             }
         }
 
         [Server]
-        private void SpawnBoss(BossSpawnConfigData cfg)
+        private void SpawnBoss(BossSpawnEntry entry)
         {
-            // Find a matching spawn point by tag
-            string spawnTag = string.IsNullOrEmpty(cfg.SpawnPointTag) ? "BossSpawn" : cfg.SpawnPointTag;
-            var spawnPoints = GameObject.FindGameObjectsWithTag(spawnTag);
-
-            if (spawnPoints.Length == 0)
+            if (entry.BossPrefab == null)
             {
-                Debug.LogWarning($"[BossSpawnManager] No spawn point with tag '{spawnTag}' for boss '{cfg.BossId}'.");
+                Debug.LogError("[BossSpawnManager] Spawn entry is missing BossPrefab!");
                 return;
             }
 
-            // Pick a random spawn point
-            var spawnGO = spawnPoints[Random.Range(0, spawnPoints.Length)];
-            Vector3 pos  = spawnGO.transform.position;
-            Quaternion rot = spawnGO.transform.rotation;
-
-            // Resolve prefab
-            GameObject prefab = GetPrefabForBossId(cfg.BossId);
-            if (prefab == null)
+            // Random pick 1 spawn point from the assigned list
+            if (entry.SpawnPoints == null || entry.SpawnPoints.Count == 0)
             {
-                Debug.LogError($"[BossSpawnManager] No prefab registered for boss '{cfg.BossId}'.");
+                Debug.LogWarning($"[BossSpawnManager] Spawn entry for '{entry.BossPrefab.name}' has no SpawnPoints assigned!");
                 return;
             }
+
+            BossSpawnPoint spawnPoint = entry.SpawnPoints[Random.Range(0, entry.SpawnPoints.Count)];
+            if (spawnPoint == null)
+            {
+                Debug.LogError($"[BossSpawnManager] A SpawnPoint for '{entry.BossPrefab.name}' is null/missing!");
+                return;
+            }
+
+            Vector3 pos  = spawnPoint.Position;
+            Quaternion rot = spawnPoint.Rotation;
 
             // Instantiate + network-spawn
-            var go   = Instantiate(prefab, pos, rot);
+            var go   = Instantiate(entry.BossPrefab, pos, rot);
             var boss = ComponentResolver.Find<BossController>(go)
                                         .OnSelf()
                                         .InChildren()
@@ -122,20 +114,25 @@ namespace NightHunt.Gameplay.Boss
                                         .Resolve();
             if (boss == null)
             {
-                Debug.LogError($"[BossSpawnManager] Prefab for '{cfg.BossId}' missing BossController!");
+                Debug.LogError($"[BossSpawnManager] Prefab for '{entry.BossPrefab.name}' missing BossController!");
                 Destroy(go);
                 return;
             }
 
+            // Inject the reward config from the map's spawn point into the Boss
+            if (spawnPoint.RewardConfig != null)
+            {
+                boss.SetDynamicRewardConfig(spawnPoint.RewardConfig);
+            }
+
             InstanceFinder.ServerManager.Spawn(go);
-            boss.Initialize(cfg);
             boss.Died += OnBossDied;
 
             _spawnedBosses.Add(boss);
 
-            Debug.Log($"[BossSpawnManager] Spawned boss '{cfg.BossId}' at {pos}.");
+            Debug.Log($"[BossSpawnManager] Spawned boss '{boss.BossId}' at {pos}.");
 
-            GameplayEventBus.Instance?.Publish(new BossSpawnedEvent { BossId = cfg.BossId });
+            GameplayEventBus.Instance?.Publish(new BossSpawnedEvent { BossId = boss.BossId });
         }
 
         private void OnBossDied(BossController boss)
@@ -144,21 +141,17 @@ namespace NightHunt.Gameplay.Boss
             Debug.Log($"[BossSpawnManager] Boss '{boss.BossId}' removed from tracking. Remaining: {_spawnedBosses.Count}");
         }
 
-        private GameObject GetPrefabForBossId(string bossId)
-        {
-            foreach (var entry in _bossPrefabs)
-                if (entry.BossId == bossId)
-                    return entry.Prefab;
-            return _bossPrefabs.Count > 0 ? _bossPrefabs[0].Prefab : null;
-        }
-
         #endregion
     }
 
     [System.Serializable]
-    public struct BossPrefabEntry
+    public struct BossSpawnEntry
     {
-        public string     BossId;
-        public GameObject Prefab;
+        [Tooltip("Prefab của Boss chứa BossController")]
+        public GameObject BossPrefab;
+        [Tooltip("Danh sách các vị trí Boss có thể chui lên (Sẽ random chọn 1 điểm trong này)")]
+        public List<BossSpawnPoint> SpawnPoints;
+        [Tooltip("Phase mà Boss này sẽ xuất hiện (Thường là Phase 2 - Hunt)")]
+        public MatchPhaseState SpawnPhase;
     }
 }

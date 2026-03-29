@@ -11,7 +11,7 @@ namespace NightHunt.Gameplay.Spectator
     /// UI components use this to determine which player's data to display.
     /// Follows Singleton pattern for global access.
     /// </summary>
-    public class SpectateManager : SingletonPersistent<SpectateManager>
+    public class SpectateManager : Singleton<SpectateManager>
     {
 
         [Header("Debug")] [SerializeField] private bool enableDebugLogs = false;

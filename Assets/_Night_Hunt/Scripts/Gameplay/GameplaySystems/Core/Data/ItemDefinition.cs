@@ -53,12 +53,6 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Min(0f)]
         public float Weight = 1f;
         
-        [Tooltip("Item này có modify weight khi equipped không")]
-        public bool ModifyWeightWhenEquipped = false;
-        
-        [Tooltip("Modifier weight khi equipped (âm = giảm weight, dương = tăng weight)")]
-        public float EquippedWeightModifier = 0f;
-        
         #endregion
 
         #region Attachments
@@ -83,11 +77,11 @@ namespace NightHunt.GameplaySystems.Core.Data
         #region Visual
         
         [Header("Visual")]
-        [Tooltip("Prefab model khi equipped")]
-        public GameObject EquippedPrefab;
+        [Tooltip("Model hiển thị khi item được cầm trên tay / trang bị (client-side visual only).")]
+        public GameObject HeldPrefab;
         
-        [Tooltip("Prefab khi drop trên ground")]
-        public GameObject DroppedPrefab;
+        [Tooltip("Model hiển thị khi item rơi dưới đất, chờ pickup (WorldItem visual only).")]
+        public GameObject GroundPrefab;
         
         #endregion
         
@@ -100,9 +94,6 @@ namespace NightHunt.GameplaySystems.Core.Data
         
         [Tooltip("Có thể cancel usage giữa chừng không")]
         public bool CanCancelUsage = true;
-        
-        [Tooltip("Có thể sử dụng khi đang di chuyển không")]
-        public bool CanUseWhileMoving = false;
         
         #endregion
         

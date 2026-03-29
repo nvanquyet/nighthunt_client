@@ -1,10 +1,11 @@
-﻿using UnityEngine;
+using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Data;
 using System.Collections.Generic;
 using FishNet;
 using NightHunt.Networking;
+using NightHunt.Gameplay.Match;
 
 namespace NightHunt.Gameplay.Objective
 {
@@ -15,10 +16,13 @@ namespace NightHunt.Gameplay.Objective
     public class ObjectiveSystem : NetworkBehaviour
     {
         [Header("Objectives")]
-        [SerializeField] private List<IObjective> activeObjectives = new List<IObjective>();
+        private List<IObjective> activeObjectives = new List<IObjective>();
         [SerializeField] private List<CaptureZoneObjective> captureZoneObjectives = new List<CaptureZoneObjective>();
         [SerializeField] private List<RadarStationObjective> radarObjectives = new List<RadarStationObjective>();
         [SerializeField] private List<EMPNodeObjective> empObjectives = new List<EMPNodeObjective>();
+
+        [Header("References")]
+        [SerializeField] private MatchPhaseManager _phaseManager;
 
         // Synchronized state
         private readonly SyncVar<int> networkActiveObjectiveCount = new SyncVar<int>();
@@ -26,7 +30,27 @@ namespace NightHunt.Gameplay.Objective
         public override void OnStartServer()
         {
             base.OnStartServer();
+
+            if (_phaseManager == null)
+                _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+
+            if (_phaseManager != null)
+                _phaseManager.OnPhaseStarted += OnPhaseStarted;
+
             InitializeObjectives();
+        }
+
+        public override void OnStopServer()
+        {
+            base.OnStopServer();
+            if (_phaseManager != null)
+                _phaseManager.OnPhaseStarted -= OnPhaseStarted;
+        }
+
+        private void OnPhaseStarted(MatchPhaseState phase, string displayName)
+        {
+            // So sánh bằng enum — type-safe
+            ActivateObjectivesForPhase(phase);
         }
 
         private void Update()
@@ -72,16 +96,14 @@ namespace NightHunt.Gameplay.Objective
         /// Server: Activate objectives for phase
         /// </summary>
         [Server]
-        public void ActivateObjectivesForPhase(string phaseName)
+        public void ActivateObjectivesForPhase(MatchPhaseState phase)
         {
-            switch (phaseName)
+            switch (phase)
             {
-                case "Phase2_Hunt":
-                case "Phase2_HuntObjectives":
+                case MatchPhaseState.Hunt:
                     ActivatePhase2Objectives();
                     break;
-                case "Phase3_Lockdown":
-                case "Phase3_FinalLockdown":
+                case MatchPhaseState.Lockdown:
                     ActivatePhase3Objectives();
                     break;
             }

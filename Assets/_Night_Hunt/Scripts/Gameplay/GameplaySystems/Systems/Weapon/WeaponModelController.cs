@@ -175,15 +175,15 @@ namespace NightHunt.GameplaySystems.Weapon
                 Debug.LogWarning($"[WeaponModelController] No ItemDatabase entry for '{inst.DefinitionID}'.");
                 return;
             }
-            if (def.EquippedPrefab == null)
+            if (def.HeldPrefab == null)
             {
-                Debug.LogWarning($"[WeaponModelController] '{def.DisplayName}' has no EquippedPrefab.");
+                Debug.LogWarning($"[WeaponModelController] '{def.DisplayName}' has no HeldPrefab.");
                 return;
             }
 
             Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
 
-            _currentModel = Instantiate(def.EquippedPrefab, parent);
+            _currentModel = Instantiate(def.HeldPrefab, parent);
             _currentModel.transform.localPosition = Vector3.zero;
             _currentModel.transform.localRotation = Quaternion.Euler(_localRotationWeapon);
 

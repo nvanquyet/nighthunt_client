@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Utilities;
+using NightHunt.Gameplay.Core.Events;
 
 namespace NightHunt.Gameplay.Respawn
 {
@@ -77,38 +78,45 @@ namespace NightHunt.Gameplay.Respawn
         {
             if (!IsServer) return;
 
-            // Update respawn timers
             var playersToRespawn = new List<NetworkPlayer>();
+            var playersFailed    = new List<NetworkPlayer>();
+
             foreach (var kvp in respawnTimers)
             {
                 var player = kvp.Key;
                 float timer = kvp.Value;
 
-                if (player != null && IsPlayerDead(player))
-                {
-                    timer -= Time.deltaTime;
-                    respawnTimers[player] = timer;
-
-                    if (timer <= 0f)
-                    {
-                        playersToRespawn.Add(player);
-                    }
-                }
-                else
+                if (player == null || !IsPlayerDead(player))
                 {
                     // Player already respawned or disconnected
-                    playersToRespawn.Add(player);
+                    playersFailed.Add(player);
+                    continue;
                 }
+
+                // Issue #4: If beacon was destroyed while waiting → cancel timer
+                var phase = phaseManager?.CurrentPhase;
+                bool needsBeacon = phase != MatchPhaseState.Lockdown;
+                if (needsBeacon && FindRespawnBeacon(player) == null)
+                {
+                    Debug.Log($"[RespawnSystem] {player.DisplayName}: beacon destroyed during wait — respawn cancelled.");
+                    RpcNotifyRespawnFailed(player.Owner, "beacon_destroyed");
+                    playersFailed.Add(player);
+                    continue;
+                }
+
+                timer -= Time.deltaTime;
+                respawnTimers[player] = timer;
+
+                if (timer <= 0f)
+                    playersToRespawn.Add(player);
             }
 
-            // Remove completed timers and respawn players
+            foreach (var p in playersFailed)  respawnTimers.Remove(p);
             foreach (var player in playersToRespawn)
             {
                 respawnTimers.Remove(player);
                 if (player != null && IsPlayerDead(player))
-                {
                     RespawnPlayer(player);
-                }
             }
         }
 
@@ -142,41 +150,32 @@ namespace NightHunt.Gameplay.Respawn
         {
             if (player == null) return;
 
-            // Find respawn location
             Vector3 respawnPosition = GetRespawnPosition(player);
             Quaternion respawnRotation = player.transform.rotation;
 
-            // Use the movement controller's Teleport to properly reset CharacterController
-            // and the prediction pipeline.  Direct transform.position assignment would
-            // be overwritten by CharacterController on the next FixedUpdate.
-            var movement = ComponentResolver.Find<IMovementController>(player)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IMovementController not found")
-                .Resolve();
-            if (movement != null)
-            {
-                movement.Teleport(respawnPosition, respawnRotation);
-            }
-            else
-            {
-                // Fallback for objects that don't use IMovementController
-                player.transform.position = respawnPosition;
-            }
+            // Issue #5: Destroy the beacon used to respawn (single-use per respawn)
+            var usedBeacon = FindRespawnBeacon(player);
+            usedBeacon?.TakeDamage(int.MaxValue);
 
-            // Restore player stats via PlayerStatSystem (health)
+            // Teleport via IMovementController to properly reset prediction pipeline
+            var movement = ComponentResolver.Find<IMovementController>(player)
+                .OnSelf().InChildren()
+                .OrLogWarning("[Auto] IMovementController not found").Resolve();
+            if (movement != null)
+                movement.Teleport(respawnPosition, respawnRotation);
+            else
+                player.transform.position = respawnPosition;
+
+            // Restore health via PlayerStatSystem
             var statSystem = ComponentResolver.Find<IPlayerStatSystem>(player)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IPlayerStatSystem not found")
-                .Resolve();
+                .OnSelf().InChildren()
+                .OrLogWarning("[Auto] IPlayerStatSystem not found").Resolve();
             if (statSystem is NightHunt.Gameplay.StatSystem.Systems.PlayerStatSystem concrete)
             {
                 float maxHealth = concrete.GetStat(PlayerStatType.MaxHealth);
                 concrete.SetCurrentStat(PlayerStatType.Health, maxHealth);
             }
 
-            // Notify player respawned
             OnPlayerRespawned(player);
         }
 
@@ -185,26 +184,16 @@ namespace NightHunt.Gameplay.Respawn
         /// </summary>
         private Vector3 GetRespawnPosition(NetworkPlayer player)
         {
-            // Phase 1-2: Use beacon if available
-            if (phaseManager != null)
-            {
-                var currentPhase = phaseManager.CurrentPhase;
-                if (currentPhase == MatchPhaseState.Preparation || currentPhase == MatchPhaseState.Hunt)
-                {
-                    var beacon = FindRespawnBeacon(player);
-                    if (beacon != null)
-                    {
-                        return beacon.transform.position;
-                    }
-                }
-                else if (currentPhase == MatchPhaseState.Lockdown)
-                {
-                    // Phase 3: Respawn in safe zone
-                    return GetSafeZonePosition();
-                }
-            }
+            var phase = phaseManager?.CurrentPhase;
 
-            // Default: Use team-aware spawn point
+            if (phase == MatchPhaseState.Lockdown)
+                return GetSafeZonePosition();
+
+            // Phase 1-2: Beacon → Default spawn point
+            var beacon = FindRespawnBeacon(player);
+            if (beacon != null)
+                return beacon.transform.position;
+
             return GetDefaultSpawnPosition(player);
         }
 
@@ -225,15 +214,15 @@ namespace NightHunt.Gameplay.Respawn
             return null;
         }
 
-        /// <summary>
-        /// Get safe zone position (Phase 3)
-        /// </summary>
+        /// Issue #6: Find the active LockdownZone center; fallback to first team spawn
         private Vector3 GetSafeZonePosition()
         {
-            // ZoneSystem is not yet active — fall back to map center.
-            // When LockdownZone is implemented it should provide a center point here.
-            Debug.LogWarning("[RespawnSystem] Zone system not yet active — using map center for Phase-3 respawn.");
-            return Vector3.zero;
+            // Try to find the Lockdown zone center if implemented
+            // var lockdownZone = FindFirstObjectByType<LockdownZone>();
+            // if (lockdownZone != null) return lockdownZone.Center;
+
+            // Fallback: Use neutral team spawn point
+            return GetDefaultSpawnPosition(null);
         }
 
         /// <summary>
@@ -270,22 +259,18 @@ namespace NightHunt.Gameplay.Respawn
         {
             if (phaseManager == null) return true;
 
-            var currentPhase = phaseManager.CurrentPhase;
+            var config = phaseManager.GetCurrentPhaseConfig();
+            if (config == null) return false;
 
-            switch (currentPhase)
-            {
-                case MatchPhaseState.Preparation:
-                case MatchPhaseState.Hunt:
-                    // Phase 1-2: Need beacon
-                    return FindRespawnBeacon(player) != null;
+            // Rules by Phase Config
+            if (!config.RespawnEnabled) return false;
 
-                case MatchPhaseState.Lockdown:
-                    // Phase 3: Auto-respawn in zone
-                    return true;
+            // If respawn is enabled, check placement logic (Beacons vs Auto-Zone)
+            if (phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
+                return true; // Auto-spawn in Safe Zone in Phase 3
 
-                default:
-                    return false;
-            }
+            // Phase 1-2: Need beacon
+            return FindRespawnBeacon(player) != null;
         }
 
         /// <summary>
@@ -293,15 +278,10 @@ namespace NightHunt.Gameplay.Respawn
         /// </summary>
         private float GetRespawnDelay()
         {
-            if (phaseManager != null && phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
-            {
-                return _respawnConfig != null ? _respawnConfig.Phase3RespawnDelay : 10f;
-            }
-
-            if (phaseManager != null && phaseManager.CurrentPhase == MatchPhaseState.Hunt)
-                return _respawnConfig != null ? _respawnConfig.Phase2RespawnDelay : 5f;
-
-            return _respawnConfig != null ? _respawnConfig.Phase1RespawnDelay : 5f;
+            if (phaseManager == null) return 5f;
+            
+            var config = phaseManager.GetCurrentPhaseConfig();
+            return config?.RespawnDelay ?? 5f;
         }
 
         /// <summary>
@@ -340,7 +320,23 @@ namespace NightHunt.Gameplay.Respawn
 
         private void OnRespawnDelayChanged(float oldDelay, float newDelay, bool asServer)
         {
-            // Update UI or other systems
+            // Clients: Forward to HUD so countdown timer can be shown
+            if (!asServer)
+                GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.RespawnTimerEvent
+                {
+                    DelaySeconds = newDelay
+                });
+        }
+
+        /// <summary>Notify the owning client their respawn was cancelled (beacon destroyed).</summary>
+        [TargetRpc]
+        private void RpcNotifyRespawnFailed(FishNet.Connection.NetworkConnection conn, string reason)
+        {
+            Debug.Log($"[RespawnSystem] Respawn cancelled: {reason}");
+            GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.RespawnCancelledEvent
+            {
+                Reason = reason
+            });
         }
     }
 }

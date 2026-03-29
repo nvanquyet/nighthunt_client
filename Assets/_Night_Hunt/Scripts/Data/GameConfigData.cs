@@ -23,9 +23,6 @@ namespace NightHunt.Data
         public List<CharacterConfigData> CharacterConfig;
         public List<StatusEffectConfigData> StatusEffectConfig;
         // New systems
-        public BeaconConfigData BeaconConfig;
-        public List<BossSpawnConfigData> BossSpawnConfig;
-        public MatchEndConfigData MatchEndConfig;
         public List<RankTierConfigData> RankTierConfig;
         public RankMatchmakingConfigData RankMatchmakingConfig;
     }
@@ -107,21 +104,25 @@ namespace NightHunt.Data
     [Serializable]
     public class MatchPhaseConfigData
     {
-        public string Phase;
+        [Tooltip("Enum định danh Phase. Dùng để lookup và so sánh trong code. Kông cần đổi.")]
+        public NightHunt.Gameplay.Match.MatchPhaseState PhaseType;
+
+        [Tooltip("Tên hiển thị trên UI/Log. Tùy biến được, chỉ dùng để đọc, không dùng compare.")]
+        public string DisplayName;
+
         public int DurationMin;
         public int DurationMax;
+        
+        [Header("Respawn")]
         public bool RespawnEnabled;
-        public bool BeaconEnabled;
-        public string ZoneActive; // "No", "Medium", "Final"
-        public string ObjectiveEvents; // "Low", "Yes", "High"
+        public float RespawnDelay;
+
+        [Header("Multipliers")]
         public float ScoreMultiplier;
         public float SurvivalMultiplier;
-        public string BuffForLosingTeam;
-        public string NerfForWinningTeam;
-        // Phase transition warning
-        public float WarningTime;        // seconds before phase ends to show warning (default 30)
-        // Phase 3 respawn
-        public float Phase3RespawnDelay; // seconds delay before respawn in Phase 3 (default 10)
+        
+        [Header("UI")]
+        public float WarningTime;
     }
 
     [Serializable]
@@ -203,76 +204,6 @@ namespace NightHunt.Data
         public float Duration;
         public bool Stackable;
         public string Description;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // BEACON CONFIG
-    // ─────────────────────────────────────────────────────────────
-    [Serializable]
-    public class BeaconConfigData
-    {
-        /// <summary>Max beacons a team can have active simultaneously</summary>
-        public int MaxActivePerTeam;
-        /// <summary>HP of a placed beacon</summary>
-        public float BeaconHealth;
-        /// <summary>Time (sec) to place a beacon</summary>
-        public float PlaceTime;
-        /// <summary>Relative weight of BeaconItem spawning in loot pool</summary>
-        public float LootSpawnWeight;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // BOSS CONFIG
-    // ─────────────────────────────────────────────────────────────
-    [Serializable]
-    public class BossSpawnConfigData
-    {
-        public string BossId;
-        public string BossType;          // "Elite", "Champion", etc.
-        public string SpawnPointTag;     // Tag used to find spawn Transform in scene
-        public float MaxHP;
-        public float MoveSpeed;
-        public bool RespawnAfterKill;
-        public float RespawnDelay;       // seconds before boss respawns (0 = no respawn)
-        public List<BossDropEntryData> DropTable;
-
-        // ── AI params ──────────────────────────────────────────────────────────
-        [Tooltip("Radius within which boss detects players.")]
-        public float AggroRadius = 20f;
-        [Tooltip("Radius within which boss performs melee attack.")]
-        public float AttackRadius = 3f;
-        [Tooltip("Damage per hit.")]
-        public float AttackDamage = 50f;
-        [Tooltip("Seconds between attacks.")]
-        public float AttackCooldown = 2f;
-        [Tooltip("Seconds after death before the NetworkObject is despawned (lets death anim play).")]
-        public float DespawnDelay = 3f;
-    }
-
-    [Serializable]
-    public class BossDropEntryData
-    {
-        public string ItemId;
-        public bool IsFixed;             // true = always drops, false = roll by weight
-        public float Weight;             // 0-1, used when IsFixed = false
-        public int MinQuantity;
-        public int MaxQuantity;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // MATCH END CONFIG
-    // ─────────────────────────────────────────────────────────────
-    [Serializable]
-    public class MatchEndConfigData
-    {
-        /// <summary>Seconds to show results screen before auto-navigate</summary>
-        public float ResultsDisplayDuration;
-        /// <summary>Countdown seconds after match end before results auto-dismiss</summary>
-        public float PostMatchCountdown;
-        /// <summary>Score per second holding a capture zone (base, before phase multiplier)</summary>
-        public float CaptureZoneScorePerSecond;
-        /// <summary>Minimum players needed inside zone to count as holding</summary>
-        public int CaptureZoneMinPlayers;
     }
 
     // ─────────────────────────────────────────────────────────────

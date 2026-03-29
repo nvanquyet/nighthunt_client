@@ -226,7 +226,7 @@ namespace NightHunt.Gameplay.Core.State
             OnRespawned?.Invoke();
 
             // GLOBAL EVENT
-            NightHunt.Gameplay.Core.Events.GameplayEventBus.Raise(new NightHunt.Gameplay.Core.Events.PlayerRespawnedEvent
+            NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance.Publish(new NightHunt.Gameplay.Core.Events.PlayerRespawnedEvent
             {
                 PlayerName = _networkPlayer != null ? _networkPlayer.DisplayName : string.Empty,
                 TeamId = _networkPlayer != null ? _networkPlayer.TeamId : -1,

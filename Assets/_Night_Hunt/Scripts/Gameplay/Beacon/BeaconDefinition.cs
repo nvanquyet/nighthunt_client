@@ -18,14 +18,11 @@ namespace NightHunt.Gameplay.Beacon
         [Tooltip("Prefab spawned on the server when the player confirms placement.")]
         public GameObject BeaconPrefab;
 
+        [Tooltip("Max health for the spawned beacon.")]
+        public int BeaconHP = 100;
+
         [Tooltip("Preview mesh shown on client during placement mode.")]
         public GameObject PlacementPreviewPrefab;
-
-        [Tooltip("Placement confirmation input action name (default: Interact).")]
-        public string PlaceAction = "Interact";
-
-        [Tooltip("Cancel placement input action name (default: AltFire).")]
-        public string CancelAction = "AltFire";
 
         [Tooltip("Layer mask used for ground ray-cast during placement preview.")]
         public LayerMask PlacementLayerMask = ~0;

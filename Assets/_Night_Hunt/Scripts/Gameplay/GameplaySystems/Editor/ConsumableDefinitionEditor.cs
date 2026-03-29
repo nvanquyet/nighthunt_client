@@ -38,7 +38,6 @@ namespace NightHunt.GameplaySystems.Editor
             consumable.MaxStackSize = 5;
             consumable.UsageDuration = 3.5f;
             consumable.CanCancelUsage = true;
-            consumable.CanUseWhileMoving = false;
             consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
             EditorUtility.SetDirty(consumable);
@@ -56,7 +55,6 @@ namespace NightHunt.GameplaySystems.Editor
             consumable.MaxStackSize = 3;
             consumable.UsageDuration = 2f;
             consumable.CanCancelUsage = true;
-            consumable.CanUseWhileMoving = true;
             consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
             EditorUtility.SetDirty(config);
             EditorUtility.SetDirty(consumable);
@@ -76,7 +74,6 @@ namespace NightHunt.GameplaySystems.Editor
                 consumable.MaxStackSize = 5;
                 consumable.UsageDuration = 3.5f;
                 consumable.CanCancelUsage = true;
-                consumable.CanUseWhileMoving = false;
                 consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
                 EditorUtility.SetDirty(consumable);
@@ -93,7 +90,6 @@ namespace NightHunt.GameplaySystems.Editor
                 consumable.MaxStackSize = 3;
                 consumable.UsageDuration = 2f;
                 consumable.CanCancelUsage = true;
-                consumable.CanUseWhileMoving = true;
                 consumable.ValidSlots = new SlotLocationType[] { SlotLocationType.Inventory };
                 EditorUtility.SetDirty(config);
                 EditorUtility.SetDirty(consumable);

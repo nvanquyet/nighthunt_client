@@ -22,14 +22,7 @@ namespace NightHunt.Gameplay.Scoring
         {
             if (configs != null)
             {
-                string phaseName = MatchPhaseManager.PhaseNames.Preparation;
-                switch (phase)
-                {
-                    case MatchPhaseState.Preparation: phaseName = MatchPhaseManager.PhaseNames.Preparation; break;
-                    case MatchPhaseState.Hunt:        phaseName = MatchPhaseManager.PhaseNames.Hunt;        break;
-                    case MatchPhaseState.Lockdown:    phaseName = MatchPhaseManager.PhaseNames.Lockdown;    break;
-                }
-                var entry = configs.FirstOrDefault(c => c.Phase == phaseName);
+                var entry = configs.FirstOrDefault(c => c.PhaseType == phase);
                 if (entry != null) return entry.ScoreMultiplier;
             }
             return GetPhaseMultiplier(phase);

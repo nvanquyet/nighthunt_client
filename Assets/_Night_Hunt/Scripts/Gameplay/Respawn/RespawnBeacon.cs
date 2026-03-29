@@ -1,261 +1,70 @@
 using System;
 using UnityEngine;
 using FishNet.Object;
-using FishNet.Object.Synchronizing;
 using NightHunt.Data;
 using NightHunt.Gameplay.Match;
-using System.Collections;
-using FishNet;
+using NightHunt.Gameplay.Deployables;
 
 namespace NightHunt.Gameplay.Respawn
 {
     /// <summary>
-    /// Respawn Beacon that players can place
-    /// Allows team members to respawn at this location
-    /// Can be destroyed by enemies
+    /// Kế thừa BaseDeployable. Dành riêng cho chức năng Hồi Sinh (Respawn). 
+    /// Không cho tầm nhìn, bị giới hạn theo Phase của Match.
+    /// Thông số HP, PlaceTime, RespawnDelay được load từ config trung tâm tùy loại beacon.
     /// </summary>
-    public class RespawnBeacon : NetworkBehaviour
+    public class RespawnBeacon : BaseDeployable
     {
-        [Header("Beacon Settings")] [SerializeField]
-        private int maxHP = 500;
-
-        [SerializeField] private float placeTime = 5f;
-        [SerializeField] private float respawnDelay = 15f;
-        [SerializeField] private float minDistanceFromOtherBeacons = 30f;
-
-        [Header("Visual")] [SerializeField] private GameObject beaconModel;
-        [SerializeField] private GameObject placementIndicator;
-        [SerializeField] private ParticleSystem placementEffect;
-
-        // Synchronized state
-        private readonly SyncVar<int> currentHP = new SyncVar<int>();
-        private readonly SyncVar<int> ownerTeamId = new SyncVar<int>();
-        private readonly SyncVar<bool> isPlaced = new SyncVar<bool>();
-        private readonly SyncVar<bool> isActive = new SyncVar<bool>();
-
-        private RespawnConfigData config;
-        private MatchPhaseManager phaseManager;
-
-        [Header("Respawn Config Data")]
-        [Tooltip("Config data cho beacon. Nếu gán thì override giá trị serialized fields ở trên.")]
-        [SerializeField] private RespawnConfigData _configOverride;
-
-        public int CurrentHP => currentHP.Value;
-        public int OwnerTeamId => ownerTeamId.Value;
-        public bool IsPlaced => isPlaced.Value;
-        public bool IsActive => isActive.Value;
-
-        /// <summary>Fired on the server when this beacon's HP reaches zero.</summary>
-        public event Action Destroyed;
+        private MatchPhaseManager _phaseManager;
 
         public override void OnStartNetwork()
         {
+            // HP được Initialize từ Server trước khi Spawn.
+            // Client chỉ cần quan tâm sync vars.
             base.OnStartNetwork();
 
-            config = _configOverride;
-            if (config != null)
-            {
-                maxHP = config.BeaconHP;
-                placeTime = config.PlaceTime;
-                respawnDelay = config.RespawnDelay;
-                minDistanceFromOtherBeacons = config.MinDistance;
-            }
-
-            currentHP.Value = maxHP;
-
-            // Find phase manager
-            phaseManager = FindFirstObjectByType<MatchPhaseManager>();
-
-            // Subscribe to HP changes
-            currentHP.OnChange += OnHPChanged;
-            isPlaced.OnChange  += OnIsPlacedChanged;
-
-            // Apply initial visual state (owner has correct isPlaced value in spawn packet)
-            ApplyPlacedVisual(isPlaced.Value);
-        }
-
-        public override void OnStopNetwork()
-        {
-            base.OnStopNetwork();
-            currentHP.OnChange -= OnHPChanged;
-            isPlaced.OnChange  -= OnIsPlacedChanged;
+            _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
         }
 
         public override void OnStartServer()
         {
             base.OnStartServer();
-            // Check if beacons are enabled in current phase
-            if (phaseManager != null && !phaseManager.AreBeaconsEnabled())
+            // Check Phase hiện tại có cho phép xài Beacon hồi sinh hay không
+            // Beacons chỉ được phép ở Phase 1 và Phase 2.
+            if (_phaseManager != null && _phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
             {
-                // Beacons disabled in this phase
-                DespawnBeacon();
+                DespawnDeployable();
             }
         }
 
-        /// <summary>
-        /// Server: Initialize beacon with owner team
-        /// </summary>
         [Server]
-        public void Initialize(int teamId)
+        protected override void OnDeployablePlaced()
         {
-            ownerTeamId.Value = teamId;
-            currentHP.Value = maxHP;
-            isPlaced.Value = false;
-            isActive.Value = true;
+            base.OnDeployablePlaced();
+            Debug.Log($"[RespawnBeacon] Kích hoạt Trạm Hồi Sinh cho Team {_ownerTeamId.Value} thành công!");
+            // Gọi ra effect khói/âm thanh ở đây nếu muốn
         }
 
         /// <summary>
-        /// Server: Start placing beacon
-        /// </summary>
-        [Server]
-        public void StartPlacement()
-        {
-            if (isPlaced.Value) return;
-
-            // Check distance from other beacons
-            if (!IsValidPlacementLocation())
-            {
-                Debug.LogWarning("[RespawnBeacon] Invalid placement location - too close to another beacon");
-                return;
-            }
-
-            // Start placement timer
-            StartCoroutine(PlacementCoroutine());
-        }
-
-        private IEnumerator PlacementCoroutine()
-        {
-            yield return new WaitForSeconds(placeTime);
-
-            if (!isPlaced.Value)
-            {
-                isPlaced.Value = true;
-                OnBeaconPlaced();
-            }
-        }
-
-        /// <summary>
-        /// Check if placement location is valid
-        /// </summary>
-        private bool IsValidPlacementLocation()
-        {
-            RespawnBeacon[] allBeacons = FindObjectsOfType<RespawnBeacon>();
-
-            foreach (var beacon in allBeacons)
-            {
-                if (beacon == this || !beacon.isPlaced.Value) continue;
-
-                float distance = Vector3.Distance(transform.position, beacon.transform.position);
-                if (distance < minDistanceFromOtherBeacons)
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Server: Take damage
-        /// </summary>
-        [Server]
-        public void TakeDamage(int damage)
-        {
-            if (!isActive.Value || !isPlaced.Value) return;
-
-            currentHP.Value -= damage;
-            currentHP.Value = Mathf.Max(0, currentHP.Value);
-
-            if (currentHP.Value <= 0)
-            {
-                OnBeaconDestroyed();
-            }
-        }
-
-        /// <summary>
-        /// Server: Destroy beacon
-        /// </summary>
-        [Server]
-        private void OnBeaconDestroyed()
-        {
-            isActive.Value = false;
-            Debug.Log($"[RespawnBeacon] Beacon destroyed (Team {ownerTeamId.Value})");
-
-            // Notify external systems (e.g. BeaconManager)
-            Destroyed?.Invoke();
-
-            // Award score to destroyer
-            // This would be handled by a scoring system
-
-            // Despawn after a delay
-            Invoke(nameof(DespawnBeacon), 2f);
-        }
-
-        /// <summary>
-        /// Server: Beacon placed successfully
-        /// </summary>
-        [Server]
-        private void OnBeaconPlaced()
-        {
-            Debug.Log($"[RespawnBeacon] Beacon placed (Team {ownerTeamId.Value})");
-            // Visual effects, etc.
-        }
-
-        /// <summary>
-        /// Server: Despawn beacon
-        /// </summary>
-        [Server]
-        private void DespawnBeacon()
-        {
-            if (IsSpawned)
-            {
-                Despawn();
-            }
-        }
-
-        /// <summary>
-        /// Server: Check if player can respawn here
+        /// Server: Hỏi xem người chơi Team này có quyền hồi sinh ở đây không?
         /// </summary>
         [Server]
         public bool CanRespawnHere(int teamId)
         {
-            if (!isActive.Value || !isPlaced.Value) return false;
-            if (teamId != ownerTeamId.Value) return false;
-            if (phaseManager != null && !phaseManager.AreBeaconsEnabled()) return false;
+            if (!_isActive.Value || !_isPlaced.Value) return false;
+            
+            if (teamId != _ownerTeamId.Value) return false; // Không chơi chung với địch
+            
+            // Ở Phase 3 (Lockdown) mọi Beacon bị vô hiệu hoá
+            if (_phaseManager != null && _phaseManager.CurrentPhase == MatchPhaseState.Lockdown) return false;
+            
             return true;
         }
 
-        /// <summary>
-        /// Get respawn delay
-        /// </summary>
-        public float GetRespawnDelay() => respawnDelay;
-
-        private void OnHPChanged(int oldHP, int newHP, bool asServer)
+        // Custom giao diện (UI) nếu máu thay đổi
+        protected override void OnHPChanged(int oldHP, int newHP, bool asServer)
         {
-            // Update health bar, etc.
-        }
-
-        private void OnIsPlacedChanged(bool oldVal, bool newVal, bool asServer)
-        {
-            ApplyPlacedVisual(newVal);
-        }
-
-        /// <summary>Toggle between placement-indicator and final beacon model.</summary>
-        private void ApplyPlacedVisual(bool placed)
-        {
-            if (beaconModel        != null) beaconModel.SetActive(placed);
-            if (placementIndicator != null) placementIndicator.SetActive(!placed);
-        }
-
-        /// <summary>
-        /// Client: Show placement indicator
-        /// </summary>
-        public void ShowPlacementIndicator(bool show)
-        {
-            if (placementIndicator != null)
-            {
-                placementIndicator.SetActive(show);
-            }
+            base.OnHPChanged(oldHP, newHP, asServer);
+            // Update UI Cột Máu của Beacon (tuỳ ý)
         }
     }
 }

@@ -24,6 +24,7 @@ namespace NightHunt.Gameplay.FogOfWar
         private FogOfWarHider _hider;
         private HiderDisableRenderers _hiderBehavior;
         private NetworkPlayer _networkPlayer;
+        private NightHunt.Gameplay.Deployables.BaseDeployable _deployable;
         private PlayerModelLoader _modelLoader;
 
         public bool IsEnemyToLocal { get; private set; }
@@ -39,8 +40,18 @@ namespace NightHunt.Gameplay.FogOfWar
             _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
         .OnSelf()
         .InChildren()
-        .OrLogWarning("[Auto] NetworkPlayer not found")
         .Resolve();
+            
+            // Nếu không phải Player, có thể đây là một thiết bị thả xuống đất (Mắt/Trạm Hồi Sinh)
+            _deployable = ComponentResolver.Find<NightHunt.Gameplay.Deployables.BaseDeployable>(this)
+        .OnSelf()
+        .InChildren()
+        .Resolve();
+
+            if (_networkPlayer == null && _deployable == null)
+            {
+                Debug.LogWarning("[FogTeamVisibilityBinder] Không tìm thấy NetworkPlayer hay BaseDeployable. Script sẽ không biết tính team!");
+            }
 
             _modelLoader = ComponentResolver.Find<PlayerModelLoader>(this)
         .OnSelf().OnRoot().InRootChildren()
@@ -173,18 +184,19 @@ namespace NightHunt.Gameplay.FogOfWar
         {
             teamId = -1;
 
-            if (_networkPlayer == null)
-                _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] NetworkPlayer not found")
-        .Resolve();
+            if (_networkPlayer != null)
+            {
+                teamId = _networkPlayer.TeamId;
+                return true;
+            }
 
-            if (_networkPlayer == null)
-                return false;
+            if (_deployable != null)
+            {
+                teamId = _deployable.OwnerTeamId;
+                return true;
+            }
 
-            teamId = _networkPlayer.TeamId;
-            return true;
+            return false;
         }
 
         private void EnsureHiderExists()

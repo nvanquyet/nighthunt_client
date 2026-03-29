@@ -124,7 +124,7 @@ namespace NightHunt.Gameplay.FogOfWar
         {
             if (_revealer == null) return;
 
-            bool isAlive = _lifecycle == null || _lifecycle.IsAlive;
+            bool isAlive = _lifecycle == null || !_lifecycle.IsDead;
             bool isAlly = _teamBinder == null || !_teamBinder.IsEnemyToLocal;
 
             _revealer.enabled = isAlive && isAlly;

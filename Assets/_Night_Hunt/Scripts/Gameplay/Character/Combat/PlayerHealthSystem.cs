@@ -299,7 +299,7 @@ namespace NightHunt.Gameplay.Character.Combat
             OnAnyPlayerDied?.Invoke(victimName, killerName, weaponId);
 
             // GLOBAL EVENT FOR KILL FEED / MATCH LOGIC:
-            NightHunt.Gameplay.Core.Events.GameplayEventBus.Raise(new NightHunt.Gameplay.Core.Events.PlayerKilledEvent
+            NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance.Publish(new NightHunt.Gameplay.Core.Events.PlayerKilledEvent
             {
                 VictimName = victimName,
                 KillerName = killerName,

@@ -214,10 +214,9 @@ namespace NightHunt.Gameplay.Beacon
 
         private void HandleInput()
         {
-            bool confirm = UnityEngine.Input.GetButtonDown(
-                _activeDefinition?.PlaceAction  ?? "Interact");
-            bool cancel  = UnityEngine.Input.GetButtonDown(
-                _activeDefinition?.CancelAction ?? "AltFire");
+            // TODO: Use InputManager events instead of polling
+            bool confirm = UnityEngine.Input.GetButtonDown("Interact");
+            bool cancel  = UnityEngine.Input.GetButtonDown("AltFire");
 
             if (cancel)
             {

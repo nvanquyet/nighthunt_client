@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using FishNet;
 using FishNet.Connection;
 using FishNet.Object;
@@ -38,19 +38,16 @@ namespace NightHunt.Gameplay.Beacon
         [Header("References")]
         [SerializeField] private MatchEndManager _matchEndManager;
 
-        [Tooltip("Fallback prefab used when a BeaconDefinition cannot be resolved " +
-                 "from the ItemDatabase (e.g. legacy calls without a definitionId).")]
-        [SerializeField] private GameObject _beaconPrefabFallback;
-
         [Header("Settings")]
-        [Tooltip("Config driving beacon limits and timing. If null, uses built-in defaults.")]
-        [SerializeField] private RespawnConfig _respawnConfig;
+        [Tooltip("Số beacon tối đa mỗi team. Khi đặt mới vượt limit → beacon cũ nhất bị destroy & thay thế.")]
+        [SerializeField] private int _maxActivePerTeam = 1;
+
+        [Tooltip("Reference tới MatchPhaseManager để block đặt Beacon ở Phase Lockdown.")]
+        [SerializeField] private MatchPhaseManager _phaseManager;
 
         // ── Runtime (server) ──────────────────────────────────────────────────
         /// <summary>teamId → list of active beacon NOs.</summary>
         private readonly Dictionary<int, List<RespawnBeacon>> _activeBeacons = new();
-
-        private int _maxActivePerTeam;
 
         // ──────────────────────────────────────────────────────────────────────
         #region Unity / FishNet Lifecycle
@@ -72,7 +69,8 @@ namespace NightHunt.Gameplay.Beacon
         {
             base.OnStartServer();
 
-            _maxActivePerTeam = _respawnConfig != null ? _respawnConfig.MaxBeaconsPerTeam : 2;
+            if (_phaseManager == null)
+                _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
 
             _matchEndManager?.RegisterBeaconProvider(this);
         }
@@ -113,15 +111,27 @@ namespace NightHunt.Gameplay.Beacon
             int               teamId,
             Vector3           position,
             Quaternion        rotation,
-            NetworkConnection ownerConn,
+            FishNet.Connection.NetworkConnection ownerConn,
             string            definitionId = null)
         {
-            // Enforce per-team limit
+            // ── Phase Gate: Block placement in Lockdown ───────────────────────
+            if (_phaseManager != null && _phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
+            {
+                Debug.Log($"[BeaconManager] Beacon placement blocked: Phase is Lockdown.");
+                return false;
+            }
+
+            // ── Enforce per-team limit: Replace oldest if at cap ──────────────
             int current = GetActiveBeaconCount(teamId);
             if (current >= _maxActivePerTeam)
             {
-                Debug.Log($"[BeaconManager] Team {teamId} at beacon limit ({_maxActivePerTeam}). Rejected.");
-                return false;
+                // Destroy oldest beacon to make room (Replace, not Reject)
+                if (_activeBeacons.TryGetValue(teamId, out var existingList) && existingList.Count > 0)
+                {
+                    var oldest = existingList[0];
+                    Debug.Log($"[BeaconManager] Team {teamId} at limit — destroying oldest beacon to replace.");
+                    oldest?.TakeDamage(int.MaxValue); // Force-kill
+                }
             }
 
             // Resolve prefab from ItemDatabase (prefers definition's BeaconPrefab)
@@ -146,8 +156,12 @@ namespace NightHunt.Gameplay.Beacon
                 return false;
             }
 
+            // Resolve definition for stats
+            var def = ItemDatabase.GetDefinition(definitionId) as BeaconDefinition;
+            int maxHP = (def != null) ? def.BeaconHP : 100; // Expected field or default
+
             // Initialize SyncVars BEFORE network-spawn so clients receive correct state.
-            beacon.Initialize(teamId);
+            beacon.Initialize(teamId, maxHP);
 
             // Network-spawn (all clients see it; ownerConn gets ownership).
             InstanceFinder.ServerManager.Spawn(go, ownerConn);
@@ -164,18 +178,24 @@ namespace NightHunt.Gameplay.Beacon
         }
 
         /// <summary>
-        /// Resolve the beacon prefab: prefer <see cref="BeaconDefinition.BeaconPrefab"/>
-        /// from the ItemDatabase, fall back to the inspector-assigned prefab.
+        /// Resolve the beacon prefab: always requires a valid BeaconDefinition from ItemDatabase.
         /// </summary>
         private GameObject ResolvePrefab(string definitionId)
         {
-            if (!string.IsNullOrEmpty(definitionId))
+            if (string.IsNullOrEmpty(definitionId))
             {
-                var def = ItemDatabase.GetDefinition(definitionId) as BeaconDefinition;
-                if (def?.BeaconPrefab != null)
-                    return def.BeaconPrefab;
+                Debug.LogError("[BeaconManager] definitionId is null or empty!");
+                return null;
             }
-            return _beaconPrefabFallback;
+
+            var def = ItemDatabase.GetDefinition(definitionId) as BeaconDefinition;
+            if (def?.BeaconPrefab == null)
+            {
+                Debug.LogError($"[BeaconManager] Could not resolve BeaconPrefab for definitionId: {definitionId}");
+                return null;
+            }
+
+            return def.BeaconPrefab;
         }
 
         #endregion
