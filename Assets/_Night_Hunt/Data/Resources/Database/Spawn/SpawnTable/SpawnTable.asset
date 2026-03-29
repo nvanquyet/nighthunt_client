@@ -15,7 +15,7 @@ MonoBehaviour:
   Mode: 0
   FixedEntries: []
   RandomEntries:
-  - Item: {fileID: 11400000, guid: 786df328601f91d49a2a2c282e927fcf, type: 2}
+  - Item: {fileID: 11400000, guid: 23c68eaf63a4e9040a1f52738e4974ed, type: 2}
     MinQuantity: 1
     MaxQuantity: 1
     Chance: 1

@@ -19543,6 +19543,8 @@ MonoBehaviour:
   _filterPanels:
   - FilterType: 2
     Panel: {fileID: 376944996}
+  - FilterType: 7
+    Panel: {fileID: 376944996}
   - FilterType: 5
     Panel: {fileID: 376944995}
   _reloadProgressBar: {fileID: 98294694}
@@ -41713,7 +41715,7 @@ MonoBehaviour:
   _matchPhaseManager: {fileID: 868932438}
   clientNetworkHandlerPrefab: {fileID: 5359618603319872427, guid: 23374191f5ee8534bb98f97a4336e8b9,
     type: 3}
-  _expectedPlayerCount: 2
+  _expectedPlayerCount: 1
   _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
 --- !u!1 &869343426
 GameObject:
@@ -78731,7 +78733,7 @@ Transform:
   m_GameObject: {fileID: 1638561315}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -14.89, y: -0.971, z: 13.03}
+  m_LocalPosition: {x: -14.89, y: 0, z: 13.03}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -99622,7 +99624,7 @@ Transform:
   m_GameObject: {fileID: 2028353385}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -9.79, y: -1.75, z: 20.1}
+  m_LocalPosition: {x: -9.79, y: 0, z: 20.1}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

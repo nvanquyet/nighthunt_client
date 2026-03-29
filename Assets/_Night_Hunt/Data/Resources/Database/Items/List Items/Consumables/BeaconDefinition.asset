@@ -22,9 +22,9 @@ MonoBehaviour:
   AttachmentSlots: 
   CanAttachTo: 
   ValidSlots: 00000000
-  HeldPrefab: {fileID: 7277718707913719503, guid: 0fcf0ac418020474f9ba20df77d84eee,
+  HeldPrefab: {fileID: 7277718707913719503, guid: 9e6910ed64665c94d8847cd90f541339,
     type: 3}
-  GroundPrefab: {fileID: 7277718707913719503, guid: 0fcf0ac418020474f9ba20df77d84eee,
+  GroundPrefab: {fileID: 7277718707913719503, guid: 9e6910ed64665c94d8847cd90f541339,
     type: 3}
   UsageDuration: 5
   CanCancelUsage: 1

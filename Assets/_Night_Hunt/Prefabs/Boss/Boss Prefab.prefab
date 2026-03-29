@@ -165,10 +165,10 @@ MonoBehaviour:
   _attackCooldown: 0.5
   _playerLayerMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 16896
   _obstacleLayerMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 8388608
   _scanInterval: 0.3
   _turretGuns:
   - {fileID: 8574440910411904091}

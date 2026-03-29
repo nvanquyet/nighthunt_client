@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using FishNet.Object;
 using System.Collections.Generic;
 using NightHunt.Networking;
@@ -114,10 +114,17 @@ namespace NightHunt.Gameplay.Team
         
         // ===== HELPERS =====
         
+        private int GetFallbackTeam()
+        {
+            // Lấy team dựa trên số lượng người hiện có (modulo) để phân phối đều
+            int currentTotal = _playerTeamMap.Count;
+            return currentTotal % _maxTeams;
+        }
+
         private int GetSmallestTeam()
         {
             TeamService teamService = TeamService.Instance;
-            if (teamService == null) return 0;
+            if (teamService == null) return GetFallbackTeam();
             
             int smallestTeam = 0;
             int smallestCount = int.MaxValue;
