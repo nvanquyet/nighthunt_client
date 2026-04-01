@@ -11,7 +11,7 @@ namespace NightHunt.GameplaySystems.Weapon
 {
     public partial class WeaponSystem
     {
-        // -- IWeaponSystem � Fire API -------------------------------------------
+        // -- IWeaponSystem � Fire API -------------------------------------------
 
         /// <summary>Begin firing (owner-side). Auto mode spawns the auto-fire coroutine.</summary>
         public void StartFire()
@@ -30,7 +30,7 @@ namespace NightHunt.GameplaySystems.Weapon
             }
         }
 
-        /// <summary>Release fire input � stops auto-fire.</summary>
+        /// <summary>Release fire input � stops auto-fire.</summary>
         public void StopFire()
         {
             _isFiring = false;
@@ -111,7 +111,9 @@ namespace NightHunt.GameplaySystems.Weapon
         }
 
         /// <summary>
-        /// Core single-shot logic. Deducts ammo, raises events, delegates ballistics to WeaponBase.
+        /// Core single-shot logic. Deducts ammo, resolves the best target via registry,
+        /// computes the real 3-D fire direction (with elevation), applies gun pitch, and
+        /// delegates ballistics to WeaponBase.
         /// Owner-only; remote clients receive animation/VFX via NetworkSync RPCs.
         /// </summary>
         internal void TryFireOnce()
@@ -138,24 +140,66 @@ namespace NightHunt.GameplaySystems.Weapon
                 (int)inst.GetCurrentValue(ItemStatType.MaxAmmo),
                 (int)magCap);
 
+            // ── Target Acquisition + Elevation ────────────────────────────────────
+            // 1. Muzzle origin (3-D, actual world position of the gun barrel tip).
+            Vector3 origin = _fireOrigin != null ? _fireOrigin.position : transform.position;
+
+            // 2. Default: fire horizontally in the aim direction (as before).
+            Vector3 finalFireDir    = _aimDirection;
+            float   elevationAngle  = 0f;
+
+            // 3. Query the registry for the best target within the acquisition cone.
+            //    _bulletTargetConfig == null → registry disabled, pure physics raycast fallback.
+            if (_bulletTargetConfig != null && BulletTargetRegistry.Instance != null)
+            {
+                float maxRange = _currentWeaponBase != null ? _currentWeaponBase.MaxRange : 150f;
+
+                var result = BulletTargetRegistry.FindBestTarget(
+                    origin, _aimDirection, maxRange, _bulletTargetConfig);
+
+                if (result.HasTarget)
+                {
+                    // Real 3-D direction from muzzle to target's centre — includes Y component.
+                    finalFireDir = (result.HitPoint - origin).normalized;
+
+                    // Elevation angle = angle between horizontal plane and the 3-D fire direction.
+                    // Mathf.Asin gives degrees from the XZ plane.
+                    // Clamped to [-1, 1] to avoid NaN on floating-point rounding near ±1.
+                    elevationAngle = Mathf.Asin(Mathf.Clamp(finalFireDir.y, -1f, 1f))
+                                   * Mathf.Rad2Deg;
+
+                    if (DebugLogs)
+                        Debug.Log($"[WeaponSystem] Acquired: {result.Target.TargetType} " +
+                                  $"angle={result.AngleDeg:F1}° elev={elevationAngle:F1}°");
+                }
+            }
+
+            // 4. Apply elevation to weapon model (gun pitches up/down visually).
+            //    Also stores _currentElevationAngle for network broadcast.
+            _weaponModelController?.SetElevationAngle(elevationAngle);
+            _currentElevationAngle = elevationAngle;
+
+            // ── Fire Events + Ballistics ──────────────────────────────────────────
+
             // Raise local fire event (drives VFX + animation on owner).
             OnShotFired?.Invoke(slot.Value, _aimDirection);
 
             // Delegate ballistics to weapon prefab component.
+            // finalFireDir has correct 3-D elevation; spread is applied inside WeaponBase.
             if (_currentWeaponBase != null)
             {
-                Vector3 origin = _fireOrigin != null ? _fireOrigin.position : transform.position;
-                var config     = BuildWeaponConfigData(inst);
-                _currentWeaponBase.Fire(origin, _aimDirection, config, (int)ObjectId);
+                var config = BuildWeaponConfigData(inst);
+                _currentWeaponBase.Fire(origin, finalFireDir, config, (int)ObjectId);
 
-                // Spawn projectile visual on remote clients.
+                // Spawn projectile visual on remote clients using the real 3-D direction.
                 if (IsOwner && _currentWeaponBase.ProjectilePrefab != null)
-                    BroadcastProjectileServerRpc(origin, _aimDirection, config);
+                    BroadcastProjectileServerRpc(origin, finalFireDir, config);
             }
 
-            // Broadcast shot event to remote clients (animation + VFX).
+            // Broadcast shot to remote clients: horizontal aim dir (for body rotation) +
+            // elevation angle (for gun pitch on their weapon model).
             if (IsOwner)
-                BroadcastShotFiredServerRpc(slot.Value, _aimDirection);
+                BroadcastShotFiredServerRpc(slot.Value, _aimDirection, elevationAngle);
         }
 
         private WeaponConfigData BuildWeaponConfigData(ItemInstance inst)

@@ -11,6 +11,7 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.GameplaySystems.Loot;
+using NightHunt.Core.Base;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Inventory
@@ -19,7 +20,7 @@ namespace NightHunt.GameplaySystems.Inventory
     /// Server-authoritative inventory using SyncList. Provides O(1) item access
     /// via ID and index caches, and broadcasts change events for UI synchronisation.
     /// </summary>
-    public class InventorySystem : NetworkBehaviour, IInventorySystem, IDisposable
+    public class InventorySystem : BaseNetworkGameplaySystem, IInventorySystem, IDisposable
     {
         #region Serialized Fields
 
@@ -38,7 +39,7 @@ namespace NightHunt.GameplaySystems.Inventory
         [Tooltip("Auto-cleanup invalid items on sync")] [SerializeField]
         private bool _autoCleanupInvalidItems = true;
 
-        [Header("Debug")] [SerializeField] private bool _enableDebugLogs = false;
+        private bool _enableDebugLogs => _debugConfig != null && _debugConfig.EnableInventoryDebugLogs;
 
         #endregion
 
@@ -84,20 +85,16 @@ namespace NightHunt.GameplaySystems.Inventory
 
         #region NetworkBehaviour Lifecycle
 
-        public override void OnStartNetwork()
+        protected override void OnNetworkStarted()
         {
-            base.OnStartNetwork();
-
             _items.OnChange += OnItemsChanged;
 
             if (!IsServerInitialized)
                 RebuildAllCaches();
         }
 
-        public override void OnStopNetwork()
+        protected override void OnNetworkStopped()
         {
-            base.OnStopNetwork();
-
             _items.OnChange -= OnItemsChanged;
             ClearAllCaches();
         }
@@ -119,40 +116,23 @@ namespace NightHunt.GameplaySystems.Inventory
 
         #region Initialization
 
-        private void Awake()
+        protected override void OnResolveReferences()
         {
-            ValidateReferences();
-        }
-
-        private void ValidateReferences()
-        {
-            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
-                .UseExisting(_statSystemComponent)
-                .OnSelf()
-                .InChildren()
-                .InParent()
-                .InRootChildren()
-                .OrLogWarning("[Auto] IPlayerStatSystem not found")
-                .Resolve();
-
-            if (_statSystem is PlayerStatSystem statConcrete)
-                _statSystemComponent = statConcrete;
+            _statSystem = this.ResolveWithFallback<IPlayerStatSystem>(_statSystemComponent,
+                "[InventorySystem] IPlayerStatSystem not found — weight updates will not work");
 
             if (_gameplayConfig == null)
                 Debug.LogError("[InventorySystem] GameplayConfig is null!");
 
             if (_inventoryConfig == null)
                 Debug.LogError("[InventorySystem] InventoryConfig is null!");
-
-            if (_statSystem == null)
-                Debug.LogWarning("[InventorySystem] IPlayerStatSystem is null - weight updates will not work!");
         }
 
 #if UNITY_EDITOR
         [ContextMenu("Validate References")]
         protected override void OnValidate()
         {
-            ValidateReferences();
+            OnResolveReferences();
         }
 #endif
 

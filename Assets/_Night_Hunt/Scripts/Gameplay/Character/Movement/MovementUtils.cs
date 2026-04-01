@@ -3,7 +3,12 @@ using UnityEngine;
 namespace NightHunt.Gameplay.Character.Movement
 {
     /// <summary>
-    /// Movement calculations and weight penalties
+    /// Movement weight-penalty helpers.
+    ///
+    /// NOTE: These utilities are NOT yet wired into the movement simulation.
+    /// When the weight system is fully integrated, call via
+    /// BaseCharacterPredictedMovement.SetWeightPenalty() and
+    /// SetStaminaDrainMultiplier() — currently both are no-op stubs pending this work.
     /// </summary>
     public static class MovementUtils
     {

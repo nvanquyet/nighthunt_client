@@ -125,7 +125,6 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(other)
                                             .OnSelf()
                                             .InChildren()
-                                            .OrLogWarning("[Auto] PlayerHitboxMarker not found")
                                             .Resolve();
                 if (hitbox != null && hitbox.HealthSystem != null)
                 {
@@ -143,6 +142,20 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                               $", headshot: {hitbox.IsHeadshot}, owner shot: {_isOwnerShot}");
 
                     hitbox.HealthSystem.RequestDamage(info);
+                }
+                else
+                {
+                    // Non-player hittable (boss, deployable, objective, etc.)
+                    var hittable = other.GetComponentInParent<IHittable>();
+                    hittable?.RequestDamage(new DamageInfo
+                    {
+                        Damage                 = _damage,
+                        IsHeadshot             = false,
+                        HitPoint               = transform.position,
+                        HitNormal              = -_direction,
+                        ShooterNetworkObjectId = _shooterNetObjId,
+                        WeaponId               = _weaponId ?? string.Empty,
+                    });
                 }
             }
 

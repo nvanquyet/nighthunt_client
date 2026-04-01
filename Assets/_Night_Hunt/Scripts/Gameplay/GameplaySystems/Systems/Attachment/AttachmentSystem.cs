@@ -1,6 +1,8 @@
 using FishNet.Object;
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
+using NightHunt.Core.Base;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
@@ -14,12 +16,14 @@ namespace NightHunt.GameplaySystems.Attachment
     /// Manages item attachment slots (scopes, grips, etc.) for a networked player.
     /// Automatically recovers attachments to inventory when the parent item is dropped.
     /// </summary>
-    public class AttachmentSystem : NetworkBehaviour, IAttachmentSystem, IDisposable
+    public class AttachmentSystem : BaseNetworkGameplaySystem, IAttachmentSystem, IDisposable
     {
         #region Serialized Fields
         
         [Header("References")]
-        [SerializeField] private InventorySystem _inventorySystem;
+        [FormerlySerializedAs("_inventorySystem")]
+        [SerializeField] private InventorySystem _inventorySystemSource;
+        private IInventorySystem _inventorySystem;
         
         [Header("Configuration")]
         [SerializeField] private InventoryConfig _inventoryConfig;
@@ -27,8 +31,7 @@ namespace NightHunt.GameplaySystems.Attachment
         [Tooltip("Auto-recover attachments when parent item dropped/destroyed")]
         [SerializeField] private bool _autoRecoverAttachments = true;
         
-        [Header("Debug")]
-        [SerializeField] private bool _enableDebugLogs = false;
+        private bool _enableDebugLogs => _debugConfig != null && _debugConfig.EnableWeaponDebugLogs;
         
         #endregion
         
@@ -41,57 +44,22 @@ namespace NightHunt.GameplaySystems.Attachment
         
         #region Lifecycle
         
-        private void Awake()
+        protected override void OnResolveReferences()
         {
-            ValidateReferences();
+            _inventorySystem = this.ResolveWithFallback<IInventorySystem>(_inventorySystemSource,
+                "[AttachmentSystem] IInventorySystem not found!");
         }
-        
-        private void ValidateReferences()
+
+        protected override void OnNetworkStarted()
         {
-#if UNITY_EDITOR
-            if (_inventorySystem == null)
-                _inventorySystem = ComponentResolver.Find<InventorySystem>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] InventorySystem not found")
-        .Resolve();
-#endif
-            
-            if (_inventorySystem == null)
-                Debug.LogError("[AttachmentSystem] InventorySystem is null!");
-        }
-        
-#if UNITY_EDITOR
-        private void OnValidate()
-        {
-            if (_inventorySystem == null)
-                _inventorySystem = ComponentResolver.Find<InventorySystem>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] InventorySystem not found")
-        .Resolve();
-        }
-#endif
-        
-        public override void OnStartNetwork()
-        {
-            base.OnStartNetwork();
-            
-            // Subscribe to inventory events for auto-recovery
             if (_autoRecoverAttachments && _inventorySystem != null)
-            {
                 _inventorySystem.OnItemRemoved += OnParentItemRemoved;
-            }
         }
-        
-        public override void OnStopNetwork()
+
+        protected override void OnNetworkStopped()
         {
-            base.OnStopNetwork();
-            
             if (_inventorySystem != null)
-            {
                 _inventorySystem.OnItemRemoved -= OnParentItemRemoved;
-            }
         }
         
         #endregion

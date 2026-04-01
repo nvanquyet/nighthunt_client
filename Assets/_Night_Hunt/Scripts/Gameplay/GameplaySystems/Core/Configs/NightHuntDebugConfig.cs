@@ -20,6 +20,9 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Tooltip("Enable debug logs for the interaction and pickup system.")]
         public bool EnableInteractionDebugLogs = false;
 
+        [Tooltip("Enable debug logs for the weapon, equipment, and attachment systems.")]
+        public bool EnableWeaponDebugLogs = false;
+
         [Tooltip("Enable debug logs for core game bootstrap, GameManager, and SessionState.")]
         public bool EnableCoreDebugLogs = false;
 

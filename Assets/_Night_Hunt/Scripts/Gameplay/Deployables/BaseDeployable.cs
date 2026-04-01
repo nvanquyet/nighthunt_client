@@ -3,6 +3,7 @@ using System.Collections;
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
+using NightHunt.Gameplay.Character.Combat;
 
 namespace NightHunt.Gameplay.Deployables
 {
@@ -11,7 +12,7 @@ namespace NightHunt.Gameplay.Deployables
     /// Quản lý Máu, Trạng thái (Placed/Active), Logic bị phá huỷ.
     /// Visual nên được xử lý thông qua prefab hierarchy, không cần script tham chiếu ở base.
     /// </summary>
-    public abstract class BaseDeployable : NetworkBehaviour
+    public abstract class BaseDeployable : NetworkBehaviour, IHittable
     {
         // Synchronized state
         protected readonly SyncVar<int> _currentHP = new SyncVar<int>();
@@ -79,6 +80,12 @@ namespace NightHunt.Gameplay.Deployables
                 OnDeployableDestroyed();
             }
         }
+
+        // ── IHittable ──────────────────────────────────────────────────────────
+        public void RequestDamage(DamageInfo info) => RequestDamageServerRpc((int)info.Damage);
+
+        [ServerRpc(RequireOwnership = false)]
+        private void RequestDamageServerRpc(int damage) => TakeDamage(damage);
 
         /// <summary>Server: Khi thiết bị bị phá huỷ (hết máu).</summary>
         [Server]

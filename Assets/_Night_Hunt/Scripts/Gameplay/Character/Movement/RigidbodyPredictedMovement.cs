@@ -358,8 +358,14 @@ namespace NightHunt.Gameplay.Character
                                 {
                                     if (Vector3.Dot(cornerHit.normal, wallHit.normal) < 0.95f)
                                     {
+                                        // True corner: project against the second wall.
                                         Vector3 cornerNormalXZ = new Vector3(cornerHit.normal.x, 0f, cornerHit.normal.z).normalized;
                                         horizontal = Vector3.ProjectOnPlane(horizontal, cornerNormalXZ);
+                                    }
+                                    else
+                                    {
+                                        // Same wall surface hit again (slide direction still blocked) — full stop.
+                                        horizontal = Vector3.zero;
                                     }
                                 }
                             }
@@ -452,8 +458,20 @@ namespace NightHunt.Gameplay.Character
 
                 if (bestFound)
                 {
-                    // Snap! The new Y exactly aligns the bottom sphere with the hit surface.
-                    float snapYDiff = castOffset - bestDist;
+                    // Snap the capsule bottom sphere CENTER to (surface_Y + _capsule.radius).
+                    //
+                    // SphereCastNonAlloc uses castRadius (reduced sphere, not _capsule.radius)
+                    // to avoid false wall hits. The sphere EDGE touches the surface at bestDist,
+                    // so the cast sphere CENTER is at (castOrigin.y - bestDist) and the surface
+                    // is at (castOrigin.y - bestDist - castRadius).
+                    //
+                    // footBase represents the capsule bottom sphere CENTER.
+                    // For the capsule to rest on the surface: footBase_target = surface_Y + _capsule.radius.
+                    //
+                    // snapYDiff = footBase_target - footBase_current
+                    //           = (castOrigin.y - bestDist - castRadius + _capsule.radius) - (castOrigin.y - castOffset)
+                    //           = castOffset - bestDist + (_capsule.radius - castRadius)
+                    float snapYDiff = castOffset - bestDist + (_capsule.radius - castRadius);
                     targetPos.y += snapYDiff;
                 }
             }
@@ -686,9 +704,9 @@ namespace NightHunt.Gameplay.Character
         }
 
         /// <summary>
-        /// Check if rigidbody is valid
+        /// Check if rigidbody component is present. Always kinematic — never check isKinematic.
         /// </summary>
-        public bool IsRigidbodyValid() => _rigidbody != null && !_rigidbody.isKinematic;
+        public bool IsRigidbodyValid() => _rigidbody != null;
 
         #endregion
 

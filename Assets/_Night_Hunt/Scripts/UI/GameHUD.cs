@@ -40,6 +40,9 @@ namespace NightHunt.UI
         [SerializeField] private MatchUI matchUI;
         [SerializeField] private KillFeedUI killFeedUI;
 
+        [Header("Boss")]
+        [SerializeField] private BossHUDPanel bossHUDPanel;
+
         [Header("Crosshair")]
         [SerializeField] private CrosshairUI crosshairUI;
 
@@ -63,6 +66,7 @@ namespace NightHunt.UI
         public PlayerHUDPanel     PlayerHUDPanel    => playerHUDPanel;
         public CombatHUDPanel     CombatHUDPanel    => combatHUDPanel;
         public KillFeedUI         KillFeed          => killFeedUI;
+        public BossHUDPanel       BossHUD           => bossHUDPanel;
         public CrosshairUI        Crosshair         => crosshairUI;
         public InteractionPromptUI InteractionPrompt => interactionPromptUI;
         public MinimapUI          Minimap           => minimapUI;
@@ -85,6 +89,18 @@ namespace NightHunt.UI
             // Never lock/hide; mobile has no cursor so this is a no-op on device.
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible   = true;
+        }
+
+        private void OnEnable()
+        {
+            // Self-wire: fires only on the owning client when local player is ready.
+            // Same pattern as LootContainerUI. No external caller required.
+            NetworkPlayer.OnOwnerReady += Initialize;
+        }
+
+        private void OnDisable()
+        {
+            NetworkPlayer.OnOwnerReady -= Initialize;
         }
 
         // ── Panel initial state ───────────────────────────────────────────────────
@@ -136,6 +152,7 @@ namespace NightHunt.UI
 
             _localNetObjId = (int)localPlayer.ObjectId;
 
+            if (matchUI != null)          matchUI.Initialize(localPlayer);
             if (minimapUI != null)        minimapUI.SetLocalPlayer(localPlayer);
             if (deathScreen != null)      deathScreen.RegisterPlayer(localPlayer);
             if (lootContainerUI != null)  lootContainerUI.SetLocalPlayer(localPlayer);
@@ -222,6 +239,12 @@ namespace NightHunt.UI
         .InChildren()
         .InParent()
         .OrLogWarning("[Auto] KillFeedUI not found")
+        .Resolve();
+            if (bossHUDPanel == null)    bossHUDPanel    = ComponentResolver.Find<BossHUDPanel>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrLogWarning("[Auto] BossHUDPanel not found")
         .Resolve();
             if (crosshairUI == null)     crosshairUI     = ComponentResolver.Find<CrosshairUI>(this)
         .OnSelf()

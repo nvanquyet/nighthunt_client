@@ -132,7 +132,18 @@ namespace NightHunt.Gameplay.Boss
 
             Debug.Log($"[BossSpawnManager] Spawned boss '{boss.BossId}' at {pos}.");
 
-            GameplayEventBus.Instance?.Publish(new BossSpawnedEvent { BossId = boss.BossId });
+            // Notify all clients so UI (BossHUDPanel) can show the HP bar.
+            RpcNotifyBossSpawned(boss.BossId, pos);
+        }
+
+        [ObserversRpc]
+        private void RpcNotifyBossSpawned(string bossId, Vector3 position)
+        {
+            GameplayEventBus.Instance?.Publish(new BossSpawnedEvent
+            {
+                BossId   = bossId,
+                Position = position,
+            });
         }
 
         private void OnBossDied(BossController boss)

@@ -38,6 +38,9 @@ namespace NightHunt.Gameplay.Character.Combat
         [Tooltip("CharacterLifecycleController for death/respawn events. Auto-resolved if null.")]
         [SerializeField] private CharacterLifecycleController _lifecycle;
 
+        [Tooltip("MatchEndManager to track kills for win condition. Auto-resolved if null.")]
+        [SerializeField] private NightHunt.Gameplay.Match.MatchEndManager _matchEndManager;
+
         [Header("Settings")]
         [Tooltip("Armor damage reduction formula: final = damage * (100 / (100 + armor)).")]
         [SerializeField] private bool _applyArmorReduction = true;
@@ -81,6 +84,9 @@ namespace NightHunt.Gameplay.Character.Combat
         .InChildren()
         .OrLogWarning("[Auto] CharacterLifecycleController not found")
         .Resolve();
+
+            if (_matchEndManager == null)
+                _matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
         }
 
 #if UNITY_EDITOR
@@ -249,8 +255,16 @@ namespace NightHunt.Gameplay.Character.Combat
             // Tell CharacterLifecycleController who the killer is BEFORE health event fires.
             _lifecycle?.SetKillerInfo(killerName);
 
+            uint killerObjId = info.ShooterNetworkObjectId > 0 ? (uint)info.ShooterNetworkObjectId : 0u;
+            uint victimObjId = _networkPlayer != null ? (uint)_networkPlayer.ObjectId : 0u;
+            int  killerTeamId = ResolveKillerTeamId(info.ShooterNetworkObjectId);
+
+            // Track kill for match-end win condition
+            if (killerTeamId >= 0)
+                _matchEndManager?.AddKill(killerTeamId);
+
             // Broadcast death event with killer name to all clients (kill feed, death screen).
-            NotifyKillObserversRpc(killerName, info.WeaponId);
+            NotifyKillObserversRpc(killerName, info.WeaponId, killerObjId, victimObjId, killerTeamId);
         }
 
         [Server]
@@ -272,6 +286,23 @@ namespace NightHunt.Gameplay.Character.Combat
             return string.Empty;
         }
 
+        [Server]
+        private int ResolveKillerTeamId(int shooterNetObjId)
+        {
+            if (shooterNetObjId < 0) return -1;
+
+            var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
+            if (players == null) return -1;
+
+            foreach (var player in players)
+            {
+                if (player != null && (int)player.ObjectId == shooterNetObjId)
+                    return player.TeamId;
+            }
+
+            return -1;
+        }
+
         // ── Observer RPCs (server → all clients) ──────────────────────────────
 
         /// <summary>Runs on all clients: spawns blood / hit-marker VFX at the hit point.</summary>
@@ -287,7 +318,8 @@ namespace NightHunt.Gameplay.Character.Combat
 
         /// <summary>Runs on all clients: triggers death screen, kill feed, etc.</summary>
         [ObserversRpc]
-        private void NotifyKillObserversRpc(string killerName, string weaponId)
+        private void NotifyKillObserversRpc(string killerName, string weaponId,
+            uint killerNetObjId, uint victimNetObjId, int killerTeamId)
         {
             string victimName = _networkPlayer?.DisplayName ?? string.Empty;
             int victimTeam = _networkPlayer != null ? _networkPlayer.TeamId : -1;
@@ -298,13 +330,16 @@ namespace NightHunt.Gameplay.Character.Combat
             OnPlayerDied?.Invoke(killerName);
             OnAnyPlayerDied?.Invoke(victimName, killerName, weaponId);
 
-            // GLOBAL EVENT FOR KILL FEED / MATCH LOGIC:
+            // GLOBAL EVENT FOR KILL FEED / MATCH LOGIC / SCORING:
             NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance.Publish(new NightHunt.Gameplay.Core.Events.PlayerKilledEvent
             {
                 VictimName = victimName,
                 KillerName = killerName,
                 WeaponId = weaponId,
-                VictimTeamId = victimTeam
+                VictimTeamId = victimTeam,
+                KillerNetworkObjectId = killerNetObjId,
+                VictimNetworkObjectId = victimNetObjId,
+                KillerTeamId = killerTeamId,
             });
         }
     }

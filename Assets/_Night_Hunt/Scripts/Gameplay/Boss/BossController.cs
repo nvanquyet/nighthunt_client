@@ -66,7 +66,7 @@ namespace NightHunt.Gameplay.Boss
     ///   TurretGun._syncLookDir : SyncVar<Vector3> — hướng xoay mỗi barrel
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class BossController : NetworkBehaviour
+    public sealed class BossController : NetworkBehaviour, IHittable
     {
         // ── SyncVars ──────────────────────────────────────────────────────────────
         private readonly SyncVar<float>     _syncHp    = new SyncVar<float>();
@@ -374,6 +374,12 @@ namespace NightHunt.Gameplay.Boss
             if (_syncHp.Value <= 0f)
                 Die();
         }
+
+        // ── IHittable ──────────────────────────────────────────────────────────
+        public void RequestDamage(DamageInfo info) => RequestDamageServerRpc(info.Damage);
+
+        [ServerRpc(RequireOwnership = false)]
+        private void RequestDamageServerRpc(float damage) => TakeDamage(damage, null);
 
         [Server]
         private float GetHighestThreat()

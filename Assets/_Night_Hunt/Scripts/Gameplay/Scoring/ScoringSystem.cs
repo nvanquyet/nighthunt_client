@@ -1,10 +1,14 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Data;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Core.Events;
+using NightHunt.Utilities;
 using FishNet;
 
 namespace NightHunt.Gameplay.Scoring
@@ -29,6 +33,7 @@ namespace NightHunt.Gameplay.Scoring
 
         private MatchPhaseManager phaseManager;
         private List<ScoreSystemData> scoreConfigs;
+        private ScoreSync _scoreSync;
 
         public override void OnStartServer()
         {
@@ -36,6 +41,39 @@ namespace NightHunt.Gameplay.Scoring
 
             scoreConfigs = _scoreConfigList.Count > 0 ? _scoreConfigList : null;
             phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+            _scoreSync   = ComponentResolver.Find<ScoreSync>(this).OnSelf().InChildren().Resolve()
+                           ?? FindFirstObjectByType<ScoreSync>();
+
+            // Subscribe to gameplay events so scoring fires automatically
+            GameplayEventBus.Instance?.Subscribe<PlayerKilledEvent>(OnPlayerKilled);
+            GameplayEventBus.Instance?.Subscribe<BossKilledEvent>(OnBossKilled);
+        }
+
+        public override void OnStopServer()
+        {
+            base.OnStopServer();
+            GameplayEventBus.Instance?.Unsubscribe<PlayerKilledEvent>(OnPlayerKilled);
+            GameplayEventBus.Instance?.Unsubscribe<BossKilledEvent>(OnBossKilled);
+        }
+
+        [Server]
+        private void OnPlayerKilled(PlayerKilledEvent evt)
+        {
+            if (evt.KillerNetworkObjectId == 0) return; // world/environment kill — no score
+            AwardKill(evt.KillerNetworkObjectId, evt.VictimNetworkObjectId);
+        }
+
+        [Server]
+        private void OnBossKilled(BossKilledEvent evt)
+        {
+            // Award all living players on the killer team
+            var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
+            if (players == null) return;
+            foreach (var player in players)
+            {
+                if (player != null && player.IsAlive && player.TeamId == evt.KillerTeamId)
+                    AwardBossKill((uint)player.ObjectId);
+            }
         }
 
         /// <summary>
@@ -90,9 +128,15 @@ namespace NightHunt.Gameplay.Scoring
         {
             var killConfig = GetScoreConfig("Kill");
             if (killConfig != null)
-            {
                 AwardScore(killerId, "Kill", killConfig.BaseScore, killConfig.PhaseMultiplier);
-            }
+
+            // Track Kills stat (AwardScore already initialized playerScores/teamScores entries)
+            if (playerScores.ContainsKey(killerId))
+                playerScores[killerId].Kills++;
+
+            NetworkPlayer killer = GetPlayerById(killerId);
+            if (killer != null && teamScores.ContainsKey(killer.TeamId))
+                teamScores[killer.TeamId].Kills++;
         }
 
         /// <summary>
@@ -131,19 +175,16 @@ namespace NightHunt.Gameplay.Scoring
             if (objectiveConfig != null)
             {
                 // Award per second of capture
-                int scorePerSecond = objectiveConfig.BaseScore;
-                int totalScore = Mathf.RoundToInt(captureTime * scorePerSecond);
+            int scorePerSecond = objectiveConfig.BaseScore;
+            int totalScore = Mathf.RoundToInt(captureTime * scorePerSecond);
 
-            // Award to all team members
-            NetworkPlayer[] players = FindObjectsOfType<NetworkPlayer>();
-            foreach (var player in players)
-            {
-                if (player.TeamId == teamId)
-                {
-                    AwardScore((uint)player.ObjectId, "ObjectiveCapture", totalScore);
-                }
-            }
-            }
+            // Award to all team members — O(n) via registry, no FindObjectsOfType
+            var allPlayers = PlayerPublicRegistry.Instance?.GetAllPlayers();
+            if (allPlayers != null)
+                foreach (var player in allPlayers)
+                    if (player != null && player.TeamId == teamId)
+                        AwardScore((uint)player.ObjectId, "ObjectiveCapture", totalScore);
+        }
         }
 
         /// <summary>
@@ -180,17 +221,16 @@ namespace NightHunt.Gameplay.Scoring
         }
 
         /// <summary>
-        /// Get player by network ID
+        /// Get player by network object ID — uses PlayerPublicRegistry (O(n) but no FindObjects).
         /// </summary>
         private NetworkPlayer GetPlayerById(uint playerId)
         {
-            NetworkPlayer[] players = FindObjectsOfType<NetworkPlayer>();
+            var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
+            if (players == null) return null;
             foreach (var player in players)
             {
-                if (player.ObjectId == playerId)
-                {
+                if (player != null && player.ObjectId == playerId)
                     return player;
-                }
             }
             return null;
         }
@@ -201,9 +241,14 @@ namespace NightHunt.Gameplay.Scoring
         [Server]
         private void SyncScores()
         {
-            // Serialize scores to JSON (simplified)
-            // In production, use proper serialization
-            scoreDataJson.Value = "scores_updated";
+            var snapshot = new ScoreSnapshot
+            {
+                Teams   = new List<TeamScore>(teamScores.Values),
+                Players = new List<PlayerScore>(playerScores.Values),
+            };
+            string json = JsonUtility.ToJson(snapshot);
+            scoreDataJson.Value = json;
+            _scoreSync?.SyncScoreData(json);
         }
 
         /// <summary>
@@ -249,6 +294,16 @@ namespace NightHunt.Gameplay.Scoring
 
             return leadingTeam;
         }
+    }
+
+    /// <summary>
+    /// Serializable snapshot of all scores — sent as JSON via ScoreSync.
+    /// </summary>
+    [System.Serializable]
+    public class ScoreSnapshot
+    {
+        public List<TeamScore>   Teams;
+        public List<PlayerScore> Players;
     }
 
     /// <summary>

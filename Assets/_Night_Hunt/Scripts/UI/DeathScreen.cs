@@ -3,8 +3,10 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Character.Combat;
+using NightHunt.Gameplay.Respawn;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking;
 using NightHunt.Utilities;
@@ -48,6 +50,8 @@ namespace NightHunt.UI
         private CharacterLifecycleController _lifecycle;
         private PlayerHealthSystem _healthSystem;
         private Coroutine _countdownRoutine;
+        private NetworkPlayer _localPlayer;
+        private RespawnSystem _respawnSystem;
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -61,6 +65,9 @@ namespace NightHunt.UI
 
             // Unsubscribe from previous player (spectate scenario)
             UnregisterCurrent();
+
+            _localPlayer = player;
+            _respawnSystem = UnityEngine.Object.FindFirstObjectByType<RespawnSystem>();
 
             _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(player)
                 .OnSelf()
@@ -116,6 +123,18 @@ namespace NightHunt.UI
             SetupButtons();
         }
 
+        private void OnEnable()
+        {
+            GameplayEventBus.Instance?.Subscribe<RespawnTimerEvent>(OnRespawnTimerReceived);
+            GameplayEventBus.Instance?.Subscribe<RespawnCancelledEvent>(OnRespawnCancelled);
+        }
+
+        private void OnDisable()
+        {
+            GameplayEventBus.Instance?.Unsubscribe<RespawnTimerEvent>(OnRespawnTimerReceived);
+            GameplayEventBus.Instance?.Unsubscribe<RespawnCancelledEvent>(OnRespawnCancelled);
+        }
+
         private void OnDestroy() => UnregisterCurrent();
 
         // ── Helpers ───────────────────────────────────────────────────────────
@@ -142,6 +161,9 @@ namespace NightHunt.UI
                 _healthSystem.OnPlayerDied -= HandlePlayerHealthDied;
                 _healthSystem = null;
             }
+
+            _localPlayer = null;
+            _respawnSystem = null;
         }
 
         // ── Event handlers ────────────────────────────────────────────────────
@@ -151,11 +173,37 @@ namespace NightHunt.UI
 
         private void HandleRespawned() => Hide();
 
+        // RespawnSystem syncs the actual server delay via SyncVar → GameplayEventBus on clients.
+        // Restart our countdown with the authoritative value instead of the local fallback.
+        private void OnRespawnTimerReceived(RespawnTimerEvent evt)
+        {
+            if (_deathPanel == null || !_deathPanel.activeSelf) return;
+
+            if (_countdownRoutine != null) StopCoroutine(_countdownRoutine);
+            _countdownRoutine = StartCoroutine(RespawnCountdown(evt.DelaySeconds));
+        }
+
+        private void OnRespawnCancelled(RespawnCancelledEvent evt)
+        {
+            if (_countdownRoutine != null)
+            {
+                StopCoroutine(_countdownRoutine);
+                _countdownRoutine = null;
+            }
+
+            if (_respawnTimerText != null)
+                _respawnTimerText.text = "Respawn cancelled";
+
+            if (_respawnButton != null)
+                _respawnButton.interactable = false;
+        }
+
         // ── Coroutine ─────────────────────────────────────────────────────────
 
-        private IEnumerator RespawnCountdown()
+        private IEnumerator RespawnCountdown(float delay = -1f)
         {
-            float remaining = _respawnDelay;
+            // Use server-provided delay if available, otherwise fall back to inspector value.
+            float remaining = delay > 0f ? delay : _respawnDelay;
 
             while (remaining > 0f)
             {
@@ -185,11 +233,10 @@ namespace NightHunt.UI
 
         private void OnRespawnClicked()
         {
-            // Respawn is server-authoritative — the RespawnSystem already requested
-            // a respawn on death (if autoRequestRespawnOnDeath = true).
-            // This button is provided for modes where manual respawn is required.
-            // Here we just note the intent; the actual respawn is handled by RespawnSystem.
-            Debug.Log("[DeathScreen] Player requested manual respawn.");
+            if (_localPlayer != null && _respawnSystem != null)
+                _respawnSystem.RequestRespawn(_localPlayer);
+            else
+                Debug.Log("[DeathScreen] Manual respawn requested — RespawnSystem or localPlayer not resolved.");
         }
     }
 }

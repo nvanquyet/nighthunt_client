@@ -118,6 +118,12 @@ namespace NightHunt.Gameplay.Core.Events
         public string KillerName;
         public string WeaponId;
         public int VictimTeamId;
+        /// <summary>NetworkObject.ObjectId of the killer. 0 = world/environment kill.</summary>
+        public uint KillerNetworkObjectId;
+        /// <summary>NetworkObject.ObjectId of the victim.</summary>
+        public uint VictimNetworkObjectId;
+        /// <summary>TeamId of the killer. -1 = environment/unknown.</summary>
+        public int KillerTeamId;
     }
 
     /// <summary>A player has respawned.</summary>

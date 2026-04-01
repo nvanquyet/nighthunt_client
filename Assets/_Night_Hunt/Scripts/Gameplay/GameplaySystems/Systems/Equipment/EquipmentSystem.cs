@@ -7,6 +7,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.Core.Base;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Equipment
@@ -15,7 +16,7 @@ namespace NightHunt.GameplaySystems.Equipment
     /// Manages equipment slot assignment (head, body, legs, feet) for a networked player.
     /// All slot mutations are server-authoritative via SyncDictionary.
     /// </summary>
-    public class EquipmentSystem : NetworkBehaviour, IEquipmentSystem, IDisposable
+    public class EquipmentSystem : BaseNetworkGameplaySystem, IEquipmentSystem, IDisposable
     {
         #region Serialized Fields
         
@@ -27,8 +28,7 @@ namespace NightHunt.GameplaySystems.Equipment
         private IInventorySystem _inventorySystem;
         private IAttachmentSystem _attachmentSystem;
         
-        [Header("Debug")]
-        [SerializeField] private bool _enableDebugLogs = false;
+        private bool _enableDebugLogs => _debugConfig != null && _debugConfig.EnableWeaponDebugLogs;
         
         #endregion
         
@@ -53,20 +53,16 @@ namespace NightHunt.GameplaySystems.Equipment
         
         #region NetworkBehaviour Lifecycle
         
-        public override void OnStartNetwork()
+        protected override void OnNetworkStarted()
         {
-            base.OnStartNetwork();
-            
             _equippedItems.OnChange += OnEquipmentChanged;
             
             if (!IsServerInitialized)
                 RebuildEquipmentCache();
         }
         
-        public override void OnStopNetwork()
+        protected override void OnNetworkStopped()
         {
-            base.OnStopNetwork();
-            
             _equippedItems.OnChange -= OnEquipmentChanged;
             _equipmentCache.Clear();
         }
@@ -88,45 +84,23 @@ namespace NightHunt.GameplaySystems.Equipment
         
         #region Initialization
         
-        private void Awake()
+        protected override void OnResolveReferences()
         {
-            ValidateReferences();
-        }
-        
-        private void ValidateReferences()
-        {
-            _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
-        .UseExisting(_inventorySystemComponent)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .InRootChildren()
-        .OrLogWarning("[Auto] IInventorySystem not found")
-        .Resolve();
+            _inventorySystem = this.ResolveWithFallback<IInventorySystem>(_inventorySystemComponent,
+                "[EquipmentSystem] IInventorySystem not found");
 
-            if (_inventorySystem is InventorySystem invConcrete)
-                _inventorySystemComponent = invConcrete;
-
-            _attachmentSystem = ComponentResolver.Find<IAttachmentSystem>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .InRootChildren()
-        .OrLogWarning("[EquipmentSystem] IAttachmentSystem not found — DetachAttachmentsOnUnequip will be skipped")
-        .Resolve();
+            _attachmentSystem = this.ResolveWithFallback<IAttachmentSystem>(null,
+                "[EquipmentSystem] IAttachmentSystem not found — DetachAttachmentsOnUnequip will be skipped");
 
             if (_inventoryConfig == null)
                 Debug.LogError("[EquipmentSystem] InventoryConfig is null!");
-            
-            if (_inventorySystem == null)
-                Debug.LogError("[EquipmentSystem] IInventorySystem is null!");
         }
         
 #if UNITY_EDITOR
         [ContextMenu("Validate References")]
         protected override void OnValidate()
         {
-            ValidateReferences();
+            OnResolveReferences();
         }
 #endif
         

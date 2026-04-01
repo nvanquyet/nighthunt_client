@@ -14,6 +14,7 @@ using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
+using NightHunt.Core.Base;
 using NightHunt.Data;
 
 namespace NightHunt.GameplaySystems.Weapon
@@ -32,11 +33,15 @@ namespace NightHunt.GameplaySystems.Weapon
     ///   WeaponSystem.EquipUnequip.cs— Equip / Unequip / Swap / Select / Holster
     ///   WeaponSystem.NetworkSync.cs — all RPCs for remote client synchronisation
     /// </summary>
-    public partial class WeaponSystem : NetworkBehaviour, IWeaponSystem, IDisposable
+    public partial class WeaponSystem : BaseNetworkGameplaySystem, IWeaponSystem, IDisposable
     {
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Configuration")]
         [SerializeField] private InventoryConfig _inventoryConfig;
+
+        [Tooltip("Target acquisition config used by BulletTargetRegistry on each shot.\n" +
+                 "Leave null to skip registry query and use raw physics raycast only.")]
+        [SerializeField] private BulletTargetConfig _bulletTargetConfig;
 
         [Header("References (auto-resolved if blank)")]
         [SerializeField] private PlayerStatSystem _statSystemSource;
@@ -49,9 +54,6 @@ namespace NightHunt.GameplaySystems.Weapon
             WeaponSlotType.Secondary,
             WeaponSlotType.Melee
         };
-
-        [Header("Debug")]
-        [SerializeField] private bool _enableDebugLogs = false;
 
         [Header("Network Sync")]
         [Tooltip("Aim direction sync rate in seconds (default 0.05 = 20 Hz).")]
@@ -86,6 +88,17 @@ namespace NightHunt.GameplaySystems.Weapon
         internal Transform _fireOrigin;
         internal WeaponBase _currentWeaponBase;
 
+        // Reference resolved in OnResolveReferences — used to apply gun pitch on each shot.
+        internal WeaponModelController _weaponModelController;
+
+        /// <summary>
+        /// Elevation angle (degrees) of the gun pitch on the last shot.
+        /// Positive = aiming up, negative = aiming down, 0 = horizontal.
+        /// Derived from the 3-D direction toward the registry-acquired target.
+        /// Synced to remote clients inside BroadcastShotFiredServerRpc.
+        /// </summary>
+        internal float _currentElevationAngle = 0f;
+
         // ── Events (IWeaponSystem) ─────────────────────────────────────────────
         public event Action<WeaponSlotType, ItemInstance>      OnWeaponEquipped;
         public event Action<WeaponSlotType, ItemInstance>      OnWeaponUnequipped;
@@ -98,11 +111,8 @@ namespace NightHunt.GameplaySystems.Weapon
         public event Action<WeaponSlotType, Vector3, Vector3>  OnHitscanResult;
 
         // ── Unity / FishNet lifecycle ──────────────────────────────────────────
-        private void Awake() => ResolveReferences();
-
-        public override void OnStartNetwork()
+        protected override void OnNetworkStarted()
         {
-            base.OnStartNetwork();
             _weapons.OnChange   += OnWeaponsChangedCallback;
             _activeSlot.OnChange += OnActiveSlotChangedCallback;
 
@@ -110,9 +120,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 RebuildWeaponCache();
         }
 
-        public override void OnStopNetwork()
+        protected override void OnNetworkStopped()
         {
-            base.OnStopNetwork();
             _weapons.OnChange   -= OnWeaponsChangedCallback;
             _activeSlot.OnChange -= OnActiveSlotChangedCallback;
             _weaponCache.Clear();
@@ -175,37 +184,33 @@ namespace NightHunt.GameplaySystems.Weapon
             }
         }
 
-        internal bool DebugLogs => _enableDebugLogs;
+        internal bool DebugLogs => _debugConfig != null && _debugConfig.EnableWeaponDebugLogs;
         internal InventoryConfig InventoryConfig => _inventoryConfig;
+        internal BulletTargetConfig BulletTargetConfig => _bulletTargetConfig;
         internal IInventorySystem InventorySystem => _inventorySystem;
         internal IPlayerStatSystem StatSystem     => _statSystem;
 
         // ── Reference resolution ───────────────────────────────────────────────
-        private void ResolveReferences()
+        protected override void OnResolveReferences()
         {
-            _statSystem ??= ComponentResolver.Find<IPlayerStatSystem>(this)
-                .UseExisting(_statSystemSource)
-                .OnSelf().InChildren().InParent()
-                .OrLogWarning("[WeaponSystem] IPlayerStatSystem not found — stat modifiers disabled")
-                .Resolve();
+            _statSystem = this.ResolveWithFallback<IPlayerStatSystem>(_statSystemSource,
+                "[WeaponSystem] IPlayerStatSystem not found — stat modifiers disabled");
 
-            _inventorySystem ??= ComponentResolver.Find<IInventorySystem>(this)
-                .UseExisting(_inventorySystemSource)
-                .OnSelf().InChildren().InParent()
-                .OrLogError("[WeaponSystem] IInventorySystem not found")
-                .Resolve();
+            _inventorySystem = this.ResolveWithFallback<IInventorySystem>(_inventorySystemSource,
+                "[WeaponSystem] IInventorySystem not found");
 
-            _attachmentSystem ??= ComponentResolver.Find<IAttachmentSystem>(this)
-                .OnSelf().InChildren().InParent()
-                .OrLogWarning("[WeaponSystem] IAttachmentSystem not found — attachment detach on unequip disabled")
-                .Resolve();
+            _attachmentSystem = this.ResolveWithFallback<IAttachmentSystem>(null,
+                "[WeaponSystem] IAttachmentSystem not found — attachment detach on unequip disabled");
+
+            // WeaponModelController lives on the same GO — needed for gun pitch on acquired targets.
+            _weaponModelController = GetComponent<WeaponModelController>();
 
             if (_inventoryConfig == null)
                 Debug.LogError("[WeaponSystem] InventoryConfig not assigned.");
-            if (_inventorySystem == null)
-                Debug.LogError("[WeaponSystem] IInventorySystem not found.");
-            if (_statSystem == null)
-                Debug.LogWarning("[WeaponSystem] IPlayerStatSystem not found — stat modifiers disabled.");
+
+            if (_bulletTargetConfig == null)
+                Debug.LogWarning("[WeaponSystem] BulletTargetConfig not assigned — " +
+                                 "registry acquisition disabled, using raw physics raycast only.");
 
             if (_slotPriority == null || _slotPriority.Length == 0)
                 _slotPriority = new[] { WeaponSlotType.Primary, WeaponSlotType.Secondary, WeaponSlotType.Melee };
@@ -215,17 +220,7 @@ namespace NightHunt.GameplaySystems.Weapon
         [ContextMenu("Validate References")]
         protected override void OnValidate()
         {
-            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
-                .UseExisting(_statSystemSource)
-                .OnSelf().InChildren().InParent().InRootChildren()
-                .OrLogWarning("[WeaponSystem] IPlayerStatSystem not found — stat modifiers disabled")
-                .Resolve();
-
-            _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
-                .UseExisting(_inventorySystemSource)
-                .OnSelf().InChildren().InParent().InRootChildren()
-                .OrLogError("[WeaponSystem] IInventorySystem not found")
-                .Resolve();
+            OnResolveReferences();
         }
 #endif
 

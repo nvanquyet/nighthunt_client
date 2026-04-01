@@ -106995,7 +106995,7 @@ PrefabInstance:
     - target: {fileID: 3473922737133147549, guid: 0fcf0ac418020474f9ba20df77d84eee,
         type: 3}
       propertyPath: WasActiveDuringEdit
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3473922737133147549, guid: 0fcf0ac418020474f9ba20df77d84eee,
         type: 3}

@@ -6,6 +6,11 @@ using System;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Team;
+using NightHunt.Gameplay.Boss;
+using NightHunt.Gameplay.Zone;
+using NightHunt.Gameplay.AntiCamping;
+using NightHunt.Gameplay.Scoring;
+using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
@@ -131,10 +136,14 @@ namespace NightHunt.Gameplay.Core
                 SpawnNetworkSystems();
             }
 
+            // Step 4: Subscribe phase events so activation methods fire at the right time
+            if (_matchPhaseManager != null)
+                _matchPhaseManager.OnPhaseStarted += HandlePhaseStarted;
+
             _isInitialized = true;
 
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                Debug.Log("[GameBootstrap] ===== âœ… All Systems Initialized =====");
+                Debug.Log("[GameBootstrap] ===== ✅ All Systems Initialized =====");
 
             // Notify listeners (ServerGameManager)
             OnSystemsInitialized?.Invoke();
@@ -282,6 +291,19 @@ namespace NightHunt.Gameplay.Core
 
         #region Phase System Activation
 
+        private void HandlePhaseStarted(MatchPhaseState phase, string phaseName)
+        {
+            // Only activate on server — client-side systems self-manage via SyncVar changes.
+            if (!_networkManager.IsServerStarted) return;
+
+            switch (phase)
+            {
+                case MatchPhaseState.Preparation: ActivatePhase1Systems(); break;
+                case MatchPhaseState.Hunt:        ActivatePhase2Systems(); break;
+                case MatchPhaseState.Lockdown:    ActivatePhase3Systems(); break;
+            }
+        }
+
         /// <summary>
         /// SERVER: Activate systems for Phase 1 (Preparation)
         /// Called by ServerGameManager when phase starts
@@ -291,21 +313,18 @@ namespace NightHunt.Gameplay.Core
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== Activating Phase 1 Systems =====");
 
-            // Phase 1: Basic systems
-            // - Spawn system (already active)
-            // - Team system (already active)
-            // - Vision system (already active)
+            // Ensure WorldSpawnManager starts its loot spawn loop.
+            var worldSpawn = FindFirstObjectByType<WorldSpawnManager>();
+            if (worldSpawn == null)
+                Debug.LogWarning("[GameBootstrap] Phase 1: WorldSpawnManager not found in scene.");
+
+            // AntiCampingSystem is always active but safe to log here.
+            var antiCamp  = FindFirstObjectByType<AntiCampingSystem>();
+            if (antiCamp == null)
+                Debug.LogWarning("[GameBootstrap] Phase 1: AntiCampingSystem not found in scene.");
 
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                Debug.Log("[GameBootstrap] Phase 1: Core systems already active");
-
-            // Activate when beacon-placement, item-spawn, and safe-zone systems are built.
-            // - Beacon placement system
-            // - Item spawn system
-            // - Safe zone system
-
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                Debug.Log("[GameBootstrap] âœ… Phase 1 systems activated");
+                Debug.Log("[GameBootstrap] ✅ Phase 1 systems activated");
         }
 
         /// <summary>
@@ -316,15 +335,18 @@ namespace NightHunt.Gameplay.Core
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== Activating Phase 2 Systems =====");
 
-            // Phase 2: Objective systems
-            // Activate when objective, boss-AI, capture-zone, and predator/prey systems are built.
-            // - Objective system
-            // - AI boss system
-            // - Capture zone system
-            // - Predator/Prey system
+            // BossSpawnManager self-activates via MatchPhaseManager.OnPhaseStarted.
+            var bossSpawn = FindFirstObjectByType<BossSpawnManager>();
+            if (bossSpawn == null)
+                Debug.LogWarning("[GameBootstrap] Phase 2: BossSpawnManager not found — boss will not spawn.");
+
+            // ScoringSystem self-activates via OnStartServer event subscriptions.
+            var scoring   = FindFirstObjectByType<ScoringSystem>();
+            if (scoring == null)
+                Debug.LogWarning("[GameBootstrap] Phase 2: ScoringSystem not found.");
 
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                Debug.Log("[GameBootstrap] âœ… Phase 2 systems activated");
+                Debug.Log("[GameBootstrap] ✅ Phase 2 systems activated");
         }
 
         /// <summary>
@@ -335,15 +357,13 @@ namespace NightHunt.Gameplay.Core
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== Activating Phase 3 Systems =====");
 
-            // Phase 3: Endgame systems
-            // Activate when zone-close, enhanced buffs, and final-objective systems are built.
-            // - Zone closing system
-            // - Enhanced predator/prey buffs
-            // - Final objective system
-            // - Disable beacon placement
+            // LockdownZone self-activates: checks CurrentPhase in Update().
+            var zone      = FindFirstObjectByType<LockdownZone>();
+            if (zone == null)
+                Debug.LogWarning("[GameBootstrap] Phase 3: LockdownZone not found in scene — zone damage will not apply.");
 
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                Debug.Log("[GameBootstrap] âœ… Phase 3 systems activated");
+                Debug.Log("[GameBootstrap] ✅ Phase 3 systems activated");
         }
 
         #endregion
@@ -393,6 +413,9 @@ namespace NightHunt.Gameplay.Core
         public void Cleanup()
         {
             if (!_isInitialized) return;
+
+            if (_matchPhaseManager != null)
+                _matchPhaseManager.OnPhaseStarted -= HandlePhaseStarted;
 
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] Cleaning up gameplay systems...");

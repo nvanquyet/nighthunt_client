@@ -4,6 +4,7 @@ using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Spawn;
+using NightHunt.Gameplay.Zone;
 using NightHunt.Networking;
 using System.Collections.Generic;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
@@ -217,9 +218,9 @@ namespace NightHunt.Gameplay.Respawn
         /// Issue #6: Find the active LockdownZone center; fallback to first team spawn
         private Vector3 GetSafeZonePosition()
         {
-            // Try to find the Lockdown zone center if implemented
-            // var lockdownZone = FindFirstObjectByType<LockdownZone>();
-            // if (lockdownZone != null) return lockdownZone.Center;
+            var zone = FindFirstObjectByType<LockdownZone>();
+            if (zone != null)
+                return zone.Center;
 
             // Fallback: Use neutral team spawn point
             return GetDefaultSpawnPosition(null);

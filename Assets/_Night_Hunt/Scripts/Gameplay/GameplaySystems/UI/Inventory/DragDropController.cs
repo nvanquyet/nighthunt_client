@@ -48,9 +48,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 private DropQuantityDialog GetDropQuantityDialog()
         {
             if (_dropQuantityDialog == null)
-            {
-                _dropQuantityDialog = FindObjectOfType<DropQuantityDialog>(true);
-            }
+                Debug.LogError("[DragDropController] DropQuantityDialog is not assigned in the inspector!");
 
             return _dropQuantityDialog;
         }

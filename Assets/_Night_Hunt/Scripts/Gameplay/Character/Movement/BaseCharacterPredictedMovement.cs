@@ -546,13 +546,9 @@ namespace NightHunt.Gameplay.Character
             }
 
             // ── Vertical / gravity ───────────────────────────────────────────────
-            // Jump fires first so launch velocity isn't eaten by gravity on the same tick.
-            if (data.Jump && grounded && movementSettings.enableJump)
-            {
-                _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.jumpHeight);
-                OnJumpTriggered?.Invoke(); // Fire animation event
-            }
-
+            // Gravity runs FIRST, then jump overrides the result.
+            // This ensures _verticalVelocity = Sqrt(2*g*h) is applied to ApplyMovement
+            // without any reduction from this tick's gravity — giving an exact jumpHeight.
             float vertVelBefore = _verticalVelocity;
             if (grounded && _verticalVelocity <= 0f)
             {
@@ -565,6 +561,14 @@ namespace NightHunt.Gameplay.Character
                 _verticalVelocity -= movementSettings.gravity * mult * dt;
                 // Clamp to terminal velocity — prevents unbounded accumulation on long falls.
                 _verticalVelocity = Mathf.Max(_verticalVelocity, -movementSettings.maxFallSpeed);
+            }
+
+            // Jump fires AFTER gravity so the full launch velocity reaches ApplyMovement
+            // unmodified, guaranteeing the character reaches exactly jumpHeight.
+            if (data.Jump && grounded && movementSettings.enableJump)
+            {
+                _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.jumpHeight);
+                OnJumpTriggered?.Invoke(); // Fire animation event
             }
 
             // ── [DIAG] FINAL MOVEMENT ─────────────────────────────────────────────
@@ -789,29 +793,35 @@ namespace NightHunt.Gameplay.Character
         public Vector2 GetMoveInput() => _moveInput;
         public float GetCameraYaw() => _yaw;
 
-        public virtual void SetWeightPenalty(float penalty)
-        {
-        }
-
-        public virtual void SetStaminaDrainMultiplier(float multiplier)
-        {
-        }
+        // SetWeightPenalty / SetStaminaDrainMultiplier are interface stubs.
+        // Weight penalty logic lives in MovementUtils but is currently not wired here.
+        // Implement these when the weight system drives movement speed.
+        public virtual void SetWeightPenalty(float penalty) { }
+        public virtual void SetStaminaDrainMultiplier(float multiplier) { }
 
         public MovementState GetCurrentState()
         {
             return new MovementState
             {
-                Position = transform.position,
-                Rotation = transform.rotation,
-                Velocity = _velocity
+                Position   = transform.position,
+                Rotation   = transform.rotation,
+                Velocity   = _velocity,
+                IsSprinting = _sprint,
+                IsCrouching = _crouch,
+                Stamina    = _stamina
             };
         }
 
         public void SetState(MovementState state)
         {
-            transform.position = state.Position;
-            transform.rotation = state.Rotation;
-            _velocity = state.Velocity;
+            transform.position    = state.Position;
+            transform.rotation    = state.Rotation;
+            _velocity             = state.Velocity;
+            _verticalVelocity     = state.Velocity.y;
+            _sprint               = state.IsSprinting;
+            _crouch               = state.IsCrouching;
+            _stamina              = state.Stamina;
+            ResetPhysicsState();
         }
 
         /// <summary>

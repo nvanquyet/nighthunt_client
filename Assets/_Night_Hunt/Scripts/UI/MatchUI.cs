@@ -5,6 +5,7 @@ using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Gameplay.Scoring;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
 
@@ -58,6 +59,9 @@ namespace NightHunt.UI
         private float             _phaseManagerRetryTime;
         private const float       PhaseManagerRetryInterval = 1f;
         private Coroutine         _warningCoroutine;
+        private NetworkPlayer     _localPlayer;
+        private int               _cachedTeamScore;
+        private int               _cachedPersonalScore;
 
         // Rows — allocated once, never touched again after populate
         private readonly List<TeamMemberRow> _teamARows = new();
@@ -72,16 +76,24 @@ namespace NightHunt.UI
             if (teamBHeaderText != null) teamBHeaderText.text = "TEAM B";
         }
 
+        /// <summary>Call once when local NetworkPlayer is known (from GameHUD or spawner).</summary>
+        public void Initialize(NetworkPlayer localPlayer)
+        {
+            _localPlayer = localPlayer;
+        }
+
         private void OnEnable()
         {
             GameplayEventBus.Instance?.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
             GameplayEventBus.Instance?.Subscribe<PhaseWarningEvent>(OnPhaseWarning);
+            GameplayEventBus.Instance?.Subscribe<ScoreDataSyncedEvent>(OnScoreDataSynced);
         }
 
         private void OnDisable()
         {
             GameplayEventBus.Instance?.Unsubscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
             GameplayEventBus.Instance?.Unsubscribe<PhaseWarningEvent>(OnPhaseWarning);
+            GameplayEventBus.Instance?.Unsubscribe<ScoreDataSyncedEvent>(OnScoreDataSynced);
         }
 
         private void Start()
@@ -172,9 +184,41 @@ namespace NightHunt.UI
 
         private void UpdateScore()
         {
-            // TODO: wire to actual scoring system
-            if (teamScoreText     != null) teamScoreText.text     = "Team Score: 0";
-            if (personalScoreText != null) personalScoreText.text = "Your Score: 0";
+            if (teamScoreText     != null) teamScoreText.text     = $"Team Score: {_cachedTeamScore}";
+            if (personalScoreText != null) personalScoreText.text = $"Your Score: {_cachedPersonalScore}";
+        }
+
+        private void OnScoreDataSynced(ScoreDataSyncedEvent evt)
+        {
+            if (string.IsNullOrEmpty(evt.ScoreDataJson)) return;
+
+            var snapshot = JsonUtility.FromJson<ScoreSnapshot>(evt.ScoreDataJson);
+            if (snapshot == null) return;
+
+            if (_localPlayer != null && snapshot.Teams != null)
+            {
+                foreach (var team in snapshot.Teams)
+                {
+                    if (team.TeamId == _localPlayer.TeamId)
+                    {
+                        _cachedTeamScore = team.TotalScore;
+                        break;
+                    }
+                }
+            }
+
+            if (_localPlayer != null && snapshot.Players != null)
+            {
+                uint myId = (uint)_localPlayer.ObjectId;
+                foreach (var player in snapshot.Players)
+                {
+                    if (player.PlayerId == myId)
+                    {
+                        _cachedPersonalScore = player.TotalScore;
+                        break;
+                    }
+                }
+            }
         }
 
         // ── Phase Warning ─────────────────────────────────────────────────────

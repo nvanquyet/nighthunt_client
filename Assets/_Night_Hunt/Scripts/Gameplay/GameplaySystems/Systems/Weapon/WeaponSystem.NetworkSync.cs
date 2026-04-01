@@ -51,22 +51,28 @@ namespace NightHunt.GameplaySystems.Weapon
         // ── 2. Shot fired broadcast ────────────────────────────────────────────
 
         [ServerRpc(RequireOwnership = true)]
-        internal void BroadcastShotFiredServerRpc(WeaponSlotType slot, Vector3 dir)
-            => BroadcastShotFiredObserversRpc(slot, dir);
+        internal void BroadcastShotFiredServerRpc(WeaponSlotType slot, Vector3 dir, float elevationAngle)
+            => BroadcastShotFiredObserversRpc(slot, dir, elevationAngle);
 
         /// <summary>
         /// Fires OnShotFired on every remote client so:
         ///   • CharacterAnimationController triggers the "Shoot" animator parameter.
         ///   • WeaponVFXController flashes the aim trail.
-        ///   • WeaponBase.PlayMuzzleFlash() is NOT called here — the WeaponModelController
-        ///     spawns the model on every client, so the local WeaponBase handles its own flash
-        ///     after Fire() is called. For remote clients we only need the animator trigger.
+        ///   • WeaponModelController applies the elevation pitch so the remote gun
+        ///     visually tilts up/down to match the shooter's actual fire angle.
+        ///
+        /// dir = horizontal aim direction (for body rotation / animator).
+        /// elevationAngle = pitch degrees applied to the weapon model only (not body).
         /// </summary>
         [ObserversRpc(ExcludeOwner = true)]
-        private void BroadcastShotFiredObserversRpc(WeaponSlotType slot, Vector3 dir)
+        private void BroadcastShotFiredObserversRpc(WeaponSlotType slot, Vector3 dir, float elevationAngle)
         {
-            _aimDirection = dir;              // keep aim in sync right at the moment of shot
+            _aimDirection = dir;              // keep horizontal aim in sync at shot moment
             OnShotFired?.Invoke(slot, dir);   // → CharacterAnimationController, WeaponVFXController
+
+            // Apply gun pitch on this remote client's weapon model.
+            _weaponModelController?.SetElevationAngle(elevationAngle);
+            _currentElevationAngle = elevationAngle;
 
             // Play muzzle flash on remote client's local weapon model instance.
             _currentWeaponBase?.PlayMuzzleFlash();

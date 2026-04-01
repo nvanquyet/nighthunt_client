@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FishNet.Object;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Scoring;
 using NightHunt.Networking;
 using UnityEngine;
 using NightHunt.Utilities;
@@ -31,6 +32,8 @@ namespace NightHunt.Gameplay.Match
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("References")] [SerializeField]
         private MatchPhaseManager _phaseManager;
+
+        [SerializeField] private ScoringSystem _scoringSystem;
 
         [Header("Settings")] [Tooltip("Team IDs present in the match (usually {0, 1}).")] [SerializeField]
         private int[] _teamIds = { 0, 1 };
@@ -63,6 +66,9 @@ namespace NightHunt.Gameplay.Match
         {
             if (_phaseManager == null)
                 _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+
+            if (_scoringSystem == null)
+                _scoringSystem = FindFirstObjectByType<ScoringSystem>();
 
             foreach (int teamId in _teamIds)
             {
@@ -382,7 +388,7 @@ namespace NightHunt.Gameplay.Match
                         TeamId = teamId,
                         Kills = _playerKillCount.TryGetValue(pid, out int k) ? k : 0,
                         Deaths = 0,
-                        Score = (int)GetTotalScore(teamId),
+                        Score = _scoringSystem != null ? _scoringSystem.GetPlayerScore((uint)np.ObjectId) : 0,
                         EloChange = 0 // calculated server-side post-match
                     });
                 }

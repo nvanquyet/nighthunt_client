@@ -1,13 +1,14 @@
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
+using NightHunt.Gameplay.Character.Combat;
 
 namespace NightHunt.Gameplay.Objective
 {
     /// <summary>
     /// EMP node objective - Server Authoritative
     /// </summary>
-    public class EMPNodeObjective : NetworkBehaviour, IObjective
+    public class EMPNodeObjective : NetworkBehaviour, IObjective, IHittable
     {
         [Header("EMP Node Settings")]
         [SerializeField] private string objectiveId = "EMP_NODE";
@@ -73,6 +74,12 @@ namespace NightHunt.Gameplay.Objective
                 _syncHealth.Value = Mathf.Max(0f, _syncHealth.Value - damage);
             }
         }
+
+        // ── IHittable ──────────────────────────────────────────────────────────
+        public void RequestDamage(DamageInfo info) => RequestDamageServerRpc(info.Damage);
+
+        [ServerRpc(RequireOwnership = false)]
+        private void RequestDamageServerRpc(float damage) => TakeDamage(damage);
     }
 }
 
