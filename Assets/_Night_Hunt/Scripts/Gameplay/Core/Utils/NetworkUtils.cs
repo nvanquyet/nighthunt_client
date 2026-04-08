@@ -21,7 +21,7 @@ namespace NightHunt.Gameplay.Core.Utils
         /// </summary>
         public static bool IsServer(NetworkBehaviour networkBehaviour)
         {
-            return networkBehaviour != null && networkBehaviour.IsServer;
+            return networkBehaviour != null && networkBehaviour.IsServerInitialized;
         }
 
         /// <summary>
@@ -29,7 +29,7 @@ namespace NightHunt.Gameplay.Core.Utils
         /// </summary>
         public static bool IsClient(NetworkBehaviour networkBehaviour)
         {
-            return networkBehaviour != null && networkBehaviour.IsClient;
+            return networkBehaviour != null && networkBehaviour.IsClientInitialized;
         }
 
         /// <summary>
@@ -63,7 +63,7 @@ namespace NightHunt.Gameplay.Core.Utils
                 return false;
             }
 
-            if (requireServer && !networkBehaviour.IsServer)
+            if (requireServer && !networkBehaviour.IsServerInitialized)
             {
                 Debug.LogWarning("[NetworkUtils] Operation requires server");
                 return false;

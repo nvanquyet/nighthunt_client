@@ -265,5 +265,78 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
             }
         }
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Auto-assign / Create Stat Row Prefab ───────
+
+        [ContextMenu("NightHunt/Auto-Assign Stat Row Prefab")]
+        private void Editor_AutoAssignStatRowPrefab()
+        {
+            if (_statRowPrefab != null) { Debug.Log("[PlayerStatUIPanel] _statRowPrefab already assigned."); return; }
+
+            string[] candidates =
+            {
+                "Assets/_Night_Hunt/Prefabs/UI/StatPrefabs.prefab",
+                "Assets/_Night_Hunt/Prefabs/UI/StatRow.prefab",
+                "Assets/_Night_Hunt/Prefabs/UI/TooltipStatRow.prefab",
+            };
+            foreach (var p in candidates)
+            {
+                var found = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(p);
+                if (found != null)
+                {
+                    _statRowPrefab = found;
+                    UnityEditor.EditorUtility.SetDirty(this);
+                    Debug.Log($"[PlayerStatUIPanel] Auto-assigned _statRowPrefab from {p}");
+                    return;
+                }
+            }
+            Debug.LogWarning("[PlayerStatUIPanel] Stat row prefab not found — use 'Create Stat Row Template Prefab'.");
+        }
+
+        [ContextMenu("NightHunt/Create Stat Row Template Prefab")]
+        private void Editor_CreateStatRowPrefab()
+        {
+            const string dir  = "Assets/_Night_Hunt/Prefabs/UI";
+            const string path = dir + "/StatRow_Template.prefab";
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[PlayerStatUIPanel] StatRow_Template already exists at {path}");
+                return;
+            }
+
+            var go = new GameObject("StatRow_Template");
+            go.AddComponent<RectTransform>().sizeDelta = new Vector2(300f, 28f);
+            var hlg = go.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+            hlg.childControlWidth  = true;
+            hlg.childControlHeight = true;
+            hlg.spacing            = 6f;
+
+            var labelGo = new GameObject("StatLabel", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+            labelGo.transform.SetParent(go.transform, false);
+            labelGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 100f;
+            labelGo.GetComponent<TMPro.TextMeshProUGUI>().text = "Health";
+
+            var sliderGo = new GameObject("StatSlider", typeof(RectTransform), typeof(UnityEngine.UI.Slider));
+            sliderGo.transform.SetParent(go.transform, false);
+            sliderGo.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
+
+            var valGo = new GameObject("StatValue", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+            valGo.transform.SetParent(go.transform, false);
+            valGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 60f;
+            valGo.GetComponent<TMPro.TextMeshProUGUI>().text = "100";
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+
+            if (_statRowPrefab == null)
+            {
+                _statRowPrefab = saved;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"[PlayerStatUIPanel] Created StatRow_Template at {path}. " +
+                      "Add PlayerStatUIView component and wire label/slider/value fields.");
+        }
+#endif
     }
 }

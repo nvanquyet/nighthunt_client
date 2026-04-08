@@ -40,12 +40,19 @@ public class Joystick : MonoBehaviour, IPointerDownHandler, IDragHandler, IPoint
 
     private Vector2 input = Vector2.zero;
 
+    // Awake runs synchronously when SetActive(true) is called, which means canvas and
+    // baseRect are guaranteed to be set before any OnPointerDown/OnDrag call that
+    // arrives in the same frame as the SetActive call (e.g. FireButton.StartJoystick).
+    protected virtual void Awake()
+    {
+        baseRect = GetComponent<RectTransform>();
+        canvas   = GetComponentInParent<Canvas>();
+    }
+
     protected virtual void Start()
     {
         HandleRange = handleRange;
         DeadZone = deadZone;
-        baseRect = GetComponent<RectTransform>();
-        canvas = GetComponentInParent<Canvas>();
         if (canvas == null)
             Debug.LogError("The Joystick is not placed inside a canvas");
 

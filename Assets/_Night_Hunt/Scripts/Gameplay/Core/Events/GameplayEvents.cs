@@ -135,6 +135,20 @@ namespace NightHunt.Gameplay.Core.Events
         public UnityEngine.Vector3 Position;
     }
 
+    // ── Match Countdown ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Broadcast each second during the pre-match countdown from MatchPhaseManager.BeginMatch().
+    /// SecondsRemaining == 0 means "GO!" — the first phase starts immediately after this tick.
+    /// Subscribe in HUD/UI to play a beep sound and display the number on screen.
+    /// </summary>
+    public struct MatchCountdownEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        /// <summary>Seconds remaining before the first phase starts. 0 = starting now.</summary>
+        public int SecondsRemaining;
+    }
+
     // ── Respawn UI ───────────────────────────────────────────────────
 
     /// <summary>Server started a respawn countdown. HUD shows a timer.</summary>
@@ -151,5 +165,42 @@ namespace NightHunt.Gameplay.Core.Events
         public float Timestamp => Time.time;
         /// <summary>"beacon_destroyed" or other reason string.</summary>
         public string Reason;
+    }
+
+    /// <summary>
+    /// Fired (server + all clients via eventual sync) when an objective is fully captured.
+    /// KillFeedUI subscribes to show "[Team 0] captured Radar Station".
+    /// </summary>
+    public struct ObjectiveCapturedEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        /// <summary>Unique objective identifier (e.g. "CAPTURE_ZONE", "RADAR_STATION").</summary>
+        public string ObjectiveId;
+        /// <summary>Human-readable display name shown in KillFeed.</summary>
+        public string ObjectiveName;
+        /// <summary>Team ID that completed the capture.</summary>
+        public int CapturingTeamId;
+    }
+
+    /// <summary>
+    /// Fired when a LockdownZone debuff is applied to a player.
+    /// UI can show a zone warning overlay.
+    /// </summary>
+    public struct ZoneDebuffAppliedEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        public int PlayerNetObjId;
+        public string ZoneId;
+        public float DamagePerSecond;
+    }
+
+    /// <summary>
+    /// Fired when local player enters/exits spectate mode.
+    /// GameHUD subscribes to hide/show combat panels.
+    /// </summary>
+    public struct SpectatorModeChangedEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        public bool IsSpectating;
     }
 }

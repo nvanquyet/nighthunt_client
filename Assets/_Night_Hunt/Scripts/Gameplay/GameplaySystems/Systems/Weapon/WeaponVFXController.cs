@@ -8,7 +8,7 @@ using NightHunt.GameplaySystems.Aim;
 namespace NightHunt.GameplaySystems.Weapon
 {
     /// <summary>
-    /// Weapon visual effects for the local player (aim trail, muzzle flash coordination).
+    /// Weapon visual effects for the local player (aim trail).
     ///
     /// PREFAB SETUP:
     ///   Lives on the same child GO as WeaponSystem + WeaponModelController ("WeaponSystem" GO).
@@ -16,12 +16,12 @@ namespace NightHunt.GameplaySystems.Weapon
     ///
     /// RESPONSIBILITIES:
     ///   • Aim trail (LineRenderer): visible for _aimTrailLingerDuration seconds after each shot.
-    ///   • Muzzle flash: delegated to WeaponBase.PlayMuzzleFlash() — not handled here.
-    ///   • Muzzle point: auto-updated from WeaponBase.FirePoint on each weapon swap.
+    ///   • Muzzle flash: owned by ProjectileComponent — played automatically on every spawn,
+    ///     including remote clients (the projectile is network-broadcast by WeaponSystem).
     ///
-    /// NOTE: Trail is hidden on remote clients (WeaponVFXController is only relevant for
-    /// the local player's camera-facing effects). Remote clients see the projectile trail
-    /// spawned by WeaponBase.SpawnVisualBullet() which is already replicated.
+    /// NOTE: Trail is hidden on remote clients (WeaponVFXController is only active for
+    /// the local player). Remote clients see the projectile trail spawned via
+    /// ShowProjectileOnClientsRpc, which already includes the muzzle flash.
     /// </summary>
     public class WeaponVFXController : MonoBehaviour
     {

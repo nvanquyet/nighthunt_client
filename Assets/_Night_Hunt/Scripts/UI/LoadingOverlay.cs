@@ -23,7 +23,11 @@ namespace NightHunt.UI
                 if (instance == null)
                 {
                     // Try to find existing instance
-                    instance = FindObjectOfType<LoadingOverlay>();
+    #if UNITY_2023_2_OR_NEWER
+                        instance = FindFirstObjectByType<LoadingOverlay>();
+    #else
+                        instance = FindObjectOfType<LoadingOverlay>();
+    #endif
                     
                     if (instance == null)
                     {

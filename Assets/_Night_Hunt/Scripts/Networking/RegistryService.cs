@@ -10,7 +10,7 @@ namespace NightHunt.Networking
     /// RegistryService - Lưu trữ PlayerRegistryData (private server data)
     /// Server-side only - clients không access
     /// </summary>
-    public class RegistryService : SingletonPersistent<RegistryService>
+    public class RegistryService : Singleton<RegistryService>
     {
         
         // ===== PRIVATE DATA STORAGE =====

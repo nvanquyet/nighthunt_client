@@ -21,8 +21,17 @@ namespace NightHunt.Gameplay.Zone
     ///   _syncRadius / _syncProgress → all clients update visual ring
     /// </summary>
     [DisallowMultipleComponent]
-    public class LockdownZone : NetworkBehaviour
+    public class LockdownZone : NetworkBehaviour, IZoneAreaInfo
     {
+        // ── IZoneAreaInfo ─────────────────────────────────────────────────────────
+        public string  ZoneId   => "lockdown_zone";
+        public Vector3 Center   => _zoneCenter != null ? _zoneCenter.position : transform.position;
+        public float   Radius   => _syncRadius.Value > 0f ? _syncRadius.Value : _initialRadius;
+        public bool    IsActive => IsSpawned;
+
+        public bool ContainsPoint(Vector3 worldPos)
+            => Vector3.SqrMagnitude(worldPos - Center) <= Radius * Radius;
+
         [Header("Zone Settings")]
         [SerializeField] private float _initialRadius    = 100f;
         [SerializeField] private float _finalRadius      = 20f;
@@ -45,9 +54,9 @@ namespace NightHunt.Gameplay.Zone
         private float _damageTickTimer;
 
         // ── Public ───────────────────────────────────────────────────────────────
-        public float   CurrentRadius => _syncRadius.Value;
-        public float   CloseProgress => _syncProgress.Value;
-        public Vector3 Center        => _zoneCenter != null ? _zoneCenter.position : transform.position;
+        public float CurrentRadius => _syncRadius.Value;
+        public float CloseProgress => _syncProgress.Value;
+        // Center is already exposed via IZoneAreaInfo (line 28)
 
         // ── FishNet ─────────────────────────────────────────────────────────────
 
@@ -56,6 +65,9 @@ namespace NightHunt.Gameplay.Zone
             if (_zoneCenter == null) _zoneCenter = transform;
             if (_phaseManager == null) _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
         }
+
+        private void OnEnable()  => ZoneSystem.Instance?.RegisterZone(this);
+        private void OnDisable() => ZoneSystem.Instance?.UnregisterZone(this);
 
         public override void OnStartNetwork()
         {

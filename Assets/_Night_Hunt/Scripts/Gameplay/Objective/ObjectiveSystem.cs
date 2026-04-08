@@ -55,7 +55,7 @@ namespace NightHunt.Gameplay.Objective
 
         private void Update()
         {
-            if (!IsServer) return;
+            if (!IsServerInitialized) return;
 
             // Update all active objectives
             foreach (var objective in activeObjectives)

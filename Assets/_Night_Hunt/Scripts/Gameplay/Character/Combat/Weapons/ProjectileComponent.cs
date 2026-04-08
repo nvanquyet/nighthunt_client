@@ -7,15 +7,19 @@ using NightHunt.Utilities;
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
     /// <summary>
-    /// Component cho đạn/projectile di chuyển (bullet, grenade, smoke…).
-    /// Kế thừa ProjectileBase — config VFX + detonation đặt trực tiếp trên prefab.
+    /// Component for moving projectiles (bullets, grenades, smoke…).
+    /// Inherits ProjectileBase — all VFX config is set on the prefab.
     ///
     /// Lifecycle:
-    ///   OnEnable  → reset state (pool-friendly)
-    ///   Initialize → set direction/speed, khởi động fuse nếu có
-    ///   Update     → di chuyển, kiểm tra tầm bay
-    ///   OnTrigger  → kích nổ nếu isImpact = true
-    ///   Detonate   → tắt MainVisual, bật DetonationVFX, đợi lifetimeAfterImpact rồi tắt object
+    ///   OnEnable    → reset state (pool-friendly)
+    ///   Initialize  → set direction/speed, play muzzle flash, start fuse if needed
+    ///   Update      → move, check range
+    ///   OnTrigger   → detonate if isImpact = true
+    ///   Detonate    → hide MainVisual, activate DetonationVFX, wait lifetimeAfterImpact, deactivate
+    ///
+    /// For hitscan visual mode (useHitscan = true):
+    ///   The projectile teleports to hitscanEndpoint immediately — damage was already applied
+    ///   by the raycast; this is a purely visual trail.
     /// </summary>
     public class ProjectileComponent : ProjectileBase
     {
@@ -49,7 +53,10 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         }
 
         // Init — called on every spawn/reuse from pool.
-        public void Initialize(WeaponConfigData config, Vector3 dir, bool useHitscan)
+        // hitscanEndpoint: if not null, the projectile jumps to this point immediately
+        //                  (visual trail only — damage was already applied via raycast).
+        public void Initialize(WeaponConfigData config, Vector3 dir, bool useHitscan,
+                               Vector3? hitscanEndpoint = null)
         {
             _config     = config;
             _direction  = dir.normalized;
@@ -59,7 +66,24 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             _damage     = config.DamageBody;
             _weaponId   = config.WeaponId;
 
+            Debug.Log($"[PROJ.INIT] Initialize — go='{gameObject.name}'  pos={transform.position:F1}  " +
+                      $"dir={_direction:F2}  speed={_speed}  maxRange={_maxRange}  " +
+                      $"useHitscan={useHitscan}  isOwnerShot={_isOwnerShot}  dmg={_damage}  " +
+                      $"endpoint={hitscanEndpoint?.ToString("F1") ?? "null"}");
+
+            // Muzzle flash plays on the projectile (spawned at the muzzle point).
+            PlayMuzzleFlash();
+
             PlayMainVisual();
+
+            if (useHitscan && hitscanEndpoint.HasValue)
+            {
+                // Teleport visual trail to the impact point and detonate immediately.
+                transform.position = hitscanEndpoint.Value;
+                Debug.Log($"[PROJ.INIT] Hitscan teleport — go='{gameObject.name}'  endpoint={hitscanEndpoint.Value:F1}");
+                Detonate();
+                return;
+            }
 
             if (!isImpact && fuseTime > 0f)
                 _fuseRoutine = StartCoroutine(FuseRoutine());
@@ -75,10 +99,13 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             _shooterNetObjId = shooterNetworkObjectId;
             if (!string.IsNullOrEmpty(weaponId))
                 _weaponId = weaponId;
+
+            Debug.Log($"[PROJ.INIT] SetOwnerData — go='{gameObject.name}'  shooterNetObjId={shooterNetworkObjectId}  " +
+                      $"weaponId='{_weaponId}'");
         }
 
         // -----------------------------------------------------------------
-        // Di chuyển
+        // Movement
         // -----------------------------------------------------------------
         private void Update()
         {
@@ -86,8 +113,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             Vector3 move = _direction * _speed * Time.deltaTime;
 
-            // Gravity nếu đạn có ballistic
-            if (_config.BallisticType == "Projectile")
+            // Apply gravity for ballistic projectiles (GravityScale > 0).
+            if (_config.GravityScale > 0f)
                 move.y -= _config.GravityScale * 9.81f * Time.deltaTime;
 
             transform.position    += move;
@@ -99,7 +126,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 transform.rotation  = Quaternion.LookRotation(_direction);
             }
 
-            // Quá tầm và không phải throwable → tắt
+            // Exceeded max range — despawn.
             if (_distanceTraveled >= _maxRange)
                 Despawn();
         }
@@ -109,17 +136,26 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         {
             if (_hasDetonated) return;
 
+            var otherRoot = other.transform.root;
+            Debug.Log($"[PROJ.HIT] OnTriggerEnter — proj='{gameObject.name}'  pos={transform.position:F1}  " +
+                      $"collider='{other.name}'  root='{otherRoot.name}'  " +
+                      $"isOwnerShot={_isOwnerShot}  useHitscan={_useHitscan}  dmg={_damage}");
+
             // Hitscan-logic mode: damage was already applied via WeaponSystem raycast.
             // Only run detonation VFX.
             if (_useHitscan)
             {
+                Debug.Log($"[PROJ.HIT] Hitscan visual — detonating at {transform.position:F1}, no damage applied.");
                 Detonate();
                 return;
             }
 
-            // For true ballistic projectiles: only the owner instance (or server in dedicated mode)
-            // sends damage to avoid duplicate hits from all client copies.
-            bool isAuthoritativeInstance = _isOwnerShot || FishNet.InstanceFinder.IsServerStarted;
+            // For true ballistic projectiles: ONLY the instance that called SetOwnerData()
+            // (i.e. the weapon-owner's local copy) may send damage RPCs.
+            // DO NOT use FishNet.InstanceFinder.IsServerStarted here — on a host machine
+            // IsServerStarted is always true, so every remote-visual projectile spawned by
+            // ShowProjectileOnClientsRpc would incorrectly deal damage to whoever it hits.
+            bool isAuthoritativeInstance = _isOwnerShot;
             if (isAuthoritativeInstance)
             {
                 var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(other)
@@ -128,9 +164,14 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                                             .Resolve();
                 if (hitbox != null && hitbox.HealthSystem != null)
                 {
+                    // Apply head multiplier from weapon config (matches hitscan path in WeaponBase)
+                    float finalDamage = hitbox.IsHeadshot
+                        ? _damage * (_config.DamageHeadMul > 0f ? _config.DamageHeadMul : 2f)
+                        : _damage;
+
                     var info = new DamageInfo
                     {
-                        Damage                 = _damage,
+                        Damage                 = finalDamage,
                         IsHeadshot             = hitbox.IsHeadshot,
                         HitPoint               = transform.position,
                         HitNormal              = -_direction,
@@ -138,8 +179,9 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                         WeaponId               = _weaponId ?? string.Empty,
                     };
 
-                    Debug.Log($"[ProjectileComponent] Projectile hit '{other.name}' — damage: {_damage:F1}" +
-                              $", headshot: {hitbox.IsHeadshot}, owner shot: {_isOwnerShot}");
+                    Debug.Log($"[PROJ.HIT] Player hitbox hit — collider='{other.name}'  " +
+                              $"dmg={finalDamage:F1}  headshot={hitbox.IsHeadshot}  " +
+                              $"weaponId='{_weaponId}'  shooterNetObjId={_shooterNetObjId}");
 
                     hitbox.HealthSystem.RequestDamage(info);
                 }
@@ -147,16 +189,31 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 {
                     // Non-player hittable (boss, deployable, objective, etc.)
                     var hittable = other.GetComponentInParent<IHittable>();
-                    hittable?.RequestDamage(new DamageInfo
+                    if (hittable != null)
                     {
-                        Damage                 = _damage,
-                        IsHeadshot             = false,
-                        HitPoint               = transform.position,
-                        HitNormal              = -_direction,
-                        ShooterNetworkObjectId = _shooterNetObjId,
-                        WeaponId               = _weaponId ?? string.Empty,
-                    });
+                        Debug.Log($"[PROJ.HIT] IHittable hit — collider='{other.name}'  hittable='{hittable.GetType().Name}'  " +
+                                  $"dmg={_damage:F1}  weaponId='{_weaponId}'");
+                        hittable.RequestDamage(new DamageInfo
+                        {
+                            Damage                 = _damage,
+                            IsHeadshot             = false,
+                            HitPoint               = transform.position,
+                            HitNormal              = -_direction,
+                            ShooterNetworkObjectId = _shooterNetObjId,
+                            WeaponId               = _weaponId ?? string.Empty,
+                        });
+                    }
+                    else
+                    {
+                        Debug.Log($"[PROJ.HIT] No damageable target on '{other.name}' (root='{otherRoot.name}') — " +
+                                  $"no PlayerHitboxMarker, no IHittable. Detonating only.");
+                    }
                 }
+            }
+            else
+            {
+                // Visual-only projectile (remote client copy) — no damage applied.
+                Debug.Log($"[PROJ.HIT] Visual-only projectile hit '{other.name}' — isOwnerShot=false, detonating only.");
             }
 
             Detonate();

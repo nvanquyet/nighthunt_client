@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Configs;
+using NightHunt.Gameplay.Character.Data;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -38,6 +39,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                  "Each row must have its StatType set.")]
         [SerializeField] private StatRowEntry[] _sceneStatRows;
 
+        [Header("Character Identity")]
+        [Tooltip("Optional Image for the local player's character icon (from CharacterDatabase). Leave null to skip.")]
+        [SerializeField] private Image _characterIconImage;
+
         // ── Runtime ───────────────────────────────────────────────────────────
         private readonly Dictionary<PlayerStatType, StatRowEntry> _rows =
             new Dictionary<PlayerStatType, StatRowEntry>();
@@ -59,6 +64,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             BuildRows();
             SubscribeBridgeEvents(true);
             PushInitialSnapshot();
+            RefreshCharacterIcon();
+        }
+
+        private void RefreshCharacterIcon()
+        {
+            if (_characterIconImage == null) return;
+            var np  = _domainBridge?.CurrentPlayer;
+            var def = np != null ? CharacterDatabase.Instance?.GetByIndex(np.CharacterModelIndex) : null;
+            _characterIconImage.sprite  = def?.Icon;
+            _characterIconImage.enabled = _characterIconImage.sprite != null;
         }
 
         // ─────────────────────────────────────────────────────────────────────

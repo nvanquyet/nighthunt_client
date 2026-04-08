@@ -54,6 +54,9 @@ namespace NightHunt.Gameplay.Match
         // Per-player kill counter keyed by BackendPlayerId
         private readonly Dictionary<string, int> _playerKillCount = new();
 
+        // Per-player death counter keyed by BackendPlayerId (Bug #13 fix)
+        private readonly Dictionary<string, int> _playerDeathCount = new();
+
         // ── Dependency injection ───────────────────────────────────────────────
         // BeaconManager will self-register; we keep a weak reference here.
         private IBeaconProvider _beaconProvider;
@@ -89,6 +92,8 @@ namespace NightHunt.Gameplay.Match
 
             // Listen for phase changes so we know which rules apply
             _phaseManager.OnPhaseTransitioned += OnPhaseChanged;
+            // Listen for Phase 3 timer expiry → score-based win resolution
+            _phaseManager.OnLockdownTimerExpired += OnLockdownTimerExpired;
         }
 
         public override void OnStopServer()
@@ -96,7 +101,10 @@ namespace NightHunt.Gameplay.Match
             base.OnStopServer();
             GameplayEventBus.Instance?.Unsubscribe<BeaconDestroyedEvent>(OnBeaconDestroyed);
             if (_phaseManager != null)
+            {
                 _phaseManager.OnPhaseTransitioned -= OnPhaseChanged;
+                _phaseManager.OnLockdownTimerExpired -= OnLockdownTimerExpired;
+            }
         }
 
         #endregion
@@ -173,6 +181,15 @@ namespace NightHunt.Gameplay.Match
             // Mark player as dead in NetworkPlayer
             np.SetAlive(false);
 
+            // Bug #13 fix: track per-player death count
+            var data = RegistryService.Instance?.GetPrivateDataByFishNetId(np.OwnerId);
+            string pid = data?.BackendPlayerId ?? string.Empty;
+            if (!string.IsNullOrEmpty(pid))
+            {
+                _playerDeathCount.TryGetValue(pid, out int prev);
+                _playerDeathCount[pid] = prev + 1;
+            }
+
             int teamId = np.TeamId;
             EvaluateTeamElimination(teamId);
         }
@@ -213,6 +230,53 @@ namespace NightHunt.Gameplay.Match
                     EvaluateTeamElimination(teamId);
                 yield return new WaitForSeconds(1f);
             }
+        }
+
+        /// <summary>
+        /// Called when Lockdown phase timer expires.
+        /// Resolves the match by comparing scores (kills + objective) across both teams.
+        /// Win condition 2: Phase 3 timer runs out → compare scores, highest wins.
+        /// </summary>
+        private void OnLockdownTimerExpired()
+        {
+            if (_matchEnded) return;
+            _matchEnded = true;
+
+            // Find the team with the highest combined score
+            int winnerTeamId = -1; // -1 = draw
+            float bestScore = -1f;
+            int tiedCount = 0;
+
+            foreach (int teamId in _teamIds)
+            {
+                float score = GetTotalScore(teamId);
+                if (score > bestScore)
+                {
+                    bestScore    = score;
+                    winnerTeamId = teamId;
+                    tiedCount    = 1;
+                }
+                else if (Mathf.Approximately(score, bestScore))
+                {
+                    tiedCount++;
+                }
+            }
+
+            if (tiedCount > 1) winnerTeamId = -1; // true draw
+
+            MatchEndReason reason = MatchEndReason.TimerExpired;
+            Debug.Log($"[MatchEndManager] Phase 3 timer expired — Winner: {(winnerTeamId >= 0 ? $"Team {winnerTeamId}" : "DRAW")} (scores: {string.Join(", ", System.Linq.Enumerable.Select(_teamIds, t => $"T{t}={GetTotalScore(t):.0}"))})");
+
+            OnMatchEnded?.Invoke(winnerTeamId, reason);
+            RpcNotifyMatchEnd(winnerTeamId, (int)reason);
+
+            MatchResult[] results = BuildResults(winnerTeamId, reason);
+            GameplayEventBus.Instance?.Publish(new MatchEndedEvent
+            {
+                WinnerTeamId = winnerTeamId,
+                Reason       = reason,
+                PlayerResults = results
+            });
         }
 
         #endregion
@@ -387,7 +451,7 @@ namespace NightHunt.Gameplay.Match
                         DisplayName = data?.DisplayName ?? "Unknown",
                         TeamId = teamId,
                         Kills = _playerKillCount.TryGetValue(pid, out int k) ? k : 0,
-                        Deaths = 0,
+                        Deaths = _playerDeathCount.TryGetValue(pid, out int d) ? d : 0, // Bug #13 fix
                         Score = _scoringSystem != null ? _scoringSystem.GetPlayerScore((uint)np.ObjectId) : 0,
                         EloChange = 0 // calculated server-side post-match
                     });

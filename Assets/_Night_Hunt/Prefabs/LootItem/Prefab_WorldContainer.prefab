@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 6853833885511695776}
   - component: {fileID: 1654619872574573400}
   - component: {fileID: 6710304406147294451}
-  m_Layer: 24
+  m_Layer: 26
   m_Name: Prefab_WorldContainer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -133,6 +133,22 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 5245050955051087609}
     m_Modifications:
+    - target: {fileID: 1154023207336088, guid: cc024d026691b2149984b1aa95f86fdb, type: 3}
+      propertyPath: m_Layer
+      value: 26
+      objectReference: {fileID: 0}
+    - target: {fileID: 1400517885205842, guid: cc024d026691b2149984b1aa95f86fdb, type: 3}
+      propertyPath: m_Layer
+      value: 26
+      objectReference: {fileID: 0}
+    - target: {fileID: 1624815321184530, guid: cc024d026691b2149984b1aa95f86fdb, type: 3}
+      propertyPath: m_Layer
+      value: 26
+      objectReference: {fileID: 0}
+    - target: {fileID: 1635497103173960, guid: cc024d026691b2149984b1aa95f86fdb, type: 3}
+      propertyPath: m_Layer
+      value: 26
+      objectReference: {fileID: 0}
     - target: {fileID: 1635497103173960, guid: cc024d026691b2149984b1aa95f86fdb, type: 3}
       propertyPath: m_IsActive
       value: 1

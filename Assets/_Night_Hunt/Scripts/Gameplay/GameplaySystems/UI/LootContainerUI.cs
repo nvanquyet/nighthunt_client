@@ -50,6 +50,11 @@ namespace NightHunt.GameplaySystems.UI
         [SerializeField] private Button _takeAllButton;
         [SerializeField] private Button _closeButton;
 
+        [Header("Collapse")]
+        [Tooltip("Root of the scrollable item list + Take All button. Close toggles this panel.\n" +
+                 "If null, Close hides the entire containerPanel instead (old behaviour).")]
+        [SerializeField] private GameObject _contentPanel;
+
         [Header("Interaction")]
         [Tooltip("Max distance (world units) between player and container before the loot panel auto-closes.")]
         [SerializeField] private float _maxLootDistance = 4f;
@@ -81,6 +86,9 @@ namespace NightHunt.GameplaySystems.UI
 
         private readonly List<GameObject> _spawnedRows = new List<GameObject>();
 
+        // Track collapse state — close button toggles this, NOT the whole panel.
+        private bool _collapsed = false;
+
         // â”€â”€ Unity lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private void Awake()
@@ -93,7 +101,8 @@ namespace NightHunt.GameplaySystems.UI
             if (_canvasGroup != null) { _canvasGroup.interactable = false; _canvasGroup.blocksRaycasts = false; }
 
             _takeAllButton?.onClick.AddListener(OnTakeAll);
-            _closeButton?.onClick.AddListener(Hide);
+            // Close = collapse/expand, NOT full-hide. Full hide happens on walk-away or empty container.
+            _closeButton?.onClick.AddListener(ToggleCollapse);
 
             string panelInfo      = _containerPanel  != null ? "ok" : "NULL";
             string cgInfo         = _canvasGroup      != null ? "ok" : "NULL";
@@ -154,7 +163,37 @@ namespace NightHunt.GameplaySystems.UI
             _takeItemAction      = null;
             _currentStorage      = null;
             _openedViaInteraction = false;
+            _collapsed            = false;  // reset collapse state for next open
             ClearRows();
+        }
+
+        /// <summary>
+        /// Toggle between collapsed (header-only) and expanded (full content) states.
+        /// Wired to the Close / Collapse button.  Full Hide() is only called on walk-away.
+        /// </summary>
+        private void ToggleCollapse()
+        {
+            _collapsed = !_collapsed;
+            ApplyCollapseState();
+        }
+
+        private void ApplyCollapseState()
+        {
+            // Content panel = scrollable item list + takeAll button.
+            // If _contentPanel is assigned, toggle it; otherwise fall back to toggling slotsParent.
+            var target = _contentPanel != null ? _contentPanel : (_slotsParent != null ? _slotsParent.gameObject : null);
+            if (target != null) target.SetActive(!_collapsed);
+
+            // Also hide TakeAll button when collapsed so header stays minimal.
+            if (_contentPanel == null && _takeAllButton != null)
+                _takeAllButton.gameObject.SetActive(!_collapsed);
+
+            // Update the close button icon / label
+            if (_closeButton != null)
+            {
+                var label = _closeButton.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+                if (label != null) label.text = _collapsed ? "▼" : "▲";
+            }
         }
 
         private void Update()
@@ -305,12 +344,15 @@ namespace NightHunt.GameplaySystems.UI
         private void ShowLoot(string title, IReadOnlyList<ItemInstanceData> storage)
         {
             _currentStorage = storage;
+            _collapsed      = false;     // always start expanded
 
             if (_containerPanel != null) _containerPanel.SetActive(true);
             // Enable CanvasGroup so buttons are clickable.
             if (_canvasGroup != null) { _canvasGroup.interactable = true; _canvasGroup.blocksRaycasts = true; }
 
             if (_containerNameText != null) _containerNameText.text = title;
+
+            ApplyCollapseState(); // ensure content pane visible on fresh open
 
             string showPanelInfo = _containerPanel != null ? "ok" : "NULL";
             string showCgInfo    = _canvasGroup    != null ? "ok" : "NULL";
@@ -509,6 +551,75 @@ namespace NightHunt.GameplaySystems.UI
 
             return go.GetComponent<Button>();
         }
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Create LootItemRow Template Prefab ─────────
+
+        [ContextMenu("NightHunt/Create LootItemRow Template Prefab")]
+        private void Editor_CreateLootItemRowPrefab()
+        {
+            const string parent2 = "Assets/_Night_Hunt/Prefabs";
+            const string dir     = parent2 + "/UI";
+            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
+                UnityEditor.AssetDatabase.CreateFolder(parent2, "UI");
+
+            const string path = dir + "/LootItemRow_Template.prefab";
+
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[LootContainerUI] LootItemRow_Template already exists at {path}");
+                return;
+            }
+
+            var row = new GameObject("LootItemRow_Template");
+            var rt2 = row.AddComponent<RectTransform>();
+            rt2.sizeDelta = new Vector2(440f, 40f);
+            var hlg = row.AddComponent<HorizontalLayoutGroup>();
+            hlg.childControlWidth  = true;
+            hlg.childControlHeight = true;
+            hlg.spacing            = 6f;
+            hlg.padding            = new RectOffset(4, 4, 2, 2);
+
+            void AddTMP(string goName, string text, float width)
+            {
+                var child  = new GameObject(goName, typeof(RectTransform), typeof(TextMeshProUGUI));
+                child.transform.SetParent(row.transform, false);
+                var el = child.AddComponent<LayoutElement>();
+                el.preferredWidth = width;
+                var t  = child.GetComponent<TextMeshProUGUI>();
+                t.text     = text;
+                t.fontSize = 14f;
+                t.color    = Color.white;
+            }
+
+            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            iconGo.transform.SetParent(row.transform, false);
+            iconGo.AddComponent<LayoutElement>().preferredWidth = 40f;
+
+            AddTMP("NameText", "Item Name", 220f);
+            AddTMP("QtyText",  "1",         60f);
+
+            var btnGo = new GameObject("TakeButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            btnGo.transform.SetParent(row.transform, false);
+            btnGo.GetComponent<Image>().color = new Color(0.2f, 0.6f, 0.2f, 1f);
+            btnGo.AddComponent<LayoutElement>().preferredWidth = 80f;
+            var btnLabel  = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            btnLabel.transform.SetParent(btnGo.transform, false);
+            var btnTmp = btnLabel.GetComponent<TextMeshProUGUI>();
+            btnTmp.text = "Take"; btnTmp.fontSize = 12f; btnTmp.alignment = TextAlignmentOptions.Center;
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(row, path);
+            UnityEngine.Object.DestroyImmediate(row);
+
+            if (_itemRowPrefab == null)
+            {
+                _itemRowPrefab = saved.GetComponent<LootItemRow>();
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"[LootContainerUI] Created LootItemRow_Template at {path}. " +
+                      "Add LootItemRow component and wire Icon/NameText/QtyText/TakeButton fields.");
+        }
+#endif
     }
 }
 

@@ -16,20 +16,12 @@ MonoBehaviour:
   DisplayName: Red Dot Sight
   Description: Improves accuracy and aim speed at close-medium range
   Icon: {fileID: 0}
+  Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.2
-  ModifyWeightWhenEquipped: 0
-  EquippedWeightModifier: 0
-  ResourceType: 0
-  MaxResource: 0
-  DefaultResource: 0
-  AttachmentSlots: 
-  CanAttachTo: 01000000
+  _heldPrefab: {fileID: 0}
+  _groundPrefab: {fileID: 0}
   ValidSlots: 00000000
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
-  UsageDuration: 0
-  CanCancelUsage: 1
-  CanUseWhileMoving: 0
-  StatConfig: {fileID: 0}
+  CanAttachTo: 01000000
+  StatConfig: {fileID: 11400000, guid: a9c68fe7b7aa4c6489dc6acf906f36b9, type: 2}

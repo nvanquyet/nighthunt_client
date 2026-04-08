@@ -1,5 +1,6 @@
 using System;
 using FishNet.Object;
+using NightHunt.Gameplay.Camera.Spectator;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Respawn;
 using NightHunt.Networking;
@@ -82,8 +83,9 @@ namespace NightHunt.Gameplay.Core.State
         }
 
 #if UNITY_EDITOR
-        private void OnValidate()
+        protected override void OnValidate()
         {
+            base.OnValidate();
             ResolveStatSystem();
         }
 #endif
@@ -93,6 +95,11 @@ namespace NightHunt.Gameplay.Core.State
             base.OnStartNetwork();
             ResolveStatSystem();
             SubscribeToStats();
+
+            // Bug #22 fix: push local lifecycle to GameCameraController so it doesn't
+            // use FindFirstObjectByType (which finds the wrong player in multiplayer).
+            if (base.Owner.IsLocalClient)
+                GameCameraController.RegisterLocalLifecycle(this);
         }
 
         public override void OnStopNetwork()
@@ -200,7 +207,7 @@ namespace NightHunt.Gameplay.Core.State
             // Reset killer name after firing so it doesn't linger
             LastKillerName = string.Empty;
 
-            if (!IsServer)
+            if (!IsServerInitialized)
                 return;
 
             // Update _isAlive SyncVar — broadcasts dead state to all clients including late-joiners.
@@ -210,7 +217,11 @@ namespace NightHunt.Gameplay.Core.State
                 _respawnSystem != null &&
                 _networkPlayer != null)
             {
-                _respawnSystem.RequestRespawn(_networkPlayer);
+                // BUG 8 FIX: Use ServerInitiateRespawn ([Server]) instead of RequestRespawn
+                // ([ServerRpc RequireOwnership=true]).  When death is triggered by a Boss/AOE
+                // (server-side code), calling a ServerRpc with RequireOwnership fails because
+                // the server is not the owner of the player object.
+                _respawnSystem.ServerInitiateRespawn(_networkPlayer);
             }
         }
 
@@ -233,7 +244,7 @@ namespace NightHunt.Gameplay.Core.State
                 Position = transform.position
             });
 
-            if (IsServer)
+            if (IsServerInitialized)
                 _networkPlayer?.SetAlive(true);
         }
 

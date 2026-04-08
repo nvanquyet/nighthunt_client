@@ -24,6 +24,11 @@ namespace NightHunt.Gameplay.AntiCamping
     {
         [Header("Config")]
         [SerializeField] private GameplayConfig _gameplayConfig;
+
+        [Tooltip("HP drain mỗi giây khi player bị phát hiện camping.\n" +
+                 "Fallback nếu _gameplayConfig = null.\n" +
+                 "Default: 5 HP/s  (= 100HP player sẽ chết sau ~20s camping)")]
+        [Min(0f)]
         [SerializeField] private float _healthDrainPerSecond = 5f;
 
         [Header("Visual")]
@@ -254,6 +259,97 @@ namespace NightHunt.Gameplay.AntiCamping
             }
             return null;
         }
+
+#if UNITY_EDITOR
+        // ── Editor — Default Config Reference ────────────────────────────────
+
+        [ContextMenu("NightHunt/Tools/Create RevealIndicator Template")]
+        private void Editor_CreateRevealIndicatorPrefab()
+        {
+            const string folder   = "Assets/_Night_Hunt/Prefabs/Gameplay";
+            const string prefPath = folder + "/RevealIndicator_Template.prefab";
+
+            if (!UnityEditor.AssetDatabase.IsValidFolder("Assets/_Night_Hunt/Prefabs"))
+                UnityEditor.AssetDatabase.CreateFolder("Assets/_Night_Hunt", "Prefabs");
+            if (!UnityEditor.AssetDatabase.IsValidFolder(folder))
+                UnityEditor.AssetDatabase.CreateFolder("Assets/_Night_Hunt/Prefabs", "Gameplay");
+
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(prefPath) != null)
+            {
+                Debug.Log($"[AntiCampingSystem] RevealIndicator_Template already exists at {prefPath}");
+            }
+            else
+            {
+                // Simple sphere visual — replace with particle system in prefab edit mode.
+                var root = new GameObject("RevealIndicator_Template");
+                var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                sphere.name = "RevealSphere";
+                sphere.transform.SetParent(root.transform, false);
+                sphere.transform.localScale = Vector3.one * 0.5f;
+                // Remove collider — purely visual
+                UnityEngine.Object.DestroyImmediate(sphere.GetComponent<Collider>());
+
+                UnityEditor.PrefabUtility.SaveAsPrefabAsset(root, prefPath);
+                UnityEngine.Object.DestroyImmediate(root);
+                Debug.Log($"[AntiCampingSystem] Created RevealIndicator_Template at {prefPath}. Mở prefab để gán material/particle system.");
+            }
+
+            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(prefPath);
+            if (prefab != null)
+            {
+                revealIndicatorPrefab = prefab;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            UnityEditor.AssetDatabase.Refresh();
+        }
+
+        [ContextMenu("NightHunt/Log AntiCamping Default Values")]
+        private void Editor_LogDefaults()
+        {
+            if (_gameplayConfig != null)
+            {
+                Debug.Log(
+                    $"[AntiCampingSystem] Config values (from GameplayConfig '{_gameplayConfig.name}'):\n" +
+                    $"  CampingTimeThreshold   : {_gameplayConfig.CampingTimeThreshold}s  — đứng yên tối đa trước khi bị reveal (default: 90s)\n" +
+                    $"  CampingPositionThreshold: {_gameplayConfig.CampingPositionThreshold}m — bán kính 'đứng yên' (default: 5m)\n" +
+                    $"  CampingRevealRadius    : {_gameplayConfig.CampingRevealRadius}m  — bán kính vùng bị lộ cho địch (default: 30m)\n" +
+                    $"  CampingUpdateInterval  : {_gameplayConfig.CampingUpdateInterval}s  — chu kỳ check (default: 5s)\n" +
+                    $"  _healthDrainPerSecond  : {_healthDrainPerSecond} HP/s — tốc độ drain HP khi camping (default: 5)");
+            }
+            else
+            {
+                Debug.LogWarning(
+                    "[AntiCampingSystem] _gameplayConfig chưa gán! Fallback hardcoded defaults:\n" +
+                    "  CampingTimeThreshold   : 90s\n" +
+                    "  CampingPositionThreshold: 5m\n" +
+                    "  CampingRevealRadius    : 30m\n" +
+                    "  CampingUpdateInterval  : 5s\n" +
+                    $"  _healthDrainPerSecond  : {_healthDrainPerSecond} HP/s\n" +
+                    "Kéo GameplayConfig ScriptableObject vào field '_gameplayConfig' để dùng giá trị thực.");
+            }
+        }
+
+        [ContextMenu("NightHunt/Auto-Assign GameplayConfig")]
+        private void Editor_AutoAssignGameplayConfig()
+        {
+            if (_gameplayConfig != null) { Debug.Log("[AntiCampingSystem] _gameplayConfig already assigned."); return; }
+
+            string[] guids = UnityEditor.AssetDatabase.FindAssets("t:GameplayConfig");
+            foreach (var guid in guids)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                var cfg = UnityEditor.AssetDatabase.LoadAssetAtPath<GameplayConfig>(path);
+                if (cfg != null)
+                {
+                    _gameplayConfig = cfg;
+                    UnityEditor.EditorUtility.SetDirty(this);
+                    Debug.Log($"[AntiCampingSystem] _gameplayConfig auto-assigned: {path}");
+                    return;
+                }
+            }
+            Debug.LogWarning("[AntiCampingSystem] No GameplayConfig asset found in project.");
+        }
+#endif
     }
 
     [System.Serializable]

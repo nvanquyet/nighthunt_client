@@ -4,6 +4,8 @@ using FishNet;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Scoring;
+using NightHunt.Gameplay.Core.Events;
 using NightHunt.Networking;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.GameplaySystems.World;
@@ -54,6 +56,7 @@ namespace NightHunt.Gameplay.Objective
         private readonly List<NetworkPlayer> _playersInZone = new();
         private MatchEndManager _matchEndManager;
         private MatchPhaseManager _phaseManager;
+        private ScoringSystem _scoringSystem;
 
         public void OnStart()
         {
@@ -61,6 +64,8 @@ namespace NightHunt.Gameplay.Objective
                 _matchEndManager = FindFirstObjectByType<MatchEndManager>();
             if (_phaseManager == null)
                 _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+            if (_scoringSystem == null)
+                _scoringSystem = FindFirstObjectByType<ScoringSystem>();
         }
 
         public void OnUpdate()
@@ -128,16 +133,30 @@ namespace NightHunt.Gameplay.Objective
             _syncIsCompleted.Value = true;
             _syncProgress.Value = 1f;
 
-            Debug.Log($"[CaptureZoneObjective] Zone '{objectiveName}' captured by team {_syncControllingTeam.Value}");
+            int team = _syncControllingTeam.Value;
+            Debug.Log($"[CaptureZoneObjective] Zone '{objectiveName}' captured by team {team}");
 
-            // Spawn phần thưởng — dùng WorldSpawnManager (cùng pipeline với BossController)
+            // Spawn phần thưởng
             if (WorldSpawnManager.Instance != null && _zoneRewardConfig != null)
             {
                 WorldSpawnManager.Instance.SpawnWorldContainer(_zoneRewardConfig, transform.position);
                 Debug.Log($"[CaptureZoneObjective] Spawned reward container at {transform.position}");
             }
 
-            // e.g. _matchEndManager.AddObjectiveScore(_syncControllingTeam.Value, 100);
+            // Award bonus score to capturing team
+            float multiplier = _phaseManager?.GetCurrentPhaseConfig()?.ScoreMultiplier ?? 1f;
+            int   captureBonus = Mathf.RoundToInt(500f * multiplier);
+            _matchEndManager?.AddObjectiveScore(team, captureBonus);
+            // AwardObjectiveCapture signature: (int teamId, float captureTime)
+            _scoringSystem?.AwardObjectiveCapture(team, captureTime);
+
+            // Publish event so KillFeed / Minimap can react
+            GameplayEventBus.Instance?.Publish(new ObjectiveCapturedEvent
+            {
+                ObjectiveId = objectiveId,
+                ObjectiveName = objectiveName,
+                CapturingTeamId = team,
+            });
         }
 
         public void OnFail()

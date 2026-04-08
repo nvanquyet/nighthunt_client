@@ -40,7 +40,7 @@ namespace NightHunt.Networking
         protected virtual void Update()
         {
             // Only run on server
-            if (!IsServer)
+            if (!FishNet.InstanceFinder.IsServerStarted)
             {
                 return;
             }
@@ -49,7 +49,7 @@ namespace NightHunt.Networking
         protected virtual void FixedUpdate()
         {
             // Only run on server
-            if (!IsServer)
+            if (!FishNet.InstanceFinder.IsServerStarted)
             {
                 return;
             }

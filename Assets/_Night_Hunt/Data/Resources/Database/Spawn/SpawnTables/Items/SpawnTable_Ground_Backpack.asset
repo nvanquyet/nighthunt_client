@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d43377b348fd2374d9366239afbb39b6, type: 3}
+  m_Name: SpawnTable_Ground_Backpack
+  m_EditorClassIdentifier: 
+  Mode: 0
+  FixedEntries: []
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: 75df374a5b8dd2147a7b9eabf88215ff, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  MinRandomCount: 1
+  MaxRandomCount: 1
+  RollOnOpen: 1
+  DropToWorldOnOpen: 0
+  MinTotalItems: 1
+  MaxTotalItems: 1

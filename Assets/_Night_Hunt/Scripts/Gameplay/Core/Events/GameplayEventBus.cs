@@ -26,10 +26,13 @@ namespace NightHunt.Gameplay.Core.Events
         {
             Type eventType = typeof(TEvent);
             if (!subscribers.ContainsKey(eventType))
-            {
                 subscribers[eventType] = new List<Delegate>();
-            }
-            subscribers[eventType].Add(handler);
+
+            // Guard: do NOT add the same delegate instance twice.
+            // OnEnable/OnDisable toggles can call Subscribe() multiple times for the same
+            // handler if the parent GameObject is disabled and re-enabled before the event fires.
+            if (!subscribers[eventType].Contains(handler))
+                subscribers[eventType].Add(handler);
         }
 
         /// <summary>

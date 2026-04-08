@@ -216,11 +216,65 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
+            // Initialize WITH items BEFORE spawn so SyncList data is
+            // embedded in the spawn packet — clients won't see a blank corpse.
+            corpse.Initialize(items);
+
             // Network spawn (tất cả clients thấy)
             ServerManager.Spawn(netObj);
-
-            // Initialize với items
-            corpse.Initialize(items);
         }
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Auto-assign / Create Corpse Prefab ────────
+
+        [ContextMenu("NightHunt/Auto-Assign Corpse Prefab")]
+        private void Editor_AutoAssignCorpsePrefab()
+        {
+            if (corpsePrefab != null) { Debug.Log("[CorpseDropOnDeath] corpsePrefab already assigned."); return; }
+
+            // Common paths to search
+            string[] candidatePaths =
+            {
+                "Assets/_Night_Hunt/Prefabs/LootItem/Prefab_Corpse.prefab",
+                "Assets/_Night_Hunt/Prefabs/Corpse.prefab",
+                "Assets/_Night_Hunt/Prefabs/Networking/Corpse.prefab",
+            };
+
+            foreach (var p in candidatePaths)
+            {
+                var found = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(p);
+                if (found != null)
+                {
+                    corpsePrefab = found;
+                    UnityEditor.EditorUtility.SetDirty(this);
+                    Debug.Log($"[CorpseDropOnDeath] Auto-assigned corpsePrefab from {p}");
+                    return;
+                }
+            }
+            Debug.LogWarning("[CorpseDropOnDeath] Corpse prefab not found — use 'NightHunt/Create Corpse Template Prefab' to generate one.");
+        }
+
+        [ContextMenu("NightHunt/Create Corpse Template Prefab")]
+        private void Editor_CreateCorpsePrefab()
+        {
+            const string dir  = "Assets/_Night_Hunt/Prefabs/LootItem";
+            const string path = dir + "/Prefab_Corpse.prefab";
+
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[CorpseDropOnDeath] Prefab_Corpse already exists at {path}");
+                return;
+            }
+
+            var go = new GameObject("Prefab_Corpse");
+            go.AddComponent<CapsuleCollider>();
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+            corpsePrefab = saved;
+            UnityEditor.EditorUtility.SetDirty(this);
+            Debug.Log($"[CorpseDropOnDeath] Created Prefab_Corpse at {path}. " +
+                      "Add NetworkObject + WorldCorpse components manually.");
+        }
+#endif
     }
 }

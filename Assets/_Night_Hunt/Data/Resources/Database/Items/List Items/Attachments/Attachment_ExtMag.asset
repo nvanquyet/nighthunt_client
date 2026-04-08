@@ -16,17 +16,12 @@ MonoBehaviour:
   DisplayName: Extended Magazine
   Description: Increases magazine capacity but adds weight
   Icon: {fileID: 21300000, guid: f407111a391aad043aa899d34d1a94d1, type: 3}
+  Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.3
-  ModifyWeightWhenEquipped: 0
-  EquippedWeightModifier: 0
-  AttachmentSlots: 
-  CanAttachTo: 04000000
+  _heldPrefab: {fileID: 0}
+  _groundPrefab: {fileID: 0}
   ValidSlots: 00000000
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
-  UsageDuration: 0
-  CanCancelUsage: 1
-  CanUseWhileMoving: 0
-  StatConfig: {fileID: 0}
+  CanAttachTo: 04000000
+  StatConfig: {fileID: 11400000, guid: 0b6edaa1b96a9a748a9f99126b4a3802, type: 2}

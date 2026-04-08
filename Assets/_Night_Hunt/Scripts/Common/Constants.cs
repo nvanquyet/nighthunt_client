@@ -76,9 +76,14 @@ namespace NightHunt.Common
         public const string API_PARTY_CANCEL_QUEUE         = "/api/party/cancel-queue";
         public const string API_PARTY_JOIN_ROOM            = "/api/party/join-room";
 
-        // Game Modes
+        // Game Config endpoints — populated at startup by GameConfigService
+        public const string API_GAME_MODES = "/api/game-modes";
+        public const string API_MAPS       = "/api/maps";
+
+        // Game Mode keys — must match GameMode.modeKey in DB
         public const string MODE_2V2 = "2v2";
         public const string MODE_3V3 = "3v3";
+        public const string MODE_4V4 = "4v4";
         public const string MODE_5V5 = "5v5";
 
         // Room Status

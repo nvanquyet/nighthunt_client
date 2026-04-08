@@ -1,6 +1,7 @@
 using System;
-using UnityEngine;
 using NightHunt.Core;
+using NightHunt.Data.DTOs;
+using UnityEngine;
 
 namespace NightHunt.Config
 {
@@ -48,57 +49,83 @@ namespace NightHunt.Config
     public class GameModeConfig : ScriptableObjectSingleton<GameModeConfig>
     {
         [Header("Game Modes")]
-        [Tooltip("Ordered list of game modes shown in the selector. Disabled entries appear greyed-out.")]
+        [Tooltip("Ordered list of game modes shown in the selector. Populated at runtime by GameConfigService.FetchAsync().")]
         [SerializeField] private GameModeEntry[] modes = new GameModeEntry[]
         {
             new GameModeEntry
             {
-                modeKey        = "1v1",
-                displayName    = "1 vs 1",
-                description    = "Solo duel",
-                playersPerTeam = 1,
-                allowFill      = false,
-                isEnabled      = true
-            },
-            new GameModeEntry
-            {
                 modeKey        = "2v2",
                 displayName    = "2 vs 2",
-                description    = "Team of 2 — fill allowed",
+                description    = "Team of 2",
                 playersPerTeam = 2,
                 allowFill      = true,
                 isEnabled      = true
             },
             new GameModeEntry
             {
-                modeKey        = "2v2",
-                displayName    = "2 vs 2 (No Fill)",
-                description    = "Team of 2 — party only",
-                playersPerTeam = 2,
-                allowFill      = false,
+                modeKey        = "3v3",
+                displayName    = "3 vs 3",
+                description    = "Team of 3",
+                playersPerTeam = 3,
+                allowFill      = true,
                 isEnabled      = true
             },
             new GameModeEntry
             {
                 modeKey        = "4v4",
                 displayName    = "4 vs 4",
-                description    = "Team of 4 — fill allowed",
+                description    = "Team of 4",
                 playersPerTeam = 4,
                 allowFill      = true,
                 isEnabled      = true
             },
             new GameModeEntry
             {
-                modeKey        = "4v4",
-                displayName    = "4 vs 4 (No Fill)",
-                description    = "Team of 4 — party only",
-                playersPerTeam = 4,
-                allowFill      = false,
-                isEnabled      = true
+                modeKey        = "5v5",
+                displayName    = "5 vs 5",
+                description    = "Team of 5",
+                playersPerTeam = 5,
+                allowFill      = true,
+                isEnabled      = false  // Coming Soon — default disabled until server enables
             }
         };
 
-        // ── Public API ─────────────────────────────────────────────────────────
+        /// <summary>
+        /// Populate this config from server data (called by GameConfigService at startup).
+        /// Overwrites the default Inspector entries with DB-driven values.
+        /// Falls back to existing Inspector defaults if <paramref name="remoteModes"/> is null/empty.
+        /// </summary>
+        public static void LoadFromRemote(GameModeResponseDTO[] remoteModes)
+        {
+            if (Instance == null)
+            {
+                Debug.LogError("[GameModeConfig] Instance not found — cannot apply remote config.");
+                return;
+            }
+
+            if (remoteModes == null || remoteModes.Length == 0)
+            {
+                Debug.LogWarning("[GameModeConfig] LoadFromRemote received empty list — keeping local defaults.");
+                return;
+            }
+
+            var entries = new GameModeEntry[remoteModes.Length];
+            for (int i = 0; i < remoteModes.Length; i++)
+            {
+                var dto = remoteModes[i];
+                entries[i] = new GameModeEntry
+                {
+                    modeKey        = dto.modeKey,
+                    displayName    = dto.displayName,
+                    description    = dto.description,
+                    playersPerTeam = dto.playersPerTeam,
+                    allowFill      = dto.allowFill,
+                    isEnabled      = dto.matchmakingEnabled && dto.modeStatus == "AVAILABLE"
+                };
+            }
+
+            Instance.modes = entries;
+        }
 
         /// <summary>All entries (enabled and disabled).</summary>
         public static GameModeEntry[] GetAll()

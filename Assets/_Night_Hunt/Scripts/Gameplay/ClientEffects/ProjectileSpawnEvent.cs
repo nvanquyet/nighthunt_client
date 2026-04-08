@@ -1,32 +1,28 @@
 using UnityEngine;
 using NightHunt.Gameplay.Core.Events;
-using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.ClientEffects
 {
     /// <summary>
-    /// Event for projectile spawn effects
+    /// Raised when a projectile is spawned — drives visual trail effects on observers.
+    ///
+    /// READONLY STRUCT — zero heap allocation per event.
     /// </summary>
-    public class ProjectileSpawnEvent : ClientEffectEvent
+    public readonly struct ProjectileSpawnEvent : IGameplayEvent
     {
-        public Vector3 Direction { get; private set; }
-        public float Speed { get; private set; }
+        public float   Timestamp { get; }
+        public Vector3 Position  { get; }
+        public Vector3 Direction { get; }
+        public float   Speed     { get; }
+        public int     NetworkId { get; }
 
-        public ProjectileSpawnEvent(Vector3 position, Vector3 direction, float speed, GameObject instigator = null)
-            : base()
+        public ProjectileSpawnEvent(Vector3 position, Vector3 direction, float speed, int networkId = 0)
         {
-            Position = position;
+            Timestamp = Time.time;
+            Position  = position;
             Direction = direction;
-            Speed = speed;
-            if (instigator != null)
-            {
-                var networkObj = ComponentResolver.Find<FishNet.Object.NetworkObject>(instigator)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] FishNet.Object.NetworkObject not found")
-                    .Resolve();
-                NetworkId = networkObj != null ? (int)networkObj.ObjectId : 0;
-            }
+            Speed     = speed;
+            NetworkId = networkId;
         }
     }
 }

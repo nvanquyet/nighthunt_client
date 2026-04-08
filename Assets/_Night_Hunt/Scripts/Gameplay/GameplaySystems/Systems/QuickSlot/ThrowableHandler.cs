@@ -42,17 +42,27 @@ namespace NightHunt.GameplaySystems.ItemUse
             Vector3 pos = spawnOrigin.position + spawnOrigin.forward * 0.5f + Vector3.up * 1.5f;
             Vector3 toTarget     = aimWorldTarget - pos;
             Vector3 horizToTarget = new Vector3(toTarget.x, 0f, toTarget.z);
+            float   horizDist    = horizToTarget.magnitude;
             Vector3 horizDir     = horizToTarget.sqrMagnitude > 0.001f
                                    ? horizToTarget.normalized
                                    : spawnOrigin.forward;
 
             Vector3 velocity = CalculateBallisticVelocity(pos, aimWorldTarget, def.LaunchAngleDeg);
-            if (velocity == Vector3.zero)
+            bool usedFallback = velocity == Vector3.zero;
+            if (usedFallback)
             {
                 // Target directly overhead / unreachable at this angle — arc forward at full force.
                 float angleRad = def.LaunchAngleDeg * Mathf.Deg2Rad;
                 velocity = (horizDir * Mathf.Cos(angleRad) + Vector3.up * Mathf.Sin(angleRad)) * def.ThrowForce;
             }
+
+            Debug.Log($"[ThrowableHandler] SpawnProjectile\n" +
+                      $"  item       = {def.DisplayName} ({def.ThrowableType})\n" +
+                      $"  spawnPos   = {pos:F2}   (origin={spawnOrigin.position:F2})\n" +
+                      $"  aimTarget  = {aimWorldTarget:F2}\n" +
+                      $"  horizDist  = {horizDist:F2} m   vertDelta = {toTarget.y:F2} m\n" +
+                      $"  launchAngle= {def.LaunchAngleDeg:F1}°   usedFallback={usedFallback}\n" +
+                      $"  velocity   = {velocity:F2}  speed={velocity.magnitude:F2} m/s");
 
             var go = Instantiate(def.ProjectilePrefab, pos, Quaternion.LookRotation(velocity.normalized));
 
@@ -75,12 +85,21 @@ namespace NightHunt.GameplaySystems.ItemUse
             var rb = go.GetComponent<Rigidbody>()
                       ?? go.GetComponentInChildren<Rigidbody>();
             if (rb != null)
+            {
                 rb.linearVelocity = velocity;
+                Debug.Log($"[ThrowableHandler] Velocity applied — rb={rb.name}  linearVelocity={rb.linearVelocity:F2}");
+            }
+            else
+            {
+                Debug.LogWarning($"[ThrowableHandler] No Rigidbody found on '{go.name}' — projectile will not move!");
+            }
 
             var proj = go.GetComponent<ProjectileNetworked>()
                        ?? go.GetComponentInChildren<ProjectileNetworked>();
             if (proj != null)
-                proj.Initialize(def);
+                proj.Initialize(def, spawnOrigin.root);
+
+            Debug.Log($"[ThrowableHandler] Spawn complete — go='{go.name}'  hasRb={rb != null}  hasProj={proj != null}  networked={nob != null}");
         }
 
         /// <summary>

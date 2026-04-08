@@ -34,7 +34,9 @@ namespace NightHunt.Core
         [SerializeField] private bool destroyDuplicates = true;
 
         [Tooltip("Nếu true, sẽ tự động tạo instance nếu chưa có (chỉ cho singleton)")]
+#pragma warning disable CS0414
         [SerializeField] private bool autoCreateIfMissing = false;
+#pragma warning restore CS0414
 
         private static PersistentObject instance;
 

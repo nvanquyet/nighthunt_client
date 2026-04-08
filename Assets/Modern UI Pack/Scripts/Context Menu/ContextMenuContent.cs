@@ -64,11 +64,14 @@ namespace Michsky.MUIP
                 try
                 {
 #if UNITY_2023_2_OR_NEWER
-                    contextManager = FindObjectsByType<ContextMenuManager>(FindObjectsSortMode.None)[0];
+                    var managers = Object.FindObjectsByType<ContextMenuManager>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    contextManager = (managers != null && managers.Length > 0) ? managers[0] : null;
 #else
-                    contextManager = (ContextMenuManager)FindObjectsOfType(typeof(ContextMenuManager))[0];
+                    var mgrs = FindObjectsOfType(typeof(ContextMenuManager)) as ContextMenuManager[];
+                    contextManager = (mgrs != null && mgrs.Length > 0) ? mgrs[0] : null;
 #endif
-                    itemParent = contextManager.transform.Find("Content/Item List").transform;
+                    if (contextManager != null)
+                        itemParent = contextManager.transform.Find("Content/Item List").transform;
                 }
 
                 catch { Debug.LogError("<b>[Context Menu]</b> Context Manager is missing.", this); return; }

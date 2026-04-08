@@ -21,7 +21,7 @@ namespace NightHunt.Networking
     ///   The host player runs FishNet Host (Server + Client) bound to localhost;
     ///   the relay proxy exposes the session port to the internet.
     /// </summary>
-    public class NetworkGameManager : SingletonPersistent<NetworkGameManager>
+    public class NetworkGameManager : Singleton<NetworkGameManager>
     {
 
 

@@ -90,8 +90,9 @@ namespace NightHunt.Gameplay.Character.Combat
         }
 
 #if UNITY_EDITOR
-        private void OnValidate()
+        protected override void OnValidate()
         {
+            base.OnValidate();
             ResolveReferences();
         }
 #endif
@@ -156,6 +157,11 @@ namespace NightHunt.Gameplay.Character.Combat
         [Server]
         public void ApplyDamageServer(DamageInfo info)
         {
+            // Guard: dead players cannot receive further damage from any source.
+            // (RequestDamageServerRpc already rejects via ValidateHit; this covers the direct server path.)
+            if (_statSystem != null && _statSystem.GetStat(PlayerStatType.Health) <= 0f)
+                return;
+
             float finalDamage = ComputeFinalDamage(info);
             ApplyDamageServer(finalDamage, info);
         }

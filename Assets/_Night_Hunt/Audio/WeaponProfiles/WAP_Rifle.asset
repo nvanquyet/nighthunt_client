@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bf3e06f6388ba664d8087d85e465803c, type: 3}
+  m_Name: WAP_Rifle
+  m_EditorClassIdentifier: 
+  weaponClass: 2
+  fireClips: []
+  fireSuppressedClips: []
+  fireVolume: 1
+  firePitch: 1
+  firePitchVariance: 0.03
+  reloadStartClip: {fileID: 8300000, guid: 4718378dc4e8d064b86f2a59e1426f12, type: 3}
+  reloadEndClip: {fileID: 8300000, guid: 407d8e4dc22324a45aca709ea1caade9, type: 3}
+  reloadTacticalClip: {fileID: 8300000, guid: 7bca1cba3e077b541aba77aba054cb76, type: 3}
+  drawClip: {fileID: 8300000, guid: 2339fab1177a09d4780517ed5f8c0203, type: 3}
+  holsterClip: {fileID: 8300000, guid: 7c4c67963606d5c44a4ceffd8c506055, type: 3}
+  emptyClip: {fileID: 8300000, guid: f0b0d2e728daca448975a0f0a1ffc07e, type: 3}
+  bulletImpactOverride: {fileID: 0}

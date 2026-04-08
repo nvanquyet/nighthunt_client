@@ -15,30 +15,7 @@ namespace NightHunt.GameplaySystems.Editor
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
-            
-            GUILayout.Space(10);
-            EditorGUILayout.LabelField("Sample Setup", EditorStyles.boldLabel);
-            
-            var attachment = (AttachmentDefinition)target;
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Red Dot")) SetupRedDot(attachment);
-            if (GUILayout.Button("Suppressor")) SetupSuppressor(attachment);
-            if (GUILayout.Button("Grip")) SetupGrip(attachment);
-            EditorGUILayout.EndHorizontal();
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Ext Magazine")) SetupExtMag(attachment);
-            if (GUILayout.Button("Flashlight")) SetupFlashlight(attachment);
-            if (GUILayout.Button("Pouch")) SetupPouch(attachment);
-            EditorGUILayout.EndHorizontal();
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("4x Scope")) Setup4xScope(attachment);
-            if (GUILayout.Button("8x Scope")) Setup8xScope(attachment);
-            EditorGUILayout.EndHorizontal();
         }
-        
         private void SetupRedDot(AttachmentDefinition attachment)
         {
             var config = ItemStatConfigSetup.GetOrCreateConfig<AttachmentStatConfig>("AttachmentStatConfig_RedDot");

@@ -3,48 +3,58 @@ using UnityEngine;
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
     /// <summary>
-    /// Base class cho tất cả projectile (đạn, grenade, smoke…).
+    /// Base class for all projectiles (bullets, grenades, smoke…).
     ///
-    /// Cấu trúc prefab (2 child):
-    ///   MainVisual     — mesh + trail, active mặc định, tắt khi va chạm nếu hideTrailOnImpact = true.
-    ///   DetonationVFX  — particle duy nhất, inactive mặc định, bật khi nổ/va chạm.
-    ///                    Nội dung thay đổi tuỳ loại: spark (bullet), explosion (grenade), smoke cloud (smoke).
+    /// Prefab structure:
+    ///   MuzzleFlash    — particle child, inactive by default; played once at spawn then hidden.
+    ///   MainVisual     — mesh + trail, active by default; hidden on impact if hideTrailOnImpact = true.
+    ///   DetonationVFX  — single particle child, inactive by default; activated on impact/explosion.
     ///
-    /// Weapon prefab (KHÔNG phải projectile) có thêm child MuzzleFlash riêng.
+    /// VFX ownership: muzzle flash, trail, and detonation are ALL managed here — not on the weapon.
+    /// The projectile is spawned at the muzzle point, so muzzle flash plays correctly at spawn.
     /// </summary>
     public class ProjectileBase : MonoBehaviour
     {
         // -----------------------------------------------------------------
-        // Inspector — VFX children (kéo thả trong prefab)
+        // Inspector — VFX children (assign in prefab)
         // -----------------------------------------------------------------
         [Header("VFX Children")]
-        [Tooltip("Child chứa mesh/trail — active mặc định khi bay.")]
+        [Tooltip("Child particle for muzzle flash — inactive by default, played once on spawn.")]
+        public GameObject muzzleFlashChild;
+
+        [Tooltip("Child containing mesh/trail — active while projectile is in flight.")]
         public GameObject mainVisualChild;
 
-        [Tooltip("Child particle duy nhất cho hiệu ứng va chạm/nổ/smoke — inactive mặc định.")]
+        [Tooltip("Single particle child for impact/explosion/smoke — inactive by default.")]
         public GameObject detonationVFXChild;
 
         // -----------------------------------------------------------------
         // Inspector — Config
         // -----------------------------------------------------------------
         [Header("Detonation Config")]
-        [Tooltip("Nổ/tương tác ngay khi va chạm. False = chỉ nổ khi hết fuseTime.")]
+        [Tooltip("Detonate immediately on collision. False = wait for fuseTime only.")]
         public bool isImpact = true;
 
-        [Tooltip("Giây chờ trước khi tự nổ. 0 = không dùng (chỉ impact).")]
+        [Tooltip("Seconds before auto-detonation. 0 = disabled (impact only).")]
         public float fuseTime = 0f;
 
-        [Tooltip("Giây tồn tại sau khi nổ để chạy hết VFX, rồi deactivate/pool.")]
+        [Tooltip("Seconds the projectile stays active after detonation (lets VFX finish).")]
         public float lifetimeAfterImpact = 3f;
 
-        [Tooltip("Tắt MainVisual ngay khi nổ để chỉ thấy DetonationVFX.")]
+        [Tooltip("Hide MainVisual immediately on impact so only DetonationVFX is visible.")]
         public bool hideTrailOnImpact = true;
 
+        [Tooltip("Duration in seconds to show muzzle flash before hiding it. 0 = single frame.")]
+        public float muzzleFlashDuration = 0.05f;
+
         // -----------------------------------------------------------------
-        // Internal reset — gọi trong OnEnable để pool reuse hoạt động đúng
+        // Internal reset — called in OnEnable so pool reuse works correctly
         // -----------------------------------------------------------------
         protected virtual void OnEnable()
         {
+            if (muzzleFlashChild != null)
+                muzzleFlashChild.SetActive(false);
+
             if (mainVisualChild != null)
                 mainVisualChild.SetActive(true);
 
@@ -53,10 +63,30 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         }
 
         // -----------------------------------------------------------------
-        // API công khai
+        // Public API
         // -----------------------------------------------------------------
 
-        /// <summary>Restart main visual (trail/mesh). Gọi khi spawn/reuse từ pool.</summary>
+        /// <summary>
+        /// Play muzzle flash once on spawn. Hides itself after muzzleFlashDuration seconds.
+        /// The projectile is spawned at the muzzle point, so position is always correct.
+        /// </summary>
+        public virtual void PlayMuzzleFlash()
+        {
+            if (muzzleFlashChild == null) return;
+            muzzleFlashChild.SetActive(true);
+            RestartParticleSystems(muzzleFlashChild);
+            StartCoroutine(HideMuzzleFlashAfter(muzzleFlashDuration));
+        }
+
+        private System.Collections.IEnumerator HideMuzzleFlashAfter(float seconds)
+        {
+            if (seconds > 0f)
+                yield return new WaitForSeconds(seconds);
+            if (muzzleFlashChild != null)
+                muzzleFlashChild.SetActive(false);
+        }
+
+        /// <summary>Restart main visual (trail/mesh). Called when spawning/reusing from pool.</summary>
         public virtual void PlayMainVisual()
         {
             if (mainVisualChild == null) return;
@@ -65,9 +95,9 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         }
 
         /// <summary>
-        /// Kích hoạt DetonationVFX tại vị trí va chạm.
-        /// Tắt MainVisual nếu hideTrailOnImpact = true.
-        /// Không Instantiate gì thêm — chỉ bật/tắt child.
+        /// Activate DetonationVFX at the impact position.
+        /// Hides MainVisual if hideTrailOnImpact = true.
+        /// No Instantiate — only toggles children.
         /// </summary>
         public virtual void TriggerDetonation(Vector3 position, Quaternion rotation)
         {

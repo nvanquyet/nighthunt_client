@@ -61,9 +61,10 @@ namespace NightHunt.Core
             SubscribeToServices();
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
             UnsubscribeFromServices();
+            base.OnDestroy();
         }
 
         /// <summary>

@@ -34,6 +34,14 @@ namespace NightHunt.GameplaySystems.World
         [Tooltip("Tên bool parameter trong Animator điều khiển trạng thái cửa.")] [SerializeField]
         private string _animatorBoolName = "IsOpen";
 
+        [Header("Fallback Visual (khi không có Animator)")]
+        [Tooltip("Renderer dùng để đổi màu khi mở/đóng cửa. Tự động tìm trên GameObject nếu để trống.")]
+        [SerializeField] private Renderer _fallbackRenderer;
+        [Tooltip("Màu fallback khi cửa đóng (chỉ dùng khi không có Animator).")]
+        [SerializeField] private Color _closedColor = Color.white;
+        [Tooltip("Màu fallback khi cửa mở (chỉ dùng khi không có Animator).")]
+        [SerializeField] private Color _openColor   = new Color(0.35f, 0.85f, 0.35f);
+
         [Header("State")] [Tooltip("Trạng thái ban đầu khi scene load.")] [SerializeField]
         private bool startOpen = false;
 
@@ -108,6 +116,14 @@ namespace NightHunt.GameplaySystems.World
             base.OnStartServer();
             syncIsOpen.Value = startOpen;
             syncIsLocked.Value = false;
+        }
+
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+            // Auto-discover fallback renderer if not assigned in Inspector.
+            if (_fallbackRenderer == null)
+                _fallbackRenderer = GetComponentInChildren<Renderer>();
         }
 
         public override void OnStartNetwork()
@@ -215,7 +231,24 @@ namespace NightHunt.GameplaySystems.World
         {
             _isOpen = newVal;
             if (_animator != null)
+            {
                 _animator.SetBool(_animatorBoolName, _isOpen);
+            }
+            else
+            {
+                // Fallback: tint the first renderer on this door so state is always visible.
+                ApplyFallbackColor();
+            }
+        }
+
+        private void ApplyFallbackColor()
+        {
+            if (_fallbackRenderer == null) return;
+            // Use MaterialPropertyBlock to avoid creating extra material instances.
+            var block = new MaterialPropertyBlock();
+            _fallbackRenderer.GetPropertyBlock(block);
+            block.SetColor("_Color", _isOpen ? _openColor : _closedColor);
+            _fallbackRenderer.SetPropertyBlock(block);
         }
 
         private void OnLockedChanged(bool oldVal, bool newVal, bool asServer)

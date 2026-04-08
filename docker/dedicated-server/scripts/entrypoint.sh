@@ -54,4 +54,5 @@ exec /app/NightHuntServer                              \
     --serverPort   "${GAME_PORT:-7777}"                \
     --backendUrl   "${BACKEND_URL}"                    \
     --serverSecret "${SERVER_SECRET}"                  \
-    --maxPlayers   "${MAX_PLAYERS:-16}"
+    --maxPlayers   "${MAX_PLAYERS:-16}"                \
+    --mapId        "${MAP_ID:-map_01}"

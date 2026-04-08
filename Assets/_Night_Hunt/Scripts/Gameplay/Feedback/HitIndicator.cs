@@ -1,60 +1,79 @@
+using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
-using System.Collections;
-using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Feedback
 {
     /// <summary>
-    /// Hit indicator component
+    /// Directional hit indicator — fades out then invokes onComplete for pool return.
+    /// Never calls Destroy().
+    ///
+    /// PREFAB REQUIREMENTS:
+    ///   • Image component on root or child.
+    ///   • RectTransform on root.
     /// </summary>
-    public class HitIndicator : MonoBehaviour
+    public sealed class HitIndicator : MonoBehaviour
     {
-         [SerializeField] private Image image;
-        private float lifetime;
+        [SerializeField] private Image _image;
 
-        public void Initialize(Vector3 direction, float lifeTime)
+        private float     _lifetime;
+        private Action    _onComplete;
+        private Coroutine _fadeRoutine;
+
+        private void Awake()
         {
-            image ??= ComponentResolver.Find<Image>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] Image not found")
-        .Resolve();
-            lifetime = lifeTime;
+            if (_image == null) _image = GetComponentInChildren<Image>();
+        }
 
-            // Rotate to face hit direction
-            if (image != null)
+        private void OnEnable()
+        {
+            if (_image == null) return;
+            var c = _image.color;
+            c.a = 1f;
+            _image.color = c;
+        }
+
+        /// <summary>
+        /// Rotate toward the incoming hit direction and start fading.
+        /// <paramref name="onComplete"/> is called at the end so the pool can reclaim.
+        /// </summary>
+        public void Initialize(Vector3 hitDirection, float lifeTime, Action onComplete = null)
+        {
+            _lifetime   = lifeTime;
+            _onComplete = onComplete;
+
+            if (hitDirection.sqrMagnitude > 0.001f)
             {
-                float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+                float angle = Mathf.Atan2(hitDirection.y, hitDirection.x) * Mathf.Rad2Deg;
                 transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
             }
 
-			//Active object
-			this.gameObject.SetActive(true);
-
-            StartCoroutine(FadeOut());
+            if (_fadeRoutine != null) StopCoroutine(_fadeRoutine);
+            _fadeRoutine = StartCoroutine(FadeOut());
         }
 
         private IEnumerator FadeOut()
         {
             float elapsed = 0f;
 
-            while (elapsed < lifetime)
+            while (elapsed < _lifetime)
             {
                 elapsed += Time.deltaTime;
-                float alpha = 1f - (elapsed / lifetime);
+                float alpha = 1f - (elapsed / _lifetime);
 
-                if (image != null)
+                if (_image != null)
                 {
-                    Color color = image.color;
-                    color.a = alpha;
-                    image.color = color;
+                    var c = _image.color;
+                    c.a = alpha;
+                    _image.color = c;
                 }
 
                 yield return null;
             }
 
-            Destroy(gameObject);
+            _fadeRoutine = null;
+            _onComplete?.Invoke(); // pool return — no Destroy
         }
     }
 }

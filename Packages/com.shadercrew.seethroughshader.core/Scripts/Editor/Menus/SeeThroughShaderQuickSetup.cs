@@ -304,8 +304,13 @@ namespace ShaderCrew.SeeThroughShader
 
 
             refMaterial = refMaterialCircle;
+#if UNITY_2023_2_OR_NEWER
+            posManager = FindFirstObjectByType<PlayersPositionManager>();
+            gloRepl = FindFirstObjectByType<GlobalShaderReplacement>();
+#else
             posManager = FindObjectOfType<PlayersPositionManager>();
             gloRepl = FindObjectOfType<GlobalShaderReplacement>();
+#endif
 
             Color origColor = EditorStyles.label.normal.textColor;
             EditorStyles.label.normal.textColor = Color.white;
@@ -1064,7 +1069,11 @@ namespace ShaderCrew.SeeThroughShader
         private bool CreateSTSObjects()
         {
             GameObject newGameObject = null;
+#if UNITY_2023_2_OR_NEWER
+            posManager = FindFirstObjectByType<PlayersPositionManager>();
+#else
             posManager = FindObjectOfType<PlayersPositionManager>();
+#endif
             if (posManager != null && posManager.playableCharacters == null)
             {
                 posManager.playableCharacters = new List<GameObject>();
@@ -1237,8 +1246,11 @@ namespace ShaderCrew.SeeThroughShader
 
         private bool CreateGroupSTSObjects()
         {
-
+#if UNITY_2023_2_OR_NEWER
+            posManager = FindFirstObjectByType<PlayersPositionManager>();
+#else
             posManager = FindObjectOfType<PlayersPositionManager>();
+#endif
 
             if (posManager != null)
             {

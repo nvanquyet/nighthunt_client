@@ -74,8 +74,8 @@ namespace NightHunt.GameplaySystems.Weapon
             _weaponModelController?.SetElevationAngle(elevationAngle);
             _currentElevationAngle = elevationAngle;
 
-            // Play muzzle flash on remote client's local weapon model instance.
-            _currentWeaponBase?.PlayMuzzleFlash();
+            // Muzzle flash is now owned by the projectile — played inside ProjectileComponent.Initialize().
+            // For hitscan weapons, ShowProjectileOnClientsRpc spawns the visual bullet which triggers it.
         }
 
         // ── 3. Reload state broadcast ──────────────────────────────────────────
@@ -91,24 +91,70 @@ namespace NightHunt.GameplaySystems.Weapon
             OnReloadStateChanged?.Invoke(isReloading); // → CharacterAnimationController
         }
 
-        // ── 4. Projectile VFX broadcast ────────────────────────────────────────
-
+        // hitscanEndpoint = world-space impact point for hitscan weapons (hit point or max-range).
+        // Passing it explicitly lets remote clients teleport the visual bullet to the exact hit
+        // position instead of flying it physics-based (which would make it hit their own body).
         [ServerRpc(RequireOwnership = true)]
-        internal void BroadcastProjectileServerRpc(Vector3 origin, Vector3 direction, WeaponConfigData config)
-            => ShowProjectileOnClientsRpc(origin, direction, config);
+        internal void BroadcastProjectileServerRpc(Vector3 origin, Vector3 direction,
+                                                   WeaponConfigData config, Vector3 hitscanEndpoint)
+            => ShowProjectileOnClientsRpc(origin, direction, config, hitscanEndpoint);
 
         [ObserversRpc]
-        private void ShowProjectileOnClientsRpc(Vector3 origin, Vector3 direction, WeaponConfigData config)
+        private void ShowProjectileOnClientsRpc(Vector3 origin, Vector3 direction,
+                                                WeaponConfigData config, Vector3 hitscanEndpoint)
         {
             // Owner already spawned the authoritative projectile locally.
-            if (IsOwner) return;
+            if (IsOwner)
+            {
+                Debug.Log($"[PROJ.RPC] ShowProjectileOnClientsRpc — SKIPPED (IsOwner).  " +
+                          $"origin={origin:F1}  weaponId='{config.WeaponId}'");
+                return;
+            }
 
-            var pool = ProjectilePool.Instance;
-            if (pool == null || _currentWeaponBase?.ProjectilePrefab == null) return;
+            var pool   = ProjectilePool.Instance;
+            var prefab = _currentWeaponBase?.ProjectilePrefab;
 
-            var proj = pool.Get(_currentWeaponBase.ProjectilePrefab, origin, Quaternion.LookRotation(direction));
+            if (pool == null)
+            {
+                Debug.LogWarning("[PROJ.RPC] ShowProjectileOnClientsRpc: ProjectilePool.Instance is null " +
+                                 "— remote bullet visual not spawned. " +
+                                 "Add ProjectilePool to your scene's 'Systems' GameObject.");
+                return;
+            }
+
+            if (prefab == null)
+            {
+                // _currentWeaponBase is null → weapon model prefab missing HitscanWeapon/ProjectileWeapon,
+                // or the model hasn't finished loading on this client yet.
+                Debug.LogWarning("[PROJ.RPC] ShowProjectileOnClientsRpc: WeaponBase or ProjectilePrefab " +
+                                 "is null on this client — remote bullet visual not spawned. " +
+                                 "Ensure the weapon HeldPrefab has a HitscanWeapon / ProjectileWeapon " +
+                                 $"component with 'Projectile Prefab' assigned. weaponId='{config.WeaponId}'  " +
+                                 $"_currentWeaponBase={(object)_currentWeaponBase ?? "null"}");
+                return;
+            }
+
+            var proj = pool.Get(prefab, origin, Quaternion.LookRotation(direction));
+            if (proj == null)
+            {
+                Debug.LogWarning($"[PROJ.RPC] ShowProjectileOnClientsRpc — pool.Get() returned null. " +
+                                 $"Increase ProjectilePool capacity for '{prefab.name}'.");
+                return;
+            }
+
             bool isHitscan = config.BallisticType == "Hitscan";
-            proj?.Initialize(config, direction, useHitscan: isHitscan);
+
+            // For hitscan: teleport the visual bullet to the pre-computed hit point so it doesn't
+            // travel through the remote client's own character and trigger a false impact VFX.
+            // For ballistic projectiles: hitscanEndpoint is ignored (pass null).
+            Vector3? endpoint = isHitscan ? (Vector3?)hitscanEndpoint : null;
+
+            Debug.Log($"[PROJ.RPC] ShowProjectileOnClientsRpc — remote visual spawned.  " +
+                      $"origin={origin:F1}  isHitscan={isHitscan}  " +
+                      $"endpoint={endpoint?.ToString("F1") ?? "null (ballistic)"}  " +
+                      $"proj='{proj.gameObject.name}'  weaponId='{config.WeaponId}'");
+
+            proj.Initialize(config, direction, useHitscan: isHitscan, hitscanEndpoint: endpoint);
         }
     }
 }

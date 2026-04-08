@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using NightHunt.Networking;
+using NightHunt.Gameplay.Character.Data;
 
 namespace NightHunt.UI
 {
@@ -21,7 +22,7 @@ namespace NightHunt.UI
 
         // ── Bind ─────────────────────────────────────────────────────────────
 
-        public void Bind(NetworkPlayer player, Sprite[] characterAvatars)
+        public void Bind(NetworkPlayer player)
         {
             if (_player != null)
                 _player.OnAliveChanged -= OnAliveChanged;
@@ -33,11 +34,11 @@ namespace NightHunt.UI
             if (_nameText != null)
                 _nameText.text = player.DisplayName;
 
-            // Avatar — index vào characterAvatars array theo CharacterModelIndex
-            if (_avatarIcon != null && characterAvatars != null && characterAvatars.Length > 0)
+            // Avatar — look up Icon from CharacterDatabase by CharacterModelIndex
+            if (_avatarIcon != null)
             {
-                int idx = Mathf.Clamp(player.CharacterModelIndex, 0, characterAvatars.Length - 1);
-                _avatarIcon.sprite  = characterAvatars[idx];
+                var def = CharacterDatabase.Instance?.GetByIndex(player.CharacterModelIndex);
+                _avatarIcon.sprite  = def?.Icon;
                 _avatarIcon.enabled = _avatarIcon.sprite != null;
             }
 

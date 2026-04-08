@@ -1,118 +1,88 @@
 using UnityEngine;
 using NightHunt.Gameplay.StatSystem.Core.Types;
-using NightHunt.Gameplay.StatSystem.Core.Data;
-    
+
 namespace NightHunt.GameplaySystems.Core.Data
 {
-/// <summary>
-    /// Base class for all item definitions
-    /// Abstract - must be inherited by specific item types
-    /// 
-    /// Usage:
-    /// 1. Create derived class (WeaponDefinition, ArmorDefinition, etc.)
-    /// 2. Create ScriptableObject asset
-    /// 3. Configure in inspector
-    /// 4. ItemDatabase auto-loads from Resources folder
+    /// <summary>
+    /// Abstract base for every item definition. Contains ONLY the identity data that is
+    /// meaningful for ALL item categories without exception.
+    ///
+    /// Hierarchy:
+    ///   ItemDefinition  (this class)
+    ///   └─ PhysicalItemDefinition   — items that exist in the world (held / dropped)
+    ///      ├─ EquippableItemDefinition  — items that go into slots and accept attachments
+    ///      │  ├─ WeaponDefinition
+    ///      │  └─ EquipmentDefinition
+    ///      ├─ AttachmentDefinition     — modifies a host item's stats
+    ///      └─ UsableItemDefinition     — items consumed / thrown with a usage duration
+    ///         ├─ ConsumableDefinition
+    ///         └─ ThrowableDefinition
+    ///
+    /// RULES:
+    ///   • Every public field on this class must be relevant to ALL derived types.
+    ///   • Category-specific data belongs on an intermediate abstract class or the leaf class.
+    ///   • Never throw exceptions from validation; always return false + populate the error string.
     /// </summary>
     public abstract class ItemDefinition : ScriptableObject
     {
-        #region Basic Info
-        
-        [Header("Basic Info")]
-        [Tooltip("Unique ID cho item này (auto-generated from asset name)")]
+        [Header("Identity")]
+        [Tooltip("Unique definition ID. Auto-generated from the asset name on first validate.")]
         public string ItemID;
-        
-        [Tooltip("Tên hiển thị")]
+
+        [Tooltip("Name shown in the UI.")]
         public string DisplayName;
-        
-        [TextArea(3, 5)]
-        [Tooltip("Mô tả item")]
+
+        [TextArea(2, 4)]
+        [Tooltip("Short description displayed in the tooltip / inspection panel.")]
         public string Description;
-        
-        [Tooltip("Icon hiển thị trong inventory")]
+
+        [Tooltip("Icon used in inventory slots, HUD, and tooltips.")]
         public Sprite Icon;
-        
-        /// <summary>
-        /// Item type (override in derived classes)
-        /// </summary>
-        public abstract ItemType Type { get; }
-        
-        #endregion
-        
-        #region Stack & Weight
-        
+
+        [Tooltip("Rarity tier — controls UI border colour and loot-table weights.")]
+        public ItemRarity Rarity = ItemRarity.Common;
+
         [Header("Stack & Weight")]
-        [Tooltip("Item này có thể stack không")]
-        public bool IsStackable = false;
-        
-        [Tooltip("Số lượng tối đa trong 1 stack")]
-        [Min(1)]
-        public int MaxStackSize = 1;
-        
-        [Tooltip("Trọng lượng của 1 item (kg)")]
-        [Min(0f)]
-        public float Weight = 1f;
-        
-        #endregion
+        [Tooltip("When true, multiple units share one inventory slot.")]
+        public bool IsStackable;
 
-        #region Attachments
+        [Tooltip("Maximum units per stack.")]
+        [Min(1)] public int MaxStackSize = 1;
 
-        [Header("Attachments")]
-        [Tooltip("Các attachment slot mà item này có")]
-        public AttachmentSlotType[] AttachmentSlots;
-        
-        [Tooltip("Item này có thể attach vào slot types nào")]
-        public AttachmentSlotType[] CanAttachTo;
-        
-        #endregion
-        
-        #region Slot Placement
-        
-        [Header("Slot Placement")]
-        [Tooltip("Item này có thể đặt ở slot locations nào")]
-        public SlotLocationType[] ValidSlots;
-        
-        #endregion
-        
-        #region Visual
-        
-        [Header("Visual")]
-        [Tooltip("Model hiển thị khi item được cầm trên tay / trang bị (client-side visual only).")]
-        public GameObject HeldPrefab;
-        
-        [Tooltip("Model hiển thị khi item rơi dưới đất, chờ pickup (WorldItem visual only).")]
-        public GameObject GroundPrefab;
-        
-        #endregion
-        
-        #region Usage System
-        
-        [Header("Usage System")]
-        [Tooltip("Thời gian sử dụng item (0 = instant, >0 = có progress bar)")]
-        [Min(0f)]
-        public float UsageDuration = 0f;
-        
-        [Tooltip("Có thể cancel usage giữa chừng không")]
-        public bool CanCancelUsage = true;
-        
-        #endregion
-        
-#region Stat / Resource Helpers
+        [Tooltip("Mass of one unit in kilograms. Contributes to the carry-weight budget.")]
+        [Min(0f)] public float Weight = 1f;
 
-        /// <summary>
-        /// Returns the starting CurrentResource value when this item is first created.
-        /// Override in WeaponDefinition (→ MaxAmmo), EquipmentDefinition (→ MaxDurability),
-        /// AttachmentDefinition with battery (→ BatteryCapacity).
-        /// Default = 0 (consumables, throwables, pouches, etc. have no current resource).
-        /// </summary>
+        /// <summary>Item category. Implemented by every concrete definition class.</summary>
+        public abstract ItemType Type { get; }
+
+        // ── Polymorphic accessors for subclass-specific data ─────────────────────
+        // These allow callers that hold an ItemDefinition reference to access common
+        // subclass properties without casting. Subclasses override the ones they support.
+
+        /// <summary>World prefab held in hands. Null for items without a held representation.</summary>
+        public virtual GameObject HeldPrefab  { get => null; set { } }
+
+        /// <summary>World prefab shown on the ground. Null for items without a ground representation.</summary>
+        public virtual GameObject GroundPrefab { get => null; set { } }
+
+        /// <summary>Attachment socket types this item exposes. Null for non-equippable items.</summary>
+        public virtual AttachmentSlotType[] AttachmentSlots { get => null; set { } }
+
+        /// <summary>Starting resource value (ammo / durability / battery) for a new ItemInstance. 0 by default.</summary>
         public virtual float GetDefaultCurrentValue() => 0f;
-        
-        #endregion
-        
-        #region Validation
-        
+
+        /// <summary>Whether an in-progress use action can be cancelled. True by default.</summary>
+        public virtual bool CanCancelUsage { get => true; set { } }
+
+        /// <summary>True if this attachment fits the given slot type. Always false for non-attachment items.</summary>
+        public virtual bool CanAttachToSlot(AttachmentSlotType slotType) => false;
+
+        // ── Validation ──────────────────────────────────────────────────────────
+
         /// <summary>
-        /// Validate item definition
+        /// Validates the definition. Derived classes should call base.IsValid() first,
+        /// then append their own checks.
+        /// Returns false and populates <paramref name="error"/> on failure; never throws.
         /// </summary>
         public virtual bool IsValid(out string error)
         {
@@ -121,19 +91,19 @@ namespace NightHunt.GameplaySystems.Core.Data
                 error = "ItemID cannot be empty";
                 return false;
             }
-            
+
             if (string.IsNullOrEmpty(DisplayName))
             {
                 error = "DisplayName cannot be empty";
                 return false;
             }
-            
+
             if (Icon == null)
             {
                 error = "Icon is required";
                 return false;
             }
-            
+
             if (IsStackable && MaxStackSize < 1)
             {
                 error = "MaxStackSize must be >= 1 for stackable items";
@@ -143,182 +113,89 @@ namespace NightHunt.GameplaySystems.Core.Data
             error = null;
             return true;
         }
-        
-        #endregion
-        
-        #region Helpers
-        
-        /// <summary>
-        /// Get total weight for a quantity
-        /// Reads Weight from StatConfig if available, otherwise uses base Weight field
-        /// </summary>
-        public virtual float GetTotalWeight(int quantity)
-        {
-            // Weight is a direct field on ItemDefinition; not part of ItemStatType enum.
-            return Weight * quantity;
-        }
-        
-        /// <summary>
-        /// Check if item can be placed in slot type
-        /// </summary>
-        public bool CanPlaceInSlot(SlotLocationType slotType)
-        {
-            if (ValidSlots == null || ValidSlots.Length == 0)
-                return slotType == SlotLocationType.Inventory; // Default to inventory only
-            
-            foreach (var validSlot in ValidSlots)
-            {
-                if (validSlot == slotType)
-                    return true;
-            }
-            
-            return false;
-        }
-        
-        /// <summary>
-        /// Check if item can be attached to specific slot type
-        /// </summary>
-        public bool CanAttachToSlot(AttachmentSlotType slotType)
-        {
-            if (CanAttachTo == null || CanAttachTo.Length == 0)
-                return false;
-            
-            foreach (var slot in CanAttachTo)
-            {
-                if (slot == slotType)
-                    return true;
-            }
-            
-            return false;
-        }
-        
-        /// <summary>
-        /// Get number of attachment slots
-        /// </summary>
-        public int GetAttachmentSlotCount()
-        {
-            return AttachmentSlots != null ? AttachmentSlots.Length : 0;
-        }
-        
-        #endregion
-        
-        #region Editor
-        
+
+        /// <summary>Total mass for a stack of the given quantity.</summary>
+        public virtual float GetTotalWeight(int quantity) => Weight * quantity;
+
 #if UNITY_EDITOR
         protected virtual void OnValidate()
         {
-            // Auto-generate ItemID from asset name if empty
-            if (string.IsNullOrEmpty(ItemID))
-            {
-                ItemID = name.ToLower();
-            }
-            
-            // Ensure stackable items have valid stack size
-            if (IsStackable && MaxStackSize < 1)
-            {
-                MaxStackSize = 1;
-            }
-            
-            // Non-stackable items should have MaxStackSize = 1
-            if (!IsStackable)
-            {
-                MaxStackSize = 1;
-            }
-            
-            // UsageDuration cannot be negative
-            if (UsageDuration < 0f)
-            {
-                UsageDuration = 0f;
-            }
+            if (string.IsNullOrEmpty(ItemID)) ItemID = name.ToLower();
+            if (IsStackable && MaxStackSize < 1) MaxStackSize = 1;
+            if (!IsStackable) MaxStackSize = 1;
         }
 #endif
-        
-        #endregion
     }
-    #region Enums
-   /// <summary>
-    /// Defines item types for categorization
-    /// Used for filtering and UI organization
-    /// </summary>
+
+    // ── Shared Enums ────────────────────────────────────────────────────────────
+
+    /// <summary>Top-level item category. Never reorder — values are serialised.</summary>
     public enum ItemType
     {
-        Equipment,      // Armor, clothing, backpack
-        Weapon,         // Guns, melee weapons
-        Consumable,     // Food, medkits, potions
-        Attachment,     // Scopes, suppressors, lights
-        Material,       // Crafting materials, resources
-        // Ammo: weapons manage ammo via ItemStatType.MaxAmmo in StatConfig (no separate ammo items)
-        Throwable,      // Grenades, flashbangs
-        Quest,          // Quest items
-        Deployable,     // Placeable objects (beacons, traps, etc.)
-        Misc            // Other items
+        Equipment  = 0,  // Armour, clothing, backpack
+        Weapon     = 1,  // Guns, melee weapons
+        Consumable = 2,  // Food, medkits, potions
+        Attachment = 3,  // Scopes, suppressors, grips
+        Material   = 4,  // Crafting materials
+        Throwable  = 5,  // Grenades, flashbangs
+        Quest      = 6,  // Non-droppable quest items
+        Deployable = 7,  // Placeable objects (beacons, traps)
+        Misc       = 8,  // Everything else
     }
-    
-    /// <summary>
-    /// Defines where items can be placed
-    /// Used for validation and UI layout
-    /// </summary>
+
+    /// <summary>Broad slot category. Used for drag-and-drop validation.</summary>
     public enum SlotLocationType
     {
-        Inventory,      // Main inventory grid
-        Equipment,      // Equipment slots (head, chest, etc.)
-        Weapon,         // Weapon slots (primary, secondary, melee)
-        Attachment      // Attachment slots on items
+        Inventory  = 0,  // Main inventory grid
+        Equipment  = 1,  // Equipment panel (head, chest …)
+        Weapon     = 2,  // Weapon slots (primary, secondary, melee)
+        Attachment = 3,  // Attachment sockets on a parent item
     }
-    
-    /// <summary>
-    /// Defines equipment slot types
-    /// Each type has specific icon and allowed item types
-    /// </summary>
+
+    /// <summary>Specific equipment body slot.</summary>
     public enum EquipmentSlotType
     {
-        Head,       // Helmet, hat
-        Face,       // Mask, goggles
-        Chest,      // Body armor, vest
-        Back,       // Backpack
-        Belt,       // Belt with pouches
-        Legs,       // Pants
-        Feet,       // Boots
-        Hands       // Gloves
+        Head  = 0,
+        Face  = 1,
+        Chest = 2,
+        Back  = 3,
+        Belt  = 4,
+        Legs  = 5,
+        Feet  = 6,
+        Hands = 7,
     }
-    
-    /// <summary>
-    /// Defines weapon slot types
-    /// </summary>
+
+    /// <summary>Weapon holster slot. None means unholstered / in inventory.</summary>
     public enum WeaponSlotType
     {
-        Primary,    // Main weapon (rifle, shotgun)
-        Secondary,  // Sidearm (pistol)
-        Melee,       // Melee weapon (knife, axe) - optional,
-        None
+        Primary   = 0,  // Main long-arm (rifle, shotgun, SMG)
+        Secondary = 1,  // Sidearm (pistol)
+        Melee     = 2,  // Knife, axe
+        None      = 3,
     }
-    
+
     /// <summary>
-    /// Defines attachment slot types
-    /// Items can have multiple attachment slots
-    /// Attachments modify item stats
+    /// Attachment socket type. Weapons and equipment declare which sockets they expose;
+    /// attachment definitions declare which socket types they fit into.
+    /// Never reorder — values are serialised.
     /// </summary>
     public enum AttachmentSlotType
     {
-        None,
-        
-        // Weapon Attachments
-        Optic,          // Scopes, red dots, holographic sights
-        Barrel,         // Suppressors, muzzle brakes, compensators
-        Grip,           // Foregrips, vertical grips
-        Magazine,       // Extended magazines
-        Stock,          // Stocks, buttstocks
-        UnderBarrel,    // Flashlights, lasers, grenade launchers
-        
-        // Equipment Attachments
-        Light,          // Flashlights, headlamps (for helmet/vest)
-        Pouch,          // Extra storage pouches (for vest/belt)
-        Plate,          // Armor plates (for vest)
-        
-        // Generic Slots
-        Accessory1,
-        Accessory2,
-        Accessory3
+        None        = 0,
+        // Weapon sockets
+        Optic       = 1,   // Scopes, red dots, holographic sights
+        Barrel      = 2,   // Suppressors, muzzle brakes, compensators
+        Grip        = 3,   // Foregrips, vertical grips
+        Magazine    = 4,   // Extended magazines
+        Stock       = 5,   // Buttstocks, folding stocks
+        UnderBarrel = 6,   // Flashlights, lasers, grenade launchers
+        // Equipment sockets
+        Light       = 7,   // Headlamps, flashlights on armour
+        Pouch       = 8,   // Storage pouches on vest / belt
+        Plate       = 9,   // Armour plates on vest
+        // Generic slots
+        Accessory1  = 10,
+        Accessory2  = 11,
+        Accessory3  = 12,
     }
-    #endregion
 }

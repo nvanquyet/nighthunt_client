@@ -455,7 +455,16 @@ namespace NightHunt.UI
         {
             _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
-            MatchLoadingOverlay.Instance?.Show();
+
+            // Resolve the correct scene from the mapId received in match_ready
+            NightHunt.Config.SceneId sceneId = NightHunt.Config.SceneId.GameMap_01;
+            if (!string.IsNullOrEmpty(e.mapId)
+                && MapConfig.TryGetById(e.mapId, out MapEntry mapEntry))
+            {
+                sceneId = mapEntry.sceneId;
+            }
+
+            MatchLoadingOverlay.Instance?.Show(sceneId);
         }
 
         private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent e)

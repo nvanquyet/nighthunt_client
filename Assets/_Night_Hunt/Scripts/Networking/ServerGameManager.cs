@@ -116,13 +116,23 @@ namespace NightHunt.Networking
             switch (args.ConnectionState)
             {
                 case RemoteConnectionState.Started:
-                    OnPlayerConnected(conn);
+                    // BUG 1 FIX: Wait until connection has loaded start scenes before spawning.
+                    // Spawning before start scenes are loaded causes the FishNet warning:
+                    // "spawned but it's recommended to not spawn objects for connections
+                    //  until they have loaded start scenes."
+                    conn.OnLoadedStartScenes += OnConnectionLoadedStartScenes;
                     break;
 
                 case RemoteConnectionState.Stopped:
                     OnPlayerDisconnected(conn);
                     break;
             }
+        }
+
+        private void OnConnectionLoadedStartScenes(NetworkConnection conn, bool asServer)
+        {
+            conn.OnLoadedStartScenes -= OnConnectionLoadedStartScenes;
+            OnPlayerConnected(conn);
         }
 
         [Server]
@@ -295,11 +305,11 @@ namespace NightHunt.Networking
             // Notify all clients: hide loading screen, show game HUD
             RpcOnAllPlayersReady();
 
-            // Start Phase 1
+            // Start first phase with countdown delay
             if (_matchPhaseManager != null)
-                _matchPhaseManager.StartPhase(NightHunt.Gameplay.Match.MatchPhaseState.Preparation);
+                _matchPhaseManager.BeginMatch();
             else
-                Debug.LogError("[ServerGameManager] MatchPhaseManager is null â€” Phase 1 not started!");
+                Debug.LogError("[ServerGameManager] MatchPhaseManager is null — BeginMatch not called!");
         }
 
         [ObserversRpc]
@@ -360,5 +370,48 @@ namespace NightHunt.Networking
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] âœ… Cleanup complete for ClientId: {fishnetClientId}");
         }
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Auto-assign Known Prefabs ──────────────────
+
+        [ContextMenu("NightHunt/Auto-Assign Player & Handler Prefabs")]
+        private void Editor_AutoAssignPrefabs()
+        {
+            bool changed = false;
+
+            if (playerPrefab == null)
+            {
+                string[] candidates =
+                {
+                    "Assets/_Night_Hunt/Prefabs/PlayerPrefab.prefab",
+                    "Assets/_Night_Hunt/Prefabs/Network_Player Rigidbody Predict.prefab",
+                };
+                foreach (var p in candidates)
+                {
+                    var found = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(p);
+                    if (found != null)
+                    {
+                        playerPrefab = found; changed = true;
+                        Debug.Log($"[ServerGameManager] Auto-assigned playerPrefab from {p}");
+                        break;
+                    }
+                }
+                if (playerPrefab == null) Debug.LogWarning("[ServerGameManager] playerPrefab not found — assign manually.");
+            }
+
+            if (clientNetworkHandlerPrefab == null)
+            {
+                const string handlerPath = "Assets/_Night_Hunt/Prefabs/Networking/ClientNetworkHandlerPrefab.prefab";
+                var found = UnityEditor.AssetDatabase.LoadAssetAtPath<ClientNetworkHandler>(handlerPath);
+                if (found != null)
+                {
+                    clientNetworkHandlerPrefab = found; changed = true;
+                    Debug.Log($"[ServerGameManager] Auto-assigned clientNetworkHandlerPrefab from {handlerPath}");
+                }
+                else Debug.LogWarning($"[ServerGameManager] ClientNetworkHandlerPrefab not found at {handlerPath}.");
+            }
+
+            if (changed) UnityEditor.EditorUtility.SetDirty(this);
+        }
+#endif
     }
 }

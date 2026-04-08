@@ -9,6 +9,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Core.Base;
 using NightHunt.Utilities;
+using NightHunt.GameplaySystems.Core;
 
 namespace NightHunt.GameplaySystems.Equipment
 {
@@ -16,7 +17,7 @@ namespace NightHunt.GameplaySystems.Equipment
     /// Manages equipment slot assignment (head, body, legs, feet) for a networked player.
     /// All slot mutations are server-authoritative via SyncDictionary.
     /// </summary>
-    public class EquipmentSystem : BaseNetworkGameplaySystem, IEquipmentSystem, IDisposable
+    public class EquipmentSystem : BaseNetworkGameplaySystem, IEquipmentSystem
     {
         #region Serialized Fields
         
@@ -64,19 +65,6 @@ namespace NightHunt.GameplaySystems.Equipment
         protected override void OnNetworkStopped()
         {
             _equippedItems.OnChange -= OnEquipmentChanged;
-            _equipmentCache.Clear();
-        }
-        
-        #endregion
-        
-        #region IDisposable Implementation
-        
-        public void Dispose()
-        {
-            // Unsubscribe from network events
-            _equippedItems.OnChange -= OnEquipmentChanged;
-            
-            // Clear cache
             _equipmentCache.Clear();
         }
         
@@ -290,14 +278,7 @@ namespace NightHunt.GameplaySystems.Equipment
 
         private void RebuildEquipmentCache()
         {
-            _equipmentCache.Clear();
-            
-            foreach (var kvp in _equippedItems)
-            {
-                var item = _inventorySystem?.GetItemByInstanceID(kvp.Value);
-                if (item != null)
-                    _equipmentCache[kvp.Key] = item;
-            }
+            SlotCacheHelper.Rebuild(_equippedItems, id => _inventorySystem?.GetItemByInstanceID(id), _equipmentCache);
         }
         
         #endregion

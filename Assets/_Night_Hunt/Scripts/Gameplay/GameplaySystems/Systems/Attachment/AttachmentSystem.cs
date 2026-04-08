@@ -16,7 +16,7 @@ namespace NightHunt.GameplaySystems.Attachment
     /// Manages item attachment slots (scopes, grips, etc.) for a networked player.
     /// Automatically recovers attachments to inventory when the parent item is dropped.
     /// </summary>
-    public class AttachmentSystem : BaseNetworkGameplaySystem, IAttachmentSystem, IDisposable
+    public class AttachmentSystem : BaseNetworkGameplaySystem, IAttachmentSystem
     {
         #region Serialized Fields
         
@@ -60,19 +60,6 @@ namespace NightHunt.GameplaySystems.Attachment
         {
             if (_inventorySystem != null)
                 _inventorySystem.OnItemRemoved -= OnParentItemRemoved;
-        }
-        
-        #endregion
-        
-        #region IDisposable Implementation
-        
-        public void Dispose()
-        {
-            // Unsubscribe from inventory events
-            if (_inventorySystem != null)
-            {
-                _inventorySystem.OnItemRemoved -= OnParentItemRemoved;
-            }
         }
         
         #endregion

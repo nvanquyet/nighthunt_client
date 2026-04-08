@@ -44,9 +44,9 @@ namespace NightHunt.Config
         [SerializeField]
         private SceneEntry[] scenes = new SceneEntry[]
         {
-            new() { id = SceneId.Home,      sceneName = "01_Home"   },
-            new() { id = SceneId.GameMap_01, sceneName = "06_Game 1" },
-            new() { id = SceneId.GameMap_02, sceneName = "06_Game 2" },
+            new() { id = SceneId.Home,       sceneName = "01_Home"    },
+            new() { id = SceneId.GameMap_01,  sceneName = "02_Map_01" },
+            new() { id = SceneId.GameMap_02,  sceneName = "02_Map_02" },
         };
 
         // ── Public API ─────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ namespace NightHunt.Config
                     return entry.sceneName;
 
             Debug.LogWarning($"[SceneConfig] SceneId.{id} không có trong config → fallback Home.");
-            return GetSceneName(SceneId.Home);
+            return "01_Home"; // hardcoded fallback — tránh infinite recursion nếu Home không có trong scenes
         }
 
         /// <summary>Tên scene Home (shortcut hay dùng).</summary>

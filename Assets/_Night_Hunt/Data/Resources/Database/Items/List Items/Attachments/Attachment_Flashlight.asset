@@ -16,28 +16,12 @@ MonoBehaviour:
   DisplayName: Tactical Flashlight
   Description: Provides illumination in dark areas
   Icon: {fileID: 0}
+  Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.1
-  ModifyWeightWhenEquipped: 0
-  EquippedWeightModifier: 0
-  ResourceType: 3
-  MaxResource: 3600
-  DefaultResource: 3600
-  AttachmentSlots: 
-  CanAttachTo: 0600000007000000
+  _heldPrefab: {fileID: 0}
+  _groundPrefab: {fileID: 0}
   ValidSlots: 0000000004000000
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
-  UsageDuration: 0
-  CanCancelUsage: 1
-  CanUseWhileMoving: 0
-  ItemModifiers:
-  - StatType: 11
-    Value: 15
-    ModifierType: 1
-    Description: Illumination range
-  - StatType: 12
-    Value: 80
-    ModifierType: 0
-    Description: Light brightness
+  CanAttachTo: 0600000007000000
+  StatConfig: {fileID: 11400000, guid: 6eadbcb18ed81204f81dab8729140168, type: 2}

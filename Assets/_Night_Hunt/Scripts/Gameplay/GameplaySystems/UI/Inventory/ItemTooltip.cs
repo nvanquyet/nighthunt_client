@@ -271,5 +271,75 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 UpdatePosition(mousePos);
             }
         }
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Auto-assign / Create Tooltip Stat Row Prefab
+
+        [ContextMenu("NightHunt/Auto-Assign Tooltip Stat Row Prefab")]
+        private void Editor_AutoAssignTooltipStatRowPrefab()
+        {
+            if (_statRowPrefab != null) { Debug.Log("[ItemTooltip] _statRowPrefab already assigned."); return; }
+
+            string[] candidates =
+            {
+                "Assets/_Night_Hunt/Prefabs/UI/TooltipStatRow.prefab",
+                "Assets/_Night_Hunt/Prefabs/UI/TooltipStatRow 2.prefab",
+                "Assets/_Night_Hunt/Prefabs/UI/StatPrefabs.prefab",
+            };
+            foreach (var p in candidates)
+            {
+                var found = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(p);
+                if (found != null)
+                {
+                    _statRowPrefab = found;
+                    UnityEditor.EditorUtility.SetDirty(this);
+                    Debug.Log($"[ItemTooltip] Auto-assigned _statRowPrefab from {p}");
+                    return;
+                }
+            }
+            Debug.LogWarning("[ItemTooltip] TooltipStatRow prefab not found — use 'Create Tooltip Stat Row Template Prefab'.");
+        }
+
+        [ContextMenu("NightHunt/Create Tooltip Stat Row Template Prefab")]
+        private void Editor_CreateTooltipStatRowPrefab()
+        {
+            const string dir  = "Assets/_Night_Hunt/Prefabs/UI";
+            const string path = dir + "/TooltipStatRow_Template.prefab";
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[ItemTooltip] TooltipStatRow_Template already exists at {path}");
+                return;
+            }
+
+            var go  = new GameObject("TooltipStatRow_Template");
+            go.AddComponent<RectTransform>().sizeDelta = new Vector2(240f, 22f);
+            var hlg = go.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+            hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 4f;
+
+            // Stat name
+            var nameGo = new GameObject("StatName", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+            nameGo.transform.SetParent(go.transform, false);
+            nameGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 120f;
+            nameGo.GetComponent<TMPro.TextMeshProUGUI>().text = "Damage";
+
+            // Stat value
+            var valGo = new GameObject("StatVal", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+            valGo.transform.SetParent(go.transform, false);
+            valGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 60f;
+            var valTmp = valGo.GetComponent<TMPro.TextMeshProUGUI>();
+            valTmp.text = "30"; valTmp.alignment = TMPro.TextAlignmentOptions.Right;
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+
+            if (_statRowPrefab == null)
+            {
+                _statRowPrefab = saved;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"[ItemTooltip] Created TooltipStatRow_Template at {path}. " +
+                      "Add TooltipStatRow component and wire StatName/StatVal fields.");
+        }
+#endif
     }
 }

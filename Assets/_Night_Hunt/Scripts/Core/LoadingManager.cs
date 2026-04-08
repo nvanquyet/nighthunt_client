@@ -179,6 +179,9 @@ namespace NightHunt.Core
             // ── Step 5: Kiểm tra backend có hoạt động không ─────────────────
             yield return StartCoroutine(WaitForBackendHealth());
 
+            // ── Step 5.5: Fetch game config (modes + maps) from backend ──────
+            yield return StartCoroutine(FetchGameConfigFlow());
+
             // ── Step 6: Remember Me / Auto-Login check ───────────────────
             yield return StartCoroutine(CheckAutoLoginFlow());
 
@@ -192,6 +195,40 @@ namespace NightHunt.Core
             yield return new WaitForSeconds(0.15f);
 
             Navigate();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Game Config Fetch
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Fetch game modes and maps from backend; populates GameModeConfig + MapConfig.
+        /// Non-fatal: if it fails the ScriptableObject defaults stay in place.
+        /// </summary>
+        private IEnumerator FetchGameConfigFlow()
+        {
+            UpdateLoadingUI("Tải cấu hình game...", 0.50f);
+
+            if (GameManager.Instance?.GameConfigService == null)
+            {
+                Debug.LogWarning("[LoadingManager] GameConfigService not available — skipping.");
+                yield break;
+            }
+
+            bool completed = false;
+            GameManager.Instance.GameConfigService
+                .FetchAsync()
+                .ContinueWith(_ => completed = true);
+
+            float waited = 0f;
+            while (!completed && waited < 8f)
+            {
+                waited += UnityEngine.Time.deltaTime;
+                yield return null;
+            }
+
+            if (!completed)
+                Debug.LogWarning("[LoadingManager] GameConfigService.FetchAsync() timed out — using defaults.");
         }
 
         // ─────────────────────────────────────────────────────────────────────

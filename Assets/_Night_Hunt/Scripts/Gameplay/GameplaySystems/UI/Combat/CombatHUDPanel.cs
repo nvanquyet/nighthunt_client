@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Michsky.MUIP;
+using NightHunt.Audio;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -24,7 +25,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
     ///   • _weaponSlotsContainer – HorizontalLayoutGroup parent for weapon slot buttons
     ///   • _consumablePanel      – left panel, filtered to consumables
     ///   • _throwablePanel       – right panel, filtered to throwables
-    ///   • _audioSource / _depletedClip – plays when active weapon goes fully empty
+    ///   Audio: depleted-weapon sound routes through AudioManager (no AudioSource needed on this GO)
     ///
     /// Call Initialize(IWeaponSystem, IItemSelectionSystem) when the local player spawns.
     /// </summary>
@@ -83,12 +84,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
                  "Calls CancelAim() on the AimController and RequestCancelUse() on the server.")]
         [SerializeField] private UnityEngine.UI.Button _cancelItemUseButton;
 
-        [Header("Audio")]
-        [Tooltip("AudioSource to play sound effects. Add AudioSource component on this GameObject.")]
-        [SerializeField] private AudioSource _audioSource;
-
-        [Tooltip("Clip played when the active weapon's magazine AND reserve ammo both reach zero.")]
-        [SerializeField] private AudioClip _depletedClip;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime
@@ -100,7 +95,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IInventorySystem     _inventorySystem;
         private CombatInputHandler   _combatInputHandler;
         private bool             _slotsSpawned;     // true after Awake spawn pass
+#pragma warning disable CS0414
         private bool             _isInitialized;    // true after first data bind
+#pragma warning restore CS0414
         private Coroutine        _reloadProgressCoroutine;
 
         private readonly List<WeaponSlotButton> _spawnedWeaponButtons = new List<WeaponSlotButton>();
@@ -425,9 +422,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var active = _weaponSystem.GetActiveWeaponSlot();
             if (!active.HasValue || active.Value != slot) return;
 
-            // Play "out of ammo" audio cue.
-            if (_audioSource != null && _depletedClip != null)
-                _audioSource.PlayOneShot(_depletedClip);
+            // Play "weapon fully depleted" audio cue via centralized AudioManager.
+            if (AudioManager.HasInstance)
+                AudioManager.Instance.PlayUI(AudioManager.Instance.Library?.weaponDepleted);
         }
 
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
@@ -512,6 +509,73 @@ namespace NightHunt.GameplaySystems.UI.Combat
             UpdateCancelButtonVisibility();
         }
 
+#if UNITY_EDITOR
+        // ─────────────────────────────────────────────────────────────────────
+        //  Editor — Context Menu: Create WeaponSlotButton Template Prefab
+        // ─────────────────────────────────────────────────────────────────────
+
+        [ContextMenu("NightHunt/Create WeaponSlotButton Template Prefab")]
+        private void Editor_CreateWeaponSlotButtonPrefab()
+        {
+            const string parent = "Assets/_Night_Hunt/Prefabs";
+            const string dir    = parent + "/UI";
+            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
+                UnityEditor.AssetDatabase.CreateFolder(parent, "UI");
+
+            const string path = dir + "/WeaponSlotButton_Template.prefab";
+
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[CombatHUDPanel] WeaponSlotButton_Template already exists at {path}");
+                return;
+            }
+
+            var go = new GameObject("WeaponSlotButton_Template");
+            var rt = go.AddComponent<UnityEngine.RectTransform>();
+            rt.sizeDelta = new UnityEngine.Vector2(80f, 80f);
+            go.AddComponent<UnityEngine.UI.Image>().color = new UnityEngine.Color(0.1f, 0.1f, 0.1f, 0.85f);
+            go.AddComponent<UnityEngine.UI.Button>();
+
+            // Icon
+            var iconGo = new GameObject("WeaponIcon", typeof(UnityEngine.RectTransform), typeof(UnityEngine.UI.Image));
+            iconGo.transform.SetParent(go.transform, false);
+            var iconRt = iconGo.GetComponent<UnityEngine.RectTransform>();
+            iconRt.anchorMin = new UnityEngine.Vector2(0.1f, 0.25f);
+            iconRt.anchorMax = new UnityEngine.Vector2(0.9f, 0.9f);
+            iconRt.offsetMin = iconRt.offsetMax = UnityEngine.Vector2.zero;
+
+            // Ammo text
+            var ammoGo  = new GameObject("AmmoText", typeof(UnityEngine.RectTransform), typeof(TMPro.TextMeshProUGUI));
+            ammoGo.transform.SetParent(go.transform, false);
+            var ammoRt  = ammoGo.GetComponent<UnityEngine.RectTransform>();
+            ammoRt.anchorMin = new UnityEngine.Vector2(0f, 0f);
+            ammoRt.anchorMax = new UnityEngine.Vector2(1f, 0.28f);
+            ammoRt.offsetMin = ammoRt.offsetMax = UnityEngine.Vector2.zero;
+            var ammoTmp = ammoGo.GetComponent<TMPro.TextMeshProUGUI>();
+            ammoTmp.text = "30/300"; ammoTmp.fontSize = 10f; ammoTmp.alignment = TMPro.TextAlignmentOptions.Center;
+
+            // Slot index badge
+            var badgeGo  = new GameObject("SlotBadge", typeof(UnityEngine.RectTransform), typeof(TMPro.TextMeshProUGUI));
+            badgeGo.transform.SetParent(go.transform, false);
+            var badgeRt  = badgeGo.GetComponent<UnityEngine.RectTransform>();
+            badgeRt.anchorMin = new UnityEngine.Vector2(0f, 0.8f);
+            badgeRt.anchorMax = new UnityEngine.Vector2(0.35f, 1f);
+            badgeRt.offsetMin = badgeRt.offsetMax = UnityEngine.Vector2.zero;
+            var badgeTmp = badgeGo.GetComponent<TMPro.TextMeshProUGUI>();
+            badgeTmp.text = "1"; badgeTmp.fontSize = 10f;
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            UnityEngine.Object.DestroyImmediate(go);
+
+            if (_weaponSlotPrefab == null)
+            {
+                _weaponSlotPrefab = saved.GetComponent<WeaponSlotButton>();
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"[CombatHUDPanel] Created WeaponSlotButton_Template at {path}. " +
+                      "Add WeaponSlotButton component and wire icon/ammo/badge fields.");
+        }
+#endif
     }
 }
 

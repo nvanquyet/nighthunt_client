@@ -7,7 +7,7 @@ namespace NightHunt.Gameplay.Core.Config
     /// <summary>
     /// Runtime config modifications (phase-based, zone-based)
     /// </summary>
-    public class RuntimeConfig : SingletonPersistent<RuntimeConfig>
+    public class RuntimeConfig : Singleton<RuntimeConfig>
     {
 
         private readonly Dictionary<string, float> phaseModifiers = new Dictionary<string, float>();

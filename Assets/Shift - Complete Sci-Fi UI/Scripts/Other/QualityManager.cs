@@ -57,7 +57,11 @@ namespace Michsky.UI.Shift
 
                     if (resolutions[i].width == Screen.currentResolution.width
                         && resolutions[i].height == Screen.currentResolution.height
+#if UNITY_2022_2_OR_NEWER
+                          && resolutions[i].refreshRateRatio.Equals(Screen.currentResolution.refreshRateRatio))
+#else
                           && resolutions[i].refreshRate == Screen.currentResolution.refreshRate)
+#endif
                     {
                         currentResolutionIndex = i;
                         resolutionSelector.index = currentResolutionIndex;
@@ -90,7 +94,11 @@ namespace Michsky.UI.Shift
 
                     if (resolutions[i].width == Screen.currentResolution.width
                         && resolutions[i].height == Screen.currentResolution.height
+#if UNITY_2022_2_OR_NEWER
+                          && resolutions[i].refreshRateRatio.Equals(Screen.currentResolution.refreshRateRatio))
+#else
                           && resolutions[i].refreshRate == Screen.currentResolution.refreshRate)
+#endif
                         currentResolutionIndex = i;
                 }
 

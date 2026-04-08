@@ -3,6 +3,7 @@ using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Weapon;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Inventory;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -72,17 +73,20 @@ namespace NightHunt.Gameplay.Character
         private PlayerModelLoader               _modelLoader;
 
         // ── Animator layer indices (resolved after model binds) ────────────────
-        private int _pistolLayer = -1;
-        private int _rifleLayer  = -1;
-        private int _meleeLayer  = -1;
+        private int _pistolLayer   = -1;
+        private int _rifleLayer    = -1;
+        private int _meleeLayer    = -1;
+        private int _launcherLayer = -1;   // Optional "LauncherActions" layer — fallback to rifle
 
         // ── Weapon animation state ─────────────────────────────────────────────
         private WeaponSlotType? _activeSlot;
+        private WeaponClass     _activeWeaponClass = WeaponClass.Rifle;
         private bool            _isFiring;
         private bool            _isReloading;
         private float           _targetPistolWeight;
         private float           _targetRifleWeight;
         private float           _targetMeleeWeight;
+        private float           _targetLauncherWeight;
 
         // ── Movement state ─────────────────────────────────────────────────────
         private Vector3 _prevPosition;
@@ -174,9 +178,23 @@ namespace NightHunt.Gameplay.Character
             var anim = _actorUtils.charAnimator;
             if (anim != null)
             {
-                _pistolLayer = GetLayerIndex(anim, "PistolLyr");
-                _rifleLayer  = GetLayerIndex(anim, "RifleActions");
-                _meleeLayer  = GetLayerIndex(anim, "MeleeActions");
+                // Validate that this Animator's controller has the required parameters.
+                // If not, PrActorUtils.charAnimator points to the wrong Animator Controller —
+                // a clear error is logged and _actorUtils is cleared so Update() won't spam.
+                if (!AnimatorHasHash(anim, SpeedHash))
+                {
+                    Debug.LogError(
+                        $"[CharacterAnimationController] Animator '{anim.runtimeAnimatorController?.name}' " +
+                        $"on model '{modelRoot.name}' is missing required parameters (e.g. 'Speed'). " +
+                        $"Check PrActorUtils.charAnimator — it must point to the player Animator Controller.");
+                    _actorUtils = null;
+                    return;
+                }
+
+                _pistolLayer   = GetLayerIndex(anim, "PistolLyr");
+                _rifleLayer    = GetLayerIndex(anim, "RifleActions");
+                _meleeLayer    = GetLayerIndex(anim, "MeleeActions");
+                _launcherLayer = GetLayerIndex(anim, "LauncherActions"); // optional; -1 if absent
                 ApplyWeaponLayerWeights(anim, immediately: true);
             }
         }
@@ -186,6 +204,13 @@ namespace NightHunt.Gameplay.Character
             for (int i = 0; i < anim.layerCount; i++)
                 if (anim.GetLayerName(i) == name) return i;
             return -1;
+        }
+
+        private static bool AnimatorHasHash(Animator anim, int hash)
+        {
+            foreach (var p in anim.parameters)
+                if (p.nameHash == hash) return true;
+            return false;
         }
 
         // ── Per-frame update ───────────────────────────────────────────────────
@@ -238,19 +263,58 @@ namespace NightHunt.Gameplay.Character
 
         private void OnWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
         {
-            _activeSlot         = newSlot;
-            _targetPistolWeight = 0f;
-            _targetRifleWeight  = 0f;
-            _targetMeleeWeight  = 0f;
+            _activeSlot           = newSlot;
+            _targetPistolWeight   = 0f;
+            _targetRifleWeight    = 0f;
+            _targetMeleeWeight    = 0f;
+            _targetLauncherWeight = 0f;
 
-            if (newSlot.HasValue)
+            if (!newSlot.HasValue) return;
+
+            // Resolve weapon class for accurate layer selection:
+            //   Pistol/SMG            → PistolLyr
+            //   Launcher              → LauncherActions (fallback to RifleActions if layer absent)
+            //   Melee                 → MeleeActions
+            //   Rifle/Shotgun/Sniper  → RifleActions
+            var inst = _weaponSystem?.GetWeapon(newSlot.Value);
+            var def  = inst != null ? ItemDatabase.GetDefinition(inst.DefinitionID) as WeaponDefinition : null;
+            _activeWeaponClass = def?.WeaponClass ?? WeaponClass.Rifle;
+
+            switch (newSlot.Value)
             {
-                switch (newSlot.Value)
-                {
-                    case WeaponSlotType.Secondary: _targetPistolWeight = 1f; break;
-                    case WeaponSlotType.Primary:   _targetRifleWeight  = 1f; break;
-                    case WeaponSlotType.Melee:     _targetMeleeWeight  = 1f; break;
-                }
+                case WeaponSlotType.Melee:
+                    _targetMeleeWeight = 1f;
+                    break;
+
+                case WeaponSlotType.Secondary:
+                    // Secondary is usually a pistol/SMG — always use PistolLyr.
+                    _targetPistolWeight = 1f;
+                    break;
+
+                case WeaponSlotType.Primary:
+                default:
+                    // Use weapon class to pick the right layer for Primary slot.
+                    switch (_activeWeaponClass)
+                    {
+                        case WeaponClass.Pistol:
+                        case WeaponClass.SMG:
+                            _targetPistolWeight = 1f;
+                            break;
+                        case WeaponClass.Launcher:
+                            // Prefer dedicated launcher layer; fall back to RifleActions.
+                            if (_launcherLayer >= 0)
+                                _targetLauncherWeight = 1f;
+                            else
+                                _targetRifleWeight = 1f;
+                            break;
+                        case WeaponClass.Rifle:
+                        case WeaponClass.Shotgun:
+                        case WeaponClass.Sniper:
+                        default:
+                            _targetRifleWeight = 1f;
+                            break;
+                    }
+                    break;
             }
         }
 
@@ -300,9 +364,10 @@ namespace NightHunt.Gameplay.Character
         private void ApplyWeaponLayerWeights(Animator anim, bool immediately)
         {
             float dt = immediately ? 1f : Time.deltaTime * _layerWeightBlendSpeed;
-            SetLayerWeight(anim, _pistolLayer, _targetPistolWeight, dt);
-            SetLayerWeight(anim, _rifleLayer,  _targetRifleWeight,  dt);
-            SetLayerWeight(anim, _meleeLayer,  _targetMeleeWeight,  dt);
+            SetLayerWeight(anim, _pistolLayer,   _targetPistolWeight,   dt);
+            SetLayerWeight(anim, _rifleLayer,    _targetRifleWeight,    dt);
+            SetLayerWeight(anim, _meleeLayer,    _targetMeleeWeight,    dt);
+            SetLayerWeight(anim, _launcherLayer, _targetLauncherWeight, dt);
         }
 
         private static void SetLayerWeight(Animator anim, int idx, float target, float dt)

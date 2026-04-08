@@ -140,7 +140,12 @@ namespace NightHunt.Gameplay.Camera
         //  State Transitions
         // ─────────────────────────────────────────────────────────────────────
 
-        private void EnterWeaponAim()
+        /// <summary>
+        /// Enter weapon-aim mode (called by aim input handler, e.g. RMB pressed).
+        /// Saves the current state (Free/Locked) to restore when aim is released.
+        /// No-op if already in WeaponAim.
+        /// </summary>
+        public void EnterWeaponAim()
         {
             if (_currentState == CameraState.WeaponAim)
                 return;
@@ -150,7 +155,11 @@ namespace NightHunt.Gameplay.Camera
             TransitionTo(CameraState.WeaponAim);
         }
 
-        private void ExitWeaponAim()
+        /// <summary>
+        /// Exit weapon-aim mode explicitly (called when aim button released).
+        /// No-op if not currently in WeaponAim state.
+        /// </summary>
+        public void ExitWeaponAim()
         {
             if (_currentState != CameraState.WeaponAim)
                 return;

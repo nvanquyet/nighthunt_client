@@ -16,32 +16,12 @@ MonoBehaviour:
   DisplayName: Suppressor
   Description: Reduces weapon noise and recoil but decreases range
   Icon: {fileID: 0}
+  Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.4
-  ModifyWeightWhenEquipped: 0
-  EquippedWeightModifier: 0
-  ResourceType: 0
-  MaxResource: 0
-  DefaultResource: 0
-  AttachmentSlots: 
-  CanAttachTo: 02000000
+  _heldPrefab: {fileID: 0}
+  _groundPrefab: {fileID: 0}
   ValidSlots: 00000000
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
-  UsageDuration: 0
-  CanCancelUsage: 1
-  CanUseWhileMoving: 0
-  ItemModifiers:
-  - StatType: 2
-    Value: -30
-    ModifierType: 1
-    Description: Suppressor reduces recoil
-  - StatType: 5
-    Value: -10
-    ModifierType: 1
-    Description: Slightly reduced range
-  - StatType: 0
-    Value: -2
-    ModifierType: 0
-    Description: Minor damage reduction
+  CanAttachTo: 02000000
+  StatConfig: {fileID: 11400000, guid: a1868b4385a951f47bbfd3e7407d6fe7, type: 2}

@@ -53,8 +53,18 @@ namespace NightHunt.Gameplay.Character
         [Tooltip("Bật để log chuyên sâu: tại sao character move khi KHÔNG có input. Throttle 2/giây để không spam.")]
         [SerializeField] protected bool diagnoseMysteryMove = false;
 
+        [Header("Grounding")]
+        [SerializeField, Tooltip("Grace window (seconds) to smooth transient ground-check flips (prevents flapping)")]
+        protected float groundedHysteresisTime = 0.12f;
+
         // Throttle diagnostic log to avoid console spam (2 logs/sec)
         private float _diagTimer = 0f;
+        // Grounded hysteresis timer (counts down when raw IsGrounded() is false)
+        private float _groundedGraceTimer = 0f;
+
+        // Ground info populated by derived implementations via SetGroundInfo
+        protected Vector3 GroundNormal { get; private set; } = Vector3.up;
+        protected float GroundSlopeAngle { get; private set; } = 0f;
 
         // Components
 
@@ -117,6 +127,18 @@ namespace NightHunt.Gameplay.Character
         /// Rigidbody: use raycast or collider checks
         /// </summary>
         protected abstract bool IsGrounded();
+
+        /// <summary>
+        /// Called by derived physics implementations to publish ground hit normal.
+        /// Base will compute slope angle for consumers and debug.
+        /// </summary>
+        /// <param name="grounded">Whether a ground contact was detected.</param>
+        /// <param name="normal">Contact normal (valid only if grounded==true).</param>
+        protected void SetGroundInfo(bool grounded, Vector3 normal)
+        {
+            GroundNormal     = normal;
+            GroundSlopeAngle = Vector3.Angle(normal, Vector3.up);
+        }
 
         /// <summary>
         /// Apply movement vector to character
@@ -191,18 +213,15 @@ namespace NightHunt.Gameplay.Character
                 : 0f;
             _stamina = currentStamina > 0f ? currentStamina : maxStamina;
 
-            // SPAWN POSITION FIX:
-            // FishNet sets transform.position from the spawn packet BEFORE OnStartNetwork fires.
-            // Calling ResetPhysicsState() syncs the physics component (e.g. CharacterController)
-            // to that transform so it does not snap back to origin on the first FixedUpdate.
+            // Sync physics component to spawn position (FishNet sets transform before this callback).
             ResetPhysicsState();
 
-            _targetPosition = transform.position;
-            _targetRotation = transform.rotation;
-            // Start at 0 — SimulateMovement sets the correct grounded/airborne value on the first tick.
-            _verticalVelocity = 0f;
-            _cameraLocked = startWithCameraLock;
+            _targetPosition      = transform.position;
+            _targetRotation      = transform.rotation;
+            _verticalVelocity    = 0f;
+            _cameraLocked        = startWithCameraLock;
             _staminaRecoveryTimer = 0f;
+            _groundedGraceTimer  = 0f;
 
             _cinemachineCamera ??= ComponentResolver.Find<CinemachineCamera>(this)
         .OnSelf()
@@ -390,14 +409,8 @@ namespace NightHunt.Gameplay.Character
             ReplicateState state = ReplicateState.Invalid,
             Channel channel = Channel.Unreliable)
         {
-            // Callback này FishNet tự gọi
-            // CRITICAL: Check all critical references before doing anything
-            if (this == null || !IsSpawned)
-                return;
-
-            // CRITICAL: Non-owner clients should NOT simulate movement
-            if (!IsOwner && !IsServerStarted)
-                return;
+            if (this == null || !IsSpawned) return;
+            if (!IsOwner && !IsServerStarted) return;
 
             SimulateMovement(data, TickDelta);
         }
@@ -406,15 +419,21 @@ namespace NightHunt.Gameplay.Character
 
         #region MOVEMENT SIMULATION
 
-        /// <summary>
-        /// Core movement simulation - same for all physics implementations
-        /// </summary>
+        /// <summary>Core movement simulation — runs on owner and server each tick.</summary>
         protected virtual void SimulateMovement(MovementReplicateData data, float dt)
         {
             if (!IsSpawned || movementSettings == null) return;
 
-            // ── Ground state ──────────────────────────────────────────────────────
-            bool grounded = IsGrounded();
+            // ── Ground state (with small hysteresis to avoid flapping) ──────────────
+            // Raw ground from physics implementation
+            bool rawGrounded = IsGrounded();
+
+            if (rawGrounded)
+                _groundedGraceTimer = groundedHysteresisTime;
+            else
+                _groundedGraceTimer = Mathf.Max(0f, _groundedGraceTimer - dt);
+
+            bool grounded = _groundedGraceTimer > 0f;
 
             // ── Speed modifier ────────────────────────────────────────────────────
             float speed = GetBaseSpeed();
@@ -469,7 +488,7 @@ namespace NightHunt.Gameplay.Character
 
             if (data.CameraLocked)
             {
-                // STRAFE mode: character model always faces aim direction (cursor/aim).
+                // STRAFE: face aim direction, move relative to camera.
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, aimRot, lockTurnSpeed * dt * 100f);
                 if (inputDir.sqrMagnitude > 0.001f) moveDir = camRot * inputDir;
             }
@@ -477,17 +496,13 @@ namespace NightHunt.Gameplay.Character
             {
                 if (inputDir.sqrMagnitude > 0.001f)
                 {
-                    // TANK mode + có input: quay theo hướng di chuyển.
+                    // TANK: rotate toward movement direction on input.
                     moveDir = camRot * inputDir;
                     transform.rotation = Quaternion.RotateTowards(
                         transform.rotation, Quaternion.LookRotation(moveDir), tankTurnSpeed * dt * 100f);
                 }
-                // ── ROT_DRIFT FIX ─────────────────────────────────────────────────────
-                // BỎ PHẦN else-if tự quay về aimRot khi KHÔNG có input.
-                // Lý do: khi idle trên slope, rotation thay đổi → slope projection có XZ
-                // component → PhysX depenetrate dọc slope → nhân vật trượt dù không input.
-                // TANK mode: direction of travel drives facing, NOT the camera aim.
-                // Nếu muốn auto-face khi fire, để CombatSystem handle riêng qua SetCameraLock(true).
+                // TANK: no idle auto-rotate — prevents slope drift from rotation-induced XZ forces.
+                // (Combat system drives camera lock via SetCameraLock() when aiming/firing.)
             }
 
 
@@ -545,26 +560,19 @@ namespace NightHunt.Gameplay.Character
                 }
             }
 
-            // ── Vertical / gravity ───────────────────────────────────────────────
-            // Gravity runs FIRST, then jump overrides the result.
-            // This ensures _verticalVelocity = Sqrt(2*g*h) is applied to ApplyMovement
-            // without any reduction from this tick's gravity — giving an exact jumpHeight.
+            // Gravity first; jump overrides after — ensures jump launch velocity is unmodified this tick.
             float vertVelBefore = _verticalVelocity;
             if (grounded && _verticalVelocity <= 0f)
             {
-                // Snap to small stick-down; no accumulation → no PhysX floor-push jitter.
                 _verticalVelocity = -movementSettings.groundedStickDownVelocity;
             }
             else
             {
                 float mult = _verticalVelocity < 0f ? Mathf.Max(1f, movementSettings.fallGravityMultiplier) : 1f;
                 _verticalVelocity -= movementSettings.gravity * mult * dt;
-                // Clamp to terminal velocity — prevents unbounded accumulation on long falls.
-                _verticalVelocity = Mathf.Max(_verticalVelocity, -movementSettings.maxFallSpeed);
+                _verticalVelocity  = Mathf.Max(_verticalVelocity, -movementSettings.maxFallSpeed);
             }
 
-            // Jump fires AFTER gravity so the full launch velocity reaches ApplyMovement
-            // unmodified, guaranteeing the character reaches exactly jumpHeight.
             if (data.Jump && grounded && movementSettings.enableJump)
             {
                 _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.jumpHeight);
@@ -721,29 +729,16 @@ namespace NightHunt.Gameplay.Character
             if (IsOwner)
             {
                 transform.position = data.Position;
-                // ROTATION ARCHITECTURE — CLIENT AUTHORITATIVE:
-                // The character body yaw is computed locally in SimulateMovement from
-                // data.Yaw (camera yaw replicated from client).  Both client and server
-                // run identical simulations, so rotation converges without a server push.
-                // Overwriting transform.rotation here would:
-                //   1. Introduce a visible snap each reconcile tick.
-                //   2. Drive rotation from a server roundtrip instead of local camera input.
-                _velocity = data.Velocity;
-                _stamina = data.Stamina;
-                _isRolling = data.IsRolling;
-                _rollTimer = data.RollTimer;
-                _rollDir = data.RollDir;
-
-                // Restore vertical velocity from reconcile data.
-                // _verticalVelocity is a separate accumulator used by SimulateMovement for
-                // gravity; it is NOT part of MovementReconcileData, but it equals
-                // _rigidbody.linearVelocity.y (set there by ApplyMovement every tick).
-                // data.Velocity.y therefore carries the authoritative vertical speed.
-                // Without this, every reconcile resets _verticalVelocity to -2f causing
-                // the player to snap upward (losing fall speed) mid-air.
+                // Rotation is not reconciled — client-authoritative yaw converges deterministically.
+                _velocity    = data.Velocity;
+                _stamina     = data.Stamina;
+                _isRolling   = data.IsRolling;
+                _rollTimer   = data.RollTimer;
+                _rollDir     = data.RollDir;
+                // Restore authoritative vertical speed; avoids fall-speed loss mid-air.
                 _verticalVelocity = data.Velocity.y;
 
-                // Sync physics component position & restore velocity.
+                _groundedGraceTimer = 0f; // Reset coyote timer after reconcile teleport.
                 ResetPhysicsState();
             }
             else if (!IsServerStarted)
@@ -786,6 +781,8 @@ namespace NightHunt.Gameplay.Character
 
         public float GetCurrentMoveSpeed() => _velocity.magnitude;
         public float GetStamina() => _stamina;
+        /// <summary>Hysteresis-smoothed grounded state (same value the animator's OnGround param uses).</summary>
+        public bool IsGroundedPublic => _groundedGraceTimer > 0f;
         public bool IsSprinting() => _sprint;
         public bool IsCrouching() => _crouch;
         public bool IsCameraLocked() => _cameraLocked;

@@ -254,7 +254,21 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
 
         #region Public API
 
-        public Vector2 GetMoveInput() => moveInput;
+        // ── Mobile joystick override ─────────────────────────────────────────────
+        // _mobileMove is set each frame by MobileMovementBridge (scene-level component).
+        // GetMoveInput() prefers _mobileMove when the joystick is actively pushed;
+        // falls back to keyboard/gamepad moveInput so PC controls are unaffected.
+        private Vector2 _mobileMove;
+
+        /// <summary>
+        /// Called every frame by <see cref="MobileMovementBridge"/> to inject joystick direction.
+        /// Pass <see cref="Vector2.zero"/> to clear the override (joystick released).
+        /// </summary>
+        public void SetMobileMove(Vector2 dir) { _mobileMove = dir; }
+
+        public Vector2 GetMoveInput() =>
+            _mobileMove.sqrMagnitude > 0.01f ? _mobileMove : moveInput;
+
         public bool IsSprinting() => isSprinting;
         public bool IsCrouching() => isCrouching;
 

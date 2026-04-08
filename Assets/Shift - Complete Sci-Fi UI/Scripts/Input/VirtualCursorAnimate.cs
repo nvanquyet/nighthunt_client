@@ -14,11 +14,16 @@ namespace Michsky.UI.Shift
             {
                 try
                 {
-                    var vCursor = (VirtualCursor)GameObject.FindObjectsOfType(typeof(VirtualCursor))[0];
-                    virtualCursor = vCursor;
+#if UNITY_2023_2_OR_NEWER
+                    var cursors = Object.FindObjectsByType<VirtualCursor>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    virtualCursor = (cursors != null && cursors.Length > 0) ? cursors[0] : null;
+#else
+                    var arr = GameObject.FindObjectsOfType(typeof(VirtualCursor)) as VirtualCursor[];
+                    virtualCursor = (arr != null && arr.Length > 0) ? arr[0] : null;
+#endif
                 }
 
-                catch { this.enabled = false; }         
+                catch { this.enabled = false; }
             }
         }
 

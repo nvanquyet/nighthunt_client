@@ -77,7 +77,7 @@ namespace NightHunt.Gameplay.Respawn
 
         private void Update()
         {
-            if (!IsServer) return;
+            if (!IsServerInitialized) return;
 
             var playersToRespawn = new List<NetworkPlayer>();
             var playersFailed    = new List<NetworkPlayer>();
@@ -122,18 +122,48 @@ namespace NightHunt.Gameplay.Respawn
         }
 
         /// <summary>
-        /// Server: Request respawn for player
+        /// Server: Initiate respawn directly from server-side code (Boss kills, AoE damage, etc).
+        /// BUG 8 FIX: Use this instead of RequestRespawn when the caller is the server itself
+        /// (not the owning client), to avoid the "not owner of object" ServerRpc ownership error.
         /// </summary>
-        [ServerRpc(RequireOwnership = true)]
-        public void RequestRespawn(NetworkPlayer player)
+        [Server]
+        public void ServerInitiateRespawn(NetworkPlayer player)
         {
             if (player == null) return;
             if (!IsPlayerDead(player)) return;
 
-            // Check phase-based respawn rules
             if (!CanRespawn(player))
             {
-                Debug.Log($"[RespawnSystem] Cannot respawn: Phase restrictions");
+                string reason = GetCannotRespawnReason(player);
+                Debug.Log($"[RespawnSystem] Cannot respawn ({player.DisplayName}): {reason}");
+                if (player.Owner != null)
+                    RpcNotifyRespawnFailed(player.Owner, reason);
+                return;
+            }
+
+            float delay = GetRespawnDelay();
+            respawnTimers[player] = delay;
+            networkRespawnDelay.Value = delay;
+        }
+
+        /// <summary>
+        /// Server: Request respawn for player
+        /// </summary>
+        [ServerRpc(RequireOwnership = true)]
+        public void RequestRespawn(NetworkPlayer player, FishNet.Connection.NetworkConnection conn = null)
+        {
+            if (player == null) return;
+            if (!IsPlayerDead(player)) return;
+
+            // Resolve connection — FishNet injects conn automatically for RequireOwnership RPCs.
+            if (conn == null) conn = player.Owner;
+
+            // Check phase-based respawn rules — notify client when rejected
+            if (!CanRespawn(player))
+            {
+                string reason = GetCannotRespawnReason(player);
+                Debug.Log($"[RespawnSystem] Cannot respawn ({player.DisplayName}): {reason}");
+                RpcNotifyRespawnFailed(conn, reason);
                 return;
             }
 
@@ -199,12 +229,13 @@ namespace NightHunt.Gameplay.Respawn
         }
 
         /// <summary>
-        /// Find respawn beacon for player
+        /// Find respawn beacon for player.
+        /// Bug #28 fix: uses RespawnBeacon.All static registry instead of
+        /// FindObjectsByType (O(scene)) called every frame per pending player.
         /// </summary>
         private RespawnBeacon FindRespawnBeacon(NetworkPlayer player)
         {
-            var beacons = FindObjectsByType<RespawnBeacon>(FindObjectsSortMode.None);
-            foreach (var beacon in beacons)
+            foreach (var beacon in RespawnBeacon.All)
             {
                 if (beacon != null && beacon.IsActive && player != null && beacon.CanRespawnHere(player.TeamId))
                 {
@@ -272,6 +303,23 @@ namespace NightHunt.Gameplay.Respawn
 
             // Phase 1-2: Need beacon
             return FindRespawnBeacon(player) != null;
+        }
+
+        /// <summary>
+        /// Returns a short string reason why CanRespawn returned false.
+        /// Used to give the client meaningful UI feedback.
+        /// </summary>
+        private string GetCannotRespawnReason(NetworkPlayer player)
+        {
+            if (phaseManager == null) return "no_phase_manager";
+
+            var config = phaseManager.GetCurrentPhaseConfig();
+            if (config == null || !config.RespawnEnabled) return "respawn_disabled";
+
+            if (phaseManager.CurrentPhase != MatchPhaseState.Lockdown && FindRespawnBeacon(player) == null)
+                return "no_beacon";
+
+            return "unknown";
         }
 
         /// <summary>

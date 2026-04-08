@@ -37,6 +37,15 @@ namespace NightHunt.Gameplay.Spawn
         {
             base.OnStartServer();
 
+            if (_teamAssignmentSystem == null)
+            {
+                _teamAssignmentSystem = FindFirstObjectByType<TeamAssignmentSystem>(FindObjectsInactive.Include);
+                if (_teamAssignmentSystem == null)
+                    Debug.LogError("[SpawnSystem] ❌ TeamAssignmentSystem not found in scene! Add it to the scene.");
+                else
+                    Debug.LogWarning("[SpawnSystem] ⚠️ TeamAssignmentSystem was not assigned — resolved via FindFirstObjectByType.");
+            }
+
             OrganizeSpawnPoints();
 
             Debug.Log($"[SpawnSystem] ✅ Initialized with {_spawnPoints.Count} spawn points");

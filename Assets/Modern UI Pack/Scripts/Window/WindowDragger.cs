@@ -22,11 +22,14 @@ namespace Michsky.MUIP
                 try
                 {
 #if UNITY_2023_2_OR_NEWER
-                    var canvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None)[0];
+                    var canvases = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    var canvas = (canvases != null && canvases.Length > 0) ? canvases[0] : null;
 #else
-                    var canvas = (Canvas)FindObjectsOfType(typeof(Canvas))[0];
+                    var canvasArr = FindObjectsOfType(typeof(Canvas)) as Canvas[];
+                    var canvas = (canvasArr != null && canvasArr.Length > 0) ? canvasArr[0] : null;
 #endif
-                    dragArea = canvas.GetComponent<RectTransform>();
+                    if (canvas != null)
+                        dragArea = canvas.GetComponent<RectTransform>();
                 }
 
                 catch { Debug.LogError("<b>[Movable Window]</b> Drag Area has not been assigned."); }

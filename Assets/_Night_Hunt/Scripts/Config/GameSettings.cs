@@ -1,23 +1,14 @@
 using NightHunt.Core;
 using UnityEngine;
-using UnityEngine.Audio;
-using System.IO;
 
 namespace NightHunt.Config
 {
     /// <summary>
-    /// Manages game settings: graphics, audio, controls
-    /// Persists settings to PlayerPrefs
+    /// Manages graphics and controls settings. Persists to PlayerPrefs.
+    /// Audio is managed exclusively by AudioManager + AudioSettingsPanel.
     /// </summary>
     public class GameSettings : SingletonPersistent<GameSettings>
     {
-
-        [Header("Audio")]
-        [SerializeField] private AudioMixer audioMixer;
-        [SerializeField] private string masterVolumeParam = "MasterVolume";
-        [SerializeField] private string musicVolumeParam = "MusicVolume";
-        [SerializeField] private string sfxVolumeParam = "SFXVolume";
-
         [Header("Graphics")]
         [SerializeField] private int[] resolutionWidths = { 1920, 1680, 1280, 1024 };
         [SerializeField] private int[] resolutionHeights = { 1080, 1050, 720, 768 };
@@ -37,11 +28,6 @@ namespace NightHunt.Config
         {
             currentSettings = new SettingsData
             {
-                // Audio
-                MasterVolume = PlayerPrefs.GetFloat("MasterVolume", 1f),
-                MusicVolume = PlayerPrefs.GetFloat("MusicVolume", 1f),
-                SFXVolume = PlayerPrefs.GetFloat("SFXVolume", 1f),
-
                 // Graphics
                 QualityLevel = PlayerPrefs.GetInt("QualityLevel", QualitySettings.GetQualityLevel()),
                 VSync = PlayerPrefs.GetInt("VSync", 1) == 1,
@@ -63,11 +49,6 @@ namespace NightHunt.Config
         {
             if (currentSettings == null) return;
 
-            // Audio
-            PlayerPrefs.SetFloat("MasterVolume", currentSettings.MasterVolume);
-            PlayerPrefs.SetFloat("MusicVolume", currentSettings.MusicVolume);
-            PlayerPrefs.SetFloat("SFXVolume", currentSettings.SFXVolume);
-
             // Graphics
             PlayerPrefs.SetInt("QualityLevel", currentSettings.QualityLevel);
             PlayerPrefs.SetInt("VSync", currentSettings.VSync ? 1 : 0);
@@ -88,14 +69,6 @@ namespace NightHunt.Config
         {
             if (currentSettings == null) return;
 
-            // Apply audio
-            if (audioMixer != null)
-            {
-                audioMixer.SetFloat(masterVolumeParam, Mathf.Log10(currentSettings.MasterVolume) * 20f);
-                audioMixer.SetFloat(musicVolumeParam, Mathf.Log10(currentSettings.MusicVolume) * 20f);
-                audioMixer.SetFloat(sfxVolumeParam, Mathf.Log10(currentSettings.SFXVolume) * 20f);
-            }
-
             // Apply graphics
             QualitySettings.SetQualityLevel(currentSettings.QualityLevel);
             QualitySettings.vSyncCount = currentSettings.VSync ? 1 : 0;
@@ -110,24 +83,6 @@ namespace NightHunt.Config
         }
 
         // Getters and Setters
-        public float MasterVolume
-        {
-            get => currentSettings?.MasterVolume ?? 1f;
-            set { if (currentSettings != null) currentSettings.MasterVolume = value; }
-        }
-
-        public float MusicVolume
-        {
-            get => currentSettings?.MusicVolume ?? 1f;
-            set { if (currentSettings != null) currentSettings.MusicVolume = value; }
-        }
-
-        public float SFXVolume
-        {
-            get => currentSettings?.SFXVolume ?? 1f;
-            set { if (currentSettings != null) currentSettings.SFXVolume = value; }
-        }
-
         public int QualityLevel
         {
             get => currentSettings?.QualityLevel ?? 2;
@@ -165,9 +120,6 @@ namespace NightHunt.Config
         {
             currentSettings = new SettingsData
             {
-                MasterVolume = 1f,
-                MusicVolume = 1f,
-                SFXVolume = 1f,
                 QualityLevel = 2,
                 VSync = true,
                 Fullscreen = true,
@@ -187,9 +139,6 @@ namespace NightHunt.Config
     [System.Serializable]
     public class SettingsData
     {
-        public float MasterVolume = 1f;
-        public float MusicVolume = 1f;
-        public float SFXVolume = 1f;
         public int QualityLevel = 2;
         public bool VSync = true;
         public bool Fullscreen = true;

@@ -294,6 +294,40 @@ namespace NightHunt.Gameplay.Scoring
 
             return leadingTeam;
         }
+
+#if UNITY_EDITOR
+        // ── Editor ───────────────────────────────────────────────────────────
+
+        [UnityEngine.ContextMenu("NightHunt/Setup Default Score Configs")]
+        private void Editor_SetupDefaultScoreConfigs()
+        {
+            _scoreConfigList = new List<ScoreSystemData>
+            {
+                new ScoreSystemData { Action = "Kill",             BaseScore = 100, PhaseMultiplier = 1f,   Notes = "" },
+                new ScoreSystemData { Action = "Assist",           BaseScore = 75,  PhaseMultiplier = 1f,   Notes = "" },
+                new ScoreSystemData { Action = "BeaconDestroy",    BaseScore = 50,  PhaseMultiplier = 1f,   Notes = "" },
+                new ScoreSystemData { Action = "BossKill",         BaseScore = 300, PhaseMultiplier = 1.2f, Notes = "" },
+                new ScoreSystemData { Action = "ObjectiveCapture", BaseScore = 20,  PhaseMultiplier = 1.1f, Notes = "per second" },
+                new ScoreSystemData { Action = "SurvivalMinute",   BaseScore = 5,   PhaseMultiplier = 1f,   Notes = "1 point per minute alive" },
+            };
+            UnityEditor.EditorUtility.SetDirty(this);
+            Debug.Log("[ScoringSystem] _scoreConfigList populated with 6 default entries from GameDesign JSON. Lưu scene để áp dụng.");
+        }
+
+        [UnityEngine.ContextMenu("NightHunt/Log Score Config Summary")]
+        private void Editor_LogScoreConfigSummary()
+        {
+            if (_scoreConfigList == null || _scoreConfigList.Count == 0)
+            {
+                Debug.LogWarning("[ScoringSystem] _scoreConfigList trống! Chạy 'NightHunt/Setup Default Score Configs' trước.");
+                return;
+            }
+            var sb = new System.Text.StringBuilder("[ScoringSystem] Score configs:\n");
+            foreach (var cfg in _scoreConfigList)
+                sb.AppendLine($"  {cfg.Action,-20} BaseScore={cfg.BaseScore,4}  ×{cfg.PhaseMultiplier}  {cfg.Notes}");
+            Debug.Log(sb.ToString());
+        }
+#endif
     }
 
     /// <summary>

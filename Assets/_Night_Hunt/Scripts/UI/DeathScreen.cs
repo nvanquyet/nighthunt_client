@@ -191,8 +191,16 @@ namespace NightHunt.UI
                 _countdownRoutine = null;
             }
 
+            string msg = evt.Reason switch
+            {
+                "no_beacon"        => "Cần Beacon để hồi sinh!",
+                "respawn_disabled" => "Hồi sinh bị khoá ở phase này",
+                "beacon_destroyed" => "Beacon bị phá huỷ!",
+                _                  => "Không thể hồi sinh"
+            };
+
             if (_respawnTimerText != null)
-                _respawnTimerText.text = "Respawn cancelled";
+                _respawnTimerText.text = msg;
 
             if (_respawnButton != null)
                 _respawnButton.interactable = false;

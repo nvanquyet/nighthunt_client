@@ -22,6 +22,12 @@ namespace NightHunt.Gameplay.Spectator
 
         public event System.Action<NetworkPlayer> OnCurrentPlayerChanged;
 
+        /// <summary>Fired when spectate mode begins (player died and chose to spectate).</summary>
+        public event System.Action OnSpectateStarted;
+
+        /// <summary>Fired when spectate mode ends (player respawned).</summary>
+        public event System.Action OnSpectateStopped;
+
         /// <summary>
         /// Fired once when the local player is registered for the first time.
         /// FogTeamVisibilityBinder (and any other component that needs the local
@@ -88,6 +94,7 @@ namespace NightHunt.Gameplay.Spectator
             currentSpectatedPlayer = player;
             isSpectating = true;
             OnCurrentPlayerChanged?.Invoke(player);
+            OnSpectateStarted?.Invoke();
 
             Log($"Started spectating {player.DisplayName}");
         }
@@ -101,6 +108,7 @@ namespace NightHunt.Gameplay.Spectator
             currentSpectatedPlayer = null;
 
             OnCurrentPlayerChanged?.Invoke(localPlayer);
+            OnSpectateStopped?.Invoke();
 
             Log($"Stopped spectating {previousSpectated?.DisplayName}");
         }

@@ -18,11 +18,14 @@ namespace NightHunt.Gameplay.Match
     /// </summary>
     public class MatchPhaseManager : NetworkBehaviour
     {
-        [Header("Phase Settings")] [SerializeField]
-        private MatchPhaseState initialState = MatchPhaseState.Preparation;
+        [Header("Phase Settings")]
+        [SerializeField] private MatchPhaseState initialState = MatchPhaseState.Preparation;
 
-        [SerializeField] private float phaseStartTime;
-        [SerializeField] private float phaseDuration;
+        [Tooltip("Thời gian đếm ngược (giây) trước khi Phase đầu tiên bắt đầu sau khi BeginMatch() được gọi.\n" +
+                 "Ví dụ: 5 → server đếm ngược 5-4-3-2-1 → StartPhase(Preparation).\n" +
+                 "Đặt 0 để bắt đầu ngay lập tức (không có countdown).")]
+        [Min(0f)]
+        [SerializeField] private float _delayBeforeFirstPhase = 5f;
 
         [Header("Phase Config Data")]
         [Tooltip("Config data cho tá»«ng phase (Preparation, Hunt, Lockdown). Assign trong Inspector.")]
@@ -31,8 +34,8 @@ namespace NightHunt.Gameplay.Match
 
         // âœ… Event system - decoupled communication
         public event Action<MatchPhaseState, string> OnPhaseStarted; // (newPhase, phaseName)
-        public event Action<MatchPhaseState, MatchPhaseState> OnPhaseTransitioned; // (oldPhase, newPhase)
-
+        public event Action<MatchPhaseState, MatchPhaseState> OnPhaseTransitioned; // (oldPhase, newPhase)        /// <summary>Fired on server when the Lockdown (Phase 3) timer runs out. Used by MatchEndManager for score-based win resolution.</summary>
+        public event Action OnLockdownTimerExpired;
         // State machine
         private StateMachine<MatchPhaseState> phaseStateMachine;
 
@@ -70,43 +73,59 @@ namespace NightHunt.Gameplay.Match
             phaseStateMachine.OnStateChanged += OnPhaseStateChanged;
         }
 
-        [ContextMenu("🔥 Auto Setup 3 Default Phases")]
-        private void AutoSetupDefaultPhases()
-        {
-            phaseConfigs.Clear();
-            
-            phaseConfigs.Add(new MatchPhaseConfigData { 
-                PhaseType = MatchPhaseState.Preparation,
-                DisplayName = "Chuẩn Bị",
-                DurationMin = 3, DurationMax = 4, 
-                RespawnEnabled = true, RespawnDelay = 5f,
-                WarningTime = 30f, ScoreMultiplier = 1f, SurvivalMultiplier = 1f
-            });
-            
-            phaseConfigs.Add(new MatchPhaseConfigData { 
-                PhaseType = MatchPhaseState.Hunt,
-                DisplayName = "Săn Mồi",
-                DurationMin = 5, DurationMax = 8, 
-                RespawnEnabled = true, RespawnDelay = 7f,
-                WarningTime = 30f, ScoreMultiplier = 2f, SurvivalMultiplier = 1.5f
-            });
-            
-            phaseConfigs.Add(new MatchPhaseConfigData { 
-                PhaseType = MatchPhaseState.Lockdown,
-                DisplayName = "Phong Tỏa",
-                DurationMin = 3, DurationMax = 3, 
-                RespawnEnabled = true, RespawnDelay = 10f,
-                WarningTime = 30f, ScoreMultiplier = 3f, SurvivalMultiplier = 2f
-            });
-
-            Debug.Log("[MatchPhaseManager] Đã tự động tạo 3 Phase mặc định với Config Hồi Sinh riêng biệt!");
-        }
-
         public override void OnStartServer()
         {
             base.OnStartServer();
             if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
                 Debug.Log("[MatchPhaseManager] Server started");
+        }
+
+        // ── Match Start with Countdown ────────────────────────────────────────
+
+        /// <summary>
+        /// Server: Begin the match — countdown <see cref="_delayBeforeFirstPhase"/> seconds
+        /// then start <see cref="initialState"/>.
+        /// Called by ServerGameManager after all players have spawned.
+        /// </summary>
+        [Server]
+        public void BeginMatch()
+        {
+            if (!IsServerStarted || !IsSpawned)
+            {
+                Debug.LogWarning("[MatchPhaseManager] BeginMatch called but server not ready.");
+                return;
+            }
+            StartCoroutine(CountdownAndStartFirstPhase());
+        }
+
+        [Server]
+        private IEnumerator CountdownAndStartFirstPhase()
+        {
+            int remaining = Mathf.CeilToInt(_delayBeforeFirstPhase);
+
+            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                Debug.Log($"[MatchPhaseManager] Match countdown: {remaining}s before {initialState}");
+
+            while (remaining > 0)
+            {
+                RpcMatchCountdown(remaining);
+                yield return new WaitForSeconds(1f);
+                remaining--;
+            }
+
+            // Tick 0 → clients show "GO!" / "Bắt Đầu!"
+            RpcMatchCountdown(0);
+            StartPhase(initialState);
+        }
+
+        [ObserversRpc]
+        private void RpcMatchCountdown(int secondsRemaining)
+        {
+            GameplayEventBus.Instance?.Publish(
+                new NightHunt.Gameplay.Core.Events.MatchCountdownEvent
+                {
+                    SecondsRemaining = secondsRemaining
+                });
         }
 
         public override void OnStartNetwork()
@@ -120,7 +139,7 @@ namespace NightHunt.Gameplay.Match
             }
 
             // Sync initial phase state for clients
-            if (!IsServer && networkPhase.Value != 0)
+            if (!IsServerInitialized && networkPhase.Value != 0)
             {
                 MatchPhaseState currentPhase = (MatchPhaseState)networkPhase.Value;
                 if (phaseStateMachine != null)
@@ -291,9 +310,13 @@ namespace NightHunt.Gameplay.Match
         {
             MatchPhaseState nextPhase = GetNextPhase(CurrentPhase);
 
-            // Avoid transition when already in final phase
+            // Lockdown is the final phase — fire timer-expired event for score-based win resolution.
             if (CurrentPhase == MatchPhaseState.Lockdown)
+            {
+                Debug.Log("[MatchPhaseManager] Lockdown timer expired — notifying MatchEndManager.");
+                OnLockdownTimerExpired?.Invoke();
                 return;
+            }
 
             if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
                 Debug.Log($"[MatchPhaseManager] Auto-transitioning from {CurrentPhase} to {nextPhase}");

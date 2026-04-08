@@ -8,7 +8,7 @@ namespace NightHunt.Networking.Prediction.Utils
     /// Network statistics cho prediction system.
     /// Track RTT, packet loss, reconciliation frequency, v.v.
     /// </summary>
-    public class NetworkStats : SingletonPersistent<NetworkStats>
+    public class NetworkStats : Singleton<NetworkStats>
     {
 
         [Header("Stats Settings")]

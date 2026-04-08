@@ -529,7 +529,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             }
         }
 
-        private void SwitchToWeaponSlot(int slot)
+        public void SwitchToWeaponSlot(int slot)
         {
             if (_currentWeaponSlot != slot)
             {

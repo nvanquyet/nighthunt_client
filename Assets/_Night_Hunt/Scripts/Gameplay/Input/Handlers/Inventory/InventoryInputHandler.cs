@@ -105,6 +105,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
             if (!ctx.performed) return;
             UseConsumablePerformed?.Invoke();
         }
+
+        // ── Mobile API ────────────────────────────────────────────────────────
+        /// <summary>
+        /// Simulate pressing the OpenInventory button. Called by MobileInventoryButton
+        /// when the on-screen button is tapped, bypassing the InputSystem keyboard path.
+        /// </summary>
+        public void SimulateToggle() => OpenInventoryPerformed?.Invoke();
     }
 }
 

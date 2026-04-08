@@ -31,6 +31,7 @@ namespace NightHunt.State
         // Dedicated server info (Ranked_DS)
         public string DsIp { get; private set; }
         public ushort DsPort { get; private set; }
+        public string DsMapId { get; private set; }
 
         // Match tracking
         public string CurrentMatchId { get; private set; }
@@ -83,12 +84,13 @@ namespace NightHunt.State
         }
 
         /// <summary>Store dedicated server info when a Ranked match is found.</summary>
-        public void SetDedicatedServer(string ip, ushort port, string matchId)
+        public void SetDedicatedServer(string ip, ushort port, string matchId, string mapId = null)
         {
             CurrentGameMode = GameMode.Ranked_DS;
             DsIp = ip;
             DsPort = port;
             CurrentMatchId = matchId;
+            DsMapId = mapId;
             IsHostPlayer = false;
         }
 
@@ -102,6 +104,7 @@ namespace NightHunt.State
             RelayPort = 0;
             DsIp = null;
             DsPort = 0;
+            DsMapId = null;
             CurrentMatchId = null;
         }
     }

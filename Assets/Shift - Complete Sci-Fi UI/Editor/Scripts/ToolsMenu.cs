@@ -53,8 +53,15 @@ namespace Michsky.UI.Shift
                 {
                     if (Selection.activeGameObject == null)
                     {
-                        var canvas = (Canvas)GameObject.FindObjectsOfType(typeof(Canvas))[0];
-                        clone.transform.SetParent(canvas.transform, false);
+#if UNITY_2023_2_OR_NEWER
+                        var canvases = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                        var canvas = (canvases != null && canvases.Length > 0) ? canvases[0] : null;
+#else
+                        var canvasArr = GameObject.FindObjectsOfType(typeof(Canvas)) as Canvas[];
+                        var canvas = (canvasArr != null && canvasArr.Length > 0) ? canvasArr[0] : null;
+#endif
+                        if (canvas != null)
+                            clone.transform.SetParent(canvas.transform, false);
                     }
 
                     else { clone.transform.SetParent(Selection.activeGameObject.transform, false); }
@@ -66,8 +73,15 @@ namespace Michsky.UI.Shift
                 catch
                 {
                     CreateCanvas();
-                    var canvas = (Canvas)GameObject.FindObjectsOfType(typeof(Canvas))[0];
-                    clone.transform.SetParent(canvas.transform, false);
+#if UNITY_2023_2_OR_NEWER
+                    var canvases2 = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    var canvas2 = (canvases2 != null && canvases2.Length > 0) ? canvases2[0] : null;
+#else
+                    var canvasArr2 = GameObject.FindObjectsOfType(typeof(Canvas)) as Canvas[];
+                    var canvas2 = (canvasArr2 != null && canvasArr2.Length > 0) ? canvasArr2[0] : null;
+#endif
+                    if (canvas2 != null)
+                        clone.transform.SetParent(canvas2.transform, false);
                     clone.name = clone.name.Replace("(Clone)", "").Trim();
                     MakeSceneDirty(clone, clone.name);
                 }

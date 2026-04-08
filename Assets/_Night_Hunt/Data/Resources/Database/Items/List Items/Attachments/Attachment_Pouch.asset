@@ -16,24 +16,12 @@ MonoBehaviour:
   DisplayName: Storage Pouch
   Description: Increases weight capacity when attached to vest or belt
   Icon: {fileID: 0}
+  Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.2
-  ModifyWeightWhenEquipped: 0
-  EquippedWeightModifier: 0
-  ResourceType: 0
-  MaxResource: 0
-  DefaultResource: 0
-  AttachmentSlots: 
-  CanAttachTo: 08000000
+  _heldPrefab: {fileID: 0}
+  _groundPrefab: {fileID: 0}
   ValidSlots: 00000000
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
-  UsageDuration: 0
-  CanCancelUsage: 1
-  CanUseWhileMoving: 0
-  ItemModifiers:
-  - StatType: 10
-    Value: 5
-    ModifierType: 0
-    Description: Extra carrying capacity
+  CanAttachTo: 08000000
+  StatConfig: {fileID: 11400000, guid: fab13c90b4aab044cb2f1a581fb34c20, type: 2}

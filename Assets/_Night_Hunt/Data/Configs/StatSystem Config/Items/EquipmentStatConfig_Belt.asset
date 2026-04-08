@@ -13,5 +13,13 @@ MonoBehaviour:
   m_Name: EquipmentStatConfig_Belt
   m_EditorClassIdentifier: 
   Stats: []
-  PlayerModifiers: []
+  PlayerModifiers:
+  - StatType: 5
+    Value: 5
+    ModifierType: 0
+    Description: Belt carry bonus (+5 kg)
+  - StatType: 7
+    Value: 10
+    ModifierType: 0
+    Description: Belt minor armor
   ItemModifiers: []

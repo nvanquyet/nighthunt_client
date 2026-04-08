@@ -15,25 +15,7 @@ namespace NightHunt.GameplaySystems.Editor
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
-            
-            GUILayout.Space(10);
-            EditorGUILayout.LabelField("Sample Setup", EditorStyles.boldLabel);
-            
-            var throwable = (ThrowableDefinition)target;
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Frag Grenade")) SetupFragGrenade(throwable);
-            if (GUILayout.Button("Smoke Grenade")) SetupSmokeGrenade(throwable);
-            if (GUILayout.Button("Flashbang")) SetupFlashbang(throwable);
-            EditorGUILayout.EndHorizontal();
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Incendiary")) SetupIncendiary(throwable);
-            if (GUILayout.Button("Gas Grenade")) SetupGasGrenade(throwable);
-            if (GUILayout.Button("Impact Grenade")) SetupImpactGrenade(throwable);
-            EditorGUILayout.EndHorizontal();
         }
-        
         private void SetupFragGrenade(ThrowableDefinition throwable)
         {
             // Stats-only config (Weight)

@@ -26,11 +26,11 @@ namespace NightHunt.Gameplay.Character.Movement
         [Min(0.1f)] public float gravity = 20f;
         [Tooltip("Extra gravity multiplier applied only while falling (verticalVelocity < 0). Higher = snappier landing. Recommended 1.5–2.5.")]
         [Min(1f)] public float fallGravityMultiplier = 2f;
+        [Tooltip("Terminal velocity when falling (m/s). Prevents unbounded speed on long falls.")]
+        [Min(1f)] public float maxFallSpeed = 20f;
         [Min(0f)] public float jumpHeight = 1.2f;
         [Tooltip("Downward velocity applied every grounded tick to hug terrain. Keep small (0.2–0.5) to avoid PhysX floor-push jitter.")]
         [Min(0f)] public float groundedStickDownVelocity = 0.3f;
-        [Tooltip("Maximum fall speed in m/s. Caps _verticalVelocity accumulation during long falls.")]
-        [Min(1f)] public float maxFallSpeed = 40f;
         public bool enableJump = true;
 
         [Header("Stamina")]

@@ -16,7 +16,7 @@ namespace ShaderCrew.SeeThroughShader
         {
             if (this.isActiveAndEnabled)
             {
-#if UNITY_6000
+#if UNITY_2023_2_OR_NEWER
                 ShaderReplacementMappings shaderReplacementMappings = FindFirstObjectByType<ShaderReplacementMappings>();
 #else
                 ShaderReplacementMappings shaderReplacementMappings = FindObjectOfType<ShaderReplacementMappings>();

@@ -210,7 +210,12 @@ namespace NightHunt.UI
 
         private static SceneId ResolveTargetMap()
         {
-            string mapId = RoomState.Instance?.CurrentRoom?.mapId;
+            // Prefer DsMapId (set directly from match_ready WS event, most reliable)
+            string mapId = RoomState.Instance?.DsMapId;
+            // Fallback to current room's mapId
+            if (string.IsNullOrWhiteSpace(mapId))
+                mapId = RoomState.Instance?.CurrentRoom?.mapId;
+
             if (!string.IsNullOrWhiteSpace(mapId)
                 && MapConfig.TryGetById(mapId, out MapEntry entry))
             {

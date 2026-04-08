@@ -104,8 +104,8 @@ namespace ShaderCrew.SeeThroughShader
 
         private List<GameObject> listAllGameObjectsFromLayerMask(LayerMask layerMask)
         {
-#if UNITY_6000
-            GameObject[] gameObjectArray = FindObjectsByType(typeof(GameObject), FindObjectsSortMode.None) as GameObject[];
+#if UNITY_2023_2_OR_NEWER
+            GameObject[] gameObjectArray = Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 #else
             GameObject[] gameObjectArray = FindObjectsOfType(typeof(GameObject)) as GameObject[];
 #endif

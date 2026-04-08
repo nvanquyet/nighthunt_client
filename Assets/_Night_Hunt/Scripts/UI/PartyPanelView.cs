@@ -471,5 +471,63 @@ namespace NightHunt.UI
         }
 
         #endregion
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Create Party UI Prefab Templates ───────────
+
+        [ContextMenu("NightHunt/Create Party Prefab Templates")]
+        private void Editor_CreatePartyPrefabs()
+        {
+            const string parent = "Assets/_Night_Hunt/Prefabs";
+            const string dir    = parent + "/UI";
+            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
+                UnityEditor.AssetDatabase.CreateFolder(parent, "UI");
+
+            bool changed = false;
+            changed |= Editor_CreatePartyRowPrefab(ref inviteItemPrefab,        dir + "/PartyInviteItem_Template.prefab",       "PartyInviteItem_Template",      new UnityEngine.Vector2(300f, 60f));
+            changed |= Editor_CreatePartyRowPrefab(ref memberItemPrefab,        dir + "/PartyMemberItem_Template.prefab",      "PartyMemberItem_Template",      new UnityEngine.Vector2(300f, 60f));
+            changed |= Editor_CreatePartyRowPrefab(ref friendSelectItemPrefab,  dir + "/FriendSelectItem_Template.prefab",     "FriendSelectItem_Template",     new UnityEngine.Vector2(300f, 50f));
+
+            if (changed) UnityEditor.EditorUtility.SetDirty(this);
+        }
+
+        private bool Editor_CreatePartyRowPrefab(ref GameObject field, string path, string goName, UnityEngine.Vector2 size)
+        {
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[PartyPanelView] Prefab already exists: {path}");
+                return false;
+            }
+
+            var go = new GameObject(goName);
+            go.AddComponent<UnityEngine.RectTransform>().sizeDelta = size;
+            go.AddComponent<UnityEngine.UI.Image>().color = new UnityEngine.Color(0.12f, 0.12f, 0.12f, 0.85f);
+            var hlg = go.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+            hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 6f;
+            hlg.padding = new UnityEngine.RectOffset(8, 8, 4, 4);
+
+            var avatarGo = new GameObject("Avatar", typeof(UnityEngine.RectTransform), typeof(UnityEngine.UI.Image));
+            avatarGo.transform.SetParent(go.transform, false);
+            avatarGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 44f;
+
+            var nameGo  = new GameObject("NameText", typeof(UnityEngine.RectTransform), typeof(TMPro.TextMeshProUGUI));
+            nameGo.transform.SetParent(go.transform, false);
+            nameGo.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
+            nameGo.GetComponent<TMPro.TextMeshProUGUI>().text = "Member Name";
+
+            var actionBtn = new GameObject("ActionButton", typeof(UnityEngine.RectTransform),
+                typeof(UnityEngine.UI.Image), typeof(UnityEngine.UI.Button));
+            actionBtn.transform.SetParent(go.transform, false);
+            actionBtn.GetComponent<UnityEngine.UI.Image>().color = new UnityEngine.Color(0.2f, 0.5f, 0.8f, 1f);
+            actionBtn.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 70f;
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            UnityEngine.Object.DestroyImmediate(go);
+
+            if (field == null) { field = saved; Debug.Log($"[PartyPanelView] Created & assigned: {path}"); return true; }
+            Debug.Log($"[PartyPanelView] Created (not assigned — field already set): {path}");
+            return false;
+        }
+#endif
     }
 }

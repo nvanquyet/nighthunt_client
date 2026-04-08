@@ -18,11 +18,16 @@ namespace NightHunt.GameplaySystems.Stat
     ///   Equipment (+ its attachments) : applied immediately on equip, cleared on unequip.
     ///   Weapon    (+ its attachments) : applied ONLY when weapon is SELECTED (drawn), cleared on deselect.
     ///
+    /// EXTENSION POINT (OCP):
+    ///   External systems (Zones, Consumable permanent-buffs, PassiveSkills …) can register
+    ///   as IStatContributor via RegisterExternalContributor / UnregisterExternalContributor.
+    ///   They will be included in every Recalculate() call. No modification to this class needed.
+    ///
     /// HOW IT WORKS:
     ///   Any equip / unequip / select / deselect / attach / detach event
     ///   → Recalculate()
     ///   → [Clear] remove all previously applied source IDs from PlayerStatSystem
-    ///   → [Rebuild] re-apply current active contributors
+    ///   → [Rebuild] re-apply current active contributors (items + external)
     ///   → [ComputeStats] refresh ComputedItemStats for active items
     ///
     /// PLACEMENT: Add to the Player prefab alongside PlayerStatSystem.
@@ -37,6 +42,9 @@ namespace NightHunt.GameplaySystems.Stat
         private IEquipmentSystem   _equipment;
         private IWeaponSystem      _weapons;
         private IAttachmentSystem  _attachments;
+
+        // ── External contributors (OCP extension point) ───────────────────────
+        private readonly List<IStatContributor> _externalContributors = new List<IStatContributor>(4);
 
         // ── Track source IDs applied last recalculation ───────────────────────
         private readonly HashSet<string> _appliedSources = new HashSet<string>(32);
@@ -87,6 +95,7 @@ namespace NightHunt.GameplaySystems.Stat
             if (_pendingRecalc)
             {
                 _pendingRecalc = false;
+                Debug.Log($"[Buff|SAO] LateUpdate → running Recalculate (frame={Time.frameCount}, T={Time.time:F2})");
                 Recalculate();
             }
         }
@@ -100,8 +109,6 @@ namespace NightHunt.GameplaySystems.Stat
         private void OnWeaponSlotChanged(WeaponSlotType _, ItemInstance __)   => ScheduleRecalc();
         private void OnActiveWeaponChanged(WeaponSlotType? __, WeaponSlotType? _) => ScheduleRecalc();
         private void OnAttachmentChanged(string __, int ___, ItemInstance ____) => ScheduleRecalc();
-
-        private void ScheduleRecalc() => _pendingRecalc = true;
 
         #endregion
 
@@ -117,8 +124,12 @@ namespace NightHunt.GameplaySystems.Stat
             if (_playerStats == null) return;
 
             // ── 1. Clear all modifiers we applied last time ───────────────────
+            Debug.Log($"[Buff|SAO] Recalculate START — clearing {_appliedSources.Count} source(s) (T={Time.time:F2})");
             foreach (var src in _appliedSources)
+            {
+                Debug.Log($"[Buff|SAO]   CLEAR source: {src}");
                 _playerStats.RemoveAllModifiersFromSource(src);
+            }
             _appliedSources.Clear();
 
             // ── 2. Equipment slots (always active while equipped) ─────────────
@@ -132,6 +143,7 @@ namespace NightHunt.GameplaySystems.Stat
                         var item = kv.Value;
                         if (item == null) continue;
 
+                        Debug.Log($"[Buff|SAO]   EQUIP slot={kv.Key} defId={item.DefinitionID} instId={item.InstanceID}");
                         ApplyItemPlayerModifiers(item, ItemType.Equipment, isHostSelected: true);
                         ApplyAttachmentPlayerModifiers(item, ItemType.Equipment, isHostSelected: true);
                         ItemStatComputer.Compute(item);
@@ -145,11 +157,68 @@ namespace NightHunt.GameplaySystems.Stat
                 var activeWeapon = _weapons.GetActiveWeapon();
                 if (activeWeapon != null)
                 {
+                    Debug.Log($"[Buff|SAO]   WEAPON active defId={activeWeapon.DefinitionID} instId={activeWeapon.InstanceID}");
                     ApplyItemPlayerModifiers(activeWeapon, ItemType.Weapon, isHostSelected: true);
                     ApplyAttachmentPlayerModifiers(activeWeapon, ItemType.Weapon, isHostSelected: true);
                     ItemStatComputer.Compute(activeWeapon);
                 }
+                else
+                    Debug.Log("[Buff|SAO]   WEAPON — none active");
             }
+
+            // ── 4. External contributors (OCP extension point) ────────────────
+            // Any IStatContributor registered via RegisterExternalContributor is
+            // collected here without modifying this class.
+            Debug.Log($"[Buff|SAO]   EXTERNAL contributors: {_externalContributors.Count}");
+            for (int i = 0; i < _externalContributors.Count; i++)
+            {
+                var contributor = _externalContributors[i];
+                if (contributor == null) continue;
+
+                Debug.Log($"[Buff|SAO]   EXTERNAL[{i}] type={contributor.GetType().Name}");
+                // External contributors use a global context (no specific item host)
+                var ctx = new StatContributionContext(true, ItemType.Misc, $"ext_{i}");
+                foreach (var mod in contributor.GetPlayerStatContributions(ctx))
+                {
+                    string src = $"{SOURCE_PREFIX}ext_{i}";
+                    AddToPlayerStat(mod, src);
+                    _appliedSources.Add(src);
+                }
+            }
+            Debug.Log($"[Buff|SAO] Recalculate END — {_appliedSources.Count} source(s) active");
+        }
+
+        /// <summary>
+        /// Register an external IStatContributor (e.g. a PassiveSkill, a Zone-linked buff system).
+        /// It will be included in every Recalculate() call.
+        /// Call ScheduleRecalc() after registering to apply immediately.
+        /// </summary>
+        public void RegisterExternalContributor(IStatContributor contributor)
+        {
+            if (contributor != null && !_externalContributors.Contains(contributor))
+            {
+                Debug.Log($"[Buff|SAO] RegisterExternalContributor: {contributor.GetType().Name} (T={Time.time:F2})");
+                _externalContributors.Add(contributor);
+                ScheduleRecalc();
+            }
+        }
+
+        /// <summary>Remove a previously registered external contributor.</summary>
+        public void UnregisterExternalContributor(IStatContributor contributor)
+        {
+            if (_externalContributors.Remove(contributor))
+            {
+                Debug.Log($"[Buff|SAO] UnregisterExternalContributor: {contributor.GetType().Name} (T={Time.time:F2})");
+                ScheduleRecalc();
+            }
+        }
+
+        /// <summary>Force an immediate recalculation on the next LateUpdate.</summary>
+        public void ScheduleRecalc()
+        {
+            if (!_pendingRecalc)
+                Debug.Log($"[Buff|SAO] ScheduleRecalc → queued for LateUpdate (T={Time.time:F2})");
+            _pendingRecalc = true;
         }
 
         #endregion
@@ -209,6 +278,7 @@ namespace NightHunt.GameplaySystems.Stat
         /// <summary>Convert a definition-time <see cref="PlayerStatModifier"/> to a runtime <see cref="StatModifier"/> and add it.</summary>
         private void AddToPlayerStat(PlayerStatModifier mod, string src)
         {
+            Debug.Log($"[Buff|SAO]     + ADD stat={mod.StatType} {mod.ModifierType} {mod.Value:+0.###;-0.###} src={src} desc=\"{mod.Description}\"");
             StatModifier runtime = mod.ModifierType switch
             {
                 ModifierType.Flat       => StatModifier.CreateFlat(src, mod.Value, 0, mod.Description),

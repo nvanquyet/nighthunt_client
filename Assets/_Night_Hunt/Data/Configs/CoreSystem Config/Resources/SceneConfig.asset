@@ -12,8 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8e4fab93c33e31e4e96f37a52b63df5b, type: 3}
   m_Name: SceneConfig
   m_EditorClassIdentifier: 
-  firstLoadingScene: 01_FirstLoading
-  loginScene: 02_Login
-  homeScene: 03_Home
-  waitingScene: 04_Waiting
-  gameScene: 05_Game
+  scenes:
+  - id: 0
+    sceneName: 01_Home
+  - id: 100
+    sceneName: 02_Map_01
+  - id: 101
+    sceneName: 02_Map_02

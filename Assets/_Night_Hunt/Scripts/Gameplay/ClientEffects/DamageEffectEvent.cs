@@ -1,35 +1,32 @@
 using UnityEngine;
 using NightHunt.Gameplay.Core.Events;
-using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.ClientEffects
 {
     /// <summary>
-    /// Event for damage effects
+    /// Raised when a bullet / melee attack lands — drives hit VFX (sparks, decals).
+    ///
+    /// READONLY STRUCT — zero heap allocation per event.
+    /// Pass networkId explicitly; no ComponentResolver dependency.
     /// </summary>
-    public class DamageEffectEvent : ClientEffectEvent
+    public readonly struct DamageEffectEvent : IGameplayEvent
     {
-        public Vector3 HitPoint { get; private set; }
-        public Vector3 HitDirection { get; private set; }
-        public float DamageAmount { get; private set; }
+        public float   Timestamp   { get; }
+        public Vector3 HitPoint    { get; }
+        public Vector3 HitDirection { get; }
+        public float   DamageAmount { get; }
+        public bool    IsHeadshot  { get; }
+        public int     NetworkId   { get; }
 
         public DamageEffectEvent(Vector3 hitPoint, Vector3 hitDirection, float damageAmount,
-            GameObject instigator = null)
-            : base()
+                                 bool isHeadshot = false, int networkId = 0)
         {
-            Position = hitPoint;
-            HitPoint = hitPoint;
+            Timestamp   = Time.time;
+            HitPoint    = hitPoint;
             HitDirection = hitDirection;
             DamageAmount = damageAmount;
-            if (instigator != null)
-            {
-                var networkObj = ComponentResolver.Find<FishNet.Object.NetworkObject>(instigator)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] FishNet.Object.NetworkObject not found")
-                    .Resolve();
-                NetworkId = networkObj != null ? (int)networkObj.ObjectId : 0;
-            }
+            IsHeadshot  = isHeadshot;
+            NetworkId   = networkId;
         }
     }
 }

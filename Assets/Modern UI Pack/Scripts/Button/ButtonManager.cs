@@ -88,7 +88,9 @@ namespace Michsky.MUIP
         // Helpers
         bool isInitialized = false;
         Button targetButton;
+#pragma warning disable CS0414
         bool isPointerOn;
+#pragma warning restore CS0414
         bool waitingForDoubleClickInput;
 
 #if UNITY_EDITOR

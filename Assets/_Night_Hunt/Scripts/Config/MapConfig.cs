@@ -1,7 +1,7 @@
 using System;
-using UnityEngine;
 using NightHunt.Core;
-using NightHunt.Config;
+using NightHunt.Data.DTOs;
+using UnityEngine;
 
 namespace NightHunt.Config
 {
@@ -79,6 +79,50 @@ namespace NightHunt.Config
         };
 
         // ── Public API ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Populate this config from server data (called by GameConfigService at startup).
+        /// Converts backend sceneName string into SceneId enum via Enum.TryParse.
+        /// Falls back to Inspector defaults if <paramref name="remoteMaps"/> is null/empty.
+        /// </summary>
+        public static void LoadFromRemote(GameMapResponseDTO[] remoteMaps)
+        {
+            if (Instance == null)
+            {
+                Debug.LogError("[MapConfig] Instance not found — cannot apply remote config.");
+                return;
+            }
+
+            if (remoteMaps == null || remoteMaps.Length == 0)
+            {
+                Debug.LogWarning("[MapConfig] LoadFromRemote received empty list — keeping local defaults.");
+                return;
+            }
+
+            var entries = new MapEntry[remoteMaps.Length];
+            for (int i = 0; i < remoteMaps.Length; i++)
+            {
+                var dto = remoteMaps[i];
+
+                // Convert sceneName string ("GameMap_01") to SceneId enum
+                SceneId sceneId = SceneId.GameMap_01; // safe fallback
+                if (!string.IsNullOrEmpty(dto.sceneName))
+                    Enum.TryParse(dto.sceneName, out sceneId);
+
+                entries[i] = new MapEntry
+                {
+                    mapId          = dto.mapId,
+                    displayName    = dto.displayName,
+                    description    = dto.description,
+                    icon           = null,  // sprites are baked into build; not served from backend
+                    sceneId        = sceneId,
+                    supportedModes = dto.supportedModes ?? Array.Empty<string>(),
+                    isLocked       = dto.isLocked
+                };
+            }
+
+            Instance.maps = entries;
+        }
 
         /// <summary>All map entries (locked and unlocked).</summary>
         public static MapEntry[] GetAll()

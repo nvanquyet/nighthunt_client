@@ -398,6 +398,25 @@
   "IsConsumable": false,
   "Rarity": "Legendary",
   "AllowedPhaseMask": 2
+ },
+ {
+  "ItemId": "DEPLOY_BEACON",
+  "DisplayName": "Respawn Beacon",
+  "Category": "Deploy",
+  "UseType": "PlaceOnGround",
+  "TargetType": "Ground",
+  "EffectType": "DeployBeacon",
+  "EffectValue": 1,
+  "EffectDuration": 0,
+  "CastTime": 5,
+  "Cooldown": 60,
+  "MaxStack": 1,
+  "Weight": 2.5,
+  "CanDrop": false,
+  "IsConsumable": false,
+  "Rarity": "Uncommon",
+  "AllowedPhaseMask": 3,
+  "ExtraParamsJson": "{\"BeaconConfigId\":\"BaseRespawnBeacon\"}"
  }
 ],
 "VisionModifiers":[

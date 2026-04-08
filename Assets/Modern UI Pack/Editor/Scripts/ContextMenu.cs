@@ -56,11 +56,14 @@ namespace Michsky.MUIP
                     if (Selection.activeGameObject == null)
                     {
 #if UNITY_2023_2_OR_NEWER
-                        var canvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None)[0];
+                        var canvases = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                        var canvas = (canvases != null && canvases.Length > 0) ? canvases[0] : null;
 #else
-                        var canvas = (Canvas)FindObjectsOfType(typeof(Canvas))[0];
+                        var canvasArr = FindObjectsOfType(typeof(Canvas)) as Canvas[];
+                        var canvas = (canvasArr != null && canvasArr.Length > 0) ? canvasArr[0] : null;
 #endif
-                        clone.transform.SetParent(canvas.transform, false);
+                        if (canvas != null)
+                            clone.transform.SetParent(canvas.transform, false);
                     }
 
                     else { clone.transform.SetParent(Selection.activeGameObject.transform, false); }
@@ -75,11 +78,14 @@ namespace Michsky.MUIP
                 {
                     CreateCanvas();
 #if UNITY_2023_2_OR_NEWER
-                    var canvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None)[0];
+                    var canvases2 = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    var canvas2 = (canvases2 != null && canvases2.Length > 0) ? canvases2[0] : null;
 #else
-                    var canvas = (Canvas)FindObjectsOfType(typeof(Canvas))[0];
+                    var canvasArr2 = FindObjectsOfType(typeof(Canvas)) as Canvas[];
+                    var canvas2 = (canvasArr2 != null && canvasArr2.Length > 0) ? canvasArr2[0] : null;
 #endif
-                    clone.transform.SetParent(canvas.transform, false);
+                    if (canvas2 != null)
+                        clone.transform.SetParent(canvas2.transform, false);
                     clone.name = clone.name.Replace("(Clone)", "").Trim();
 #if !UNITY_2021_3_OR_NEWER || UNITY_2022_1_OR_NEWER
                     MakeSceneDirty(clone, clone.name);
@@ -105,11 +111,14 @@ namespace Michsky.MUIP
                     if (Selection.activeGameObject == null)
                     {
 #if UNITY_2023_2_OR_NEWER
-                        var canvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None)[0];
+                        var canvases3 = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                        var canvas3 = (canvases3 != null && canvases3.Length > 0) ? canvases3[0] : null;
 #else
-                        var canvas = (Canvas)FindObjectsOfType(typeof(Canvas))[0];
+                        var canvasArr3 = FindObjectsOfType(typeof(Canvas)) as Canvas[];
+                        var canvas3 = (canvasArr3 != null && canvasArr3.Length > 0) ? canvasArr3[0] : null;
 #endif
-                        clone.transform.SetParent(canvas.transform, false);
+                        if (canvas3 != null)
+                            clone.transform.SetParent(canvas3.transform, false);
                     }
 
                     else { clone.transform.SetParent(Selection.activeGameObject.transform, false); }
@@ -125,11 +134,14 @@ namespace Michsky.MUIP
                 {
                     CreateCanvas();
 #if UNITY_2023_2_OR_NEWER
-                    var canvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None)[0];
+                    var canvases4 = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                    var canvas4 = (canvases4 != null && canvases4.Length > 0) ? canvases4[0] : null;
 #else
-                    var canvas = (Canvas)FindObjectsOfType(typeof(Canvas))[0];
+                    var canvasArr4 = FindObjectsOfType(typeof(Canvas)) as Canvas[];
+                    var canvas4 = (canvasArr4 != null && canvasArr4.Length > 0) ? canvasArr4[0] : null;
 #endif
-                    clone.transform.SetParent(canvas.transform, false);
+                    if (canvas4 != null)
+                        clone.transform.SetParent(canvas4.transform, false);
                     clone.name = "Button";
 #if !UNITY_2021_3_OR_NEWER || UNITY_2022_1_OR_NEWER
                     MakeSceneDirty(clone, clone.name);

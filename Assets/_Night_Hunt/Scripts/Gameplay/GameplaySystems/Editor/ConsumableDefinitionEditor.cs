@@ -15,16 +15,6 @@ namespace NightHunt.GameplaySystems.Editor
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
-            
-            GUILayout.Space(10);
-            EditorGUILayout.LabelField("Sample Setup", EditorStyles.boldLabel);
-            
-            var consumable = (ConsumableDefinition)target;
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Setup Medkit")) SetupMedkit(consumable);
-            if (GUILayout.Button("Setup Energy Drink")) SetupEnergyDrink(consumable);
-            EditorGUILayout.EndHorizontal();
         }
         
         private void SetupMedkit(ConsumableDefinition consumable)

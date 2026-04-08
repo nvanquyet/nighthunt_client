@@ -21,7 +21,7 @@ MonoBehaviour:
   m_OverrideGlobalSceneList: 1
   m_Scenes:
   - m_enabled: 1
-    m_path: Assets/_Night_Hunt/Scenes/06_Game 2.unity
+    m_path: Assets/_Night_Hunt/Scenes/00_DS_Boot.unity
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
     m_Settings:
@@ -813,7 +813,6 @@ MonoBehaviour:
     - line: '|   syncCapabilities: 0'
     - line: '|   platformCapabilities:'
     - line: '|     WindowsStoreApps:'
-    - line: '|       EnterpriseAuthentication: False'
     - line: '|       OfflineMapsManagement: False'
     - line: '|       HumanInterfaceDevice: False'
     - line: '|       Location: False'
@@ -826,6 +825,7 @@ MonoBehaviour:
     - line: '|       InternetClientServer: False'
     - line: '|       VideosLibrary: False'
     - line: '|       Objects3D: False'
+    - line: '|       InternetClient: False'
     - line: '|       RemoteSystem: False'
     - line: '|       BlockedChatMessages: False'
     - line: '|       PhoneCall: False'
@@ -847,9 +847,9 @@ MonoBehaviour:
     - line: '|       RecordedCallsFolder: False'
     - line: '|       Contacts: False'
     - line: '|       Proximity: False'
-    - line: '|       InternetClient: False'
     - line: '|       CodeGeneration: False'
     - line: '|       BackgroundMediaPlayback: False'
+    - line: '|       EnterpriseAuthentication: False'
     - line: '|   metroTargetDeviceFamilies:'
     - line: '|     Desktop: False'
     - line: '|     Holographic: False'

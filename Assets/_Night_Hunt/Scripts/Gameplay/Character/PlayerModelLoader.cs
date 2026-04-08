@@ -65,6 +65,21 @@ namespace NightHunt.Gameplay.Character
 
         private GameObject _currentModelInstance;
 
+        // Tracks the last index actually applied as a model.
+        // int.MinValue = nothing applied yet (sentinel).
+        // Used to make ApplyModelIndex idempotent: if OnStartClient loads the model
+        // and FishNet's SyncVar OnStartCallback also fires (prev→same index), the
+        // second call is a no-op rather than a wasteful destroy+recreate.
+        private int _appliedIndex = int.MinValue;
+
+        /// <summary>
+        /// Returns the current model instance, or null if not yet loaded.
+        /// Used by components that subscribe to OnModelReady in Start() — which may run
+        /// AFTER FishNet has already fired OnStartClient (and thus after OnModelReady),
+        /// so they can call their handler immediately if the model is already ready.
+        /// </summary>
+        public GameObject CurrentModelInstance => _currentModelInstance;
+
         // ── Unity ──────────────────────────────────────────────────────────────
 
         private void Awake()
@@ -94,7 +109,13 @@ namespace NightHunt.Gameplay.Character
 
             Debug.Log($"[PlayerModelLoader] OnStartClient: ObjId={ObjectId} IsOwner={IsOwner} IsServer={IsServerInitialized} _modelIndex={_modelIndex.Value} _modelParent={((_modelParent != null) ? _modelParent.name : "NULL")} db={(_characterDatabase != null ? _characterDatabase.name : "NULL")}");
 
-            // Apply the value we already have from the spawn packet (handles late-joiners).
+            // Always apply the current SyncVar value here.
+            // FishNet only fires SyncVar.OnStartCallback when the value was marked dirty
+            // (i.e. SetModelIndex() actually changed the value). If the server set index=0
+            // and the SyncVar default is also 0, FishNet skips the dirty-mark and
+            // OnStartCallback never fires — leaving the model unloaded.
+            // ApplyModelIndex is idempotent (_appliedIndex guard), so if OnStartCallback
+            // also fires it becomes a cheap no-op.
             ApplyModelIndex(_modelIndex.Value);
         }
 
@@ -102,6 +123,7 @@ namespace NightHunt.Gameplay.Character
         {
             base.OnStopClient();
             _modelIndex.OnChange -= OnModelIndexChanged;
+            _appliedIndex = int.MinValue; // reset so re-join works correctly
         }
 
         // ── Server API ─────────────────────────────────────────────────────────
@@ -127,14 +149,25 @@ namespace NightHunt.Gameplay.Character
         private void OnModelIndexChanged(int prev, int next, bool asServer)
         {
             Debug.Log($"[PlayerModelLoader] OnModelIndexChanged: {prev} → {next} asServer={asServer} ObjId={ObjectId}");
-            // OnStartClient already called ApplyModelIndex for the initial value.
-            // This callback fires only on subsequent changes, and only on clients.
+            // Fires for both initial SyncVar OnStartCallback AND live value changes.
+            // ApplyModelIndex is idempotent: if OnStartClient already loaded this index,
+            // the call below is a cheap no-op.
             if (!asServer)
                 ApplyModelIndex(next);
         }
 
         private void ApplyModelIndex(int index)
         {
+            // Idempotency guard: if this exact index is already displayed, do nothing.
+            // Prevents double-load when both OnStartClient() and SyncVar OnStartCallback
+            // call us in the same frame with the same index.
+            if (index == _appliedIndex && _currentModelInstance != null)
+            {
+                Debug.Log($"[PlayerModelLoader] ApplyModelIndex: SKIP — index={index} already loaded. ObjId={ObjectId}");
+                return;
+            }
+            _appliedIndex = index;
+
             Debug.Log($"[PlayerModelLoader] ApplyModelIndex ENTRY: index={index} _modelParent={(_modelParent != null ? _modelParent.name : "NULL")} db={(_characterDatabase != null ? _characterDatabase.name : "NULL")} ObjId={ObjectId}");
 
             if (_modelParent == null)

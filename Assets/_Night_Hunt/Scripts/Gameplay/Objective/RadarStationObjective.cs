@@ -1,35 +1,45 @@
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
+using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Scoring;
 
 namespace NightHunt.Gameplay.Objective
 {
     /// <summary>
-    /// Radar station objective - Server Authoritative
+    /// Radar station objective - Server Authoritative.
+    /// A player holds the interact button to activate it over time.
+    /// On completion: awards objective score to the activating team.
     /// </summary>
     public class RadarStationObjective : NetworkBehaviour, IObjective
     {
         [Header("Radar Station Settings")]
-        [SerializeField] private string objectiveId = "RADAR_STATION";
+        [SerializeField] private string objectiveId   = "RADAR_STATION";
         [SerializeField] private string objectiveName = "Activate Radar Station";
-        [SerializeField] private float activationTime = 5f;
+        [SerializeField] private float  activationTime = 5f;
 
-        private readonly SyncVar<bool> _syncIsActivated = new SyncVar<bool>();
-        private readonly SyncVar<float> _syncProgress = new SyncVar<float>();
+        [Header("Score")]
+        [Tooltip("Score awarded to the activating team via MatchEndManager.AddObjectiveScore.")]
+        [SerializeField] private float completionScore = 300f;
 
-        public string ObjectiveId => objectiveId;
+        private readonly SyncVar<bool>  _syncIsActivated = new SyncVar<bool>();
+        private readonly SyncVar<float> _syncProgress    = new SyncVar<float>();
+
+        public string ObjectiveId   => objectiveId;
         public string ObjectiveName => objectiveName;
-        public bool IsCompleted => _syncIsActivated.Value;
-        public float Progress => _syncProgress.Value;
+        public bool   IsCompleted   => _syncIsActivated.Value;
+        public float  Progress      => _syncProgress.Value;
 
-        private bool isInteracting = false;
+        private bool isInteracting      = false;
+        private int  _interactingTeamId = -1;
 
         public void OnStart()
         {
             if (!IsServerStarted) return;
             _syncIsActivated.Value = false;
-            _syncProgress.Value = 0f;
-            isInteracting = false;
+            _syncProgress.Value    = 0f;
+            isInteracting          = false;
+            _interactingTeamId     = -1;
         }
 
         public void OnUpdate()
@@ -38,17 +48,14 @@ namespace NightHunt.Gameplay.Objective
 
             if (isInteracting)
             {
-                _syncProgress.Value += Time.deltaTime / activationTime;
-                _syncProgress.Value = Mathf.Clamp01(_syncProgress.Value);
+                _syncProgress.Value = Mathf.Clamp01(_syncProgress.Value + Time.deltaTime / activationTime);
 
                 if (_syncProgress.Value >= 1f)
-                {
                     OnComplete();
-                }
             }
             else if (_syncProgress.Value > 0f)
             {
-                // Decay progress if not interacting
+                // Decay if player releases early
                 _syncProgress.Value = Mathf.Max(0f, _syncProgress.Value - Time.deltaTime / activationTime);
             }
         }
@@ -57,29 +64,39 @@ namespace NightHunt.Gameplay.Objective
         public void OnComplete()
         {
             if (_syncIsActivated.Value) return;
-            
+
             _syncIsActivated.Value = true;
-            _syncProgress.Value = 1f;
-            Debug.Log($"[RadarStationObjective] Radar station activated: {objectiveName}");
+            _syncProgress.Value    = 1f;
+            isInteracting          = false;
+
+            Debug.Log($"[RadarStationObjective] '{objectiveName}' activated by team {_interactingTeamId}.");
+
+            if (_interactingTeamId >= 0)
+            {
+                var mem = FindFirstObjectByType<MatchEndManager>();
+                if (mem != null)
+                    mem.AddObjectiveScore(_interactingTeamId, completionScore);
+
+                var scoring = FindFirstObjectByType<ScoringSystem>();
+                if (scoring != null)
+                    scoring.AwardObjectiveCapture(_interactingTeamId, activationTime);
+            }
         }
 
-        public void OnFail()
-        {
-            // Radar station doesn't fail
-        }
+        public void OnFail() { /* Radar station doesn't fail */ }
 
         /// <summary>
-        /// Start interaction
+        /// Begin activation — caller must supply the interacting player's team.
         /// </summary>
+        /// <param name="teamId">Team ID of the player holding the activation button.</param>
         [Server]
-        public void StartInteraction()
+        public void StartInteraction(int teamId = -1)
         {
-            isInteracting = true;
+            isInteracting      = true;
+            _interactingTeamId = teamId;
         }
 
-        /// <summary>
-        /// Stop interaction
-        /// </summary>
+        /// <summary>Player released the interaction — activation decays.</summary>
         [Server]
         public void StopInteraction()
         {
@@ -87,4 +104,3 @@ namespace NightHunt.Gameplay.Objective
         }
     }
 }
-

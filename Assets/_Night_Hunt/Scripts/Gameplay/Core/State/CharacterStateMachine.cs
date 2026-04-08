@@ -39,9 +39,11 @@ namespace NightHunt.Gameplay.Core.State
                 CharacterLifecycleState.Alive,
                 CharacterLifecycleState.Spectating);
 
-            // Dead can transition to Respawning or Spectating
+            // Dead can transition to Respawning, Spectating, or directly to Alive
+            // (direct Dead→Alive needed when server confirms respawn before client SM processes Respawning state)
             stateMachine.AddTransitions(CharacterLifecycleState.Dead,
                 CharacterLifecycleState.Respawning,
+                CharacterLifecycleState.Alive,
                 CharacterLifecycleState.Spectating);
 
             // Respawning can transition to Alive

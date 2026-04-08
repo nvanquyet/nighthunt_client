@@ -42,7 +42,8 @@ namespace NightHunt.Networking
         protected virtual void Update()
         {
             // Only run on client
-            if (IsServer)
+            // Disable on dedicated server (server started, client NOT started).
+            if (FishNet.InstanceFinder.IsServerStarted && !FishNet.InstanceFinder.IsClientStarted)
             {
                 return;
             }

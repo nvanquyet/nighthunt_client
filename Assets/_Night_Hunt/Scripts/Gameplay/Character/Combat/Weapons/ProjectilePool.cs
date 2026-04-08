@@ -20,7 +20,40 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
     /// </summary>
     public class ProjectilePool : MonoBehaviour
     {
-        public static ProjectilePool Instance { get; private set; }
+        // ── Singleton (lazy auto-create) ──────────────────────────────────────
+        private static ProjectilePool _instance;
+
+        /// <summary>
+        /// Scene-level singleton. If no ProjectilePool exists in the scene it is
+        /// auto-created at runtime and kept alive across scene loads.
+        /// Best practice: add ProjectilePool to your "Systems" persistent GameObject
+        /// so it initialises at scene load rather than on the first shot.
+        /// </summary>
+        public static ProjectilePool Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    #if UNITY_2023_2_OR_NEWER
+                    _instance = FindFirstObjectByType<ProjectilePool>();
+                    #else
+                    _instance = FindObjectOfType<ProjectilePool>();
+                    #endif
+                    if (_instance == null)
+                    {
+                        var go = new GameObject("[ProjectilePool – Auto]");
+                        DontDestroyOnLoad(go);
+                        _instance = go.AddComponent<ProjectilePool>();
+                        Debug.LogWarning(
+                            "[ProjectilePool] No ProjectilePool found in scene — " +
+                            "auto-created one. Add ProjectilePool to your 'Systems' " +
+                            "persistent GameObject to avoid this message.");
+                    }
+                }
+                return _instance;
+            }
+        }
 
         // prefab → inactive instances
         private readonly Dictionary<GameObject, Queue<ProjectileComponent>> _pools
@@ -34,18 +67,18 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
         private void Awake()
         {
-            if (Instance != null && Instance != this)
+            if (_instance != null && _instance != this)
             {
                 Destroy(gameObject);
                 return;
             }
-            Instance = this;
+            _instance = this;
         }
 
         private void OnDestroy()
         {
-            if (Instance == this)
-                Instance = null;
+            if (_instance == this)
+                _instance = null;
         }
 
         // ── Public API ────────────────────────────────────────────────────────

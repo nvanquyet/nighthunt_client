@@ -41,9 +41,6 @@ namespace NightHunt.UI
         [SerializeField] private TextMeshProUGUI teamBHeaderText;
         [SerializeField] private GameObject      teamMemberPrefab;
 
-        [Tooltip("Avatar sprites indexed by CharacterModelIndex.")]
-        [SerializeField] private Sprite[]        characterAvatars;
-
         // ── Phase Warning Banner ──────────────────────────────────────────────
         [Header("Phase Warning Banner")]
         [SerializeField] private GameObject      warningPanel;
@@ -63,9 +60,10 @@ namespace NightHunt.UI
         private int               _cachedTeamScore;
         private int               _cachedPersonalScore;
 
-        // Rows — allocated once, never touched again after populate
+        // Rows — allocated once per round; cleared before each populate
         private readonly List<TeamMemberRow> _teamARows = new();
         private readonly List<TeamMemberRow> _teamBRows = new();
+        private bool _teamsPopulated = false;
 
         // ── Unity Lifecycle ───────────────────────────────────────────────────
 
@@ -112,15 +110,39 @@ namespace NightHunt.UI
 
         private void OnAllPlayersReady(AllPlayersReadyEvent _)
         {
+            // Guard: even if the event somehow fires twice (or the subscription
+            // was added twice), only populate once per session.
+            if (_teamsPopulated) return;
+            _teamsPopulated = true;
+
+            // Defer to end-of-frame so all _playerData SyncVars (team IDs) have
+            // settled before we read TeamId from each NetworkPlayer.
+            StartCoroutine(PopulateTeamsNextFrame());
+        }
+
+        private System.Collections.IEnumerator PopulateTeamsNextFrame()
+        {
+            yield return null; // wait one frame for SyncVar deltas to process
+
             var registry = PlayerPublicRegistry.Instance;
             if (registry == null)
             {
                 Debug.LogWarning("[MatchUI] PlayerPublicRegistry not found.");
-                return;
+                _teamsPopulated = false; // allow retry
+                yield break;
             }
 
+            ClearTeamRows(_teamARows, teamAListParent);
+            ClearTeamRows(_teamBRows, teamBListParent);
             PopulateTeam(registry.GetPlayersByTeam(0), teamAListParent, _teamARows);
             PopulateTeam(registry.GetPlayersByTeam(1), teamBListParent, _teamBRows);
+        }
+
+        private static void ClearTeamRows(List<TeamMemberRow> rows, Transform parent)
+        {
+            foreach (var row in rows)
+                if (row != null) Destroy(row.gameObject);
+            rows.Clear();
         }
 
         private void PopulateTeam(List<NetworkPlayer> players,
@@ -143,7 +165,7 @@ namespace NightHunt.UI
                     continue;
                 }
 
-                row.Bind(player, characterAvatars);
+                row.Bind(player);
                 rows.Add(row);
             }
         }
@@ -274,5 +296,66 @@ namespace NightHunt.UI
             "Phase3_FinalLockdown"  => "PHASE 3: FINAL LOCKDOWN",
             _                       => phase
         };
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Create TeamMemberRow Template Prefab ───────
+
+        [ContextMenu("NightHunt/Create TeamMemberRow Template Prefab")]
+        private void Editor_CreateTeamMemberRowPrefab()
+        {
+            const string parent = "Assets/_Night_Hunt/Prefabs";
+            const string dir    = parent + "/UI";
+            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
+                UnityEditor.AssetDatabase.CreateFolder(parent, "UI");
+
+            const string path = dir + "/TeamMemberRow_Template.prefab";
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[MatchUI] TeamMemberRow_Template already exists at {path}");
+                return;
+            }
+
+            var go  = new GameObject("TeamMemberRow_Template");
+            go.AddComponent<RectTransform>().sizeDelta = new Vector2(200f, 36f);
+            go.AddComponent<UnityEngine.UI.Image>().color = new Color(0.1f, 0.15f, 0.1f, 0.7f);
+            var hlg = go.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+            hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 4f;
+            hlg.padding = new RectOffset(4, 4, 2, 2);
+
+            // Avatar
+            var avatarGo = new GameObject("Avatar", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            avatarGo.transform.SetParent(go.transform, false);
+            avatarGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 32f;
+
+            // Name
+            var nameGo  = new GameObject("NameText", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+            nameGo.transform.SetParent(go.transform, false);
+            nameGo.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
+            nameGo.GetComponent<TMPro.TextMeshProUGUI>().text = "PlayerName";
+
+            // Alive/Dead indicator
+            var aliveGo = new GameObject("AliveIndicator", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            aliveGo.transform.SetParent(go.transform, false);
+            aliveGo.GetComponent<UnityEngine.UI.Image>().color = Color.green;
+            aliveGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 14f;
+
+            var deadGo  = new GameObject("DeadIndicator", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            deadGo.transform.SetParent(go.transform, false);
+            deadGo.GetComponent<UnityEngine.UI.Image>().color = Color.red;
+            deadGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 14f;
+            deadGo.SetActive(false);
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+
+            if (teamMemberPrefab == null)
+            {
+                teamMemberPrefab = saved;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"[MatchUI] Created TeamMemberRow_Template at {path}. " +
+                      "Add TeamMemberRow component and wire name/alive/dead fields.");
+        }
+#endif
     }
 }

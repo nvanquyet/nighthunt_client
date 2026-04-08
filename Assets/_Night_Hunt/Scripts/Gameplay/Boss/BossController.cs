@@ -92,8 +92,9 @@ namespace NightHunt.Gameplay.Boss
         [SerializeField] private List<TurretGun> _turretGuns = new List<TurretGun>();
 
 #if UNITY_EDITOR
-        private void OnValidate()
+        protected override void OnValidate()
         {
+            base.OnValidate();
             // Tự động gom toàn bộ TurretGun trong children — designer chỉ cần đặt prefab
             var found = GetComponentsInChildren<TurretGun>(includeInactive: true);
             _turretGuns = new List<TurretGun>(found);
@@ -104,7 +105,10 @@ namespace NightHunt.Gameplay.Boss
         [Tooltip("True = Hitscan (damage ngay bằng Raycast trên Server), False = Bay chậm")]
         [SerializeField] private bool _isHitscanWeapon = true;
 
-        [Tooltip("Prefab ProjectileComponent lấy từ ProjectilePool (Thay thế hoàn toàn Tracer/Rocket cũ)")]
+        [Tooltip("Prefab ProjectileComponent lấy từ ProjectilePool (Thay thế hoàn toàn Tracer/Rocket cũ). " +
+                 "Hitscan boss (_isHitscanWeapon=true): assign Projectile_Hitscan_Template. " +
+                 "Ballistic boss (_isHitscanWeapon=false): assign Projectile_Physics_Template. " +
+                 "Generate templates via NightHunt/Tools/Build Template Prefabs.")]
         [SerializeField] private GameObject _projectilePrefab;
 
         [Tooltip("Tốc độ bay của đạn (Nếu hitscan thì tốc độ này chỉ dành cho VFX)")]
@@ -137,7 +141,9 @@ namespace NightHunt.Gameplay.Boss
         // ── Public ────────────────────────────────────────────────────────────────
         public string    BossId    => _bossId;
         public float     CurrentHp => _syncHp.Value;
-        public float     MaxHp     => _maxHp;
+        public float     MaxHp       => _maxHp;
+        public float     AggroRadius  => _aggroRadius;
+        public float     AttackRadius => _attackRadius;
         public bool      IsDead    => _syncState.Value == BossState.Dead;
         public event Action<BossController> Died;
 
@@ -170,6 +176,35 @@ namespace NightHunt.Gameplay.Boss
             }
 
             Debug.Log($"[BossController] '{_bossId}' initialized with {_turretGuns.Count} TurretGun(s).");
+
+            // Push the client-side projectile prefab to each turret so it never
+            // needs to be serialized across the network via RPC.
+            if (_projectilePrefab != null)
+                foreach (var gun in _turretGuns)
+                    gun.SetProjectilePrefab(_projectilePrefab);
+            else
+                Debug.LogWarning($"[BossController] '{_bossId}': _projectilePrefab is NULL on server — assign in prefab Inspector!");
+        }
+
+        /// <summary>Runs on ALL clients after the boss NetworkObject is fully spawned. Pushes the
+        /// projectile prefab (which is serialized on the prefab and thus available locally) to each
+        /// TurretGun so that RpcSpawnProjectileVisual can pool from it.</summary>
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+
+            // Collect turrets in case the serialized list is empty on this peer
+            if (_turretGuns == null || _turretGuns.Count == 0)
+                _turretGuns = new List<TurretGun>(GetComponentsInChildren<TurretGun>(includeInactive: true));
+
+            if (_projectilePrefab != null)
+            {
+                foreach (var gun in _turretGuns)
+                    gun.SetProjectilePrefab(_projectilePrefab);
+                Debug.Log($"[BossController] '{_bossId}' OnStartClient — pushed prefab to {_turretGuns.Count} TurretGun(s).");
+            }
+            else
+                Debug.LogWarning($"[BossController] '{_bossId}': _projectilePrefab is NULL on client — projectile visuals will NOT appear! Assign in prefab Inspector.");
         }
 
         // ── Server Update ──────────────────────────────────────────────────────────
@@ -202,10 +237,18 @@ namespace NightHunt.Gameplay.Boss
             }
 
             // Update state machine
+            // Bug #14 fix: Aggro = target detected but attack still on cooldown (reloading / circling)
+            //              Attack = actively firing
             if (_currentTarget != null)
-                _syncState.Value = BossState.Attack;
+            {
+                _syncState.Value = _attackCooldownTimer > 0f
+                    ? BossState.Aggro   // saw target, waiting for attack cooldown
+                    : BossState.Attack; // ready to fire
+            }
             else
+            {
                 _syncState.Value = BossState.Idle;
+            }
         }
 
         // ── Target Scan ────────────────────────────────────────────────────────────
@@ -309,11 +352,20 @@ namespace NightHunt.Gameplay.Boss
                     ShooterNetworkObjectId = (int)ObjectId,
                     WeaponId               = $"Boss_{_bossId}"
                 };
+                Debug.Log($"[SHOOT.BOSS] HitscanAttack '{_bossId}' → target='{target.name}'  " +
+                          $"aimPoint={aimPoint:F1}  dmg={_attackDamage}  hittable='{hittable.GetType().Name}'");
                 (hittable as PlayerHealthSystem)?.ApplyDamageServer(info);
+            }
+            else
+            {
+                Debug.LogWarning($"[SHOOT.BOSS] HitscanAttack '{_bossId}' — target='{target.name}' has NO IHittable component! " +
+                                 $"Damage NOT applied. Check player prefab has PlayerHealthSystem.");
             }
 
             // Gọi ObserversRpc báo cho Client lôi đạn từ Pool ra bắn (Chỉ là hình ảnh)
-            gun.RpcSpawnProjectileVisual(_projectilePrefab, aimPoint, true, _projectileSpeed);
+            // NOTE: aimPoint is passed as the hitscan endpoint so TurretGun.RpcSpawnProjectileVisual
+            //       can teleport the visual directly to the impact position.
+            gun.RpcSpawnProjectileVisual(aimPoint, true, _projectileSpeed);
         }
 
         [Server]
@@ -336,6 +388,15 @@ namespace NightHunt.Gameplay.Boss
                 var proj = pool.Get(_projectilePrefab, origin, Quaternion.LookRotation(dir));
                 if (proj != null)
                 {
+                    // ★ BUG FIX: Ignore collision between the boss's own colliders and this
+                    // projectile so it doesn't immediately trigger on the boss's own hitbox
+                    // (which would cause the boss to damage itself and detonate at the wrong spot).
+                    var bossCols = GetComponentsInChildren<Collider>(true);
+                    var projCols = proj.GetComponentsInChildren<Collider>(true);
+                    foreach (var bc in bossCols)
+                        foreach (var pc in projCols)
+                            Physics.IgnoreCollision(bc, pc, true);
+
                     proj.SetOwnerData((int)ObjectId, $"Boss_{_bossId}");
                     var fakeConfig = new NightHunt.Data.WeaponConfigData 
                     { 
@@ -345,11 +406,24 @@ namespace NightHunt.Gameplay.Boss
                         BallisticType = "Projectile" 
                     };
                     proj.Initialize(fakeConfig, dir, false);
+                    Debug.Log($"[SHOOT.BOSS] RocketAttack '{_bossId}' — origin={origin:F1}  dir={dir:F2}  " +
+                              $"bossIgnoreCols={bossCols.Length}  projCols={projCols.Length}");
                 }
+                else
+                {
+                    Debug.LogWarning($"[SHOOT.BOSS] RocketAttack '{_bossId}' — ProjectilePool.Get() returned null. " +
+                                     $"Increase pool capacity for prefab '{_projectilePrefab.name}'.");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[SHOOT.BOSS] RocketAttack '{_bossId}' — ProjectilePool.Instance is null! " +
+                                 $"Add ProjectilePool component to a persistent GameObject in the scene.");
             }
 
             // Gọi Clients spawn VFX của đạn đó
-            gun.RpcSpawnProjectileVisual(_projectilePrefab, dir, false, _projectileSpeed);
+            // NOTE: Passes direction (not a point) so TurretGun uses it as a fly direction.
+            gun.RpcSpawnProjectileVisual(dir, false, _projectileSpeed);
         }
 
         // ── Damage & Threat System ─────────────────────────────────────────────────
@@ -376,10 +450,18 @@ namespace NightHunt.Gameplay.Boss
         }
 
         // ── IHittable ──────────────────────────────────────────────────────────
-        public void RequestDamage(DamageInfo info) => RequestDamageServerRpc(info.Damage);
+        public void RequestDamage(DamageInfo info)
+            => RequestDamageServerRpc(info.Damage, info.ShooterNetworkObjectId);
 
         [ServerRpc(RequireOwnership = false)]
-        private void RequestDamageServerRpc(float damage) => TakeDamage(damage, null);
+        private void RequestDamageServerRpc(float damage, int shooterNetObjId)
+        {
+            NetworkObject attacker = null;
+            if (shooterNetObjId > 0)
+                InstanceFinder.NetworkManager.ServerManager.Objects.Spawned
+                    .TryGetValue(shooterNetObjId, out attacker);
+            TakeDamage(damage, attacker);
+        }
 
         [Server]
         private float GetHighestThreat()
@@ -487,7 +569,41 @@ namespace NightHunt.Gameplay.Boss
             UnityEditor.Handles.Label(transform.position + Vector3.up * 3f, text, style);
         }
 #endif
-    }
 
-    public enum BossState { Idle, Aggro, Attack, Dead }
+        // ── ONGUI Debug (Play Mode) ────────────────────────────────────────────────
+        private void OnGUI()
+        {
+            if (!_showDebug || !Application.isPlaying) return;
+
+            // Project boss position to screen
+            UnityEngine.Camera cam = UnityEngine.Camera.main;
+            if (cam == null) return;
+            Vector3 screenPos = cam.WorldToScreenPoint(transform.position + Vector3.up * 2.5f);
+            if (screenPos.z < 0) return; // behind camera
+
+            float hp    = _syncHp.Value;
+            float hpPct = _maxHp > 0 ? hp / _maxHp : 0f;
+            string tName = _currentTarget != null ? _currentTarget.name : "–";
+
+            // Convert screen pos from bottom-left to top-left GUI coords
+            float gx = screenPos.x - 80f;
+            float gy = Screen.height - screenPos.y;
+
+            GUI.color = new Color(0f, 0f, 0f, 0.55f);
+            GUI.DrawTexture(new Rect(gx - 2f, gy - 2f, 164f, 62f), Texture2D.whiteTexture);
+
+            GUI.color = Color.white;
+            GUI.Label(new Rect(gx, gy, 160f, 14f),      $"BOSS: {_bossId}");
+            GUI.Label(new Rect(gx, gy + 14f, 160f, 14f), $"HP: {hp:F0}/{_maxHp:F0}  [{hpPct:P0}]");
+            GUI.Label(new Rect(gx, gy + 28f, 160f, 14f), $"State: {_syncState.Value}");
+            GUI.Label(new Rect(gx, gy + 42f, 160f, 14f), $"Target: {tName}  Threats:{_threatTable?.Count ?? 0}");
+
+            // HP bar
+            GUI.color = Color.red;
+            GUI.DrawTexture(new Rect(gx, gy + 58f, 160f * hpPct, 4f), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+        }
+
+        public enum BossState { Idle, Aggro, Attack, Dead }
+    }
 }

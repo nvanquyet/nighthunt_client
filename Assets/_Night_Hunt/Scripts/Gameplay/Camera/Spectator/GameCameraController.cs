@@ -26,16 +26,55 @@ namespace NightHunt.Gameplay.Camera.Spectator
 
         private NetworkPlayer _localPlayer;
 
+        // ── Static registration (Bug #22 Fix) ────────────────────────────────
+        // Players call RegisterLocalLifecycle() on OnStartNetwork (IsOwner)
+        // instead of GameCameraController using FindFirstObjectByType which would
+        // find ANY player in a multiplayer session.
+        private static GameCameraController _instance;
+
+        /// <summary>
+        /// Called by the owning player's CharacterLifecycleController on spawn.
+        /// Replaces the unsafe FindFirstObjectByType fallback.
+        /// </summary>
+        public static void RegisterLocalLifecycle(CharacterLifecycleController lc)
+        {
+            if (_instance != null)
+                _instance.SetLocalLifecycle(lc);
+        }
+
+        private void SetLocalLifecycle(CharacterLifecycleController lc)
+        {
+            if (_localLifecycle != null)
+            {
+                _localLifecycle.OnDied -= HandleLocalPlayerDied;
+                _localLifecycle.OnRespawned -= HandleLocalPlayerRespawned;
+            }
+            _localLifecycle = lc;
+            if (_localLifecycle != null)
+            {
+                _localLifecycle.OnDied += HandleLocalPlayerDied;
+                _localLifecycle.OnRespawned += HandleLocalPlayerRespawned;
+            }
+        }
+
         private void Awake()
         {
+            _instance = this;
+
             if (_virtualCamera == null)
                 _virtualCamera = FindFirstObjectByType<CinemachineCamera>();
 
-            if (_localLifecycle == null)
-                _localLifecycle = FindFirstObjectByType<CharacterLifecycleController>();
+            // NOTE: _localLifecycle intentionally NOT resolved via FindFirstObjectByType.
+            // Use Inspector assignment OR let the local player register via
+            // GameCameraController.RegisterLocalLifecycle() on spawn.
 
             if (_spectatorInput == null)
                 _spectatorInput = FindFirstObjectByType<SpectatorInputHandler>();
+        }
+
+        private void OnDestroy()
+        {
+            if (_instance == this) _instance = null;
         }
 
         private void OnEnable()
@@ -46,11 +85,8 @@ namespace NightHunt.Gameplay.Camera.Spectator
                 SpectateManager.Instance.OnCurrentPlayerChanged += HandleCurrentPlayerChanged;
             }
 
-            if (_localLifecycle != null)
-            {
-                _localLifecycle.OnDied += HandleLocalPlayerDied;
-                _localLifecycle.OnRespawned += HandleLocalPlayerRespawned;
-            }
+            // Lifecycle events are managed by SetLocalLifecycle() (called on player spawn).
+            // Inspector-assigned _localLifecycle also wired there — no duplicate subscribe needed.
 
             if (_spectatorInput != null)
             {
@@ -62,6 +98,10 @@ namespace NightHunt.Gameplay.Camera.Spectator
 
         private void Start()
         {
+            // If Inspector-assigned, wire it through SetLocalLifecycle so subscribe logic is unified.
+            if (_localLifecycle != null)
+                SetLocalLifecycle(_localLifecycle);
+
             if (SpectateManager.Instance != null)
             {
                 var current = SpectateManager.Instance.GetCurrentPlayer();
@@ -77,11 +117,7 @@ namespace NightHunt.Gameplay.Camera.Spectator
                 SpectateManager.Instance.OnCurrentPlayerChanged -= HandleCurrentPlayerChanged;
             }
 
-            if (_localLifecycle != null)
-            {
-                _localLifecycle.OnDied -= HandleLocalPlayerDied;
-                _localLifecycle.OnRespawned -= HandleLocalPlayerRespawned;
-            }
+            // Lifecycle events managed by SetLocalLifecycle — no unsubscribe needed here.
 
             if (_spectatorInput != null)
             {

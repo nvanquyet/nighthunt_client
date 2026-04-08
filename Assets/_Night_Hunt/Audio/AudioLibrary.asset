@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c335882e540ca2f47a9e1ca67e0bdf1f, type: 3}
+  m_Name: AudioLibrary
+  m_EditorClassIdentifier: 
+  uiClick: {fileID: 0}
+  uiHover: {fileID: 0}
+  uiPanelOpen: {fileID: 0}
+  uiPanelClose: {fileID: 0}
+  uiNotification: {fileID: 0}
+  uiCountdownBeep: {fileID: 0}
+  uiCountdownFinal: {fileID: 0}
+  uiMatchFound: {fileID: 0}
+  hitMarkerTick: {fileID: 0}
+  hitMarkerHeadshot: {fileID: 0}
+  weaponDepleted: {fileID: 0}
+  killConfirm: {fileID: 0}
+  multiKillClips: []
+  lowHealthHeartbeat: {fileID: 0}
+  lowHealthThreshold: 0.3
+  playerDeathStinger: {fileID: 0}
+  bgmHome: {fileID: 0}
+  bgmMatch: {fileID: 0}
+  bgmIntense: {fileID: 0}
+  bgmResults: {fileID: 0}
+  footstepWalk:
+  - {fileID: 8300000, guid: 48be7f48cabe1684081d9057974691fd, type: 3}
+  - {fileID: 8300000, guid: faae713c33699294e9570b70126713e3, type: 3}
+  footstepSprint:
+  - {fileID: 8300000, guid: 715fab321e797e94f9b46731783a3789, type: 3}
+  - {fileID: 8300000, guid: fbcf6f3a68b753d499db713a298a6dff, type: 3}
+  footstepLand:
+  - {fileID: 8300000, guid: 3b09d59f4499d45428baa7a21e954296, type: 3}
+  footstepJump: {fileID: 8300000, guid: 5897aeed9b676024fbb8c694b421a861, type: 3}
+  footstepRoll: {fileID: 8300000, guid: 5897aeed9b676024fbb8c694b421a861, type: 3}
+  explosionGrenade: {fileID: 8300000, guid: 87b243d597489a044a5bf2f6cf94e093, type: 3}
+  explosionRocket: {fileID: 8300000, guid: 97ba94d6e0f66f44c95d43fa3e7b6591, type: 3}
+  bulletImpact: {fileID: 8300000, guid: d3cf8992bc84f5e4a9dcf7af65d5b438, type: 3}
+  consumableUse: {fileID: 8300000, guid: 407d8e4dc22324a45aca709ea1caade9, type: 3}
+  throwablePull: {fileID: 8300000, guid: 407d8e4dc22324a45aca709ea1caade9, type: 3}
+  ambienceVariants: []

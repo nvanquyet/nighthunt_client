@@ -15,24 +15,7 @@ namespace NightHunt.GameplaySystems.Editor
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
-            
-            GUILayout.Space(10);
-            EditorGUILayout.LabelField("Sample Setup", EditorStyles.boldLabel);
-            
-            var equipment = (EquipmentDefinition)target;
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Setup Vest")) SetupVest(equipment);
-            if (GUILayout.Button("Setup Backpack")) SetupBackpack(equipment);
-            if (GUILayout.Button("Setup Helmet")) SetupHelmet(equipment);
-            EditorGUILayout.EndHorizontal();
-            
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Setup Belt")) SetupBelt(equipment);
-            if (GUILayout.Button("Setup Gloves")) SetupGloves(equipment);
-            EditorGUILayout.EndHorizontal();
         }
-        
         private void SetupVest(EquipmentDefinition equipment)
         {
             var config = ItemStatConfigSetup.GetOrCreateConfig<EquipmentStatConfig>("EquipmentStatConfig_Vest");

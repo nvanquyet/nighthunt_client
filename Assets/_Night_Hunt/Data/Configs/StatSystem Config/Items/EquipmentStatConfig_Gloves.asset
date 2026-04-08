@@ -13,5 +13,13 @@ MonoBehaviour:
   m_Name: EquipmentStatConfig_Gloves
   m_EditorClassIdentifier: 
   Stats: []
-  PlayerModifiers: []
+  PlayerModifiers:
+  - StatType: 4
+    Value: 2
+    ModifierType: 1
+    Description: Gloves agility (+2% speed)
+  - StatType: 7
+    Value: 5
+    ModifierType: 0
+    Description: Gloves minor armor
   ItemModifiers: []

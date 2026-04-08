@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e51fac3969a4ffda71bcf342aeebc97, type: 3}
+  m_Name: Weapon_RIFLE_AK
+  m_EditorClassIdentifier: 
+  ItemID: RIFLE_AK
+  DisplayName: AK Rifle
+  Description: 
+  Icon: {fileID: 21300000, guid: 89c94b010a5928f4a9b03d41d3a4d4c1, type: 3}
+  Rarity: 2
+  IsStackable: 0
+  MaxStackSize: 1
+  Weight: 4
+  _heldPrefab: {fileID: 6326673001157521716, guid: 79a86a91ff5c87f4c8911924595e0ac4,
+    type: 3}
+  _groundPrefab: {fileID: 6326673001157521716, guid: 79a86a91ff5c87f4c8911924595e0ac4,
+    type: 3}
+  ValidSlots: 0000000002000000
+  _attachmentSlots: 
+  StatConfig: {fileID: 11400000, guid: 3ad516cd11d497649a136f084755be89, type: 2}
+  WeaponClass: 2

@@ -1,75 +1,45 @@
 using UnityEngine;
-using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Configs;
-using NightHunt.GameplaySystems.Inventory;
 
 namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>
-    /// Equipment item definition. Stats + PlayerModifiers from StatConfig.
+    /// Definition asset for an equipment item (armour, clothing, backpack).
+    ///
+    /// DURABILITY MODEL:
+    ///   StatConfig[MaxDurability]  — maximum durability (attachment-buffable).
+    ///   instance.CurrentResource   — current durability at runtime.
+    ///   DurabilityLossRate         — fraction of incoming damage subtracted from durability.
     /// </summary>
     [CreateAssetMenu(fileName = "Armor_", menuName = "NightHunt/Items/Armor Definition")]
-    public class EquipmentDefinition : ItemDefinition
+    public class EquipmentDefinition : EquippableItemDefinition
     {
         public override ItemType Type => ItemType.Equipment;
-        
-        #region Stat Config
-        
+
         [Header("Stat Config")]
-        [Tooltip("Kéo thả EquipmentStatConfig vào đây")]
+        [Tooltip("Drag an EquipmentStatConfig asset here.")]
         public EquipmentStatConfig StatConfig;
-        
-        #endregion
-        
-        #region Equipment Slot
-        
+
         [Header("Equipment Slot")]
-        [Tooltip("Which equipment slot this item goes into")]
+        [Tooltip("Body slot this item occupies when equipped.")]
         public EquipmentSlotType EquipmentSlot = EquipmentSlotType.Chest;
-        
-        #endregion
-        
-        #region Durability
-        
+
         [Header("Durability")]
-        [Tooltip("Durability loss per damage taken (multiplier applied to incoming damage)")]
-        [Min(0f)]
-        public float DurabilityLossRate = 1f;
-        // MaxDurability / DefaultDurability → StatConfig.Stats[ItemStatType.MaxDurability]
-        // Start value set by InventorySystem via GetDefaultCurrentValue()
-        // instance.CurrentResource = runtime current durability
+        [Tooltip("Fraction of incoming damage removed from durability per hit. " +
+                 "1.0 = loses 1 durability per 1 damage taken.")]
+        [Min(0f)] public float DurabilityLossRate = 1f;
 
-        #endregion
+        // ── EquippableItemDefinition overrides ───────────────────────────────
+        protected override ItemStatConfig StatConfigBase => StatConfig;
 
-        #region Override Methods
-
-        /// <summary>
-        /// Returns StatConfig[MaxDurability] as the starting CurrentResource value.
-        /// InventorySystem.CreateItemInstance() calls this to initialize instance.CurrentResource.
-        /// </summary>
+        /// <summary>Starting durability = StatConfig[MaxDurability].</summary>
         public override float GetDefaultCurrentValue()
             => StatConfig != null ? StatConfig.GetStatValue(ItemStatType.MaxDurability) : 0f;
 
-        #endregion
-
-        #region Stat Helpers
-        
-        public float GetStatValue(ItemStatType statType)
-        {
-            return StatConfig != null ? StatConfig.GetStatValue(statType) : 0f;
-        }
-        
-        public bool HasStat(ItemStatType statType)
-        {
-            return StatConfig != null && StatConfig.HasStat(statType);
-        }
-        
+        /// <summary>Player-stat modifiers applied while this equipment is equipped.</summary>
         public PlayerStatModifier[] GetPlayerModifiers()
-        {
-            return StatConfig?.PlayerModifiers;
-        }
-        
-        #endregion
+            => StatConfig?.PlayerModifiers;
     }
 }

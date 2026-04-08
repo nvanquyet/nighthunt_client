@@ -8,7 +8,7 @@ namespace NightHunt.Networking
     /// Centralized server authority manager
     /// Ensures all server logic is separated and can work with both host and dedicated server
     /// </summary>
-    public class ServerAuthorityManager : SingletonPersistent<ServerAuthorityManager>
+    public class ServerAuthorityManager : Singleton<ServerAuthorityManager>
     {
 
         [Header("Server Settings")]

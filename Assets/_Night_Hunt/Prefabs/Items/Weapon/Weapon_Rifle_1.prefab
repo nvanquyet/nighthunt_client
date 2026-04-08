@@ -28,8 +28,7 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1.0000004, z: 1.0000002}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 794783362797726702}
+  m_Children: []
   m_Father: {fileID: 7901255042946311932}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4499871423123323414
@@ -47,7 +46,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &794783362797726702
 Transform:
   m_ObjectHideFlags: 0
@@ -56,14 +55,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4499871423123323414}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.015676158, y: 0.88392705, z: 0.02970866, w: -0.4664168}
-  m_LocalPosition: {x: 0.00000014087723, y: -0.6141934, z: 0.062163576}
-  m_LocalScale: {x: 1, y: 0.99999976, z: 0.99999964}
+  m_LocalRotation: {x: -0, y: -0, z: 0.000000014901161, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 5890405404033678351}
   - {fileID: 3437761364949684796}
-  m_Father: {fileID: 5238170294300633860}
+  m_Father: {fileID: 7823724266381470840}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &4945502415523595382
 GameObject:
@@ -205,6 +204,38 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
+--- !u!1 &6088819860821921762
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7823724266381470840}
+  m_Layer: 9
+  m_Name: Fire Point
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7823724266381470840
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6088819860821921762}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0.34089127, y: 0.64603794, z: -0.60402375, w: -0.31872174}
+  m_LocalPosition: {x: 0, y: 0.06216383, z: 0.61419356}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 794783362797726702}
+  m_Father: {fileID: 7901255042946311932}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &6326673001157521716
 GameObject:
   m_ObjectHideFlags: 0
@@ -214,7 +245,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7901255042946311932}
-  - component: {fileID: 2016035809084995389}
+  - component: {fileID: 7632805846521770854}
   m_Layer: 17
   m_Name: Weapon_Rifle_1
   m_TagString: Untagged
@@ -238,9 +269,10 @@ Transform:
   - {fileID: 6237346750657457721}
   - {fileID: 5238170294300633860}
   - {fileID: 3004933405546589605}
+  - {fileID: 7823724266381470840}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2016035809084995389
+--- !u!114 &7632805846521770854
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -249,26 +281,29 @@ MonoBehaviour:
   m_GameObject: {fileID: 6326673001157521716}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 17ace139e5bde5649ab0851119afbd33, type: 3}
+  m_Script: {fileID: 11500000, guid: 328ac3c773f602742ad699ba934ed64a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ballisticType: 0
-  hitLayers:
-    serializedVersion: 2
-    m_Bits: 60223249
-  damageHeadMultiplier: 2
+  firePoint: {fileID: 7823724266381470840}
+  leftHandIKTarget: {fileID: 5238170294300633860}
+  spreadBase: 1
+  spreadPenaltyPerShot: 0.4
+  spreadRecoveryRate: 2
+  spreadMax: 0
   projectilePrefab: {fileID: 7135761094741138672, guid: d0f08300b42b1b64ab830e8833130ce8,
     type: 3}
-  projectileSpeed: 50
   maxRange: 150
+  projectileSpeed: 50
   gravityScale: 0
   defaultFireMode: 0
   allowFireModeToggle: 1
   canTacticalReload: 1
-  muzzleFlashChild: {fileID: 5890405404033383639}
-  muzzleFlashDuration: 0.08
-  firePoint: {fileID: 3437761364949684796}
-  leftHandIKTarget: {fileID: 3004933405546589605}
+  hitLayers:
+    serializedVersion: 2
+    m_Bits: 8388993
+  damageHeadMultiplier: 2
+  pelletCount: 1
+  pelletSpreadBonus: 3
 --- !u!1 &7148760165026576381
 GameObject:
   m_ObjectHideFlags: 0
@@ -467,12 +502,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 73eae4b8303463a419bf4eb29b8b4f75, type: 3}
---- !u!1 &5890405404033383639 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 139460, guid: 73eae4b8303463a419bf4eb29b8b4f75,
-    type: 3}
-  m_PrefabInstance: {fileID: 5890405404033244179}
-  m_PrefabAsset: {fileID: 0}
 --- !u!4 &5890405404033678351 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 434204, guid: 73eae4b8303463a419bf4eb29b8b4f75,

@@ -518,5 +518,83 @@ namespace NightHunt.UI
             RebuildOnlineList();
             RebuildOfflineList();
         }
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Create Friend UI Prefab Templates ──────────
+
+        [ContextMenu("NightHunt/Create Friend Item Prefab Template")]
+        private void Editor_CreateFriendItemPrefab()
+        {
+            Editor_CreateRowPrefab(
+                "Assets/_Night_Hunt/Prefabs/UI/FriendItem_Template.prefab",
+                "FriendItem_Template",
+                new UnityEngine.Vector2(300f, 50f),
+                ref friendItemPrefab,
+                "FriendItemView",
+                "[FriendPanelView] Created FriendItem_Template. Add FriendItemView component.");
+        }
+
+        [ContextMenu("NightHunt/Create Friend Request Item Prefab Template")]
+        private void Editor_CreateFriendRequestItemPrefab()
+        {
+            Editor_CreateRowPrefab(
+                "Assets/_Night_Hunt/Prefabs/UI/FriendRequestItem_Template.prefab",
+                "FriendRequestItem_Template",
+                new UnityEngine.Vector2(300f, 55f),
+                ref requestItemPrefab,
+                "FriendRequestItemView",
+                "[FriendPanelView] Created FriendRequestItem_Template. Add FriendRequestItemView component.");
+        }
+
+        private void Editor_CreateRowPrefab(string path, string goName, UnityEngine.Vector2 size,
+            ref GameObject field, string componentHint, string logMessage)
+        {
+            const string parent = "Assets/_Night_Hunt/Prefabs";
+            const string dir    = parent + "/UI";
+            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
+                UnityEditor.AssetDatabase.CreateFolder(parent, "UI");
+
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[FriendPanelView] Prefab already exists at {path}");
+                return;
+            }
+
+            var go = new GameObject(goName);
+            go.AddComponent<UnityEngine.RectTransform>().sizeDelta = size;
+            go.AddComponent<UnityEngine.UI.Image>().color = new UnityEngine.Color(0.1f, 0.1f, 0.1f, 0.8f);
+            var hlg = go.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+            hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 6f;
+            hlg.padding = new UnityEngine.RectOffset(6, 6, 4, 4);
+
+            // Avatar
+            var avatarGo = new GameObject("Avatar", typeof(UnityEngine.RectTransform), typeof(UnityEngine.UI.Image));
+            avatarGo.transform.SetParent(go.transform, false);
+            avatarGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 40f;
+
+            // Name
+            var nameGo  = new GameObject("NameText", typeof(UnityEngine.RectTransform), typeof(TMPro.TextMeshProUGUI));
+            nameGo.transform.SetParent(go.transform, false);
+            nameGo.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
+            var nameTmp = nameGo.GetComponent<TMPro.TextMeshProUGUI>();
+            nameTmp.text = "Friend Name"; nameTmp.fontSize = 14f;
+
+            // Status dot
+            var dotGo = new GameObject("StatusDot", typeof(UnityEngine.RectTransform), typeof(UnityEngine.UI.Image));
+            dotGo.transform.SetParent(go.transform, false);
+            dotGo.GetComponent<UnityEngine.UI.Image>().color = UnityEngine.Color.green;
+            dotGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 14f;
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            UnityEngine.Object.DestroyImmediate(go);
+
+            if (field == null)
+            {
+                field = saved;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"{logMessage} — saved at: {path}");
+        }
+#endif
     }
 }

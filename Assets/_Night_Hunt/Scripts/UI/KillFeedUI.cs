@@ -160,6 +160,70 @@ namespace NightHunt.UI
                 Destroy(item.gameObject);
             }
         }
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Create KillFeedItem Template Prefab ────────
+
+        [ContextMenu("NightHunt/Create KillFeedItem Template Prefab")]
+        private void Editor_CreateKillFeedItemPrefab()
+        {
+            const string parent = "Assets/_Night_Hunt/Prefabs";
+            const string dir    = parent + "/UI";
+            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
+                UnityEditor.AssetDatabase.CreateFolder(parent, "UI");
+
+            const string path = dir + "/KillFeedItem_Template.prefab";
+
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[KillFeedUI] KillFeedItem_Template already exists at {path}");
+                return;
+            }
+
+            // Root
+            var go = new GameObject("KillFeedItem_Template");
+            go.AddComponent<CanvasGroup>();
+            var rootRt = go.AddComponent<UnityEngine.RectTransform>();
+            rootRt.sizeDelta = new UnityEngine.Vector2(300f, 30f);
+            // KillFeedItem script stub (will be set by user)
+            // Horizontal layout
+            var hlg = go.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+            hlg.childControlWidth  = true;
+            hlg.childControlHeight = true;
+            hlg.spacing            = 4f;
+            // Killer label
+            var killerGo  = new GameObject("KillerText");
+            killerGo.transform.SetParent(go.transform, false);
+            var killerTmp = killerGo.AddComponent<TMPro.TextMeshProUGUI>();
+            killerTmp.text      = "PlayerA";
+            killerTmp.fontSize  = 12f;
+            killerTmp.color     = UnityEngine.Color.white;
+            // Separator
+            var sepGo  = new GameObject("SepText");
+            sepGo.transform.SetParent(go.transform, false);
+            var sepTmp = sepGo.AddComponent<TMPro.TextMeshProUGUI>();
+            sepTmp.text     = "→";
+            sepTmp.fontSize = 12f;
+            // Victim label
+            var victimGo  = new GameObject("VictimText");
+            victimGo.transform.SetParent(go.transform, false);
+            var victimTmp = victimGo.AddComponent<TMPro.TextMeshProUGUI>();
+            victimTmp.text     = "PlayerB";
+            victimTmp.fontSize = 12f;
+            victimTmp.color    = UnityEngine.Color.red;
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+
+            if (killFeedItemPrefab == null)
+            {
+                killFeedItemPrefab = saved;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"[KillFeedUI] Created KillFeedItem_Template at {path}. " +
+                      "Add KillFeedItem component, then assign to killFeedItemPrefab.");
+        }
+#endif
     }
 
     /// <summary>

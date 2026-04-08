@@ -61,6 +61,17 @@ namespace NightHunt.Gameplay.Boss
         // ── Public API ────────────────────────────────────────────────────────────
         public Transform FirePoint => _firePoint;
 
+        /// <summary>
+        /// Set the client-side visual projectile prefab. Called by BossController.OnStartServer
+        /// so the prefab reference lives on the component and never needs to cross the network.
+        /// </summary>
+        public void SetProjectilePrefab(GameObject prefab) => _projectilePrefab = prefab;
+
+        // ── Projectile prefab (client visual only — NOT serialized via RPC) ─────────
+        // Set by BossController.OnStartServer via SetProjectilePrefab().
+        // All TurretGuns on a single boss share the same prefab.
+        private GameObject _projectilePrefab;
+
         // ── Unity Lifecycle ───────────────────────────────────────────────────────
 
         private void Awake()
@@ -164,28 +175,64 @@ namespace NightHunt.Gameplay.Boss
 
         // ── Visual Bullet Spawn (Client Side Pool) ──────────────────────────────
 
+        /// <summary>
+        /// Spawns the client-side projectile visual from the pool.
+        /// Only primitive data crosses the network — the prefab is stored locally on each client.
+        ///
+        /// hitPointOrDir:
+        ///   isHitscan=true  → world-space impact point (aimPoint from HitscanAttack).
+        ///                     Used as hitscanEndpoint so the visual teleports immediately
+        ///                     to the hit position instead of flying and detonating on wrong geometry.
+        ///   isHitscan=false → normalized fly direction (from RocketAttack).
+        /// </summary>
         [ObserversRpc]
-        public void RpcSpawnProjectileVisual(GameObject projectilePrefab, Vector3 hitPointOrDir, bool isHitscan, float speed)
+        public void RpcSpawnProjectileVisual(Vector3 hitPointOrDir, bool isHitscan, float speed)
         {
-            if (projectilePrefab == null) return;
+            if (_projectilePrefab == null)
+            {
+                Debug.LogWarning($"[VFX.BOSS] TurretGun.RpcSpawnProjectileVisual — _projectilePrefab is NULL. " +
+                                 $"BossController.OnStartClient may not have called SetProjectilePrefab yet on this client.");
+                return;
+            }
+
             var pool = NightHunt.Gameplay.Character.Combat.Weapons.ProjectilePool.Instance;
-            if (pool == null) return;
+            if (pool == null)
+            {
+                Debug.LogWarning("[VFX.BOSS] TurretGun.RpcSpawnProjectileVisual — ProjectilePool.Instance is NULL. " +
+                                 "Add ProjectilePool to a persistent scene GameObject.");
+                return;
+            }
 
             Vector3 origin = GetFireOrigin();
-            Vector3 dir = isHitscan ? (hitPointOrDir - origin).normalized : hitPointOrDir.normalized;
+            Vector3 dir    = isHitscan ? (hitPointOrDir - origin).normalized : hitPointOrDir.normalized;
 
-            var proj = pool.Get(projectilePrefab, origin, Quaternion.LookRotation(dir));
+            // ★ BUG FIX: For hitscan, pass the world-space impact point as hitscanEndpoint.
+            // ProjectileComponent.Initialize() will teleport the visual directly to that position
+            // and call Detonate(), so the effect plays at the correct hit location and not on
+            // whatever geometry the bullet physically touches first (which could be the boss itself).
+            Vector3? endpoint = isHitscan ? (Vector3?)hitPointOrDir : null;
+
+            Debug.Log($"[VFX.BOSS] RpcSpawnProjectileVisual — isHitscan={isHitscan}  " +
+                      $"origin={origin:F1}  hitPointOrDir={hitPointOrDir:F1}  dir={dir:F2}  " +
+                      $"endpoint={endpoint?.ToString("F1") ?? "null (ballistic)"}");
+
+            var proj = pool.Get(_projectilePrefab, origin, Quaternion.LookRotation(dir));
             if (proj != null)
             {
-                // Truyền config fake để Particle Component chạy mượt
-                var fakeConfig = new NightHunt.Data.WeaponConfigData 
-                { 
-                    ProjectileSpeed = speed, 
-                    MaxRange = 200f, 
-                    DamageBody = 0,
-                    BallisticType = isHitscan ? "Hitscan" : "Projectile" 
+                var fakeConfig = new NightHunt.Data.WeaponConfigData
+                {
+                    ProjectileSpeed = speed,
+                    MaxRange = 200f,
+                    DamageBody = 0,     // Visual only — damage already applied server-side.
+                    BallisticType = isHitscan ? "Hitscan" : "Projectile"
                 };
-                proj.Initialize(fakeConfig, dir, isHitscan);
+                // ★ BUG FIX: Pass endpoint so hitscan visuals teleport to the correct hit position.
+                proj.Initialize(fakeConfig, dir, isHitscan, endpoint);
+            }
+            else
+            {
+                Debug.LogWarning($"[VFX.BOSS] RpcSpawnProjectileVisual — ProjectilePool.Get() returned null. " +
+                                 $"Increase pool capacity for prefab '{_projectilePrefab.name}'.");
             }
         }
     }

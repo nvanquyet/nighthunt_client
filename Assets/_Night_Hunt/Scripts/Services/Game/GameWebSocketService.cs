@@ -33,7 +33,6 @@ namespace NightHunt.Services.Game
         private string accessToken;
         private string connectionToken = null; // track current connect attempt
         private bool allowAutoReconnect = true;
-        private bool isShuttingDown = false;
         private int reconnectAttempts = 0;
         private const int MAX_RECONNECT_ATTEMPTS = 5;
         /// <summary>UTC time when the current connection was last confirmed open. Used to determine
@@ -133,9 +132,10 @@ namespace NightHunt.Services.Game
             #endif
         }
 
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
             Disconnect();
+            base.OnDestroy();
         }
 
         /// <summary>
@@ -574,7 +574,7 @@ namespace NightHunt.Services.Game
                             // Store DS info in RoomState immediately
                             if (RoomState.Instance != null && !string.IsNullOrEmpty(matchReady.dsIp))
                                 RoomState.Instance.SetDedicatedServer(
-                                    matchReady.dsIp, (ushort)matchReady.dsPort, matchReady.matchId);
+                                    matchReady.dsIp, (ushort)matchReady.dsPort, matchReady.matchId, matchReady.mapId);
                             OnMatchReady?.Invoke(matchReady);
                         }
                         break;
@@ -930,6 +930,7 @@ namespace NightHunt.Services.Game
         {
             public string lobbyToken;
             public string gameMode;
+            public string mapId;
             public string roomCode;
             public long   roomId;
             public string matchId;

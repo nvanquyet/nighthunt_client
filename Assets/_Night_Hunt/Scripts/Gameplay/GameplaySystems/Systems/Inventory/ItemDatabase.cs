@@ -447,6 +447,37 @@ namespace NightHunt.GameplaySystems.Inventory
             if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                 Debug.Log("=======================================");
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Editor-only: Scans the Resources/Database/Items folder, collects every
+        /// ItemDefinition asset, and populates the serialized _itemDefinitions array.
+        /// Run this after adding or removing item assets so the database is always up to date.
+        /// </summary>
+        [ContextMenu("Rebuild/◆ Scan Project & Populate _itemDefinitions")]
+        private void EditorScanAndPopulate()
+        {
+            var guids = UnityEditor.AssetDatabase.FindAssets("t:ItemDefinition",
+                new[] { "Assets/_Night_Hunt/Data/Resources" });
+
+            var defs = new List<ItemDefinition>();
+            foreach (var guid in guids)
+            {
+                var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
+                var def  = UnityEditor.AssetDatabase.LoadAssetAtPath<ItemDefinition>(path);
+                if (def != null && !string.IsNullOrEmpty(def.ItemID))
+                    defs.Add(def);
+            }
+
+            _itemDefinitions = defs.ToArray();
+            UnityEditor.EditorUtility.SetDirty(this);
+            UnityEditor.AssetDatabase.SaveAssets();
+
+            Debug.Log($"[ItemDatabase] ◆ Populated {_itemDefinitions.Length} definitions from Resources/Database/Items.");
+            foreach (var d in _itemDefinitions)
+                Debug.Log($"  ► {d.ItemID}  ({d.Type})  [{d.name}]");
+        }
+#endif
         
         #endregion
     }

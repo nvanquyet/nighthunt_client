@@ -157,7 +157,7 @@ namespace NightHunt.GameplaySystems.Interaction
                     if (target is NightHunt.GameplaySystems.Loot.WorldItem worldItem)
                     {
                         var field = typeof(NightHunt.GameplaySystems.Loot.WorldItem)
-                            .GetField("maxPickupDistance",
+                            .GetField("_maxPickupDistance",
                                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                         if (field != null)
                             maxDist = (float)field.GetValue(worldItem);
@@ -290,7 +290,7 @@ namespace NightHunt.GameplaySystems.Interaction
                     if (target is NightHunt.GameplaySystems.Loot.WorldItem worldItem)
                     {
                         var field = typeof(NightHunt.GameplaySystems.Loot.WorldItem)
-                            .GetField("maxPickupDistance",
+                            .GetField("_maxPickupDistance",
                                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                         if (field != null)
                             maxDist = (float)field.GetValue(worldItem);

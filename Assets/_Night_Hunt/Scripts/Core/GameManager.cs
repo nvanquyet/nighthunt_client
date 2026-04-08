@@ -2,6 +2,7 @@
 using NightHunt.Networking;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;
+using NightHunt.Services.Config;
 using NightHunt.Services.Friend;
 using NightHunt.Services.Party;
 using NightHunt.Services.Game;
@@ -25,6 +26,7 @@ namespace NightHunt.Core
         [Header("Services")]
         [SerializeField] private BackendHttpClient    backendHttpClient;
         [SerializeField] private AuthService          authService;
+        [SerializeField] private GameConfigService    gameConfigService;
         [SerializeField] private FriendService        friendService;
         [SerializeField] private PartyService         partyService;
         [SerializeField] private RoomService          roomService;
@@ -39,9 +41,10 @@ namespace NightHunt.Core
         [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         // â”€â”€ Public getters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        public BackendHttpClient    BackendClient  => backendHttpClient;
-        public AuthService          AuthService    => authService;
-        public FriendService        FriendService  => friendService;
+        public BackendHttpClient    BackendClient    => backendHttpClient;
+        public AuthService          AuthService      => authService;
+        public GameConfigService    GameConfigService=> gameConfigService;
+        public FriendService        FriendService    => friendService;
         public PartyService         PartyService   => partyService;
         public RoomService          RoomService    => roomService;
         public GameWebSocketService GameWebSocket  => gameWebSocketService;
@@ -91,6 +94,7 @@ namespace NightHunt.Core
         {
             backendHttpClient = ResolveOrAdd<BackendHttpClient>(backendHttpClient);
             authService       = ResolveOrAdd<AuthService>(authService);
+            gameConfigService = ResolveOrAdd<GameConfigService>(gameConfigService);
             friendService     = ResolveOrAdd<FriendService>(friendService);
             partyService      = ResolveOrAdd<PartyService>(partyService);
             roomService       = ResolveOrAdd<RoomService>(roomService);

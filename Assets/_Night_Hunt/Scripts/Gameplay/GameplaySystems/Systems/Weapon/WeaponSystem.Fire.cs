@@ -192,8 +192,41 @@ namespace NightHunt.GameplaySystems.Weapon
                 _currentWeaponBase.Fire(origin, finalFireDir, config, (int)ObjectId);
 
                 // Spawn projectile visual on remote clients using the real 3-D direction.
+                // For hitscan weapons, _lastFireEndpoint is the raycast hit point; remote clients
+                // use it to teleport the visual to the impact position instead of flying it.
                 if (IsOwner && _currentWeaponBase.ProjectilePrefab != null)
-                    BroadcastProjectileServerRpc(origin, finalFireDir, config);
+                {
+                    Debug.Log($"[SHOOT.PLAYER] TryFireOnce — BroadcastProjectile.  " +
+                              $"origin={origin:F1}  dir={finalFireDir:F2}  elev={elevationAngle:F1}°  " +
+                              $"ballisticType={config.BallisticType}  endpoint={_lastFireEndpoint:F1}  " +
+                              $"weapon='{_currentWeaponBase.gameObject.name}'");
+                    BroadcastProjectileServerRpc(origin, finalFireDir, config, _lastFireEndpoint);
+                }
+                else if (IsOwner && _currentWeaponBase.ProjectilePrefab == null)
+                {
+                    Debug.LogWarning($"[SHOOT.PLAYER] TryFireOnce — ProjectilePrefab is NULL on '{_currentWeaponBase.gameObject.name}'. " +
+                                     $"Remote clients will NOT see bullet visual. Assign prefab in weapon model component.");
+                }
+            }
+            else
+            {
+                // ── DIAGNOSTIC ────────────────────────────────────────────────────────────
+                // Animation and ammo updates happen but NO bullet is fired.
+                // Root cause: the weapon model prefab is missing a HitscanWeapon or
+                // ProjectileWeapon component, OR the model hasn't finished loading yet.
+                //
+                // Fix checklist:
+                //   1. Open the weapon's HeldPrefab in the Project window.
+                //   2. Add HitscanWeapon (rifles/pistols) OR ProjectileWeapon (rockets) component.
+                //   3. Assign 'Fire Point' (muzzle Transform child) on that component.
+                //   4. Assign 'Projectile Prefab' (a ProjectileComponent prefab) on that component.
+                //   5. Optionally assign 'Left Hand IK Target' for the IK grip anchor.
+                Debug.LogWarning(
+                    $"[WeaponSystem] TryFireOnce: _currentWeaponBase is NULL — " +
+                    $"weapon model has no HitscanWeapon / ProjectileWeapon component, " +
+                    $"or WeaponModelController hasn't finished loading the model yet. " +
+                    $"Slot={slot.Value}  GameObject={gameObject.name}",
+                    gameObject);
             }
 
             // Broadcast shot to remote clients: horizontal aim dir (for body rotation) +
@@ -204,13 +237,20 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private WeaponConfigData BuildWeaponConfigData(ItemInstance inst)
         {
+            // DamageHeadMul is on HitscanWeapon only; projectile weapons use the default.
+            float headMul = 2f;
+            if (_currentWeaponBase is HitscanWeapon hw)
+                headMul = hw.DamageHeadMultiplier;
+
+            bool isHitscan = _currentWeaponBase is HitscanWeapon;
+
             return new WeaponConfigData
             {
                 WeaponId        = inst.DefinitionID,
                 DisplayName     = inst.DefinitionID,
-                BallisticType   = _currentWeaponBase?.BallisticType.ToString() ?? "Hitscan",
+                BallisticType   = isHitscan ? "Hitscan" : "Projectile",
                 DamageBody      = (int)inst.GetComputedStat(ItemStatType.Damage),
-                DamageHeadMul   = _currentWeaponBase?.DamageHeadMultiplier ?? 2f,
+                DamageHeadMul   = headMul,
                 FireRate        = inst.GetComputedStat(ItemStatType.FireRate),
                 ReloadTime      = inst.GetComputedStat(ItemStatType.ReloadSpeed),
                 MagazineSize    = (int)inst.GetComputedStat(ItemStatType.MagazineSize),
@@ -218,12 +258,16 @@ namespace NightHunt.GameplaySystems.Weapon
                 ProjectileSpeed = _currentWeaponBase?.ProjectileSpeed ?? 50f,
                 MaxRange        = _currentWeaponBase?.MaxRange        ?? 150f,
                 GravityScale    = _currentWeaponBase?.GravityScale    ?? 0f,
-                SpreadBase      = inst.GetComputedStat(ItemStatType.SpreadBase),
             };
         }
 
         private void HandleWeaponFireResult(Vector3 origin, Vector3 endpoint)
         {
+            // Cache the endpoint so TryFireOnce can pass it to BroadcastProjectileServerRpc
+            // AFTER Fire() returns.  HandleWeaponFireResult is called FROM inside Fire() via
+            // the OnFireResult event, which means _lastFireEndpoint is fully populated before
+            // BroadcastProjectileServerRpc is reached.
+            _lastFireEndpoint = endpoint;
             var slot = _activeSlot.Value;
             if (slot != null) OnHitscanResult?.Invoke(slot.Value, origin, endpoint);
         }

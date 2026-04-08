@@ -146,5 +146,62 @@ namespace NightHunt.UI
                 if (s != null) Destroy(s.gameObject);
             _slots.Clear();
         }
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Create PartyModelSlot Template Prefab ────
+
+        [ContextMenu("NightHunt/Create PartyModelSlot Template Prefab")]
+        private void Editor_CreatePartyModelSlotPrefab()
+        {
+            const string parent = "Assets/_Night_Hunt/Prefabs";
+            const string dir    = parent + "/UI";
+            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
+                UnityEditor.AssetDatabase.CreateFolder(parent, "UI");
+
+            const string path = dir + "/PartyModelSlot_Template.prefab";
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[PartyModelListView] PartyModelSlot_Template already exists at {path}");
+                return;
+            }
+
+            // Root: slot container (100 × 160)
+            var go  = new GameObject("PartyModelSlot_Template");
+            var rt  = go.AddComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(100f, 160f);
+
+            // Model area background (top 120 px)
+            var modelArea = new GameObject("ModelArea", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            modelArea.transform.SetParent(go.transform, false);
+            var maRt = modelArea.GetComponent<RectTransform>();
+            maRt.anchorMin = new Vector2(0f, 0.25f);
+            maRt.anchorMax = Vector2.one;
+            maRt.offsetMin = maRt.offsetMax = Vector2.zero;
+            modelArea.GetComponent<UnityEngine.UI.Image>().color = new Color(0.15f, 0.15f, 0.15f, 0.6f);
+
+            // Name label (bottom 40 px)
+            var nameLabelGo = new GameObject("NameText", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+            nameLabelGo.transform.SetParent(go.transform, false);
+            var nlRt = nameLabelGo.GetComponent<RectTransform>();
+            nlRt.anchorMin = Vector2.zero;
+            nlRt.anchorMax = new Vector2(1f, 0.25f);
+            nlRt.offsetMin = nlRt.offsetMax = Vector2.zero;
+            var nlTmp = nameLabelGo.GetComponent<TMPro.TextMeshProUGUI>();
+            nlTmp.text = "Player";
+            nlTmp.alignment = TMPro.TextAlignmentOptions.Center;
+            nlTmp.fontSize  = 14f;
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            UnityEngine.Object.DestroyImmediate(go);
+
+            if (slotPrefab == null)
+            {
+                slotPrefab = saved;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"[PartyModelListView] Created PartyModelSlot_Template at {path}. " +
+                      "Add the PartyModelSlotView component to the root and wire up NameText.");
+        }
+#endif
     }
 }

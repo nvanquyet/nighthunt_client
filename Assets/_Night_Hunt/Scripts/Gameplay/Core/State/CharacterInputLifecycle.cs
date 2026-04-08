@@ -1,6 +1,7 @@
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.Gameplay.Spectator;
 using UnityEngine;
 using FishNet.Object;
 using NightHunt.Utilities;
@@ -41,6 +42,9 @@ namespace NightHunt.Gameplay.Core.State
 
             _lifecycle.OnDied += HandleDied;
             _lifecycle.OnRespawned += HandleRespawned;
+
+            // Subscribe to spectate events — deferred until SpectateManager is available
+            SubscribeSpectate();
         }
 
         private void OnDisable()
@@ -50,13 +54,26 @@ namespace NightHunt.Gameplay.Core.State
 
             _lifecycle.OnDied -= HandleDied;
             _lifecycle.OnRespawned -= HandleRespawned;
+            UnsubscribeSpectate();
+        }
+
+        private void SubscribeSpectate()
+        {
+            if (SpectateManager.Instance == null) return;
+            SpectateManager.Instance.OnSpectateStarted += HandleSpectateStarted;
+            SpectateManager.Instance.OnSpectateStopped += HandleSpectateStopped;
+        }
+
+        private void UnsubscribeSpectate()
+        {
+            if (SpectateManager.Instance == null) return;
+            SpectateManager.Instance.OnSpectateStarted -= HandleSpectateStarted;
+            SpectateManager.Instance.OnSpectateStopped -= HandleSpectateStopped;
         }
 
         private void HandleDied()
         {
             // Guard: chỉ ảnh hưởng input của local client khi CHÍNH character này chết.
-            // Nếu không có guard, khi bất kỳ player nào chết (SyncList update broadcast
-            // sang all clients) thì InputLayerManager của CLIENT ĐANG SỐNG cũng bị freeze.
             if (_networkObject != null && !_networkObject.IsOwner)
                 return;
 
@@ -70,6 +87,28 @@ namespace NightHunt.Gameplay.Core.State
                 return;
 
             InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
+        }
+
+        private void HandleSpectateStarted()
+        {
+            // SpectateManager là global — chỉ đổi input khi chính local player đang spectate.
+            // SpectateManager.StartSpectating chỉ được gọi từ local player's death flow, nên safe.
+            if (_networkObject != null && !_networkObject.IsOwner)
+                return;
+
+            InputLayerManager.Instance?.TransitionToState(InputState.Spectating);
+            Debug.Log("[CharacterInputLifecycle] Spectating input enabled");
+        }
+
+        private void HandleSpectateStopped()
+        {
+            if (_networkObject != null && !_networkObject.IsOwner)
+                return;
+
+            // Returning from spectate can mean: respawn (→ PlayerAlive) or match ended.
+            // Use PlayerAlive as the default restore state; respawn will also fire HandleRespawned.
+            InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
+            Debug.Log("[CharacterInputLifecycle] Spectating input disabled");
         }
     }
 }

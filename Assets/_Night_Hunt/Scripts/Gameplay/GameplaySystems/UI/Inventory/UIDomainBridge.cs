@@ -29,6 +29,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         public bool IsReady => _bridge != null && _bridge.IsReady;
         public IGameplayBridge Bridge => _bridge;
+        public NetworkPlayer CurrentPlayer => _currentPlayer;
 
         #region UI Events
 

@@ -5,6 +5,10 @@ using NightHunt.GameplaySystems.UI.Combat;
 using NightHunt.GameplaySystems.UI.Interaction;
 using NightHunt.Networking;
 using NightHunt.Gameplay.Character.Combat;
+using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Input.Core;
+using NightHunt.Gameplay.Input.Handlers.Movement;
+using NightHunt.Gameplay.Input.Handlers.Camera;
 using NightHunt.Utilities;
 
 namespace NightHunt.UI
@@ -61,6 +65,15 @@ namespace NightHunt.UI
         [Header("Feedback")]
         [SerializeField] private Gameplay.Feedback.DamageFeedbackSystem damageFeedback;
 
+        [Header("Mobile Input")]
+        [Tooltip("MobileMovementBridge on the [MoveJoystick] GO in the HUD canvas. " +
+                 "Auto-found in children at OnValidate. Must be bound after local player spawns.")]
+        [SerializeField] private MobileMovementBridge _mobileMovementBridge;
+
+        [Tooltip("MobilePinchZoomBridge on any HUD GO. " +
+                 "Auto-found in children at OnValidate. Must be bound after local player spawns.")]
+        [SerializeField] private MobilePinchZoomBridge _mobilePinchZoomBridge;
+
         // ── Public accessors (for external systems that need a sub-panel ref) ─
 
         public PlayerHUDPanel     PlayerHUDPanel    => playerHUDPanel;
@@ -74,6 +87,9 @@ namespace NightHunt.UI
         public LootContainerUI    LootContainerUI   => lootContainerUI;
         // NetworkObject ID of the local player; used to filter shooter-side damage numbers.
         private int _localNetObjId = -1;
+
+        // Reference kept so we can subscribe/unsubscribe lifecycle events.
+        private CharacterLifecycleController _localLifecycle;
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
         private void Awake()
@@ -101,6 +117,7 @@ namespace NightHunt.UI
         private void OnDisable()
         {
             NetworkPlayer.OnOwnerReady -= Initialize;
+            UnsubscribeLifecycle();
         }
 
         // ── Panel initial state ───────────────────────────────────────────────────
@@ -161,13 +178,123 @@ namespace NightHunt.UI
             PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;
             PlayerHealthSystem.OnAnyHitReceived += HandleAnyHitReceived;
 
+            // Subscribe lifecycle events to toggle combat panels on death/respawn.
+            UnsubscribeLifecycle();
+            _localLifecycle = ComponentResolver.Find<CharacterLifecycleController>(localPlayer)
+                .OnSelf().InChildren()
+                .OrLogWarning("[GameHUD] CharacterLifecycleController not found")
+                .Resolve();
+            if (_localLifecycle != null)
+            {
+                _localLifecycle.OnDied      += OnLocalPlayerDied;
+                _localLifecycle.OnRespawned += OnLocalPlayerRespawned;
+            }
+
+            // Subscribe spectate events via SpectateManager (global singleton)
+            if (Gameplay.Spectator.SpectateManager.Instance != null)
+            {
+                Gameplay.Spectator.SpectateManager.Instance.OnSpectateStarted += OnLocalPlayerSpectate;
+                Gameplay.Spectator.SpectateManager.Instance.OnSpectateStopped += OnLocalPlayerRespawned;
+            }
+
+            // Bind mobile joystick → MovementInputHandler so dragging the on-screen
+            // joystick actually drives _mobileMove inside MovementInputHandler.
+            if (_mobileMovementBridge == null)
+                _mobileMovementBridge = GetComponentInChildren<MobileMovementBridge>(true);
+            if (_mobileMovementBridge != null)
+            {
+                _mobileMovementBridge.BindHandler(InputManager.Instance?.MovementHandler);
+                Debug.Log("[GameHUD] MobileMovementBridge bound to MovementHandler.");
+            }
+            else
+            {
+                Debug.LogWarning("[GameHUD] MobileMovementBridge not found — joystick will NOT move the character!");
+            }
+
+            // Bind pinch-zoom bridge → CameraInputHandler.
+            if (_mobilePinchZoomBridge == null)
+                _mobilePinchZoomBridge = GetComponentInChildren<MobilePinchZoomBridge>(true);
+            if (_mobilePinchZoomBridge != null)
+            {
+                _mobilePinchZoomBridge.BindHandler(InputManager.Instance?.CameraHandler);
+                Debug.Log("[GameHUD] MobilePinchZoomBridge bound to CameraHandler.");
+            }
+            else
+            {
+                Debug.LogWarning("[GameHUD] MobilePinchZoomBridge not found — pinch zoom will NOT work on mobile!");
+            }
+
+            // Wire InteractionPromptUI — must be called after local player spawns so the
+            // RaycastDetector and PlayerInteractionSystem on the player prefab are ready.
+            if (interactionPromptUI != null)
+            {
+                var detector = ComponentResolver.Find<Gameplay.Input.Handlers.Interaction.RaycastDetector>(localPlayer)
+                    .OnSelf().InChildren()
+                    .OrLogWarning("[GameHUD] RaycastDetector not found on local player — InteractionPromptUI will stay hidden")
+                    .Resolve();
+                var interactionSys = ComponentResolver.Find<GameplaySystems.Interaction.PlayerInteractionSystem>(localPlayer)
+                    .OnSelf().InChildren()
+                    .OrLogWarning("[GameHUD] PlayerInteractionSystem not found on local player — hold-progress bar disabled")
+                    .Resolve();
+                interactionPromptUI.Init(detector, interactionSys);
+                Debug.Log($"[GameHUD] InteractionPromptUI.Init — detector={detector != null} sys={interactionSys != null}");
+            }
+
             Debug.Log($"[GameHUD] Initialized for player ObjectId={_localNetObjId}");
+        }
+
+        private void UnsubscribeLifecycle()
+        {
+            _mobileMovementBridge?.UnbindHandler();
+            _mobilePinchZoomBridge?.UnbindHandler();
+
+            if (_localLifecycle != null)
+            {
+                _localLifecycle.OnDied      -= OnLocalPlayerDied;
+                _localLifecycle.OnRespawned -= OnLocalPlayerRespawned;
+                _localLifecycle = null;
+            }
+            if (Gameplay.Spectator.SpectateManager.Instance != null)
+            {
+                Gameplay.Spectator.SpectateManager.Instance.OnSpectateStarted -= OnLocalPlayerSpectate;
+                Gameplay.Spectator.SpectateManager.Instance.OnSpectateStopped -= OnLocalPlayerRespawned;
+            }
         }
 
         private void OnDestroy()
         {
             PlayerHealthSystem.OnAnyPlayerDied  -= HandleAnyPlayerDied;
             PlayerHealthSystem.OnAnyHitReceived -= HandleAnyHitReceived;
+            UnsubscribeLifecycle();
+        }
+
+        // ── Lifecycle state responses ─────────────────────────────────────────
+
+        private void OnLocalPlayerDied()
+        {
+            // Hide combat panels — they sit behind the DeathScreen
+            combatHUDPanel?.gameObject.SetActive(false);
+            crosshairUI?.gameObject.SetActive(false);
+            interactionPromptUI?.gameObject.SetActive(false);
+            // Keep playerHUDPanel / killFeed / minimap visible for context
+        }
+
+        private void OnLocalPlayerRespawned()
+        {
+            // Restore combat panels
+            combatHUDPanel?.gameObject.SetActive(true);
+            crosshairUI?.gameObject.SetActive(true);
+            interactionPromptUI?.gameObject.SetActive(true);
+            HideDeathScreen();
+        }
+
+        private void OnLocalPlayerSpectate()
+        {
+            // During spectate: hide personal HUD, keep kill feed / minimap
+            combatHUDPanel?.gameObject.SetActive(false);
+            crosshairUI?.gameObject.SetActive(false);
+            playerHUDPanel?.gameObject.SetActive(false);
+            interactionPromptUI?.gameObject.SetActive(false);
         }
 
         // ── Combat event routing ───────────────────────────────────────────
@@ -282,6 +409,10 @@ namespace NightHunt.UI
         .InParent()
         .OrLogWarning("[Auto] Gameplay.Feedback.DamageFeedbackSystem not found")
         .Resolve();
+            if (_mobileMovementBridge == null)
+                _mobileMovementBridge = GetComponentInChildren<MobileMovementBridge>(true);
+            if (_mobilePinchZoomBridge == null)
+                _mobilePinchZoomBridge = GetComponentInChildren<MobilePinchZoomBridge>(true);
         }
 #endif
     }

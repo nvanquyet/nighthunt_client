@@ -61,7 +61,11 @@ namespace NightHunt.Gameplay.Character.Combat
 
         private void OnDestroy()
         {
-            if (Instance == this) Instance = null;
+            if (Instance == this)
+            {
+                _registered.Clear();
+                Instance = null;
+            }
         }
 
         // ── Registry ──────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ namespace NightHunt.GameplaySystems.Inventory
     /// Server-authoritative inventory using SyncList. Provides O(1) item access
     /// via ID and index caches, and broadcasts change events for UI synchronisation.
     /// </summary>
-    public class InventorySystem : BaseNetworkGameplaySystem, IInventorySystem, IDisposable
+    public class InventorySystem : BaseNetworkGameplaySystem, IInventorySystem
     {
         #region Serialized Fields
 
@@ -96,19 +96,6 @@ namespace NightHunt.GameplaySystems.Inventory
         protected override void OnNetworkStopped()
         {
             _items.OnChange -= OnItemsChanged;
-            ClearAllCaches();
-        }
-
-        #endregion
-
-        #region IDisposable Implementation
-
-        public void Dispose()
-        {
-            // Unsubscribe from network events
-            _items.OnChange -= OnItemsChanged;
-
-            // Clear all caches
             ClearAllCaches();
         }
 

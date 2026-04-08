@@ -35,7 +35,11 @@ namespace NightHunt.Networking.ClientOnly
             var disabledComponents = new List<string>();
 
             // Disable all Camera components
+            #if UNITY_2023_2_OR_NEWER
+            Camera[] cameras = Object.FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            #else
             Camera[] cameras = FindObjectsOfType<Camera>(true);
+            #endif
             foreach (var camera in cameras)
             {
                 if (camera != null && camera.enabled)
@@ -47,7 +51,11 @@ namespace NightHunt.Networking.ClientOnly
             }
 
             // Disable all CinemachineCamera components
+            #if UNITY_2023_2_OR_NEWER
+            CinemachineCamera[] cinemachineCameras = Object.FindObjectsByType<CinemachineCamera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            #else
             CinemachineCamera[] cinemachineCameras = FindObjectsOfType<CinemachineCamera>(true);
+            #endif
             foreach (var cmCamera in cinemachineCameras)
             {
                 if (cmCamera != null && cmCamera.enabled)
@@ -59,7 +67,11 @@ namespace NightHunt.Networking.ClientOnly
             }
 
             // Disable all MeshRenderer components
+            #if UNITY_2023_2_OR_NEWER
+            MeshRenderer[] meshRenderers = Object.FindObjectsByType<MeshRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            #else
             MeshRenderer[] meshRenderers = FindObjectsOfType<MeshRenderer>(true);
+            #endif
             foreach (var renderer in meshRenderers)
             {
                 if (renderer != null && renderer.enabled)
@@ -71,7 +83,11 @@ namespace NightHunt.Networking.ClientOnly
             }
 
             // Disable all SkinnedMeshRenderer components
+            #if UNITY_2023_2_OR_NEWER
+            SkinnedMeshRenderer[] skinnedMeshRenderers = Object.FindObjectsByType<SkinnedMeshRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            #else
             SkinnedMeshRenderer[] skinnedMeshRenderers = FindObjectsOfType<SkinnedMeshRenderer>(true);
+            #endif
             foreach (var renderer in skinnedMeshRenderers)
             {
                 if (renderer != null && renderer.enabled)
@@ -83,7 +99,11 @@ namespace NightHunt.Networking.ClientOnly
             }
 
             // Disable all ParticleSystem components
+            #if UNITY_2023_2_OR_NEWER
+            ParticleSystem[] particleSystems = Object.FindObjectsByType<ParticleSystem>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            #else
             ParticleSystem[] particleSystems = FindObjectsOfType<ParticleSystem>(true);
+            #endif
             foreach (var ps in particleSystems)
             {
                 if (ps != null && ps.gameObject.activeSelf)
@@ -95,7 +115,11 @@ namespace NightHunt.Networking.ClientOnly
             }
 
             // Disable all LineRenderer components
+            #if UNITY_2023_2_OR_NEWER
+            LineRenderer[] lineRenderers = Object.FindObjectsByType<LineRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            #else
             LineRenderer[] lineRenderers = FindObjectsOfType<LineRenderer>(true);
+            #endif
             foreach (var lr in lineRenderers)
             {
                 if (lr != null && lr.enabled)
@@ -107,7 +131,11 @@ namespace NightHunt.Networking.ClientOnly
             }
 
             // Disable all TrailRenderer components
+            #if UNITY_2023_2_OR_NEWER
+            TrailRenderer[] trailRenderers = Object.FindObjectsByType<TrailRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            #else
             TrailRenderer[] trailRenderers = FindObjectsOfType<TrailRenderer>(true);
+            #endif
             foreach (var tr in trailRenderers)
             {
                 if (tr != null && tr.enabled)
@@ -119,7 +147,11 @@ namespace NightHunt.Networking.ClientOnly
             }
 
             // Disable all Canvas components (UI not needed on server)
+            #if UNITY_2023_2_OR_NEWER
+            Canvas[] canvases = Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            #else
             Canvas[] canvases = FindObjectsOfType<Canvas>(true);
+            #endif
             foreach (var canvas in canvases)
             {
                 if (canvas != null && canvas.gameObject.activeSelf)

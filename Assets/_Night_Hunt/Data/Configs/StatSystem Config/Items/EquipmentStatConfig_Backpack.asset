@@ -12,10 +12,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a64d04af30def8a418e90d6c4b0f5cc4, type: 3}
   m_Name: EquipmentStatConfig_Backpack
   m_EditorClassIdentifier: 
-  Stats: []
+  Stats:
+  - Type: 30
+    DefaultValue: 10
+    MinValue: 0
+    MaxValue: 100
+  - Type: 31
+    DefaultValue: 100
+    MinValue: 0
+    MaxValue: 500
   PlayerModifiers:
   - StatType: 4
-    Value: -2
+    Value: -5
     ModifierType: 1
-    Description: Backpack penalty
+    Description: Backpack weight penalty (-5% speed)
+  - StatType: 5
+    Value: 20
+    ModifierType: 0
+    Description: Backpack carry capacity (+20 kg)
   ItemModifiers: []

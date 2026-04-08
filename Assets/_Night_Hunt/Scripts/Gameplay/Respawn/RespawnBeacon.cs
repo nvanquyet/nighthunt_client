@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using FishNet.Object;
 using NightHunt.Data;
@@ -11,9 +12,18 @@ namespace NightHunt.Gameplay.Respawn
     /// Kế thừa BaseDeployable. Dành riêng cho chức năng Hồi Sinh (Respawn). 
     /// Không cho tầm nhìn, bị giới hạn theo Phase của Match.
     /// Thông số HP, PlaceTime, RespawnDelay được load từ config trung tâm tùy loại beacon.
+    ///
+    /// Bug #28 fix: Exposes static <see cref="All"/> registry so RespawnSystem can
+    /// iterate beacons in O(k) instead of calling FindObjectsByType every frame.
     /// </summary>
     public class RespawnBeacon : BaseDeployable
     {
+        // ── Static O(1) registry — Bug #28 fix ───────────────────────────────────
+        /// <summary>
+        /// All currently active (server-spawned) RespawnBeacons.
+        /// RespawnSystem iterates this instead of FindObjectsByType every frame.
+        /// </summary>
+        public static readonly HashSet<RespawnBeacon> All = new HashSet<RespawnBeacon>();
         private MatchPhaseManager _phaseManager;
 
         public override void OnStartNetwork()
@@ -28,12 +38,19 @@ namespace NightHunt.Gameplay.Respawn
         public override void OnStartServer()
         {
             base.OnStartServer();
+            All.Add(this); // Bug #28 fix: register so RespawnSystem avoids FindObjectsByType
             // Check Phase hiện tại có cho phép xài Beacon hồi sinh hay không
             // Beacons chỉ được phép ở Phase 1 và Phase 2.
             if (_phaseManager != null && _phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
             {
                 DespawnDeployable();
             }
+        }
+
+        public override void OnStopServer()
+        {
+            base.OnStopServer();
+            All.Remove(this); // Bug #28 fix: unregister on despawn
         }
 
         [Server]

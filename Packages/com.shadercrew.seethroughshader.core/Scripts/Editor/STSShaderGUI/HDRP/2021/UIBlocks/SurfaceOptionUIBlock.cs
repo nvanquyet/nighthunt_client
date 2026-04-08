@@ -224,7 +224,9 @@ namespace ShaderCrew.SeeThroughShader
         MaterialProperty opaqueCullMode = null;
         MaterialProperty rayTracing = null;
 
+#pragma warning disable CS0414
         SerializedProperty renderQueueProperty = null;
+#pragma warning restore CS0414
 
         SurfaceType defaultSurfaceType { get { return SurfaceType.Opaque; } }
 

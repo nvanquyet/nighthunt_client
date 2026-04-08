@@ -3,7 +3,9 @@ using UnityEngine;
 using FishNet.Object;
 using FishNet.Connection;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
+using NightHunt.Audio;
 
 namespace NightHunt.GameplaySystems.ItemUse
 {
@@ -32,8 +34,20 @@ namespace NightHunt.GameplaySystems.ItemUse
         private ThrowableDefinition _def;
         private Rigidbody _rb;
         private ProjectileBase _projectileBase;
+
+        // Owner identified by PlayerHealthSystem component reference — more robust than a
+        // Transform hierarchy check because it survives rig-model refactors and correctly
+        // excludes every hitbox bone (PlayerHitBox layer) regardless of depth in the rig.
+        private PlayerHealthSystem _ownerHealthSystem;
+
         private bool _initialized;
         private bool _exploded;
+
+        // Restrict the proximity OverlapSphere to relevant layers (e.g. PlayerHitBox | Character).
+        // Default ~0 (everything) works but set to PlayerHitBox in the Inspector for best performance.
+        [Tooltip("Layers polled by ProximityDetection. Set to PlayerHitBox (+ Character) to only " +
+                 "react to approaching players and skip terrain/props entirely.")]
+        [SerializeField] private LayerMask _proximityLayers = ~0;
 
         // Shared static PhysicsMaterial — allocated once, reused by all non-bounce projectiles.
         private static PhysicsMaterial s_noBounce;
@@ -81,12 +95,20 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// Called by server immediately after spawn
         /// </summary>
         [Server]
-        public void Initialize(ThrowableDefinition def)
+        public void Initialize(ThrowableDefinition def, Transform ownerRoot = null)
         {
             if (_initialized) return;
             
             _initialized = true;
             _def = def;
+
+            // Resolve owner by component, not by hierarchy root.
+            // This correctly covers every hitbox bone (PlayerHitBox layer) in the rig model
+            // without relying on IsChildOf() which can silently fail after prefab restructuring.
+            _ownerHealthSystem = ownerRoot != null
+                ? (ownerRoot.GetComponent<PlayerHealthSystem>()
+                   ?? ownerRoot.GetComponentInChildren<PlayerHealthSystem>(true))
+                : null;
             
             // Physics bounciness — reuse shared static material to avoid a new allocation per spawn.
             if (!def.CanBounce)
@@ -146,14 +168,24 @@ namespace NightHunt.GameplaySystems.ItemUse
             while (!_exploded)
             {
                 // NonAlloc: writes into the shared static buffer — zero heap allocation per tick.
-                int count = Physics.OverlapSphereNonAlloc(transform.position, detectionR, s_proximityBuffer);
+                // _proximityLayers restricts detection to relevant physics layers (e.g. PlayerHitBox)
+                // so terrain, props, and other non-player colliders are invisible to the sensor.
+                int count = Physics.OverlapSphereNonAlloc(transform.position, detectionR, s_proximityBuffer, _proximityLayers);
                 for (int i = 0; i < count; i++)
                 {
                     var hit = s_proximityBuffer[i];
                     if (hit.transform.IsChildOf(transform) || hit.transform == transform)
                         continue;
 
-                    if (hit.TryGetComponent<IDamageable>(out _))
+                    // Skip the thrower's hitboxes — compared by PlayerHealthSystem instance,
+                    // which is unique per player and covers all bones in the rig model.
+                    if (_ownerHealthSystem != null
+                        && hit.TryGetComponent<PlayerHitboxMarker>(out var ownerCheck)
+                        && ownerCheck.HealthSystem == _ownerHealthSystem)
+                        continue;
+
+                    // Check for players (IHittable via PlayerHitboxMarker) or IHittable on self
+                    if (hit.TryGetComponent<PlayerHitboxMarker>(out _) || hit.TryGetComponent<IHittable>(out _))
                     {
                         Explode();
                         yield break;
@@ -247,9 +279,15 @@ namespace NightHunt.GameplaySystems.ItemUse
             // VFX — bật DetonationVFX child thay vì Instantiate prefab mới
             _projectileBase?.TriggerDetonation(position, rotation);
 
-            // SFX
+            // SFX — route through AudioManager (3D, mixer-controlled, pooled — no GC)
             if (_def?.ImpactSound != null)
-                AudioSource.PlayClipAtPoint(_def.ImpactSound, position);
+            {
+                if (AudioManager.HasInstance)
+                    AudioManager.Instance.Play3D(_def.ImpactSound, position,
+                        AudioManager.Instance.GroupExplosion);
+                else
+                    AudioSource.PlayClipAtPoint(_def.ImpactSound, position); // fallback
+            }
         }
         
         [Server]
@@ -275,16 +313,55 @@ namespace NightHunt.GameplaySystems.ItemUse
             Vector3 origin = transform.position;
             float radius   = _def.ExplosionRadius;
 
+            // Track which HealthSystems have already been hit to avoid double-damage
+            // (player may have multiple hitbox children in the overlap sphere).
+            var hitSystems = new System.Collections.Generic.HashSet<PlayerHealthSystem>();
+
             for (int i = 0; i < count; i++)
             {
                 var hit = s_aoeBuffer[i];
-                if (!hit.TryGetComponent<IDamageable>(out var damageable))
-                    continue;
+                if (hit.transform.IsChildOf(transform) || hit.transform == transform) continue;
 
                 float dist    = Vector3.Distance(origin, hit.transform.position);
                 float falloff = Mathf.Clamp01(1f - dist / radius);
-                damageable.TakeDamage(_def.Damage * falloff);
 
+                // ── Path A: Player hitbox ─────────────────────────────────────────
+                if (hit.TryGetComponent<PlayerHitboxMarker>(out var marker))
+                {
+                    var hs = marker.HealthSystem;
+                    // Skip the thrower — identified by PlayerHealthSystem reference so every
+                    // rig bone (PlayerHitBox layer) is excluded without a hierarchy walk.
+                    if (hs != null && hs == _ownerHealthSystem) continue;
+                    if (hs != null && hitSystems.Add(hs))
+                    {
+                        var info = new DamageInfo
+                        {
+                            Damage                = _def.Damage * falloff,
+                            IsHeadshot            = false,
+                            HitPoint              = hit.transform.position,
+                            HitNormal             = (hit.transform.position - origin).normalized,
+                            ShooterNetworkObjectId = -1,  // world/grenade damage
+                            WeaponId              = _def != null ? _def.ItemID : string.Empty,
+                        };
+                        hs.ApplyDamageServer(info);
+                    }
+                }
+                // ── Path B: Generic IHittable (boss, destructibles, etc.) ─────────
+                else if (hit.TryGetComponent<IHittable>(out var hittable))
+                {
+                    var info = new DamageInfo
+                    {
+                        Damage                = _def.Damage * falloff,
+                        IsHeadshot            = false,
+                        HitPoint              = hit.transform.position,
+                        HitNormal             = (hit.transform.position - origin).normalized,
+                        ShooterNetworkObjectId = -1,
+                        WeaponId              = _def != null ? _def.ItemID : string.Empty,
+                    };
+                    hittable.RequestDamage(info);
+                }
+
+                // Rigidbody impulse for physics objects (crates, etc.)
                 if (hit.TryGetComponent<Rigidbody>(out var rb) && !rb.isKinematic)
                 {
                     Vector3 dir = (hit.transform.position - origin).normalized;

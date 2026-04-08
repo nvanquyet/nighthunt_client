@@ -41,7 +41,7 @@ namespace NightHunt.Gameplay.Scoring
         /// </summary>
         public void SyncScoreData(string scoreData)
         {
-            if (IsServer)
+            if (IsServerInitialized)
             {
                 networkScoreData.Value = scoreData;
             }

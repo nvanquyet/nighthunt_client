@@ -160,6 +160,8 @@ namespace NightHunt.GameplaySystems.Loot
             syncHasRolled.OnChange -= OnRolledChanged;
             syncIsOpen.OnChange -= OnOpenChanged;
             _isOpenPending = false;
+            if (IsServerInitialized)
+                OnDespawned?.Invoke();
         }
 
         // ── Server API ────────────────────────────────────────────────────────────
@@ -267,6 +269,9 @@ namespace NightHunt.GameplaySystems.Loot
                 if (WorldSpawnManager.Instance != null)
                     WorldSpawnManager.Instance.SpawnWorldItemsFromResults(_pendingDropResults, transform.position,
                         1.5f);
+                else
+                    Debug.LogError("[WorldContainer] WorldSpawnManager.Instance is NULL — " +
+                                   $"{_pendingDropResults.Count} drop results LOST! Ensure WorldSpawnManager exists in scene.");
                 _pendingDropResults = null;
             }
 

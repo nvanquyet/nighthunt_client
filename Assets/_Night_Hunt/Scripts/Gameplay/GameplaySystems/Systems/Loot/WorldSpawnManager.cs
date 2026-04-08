@@ -101,6 +101,9 @@ namespace NightHunt.GameplaySystems.Loot
         {
             var config = point.SpawnConfig;
 
+            // Stagger initial spawns so all points don't fire in the same frame.
+            yield return null;
+
             while (true)
             {
                 if (point.IsExhausted) yield break;
@@ -108,6 +111,8 @@ namespace NightHunt.GameplaySystems.Loot
                 while (point.IsFull) yield return null;
 
                 SpawnAtPoint(point);
+                // Yield at least one frame after spawning to avoid same-frame re-entry.
+                yield return null;
 
                 if (!config.CanRespawn) yield break;
 
@@ -115,7 +120,8 @@ namespace NightHunt.GameplaySystems.Loot
 
                 if (point.IsExhausted) yield break;
 
-                yield return new WaitForSeconds(config.RespawnTime);
+                // Minimum 1 s between respawns to prevent busyloop when RespawnTime == 0.
+                yield return new WaitForSeconds(Mathf.Max(1f, config.RespawnTime));
             }
         }
 
@@ -355,5 +361,76 @@ namespace NightHunt.GameplaySystems.Loot
         [Server]
         void IDropHandler.SpawnPickupsFromTable(SpawnTable table, Vector3 centerPosition, float spreadRadius)
             => SpawnWorldItemsFromTable(table, centerPosition, spreadRadius);
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Auto-assign / Create Prefab References ────
+
+        [ContextMenu("NightHunt/Auto-Assign World Prefabs")]
+        private void Editor_AutoAssignWorldPrefabs()
+        {
+            bool changed = false;
+
+            if (worldItemPrefab == null)
+            {
+                const string itemPath = "Assets/_Night_Hunt/Prefabs/LootItem/Prefab_WorldItem.prefab";
+                var found = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(itemPath);
+                if (found != null) { worldItemPrefab = found; changed = true; Debug.Log($"[WorldSpawnManager] Auto-assigned worldItemPrefab from {itemPath}"); }
+                else Debug.LogWarning($"[WorldSpawnManager] worldItemPrefab not found at {itemPath} — create it first.");
+            }
+
+            if (worldContainerPrefab == null)
+            {
+                const string containerPath = "Assets/_Night_Hunt/Prefabs/LootItem/Prefab_WorldContainer.prefab";
+                var found = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(containerPath);
+                if (found != null) { worldContainerPrefab = found; changed = true; Debug.Log($"[WorldSpawnManager] Auto-assigned worldContainerPrefab from {containerPath}"); }
+                else Debug.LogWarning($"[WorldSpawnManager] worldContainerPrefab not found at {containerPath} — create it first.");
+            }
+
+            if (changed) UnityEditor.EditorUtility.SetDirty(this);
+        }
+
+        [ContextMenu("NightHunt/Create WorldItem Template Prefab")]
+        private void Editor_CreateWorldItemPrefab()
+        {
+            const string dir  = "Assets/_Night_Hunt/Prefabs/LootItem";
+            const string path = dir + "/Prefab_WorldItem.prefab";
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[WorldSpawnManager] Prefab_WorldItem already exists at {path}");
+                return;
+            }
+
+            var go = new GameObject("Prefab_WorldItem");
+            // WorldItem requires NetworkObject — add stub components for reference
+            go.AddComponent<SphereCollider>().radius = 0.5f;
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+            worldItemPrefab = saved;
+            UnityEditor.EditorUtility.SetDirty(this);
+            Debug.Log($"[WorldSpawnManager] Created Prefab_WorldItem template at {path}. " +
+                      "Add NetworkObject + WorldItem components manually.");
+        }
+
+        [ContextMenu("NightHunt/Create WorldContainer Template Prefab")]
+        private void Editor_CreateWorldContainerPrefab()
+        {
+            const string dir  = "Assets/_Night_Hunt/Prefabs/LootItem";
+            const string path = dir + "/Prefab_WorldContainer.prefab";
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[WorldSpawnManager] Prefab_WorldContainer already exists at {path}");
+                return;
+            }
+
+            var go = new GameObject("Prefab_WorldContainer");
+            go.AddComponent<BoxCollider>();
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+            worldContainerPrefab = saved;
+            UnityEditor.EditorUtility.SetDirty(this);
+            Debug.Log($"[WorldSpawnManager] Created Prefab_WorldContainer template at {path}. " +
+                      "Add NetworkObject + WorldContainer components manually.");
+        }
+#endif
     }
 }

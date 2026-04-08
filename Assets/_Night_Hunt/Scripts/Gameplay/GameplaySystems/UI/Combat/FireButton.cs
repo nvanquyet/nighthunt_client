@@ -184,12 +184,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private void StartJoystick(PointerEventData eventData)
         {
+            // BUG 10 FIX: Guard against calling joystick before player has spawned and
+            // Initialize(handler) has been called. The joystick's internal _background field
+            // can be null if OnPointerDown fires before Unity initializes the VariableJoystick.
+            if (_joystick == null || _combatInputHandler == null) return;
+
             _joystickStarted = true;
-            if (_joystick != null)
-            {
-                _joystick.gameObject.SetActive(true);    // make visible + enable raycasting
-                _joystick.OnPointerDown(eventData);      // Floating mode: positions background at touch point
-            }
+            _joystick.gameObject.SetActive(true);    // make visible + enable raycasting
+            _joystick.OnPointerDown(eventData);      // Floating mode: positions background at touch point
         }
 
         private void StopHoldTimer()

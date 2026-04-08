@@ -16,25 +16,14 @@ MonoBehaviour:
   DisplayName: Tactical Gloves
   Description: Improves grip and handling
   Icon: {fileID: 0}
+  Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.2
-  ModifyWeightWhenEquipped: 0
-  EquippedWeightModifier: 0
-  ResourceType: 0
-  MaxResource: 0
-  DefaultResource: 0
-  AttachmentSlots: 
-  CanAttachTo: 
-  ValidSlots: 
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
-  UsageDuration: 0
-  CanCancelUsage: 1
-  CanUseWhileMoving: 0
-  Stats: []
+  _heldPrefab: {fileID: 0}
+  _groundPrefab: {fileID: 0}
+  ValidSlots: 0000000001000000
+  _attachmentSlots: 
+  StatConfig: {fileID: 11400000, guid: ddf2a9295a491124fabff2d594d035e8, type: 2}
   EquipmentSlot: 2
-  MaxDurability: 100
-  DefaultDurability: 100
   DurabilityLossRate: 1
-  PlayerModifiers: []

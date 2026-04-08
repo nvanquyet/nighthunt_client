@@ -32,7 +32,11 @@ namespace GameKit.Dependencies.Utilities.ObjectPooling.Examples
             // Used as our pretend overhead.
             for (int i = 0; i < 30; i++)
             {
+#if UNITY_2023_2_OR_NEWER
+                _spawner = FindFirstObjectByType<ProjectileSpawner>();
+#else
                 _spawner = FindObjectOfType<ProjectileSpawner>();
+#endif
                 _renderers = GetComponentsInChildren<MeshRenderer>();
             }
         }

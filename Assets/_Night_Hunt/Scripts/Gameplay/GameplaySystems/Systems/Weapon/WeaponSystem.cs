@@ -16,6 +16,7 @@ using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
 using NightHunt.Core.Base;
 using NightHunt.Data;
+using NightHunt.GameplaySystems.Core;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
@@ -33,7 +34,7 @@ namespace NightHunt.GameplaySystems.Weapon
     ///   WeaponSystem.EquipUnequip.cs— Equip / Unequip / Swap / Select / Holster
     ///   WeaponSystem.NetworkSync.cs — all RPCs for remote client synchronisation
     /// </summary>
-    public partial class WeaponSystem : BaseNetworkGameplaySystem, IWeaponSystem, IDisposable
+    public partial class WeaponSystem : BaseNetworkGameplaySystem, IWeaponSystem
     {
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("Configuration")]
@@ -99,6 +100,13 @@ namespace NightHunt.GameplaySystems.Weapon
         /// </summary>
         internal float _currentElevationAngle = 0f;
 
+        /// <summary>
+        /// World-space endpoint of the last hitscan pellet (hit point or max-range terminus).
+        /// Set by HandleWeaponFireResult so BroadcastProjectileServerRpc can relay it to remote
+        /// clients — allowing the visual projectile to teleport instead of flying physically.
+        /// </summary>
+        internal Vector3 _lastFireEndpoint = Vector3.zero;
+
         // ── Events (IWeaponSystem) ─────────────────────────────────────────────
         public event Action<WeaponSlotType, ItemInstance>      OnWeaponEquipped;
         public event Action<WeaponSlotType, ItemInstance>      OnWeaponUnequipped;
@@ -121,13 +129,6 @@ namespace NightHunt.GameplaySystems.Weapon
         }
 
         protected override void OnNetworkStopped()
-        {
-            _weapons.OnChange   -= OnWeaponsChangedCallback;
-            _activeSlot.OnChange -= OnActiveSlotChangedCallback;
-            _weaponCache.Clear();
-        }
-
-        public void Dispose()
         {
             _weapons.OnChange   -= OnWeaponsChangedCallback;
             _activeSlot.OnChange -= OnActiveSlotChangedCallback;
@@ -176,12 +177,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
         internal void RebuildWeaponCache()
         {
-            _weaponCache.Clear();
-            foreach (var kvp in _weapons)
-            {
-                var w = _inventorySystem?.GetItemByInstanceID(kvp.Value);
-                if (w != null) _weaponCache[kvp.Key] = w;
-            }
+            SlotCacheHelper.Rebuild(_weapons, id => _inventorySystem?.GetItemByInstanceID(id), _weaponCache);
         }
 
         internal bool DebugLogs => _debugConfig != null && _debugConfig.EnableWeaponDebugLogs;
@@ -209,8 +205,31 @@ namespace NightHunt.GameplaySystems.Weapon
                 Debug.LogError("[WeaponSystem] InventoryConfig not assigned.");
 
             if (_bulletTargetConfig == null)
+            {
                 Debug.LogWarning("[WeaponSystem] BulletTargetConfig not assigned — " +
                                  "registry acquisition disabled, using raw physics raycast only.");
+#if UNITY_EDITOR
+                // Editor convenience: try to auto-resolve a project asset of type BulletTargetConfig
+                try
+                {
+                    var guids = UnityEditor.AssetDatabase.FindAssets("t:BulletTargetConfig");
+                    if (guids != null && guids.Length > 0)
+                    {
+                        var path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
+                        var asset = UnityEditor.AssetDatabase.LoadAssetAtPath<BulletTargetConfig>(path);
+                        if (asset != null)
+                        {
+                            _bulletTargetConfig = asset;
+                            UnityEngine.Debug.Log($"[WeaponSystem] Auto-assigned BulletTargetConfig from {path}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    UnityEngine.Debug.LogWarning($"[WeaponSystem] Auto-resolve BulletTargetConfig failed: {ex.Message}");
+                }
+#endif
+            }
 
             if (_slotPriority == null || _slotPriority.Length == 0)
                 _slotPriority = new[] { WeaponSlotType.Primary, WeaponSlotType.Secondary, WeaponSlotType.Melee };

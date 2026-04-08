@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using FishNet.Managing;
+using FishNet.Managing.Scened;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -23,18 +24,21 @@ namespace NightHunt.Server
         [Header("References")]
         [SerializeField] private NetworkManager networkManager;
 
-        [Header("Fallback (Production-Localhost)")]
+        [Header("Fallback (Editor only — fill in from backend /api/internal/allocate response)")]
         [SerializeField] private ushort  fallbackPort       = 7777;
         [SerializeField] private string  fallbackBackendUrl = "https://localhost:8443";
         [SerializeField] private string  fallbackServerId   = "localhost-production-test";
+        [SerializeField] private string  fallbackServerSecret = "replace-with-devSecret-from-allocate";
+        [SerializeField] private string  fallbackMapId      = "map_01";
         [SerializeField] private int     fallbackMaxPlayers  = 16;
 
-        // Được parse từ CLI args (Docker truyền vào qua entrypoint.sh)
+        // Được parse từ CLI args (Docker ENV qua entrypoint.sh, hoặc -e MAP_ID=...)
         private string _serverId;
         private ushort _gamePort;
         private string _backendUrl;
         private string _serverSecret;
         private int    _maxPlayers;
+        private string _mapId; // e.g. "map_01", "map_02" — empty = dùng scene hiện tại
 
         // ─────────────────────────────────────────────────────────────────────────
 
@@ -47,13 +51,18 @@ namespace NightHunt.Server
 #if UNITY_SERVER
             ParseCommandLineArgs();
 #else
-            // Editor fallback uses the same localhost production endpoint.
+            // Editor fallback: values must be filled from backend /api/internal/allocate response.
+            // 1. Call POST /api/internal/allocate → get serverId + devSecret
+            // 2. Paste serverId → fallbackServerId, devSecret → fallbackServerSecret
+            // 3. Press Play — server will register with backend successfully.
             _serverId     = fallbackServerId;
             _gamePort     = fallbackPort;
             _backendUrl   = fallbackBackendUrl;
-            _serverSecret = "replace-this-production-ds-admin-secret";
+            _serverSecret = fallbackServerSecret;
             _maxPlayers   = fallbackMaxPlayers;
-            Debug.LogWarning("[ServerBootstrap] Running in editor with localhost production fallback config.");
+            _mapId        = fallbackMapId;
+            Debug.LogWarning($"[ServerBootstrap] EDITOR MODE — serverId='{_serverId}' backendUrl='{_backendUrl}'. " +
+                             "Fill fallbackServerId/fallbackServerSecret from POST /api/internal/allocate if registration fails.");
 #endif
 
             if (networkManager == null)
@@ -88,6 +97,7 @@ namespace NightHunt.Server
                     case "--backendUrl":   _backendUrl   = args[i + 1]; break;
                     case "--serverSecret": _serverSecret = args[i + 1]; break;
                     case "--maxPlayers":   int.TryParse(args[i + 1], out _maxPlayers); break;
+                    case "--mapId":        _mapId        = args[i + 1]; break;
                 }
             }
 
@@ -95,7 +105,8 @@ namespace NightHunt.Server
                       $"\n  ServerId   : {_serverId}" +
                       $"\n  Port       : {_gamePort}" +
                       $"\n  BackendUrl : {_backendUrl}" +
-                      $"\n  MaxPlayers : {_maxPlayers}");
+                      $"\n  MaxPlayers : {_maxPlayers}" +
+                      $"\n  MapId      : {(string.IsNullOrEmpty(_mapId) ? "(default/current scene)" : _mapId)}");
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -167,8 +178,9 @@ namespace NightHunt.Server
                 if (req.result == UnityWebRequest.Result.Success)
                 {
                     Debug.Log("[ServerBootstrap] ✓ Registered with backend successfully!");
-                    WriteHealthFile(); // Báo cho Docker health check biết server OK
+                    WriteHealthFile();
                     StartCoroutine(HeartbeatLoop());
+                    LoadGameScene(); // Load đúng map scene theo mapId
                     yield break;
                 }
 
@@ -182,6 +194,45 @@ namespace NightHunt.Server
             // Vẫn chạy nhưng log error để backend biết
             Debug.LogError("[ServerBootstrap] Failed to register after 3 attempts. " +
                            "Server running but NOT visible to matchmaking!");
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Load game scene theo mapId nhận từ Docker ENV.
+        ///
+        /// DS boot vào 00_DS_Boot.unity (không phải map), nên LUÔN load map scene.
+        /// - MAP_ID=map_01 → LoadGlobalScenes("02_Map_01", ReplaceScenes=All)
+        /// - MAP_ID=map_02 → LoadGlobalScenes("02_Map_02", ReplaceScenes=All)
+        ///   FishNet unload 00_DS_Boot, load map scene.
+        ///   NetworkManager (DontDestroyOnLoad=1) survive sang map scene.
+        ///   Map scene có NetworkManager riêng → FishNet destroy duplicate (DestroyNewest) → dùng boot NM.
+        ///
+        /// Client KHÔNG cần gọi hàm này. FishNet SceneManager tự sync scene cho client.
+        /// Thêm map mới: thêm case vào switch + thêm scene vào BuildScript.SERVER_SCENES.
+        /// </summary>
+        private void LoadGameScene()
+        {
+            // Với dedicated boot scene, LUÔN load map (không còn trường hợp "đã ở đúng scene")
+            string sceneName = _mapId switch
+            {
+                "map_01" => "02_Map_01",
+                "map_02" => "02_Map_02",
+                // Thêm map mới ở đây:
+                // "map_03" => "02_Map_03",
+                _ => "02_Map_01", // fallback về map_01
+            };
+
+            Debug.Log($"[ServerBootstrap] mapId='{_mapId}' → loading scene '{sceneName}'...");
+
+            // ReplaceScenes=All: unload 00_DS_Boot, load map scene.
+            // NetworkManager (DontDestroyOnLoad=1) tự survive sang scene mới.
+            var sld = new SceneLoadData(sceneName)
+            {
+                ReplaceScenes = ReplaceOption.All,
+                Options       = new LoadOptions { AllowStacking = false },
+            };
+            networkManager.SceneManager.LoadGlobalScenes(sld);
         }
 
         // ─────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d43377b348fd2374d9366239afbb39b6, type: 3}
+  m_Name: SpawnTable_SupplyDrop_Rare
+  m_EditorClassIdentifier: 
+  Mode: 2
+  FixedEntries: []
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: d00a50bc8623ccf48a0bb2387d60de90, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 0.85
+  - Item: {fileID: 11400000, guid: ad73a92b20f42c447a98965c6e99b60d, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 0.85
+  - Item: {fileID: 11400000, guid: 7c33b3e3c0b26ad4280386a84fabc140, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 0.8
+  - Item: {fileID: 11400000, guid: 7edd8e440c99dd84e87e197bedd546b2, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 0.75
+  - Item: {fileID: 11400000, guid: 0f851431afcd2b44995f3025196e9d90, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 0.75
+  - Item: {fileID: 11400000, guid: 75df374a5b8dd2147a7b9eabf88215ff, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 0.65
+  MinRandomCount: 3
+  MaxRandomCount: 5
+  RollOnOpen: 1
+  DropToWorldOnOpen: 0
+  MinTotalItems: 4
+  MaxTotalItems: 7

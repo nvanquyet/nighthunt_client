@@ -43,7 +43,10 @@ namespace NightHunt.UI
         private Button _continueButton;
 
         // ── Config ────────────────────────────────────────────────────────────
-        [Header("Timing")] [SerializeField] private float _displayDuration = 10f; // Overridden by config at runtime
+        [Header("Timing")]
+#pragma warning disable CS0414
+        [SerializeField] private float _displayDuration = 10f; // Overridden by config at runtime
+#pragma warning restore CS0414
         [SerializeField] private float _postMatchCountdown = 10f;
 
         // ──────────────────────────────────────────────────────────────────────
@@ -199,6 +202,56 @@ namespace NightHunt.UI
         }
 
         #endregion
+
+#if UNITY_EDITOR
+        // ── Editor — Context Menu: Create ResultRow Template Prefab ──────────
+
+        [ContextMenu("NightHunt/Create ResultRow Template Prefab")]
+        private void Editor_CreateResultRowPrefab()
+        {
+            const string parent = "Assets/_Night_Hunt/Prefabs";
+            const string dir    = parent + "/UI";
+            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
+                UnityEditor.AssetDatabase.CreateFolder(parent, "UI");
+
+            const string path = dir + "/ResultRow_Template.prefab";
+            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
+            {
+                Debug.Log($"[ResultsView] ResultRow_Template already exists at {path}");
+                return;
+            }
+
+            var go  = new GameObject("ResultRow_Template");
+            go.AddComponent<RectTransform>().sizeDelta = new Vector2(500f, 40f);
+            go.AddComponent<UnityEngine.UI.Image>().color = new Color(0.08f, 0.08f, 0.08f, 0.8f);
+            var hlg = go.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+            hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 4f;
+            hlg.padding = new RectOffset(6, 6, 2, 2);
+
+            string[] colNames   = { "NameText", "TeamText", "KillsText", "DeathsText", "ScoreText", "EloText" };
+            string[] colSamples = { "PlayerX",  "Team A",   "5",          "2",           "1200",      "+25" };
+            float[]  colWidths  = { 160f, 70f, 50f, 50f, 70f, 60f };
+
+            for (int i = 0; i < colNames.Length; i++)
+            {
+                var colGo  = new GameObject(colNames[i], typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+                colGo.transform.SetParent(go.transform, false);
+                colGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = colWidths[i];
+                colGo.GetComponent<TMPro.TextMeshProUGUI>().text = colSamples[i];
+            }
+
+            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+
+            if (_resultRowPrefab == null)
+            {
+                _resultRowPrefab = saved;
+                UnityEditor.EditorUtility.SetDirty(this);
+            }
+            Debug.Log($"[ResultsView] Created ResultRow_Template at {path}. " +
+                      "Add ResultRowView component and wire nameText/teamText/killsText/deathsText/scoreText/eloText.");
+        }
+#endif
     }
 
     /// <summary>

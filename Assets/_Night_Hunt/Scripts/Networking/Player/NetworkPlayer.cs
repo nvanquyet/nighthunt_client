@@ -53,6 +53,10 @@ namespace NightHunt.Networking
         private NightHunt.Gameplay.Input.Handlers.Movement.MovementInputHandler _cachedMovementHandler;
         private NightHunt.Gameplay.Input.Handlers.Camera.CameraInputHandler _cachedCameraHandler;
 
+        // Guard: FishNet fires both OnStartClient and OnOwnershipClient for the local player's
+        // own spawn — this flag ensures SetupOwnerSide() only runs once per network lifetime.
+        private bool _ownerSideInitialized = false;
+
 
         // ── PUBLIC PLAYER DATA ────────────────────────────────────────────────
         // SyncVar ensures FishNet includes the current value in every spawn packet
@@ -203,6 +207,7 @@ namespace NightHunt.Networking
         public override void OnStopClient()
         {
             base.OnStopClient();
+            _ownerSideInitialized = false; // reset so it can run again on rejoin/reconnect
             _playerData.OnChange -= OnPlayerDataChanged;
             _isAlive.OnChange -= OnAliveStateChanged;
             PlayerPublicRegistry.Instance.Unregister((int)this.ObjectId);
@@ -217,6 +222,13 @@ namespace NightHunt.Networking
 
         private void OnPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next, bool asServer)
         {
+            // On a listen server, FishNet fires this callback TWICE per SyncVar write:
+            // once with asServer=true (server side) and once with asServer=false (client side).
+            // Skip the server-side call when the client is also running to prevent
+            // OnPublicDataChanged from firing 2x (which causes FogTeamVisibilityBinder
+            // and any UI subscriber to refresh redundantly).
+            if (asServer && IsClientInitialized) return;
+
             PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
             OnPublicDataChanged?.Invoke(prev, next);
         }
@@ -264,6 +276,12 @@ namespace NightHunt.Networking
 
         private void SetupOwnerSide()
         {
+            // Guard: FishNet fires both OnStartClient (IsOwner=true) AND OnOwnershipClient
+            // for the local player's own spawn. Skip the second call to prevent double
+            // initialization of HUD, input, AimSystem, etc.
+            if (_ownerSideInitialized) return;
+            _ownerSideInitialized = true;
+
             // Owner only: Enable camera and input
             EnableInput();
 

@@ -16,19 +16,14 @@ MonoBehaviour:
   DisplayName: 
   Description: 
   Icon: {fileID: 21300000, guid: 10b64ede9a66119419847a8d6a2c068b, type: 3}
+  Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 1.5
-  ModifyWeightWhenEquipped: 0
-  EquippedWeightModifier: 0
-  AttachmentSlots: 07000000
-  CanAttachTo: 
+  _heldPrefab: {fileID: 0}
+  _groundPrefab: {fileID: 0}
   ValidSlots: 0000000001000000
-  EquippedPrefab: {fileID: 0}
-  DroppedPrefab: {fileID: 0}
-  UsageDuration: 0
-  CanCancelUsage: 1
-  CanUseWhileMoving: 0
-  StatConfig: {fileID: 0}
+  _attachmentSlots: 07000000
+  StatConfig: {fileID: 11400000, guid: b7f1df3daabfac240a882fb6a9cb4a8b, type: 2}
   EquipmentSlot: 0
   DurabilityLossRate: 1

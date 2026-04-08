@@ -1,4 +1,4 @@
-using FishNet.Object;
+﻿using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using System.Collections;
@@ -59,8 +59,14 @@ namespace NightHunt.GameplaySystems.Loot
     /// </summary>
     public class WorldItem : NetworkBehaviour, IPickupable
     {
-        /// <summary>Fired server-side khi WorldItem bá»‹ despawn (pickup hoáº·c expired).</summary>
+        /// <summary>Fired server-side khi WorldItem bị despawn (pickup hoặc expired).</summary>
         public event System.Action OnDespawned;
+
+        /// <summary>Fired on the local client when any WorldItem enters hover (raycast target changed).</summary>
+        public static event System.Action<WorldItem> OnAnyHoverEnter;
+
+        /// <summary>Fired on the local client when any WorldItem exits hover.</summary>
+        public static event System.Action<WorldItem> OnAnyHoverExit;
 
         [Header("Settings")]
         [Tooltip("Maximum distance to pickup â€” fallback khi khÃ´ng cÃ³ LootableConfig.")]
@@ -77,11 +83,13 @@ namespace NightHunt.GameplaySystems.Loot
         // Ä‘á»ƒ value Ä‘Æ°á»£c embed vÃ o spawn packet â†’ clients nháº­n data ngay láº§n Ä‘áº§u.
         private readonly SyncVar<ItemInstanceData> _syncItemData = new SyncVar<ItemInstanceData>();
 
+        // Server-authoritative picked-up flag — SyncVar so all observers immediately see IsPickedUp=true when server confirms pickup.
+        private readonly SyncVar<bool> _syncIsPickedUp = new SyncVar<bool>();
+
         // â”€â”€ Local state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private ItemInstanceData _itemData;
         private GameObject _modelInstance;
-        private bool _initialized;
-        private bool _modelSpawned; // guard: SpawnModelLocal chá»‰ cháº¡y 1 láº§n
+        private bool _modelSpawned; // guard: SpawnModelLocal chỉ chạy 1 lần
         private Coroutine _waitDataCoroutine; // fallback polling coroutine
 
         // â”€â”€ Properties â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -96,7 +104,9 @@ namespace NightHunt.GameplaySystems.Loot
         public string ItemDefinitionID => _itemData.DefinitionID;
         public int Quantity => _itemData.Quantity;
         public bool IsPickedUp { get; private set; }
+#pragma warning disable CS0414
         private bool _isPickupPending;
+#pragma warning restore CS0414
 
         // â”€â”€ IInteractable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -114,14 +124,17 @@ namespace NightHunt.GameplaySystems.Loot
 
         public bool CanInteract(GameObject interactor)
         {
-            if (IsPickedUp || _isPickupPending) return false;
+            // IsPickedUp is a SyncVar — reflects the server’s authoritative state on all clients.
+            // _isPickupPending is intentionally NOT checked here: if the server ever rejects a
+            // pickup RPC (e.g. validation fail) the client would be permanently locked out.
+            if (IsPickedUp) return false;
             if (!IsDataReady) return false;
             return Vector3.Distance(transform.position, interactor.transform.position) <= GetInteractDistance();
         }
 
         public void Interact(GameObject interactor)
         {
-            if (interactor == null || _isPickupPending) return;
+            if (interactor == null) return;
             if (!IsSpawned || !IsClientStarted) return;
 
             var playerNob = ComponentResolver.Find<NetworkObject>(interactor)
@@ -131,20 +144,25 @@ namespace NightHunt.GameplaySystems.Loot
                 .Resolve();
             if (playerNob == null)
             {
-                Debug.LogError($"[WorldItem] Interact: '{interactor.name}' khÃ´ng cÃ³ NetworkObject!");
+                Debug.LogError($"[WorldItem] Interact: '{interactor.name}' không có NetworkObject!");
                 return;
             }
 
+            // _isPickupPending kept only to prevent rapid same-frame spam RPCs.
+            // It is intentionally NOT checked in CanInteract() so that a server rejection
+            // (which never calls OnStopNetwork to reset it) can't permanently lock the client.
             _isPickupPending = true;
             RequestPickup(playerNob);
         }
 
         public void OnHoverEnter(GameObject interactor)
         {
+            OnAnyHoverEnter?.Invoke(this);
         }
 
         public void OnHoverExit(GameObject interactor)
         {
+            OnAnyHoverExit?.Invoke(this);
         }
 
         // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -221,7 +239,6 @@ namespace NightHunt.GameplaySystems.Loot
                 if (string.IsNullOrEmpty(_itemData.DefinitionID))
                 {
                     _itemData = syncVal;
-                    _initialized = true;
                     if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                         Debug.Log($"[WorldItem] OnStartClient: synced _itemData tá»« syncVal ObjId={ObjectId}");
                 }
@@ -292,10 +309,11 @@ namespace NightHunt.GameplaySystems.Loot
 
             _itemData = data;
             _lootableConfig = lootableConfig;
-            _initialized = true;
 
-            // Set SyncVar TRÆ¯á»šC Spawn â†’ FishNet embed value vÃ o spawn packet
+            // Set SyncVar TRƯỚC Spawn → FishNet embed value vào spawn packet
             _syncItemData.Value = data;
+            // Reset picked-up flag so that pooled NetworkObjects don't carry stale state.
+            _syncIsPickedUp.Value = false;
 
             if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                 Debug.Log($"[WorldItem] â”€â”€ InitializeBeforeSpawn â”€â”€ " +
@@ -340,7 +358,6 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             _itemData = newData;
-            _initialized = true;
 
             SpawnModelLocal($"OnSyncItemDataChanged(asServer={asServer})");
         }
@@ -492,10 +509,7 @@ namespace NightHunt.GameplaySystems.Loot
                 if (!string.IsNullOrEmpty(defID))
                 {
                     if (string.IsNullOrEmpty(_itemData.DefinitionID))
-                    {
                         _itemData = syncVal;
-                        _initialized = true;
-                    }
 
                     if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                         Debug.Log(
@@ -519,6 +533,16 @@ namespace NightHunt.GameplaySystems.Loot
         public void RequestPickup(NetworkObject playerNob, NetworkConnection conn = null)
         {
             if (conn == null) conn = playerNob?.Owner;
+
+            // Server-side race-condition guard: two clients pressing F on the same tick.
+            // Also protects against RPC spam from a single client before the SyncVar
+            // update travels back to them.
+            if (IsPickedUp)
+            {
+                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldItem] RequestPickup: already picked up (ObjId={ObjectId}). Ignoring.");
+                return;
+            }
 
             if (conn == null)
             {
@@ -588,7 +612,10 @@ namespace NightHunt.GameplaySystems.Loot
             }
 
             inventory.AddItem(_itemData.DefinitionID, _itemData.Quantity);
-            IsPickedUp = true;
+            // Mark as picked up via SyncVar so all clients immediately reflect the state.
+            // This fires OnChange on every observer, letting their CanInteract() return false
+            // without any client needing to track _isPickupPending.
+            _syncIsPickedUp.Value = true;
             if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
                 Debug.Log(
                 $"[WorldItem] âœ“ Pickup: '{_itemData.DefinitionID}' Ã—{_itemData.Quantity} ClientId={conn.ClientId}");
