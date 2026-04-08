@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 5010549295229945176}
   - component: {fileID: 5135793850544410904}
   - component: {fileID: 5135385315644009018}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: Smoke
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4923,7 +4923,7 @@ GameObject:
   - component: {fileID: 5014425182996638346}
   - component: {fileID: 5135736751204622664}
   - component: {fileID: 5134563250994765002}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: Sparks
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9835,7 +9835,7 @@ GameObject:
   - component: {fileID: 5010562390422890174}
   - component: {fileID: 5136020695704660186}
   - component: {fileID: 5135402642469505372}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: Flash
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -14756,7 +14756,7 @@ GameObject:
   - component: {fileID: 5010659045840583644}
   - component: {fileID: 5135612897510814550}
   - component: {fileID: 5135332624892702970}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: Glow
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -19659,7 +19659,7 @@ GameObject:
   - component: {fileID: 5010391872744333516}
   - component: {fileID: 5136192485949845292}
   - component: {fileID: 5134769826230044902}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: Debris
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -24571,7 +24571,7 @@ GameObject:
   - component: {fileID: 5014668337730864162}
   - component: {fileID: 5136209380988914868}
   - component: {fileID: 5135055844466630532}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: Hit 1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -29507,7 +29507,7 @@ GameObject:
   - component: {fileID: 5014458615927015974}
   - component: {fileID: 5131966882008950440}
   - component: {fileID: 5134894173922369204}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: Trails
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -34412,7 +34412,7 @@ GameObject:
   - component: {fileID: 7188641018273312176}
   - component: {fileID: 7124800593613014196}
   - component: {fileID: 2926743513608004426}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: Projectile 1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -34514,7 +34514,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6798795764126664165}
-  m_Layer: 9
+  m_Layer: 8
   m_Name: ShootFX
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -34551,7 +34551,7 @@ GameObject:
   - component: {fileID: 7908702678972710144}
   - component: {fileID: 534390947499407338}
   - component: {fileID: 5915132072030169304}
-  m_Layer: 13
+  m_Layer: 8
   m_Name: MainFX
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -39543,7 +39543,7 @@ GameObject:
   - component: {fileID: 3672376483986453923}
   - component: {fileID: 4304479529011764781}
   - component: {fileID: 5830845583561116473}
-  m_Layer: 9
+  m_Layer: 8
   m_Name: MuzzleLight
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -39682,6 +39682,10 @@ PrefabInstance:
     - target: {fileID: 139460, guid: 73eae4b8303463a419bf4eb29b8b4f75, type: 3}
       propertyPath: m_Name
       value: GenericMuzzleFlash
+      objectReference: {fileID: 0}
+    - target: {fileID: 139460, guid: 73eae4b8303463a419bf4eb29b8b4f75, type: 3}
+      propertyPath: m_Layer
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 434204, guid: 73eae4b8303463a419bf4eb29b8b4f75, type: 3}
       propertyPath: m_LocalPosition.x

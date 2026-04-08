@@ -35,8 +35,9 @@ MonoBehaviour:
   footstepWalk:
   - {fileID: 8300000, guid: 48be7f48cabe1684081d9057974691fd, type: 3}
   - {fileID: 8300000, guid: faae713c33699294e9570b70126713e3, type: 3}
-  footstepSprint:
+  footstepRun:
   - {fileID: 8300000, guid: 715fab321e797e94f9b46731783a3789, type: 3}
+  footstepSprint:
   - {fileID: 8300000, guid: fbcf6f3a68b753d499db713a298a6dff, type: 3}
   footstepLand:
   - {fileID: 8300000, guid: 3b09d59f4499d45428baa7a21e954296, type: 3}

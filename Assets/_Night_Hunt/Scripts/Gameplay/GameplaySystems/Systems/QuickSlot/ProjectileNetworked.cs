@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using FishNet.Object;
 using FishNet.Connection;
+using NightHunt.Core;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
@@ -74,6 +75,9 @@ namespace NightHunt.GameplaySystems.ItemUse
         {
             _rb = GetComponent<Rigidbody>();
             _projectileBase = GetComponent<ProjectileBase>();
+            // Self-heal layer: always ensure throwables land on the correct physics layer
+            // regardless of the serialised prefab value (layer table renames break prefabs).
+            gameObject.layer = LayerMask.NameToLayer(NightHuntLayers.Throwable);
         }
         
         public override void OnStartNetwork()

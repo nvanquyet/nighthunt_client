@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 5224314204864568699}
   - component: {fileID: 2960896585555497786}
   - component: {fileID: 362667537298120939}
-  m_Layer: 13
+  m_Layer: 12
   m_Name: GrenadeBasic
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -96,7 +96,7 @@ GameObject:
   m_Component:
   - component: {fileID: 9079636076033683978}
   - component: {fileID: 5943568965928873858}
-  m_Layer: 13
+  m_Layer: 12
   m_Name: Trail
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -248,7 +248,7 @@ GameObject:
   - component: {fileID: 2722063571810959594}
   - component: {fileID: 1345958140613512518}
   - component: {fileID: 2717253905578451403}
-  m_Layer: 13
+  m_Layer: 12
   m_Name: Frag Grenade
   m_TagString: Bullets
   m_Icon: {fileID: 0}
@@ -391,6 +391,9 @@ MonoBehaviour:
   _componentIndexCache: 0
   _addedNetworkObject: {fileID: 2722063571810959594}
   _networkObjectCache: {fileID: 2722063571810959594}
+  _proximityLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!114 &2717253905578451403
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -419,9 +422,34 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 6083354261049304392}
     m_Modifications:
+    - target: {fileID: -8957688994022465235, guid: d616c4de34d1bda439766b6dab9b9609,
+        type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1250657956236920, guid: d616c4de34d1bda439766b6dab9b9609, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 1662185834175136, guid: d616c4de34d1bda439766b6dab9b9609, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 1868667701378258, guid: d616c4de34d1bda439766b6dab9b9609, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
     - target: {fileID: 1938031414114752, guid: d616c4de34d1bda439766b6dab9b9609, type: 3}
       propertyPath: m_Name
       value: LightningSoftExplosionYellow
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938031414114752, guid: d616c4de34d1bda439766b6dab9b9609, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 1938031414114752, guid: d616c4de34d1bda439766b6dab9b9609, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4976227023823008, guid: d616c4de34d1bda439766b6dab9b9609, type: 3}
       propertyPath: m_LocalPosition.x
@@ -463,7 +491,23 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    - target: {fileID: 82491152906416450, guid: d616c4de34d1bda439766b6dab9b9609,
+        type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 108319278933277442, guid: d616c4de34d1bda439766b6dab9b9609,
+        type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 114960957827812826, guid: d616c4de34d1bda439766b6dab9b9609,
+        type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    m_RemovedComponents:
+    - {fileID: 82491152906416450, guid: d616c4de34d1bda439766b6dab9b9609, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents: []

@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 1911459360187111797}
   - component: {fileID: 6644108213094739480}
   - component: {fileID: 7971256989803887784}
-  m_Layer: 27
+  m_Layer: 10
   m_Name: Prefab_WorldItem
   m_TagString: Untagged
   m_Icon: {fileID: 0}

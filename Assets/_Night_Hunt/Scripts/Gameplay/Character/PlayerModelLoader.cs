@@ -243,27 +243,25 @@ namespace NightHunt.Gameplay.Character
 
         /// <summary>
         /// Sets the correct physics/rendering layers on the player hierarchy:
-        ///   • Root (this GameObject)          → "Character"
-        ///   • Model root (e.g. Soldier_White) → "PlayerCharacter"
+        ///   • Root (this GameObject)          → "Player"
+        ///   • Model root (e.g. Soldier_White) → "Player"
         ///   • All children of model root      → "PlayerHitBox"
         /// </summary>
         private void SetupModelLayers(GameObject modelRoot)
         {
-            int characterLayer  = LayerMask.NameToLayer("Character");
-            int playerCharLayer = LayerMask.NameToLayer("PlayerCharacter");
-            int hitboxLayer     = LayerMask.NameToLayer("PlayerHitBox");
+            int playerLayer = LayerMask.NameToLayer("Player");
+            int hitboxLayer = LayerMask.NameToLayer("PlayerHitBox");
 
-            if (characterLayer  == -1) Debug.LogWarning("[PlayerModelLoader] Layer 'Character' not found in Project Settings.");
-            if (playerCharLayer == -1) Debug.LogWarning("[PlayerModelLoader] Layer 'PlayerCharacter' not found in Project Settings.");
-            if (hitboxLayer     == -1) Debug.LogWarning("[PlayerModelLoader] Layer 'PlayerHitBox' not found in Project Settings.");
+            if (playerLayer == -1) Debug.LogWarning("[PlayerModelLoader] Layer 'Player' not found in Project Settings.");
+            if (hitboxLayer == -1) Debug.LogWarning("[PlayerModelLoader] Layer 'PlayerHitBox' not found in Project Settings.");
 
-            // 1. Player prefab root → "Character"
-            if (characterLayer != -1)
-                gameObject.layer = characterLayer;
+            // 1. Player prefab root → "Player"
+            if (playerLayer != -1)
+                gameObject.layer = playerLayer;
 
-            // 2. Model root (Soldier_White, etc.) → "PlayerCharacter"
-            if (playerCharLayer != -1)
-                modelRoot.layer = playerCharLayer;
+            // 2. Model root (Soldier_White, etc.) → "Player"
+            if (playerLayer != -1)
+                modelRoot.layer = playerLayer;
 
             // 3. All children of model root (bones, hitboxes, meshes) → "PlayerHitBox"
             if (hitboxLayer != -1)

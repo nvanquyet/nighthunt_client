@@ -85,15 +85,22 @@ namespace NightHunt.Editor.Tests
         private const string ConfigRoot      = "Assets/_Night_Hunt/Data/Configs";
 
         // â”€â”€ Physics layer indices â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        private const int L_Player          = 6;
-        private const int L_PlayerHitBox    = 7;
-        private const int L_Projectile      = 8;
-        private const int L_Ground          = 9;
+        // Slot indices MUST match NightHuntLayerSetupTool canonical table.
+        // Run  NightHunt ▸ Tools ▸ Layer & Tag Setup  to write these to TagManager.
+        private const int L_Player          =  6;
+        private const int L_PlayerHitBox    =  7;
+        private const int L_Projectile      =  8;
         private const int L_Interactable    = 10;
         private const int L_Zone            = 11;
-        private const int L_Minimap         = 12;
-        private const int L_Character       = 13;
-        private const int L_PlayerCharacter = 14;
+        private const int L_Throwable       = 12;
+        private const int L_DeadCharacter   = 13;
+        private const int L_MapObstacle     = 15;
+        private const int L_Items           = 20;
+        private const int L_Minimap         = 21;   // Minimap at slot 21 (was wrongly 12)
+        private const int L_MapStatic       = 22;
+        private const int L_Wall            = 23;
+        private const int L_Ground          = 24;   // Ground at slot 24 (was wrongly 9)
+        private const int L_SeeThrough      = 25;
 
         // â”€â”€ Shared state (valid only within a single generation run) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private static Gameplay.Spawn.SpawnSystem          s_SpawnSystem;
@@ -204,31 +211,62 @@ namespace NightHunt.Editor.Tests
         private static void BuildPhysicsLayers(List<string> log)
         {
             log.Add("\n[Physics Layers]");
+
+            // NOTE: The full canonical layer + tag + collision-matrix setup is performed by
+            //       NightHuntLayerSetupTool (NightHunt ▸ Tools ▸ Layer & Tag Setup).
+            //       This demo-scene generator only VERIFIES layers are present;
+            //       it does NOT overwrite conflicting slots (that is the tool's job).
+
             var tm     = new SerializedObject(
                 AssetDatabase.LoadAssetAtPath<Object>("ProjectSettings/TagManager.asset"));
             var layers = tm.FindProperty("layers");
 
+            // Verify (add if empty, warn if occupied by wrong name — do NOT force-overwrite).
             DefineLayer(layers, L_Player,          "Player",          log);
             DefineLayer(layers, L_PlayerHitBox,    "PlayerHitBox",    log);
             DefineLayer(layers, L_Projectile,      "Projectile",      log);
-            DefineLayer(layers, L_Ground,          "Ground",          log);
             DefineLayer(layers, L_Interactable,    "Interactable",    log);
             DefineLayer(layers, L_Zone,            "Zone",            log);
+            DefineLayer(layers, L_Throwable,       "Throwable",       log);
+            DefineLayer(layers, L_DeadCharacter,   "DeadCharacter",   log);
+            DefineLayer(layers, L_MapObstacle,     "MapObstacle",     log);
+            DefineLayer(layers, L_Items,           "Items",           log);
             DefineLayer(layers, L_Minimap,         "Minimap",         log);
-            DefineLayer(layers, L_Character,       "Character",       log);
-            DefineLayer(layers, L_PlayerCharacter, "PlayerCharacter", log);
+            DefineLayer(layers, L_MapStatic,       "MapStatic",       log);
+            DefineLayer(layers, L_Wall,            "Wall",            log);
+            DefineLayer(layers, L_Ground,          "Ground",          log);
+            DefineLayer(layers, L_SeeThrough,      "SeeThrough",      log);
             tm.ApplyModifiedProperties();
 
-            Physics.IgnoreLayerCollision(L_Player,       L_Player,       true);
-            Physics.IgnoreLayerCollision(L_PlayerHitBox, L_Player,       true);
-            Physics.IgnoreLayerCollision(L_PlayerHitBox, L_PlayerHitBox, true);
-            Physics.IgnoreLayerCollision(L_Projectile,   L_Projectile,   true);
-            Physics.IgnoreLayerCollision(L_Zone,         L_Projectile,   true);
-            Physics.IgnoreLayerCollision(L_Zone,         L_Ground,       true);
-            Physics.IgnoreLayerCollision(L_Zone,         L_Interactable, true);
-            Physics.IgnoreLayerCollision(L_Zone,         L_Zone,         true);
-            for (int i = 0; i < 32; i++) Physics.IgnoreLayerCollision(L_Minimap, i, true);
-            log.Add("  Collision matrix applied");
+            // Collision matrix — resolved by NAME so it is immune to future slot changes.
+            // The full matrix is applied by NightHuntLayerSetupTool; here we only apply
+            // the minimal rules needed for the demo scene to be playable.
+            int lPlayer       = LayerMask.NameToLayer("Player");
+            int lPlayerHitBox = LayerMask.NameToLayer("PlayerHitBox");
+            int lProjectile   = LayerMask.NameToLayer("Projectile");
+            int lZone         = LayerMask.NameToLayer("Zone");
+            int lMinimap      = LayerMask.NameToLayer("Minimap");
+            int lGround       = LayerMask.NameToLayer("Ground");
+            int lInteractable = LayerMask.NameToLayer("Interactable");
+
+            if (lPlayer       >= 0) Physics.IgnoreLayerCollision(lPlayer,       lPlayer,       true);
+            if (lPlayerHitBox >= 0 && lPlayer >= 0)
+                                    Physics.IgnoreLayerCollision(lPlayerHitBox, lPlayer,       true);
+            if (lPlayerHitBox >= 0) Physics.IgnoreLayerCollision(lPlayerHitBox, lPlayerHitBox, true);
+            if (lProjectile   >= 0) Physics.IgnoreLayerCollision(lProjectile,   lProjectile,   true);
+            if (lZone         >= 0 && lProjectile >= 0)
+                                    Physics.IgnoreLayerCollision(lZone,         lProjectile,   true);
+            if (lZone         >= 0 && lGround >= 0)
+                                    Physics.IgnoreLayerCollision(lZone,         lGround,       true);
+            if (lZone         >= 0 && lInteractable >= 0)
+                                    Physics.IgnoreLayerCollision(lZone,         lInteractable, true);
+            if (lZone         >= 0) Physics.IgnoreLayerCollision(lZone,         lZone,         true);
+            if (lMinimap      >= 0)
+                for (int i = 0; i < 32; i++)
+                    Physics.IgnoreLayerCollision(lMinimap, i, true);
+
+            log.Add("  Collision matrix applied (name-based — survives slot moves).");
+            log.Add("  Run NightHunt ▸ Tools ▸ Layer & Tag Setup for the FULL matrix.");
         }
 
         private static void DefineLayer(SerializedProperty p, int idx, string name, List<string> log)

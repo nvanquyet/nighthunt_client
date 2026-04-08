@@ -2,14 +2,17 @@
 %TAG !u! tag:unity3d.com,2011:
 --- !u!21 &2100000
 Material:
-  serializedVersion: 6
+  serializedVersion: 8
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: M_Soldier_F_Torso
   m_Shader: {fileID: 4800000, guid: 379c1070b49fc7e4b961df5119ca6d13, type: 3}
-  m_ShaderKeywords: 
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
   m_LightmapFlags: 2
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
@@ -17,6 +20,7 @@ Material:
   stringTagMap: {}
   disabledShaderPasses:
   - TransparentBackface
+  m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -58,6 +62,10 @@ Material:
         m_Offset: {x: 0, y: 0}
     - _MainTex:
         m_Texture: {fileID: 2800000, guid: 461cef00c67e1fc409dbbdaf6ca43347, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Masks:
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MetallicGlossMap:
@@ -104,10 +112,12 @@ Material:
         m_Texture: {fileID: 2800000, guid: 661811ea92622194ca8fd3fad893bd74, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    m_Ints: []
     m_Floats:
     - _AlphaCutoffEnable: 0
     - _AlphaDstBlend: 0
     - _AlphaSrcBlend: 1
+    - _Angle: 0
     - _BlendMode: 0
     - _BumpScale: 1
     - _Burning: 1
@@ -166,6 +176,8 @@ Material:
     - _ZTestTransparent: 4
     - _ZWrite: 1
     m_Colors:
+    - _AreaColor: {r: 0.5, g: 0.5, b: 0.5, a: 0.5}
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _BurningColor: {r: 0.11029408, g: 0.06331282, b: 0.012975777, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _Color1: {r: 0.42409173, g: 0.57760227, b: 0.7794118, a: 1}
@@ -175,12 +187,15 @@ Material:
     - _EmissionColor: {r: 1, g: 1, b: 1, a: 1}
     - _EmissiveColor: {r: 1, g: 1, b: 1, a: 1}
     - _FrozenColor: {r: 0.5453071, g: 0.7248595, b: 0.9044118, a: 1}
+    - _LineColor: {r: 0.5, g: 0.5, b: 0.5, a: 0.5}
     - _MaskedColorA: {r: 0.71323526, g: 0, b: 0, a: 1}
     - _MaskedColorB: {r: 0.5294118, g: 0.5294118, b: 0.5294118, a: 1}
     - _MaskedColorC: {r: 0.125, g: 0.125, b: 0.125, a: 1}
     - _OutlineColor: {r: 0.4338235, g: 0.78914815, b: 1, a: 0.39215687}
     - _SpecColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
     - _UVScale: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
 --- !u!114 &6430543580265195218
 MonoBehaviour:
   m_ObjectHideFlags: 11
@@ -194,3 +209,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   version: 2
+  hdPluginSubTargetMaterialVersions:
+    m_Keys: []
+    m_Values: 

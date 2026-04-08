@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 5224314204864568699}
   - component: {fileID: 2960896585555497786}
   - component: {fileID: 362667537298120939}
-  m_Layer: 13
+  m_Layer: 12
   m_Name: GrenadeBasic
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -96,7 +96,7 @@ GameObject:
   m_Component:
   - component: {fileID: 9079636076033683978}
   - component: {fileID: 5943568965928873858}
-  m_Layer: 13
+  m_Layer: 12
   m_Name: Trail
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -248,7 +248,7 @@ GameObject:
   - component: {fileID: 2722063571810959594}
   - component: {fileID: 1345958140613512518}
   - component: {fileID: 2717253905578451403}
-  m_Layer: 13
+  m_Layer: 12
   m_Name: Smoke Grenade
   m_TagString: Bullets
   m_Icon: {fileID: 0}
@@ -391,6 +391,9 @@ MonoBehaviour:
   _componentIndexCache: 0
   _addedNetworkObject: {fileID: 2722063571810959594}
   _networkObjectCache: {fileID: 2722063571810959594}
+  _proximityLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!114 &2717253905578451403
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -420,12 +423,20 @@ PrefabInstance:
     m_TransformParent: {fileID: 6083354261049304392}
     m_Modifications:
     - target: {fileID: 131196, guid: e7c3a9353c0302b4cb1fab702e1db14f, type: 3}
+      propertyPath: m_Layer
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 131196, guid: e7c3a9353c0302b4cb1fab702e1db14f, type: 3}
       propertyPath: m_IsActive
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 167252, guid: e7c3a9353c0302b4cb1fab702e1db14f, type: 3}
       propertyPath: m_Name
       value: StinkyCloud
+      objectReference: {fileID: 0}
+    - target: {fileID: 167252, guid: e7c3a9353c0302b4cb1fab702e1db14f, type: 3}
+      propertyPath: m_Layer
+      value: 12
       objectReference: {fileID: 0}
     - target: {fileID: 167252, guid: e7c3a9353c0302b4cb1fab702e1db14f, type: 3}
       propertyPath: m_IsActive

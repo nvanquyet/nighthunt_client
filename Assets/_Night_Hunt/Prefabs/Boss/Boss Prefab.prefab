@@ -155,7 +155,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _componentIndexCache: 0
-  _addedNetworkObject: {fileID: 0}
+  _addedNetworkObject: {fileID: 2492941880337181947}
   _networkObjectCache: {fileID: 2492941880337181947}
   _bossId: turret_boss
   _maxHp: 5000
@@ -168,7 +168,7 @@ MonoBehaviour:
     m_Bits: 16896
   _obstacleLayerMask:
     serializedVersion: 2
-    m_Bits: 8388608
+    m_Bits: 0
   _scanInterval: 0.3
   _turretGuns:
   - {fileID: 8574440910411904091}

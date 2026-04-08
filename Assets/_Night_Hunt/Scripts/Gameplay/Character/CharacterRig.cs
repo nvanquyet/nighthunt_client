@@ -18,9 +18,11 @@ namespace NightHunt.Gameplay.Character
     ///
     /// SETUP (per model prefab):
     ///   1. Open the model prefab.
-    ///   2. Add this component to the root GameObject.
+    ///   2. Add this component to the root GameObject (already done on Character 01).
     ///   3. Drag the correct bone Transforms into ankleLeft / ankleRight.
-    ///      (SciFi Soldier: Ankle_L → ankleLeft, Ankle_R → ankleRight)
+    ///      Character 01 / SciFi Bip001 rig:
+    ///        "Bip001 L Foot"  →  ankleLeft
+    ///        "Bip001 R Foot"  →  ankleRight
     ///   4. Optionally drag spine / head bones for other systems.
     /// </summary>
     [DisallowMultipleComponent]

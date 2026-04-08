@@ -41,15 +41,11 @@ namespace NightHunt.Audio
         [Header("Time-Based Footstep (only used if FootstepMethod == TimeBased)")]
         [Tooltip("Seconds between footstep sounds at walk speed.")]
         [SerializeField, Min(0.1f)] private float walkStepInterval   = 0.45f;
-        [Tooltip("Seconds between footstep sounds at run speed.")]
-        [SerializeField, Min(0.05f)] private float runStepInterval   = 0.36f;
         [Tooltip("Seconds between footstep sounds at sprint speed.")]
         [SerializeField, Min(0.05f)] private float sprintStepInterval = 0.28f;
         [Tooltip("Minimum speed (m/s) to trigger any footstep sound.")]
         [SerializeField, Min(0f)] private float minMoveSpeed = 0.5f;
-        [Tooltip("Speed (m/s) at or above which movement is treated as Run (not Walk).")]
-        [SerializeField, Min(0f)] private float runSpeedThreshold    = 3.5f;
-        [Tooltip("Speed (m/s) at or above which movement is treated as Sprint.")]
+        [Tooltip("Speed (m/s) at or above which movement is treated as Sprint (louder/heavier clips).")]
         [SerializeField, Min(0f)] private float sprintSpeedThreshold = 5.5f;
 
         [Header("Volumes")]
@@ -150,9 +146,7 @@ namespace NightHunt.Audio
             }
 
             FootstepType type = GetFootstepTypeFromSpeed(speed);
-            float interval = type == FootstepType.Sprint ? sprintStepInterval
-                           : type == FootstepType.Run    ? runStepInterval
-                           : walkStepInterval;
+            float interval = type == FootstepType.Sprint ? sprintStepInterval : walkStepInterval;
 
             _stepTimer += Time.deltaTime;
             if (_stepTimer >= interval)
@@ -228,6 +222,18 @@ namespace NightHunt.Audio
             FootstepType type = GetFootstepTypeFromSpeed(_movement?.GetCurrentMoveSpeed() ?? 1f);
             Log($"AnimEvent FootstepR type={type}");
             PlayFootstep(type, _footRight);
+        }
+
+        // ── Roll sound from anim event (remote client sync) ────────────────────
+        // Roll.FBX has a "RollSound" animation event at the roll start frame.
+        // Because NetworkAnimator syncs the Roll state to all clients, this event
+        // fires on EVERY client — bridging the gap for remote players who never
+        // receive OnRollTriggered (which is owner/prediction only).
+        // Owner guard: OnRollTriggered fires first → sets _rollSuppressTimer → this is skipped.
+        public void OnAnimEventRollSound()
+        {
+            if (_rollSuppressTimer > 0f) return; // owner already played it via OnRollTriggered
+            HandleRoll();
         }
 
         // ── Event Handlers ─────────────────────────────────────────────────────
@@ -350,18 +356,18 @@ namespace NightHunt.Audio
             var lib = AudioManager.Instance.Library;
             if (lib == null) return;
 
-            AudioClip clip = type switch
+            AudioClip clip = type == FootstepType.Sprint
+                ? lib.GetRandomFootstepSprint()
+                : lib.GetRandomFootstepWalk();
+
+            if (clip == null)
             {
-                FootstepType.Sprint => lib.GetRandomFootstepSprint(),
-                FootstepType.Run    => lib.GetRandomFootstepRun(),
-                _                   => lib.GetRandomFootstepWalk(),
-            };
-            if (clip == null) return;
+                LogWarn($"No footstep clip found for type={type} — assign clips in AudioLibrary.footstepWalk/footstepSprint");
+                return;
+            }
 
             Vector3 pos = foot != null ? foot.position : transform.position;
-            float vol = footstepVolume * (type == FootstepType.Sprint ? 1.15f
-                                        : type == FootstepType.Run    ? 1.07f
-                                        : 1f);
+            float vol = footstepVolume * (type == FootstepType.Sprint ? 1.15f : 1f);
 
             Log($"Footstep type={type} clip={clip.name} pos={pos}");
             AudioManager.Instance.Play3D(clip, pos,
@@ -371,17 +377,12 @@ namespace NightHunt.Audio
         }
 
         private FootstepType GetFootstepTypeFromSpeed(float speed)
-        {
-            if (speed >= sprintSpeedThreshold) return FootstepType.Sprint;
-            if (speed >= runSpeedThreshold)    return FootstepType.Run;
-            return FootstepType.Walk;
-        }
+            => speed >= sprintSpeedThreshold ? FootstepType.Sprint : FootstepType.Walk;
 
         internal static FootstepType ParseFootstepType(string data)
         {
             if (data == null) return FootstepType.Walk;
             if (data.IndexOf("Sprint", System.StringComparison.OrdinalIgnoreCase) >= 0) return FootstepType.Sprint;
-            if (data.IndexOf("Run",    System.StringComparison.OrdinalIgnoreCase) >= 0) return FootstepType.Run;
             return FootstepType.Walk;
         }
 
@@ -392,8 +393,8 @@ namespace NightHunt.Audio
 
         public enum FootstepMethod { AnimEvent, TimeBased }
 
-        /// <summary>Walk uses lightest clips; Run uses medium; Sprint uses heaviest. Drives AudioLibrary lookup + volume scaling.</summary>
-        public enum FootstepType { Walk, Run, Sprint }
+        /// <summary>Walk = normal/slow clips; Sprint = fast/heavy clips. Drives AudioLibrary lookup + volume.</summary>
+        public enum FootstepType { Walk, Sprint }
     }
 
     /// <summary>
@@ -415,7 +416,7 @@ namespace NightHunt.Audio
         internal CharacterAudioController audioController;
 
         // ── Package path: SciFi Soldier animation clips call FootStep(string) ───────────────
-        // stepType = animation event data string, e.g. "Rifle Walk", "Rifle Run", "Rifle Sprint"
+        // stepType = animation event data string, e.g. "Rifle Walk", "Rifle Sprint"
         public void FootStep(string stepType)
         {
             if (audioController == null) return;
@@ -423,7 +424,13 @@ namespace NightHunt.Audio
             audioController.OnAnimEventFootstepTyped(type);
         }
 
-        // ── Custom clip path: add Animation Events in Unity Editor calling these names ──────
+        // ── Roll.FBX fires RollSound — synced via NetworkAnimator to ALL clients ─────────────
+        // Owner:   OnRollTriggered C# event fires first (prediction) → plays sound + sets suppress timer.
+        //          RollSound anim event fires ~1 frame later → guard (_rollSuppressTimer > 0) skips it.
+        // Remote:  OnRollTriggered never fires → suppress timer = 0 → RollSound plays correctly.
+        public void RollSound() => audioController?.OnAnimEventRollSound();
+
+        // ── Custom clip path: add Animation Events in Unity Editor calling these names ───────
         public void OnAnimEventFootstep()  => audioController?.OnAnimEventFootstep();
         public void OnAnimEventFootstepL() => audioController?.OnAnimEventFootstepL();
         public void OnAnimEventFootstepR() => audioController?.OnAnimEventFootstepR();

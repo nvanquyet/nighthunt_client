@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using NightHunt.Core;
 using NightHunt.Data;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Utilities;
@@ -44,6 +45,9 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         protected override void OnEnable()
         {
             base.OnEnable();
+            // Self-heal layer: always ensure bullets land on the correct physics layer
+            // regardless of the serialised prefab value (layer table renames break prefabs).
+            gameObject.layer = LayerMask.NameToLayer(NightHuntLayers.Projectile);
             _hasDetonated     = false;
             _distanceTraveled = 0f;
             _fuseRoutine      = null;

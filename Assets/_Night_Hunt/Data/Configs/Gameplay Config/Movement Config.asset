@@ -19,20 +19,20 @@ MonoBehaviour:
   deceleration: 30
   gravity: 9.8
   fallGravityMultiplier: 2.5
+  maxFallSpeed: 40
   jumpHeight: 1.2
   groundedStickDownVelocity: 0.2
-  maxFallSpeed: 40
   enableJump: 0
   maxStamina: 100
   staminaDrainRate: 20
   staminaRegenRate: 15
   minStaminaToSprint: 10
   rollStaminaCost: 20
-  rollDistance: 4
-  rollDuration: 0.2
+  rollDistance: 1.5
+  rollDuration: 0.12
   rollEaseOutFraction: 0.25
   rollMode: 1
-  rollLeapHeight: 1.2
+  rollLeapHeight: 1.5
   enableRoll: 1
   rotationDeadzoneDegrees: 8
   rotationSpeed: 10

@@ -4,6 +4,7 @@ using FishNet.Connection;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Serialization;
+using NightHunt.Core;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
@@ -172,6 +173,9 @@ namespace NightHunt.GameplaySystems.Loot
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
+            // Self-heal layer: Prefab_WorldItem was serialised on an unnamed layer (27).
+            // Force "Interactable" so RaycastDetector can find it with a proper mask.
+            gameObject.layer = LayerMask.NameToLayer(NightHuntLayers.Interactable);
             _syncItemData.OnChange += OnSyncItemDataChanged;
 
             if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)

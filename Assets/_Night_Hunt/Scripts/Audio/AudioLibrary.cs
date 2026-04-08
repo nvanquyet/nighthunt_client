@@ -94,13 +94,10 @@ namespace NightHunt.Audio
 
         // ── Footstep (3D) ───────────────────────────────────────────────────
         [Header("Footstep (3D — spatialBlend=1)")]
-        [Tooltip("Walk cycle footstep variants (min 4 for good randomization).")]
+        [Tooltip("Walk / slow movement footstep variants (min 4 for good randomization).")]
         public AudioClip[] footstepWalk;
 
-        [Tooltip("Run cycle footstep variants — heavier than walk. Falls back to walk if empty.")]
-        public AudioClip[] footstepRun;
-
-        [Tooltip("Sprint cycle footstep variants — heaviest impact. Falls back to run → walk if empty.")]
+        [Tooltip("Sprint / fast movement footstep variants — heavier impact. Falls back to walk if empty.")]
         public AudioClip[] footstepSprint;
 
         [Tooltip("Landing sound after jump/fall.")]
@@ -138,35 +135,18 @@ namespace NightHunt.Audio
 
         // ── Helpers ──────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Random walk footstep. Fallback chain: walk → run → sprint.
-        /// </summary>
+        /// <summary>Random walk footstep. Falls back to sprint if walk array is empty.</summary>
         public AudioClip GetRandomFootstepWalk()
         {
             if (footstepWalk   is { Length: > 0 }) return footstepWalk  [Random.Range(0, footstepWalk.Length)];
-            if (footstepRun    is { Length: > 0 }) return footstepRun   [Random.Range(0, footstepRun.Length)];
             if (footstepSprint is { Length: > 0 }) return footstepSprint[Random.Range(0, footstepSprint.Length)];
             return null;
         }
 
-        /// <summary>
-        /// Random run footstep. Fallback chain: run → sprint → walk.
-        /// </summary>
-        public AudioClip GetRandomFootstepRun()
-        {
-            if (footstepRun    is { Length: > 0 }) return footstepRun   [Random.Range(0, footstepRun.Length)];
-            if (footstepSprint is { Length: > 0 }) return footstepSprint[Random.Range(0, footstepSprint.Length)];
-            if (footstepWalk   is { Length: > 0 }) return footstepWalk  [Random.Range(0, footstepWalk.Length)];
-            return null;
-        }
-
-        /// <summary>
-        /// Random sprint footstep. Fallback chain: sprint → run → walk.
-        /// </summary>
+        /// <summary>Random sprint footstep. Falls back to walk if sprint array is empty.</summary>
         public AudioClip GetRandomFootstepSprint()
         {
             if (footstepSprint is { Length: > 0 }) return footstepSprint[Random.Range(0, footstepSprint.Length)];
-            if (footstepRun    is { Length: > 0 }) return footstepRun   [Random.Range(0, footstepRun.Length)];
             if (footstepWalk   is { Length: > 0 }) return footstepWalk  [Random.Range(0, footstepWalk.Length)];
             return null;
         }
