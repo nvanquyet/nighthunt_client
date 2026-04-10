@@ -150,6 +150,24 @@ namespace NightHunt.Core
                 retryButton.onClick.AddListener(OnRetryClicked);
             }
 
+            
+            // Allow self-signed cert bypass for .NET ClientWebSocket (NativeWebSocket on desktop/editor).
+            // Only active when allowSelfSignedCert=true (local/staging dev against an IP with no trusted cert).
+            // Production uses Let's Encrypt — no bypass needed.
+#if !UNITY_WEBGL || UNITY_EDITOR
+            if (_backendConfig != null && _backendConfig.ShouldBypassSslCertificateValidation())
+            {
+                System.Net.ServicePointManager.ServerCertificateValidationCallback =
+                    (sender, certificate, chain, sslPolicyErrors) => true;
+                Debug.LogWarning("[LoadingManager] ⚠️ SSL cert validation DISABLED (allowSelfSignedCert=true). For production use a trusted cert.");
+            }
+            else
+            {
+                // Restore default validation (important after hot-reload in Editor)
+                System.Net.ServicePointManager.ServerCertificateValidationCallback = null;
+            }
+#endif
+
             StartCoroutine(InitFlow());
         }
 

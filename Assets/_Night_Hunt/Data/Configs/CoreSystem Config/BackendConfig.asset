@@ -16,7 +16,8 @@ MonoBehaviour:
   devApiHost: 20.2.235.140:8443
   forceProductionInEditor: 1
   forceProductionOnDevBuild: 1
-  prodApiHost: 20.2.235.140:8443
+  prodApiHost: vawnwuyest.me
+  allowSelfSignedCert: 0
   wsPath: /api/ws/game
   overrideWsBaseUrl: 
   requestTimeoutSeconds: 10
