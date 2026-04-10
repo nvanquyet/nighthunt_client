@@ -51,7 +51,7 @@ namespace NightHunt.UI
 
         [Header("Ping Settings")]
         [SerializeField] private bool showBackendPingWhenDisconnected = true;
-        [SerializeField] private bool headlessPingEnabled = false; // headless is disabled currently
+        [SerializeField] private bool headlessPingEnabled = true; // Uses FishNet TimeManager.RoundTripTime
 
         private NetworkManager networkManager;
         private BackendHttpClient backendClient;
@@ -205,22 +205,18 @@ namespace NightHunt.UI
 
         private int EstimateRTTFromConnection(NetworkConnection connection)
         {
-            // FishNet connection may have RTT information
-            // This is a simplified approach - check FishNet documentation for exact API
-            // For now, return a placeholder
-            return 50; // Placeholder - should be replaced with actual connection RTT
+            // Use FishNet TimeManager RTT (seconds → milliseconds)
+            double rtt = networkManager?.TimeManager?.RoundTripTime ?? 0.0;
+            return Mathf.RoundToInt((float)rtt * 1000f);
         }
 
         private int EstimateRTTFromNetworkTime()
         {
-            // Estimate RTT from FishNet network time
-            // This is a simplified approach - actual RTT should come from transport
+            // Use FishNet TimeManager RTT (seconds → milliseconds)
             if (networkManager != null && networkManager.ClientManager != null && networkManager.ClientManager.Started)
             {
-                // FishNet provides network time through TimeManager
-                // RTT can be estimated, but transport should provide direct access
-                // For now, return a placeholder
-                return 50; // Placeholder - should be replaced with actual transport RTT
+                double rtt = networkManager.TimeManager?.RoundTripTime ?? 0.0;
+                return Mathf.RoundToInt((float)rtt * 1000f);
             }
             return 0;
         }

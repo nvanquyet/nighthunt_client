@@ -1,5 +1,8 @@
 using System.Collections;
+using System.Collections.Generic;
+using NightHunt.Common;
 using NightHunt.Core;
+using NightHunt.Data.DTOs;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Networking;
 using NightHunt.State;
@@ -49,6 +52,9 @@ namespace NightHunt.UI
 #pragma warning restore CS0414
         [SerializeField] private float _postMatchCountdown = 10f;
 
+        // Last match end result (cached for post-match backend call)
+        private MatchEndedEvent? _lastMatchResult;
+
         // ──────────────────────────────────────────────────────────────────────
 
         #region Lifecycle
@@ -77,6 +83,7 @@ namespace NightHunt.UI
 
         private void OnMatchEnded(MatchEndedEvent evt)
         {
+            _lastMatchResult = evt;
             ShowResults(evt);
             StartCoroutine(CountdownCoroutine());
         }
@@ -192,6 +199,11 @@ namespace NightHunt.UI
         private void NavigatePostMatch()
         {
             var mode = RoomState.Instance?.CurrentGameMode ?? NightHunt.Networking.GameMode.None;
+
+            // Report match result to backend before clearing session.
+            // Fire-and-forget: don't block navigation on network latency.
+            _ = PostMatchResultAsync();
+
             RoomState.Instance?.ClearRoom();
 
             // Đang ở gameplay scene → luôn dùng SceneLoader.LoadHome() để về 01_Home.
@@ -199,6 +211,61 @@ namespace NightHunt.UI
             // (Custom_Relay cũng về Home trước, Home panel có reconnect check)
             Debug.Log($"[ResultsView] Match ended (mode={mode}) → LoadHome");
             SceneLoader.LoadHome();
+        }
+
+        private async System.Threading.Tasks.Task PostMatchResultAsync()
+        {
+            var backend = GameManager.Instance?.BackendClient;
+            var roomState = RoomState.Instance;
+            if (backend == null || roomState == null) return;
+
+            string matchId = roomState.CurrentMatchId;
+            if (string.IsNullOrEmpty(matchId))
+            {
+                // Custom_Relay uses room matchId
+                matchId = roomState.CurrentRoom?.matchId ?? string.Empty;
+            }
+
+            if (string.IsNullOrEmpty(matchId))
+            {
+                Debug.LogWarning("[ResultsView] matchId not set — skipping backend result push.");
+                return;
+            }
+
+            var evt = _lastMatchResult;
+            if (!evt.HasValue) return;
+
+            var playerEntries = new List<MatchResultPlayerEntry>();
+            if (evt.Value.PlayerResults != null)
+            {
+                foreach (var r in evt.Value.PlayerResults)
+                {
+                    playerEntries.Add(new MatchResultPlayerEntry
+                    {
+                        backendPlayerId = r.BackendPlayerId,
+                        teamId          = r.TeamId,
+                        kills           = r.Kills,
+                        deaths          = r.Deaths,
+                        score           = r.Score,
+                    });
+                }
+            }
+
+            var request = new MatchResultRequest
+            {
+                matchId      = matchId,
+                winnerTeamId = evt.Value.WinnerTeamId,
+                endReason    = evt.Value.Reason.ToString(),
+                players      = playerEntries,
+            };
+
+            string endpoint = string.Format(Constants.API_MATCH_RESULT, matchId);
+            var result = await backend.PostAsync<object>(endpoint, request);
+
+            if (!result.Success)
+                Debug.LogWarning($"[ResultsView] Backend result push failed: {result.Message}");
+            else
+                Debug.Log($"[ResultsView] Match result reported to backend (matchId={matchId}).");
         }
 
         #endregion

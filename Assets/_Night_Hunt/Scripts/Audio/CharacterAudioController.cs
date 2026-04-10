@@ -81,20 +81,34 @@ namespace NightHunt.Audio
         {
             _movement = ComponentResolver.Find<BaseCharacterPredictedMovement>(this)
                 .OnSelf().InChildren().InParent()
-                .OrLogWarning("[CharacterAudioController] BaseCharacterPredictedMovement not found — jump/roll audio disabled")
+                .OrLogWarning("[CAC] BaseCharacterPredictedMovement not found — jump/roll audio disabled")
                 .Resolve();
 
             _modelLoader = ComponentResolver.Find<PlayerModelLoader>(this)
                 .OnSelf().OnRoot().InRootChildren()
-                .OrLogWarning("[CharacterAudioController] PlayerModelLoader not found — foot bones won't be auto-bound")
+                .OrLogWarning("[CAC] PlayerModelLoader not found — foot bones will NOT be auto-bound and FootstepAnimEventRelay will NOT be added")
                 .Resolve();
 
             if (_modelLoader != null)
             {
+                Log($"Awake: PlayerModelLoader found on '{_modelLoader.name}'. Subscribing OnModelReady.");
                 _modelLoader.OnModelReady += BindModel;
                 // Handle case where model was already loaded before this Awake ran
                 if (_modelLoader.CurrentModelInstance != null)
+                {
+                    Log($"Awake: CurrentModelInstance already set ('{_modelLoader.CurrentModelInstance.name}'). Calling BindModel immediately.");
                     BindModel(_modelLoader.CurrentModelInstance);
+                }
+                else
+                {
+                    Log("Awake: CurrentModelInstance is null — waiting for OnModelReady event.");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[CAC] Awake: PlayerModelLoader NOT found on this prefab hierarchy. " +
+                                 "FootstepAnimEventRelay will never be added — AnimEvent footsteps will be silent. " +
+                                 "Check that PlayerModelLoader is on the player prefab root.", this);
             }
         }
 
@@ -170,6 +184,7 @@ namespace NightHunt.Audio
         {
             if (!AudioManager.HasInstance) return;
             // Guard: anim blend transitions can fire events 1-2 frames after leaving walk state.
+            // Use IsGroundedPublic only for the generic (no-data) event as it has no other guard.
             if (_movement != null && !_movement.IsGroundedPublic) return;
             if (_rollSuppressTimer > 0f) return;
 
@@ -183,11 +198,17 @@ namespace NightHunt.Audio
         /// <summary>
         /// Called by <see cref="FootstepAnimEventRelay"/> when a package clip fires <c>FootStep(string)</c>.<br/>
         /// The step type is parsed from the animation data string — more precise than speed detection.
+        /// Weapon-type mapping: Rifle/Pistol/Unarmed/Launcher/Shotgun/Sniper/SMG → Walk by default.
+        /// Only "Sprint" keyword in data string → Sprint.
         /// </summary>
         public void OnAnimEventFootstepTyped(FootstepType type)
         {
             if (!AudioManager.HasInstance) return;
-            if (_movement != null && !_movement.IsGroundedPublic) return;
+            // NOTE: IsGroundedPublic is NOT checked here.
+            // _groundedGraceTimer ticks inside FishNet SimulateMovement (not Unity Update),
+            // so it can legitimately be 0 when an AnimEvent fires between physics ticks even
+            // while the character is visually grounded. Anim events only fire while the
+            // locomotion clip is playing — that is a sufficient ground guard by itself.
             if (_rollSuppressTimer > 0f) return;
 
             Transform foot = _lastLeft ? _footLeft : _footRight;
@@ -203,7 +224,6 @@ namespace NightHunt.Audio
         public void OnAnimEventFootstepL()
         {
             if (!AudioManager.HasInstance) return;
-            if (_movement != null && !_movement.IsGroundedPublic) return;
             if (_rollSuppressTimer > 0f) return;
             FootstepType type = GetFootstepTypeFromSpeed(_movement?.GetCurrentMoveSpeed() ?? 1f);
             Log($"AnimEvent FootstepL type={type}");
@@ -217,7 +237,6 @@ namespace NightHunt.Audio
         public void OnAnimEventFootstepR()
         {
             if (!AudioManager.HasInstance) return;
-            if (_movement != null && !_movement.IsGroundedPublic) return;
             if (_rollSuppressTimer > 0f) return;
             FootstepType type = GetFootstepTypeFromSpeed(_movement?.GetCurrentMoveSpeed() ?? 1f);
             Log($"AnimEvent FootstepR type={type}");
@@ -341,11 +360,53 @@ namespace NightHunt.Audio
 
             // Add relay: forwards FootStep(string) animation events from model Animator
             // to this controller's OnAnimEventFootstep() — no package modification needed.
-            if (modelRoot.GetComponent<FootstepAnimEventRelay>() == null)
+            // IMPORTANT: Unity SendMessage for animation events targets the Animator's own
+            // GameObject, NOT the model root (if they differ). Find the Animator's GO first.
+            var animator = modelRoot.GetComponentInChildren<Animator>(true);
+            var relayTarget = (animator != null) ? animator.gameObject : modelRoot;
+            if (relayTarget != modelRoot)
+                Log($"BindModel: Animator is on child '{relayTarget.name}' (not root '{modelRoot.name}') — relay added to Animator GO.");
+
+            // Diagnostic: when _debugLog is on, dump all animation clips and their events
+            // so we can verify FootStep events were actually imported from the .meta files.
+            if (_debugLog && animator != null)
             {
-                var relay = modelRoot.AddComponent<FootstepAnimEventRelay>();
+                var clips = animator.runtimeAnimatorController?.animationClips;
+                if (clips != null)
+                {
+                    int clipsWithEvents = 0;
+                    var sb = new System.Text.StringBuilder();
+                    sb.Append($"[CAC] Animator '{relayTarget.name}' has {clips.Length} clips. Clips WITH FootStep events:\n");
+                    foreach (var c in clips)
+                    {
+                        if (c == null) continue;
+                        foreach (var ev in c.events)
+                        {
+                            if (ev.functionName == "FootStep")
+                            {
+                                sb.Append($"  {c.name} t={ev.time:F3} data='{ev.stringParameter}'\n");
+                                clipsWithEvents++;
+                                break;
+                            }
+                        }
+                    }
+                    if (clipsWithEvents == 0)
+                        sb.Append("  *** NONE — FootStep events missing! Re-import FBX files. ***");
+                    Debug.Log(sb.ToString(), this);
+                }
+            }
+
+            if (relayTarget.GetComponent<FootstepAnimEventRelay>() == null)
+            {
+                var relay = relayTarget.AddComponent<FootstepAnimEventRelay>();
                 relay.audioController = this;
-                Log($"FootstepAnimEventRelay added to '{modelRoot.name}'");
+                Log($"FootstepAnimEventRelay added to '{relayTarget.name}'");
+            }
+            else
+            {
+                // Relay already present (e.g. model was reused) — re-bind the controller reference.
+                relayTarget.GetComponent<FootstepAnimEventRelay>().audioController = this;
+                Log($"FootstepAnimEventRelay already on '{relayTarget.name}' — re-bound audioController.");
             }
         }
 
@@ -376,9 +437,23 @@ namespace NightHunt.Audio
                 RandomPitch());
         }
 
+        // NOTE: We deliberately ignore the raw speed value here because _velocity.magnitude
+        // includes Y (gravity/jump) velocity and inflates the reading on any slope or during
+        // physics settling. Using the explicit sprint-input flag is more reliable.
         private FootstepType GetFootstepTypeFromSpeed(float speed)
-            => speed >= sprintSpeedThreshold ? FootstepType.Sprint : FootstepType.Walk;
+            => _movement != null && _movement.IsSprinting() ? FootstepType.Sprint : FootstepType.Walk;
 
+        /// <summary>
+        /// Maps the animation event data string to a <see cref="FootstepType"/>.
+        /// Rule: any data string containing "Sprint" (case-insensitive) → Sprint.
+        /// Everything else (Walk, Run, Crouch, any weapon name) → Walk.
+        /// This covers all current and future weapons:
+        ///   "Rifle Walk/Run/Crouch" → Walk   "Rifle Sprint" → Sprint
+        ///   "Pistol Walk/Run"       → Walk   (no Pistol Sprint exists in package)
+        ///   "Unarmed Walk/Run"      → Walk   "Unarmed Sprint" → Sprint
+        ///   "Launcher Walk/Sprint"  → Walk/Sprint  (custom clips, future)
+        ///   "Shotgun Walk/Sprint"   → Walk/Sprint  (custom clips, future)
+        /// </summary>
         internal static FootstepType ParseFootstepType(string data)
         {
             if (data == null) return FootstepType.Walk;
@@ -417,6 +492,11 @@ namespace NightHunt.Audio
 
         // ── Package path: SciFi Soldier animation clips call FootStep(string) ───────────────
         // stepType = animation event data string, e.g. "Rifle Walk", "Rifle Sprint"
+        // Weapon coverage:
+        //   Rifle / Shotgun / Sniper / Launcher  → use Rifle locomotion clips → "Rifle Walk" / "Rifle Sprint"
+        //   Pistol / SMG                          → use Pistol locomotion clips → "Pistol Walk" / "Pistol Run"
+        //   Unarmed                               → "Unarmed Walk" / "Unarmed Sprint"
+        // All "Walk/Run/Crouch" data → FootstepType.Walk; any "Sprint" data → FootstepType.Sprint.
         public void FootStep(string stepType)
         {
             if (audioController == null) return;

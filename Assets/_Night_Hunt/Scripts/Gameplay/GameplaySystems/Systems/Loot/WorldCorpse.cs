@@ -263,7 +263,13 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            inventory.AddItem(itemData.DefinitionID, takeQty);
+            // Preserve full runtime state (ammo, durability, attachments) when looting.
+            // Build a copy of the data with the quantity actually taken, then restore it.
+            var takenData = itemData;
+            takenData.Quantity = takeQty;
+            // Use a fresh InstanceID so the looted item is independent of any remaining stack.
+            takenData.InstanceID = System.Guid.NewGuid().ToString();
+            inventory.AddItemFromData(takenData);
 
             if (takeQty >= itemData.Quantity)
             {

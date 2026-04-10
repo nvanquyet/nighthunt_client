@@ -658,7 +658,7 @@ MonoBehaviour:
   _componentIndexCache: 6
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
-  _debugConfig: {fileID: 0}
+  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _bulletTargetConfig: {fileID: 0}
   _statSystemSource: {fileID: 2125858533983064380}
@@ -799,7 +799,7 @@ MonoBehaviour:
   _scanInterval: 0.15
   interactableLayerMask:
     serializedVersion: 2
-    m_Bits: 201327360
+    m_Bits: 9280
   _maxResults: 16
   logOnChange: 0
   drawGizmos: 0
@@ -819,7 +819,7 @@ MonoBehaviour:
   playerCamera: {fileID: 0}
   interactableLayerMask:
     serializedVersion: 2
-    m_Bits: 211157760
+    m_Bits: 9280
   _maxDistance: 50
   ignorePlayerLayer: 1
   showDebugRay: 0
@@ -1161,17 +1161,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   footstepMethod: 0
   walkStepInterval: 0.45
-  runStepInterval: 0.36
   sprintStepInterval: 0.28
   minMoveSpeed: 0.5
-  runSpeedThreshold: 3.5
   sprintSpeedThreshold: 5.5
   footstepVolume: 0.75
   jumpVolume: 0.8
   landVolume: 0.9
   rollVolume: 0.7
   pitchVariance: 0.08
-  _debugLog: 0
+  _debugLog: 1
 --- !u!1 &6529247948932358281
 GameObject:
   m_ObjectHideFlags: 0

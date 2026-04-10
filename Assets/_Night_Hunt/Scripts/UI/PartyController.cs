@@ -442,21 +442,90 @@ namespace NightHunt.UI
 
         // ── Matchmaking ───────────────────────────────────────────────────────
 
-        private async void HandleMatchFound(GameWebSocketService.MatchFoundEvent e)
+        private void HandleMatchFound(GameWebSocketService.MatchFoundEvent e)
         {
             _pendingLobbyToken = e.lobbyToken;
-            if (!string.IsNullOrEmpty(_pendingLobbyToken))
+            SetQueueState(RankedQueueState.Idle);   // dừng timer "đang tìm trận"
+
+            long localUserId = _sessionState?.UserId ?? 0L;
+
+            var overlay = MatchFoundOverlay.Instance;
+            if (overlay != null)
+            {
+                // Unwire cũ trước để không bị double-subscribe nếu match_found đến nhiều lần
+                overlay.OnAccepted -= OnMatchFoundAccepted;
+                overlay.OnDeclined -= OnMatchFoundDeclined;
+                overlay.OnAccepted += OnMatchFoundAccepted;
+                overlay.OnDeclined += OnMatchFoundDeclined;
+
+                overlay.Show(
+                    lobbyToken:     e.lobbyToken,
+                    gameMode:       e.gameMode,
+                    mapId:          null,                   // match_found chưa có mapId — chỉ có ở match_ready
+                    playerIds:      e.playerIds,
+                    localUserId:    localUserId,
+                    timeoutSeconds: e.acceptTimeoutSeconds);
+            }
+            else
+            {
+                // Fallback: không có overlay → auto-accept (giữ hành vi cũ)
+                Debug.LogWarning("[PartyController] MatchFoundOverlay not found — auto-accepting.");
+                _ = SendAcceptAsync(e.lobbyToken);
+            }
+        }
+
+        private async void OnMatchFoundAccepted()
+        {
+            var overlay = MatchFoundOverlay.Instance;
+            if (overlay != null)
+            {
+                overlay.OnAccepted -= OnMatchFoundAccepted;
+                overlay.OnDeclined -= OnMatchFoundDeclined;
+            }
+            await SendAcceptAsync(_pendingLobbyToken);
+        }
+
+        private async void OnMatchFoundDeclined()
+        {
+            var overlay = MatchFoundOverlay.Instance;
+            if (overlay != null)
+            {
+                overlay.OnAccepted -= OnMatchFoundAccepted;
+                overlay.OnDeclined -= OnMatchFoundDeclined;
+            }
+
+            string token = _pendingLobbyToken;
+            _pendingLobbyToken = null;
+
+            if (!string.IsNullOrEmpty(token))
                 await GameManager.Instance.BackendClient.PostAsync<object>(
-                    Constants.API_MATCHMAKING_ACCEPT,
-                    new MatchmakingAcceptRequest { lobbyToken = _pendingLobbyToken });
+                    Constants.API_MATCHMAKING_DECLINE,
+                    new MatchmakingDeclineRequest { lobbyToken = token });
+
+            SetQueueState(RankedQueueState.Idle);
+        }
+
+        private async System.Threading.Tasks.Task SendAcceptAsync(string lobbyToken)
+        {
+            if (string.IsNullOrEmpty(lobbyToken)) return;
+            await GameManager.Instance.BackendClient.PostAsync<object>(
+                Constants.API_MATCHMAKING_ACCEPT,
+                new MatchmakingAcceptRequest { lobbyToken = lobbyToken });
         }
 
         private void HandleMatchReady(GameWebSocketService.MatchReadyEvent e)
         {
+            // Ẩn overlay "tìm thấy trận" (nếu đang mở)
+            MatchFoundOverlay.Instance?.Hide();
+
             _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
 
-            // Resolve the correct scene from the mapId received in match_ready
+            // Lưu DS info vào RoomState để MatchNetworkConnector dùng khi scene load
+            if (ushort.TryParse(e.dsPort.ToString(), out ushort dsPort))
+                RoomState.Instance?.SetDedicatedServer(e.dsIp, dsPort, e.matchId, e.mapId);
+
+            // Resolve scene đúng từ mapId
             NightHunt.Config.SceneId sceneId = NightHunt.Config.SceneId.GameMap_01;
             if (!string.IsNullOrEmpty(e.mapId)
                 && MapConfig.TryGetById(e.mapId, out MapEntry mapEntry))
@@ -469,10 +538,13 @@ namespace NightHunt.UI
 
         private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent e)
         {
+            // Ẩn overlay "tìm thấy trận" (nếu đang mở)
+            MatchFoundOverlay.Instance?.Hide();
+
             _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
             if (!string.IsNullOrEmpty(e.reason))
-                ShowToast("Gh\u00e9p tr\u1eadn", $"H\u1ee7y tr\u1eadn: {e.reason}");
+                ShowToast("Ghép trận", $"Hủy trận: {e.reason}");
         }
 
         // ── Party ─────────────────────────────────────────────────────────────

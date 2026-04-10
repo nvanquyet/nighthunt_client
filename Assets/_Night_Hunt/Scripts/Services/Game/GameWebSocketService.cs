@@ -42,7 +42,6 @@ namespace NightHunt.Services.Game
         private CancellationTokenSource _reconnectCts;
         /// <summary>Cancels the '60 s stable → reset counter' timer when the connection drops before that window.</summary>
         private CancellationTokenSource _stableResetCts;
-        private const int MAX_MESSAGES_PER_FRAME = 5; // PERF: Limit message processing to prevent frame drops
         private const float PING_INTERVAL = 15f;         // Send ping every 15 s to prevent server stale-eviction
         private float _pingTimer = PING_INTERVAL;
 
@@ -105,28 +104,17 @@ namespace NightHunt.Services.Game
                     _ = webSocket.SendText("{\"type\":\"ping\"}");
                 }
 
-                // PERF-FIX: Process max 5 messages per frame to prevent frame drops
-                // This ensures smooth 60fps even with message bursts (10+ messages)
-                // Example: 10 friends come online at once = 10 messages dispatched over 2 frames
-                int messagesProcessed = 0;
-                
-                while (messagesProcessed < MAX_MESSAGES_PER_FRAME)
+                // Process all queued WS messages this frame.
+                // NativeWebSocket.DispatchMessageQueue() dispatches ALL pending messages at once;
+                // per-message throttling is not supported by this library.
+                // TODO: Switch to a WebSocket library with per-message dispatch if burst traffic causes frame drops.
+                try
                 {
-                    try
-                    {
-                        // Check if there are messages in queue
-                        // Note: DispatchMessageQueue() processes all messages
-                        // We need to manually limit it, but NativeWebSocket doesn't expose HasMessageInQueue()
-                        // So we use a workaround: call DispatchMessageQueue() which processes ALL messages
-                        // TODO: Consider switching to a WebSocket library that supports per-message dispatch
-                        webSocket.DispatchMessageQueue();
-                        break; // DispatchMessageQueue processes all, so break after one call
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"[GameWebSocketService] Error dispatching messages: {ex.Message}");
-                        break;
-                    }
+                    webSocket.DispatchMessageQueue();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[GameWebSocketService] Error dispatching messages: {ex.Message}");
                 }
             }
             #endif
@@ -923,6 +911,12 @@ namespace NightHunt.Services.Game
             public string lobbyToken;
             public string gameMode;
             public long[] playerIds;
+            /// <summary>
+            /// Số giây để accept trước khi auto-decline.
+            /// Backend đặt qua matchmaking.accept-timeout-seconds config.
+            /// 0 = dùng defaultTimeoutSec trong MatchFoundOverlay.
+            /// </summary>
+            public int acceptTimeoutSeconds;
         }
 
         [Serializable]

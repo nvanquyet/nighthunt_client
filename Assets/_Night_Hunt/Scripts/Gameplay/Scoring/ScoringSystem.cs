@@ -44,6 +44,11 @@ namespace NightHunt.Gameplay.Scoring
             _scoreSync   = ComponentResolver.Find<ScoreSync>(this).OnSelf().InChildren().Resolve()
                            ?? FindFirstObjectByType<ScoreSync>();
 
+            if (scoreConfigs == null)
+                Debug.LogWarning("[ScoringSystem] _scoreConfigList is empty! " +
+                                 "Right-click component → 'NightHunt/Setup Default Score Configs' to populate. " +
+                                 "Falling back to hardcoded defaults.");
+
             // Subscribe to gameplay events so scoring fires automatically
             GameplayEventBus.Instance?.Subscribe<PlayerKilledEvent>(OnPlayerKilled);
             GameplayEventBus.Instance?.Subscribe<BossKilledEvent>(OnBossKilled);
@@ -127,8 +132,7 @@ namespace NightHunt.Gameplay.Scoring
         public void AwardKill(uint killerId, uint victimId)
         {
             var killConfig = GetScoreConfig("Kill");
-            if (killConfig != null)
-                AwardScore(killerId, "Kill", killConfig.BaseScore, killConfig.PhaseMultiplier);
+            AwardScore(killerId, "Kill", killConfig.BaseScore, killConfig.PhaseMultiplier);
 
             // Track Kills stat (AwardScore already initialized playerScores/teamScores entries)
             if (playerScores.ContainsKey(killerId))
@@ -146,10 +150,7 @@ namespace NightHunt.Gameplay.Scoring
         public void AwardAssist(uint assistId, uint victimId)
         {
             var assistConfig = GetScoreConfig("Assist");
-            if (assistConfig != null)
-            {
-                AwardScore(assistId, "Assist", assistConfig.BaseScore, assistConfig.PhaseMultiplier);
-            }
+            AwardScore(assistId, "Assist", assistConfig.BaseScore, assistConfig.PhaseMultiplier);
         }
 
         /// <summary>
@@ -159,10 +160,7 @@ namespace NightHunt.Gameplay.Scoring
         public void AwardBossKill(uint killerId)
         {
             var bossKillConfig = GetScoreConfig("BossKill");
-            if (bossKillConfig != null)
-            {
-                AwardScore(killerId, "BossKill", bossKillConfig.BaseScore, bossKillConfig.PhaseMultiplier);
-            }
+            AwardScore(killerId, "BossKill", bossKillConfig.BaseScore, bossKillConfig.PhaseMultiplier);
         }
 
         /// <summary>
@@ -172,9 +170,6 @@ namespace NightHunt.Gameplay.Scoring
         public void AwardObjectiveCapture(int teamId, float captureTime)
         {
             var objectiveConfig = GetScoreConfig("ObjectiveCapture");
-            if (objectiveConfig != null)
-            {
-                // Award per second of capture
             int scorePerSecond = objectiveConfig.BaseScore;
             int totalScore = Mathf.RoundToInt(captureTime * scorePerSecond);
 
@@ -185,7 +180,6 @@ namespace NightHunt.Gameplay.Scoring
                     if (player != null && player.TeamId == teamId)
                         AwardScore((uint)player.ObjectId, "ObjectiveCapture", totalScore);
         }
-        }
 
         /// <summary>
         /// Server: Award survival score
@@ -194,21 +188,41 @@ namespace NightHunt.Gameplay.Scoring
         public void AwardSurvival(uint playerId, float timeAlive)
         {
             var survivalConfig = GetScoreConfig("SurvivalMinute");
-            if (survivalConfig != null)
-            {
-                int minutes = Mathf.FloorToInt(timeAlive / 60f);
-                int score = minutes * survivalConfig.BaseScore;
-                AwardScore(playerId, "Survival", score);
-            }
+            int minutes = Mathf.FloorToInt(timeAlive / 60f);
+            int score = minutes * survivalConfig.BaseScore;
+            AwardScore(playerId, "Survival", score);
         }
 
         /// <summary>
-        /// Get score config by action name
+        /// Returns the ScoreSystemData for the given action. When the designer list is
+        /// empty or missing an entry, falls back to hardcoded defaults so scoring never
+        /// silently drops kills/objectives in untested scenes.
         /// </summary>
         private ScoreSystemData GetScoreConfig(string action)
         {
-            if (scoreConfigs == null) return null;
-            return scoreConfigs.Find(s => s.Action == action);
+            if (scoreConfigs != null)
+            {
+                var cfg = scoreConfigs.Find(s => s.Action == action);
+                if (cfg != null) return cfg;
+            }
+            return GetFallbackScoreConfig(action);
+        }
+
+        // Hardcoded fallback table — keeps gameplay functional when Inspector list is empty.
+        private static ScoreSystemData GetFallbackScoreConfig(string action)
+        {
+            switch (action)
+            {
+                case "Kill":             return new ScoreSystemData { Action = action, BaseScore = 100, PhaseMultiplier = 1f };
+                case "Assist":           return new ScoreSystemData { Action = action, BaseScore = 75,  PhaseMultiplier = 1f };
+                case "BossKill":         return new ScoreSystemData { Action = action, BaseScore = 300, PhaseMultiplier = 1.2f };
+                case "ObjectiveCapture": return new ScoreSystemData { Action = action, BaseScore = 20,  PhaseMultiplier = 1.1f };
+                case "BeaconDestroy":    return new ScoreSystemData { Action = action, BaseScore = 50,  PhaseMultiplier = 1f };
+                case "SurvivalMinute":   return new ScoreSystemData { Action = action, BaseScore = 5,   PhaseMultiplier = 1f };
+                default:
+                    Debug.LogWarning($"[ScoringSystem] No score config for '{action}' and no hardcoded fallback — returning 0.");
+                    return new ScoreSystemData { Action = action, BaseScore = 0, PhaseMultiplier = 1f };
+            }
         }
 
         /// <summary>

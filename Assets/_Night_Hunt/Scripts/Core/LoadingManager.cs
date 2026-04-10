@@ -389,6 +389,12 @@ namespace NightHunt.Core
                 using var req = UnityWebRequest.Get(url);
                 req.timeout = Mathf.Max(1, (int)internetTimeout);
 
+                // Attach AcceptAllCertificatesHandler nếu server dùng self-signed cert (mkcert + IP)
+                if (_backendConfig != null && _backendConfig.ShouldBypassSslCertificateValidation())
+                {
+                    req.certificateHandler = new NightHunt.Config.AcceptAllCertificatesHandler();
+                }
+
                 // 📋 DEBUG LOG: Health check request details
                 Debug.Log($"[LoadingManager] 🔍 Health Check Request:");
                 Debug.Log($"  URL: {url}");
@@ -440,22 +446,60 @@ namespace NightHunt.Core
                 // Diagnose specific connection issues
                 if (req.result == UnityWebRequest.Result.ConnectionError)
                 {
+                    // Case-insensitive SSL detection + Curl error 60 (CN mismatch)
                     bool isSslError = req.error != null &&
-                        (req.error.Contains("SSL") || req.error.Contains("certificate") || req.error.Contains("CA"));
+                        (req.error.IndexOf("SSL",        System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("certificate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("Cert",        System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("CA",          System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("TLS",         System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("UnityTls",    System.StringComparison.OrdinalIgnoreCase) >= 0);
 
                     if (isSslError)
                     {
-                        Debug.LogError($"[LoadingManager] SSL CERT ERROR — Nguyen nhan: mkcert CA chua duoc install vao Windows");
-                        Debug.LogError($"  Fix: Chay dev-start.bat (hoac .dev-start.ps1) trong thu muc NightHuntServer");
-                        Debug.LogError($"  Hoac chay thu cong: mkcert -install  (trong PowerShell)");
-                        Debug.LogError($"  Sau do RESTART Unity Editor");
+                        bool isLocalHost = url.IndexOf("localhost",  System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                           url.Contains("127.0.0.1");
+                        bool isCnMismatch = req.error.IndexOf("mismatch",    System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                            req.error.IndexOf("Common Name",  System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                            req.error.IndexOf("CN",           System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                            req.error.IndexOf("Cert verify",  System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+                        if (isLocalHost)
+                        {
+                            // Local dev: mkcert CA not trusted
+                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (local) — mkcert CA chua duoc install vao Windows");
+                            Debug.LogError($"  URL: {url}");
+                            Debug.LogError($"  Fix: Chay Tools/setup-dev-cert.ps1 hoac 'mkcert -install' trong PowerShell");
+                            Debug.LogError($"  Sau do RESTART Unity Editor");
+                        }
+                        else if (isCnMismatch)
+                        {
+                            // Cloud server: certificate CN does not match the host being connected to
+                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (cloud CN mismatch) — Certificate CN khong khop voi host");
+                            Debug.LogError($"  URL: {url}");
+                            Debug.LogError($"  Host dang ket noi: {_backendConfig?.apiHost}");
+                            Debug.LogError($"  Nguyen nhan co the:");
+                            Debug.LogError($"    1. 'prodApiHost' trong BackendConfig sai hoac khong khop voi CN tren cert cua server");
+                            Debug.LogError($"    2. Server dang dung self-signed cert (mkcert) thay vi Let's Encrypt");
+                            Debug.LogError($"    3. Trong editor: bat 'Force Production In Editor' tren BackendConfig de test cloud");
+                            Debug.LogError($"  Raw error: {req.error}");
+                        }
+                        else
+                        {
+                            // Cloud server: cert not trusted (CA chain issue)
+                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (cloud) — Server cert khong duoc trust");
+                            Debug.LogError($"  URL: {url}");
+                            Debug.LogError($"  Kiem tra: server co Let's Encrypt cert hop le khong?");
+                            Debug.LogError($"  Raw error: {req.error}");
+                        }
                     }
                     else
                     {
                         Debug.LogError($"[LoadingManager] CONNECTION ERROR:");
+                        Debug.LogError($"  URL: {url}");
                         Debug.LogError($"  1. Server chua chay tren {_backendConfig?.apiHost ?? "localhost:8443"}");
-                        Debug.LogError($"  2. SSL cert chua duoc setup — chay dev-start.bat");
-                        Debug.LogError($"  3. Port 8443 bi block boi Firewall");
+                        Debug.LogError($"  2. SSL cert chua duoc setup — chay Tools/setup-dev-cert.ps1");
+                        Debug.LogError($"  3. Port bi block boi Firewall");
                     }
                 }
                 else if (req.result == UnityWebRequest.Result.ProtocolError)

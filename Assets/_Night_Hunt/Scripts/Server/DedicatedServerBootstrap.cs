@@ -36,6 +36,7 @@ namespace NightHunt.Server
 
         // ── State ─────────────────────────────────────────────────────────────
         private bool _registered;
+        private int  _expectedPlayers;
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ namespace NightHunt.Server
             _backendUrl   = GetEnv("BACKEND_URL",   "http://localhost:8080/api");
             _serverSecret = GetEnv("SERVER_SECRET", "");
             _mapId        = GetEnv("MAP_ID",        "map_01");
+            _expectedPlayers = int.TryParse(GetEnv("EXPECTED_PLAYERS", "2"), out int ep) ? ep : 2;
 
             if (networkGameManager == null)
                 networkGameManager = FindFirstObjectByType<NetworkGameManager>();
@@ -76,10 +78,21 @@ namespace NightHunt.Server
                 Debug.LogError("[DS Bootstrap] NetworkGameManager not found! Server not started.");
             }
 
-            // 3. Đợi để server ổn định trước khi register
+            // 3. Set expected player count from env vars
+            if (ServerGameManager.Instance != null)
+            {
+                ServerGameManager.Instance.SetExpectedPlayerCount(_expectedPlayers);
+                Debug.Log($"[DS Bootstrap] Expected player count set to {_expectedPlayers}");
+            }
+            else
+            {
+                Debug.LogWarning("[DS Bootstrap] ServerGameManager not found — expectedPlayerCount not applied!");
+            }
+
+            // 4. Đợi để server ổn định trước khi register
             yield return new WaitForSeconds(2f);
 
-            // 4. Register với backend (retry tối đa 5 lần)
+            // 5. Register với backend (retry tối đa 5 lần)
             for (int attempt = 1; attempt <= 5; attempt++)
             {
                 yield return RegisterWithBackend();
@@ -96,7 +109,7 @@ namespace NightHunt.Server
                 yield break;
             }
 
-            // 5. Start heartbeat
+            // 6. Start heartbeat
             InvokeRepeating(nameof(SendHeartbeat), 30f, 30f);
         }
 

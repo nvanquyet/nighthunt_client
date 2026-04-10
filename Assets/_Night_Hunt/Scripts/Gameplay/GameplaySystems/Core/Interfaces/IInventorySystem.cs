@@ -72,6 +72,14 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Server-side only, syncs to clients
         /// </summary>
         void AddItem(string itemDefinitionID, int quantity);
+
+        /// <summary>
+        /// Restore a previously serialised item (e.g. picked up from world) into inventory,
+        /// preserving all runtime state: CurrentMagazine, CurrentResource, AttachedItems, etc.
+        /// Does NOT try to stack — always creates a new inventory slot entry.
+        /// Server-side only.
+        /// </summary>
+        void AddItemFromData(ItemInstanceData data);
         
         /// <summary>
         /// Remove specific item instance

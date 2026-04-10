@@ -615,7 +615,7 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            inventory.AddItem(_itemData.DefinitionID, _itemData.Quantity);
+            inventory.AddItemFromData(_itemData);
             // Mark as picked up via SyncVar so all clients immediately reflect the state.
             // This fires OnChange on every observer, letting their CanInteract() return false
             // without any client needing to track _isPickupPending.

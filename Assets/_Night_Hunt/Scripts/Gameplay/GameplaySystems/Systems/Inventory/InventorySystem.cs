@@ -212,6 +212,56 @@ namespace NightHunt.GameplaySystems.Inventory
             AddItemServer(itemDefinitionID, quantity);
         }
 
+        /// <summary>
+        /// Restore a full <see cref="ItemInstanceData"/> snapshot into inventory,
+        /// preserving all runtime state (magazine, resource, attachments).
+        /// Used by <see cref="WorldItem.RequestPickup"/> so that dropped-then-picked-up
+        /// guns retain their ammo count rather than resetting to full.
+        /// </summary>
+        public void AddItemFromData(ItemInstanceData data)
+        {
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[InventorySystem] AddItemFromData: server-only!");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(data.DefinitionID))
+            {
+                Debug.LogWarning("[InventorySystem] AddItemFromData: empty DefinitionID, skipping.");
+                return;
+            }
+
+            var itemDef = ItemDatabase.GetDefinition(data.DefinitionID);
+            if (itemDef == null)
+            {
+                Debug.LogError($"[InventorySystem] AddItemFromData: unknown definition '{data.DefinitionID}'");
+                return;
+            }
+
+            // Reconstruct the ItemInstance restoring all persisted runtime values.
+            var restored = new ItemInstance(data.DefinitionID, Mathf.Max(1, data.Quantity), GetNextAvailableIndex())
+            {
+                InstanceID       = !string.IsNullOrEmpty(data.InstanceID) ? data.InstanceID : System.Guid.NewGuid().ToString(),
+                CurrentMagazine  = data.CurrentMagazine,
+                CurrentResource  = data.CurrentResource,
+                AttachedItems    = data.AttachedItems != null ? (string[])data.AttachedItems.Clone() : null,
+                CustomData       = data.CustomData,
+                CreatedTimestamp = data.CreatedTimestamp != 0 ? data.CreatedTimestamp : DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            };
+
+            AddToAllCaches(restored);
+            _items.Add(restored.ToData());
+            ItemDatabase.RegisterInstance(restored);
+
+            OnItemAdded?.Invoke(restored);
+            ScheduleWeightUpdate();
+
+            if (_enableDebugLogs)
+                Debug.Log($"[InventorySystem] AddItemFromData: restored '{data.DefinitionID}' " +
+                          $"×{data.Quantity} mag={data.CurrentMagazine} id={restored.InstanceID}");
+        }
+
         [Server]
         private void AddItemServer(string itemDefinitionID, int quantity)
         {

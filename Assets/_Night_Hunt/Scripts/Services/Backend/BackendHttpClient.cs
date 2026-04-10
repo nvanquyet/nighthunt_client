@@ -116,6 +116,12 @@ namespace NightHunt.Services.Backend
 
             request.timeout = config.requestTimeoutSeconds;
 
+            // Attach AcceptAllCertificatesHandler nếu server dùng self-signed cert (mkcert + IP)
+            if (config.ShouldBypassSslCertificateValidation())
+            {
+                request.certificateHandler = new NightHunt.Config.AcceptAllCertificatesHandler();
+            }
+
             var operation = request.SendWebRequest();
 
             while (!operation.isDone)

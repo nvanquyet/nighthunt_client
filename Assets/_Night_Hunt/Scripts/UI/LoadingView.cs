@@ -54,11 +54,13 @@ namespace NightHunt.UI
 
         private void Awake()
         {
+            GameplayEventBus.Instance?.Subscribe<SpawningStartedEvent>(OnSpawningStarted);
             GameplayEventBus.Instance?.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
         }
 
         private void OnDestroy()
         {
+            GameplayEventBus.Instance?.Unsubscribe<SpawningStartedEvent>(OnSpawningStarted);
             GameplayEventBus.Instance?.Unsubscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
         }
 
@@ -112,6 +114,11 @@ namespace NightHunt.UI
                     _progressTarget = 1f;
                     break;
             }
+        }
+
+        private void OnSpawningStarted(SpawningStartedEvent _)
+        {
+            SetStage(LoadingStage.Spawning);
         }
 
         private void OnAllPlayersReady(AllPlayersReadyEvent _)

@@ -10,25 +10,27 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 15003, guid: 0000000000000000e000000000000000, type: 0}
-  m_Name: "New Android\u2122 Profile"
+  m_Name: New Linux Server Profile 1
   m_EditorClassIdentifier: 
   m_AssetVersion: 1
-  m_BuildTarget: 13
-  m_Subtarget: 0
-  m_PlatformId: b9b35072a6f44c2e863f17467ea3dc13
+  m_BuildTarget: 24
+  m_Subtarget: 1
+  m_PlatformId: 91d938b35f6f4798811e41f2acf9377f
   m_PlatformBuildProfile:
-    rid: 4644974337973551213
+    rid: 2234766402760474710
   m_OverrideGlobalSceneList: 1
   m_Scenes:
   - m_enabled: 1
     m_path: Assets/_Night_Hunt/Scenes/00_DS_Boot.unity
+  - m_enabled: 1
+    m_path: Assets/_Night_Hunt/Scenes/02_Map_01.unity
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
     m_Settings:
     - line: '| PlayerSettings:'
     - line: '|   m_ObjectHideFlags: 0'
     - line: '|   serializedVersion: 28'
-    - line: '|   productGUID: 91649bb2335363841ab2fbd8cdc8de7c'
+    - line: '|   productGUID: eb8aa8801797d734cb19a3a8e80649b4'
     - line: '|   AndroidProfiler: 0'
     - line: '|   AndroidFilterTouchesWhenObscured: 0'
     - line: '|   AndroidEnableSustainedPerformanceMode: 0'
@@ -36,7 +38,7 @@ MonoBehaviour:
     - line: '|   targetDevice: 2'
     - line: '|   useOnDemandResources: 0'
     - line: '|   accelerometerFrequency: 60'
-    - line: '|   companyName: DefaultCompany'
+    - line: '|   companyName: YnWuet'
     - line: '|   productName: NightHunt'
     - line: '|   defaultCursor: {instanceID: 0}'
     - line: '|   cursorHotspot: {x: 0, y: 0}'
@@ -84,8 +86,8 @@ MonoBehaviour:
     - line: '|   iosShowActivityIndicatorOnLoading: -1'
     - line: '|   androidShowActivityIndicatorOnLoading: -1'
     - line: '|   iosUseCustomAppBackgroundBehavior: 0'
-    - line: '|   allowedAutorotateToPortrait: 0'
-    - line: '|   allowedAutorotateToPortraitUpsideDown: 0'
+    - line: '|   allowedAutorotateToPortrait: 1'
+    - line: '|   allowedAutorotateToPortraitUpsideDown: 1'
     - line: '|   allowedAutorotateToLandscapeRight: 1'
     - line: '|   allowedAutorotateToLandscapeLeft: 1'
     - line: '|   useOSAutorotation: 1'
@@ -166,9 +168,7 @@ MonoBehaviour:
     - line: '|   visionOSBundleVersion: 1.0'
     - line: '|   tvOSBundleVersion: 1.0'
     - line: '|   bundleVersion: 2.0'
-    - line: '|   preloadedAssets:'
-    - line: '|   - {fileID: -944628639613478452, guid: 35f8ec9ffcbebf94499ec1d900b20e92,
-        type: 3}'
+    - line: '|   preloadedAssets: []'
     - line: '|   metroInputSource: 0'
     - line: '|   wsaTransparentSwapchain: 0'
     - line: '|   m_HolographicPauseOnTrackingLoss: 1'
@@ -189,8 +189,7 @@ MonoBehaviour:
     - line: '|   androidSupportedAspectRatio: 1'
     - line: '|   androidMaxAspectRatio: 2.4'
     - line: '|   androidMinAspectRatio: 1'
-    - line: '|   applicationIdentifier:'
-    - line: '|     Android: com.DefaultCompany.NightHunt'
+    - line: '|   applicationIdentifier: {}'
     - line: '|   buildNumber:'
     - line: '|     Standalone: 0'
     - line: '|     VisionOS: 0'
@@ -475,10 +474,7 @@ MonoBehaviour:
     - line: '|   m_BuildTargetGroupLightmapSettings: []'
     - line: '|   m_BuildTargetGroupLoadStoreDebugModeSettings: []'
     - line: '|   m_BuildTargetNormalMapEncoding: []'
-    - line: '|   m_BuildTargetDefaultTextureCompressionFormat:'
-    - line: '|   - serializedVersion: 3'
-    - line: '|     m_BuildTarget: Android'
-    - line: '|     m_Formats: 01000000'
+    - line: '|   m_BuildTargetDefaultTextureCompressionFormat: []'
     - line: '|   playModeTestRunnerEnabled: 0'
     - line: '|   runPlayModeTestAsEditModeTest: 0'
     - line: '|   actionOnDotNetUnhandledException: 1'
@@ -745,9 +741,10 @@ MonoBehaviour:
     - line: '|   webGLCloseOnQuit: 0'
     - line: '|   webWasm2023: 0'
     - line: '|   scriptingDefineSymbols:'
-    - line: '|     Android: UNITY_POST_PROCESSING_STACK_V2;FISHNET;FISHNET_V4;FISHNET_PRO'
+    - line: '|     Android: UNITY_POST_PROCESSING_STACK_V2'
     - line: '|     Nintendo Switch: UNITY_POST_PROCESSING_STACK_V2'
     - line: '|     PS4: UNITY_POST_PROCESSING_STACK_V2'
+    - line: '|     Server: FISHNET;FISHNET_V4;FISHNET_PRO'
     - line: '|     Standalone: UNITY_POST_PROCESSING_STACK_V2;FISHNET;FISHNET_V4;FISHNET_PRO'
     - line: '|     WebGL: UNITY_POST_PROCESSING_STACK_V2'
     - line: '|     XboxOne: UNITY_POST_PROCESSING_STACK_V2'
@@ -756,6 +753,7 @@ MonoBehaviour:
     - line: '|   platformArchitecture: {}'
     - line: '|   scriptingBackend:'
     - line: '|     Android: 1'
+    - line: '|     Server: 1'
     - line: '|   il2cppCompilerConfiguration: {}'
     - line: '|   il2cppCodeGeneration: {}'
     - line: '|   il2cppStacktraceInformation: {}'
@@ -813,7 +811,6 @@ MonoBehaviour:
     - line: '|   syncCapabilities: 0'
     - line: '|   platformCapabilities:'
     - line: '|     WindowsStoreApps:'
-    - line: '|       CodeGeneration: False'
     - line: '|       OfflineMapsManagement: False'
     - line: '|       HumanInterfaceDevice: False'
     - line: '|       Location: False'
@@ -826,6 +823,7 @@ MonoBehaviour:
     - line: '|       InternetClientServer: False'
     - line: '|       VideosLibrary: False'
     - line: '|       Objects3D: False'
+    - line: '|       InternetClient: False'
     - line: '|       RemoteSystem: False'
     - line: '|       BlockedChatMessages: False'
     - line: '|       PhoneCall: False'
@@ -847,7 +845,7 @@ MonoBehaviour:
     - line: '|       RecordedCallsFolder: False'
     - line: '|       Contacts: False'
     - line: '|       Proximity: False'
-    - line: '|       InternetClient: False'
+    - line: '|       CodeGeneration: False'
     - line: '|       BackgroundMediaPlayback: False'
     - line: '|       EnterpriseAuthentication: False'
     - line: '|   metroTargetDeviceFamilies:'
@@ -890,9 +888,7 @@ MonoBehaviour:
     - line: '|   XboxOneOverrideIdentityName: '
     - line: '|   XboxOneOverrideIdentityPublisher: '
     - line: '|   vrEditorSettings: {}'
-    - line: '|   cloudServicesEnabled:'
-    - line: '|     Purchasing: 0'
-    - line: '|     Unity Ads: 0'
+    - line: '|   cloudServicesEnabled: {}'
     - line: '|   luminIcon:'
     - line: '|     m_Name: '
     - line: '|     m_ModelFolderPath: '
@@ -912,7 +908,7 @@ MonoBehaviour:
     - line: '|   qnxGraphicConfPath: '
     - line: '|   apiCompatibilityLevel: 6'
     - line: '|   captureStartupLogs: {}'
-    - line: '|   activeInputHandler: 2'
+    - line: '|   activeInputHandler: 0'
     - line: '|   windowsGamepadBackendHint: 0'
     - line: '|   cloudProjectId: 46232ba1-0a57-41ac-be2c-f786615c61bf'
     - line: '|   framebufferDepthMemorylessMode: 0'
@@ -931,8 +927,8 @@ MonoBehaviour:
   references:
     version: 2
     RefIds:
-    - rid: 4644974337973551213
-      type: {class: AndroidPlatformBuildSettings, ns: UnityEditor.Android, asm: UnityEditor.Android.Extensions}
+    - rid: 2234766402760474710
+      type: {class: LinuxPlatformSettings, ns: UnityEditor.LinuxStandalone, asm: UnityEditor.LinuxStandalone.Extensions}
       data:
         m_Development: 0
         m_ConnectProfiler: 0
@@ -943,15 +939,5 @@ MonoBehaviour:
         m_ExplicitNullChecks: 0
         m_ExplicitDivideByZeroChecks: 0
         m_ExplicitArrayBoundsChecks: 0
-        m_CompressionType: 2
+        m_CompressionType: 0
         m_InstallInBuildFolder: 0
-        m_BuildSubtarget: 0
-        m_BuildSystem: 1
-        m_ExportAsGoogleAndroidProject: 0
-        m_DebugSymbolLevel: 1
-        m_DebugSymbolFormat: 5
-        m_CurrentDeploymentTargetId: __builtin__target_default
-        m_BuildType: 2
-        m_BuildAppBundle: 0
-        m_IPAddressToConnect: 
-        m_SymlinkSources: 0

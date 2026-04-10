@@ -8,7 +8,7 @@ namespace NightHunt.GameplaySystems.Weapon
 {
     public partial class WeaponSystem
     {
-        // -- IWeaponSystem — Reload API -----------------------------------------
+        // -- IWeaponSystem ï¿½ Reload API -----------------------------------------
 
         /// <summary>Owner-client calls this (e.g. press R). Runs reload coroutine locally,
         /// and broadcasts state change to remote clients via NetworkSync.</summary>
@@ -17,6 +17,8 @@ namespace NightHunt.GameplaySystems.Weapon
             var slot = _activeSlot.Value;
             if (slot == null || _isReloading) return;
             if (!_weaponCache.TryGetValue(slot.Value, out var inst)) return;
+            // Guard: do not reload if no reserve ammo remains.
+            if (!CanReload(slot.Value)) return;
             StartCoroutine(ReloadCoroutine(slot.Value, inst));
         }
 
@@ -76,14 +78,8 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             if (_isReloading) yield break;
 
-            // Lazy-init reserve ammo.
-            if (inst.GetCurrentValue(ItemStatType.MaxAmmo) == 0f)
-            {
-                float max = inst.GetComputedStat(ItemStatType.MaxAmmo);
-                if (max > 0f) inst.SetCurrentValue(ItemStatType.MaxAmmo, max);
-                else { Debug.LogError($"[WeaponSystem] MaxAmmo stat missing for '{inst.DefinitionID}'."); }
-            }
-
+            // NOTE: Reserve ammo is initialised once in AssignToSlot (first equip).
+            // Do NOT lazy-reinit here â€” a gun that deliberately ran out of reserve must stay empty.
             float magCap     = inst.GetComputedStat(ItemStatType.MagazineSize);
             float reloadTime = inst.GetComputedStat(ItemStatType.ReloadSpeed);
             if (reloadTime <= 0f) reloadTime = 2.5f;

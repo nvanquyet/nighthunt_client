@@ -12,6 +12,8 @@ using System.Collections.Generic;
 using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.Config;
+using NightHunt.State;
 
 namespace NightHunt.Networking
 {
@@ -30,7 +32,9 @@ namespace NightHunt.Networking
         [SerializeField] private ClientNetworkHandler clientNetworkHandlerPrefab;
 
         [Header("Match Settings")]
-        [Tooltip("Total players expected before starting Phase 1 (set by backend/room config).")]
+        [Tooltip("Total players expected before starting Phase 1.\n" +
+                 "Tự động resolve từ RoomState.PlayerCount (Ranked) hoặc GameModeConfig khi OnStartNetwork.\n" +
+                 "Chỉ cần đặt thủ công khi test trong Editor (dev mode, GameMode.None).")]
         [SerializeField]
         private int _expectedPlayerCount = 2;
         [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
@@ -94,8 +98,49 @@ namespace NightHunt.Networking
             // Subscribe to connection events
             _networkManager.ServerManager.OnRemoteConnectionState += OnServerConnectionState;
 
+            // Auto-resolve expected player count from RoomState (set by backend match_ready WS).
+            // Priority: RoomState.PlayerCount (Ranked_DS, most accurate)
+            //           → GameModeConfig lookup by modeKey
+            //           → keep Inspector value (dev/editor fallback)
+            ResolveExpectedPlayerCount();
+
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] âœ… Initialized");
+                Debug.Log("[ServerGameManager] ✅ Initialized");
+        }
+
+        [Server]
+        private void ResolveExpectedPlayerCount()
+        {
+            // 1. Ranked DS: room already has all slots filled → use PlayerCount directly
+            var roomState = RoomState.Instance;
+            if (roomState != null && roomState.CurrentGameMode == GameMode.Ranked_DS
+                && roomState.PlayerCount > 0)
+            {
+                _expectedPlayerCount = roomState.PlayerCount;
+                if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                    Debug.Log($"[ServerGameManager] ExpectedPlayerCount resolved from RoomState: {_expectedPlayerCount}");
+                return;
+            }
+
+            // 2. Fallback: resolve via GameModeConfig using room's mode key (field name is "mode" in RoomResponse)
+            string modeKey = roomState?.CurrentRoom?.mode;
+            if (!string.IsNullOrEmpty(modeKey))
+            {
+                // Try allowFill=true first, then false
+                if (GameModeConfig.TryGetByKey(modeKey, true, out GameModeEntry entry)
+                    || GameModeConfig.TryGetByKey(modeKey, false, out entry))
+                {
+                    _expectedPlayerCount = entry.playersPerTeam * 2;
+                    if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                        Debug.Log($"[ServerGameManager] ExpectedPlayerCount resolved from GameModeConfig ({modeKey}): {_expectedPlayerCount}");
+                    return;
+                }
+            }
+
+            // 3. Keep Inspector value — dev mode or no data available
+            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                Debug.LogWarning($"[ServerGameManager] ExpectedPlayerCount using Inspector value: {_expectedPlayerCount}. " +
+                                 "Ensure RoomState is populated before scene load in production.");
         }
 
         public override void OnStopNetwork()
@@ -284,6 +329,12 @@ namespace NightHunt.Networking
             networkPlayer.SetAlive(true);
             _spawnedPlayerCount++;
 
+            // Notify all clients to enter "Spawning" stage on first spawn
+            if (_spawnedPlayerCount == 1)
+            {
+                RpcOnSpawningStarted();
+            }
+
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.Log(
                 $"[ServerGameManager] === âœ… Spawn complete ({_spawnedPlayerCount}/{_expectedPlayerCount}) - {serverData.DisplayName}, Team: {serverData.TeamId} ===");
@@ -310,6 +361,14 @@ namespace NightHunt.Networking
                 _matchPhaseManager.BeginMatch();
             else
                 Debug.LogError("[ServerGameManager] MatchPhaseManager is null — BeginMatch not called!");
+        }
+
+        [ObserversRpc]
+        private void RpcOnSpawningStarted()
+        {
+            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                Debug.Log("[ServerGameManager] CLIENT: First player spawned — advancing to Spawning stage.");
+            GameplayEventBus.Instance?.Publish(new SpawningStartedEvent());
         }
 
         [ObserversRpc]

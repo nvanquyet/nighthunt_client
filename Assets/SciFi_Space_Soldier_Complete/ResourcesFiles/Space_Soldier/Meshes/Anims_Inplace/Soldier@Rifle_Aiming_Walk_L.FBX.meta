@@ -438,14 +438,14 @@ ModelImporter:
       events:
       - time: 0.3109756
         functionName: FootStep
-        data: Aiming
+        data: Rifle
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
       - time: 0.7378049
         functionName: FootStep
-        data: Aiming
+        data: Rifle
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0

@@ -165,6 +165,12 @@ namespace NightHunt.UI
 
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeIn());
+
+            // Load game scene immediately so MatchNetworkConnector (placed in the game map
+            // scene) can Start() and connect to the relay/DS. The overlay persists through
+            // the scene transition (DontDestroyOnLoad via PersistentUICanvas). Once all
+            // players have spawned the server fires AllPlayersReadyEvent → we hide.
+            SceneLoader.LoadGame(targetMapId);
         }
 
         private void SetStage(MatchLoadStage stage)
@@ -194,18 +200,24 @@ namespace NightHunt.UI
             }
         }
 
+        private void OnSpawningStarted(SpawningStartedEvent _)
+        {
+            MarkSpawning();
+        }
+
         private void OnAllPlayersReady(AllPlayersReadyEvent _)
         {
             SetStage(MatchLoadStage.AllReady);
-            // Đợi progress bar hoàn thành animation rồi load scene
-            Invoke(nameof(LoadGameplayScene), delayAfterReady);
+            // Game scene is already loaded (triggered inside ShowInternal).
+            // Wait for progress-bar animation then hide overlay and unsubscribe.
+            Invoke(nameof(HideOnReady), delayAfterReady);
         }
 
-        private void LoadGameplayScene()
+        private void HideOnReady()
         {
             UnsubscribeEvents();
-            Debug.Log($"[MatchLoadingOverlay] Loading gameplay scene: {targetMapId}");
-            SceneLoader.LoadGame(targetMapId);
+            Debug.Log("[MatchLoadingOverlay] All players ready — hiding overlay.");
+            Hide();
         }
 
         private static SceneId ResolveTargetMap()
@@ -227,10 +239,39 @@ namespace NightHunt.UI
 
         private void RefreshTeamInfo()
         {
-            // TODO: lấy team info từ RoomState khi có đủ data
-            if (teamALabel != null) teamALabel.text = "Team A";
-            if (teamBLabel != null) teamBLabel.text = "Team B";
-            if (vsLabel    != null) vsLabel.text    = "VS";
+            var room = RoomState.Instance?.CurrentRoom;
+            if (room?.players == null || room.players.Count == 0)
+            {
+                // Fallback khi không có data (dev mode)
+                if (teamALabel != null) teamALabel.text = "Team A";
+                if (teamBLabel != null) teamBLabel.text = "Team B";
+                if (vsLabel    != null) vsLabel.text    = "VS";
+                return;
+            }
+
+            // Gộp tên player theo team. RoomPlayerResponse.team = 1 hoặc 2.
+            var teamANames = new System.Collections.Generic.List<string>();
+            var teamBNames = new System.Collections.Generic.List<string>();
+
+            foreach (var p in room.players)
+            {
+                string name = string.IsNullOrEmpty(p.username) ? $"Player {p.userId}" : p.username;
+                if (p.team == 1) teamANames.Add(name);
+                else             teamBNames.Add(name);
+            }
+
+            if (teamALabel != null)
+                teamALabel.text = teamANames.Count > 0
+                    ? string.Join("\n", teamANames)
+                    : "Team A";
+
+            if (teamBLabel != null)
+                teamBLabel.text = teamBNames.Count > 0
+                    ? string.Join("\n", teamBNames)
+                    : "Team B";
+
+            if (vsLabel != null)
+                vsLabel.text = "VS";
         }
 
         private void SetStatus(string msg)
@@ -249,11 +290,13 @@ namespace NightHunt.UI
 
         private void SubscribeEvents()
         {
+            GameplayEventBus.Instance?.Subscribe<SpawningStartedEvent>(OnSpawningStarted);
             GameplayEventBus.Instance?.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
         }
 
         private void UnsubscribeEvents()
         {
+            GameplayEventBus.Instance?.Unsubscribe<SpawningStartedEvent>(OnSpawningStarted);
             GameplayEventBus.Instance?.Unsubscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
         }
 

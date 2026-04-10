@@ -98,8 +98,12 @@ namespace NightHunt.UI
                     ? "You died"
                     : $"Killed by: {killerName}";
 
-            // Disable respawn button until countdown finishes
-            if (_respawnButton != null) _respawnButton.interactable = false;
+            // Show respawn button (hidden/greyed by default); countdown enables it.
+            if (_respawnButton != null)
+            {
+                _respawnButton.gameObject.SetActive(true);
+                _respawnButton.interactable = false;
+            }
 
             if (_countdownRoutine != null) StopCoroutine(_countdownRoutine);
             _countdownRoutine = StartCoroutine(RespawnCountdown());
@@ -202,8 +206,9 @@ namespace NightHunt.UI
             if (_respawnTimerText != null)
                 _respawnTimerText.text = msg;
 
+            // Hide the respawn button entirely — only Spectate is available.
             if (_respawnButton != null)
-                _respawnButton.interactable = false;
+                _respawnButton.gameObject.SetActive(false);
         }
 
         // ── Coroutine ─────────────────────────────────────────────────────────
@@ -224,8 +229,12 @@ namespace NightHunt.UI
             if (_respawnTimerText != null)
                 _respawnTimerText.text = "Ready!";
 
+            // Re-show and enable respawn button once countdown finishes.
             if (_respawnButton != null)
+            {
+                _respawnButton.gameObject.SetActive(true);
                 _respawnButton.interactable = true;
+            }
         }
 
         // ── Button callbacks ──────────────────────────────────────────────────

@@ -13,11 +13,10 @@ MonoBehaviour:
   m_Name: BackendConfig
   m_EditorClassIdentifier: 
   environment: 2
-  apiHost: localhost:8443
-  useHttps: 1
-  forceHttpsInProduction: 1
-  ignoreSslCertificate: 0
-  forceSecureEverywhere: 1
-  requestTimeoutSeconds: 10
+  devApiHost: 20.2.235.140:8443
+  forceProductionInEditor: 1
+  forceProductionOnDevBuild: 1
+  prodApiHost: 20.2.235.140:8443
   wsPath: /api/ws/game
   overrideWsBaseUrl: 
+  requestTimeoutSeconds: 10

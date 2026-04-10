@@ -20,6 +20,7 @@ namespace NightHunt.UI
 
         [Header("UI Components")]        [SerializeField] private LoadingManager     loadingManager;
         [SerializeField] private MatchLoadingOverlay matchLoadingOverlay;
+        [SerializeField] private MatchFoundOverlay   matchFoundOverlay;
         [SerializeField] private PingDisplay         pingDisplay;
         [SerializeField] private ToastService        toastService;
 
@@ -27,6 +28,7 @@ namespace NightHunt.UI
         public Canvas              Canvas               => canvas;
         public LoadingManager      LoadingManager       => loadingManager;
         public MatchLoadingOverlay MatchLoadingOverlay  => matchLoadingOverlay;
+        public MatchFoundOverlay   MatchFoundOverlay    => matchFoundOverlay;
         public PingDisplay         PingDisplay          => pingDisplay;
         public ToastService        ToastService         => toastService;
 

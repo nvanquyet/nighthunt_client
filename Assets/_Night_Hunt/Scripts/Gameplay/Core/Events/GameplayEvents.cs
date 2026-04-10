@@ -5,6 +5,12 @@ namespace NightHunt.Gameplay.Core.Events
 {
     // ── Match Flow ────────────────────────────────────────────────────────────
 
+    /// <summary>First player has spawned on the server. Clients should advance to the "Spawning" loading stage.</summary>
+    public struct SpawningStartedEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+    }
+
     /// <summary>All expected players have spawned. Clients should dismiss loading screen.</summary>
     public struct AllPlayersReadyEvent : IGameplayEvent
     {

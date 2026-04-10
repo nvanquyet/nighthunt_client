@@ -78,6 +78,9 @@ namespace NightHunt.Common
 
         // Game Config endpoints — populated at startup by GameConfigService
         public const string API_GAME_MODES = "/api/game-modes";
+
+        // Match result (post-match summary — client reports to backend after match ends)
+        public const string API_MATCH_RESULT = "/api/matches/{0}/result";
         public const string API_MAPS       = "/api/maps";
 
         // Game Mode keys — must match GameMode.modeKey in DB

@@ -165,10 +165,10 @@ MonoBehaviour:
   _attackCooldown: 0.5
   _playerLayerMask:
     serializedVersion: 2
-    m_Bits: 16896
+    m_Bits: 64
   _obstacleLayerMask:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 8421377
   _scanInterval: 0.3
   _turretGuns:
   - {fileID: 8574440910411904091}
@@ -176,9 +176,9 @@ MonoBehaviour:
   _projectilePrefab: {fileID: 7135761094741138672, guid: d0f08300b42b1b64ab830e8833130ce8,
     type: 3}
   _projectileSpeed: 60
-  _bossRewardConfig: {fileID: 11400000, guid: d042b479dd7adb54d93384f0dc1daab7, type: 2}
+  _bossRewardConfig: {fileID: 11400000, guid: 0a7c37bea041f1943a3b909e24c6a880, type: 2}
   _bossKillScore: 500
-  _showDebug: 1
+  _showDebug: 0
   _despawnDelay: 3
 --- !u!1 &1966791383097519826
 GameObject:

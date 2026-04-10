@@ -15,6 +15,8 @@ namespace NightHunt.State
         public string RoomCode => CurrentRoom?.roomCode ?? "";
         public string Status => CurrentRoom?.status ?? "";
         public bool IsReady => CurrentRoom?.players?.Find(p => p.userId == (SessionState.Instance?.UserId ?? 0))?.isReady ?? false;
+        /// <summary>Number of players currently in the room (0 when not in a room).</summary>
+        public int PlayerCount => CurrentRoom?.players?.Count ?? 0;
 
         // ── Game mode & network session ───────────────────────────────────────
         /// <summary>Whether this session uses Custom_Relay or Ranked_DS.</summary>

@@ -94,6 +94,7 @@ namespace NightHunt.Networking
                     _connected = true;
                     Debug.Log("[MatchNetworkConnector] ✅ Client connected.");
                     _loadingView?.MarkConnected();
+                    MatchLoadingOverlay.Instance?.MarkConnected();
                     break;
 
                 case LocalConnectionState.Stopped:
@@ -159,6 +160,19 @@ namespace NightHunt.Networking
             {
                 Debug.Log($"[MatchNetworkConnector] Starting HOST via relay {room.RelayIp}:{room.RelayPort} session={room.RelaySessionId}");
                 _networkGameManager.StartHostWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
+
+                // Inform ServerGameManager how many players to wait for before starting the match.
+                // RoomState.CurrentRoom.players is populated by the backend before game_starting.
+                int expected = room.PlayerCount > 0 ? room.PlayerCount : 2;
+                if (ServerGameManager.Instance != null)
+                {
+                    ServerGameManager.Instance.SetExpectedPlayerCount(expected);
+                    Debug.Log($"[MatchNetworkConnector] Host: expectedPlayerCount set to {expected}");
+                }
+                else
+                {
+                    Debug.LogWarning("[MatchNetworkConnector] ServerGameManager.Instance null — expectedPlayerCount not applied. Assign ServerGameManager to scene.");
+                }
             }
             else
             {

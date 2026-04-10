@@ -376,14 +376,14 @@ ModelImporter:
       events:
       - time: 0.30779627
         functionName: FootStep
-        data: Rifle
+        data: Rifle Run
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
       - time: 0.7989605
         functionName: FootStep
-        data: Rifle
+        data: Rifle Run
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
