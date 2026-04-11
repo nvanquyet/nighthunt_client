@@ -104,6 +104,9 @@ namespace NightHunt.UI
         private float _lastOnShowTime = float.MinValue;
         private const float ON_SHOW_MIN_INTERVAL = 2f;
 
+        // Track whether the WS was ever connected so reconnect toasts only show after the first drop.
+        private bool _wsWasConnected;
+
         /// <summary>
         /// Fallback called when UINavigator.Notify() cannot reach this component (panelObject
         /// not wired in Inspector). OnShow() is effectively idempotent — safe to call twice.
@@ -265,6 +268,11 @@ namespace NightHunt.UI
             if (_ws == null) _ws = GameWebSocketService.Instance;
             if (_ws == null) return;
 
+            // Connection state
+            _ws.OnConnected        += HandleWsConnected;
+            _ws.OnDisconnected     += HandleWsDisconnected;
+            _ws.OnReconnectFailed  += HandleWsReconnectFailed;
+
             // Session lifecycle
             _ws.OnForceLogout    += HandleForceLogout;
             _ws.OnSessionExpired += HandleSessionExpired;
@@ -273,20 +281,55 @@ namespace NightHunt.UI
             _ws.OnFriendStatusChanged   += HandleFriendStatusChanged;
             _ws.OnFriendRequestReceived += HandleFriendRequestReceived;
             _ws.OnFriendRequestAccepted += HandleFriendRequestAccepted;
-            _ws.OnFriendRequestDeclined += HandleFriendRequestDeclined;
-            _ws.OnFriendRemoved         += HandleFriendRemoved;
+            _ws.OnFriendRequestDeclined   += HandleFriendRequestDeclined;
+            _ws.OnFriendRequestCancelled += HandleFriendRequestCancelled;
+            _ws.OnFriendRemoved           += HandleFriendRemoved;
         }
 
         private void UnsubscribeWSEvents()
         {
             if (_ws == null) return;
+            _ws.OnConnected       -= HandleWsConnected;
+            _ws.OnDisconnected    -= HandleWsDisconnected;
+            _ws.OnReconnectFailed -= HandleWsReconnectFailed;
             _ws.OnForceLogout    -= HandleForceLogout;
             _ws.OnSessionExpired -= HandleSessionExpired;
             _ws.OnFriendStatusChanged   -= HandleFriendStatusChanged;
             _ws.OnFriendRequestReceived -= HandleFriendRequestReceived;
             _ws.OnFriendRequestAccepted -= HandleFriendRequestAccepted;
-            _ws.OnFriendRequestDeclined -= HandleFriendRequestDeclined;
-            _ws.OnFriendRemoved         -= HandleFriendRemoved;
+            _ws.OnFriendRequestDeclined   -= HandleFriendRequestDeclined;
+            _ws.OnFriendRequestCancelled -= HandleFriendRequestCancelled;
+            _ws.OnFriendRemoved           -= HandleFriendRemoved;
+        }
+
+        // ── WS Connection ─────────────────────────────────────────────────
+
+        private void HandleWsConnected()
+        {
+            Debug.Log("[HomeView] WS OnConnected — wsWasConnected=" + _wsWasConnected);
+            if (_wsWasConnected)
+            {
+                var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+                toast?.Show("Connected", "Connection restored.");
+            }
+            _wsWasConnected = true;
+        }
+
+        private void HandleWsDisconnected()
+        {
+            Debug.Log("[HomeView] WS OnDisconnected — wsWasConnected=" + _wsWasConnected);
+            if (_wsWasConnected)
+            {
+                var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+                toast?.Show("Connection Lost", "Lost connection to server. Reconnecting...");
+            }
+        }
+
+        private void HandleWsReconnectFailed()
+        {
+            Debug.LogWarning("[HomeView] WS reconnect failed — max attempts reached");
+            var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+            toast?.Show("Connection Error", "Unable to reconnect to server. Please restart the game.");
         }
 
         private void HandleForceLogout()
@@ -315,22 +358,43 @@ namespace NightHunt.UI
             friendPanelView?.OnFriendRequestBadge(+1);
             friendPanelView?.RefreshAll();
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
-            toast?.Show(title: "K\u1ebft b\u1ea1n", message: $"{e.fromUsername} mu\u1ed1n k\u1ebft b\u1ea1n v\u1edbi b\u1ea1n.");
+            toast?.Show("Friend Request", $"{e.fromUsername} wants to be your friend.");
+            Debug.Log($"[HomeView] FriendRequestReceived from {e.fromUsername} ({e.fromUserId})");
         }
 
         private void HandleFriendRequestAccepted(GameWebSocketService.FriendRequestAcceptedEvent e)
-            => friendPanelView?.RefreshFriendList();
+        {
+            friendPanelView?.RefreshFriendList();
+            string name = string.IsNullOrEmpty(e.addresseeUsername) ? "Someone" : e.addresseeUsername;
+            var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+            toast?.Show("Friends", $"{name} accepted your friend request.");
+            Debug.Log($"[HomeView] FriendRequestAccepted — addressee={e.addresseeUsername} ({e.addresseeUserId})");
+        }
 
         // Requester's outgoing request was declined — refresh requests list if tab is open.
         private void HandleFriendRequestDeclined(GameWebSocketService.FriendRequestDeclinedEvent e)
         {
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
-            toast?.Show(title: "Kết bạn", message: "Lời mời kết bạn đã bị từ chối.");
+            toast?.Show("Friend Request", "Your friend request was declined.");
             friendPanelView?.RefreshAll();
+            Debug.Log($"[HomeView] FriendRequestDeclined by userId={e.addresseeUserId}");
+        }
+
+        // Sender cancelled their outgoing request before we accepted — decrement badge and refresh.
+        private void HandleFriendRequestCancelled(GameWebSocketService.FriendRequestCancelledEvent e)
+        {
+            friendPanelView?.OnFriendRequestBadge(-1);
+            friendPanelView?.RefreshAll();
+            Debug.Log($"[HomeView] FriendRequestCancelled by userId={e.requesterUserId}");
         }
 
         // A friend removed us (or we removed them via another device) — reload friend list.
         private void HandleFriendRemoved(GameWebSocketService.FriendRemovedEvent e)
-            => friendPanelView?.RefreshFriendList();
+        {
+            friendPanelView?.RefreshFriendList();
+            var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+            toast?.Show("Friends", "A friend was removed from your list.");
+            Debug.Log($"[HomeView] FriendRemoved — userId={e.userId} friendUserId={e.friendUserId}");
+        }
     }
 }

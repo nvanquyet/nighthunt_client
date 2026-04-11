@@ -31,6 +31,7 @@ namespace NightHunt.Data.DTOs
         public string modeStatus;          // "AVAILABLE" | "LOCKED" | "COMING_SOON" | "DISABLED"
         public int    displayOrder;
         public bool   isActive;            // @JsonProperty("isActive") on backend → key "isActive"
+        public bool   isDevMode;           // @JsonProperty("isDevMode") on backend → key "isDevMode"
     }
 
     /// <summary>

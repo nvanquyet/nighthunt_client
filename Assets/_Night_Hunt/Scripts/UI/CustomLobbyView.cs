@@ -195,6 +195,7 @@ namespace NightHunt.UI
         // Shared slot context menu — stores target while menu is open
         private PlayerSlotView _contextMenuTargetSV  = null;
         private bool _closeContextMenuNextFrame = false;
+        private float _menuShownTime = -1f;  // prevents same-frame close on menu open
 
         // ══════════════════════════════════════════════════════════════════════
         // LIFECYCLE
@@ -294,7 +295,11 @@ namespace NightHunt.UI
                 HideSlotContextMenu();
                 return;
             }
-            if (slotContextMenu != null && slotContextMenu.activeSelf && Input.GetMouseButtonDown(0))
+            // Only schedule a close when not in the same frame the menu was just shown
+            // (avoids the slot button's onClick immediately re-opening after the close fires).
+            if (slotContextMenu != null && slotContextMenu.activeSelf
+                && Input.GetMouseButtonDown(0)
+                && Time.unscaledTime > _menuShownTime + 0.1f)
                 _closeContextMenuNextFrame = true;
         }
 
@@ -926,6 +931,13 @@ namespace NightHunt.UI
             long targetId = sv.Player?.userId ?? 0L;
             if (targetId == (_sessionState?.UserId ?? 0L)) return; // own slot — ignore
 
+            // Toggle: clicking the same occupied slot while the menu is open closes it.
+            if (slotContextMenu != null && slotContextMenu.activeSelf && _contextMenuTargetSV == sv)
+            {
+                HideSlotContextMenu();
+                return;
+            }
+
             // Open shared context menu — actual action chosen by player
             _contextMenuTargetSV = sv;
             bool isHost = IsLocalPlayerHost();
@@ -933,6 +945,7 @@ namespace NightHunt.UI
             if (btn_CM_Kick          != null) btn_CM_Kick.gameObject.SetActive(isHost);
             if (btn_CM_TransferOwner != null) btn_CM_TransferOwner.gameObject.SetActive(isHost);
             if (slotContextMenu      != null) slotContextMenu.SetActive(true);
+            _menuShownTime = Time.unscaledTime;
         }
 
         private void HideSlotContextMenu()
@@ -1265,13 +1278,19 @@ namespace NightHunt.UI
 
         private void HandleSwapRequestStatus(GameWebSocketService.SwapRequestStatusEvent evt)
         {
-            bool isOurRequest  = evt.requestId == _pendingSwapRequestId && _pendingSwapRequestId != 0L;
-            bool isAnyAccepted = evt.status == "ACCEPTED" && _pendingSwapRequestId != 0L;
+            // Only act on the modal if this event matches OUR pending request.
+            // The old isAnyAccepted flag would silently close an unrelated modal whenever
+            // any swap was accepted in the room (e.g. two other players swapping).
+            // requestId == 0L is a wildcard from synthesized swap_accepted WS events
+            // (GameWebSocketService emits requestId=0 when backend sends swap_accepted
+            // without a requestId field). Treat 0L as "any pending swap of ours".
+            bool isOurRequest = (evt.requestId == _pendingSwapRequestId || evt.requestId == 0L)
+                                && _pendingSwapRequestId != 0L;
 
-            if (isOurRequest || isAnyAccepted)
+            if (isOurRequest)
             {
                 _pendingSwapRequestId = 0L;
-                GameModalWindow.Instance?.Close();
+                GameModalWindow.Instance?.Close();   // silent — swap resolved
 
                 if (evt.status == "REJECTED" || evt.status == "CANCELLED")
                     GameModalWindow.Instance?.ShowNotice(

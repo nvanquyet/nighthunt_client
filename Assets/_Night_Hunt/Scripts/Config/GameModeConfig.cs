@@ -29,6 +29,9 @@ namespace NightHunt.Config
 
         [Tooltip("If false, displayed as 'Coming Soon' and cannot be selected.")]
         public bool isEnabled;
+
+        [Tooltip("Dev/test only. Shown in Editor and Development builds — never in production.")]
+        public bool isDevMode;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -87,6 +90,16 @@ namespace NightHunt.Config
                 playersPerTeam = 5,
                 allowFill      = true,
                 isEnabled      = false  // Coming Soon — default disabled until server enables
+            },
+            new GameModeEntry
+            {
+                modeKey        = "1v1",
+                displayName    = "1 vs 1 (Dev)",
+                description    = "Solo DS test — 1 player per team. Launch DS with --expectedPlayers 1.",
+                playersPerTeam = 1,
+                allowFill      = true,
+                isEnabled      = false,
+                isDevMode      = true
             }
         };
 
@@ -109,7 +122,15 @@ namespace NightHunt.Config
                 return;
             }
 
-            var entries = new GameModeEntry[remoteModes.Length];
+            // Preserve any local isDevMode entries that have no server counterpart
+            // (e.g. future locally-added test modes not yet in the DB).
+            var devEntries = new System.Collections.Generic.List<GameModeEntry>();
+            if (Instance.modes != null)
+                foreach (var m in Instance.modes)
+                    if (m.isDevMode && !System.Array.Exists(remoteModes, r => r.modeKey == m.modeKey))
+                        devEntries.Add(m);
+
+            var entries = new GameModeEntry[remoteModes.Length + devEntries.Count];
             for (int i = 0; i < remoteModes.Length; i++)
             {
                 var dto = remoteModes[i];
@@ -120,9 +141,12 @@ namespace NightHunt.Config
                     description    = dto.description,
                     playersPerTeam = dto.playersPerTeam,
                     allowFill      = dto.allowFill,
-                    isEnabled      = dto.matchmakingEnabled && dto.modeStatus == "AVAILABLE"
+                    isEnabled      = dto.matchmakingEnabled && dto.modeStatus == "AVAILABLE",
+                    isDevMode      = dto.isDevMode   // propagate dev flag from server
                 };
             }
+            for (int i = 0; i < devEntries.Count; i++)
+                entries[remoteModes.Length + i] = devEntries[i];
 
             Instance.modes = entries;
         }
@@ -138,16 +162,18 @@ namespace NightHunt.Config
             return Instance.modes;
         }
 
-        /// <summary>Only enabled entries.</summary>
+        /// <summary>Only enabled entries — plus dev entries in Editor and Development builds.</summary>
         public static GameModeEntry[] GetEnabled()
         {
             var all   = GetAll();
             int count = 0;
-            foreach (var m in all) if (m.isEnabled) count++;
+            foreach (var m in all)
+                if (m.isEnabled || (m.isDevMode && Debug.isDebugBuild)) count++;
 
             var result = new GameModeEntry[count];
             int i = 0;
-            foreach (var m in all) if (m.isEnabled) result[i++] = m;
+            foreach (var m in all)
+                if (m.isEnabled || (m.isDevMode && Debug.isDebugBuild)) result[i++] = m;
             return result;
         }
 

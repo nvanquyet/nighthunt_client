@@ -27,6 +27,16 @@ namespace NightHunt.Services.Game
         [Tooltip("Optional local override of wsPath; leave empty to use BackendConfig.wsPath.")]
         [SerializeField] private string wsPathOverride = "";
 
+        // ── Main-thread dispatch queue ─────────────────────────────────────────
+        /// <summary>
+        /// NativeWebSocket fires OnOpen / OnError / OnClose from a background thread pool thread.
+        /// Any Unity API call made from those callbacks (gameObject, transform, Debug.Log via
+        /// ConditionalLogger, etc.) will throw "can only be called from the main thread".
+        /// Actions enqueued here are drained by Update() on the main thread.
+        /// </summary>
+        private readonly System.Collections.Concurrent.ConcurrentQueue<System.Action>
+            _mainThreadActions = new System.Collections.Concurrent.ConcurrentQueue<System.Action>();
+
         private WebSocket webSocket;
         private bool isConnected = false;
         private bool isConnecting = false;
@@ -72,7 +82,8 @@ namespace NightHunt.Services.Game
         public event Action<FriendStatusChangedEvent> OnFriendStatusChanged;
         public event Action<FriendRequestEvent> OnFriendRequestReceived;
         public event Action<FriendRequestAcceptedEvent> OnFriendRequestAccepted;
-        public event Action<FriendRequestDeclinedEvent> OnFriendRequestDeclined;
+        public event Action<FriendRequestDeclinedEvent>   OnFriendRequestDeclined;
+        public event Action<FriendRequestCancelledEvent> OnFriendRequestCancelled;
         public event Action<FriendRemovedEvent> OnFriendRemoved;
         
         // Party Events
@@ -86,12 +97,23 @@ namespace NightHunt.Services.Game
         
         // Connection Events
         public event Action OnDisconnected;
+        /// <summary>Fired every time the WebSocket successfully opens (initial connect AND reconnects).</summary>
+        public event Action OnConnected;
+        /// <summary>Fired when auto-reconnect gives up after MAX_RECONNECT_ATTEMPTS.</summary>
+        public event Action OnReconnectFailed;
         public event Action<string> OnError;
 
 
 
         private void Update()
         {
+            // Drain actions dispatched from background WS threads (OnOpen / OnError / OnClose)
+            while (_mainThreadActions.TryDequeue(out var mainAction))
+            {
+                try { mainAction(); }
+                catch (Exception ex) { Debug.LogError($"[GameWebSocketService] Main-thread action threw: {ex.Message}"); }
+            }
+
             // Dispatch WebSocket message queue
             #if !UNITY_WEBGL || UNITY_EDITOR
             if (webSocket != null && webSocket.State == WebSocketState.Open)
@@ -204,28 +226,39 @@ namespace NightHunt.Services.Game
                 // Create WebSocket instance
                 webSocket = new WebSocket(url);
 
-                // Set up event handlers
+                // Set up event handlers.
+                // IMPORTANT: NativeWebSocket fires OnOpen / OnError / OnClose from a background
+                // thread pool thread on non-WebGL platforms. We must NOT touch any Unity object
+                // directly here — enqueue to _mainThreadActions and handle in Update() instead.
+
                 webSocket.OnOpen += () =>
                 {
-                    if (token != connectionToken) return;
-                    ConditionalLogger.Log("GameWebSocketService", "WebSocket opened");
-                    isConnected = true;
-                    isConnecting = false;
-                    _connectedSince = DateTime.UtcNow;
-
-                    // Start a 60 s stability timer — if the connection survives this long,
-                    // the session is genuinely re-established and the retry counter is reset.
-                    // The timer is cancelled in OnClose if the connection drops before 60 s.
-                    _stableResetCts?.Cancel();
-                    _stableResetCts = new CancellationTokenSource();
-                    var stableCts = _stableResetCts;
-                    _ = Task.Delay(60000, stableCts.Token).ContinueWith(t =>
+                    // Capture for closure — connectionToken may change by next frame.
+                    string capturedToken = token;
+                    _mainThreadActions.Enqueue(() =>
                     {
-                        if (!t.IsCanceled)
+                        if (capturedToken != connectionToken) return;
+                        ConditionalLogger.Log("GameWebSocketService", "WebSocket opened");
+                        isConnected = true;
+                        isConnecting = false;
+                        _connectedSince = DateTime.UtcNow;
+                        OnConnected?.Invoke();
+
+                        // Start a 60 s stability timer — if the connection survives this long,
+                        // the session is genuinely re-established and the retry counter is reset.
+                        // The timer is cancelled in OnClose if the connection drops before 60 s.
+                        _stableResetCts?.Cancel();
+                        _stableResetCts = new CancellationTokenSource();
+                        var stableCts = _stableResetCts;
+                        _ = Task.Delay(60000, stableCts.Token).ContinueWith(t =>
                         {
-                            reconnectAttempts = 0;
-                            ConditionalLogger.Log("GameWebSocketService", "Connection stable for 60 s — reconnect counter reset.");
-                        }
+                            if (!t.IsCanceled)
+                                _mainThreadActions.Enqueue(() =>
+                                {
+                                    reconnectAttempts = 0;
+                                    ConditionalLogger.Log("GameWebSocketService", "Connection stable for 60 s — reconnect counter reset.");
+                                });
+                        });
                     });
                 };
 
@@ -238,62 +271,77 @@ namespace NightHunt.Services.Game
 
                 webSocket.OnError += (error) =>
                 {
-                    if (token != connectionToken) return;
-                    ConditionalLogger.LogError("GameWebSocketService", $"WebSocket error: {error}");
-                    isConnected = false;
-                    isConnecting = false;
-                    OnError?.Invoke(error);
+                    string capturedToken = token;
+                    string capturedError = error;
+                    _mainThreadActions.Enqueue(() =>
+                    {
+                        if (capturedToken != connectionToken) return;
+                        ConditionalLogger.LogError("GameWebSocketService", $"WebSocket error: {capturedError}");
+                        isConnected = false;
+                        isConnecting = false;
+                        OnError?.Invoke(capturedError);
+                    });
                 };
 
                 webSocket.OnClose += (code) =>
                 {
-                    if (token != connectionToken) return;
-
-                    // Cancel the stability timer — connection dropped before the grace period.
-                    _stableResetCts?.Cancel();
-
-                    bool wasStable = _connectedSince != DateTime.MinValue &&
-                                     (DateTime.UtcNow - _connectedSince).TotalSeconds >= 10.0;
-                    _connectedSince = DateTime.MinValue;
-
-                    ConditionalLogger.Log("GameWebSocketService",
-                        $"WebSocket closed: {code} (stableConnection={wasStable})");
-                    isConnected  = false;
-                    isConnecting = false;
-                    OnDisconnected?.Invoke();
-
-                    if (!allowAutoReconnect) return;
-                    if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated) return;
-
-                    // Normal (1000) = intentional server-side close (e.g. server restart or session eviction).
-                    // Still reconnect, but use a longer initial delay to avoid spamming a restarting server.
-                    int baseDelayMs = (code == WebSocketCloseCode.Normal) ? 5000 : 1000;
-
-                    // NOTE: reconnectAttempts is NO LONGER reset here on wasStable.
-                    // Resetting here caused an infinite loop: every stable drop reset the counter to 0,
-                    // so reconnectAttempts was always 1 and the MAX_RECONNECT_ATTEMPTS cap was never reached.
-                    // The counter is now reset only after 60 s of continuous stability (see OnOpen timer).
-
-                    reconnectAttempts++;
-                    if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS)
+                    string capturedToken = token;
+                    WebSocketCloseCode capturedCode = code;
+                    _mainThreadActions.Enqueue(() =>
                     {
-                        ConditionalLogger.LogError("GameWebSocketService",
-                            $"Reconnect attempts exceeded limit ({MAX_RECONNECT_ATTEMPTS}). Stopping auto-reconnect.");
-                        return;
-                    }
+                        if (capturedToken != connectionToken) return;
 
-                    // Exponential backoff: baseDelay * 2^(attempt-1), capped at 60 s
-                    int delayMs = Mathf.Min(baseDelayMs * (1 << (reconnectAttempts - 1)), 60000);
-                    ConditionalLogger.Log("GameWebSocketService",
-                        $"Reconnecting in {delayMs}ms... (attempt {reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS}, closeCode={code})");
+                        // Cancel the stability timer — connection dropped before the grace period.
+                        _stableResetCts?.Cancel();
 
-                    _reconnectCts?.Cancel();
-                    _reconnectCts = new CancellationTokenSource();
-                    var cts = _reconnectCts;
-                    _ = Task.Delay(delayMs, cts.Token).ContinueWith(t =>
-                    {
-                        if (!t.IsCanceled && allowAutoReconnect && SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
-                            _ = Connect();
+                        bool wasStable = _connectedSince != DateTime.MinValue &&
+                                         (DateTime.UtcNow - _connectedSince).TotalSeconds >= 10.0;
+                        _connectedSince = DateTime.MinValue;
+
+                        ConditionalLogger.Log("GameWebSocketService",
+                            $"WebSocket closed: {capturedCode} (stableConnection={wasStable})");
+                        isConnected  = false;
+                        isConnecting = false;
+                        OnDisconnected?.Invoke();
+
+                        if (!allowAutoReconnect) return;
+                        if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated) return;
+
+                        // Normal (1000) = intentional server-side close (e.g. server restart or session eviction).
+                        // Still reconnect, but use a longer initial delay to avoid spamming a restarting server.
+                        int baseDelayMs = (capturedCode == WebSocketCloseCode.Normal) ? 5000 : 1000;
+
+                        // NOTE: reconnectAttempts is NO LONGER reset here on wasStable.
+                        // Resetting here caused an infinite loop: every stable drop reset the counter to 0,
+                        // so reconnectAttempts was always 1 and the MAX_RECONNECT_ATTEMPTS cap was never reached.
+                        // The counter is now reset only after 60 s of continuous stability (see OnOpen timer).
+
+                        reconnectAttempts++;
+                        if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS)
+                        {
+                            ConditionalLogger.LogError("GameWebSocketService",
+                                $"Reconnect attempts exceeded limit ({MAX_RECONNECT_ATTEMPTS}). Stopping auto-reconnect.");
+                            OnReconnectFailed?.Invoke();
+                            return;
+                        }
+
+                        // Exponential backoff: baseDelay * 2^(attempt-1), capped at 60 s
+                        int delayMs = Mathf.Min(baseDelayMs * (1 << (reconnectAttempts - 1)), 60000);
+                        ConditionalLogger.Log("GameWebSocketService",
+                            $"Reconnecting in {delayMs}ms... (attempt {reconnectAttempts}/{MAX_RECONNECT_ATTEMPTS}, closeCode={capturedCode})");
+
+                        _reconnectCts?.Cancel();
+                        _reconnectCts = new CancellationTokenSource();
+                        var cts = _reconnectCts;
+                        _ = Task.Delay(delayMs, cts.Token).ContinueWith(t =>
+                        {
+                            if (!t.IsCanceled && allowAutoReconnect
+                                && SessionState.Instance != null
+                                && SessionState.Instance.IsAuthenticated)
+                                // Post reconnect back to main thread so the new Connect() async
+                                // chain inherits Unity's SynchronizationContext.
+                                _mainThreadActions.Enqueue(() => _ = Connect());
+                        });
                     });
                 };
 
@@ -624,6 +672,18 @@ namespace NightHunt.Services.Game
                             OnFriendRequestDeclined?.Invoke(friendDeclined);
                             // CACHE: Invalidate friend requests (request declined)
                             APICache.Invalidate(APICache.KEY_FRIENDS_REQUESTS_OUTGOING);
+                        }
+                        break;
+
+                    case "friend_request_cancelled":
+                        var friendCancelled = JsonUtility.FromJson<FriendRequestCancelledEvent>(messageData.data);
+                        if (friendCancelled != null)
+                        {
+                            friendCancelled.fromUserId = friendCancelled.requesterUserId;
+                            ConditionalLogger.Log("GameWebSocketService", $"Friend request cancelled by: {friendCancelled.requesterUserId}");
+                            OnFriendRequestCancelled?.Invoke(friendCancelled);
+                            // CACHE: Invalidate incoming requests (sender cancelled)
+                            APICache.Invalidate(APICache.KEY_FRIENDS_REQUESTS_INCOMING);
                         }
                         break;
 
@@ -992,6 +1052,16 @@ namespace NightHunt.Services.Game
             public long addresseeUserId;
             // Compatibility alias — filled in handler
             public long requestId;   // kept for legacy log; server doesn't send this
+            public long fromUserId;  // alias for requesterUserId
+        }
+
+        [Serializable]
+        public class FriendRequestCancelledEvent
+        {
+            // Server field names (PRIMARY)
+            public long requesterUserId;
+            public long addresseeUserId;
+            // Compatibility alias — filled in handler
             public long fromUserId;  // alias for requesterUserId
         }
 

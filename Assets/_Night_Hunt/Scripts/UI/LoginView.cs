@@ -2,6 +2,7 @@ using System.Collections;
 using System.Threading.Tasks;
 using Michsky.UI.Shift;
 using NightHunt.Core;
+using NightHunt.Data;
 using NightHunt.Services.Auth;
 using NightHunt.State;
 using NightHunt.Utils;
@@ -168,7 +169,8 @@ namespace NightHunt.UI
 
             if (string.IsNullOrEmpty(identifier) || string.IsNullOrEmpty(password))
             {
-                ShowToast("Lỗi", "Vui lòng nhập tên đăng nhập và mật khẩu");
+                Debug.Log("[LoginView] Login validation failed: empty credentials");
+                ShowToast("Login Error", "Please enter your username and password.");
                 return;
             }
 
@@ -186,9 +188,17 @@ namespace NightHunt.UI
                 onLoginSuccess?.Invoke();   // Inspector: wire animation/sound ở đây
                 UINavigator.Instance?.GoHome();
             }
+            else if (result.ErrorCode == ErrorCodes.AUTH_SESSION_CONFLICT)
+            {
+                // Old session was terminated — user just needs to try again once.
+                Debug.Log("[LoginView] AUTH_SESSION_CONFLICT: previous session terminated, prompting retry");
+                ShowToast("Đăng xuất thành công", result.Message ?? "Phiên trước đã bị đăng xuất. Vui lòng đăng nhập lại.");
+                // Do NOT fire onLoginFailed — user can retry immediately without changing anything.
+            }
             else
             {
-                ShowToast("Đăng nhập thất bại", result.Message ?? "Vui lòng thử lại");
+                Debug.LogWarning($"[LoginView] Login failed: {result.Message}");
+                ShowToast("Login Failed", result.Message ?? "Please try again.");
                 onLoginFailed?.Invoke();
             }
         }
@@ -209,19 +219,22 @@ namespace NightHunt.UI
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(email) ||
                 string.IsNullOrEmpty(password) || string.IsNullOrEmpty(confirmPassword))
             {
-                ShowToast("Lỗi", "Vui lòng điền đầy đủ thông tin");
+                Debug.Log("[LoginView] Register validation failed: incomplete fields");
+                ShowToast("Registration Error", "Please fill in all fields.");
                 return;
             }
 
             if (password != confirmPassword)
             {
-                ShowToast("Lỗi", "Mật khẩu xác nhận không khớp");
+                Debug.Log("[LoginView] Register validation failed: password mismatch");
+                ShowToast("Registration Error", "Passwords do not match.");
                 return;
             }
 
             if (agreeToTermsSwitch == null || !agreeToTermsSwitch.isOn)
             {
-                ShowToast("Lỗi", "Vui lòng đồng ý với điều khoản sử dụng");
+                Debug.Log("[LoginView] Register validation failed: terms not accepted");
+                ShowToast("Registration Error", "Please agree to the terms of service.");
                 return;
             }
 
@@ -236,11 +249,13 @@ namespace NightHunt.UI
             if (result.Success)
             {
                 onRegisterSuccess?.Invoke();
-                ShowToast("Thành công", "Đăng ký thành công! Vui lòng đăng nhập.", ClearRegisterFields);
+                Debug.Log($"[LoginView] Register success — username='{username}'");
+                ShowToast("Success", "Registration complete! Please log in.", ClearRegisterFields);
             }
             else
             {
-                ShowToast("Đăng ký thất bại", result.Message ?? "Vui lòng thử lại");
+                Debug.LogWarning($"[LoginView] Register failed: {result.Message}");
+                ShowToast("Registration Failed", result.Message ?? "Please try again.");
                 onRegisterFailed?.Invoke();
             }
         }
