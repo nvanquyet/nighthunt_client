@@ -6,10 +6,11 @@ namespace NightHunt.Data.DTOs
     [Serializable]
     public class CreateRoomRequest
     {
-        public string mode; // 2v2, 3v3, 5v5
-        public bool isPublic = true;
-        public bool isLocked = false;
-        public string password; // Optional password for room
+        public string mode;             // 2v2, 3v3, 5v5
+        public bool   allowFill = true; // whether server may fill empty slots with solo players
+        public bool   isPublic = true;
+        public bool   isLocked = false;
+        public string password;         // Optional password for room
     }
 
     [Serializable]
@@ -23,6 +24,7 @@ namespace NightHunt.Data.DTOs
     public class QuickPlayRequest
     {
         public string mode;
+        public bool   allowFill = true;
     }
 
     [Serializable]
@@ -49,9 +51,10 @@ namespace NightHunt.Data.DTOs
     [Serializable]
     public class RoomResponse
     {
-        public long roomId;
+        public long   roomId;
         public string roomCode;
         public string mode;
+        public bool   allowFill;
         public string mapId;
         public string status;
         public bool isPublic;
@@ -108,6 +111,7 @@ namespace NightHunt.Data.DTOs
     {
         public string mode;             // required — always send current or new value
         public string mapId;            // required — always send current or new value
+        public bool   allowFill = true; // required — always send current or new value
         public bool   isPublic = true;  // required — always send current or new value
         public bool   isLocked = false; // required — always send current or new value
         public string password;         // optional — null/empty = keep existing password

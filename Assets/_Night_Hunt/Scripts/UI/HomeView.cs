@@ -2,6 +2,7 @@
 using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
+using NightHunt.Utils;
 using NightHunt.Gameplay.Character.Data;
 using NightHunt.Services.Game;
 using NightHunt.Services.Room;
@@ -335,8 +336,8 @@ namespace NightHunt.UI
         private void HandleForceLogout()
         {
             GameModalWindow.Instance?.ShowNotice(
-                "\u0110\u0103ng xu\u1ea5t b\u1eaft bu\u1ed9c",
-                "T\u00e0i kho\u1ea3n c\u1ee7a b\u1ea1n \u0111\u00e3 \u0111\u0103ng nh\u1eadp \u1edf n\u01a1i kh\u00e1c.",
+                "Forced Logout",
+                "Your account has been logged in from another location.",
                 closeText: "OK",
                 onClose:   LoginView.Logout);
         }
@@ -344,8 +345,8 @@ namespace NightHunt.UI
         private void HandleSessionExpired()
         {
             GameModalWindow.Instance?.ShowNotice(
-                "Phi\u00ean h\u1ebft h\u1ea1n",
-                "Phi\u00ean \u0111\u0103ng nh\u1eadp \u0111\u00e3 h\u1ebft h\u1ea1n. Vui l\u00f2ng \u0111\u0103ng nh\u1eadp l\u1ea1i.",
+                "Session Expired",
+                "Your session has expired. Please log in again.",
                 closeText: "OK",
                 onClose:   LoginView.Logout);
         }
@@ -356,7 +357,7 @@ namespace NightHunt.UI
         private void HandleFriendRequestReceived(GameWebSocketService.FriendRequestEvent e)
         {
             friendPanelView?.OnFriendRequestBadge(+1);
-            friendPanelView?.RefreshAll();
+            friendPanelView?.ForceRefreshFriendRequests(); // bypass cooldown cache — data changed on server
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
             toast?.Show("Friend Request", $"{e.fromUsername} wants to be your friend.");
             Debug.Log($"[HomeView] FriendRequestReceived from {e.fromUsername} ({e.fromUserId})");
@@ -364,19 +365,24 @@ namespace NightHunt.UI
 
         private void HandleFriendRequestAccepted(GameWebSocketService.FriendRequestAcceptedEvent e)
         {
+            // Belt-and-suspenders: invalidate before reload in case the WS handler's invalidation
+            // fired just before a background refresh re-filled the cache.
+            APICache.InvalidateFriends();
+            // Refresh friend list (new friend) AND request list (outgoing request is now gone)
             friendPanelView?.RefreshFriendList();
+            friendPanelView?.ForceRefreshFriendRequests(); // remove the accepted request from "Sent" tab
             string name = string.IsNullOrEmpty(e.addresseeUsername) ? "Someone" : e.addresseeUsername;
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
             toast?.Show("Friends", $"{name} accepted your friend request.");
             Debug.Log($"[HomeView] FriendRequestAccepted — addressee={e.addresseeUsername} ({e.addresseeUserId})");
         }
 
-        // Requester's outgoing request was declined — refresh requests list if tab is open.
+        // Requester's outgoing request was declined — refresh requests list.
         private void HandleFriendRequestDeclined(GameWebSocketService.FriendRequestDeclinedEvent e)
         {
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
             toast?.Show("Friend Request", "Your friend request was declined.");
-            friendPanelView?.RefreshAll();
+            friendPanelView?.ForceRefreshFriendRequests(); // bypass cooldown cache — outgoing request is now gone
             Debug.Log($"[HomeView] FriendRequestDeclined by userId={e.addresseeUserId}");
         }
 
@@ -384,7 +390,7 @@ namespace NightHunt.UI
         private void HandleFriendRequestCancelled(GameWebSocketService.FriendRequestCancelledEvent e)
         {
             friendPanelView?.OnFriendRequestBadge(-1);
-            friendPanelView?.RefreshAll();
+            friendPanelView?.ForceRefreshFriendRequests(); // bypass cooldown cache — incoming request is now gone
             Debug.Log($"[HomeView] FriendRequestCancelled by userId={e.requesterUserId}");
         }
 

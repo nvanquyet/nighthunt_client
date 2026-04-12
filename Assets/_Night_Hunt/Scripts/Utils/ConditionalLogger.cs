@@ -36,6 +36,7 @@ namespace NightHunt.Utils
         /// </summary>
         public static bool EnableWebSocketLogs = true;
         public static bool EnableServiceLogs = true;
+        public static bool EnableConfigLogs = true;
         public static bool EnableNetworkLogs = true;
         public static bool EnableUILogs = true;
         public static bool EnableGameplayLogs = true;
@@ -108,12 +109,19 @@ namespace NightHunt.Utils
                 case "matchmakingservice":
                     return EnableServiceLogs;
 
+                case "gameconfig":
+                case "mapconfig":
+                case "gameconfigservice":
+                case "mapconfigservice":
+                    return EnableConfigLogs;
+
                 case "network":
                 case "backendclient":
                 case "backendhttpclient":
                     return EnableNetworkLogs;
 
                 case "ui":
+                case "customlobby":
                 case "loadingoverlay":
                 case "partypanel":
                 case "friendpanel":

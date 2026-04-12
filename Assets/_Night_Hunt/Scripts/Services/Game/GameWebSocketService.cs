@@ -72,6 +72,10 @@ namespace NightHunt.Services.Game
         public event Action<SwapRequestEvent> OnSwapRequest;
         public event Action<SwapRequestStatusEvent> OnSwapRequestStatus;
         public event Action<GameStartingEvent> OnGameStarting;
+        /// <summary>Fired when the room ceases to exist (host disbanded or host disconnected).</summary>
+        public event Action<RoomDisbandedEvent> OnRoomDisbanded;
+        /// <summary>Fired only to the player who was kicked.</summary>
+        public event Action<YouWereKickedEvent> OnYouWereKicked;
 
         // Matchmaking Events
         public event Action<MatchFoundEvent>     OnMatchFound;
@@ -88,6 +92,9 @@ namespace NightHunt.Services.Game
         
         // Party Events
         public event Action<PartyInvitationEvent> OnPartyInvitationReceived;
+        public event Action<PartyInvitationResponseEvent> OnPartyInvitationDeclined;  // inviter is notified
+        public event Action<PartyInvitationResponseEvent> OnPartyInvitationCancelled; // invitee is notified
+        public event Action<PartyInvitationResponseEvent> OnPartyInvitationExpired;   // both sides notified
         public event Action<PartyMemberJoinedEvent> OnPartyMemberJoined;
         public event Action<PartyMemberLeftEvent> OnPartyMemberLeft;
         public event Action<PartyMemberKickedEvent> OnPartyMemberKicked;
@@ -716,6 +723,35 @@ namespace NightHunt.Services.Game
                         }
                         break;
 
+                    case "party_invitation_declined":
+                        var partyInvDeclined = JsonUtility.FromJson<PartyInvitationResponseEvent>(messageData.data);
+                        if (partyInvDeclined != null)
+                        {
+                            ConditionalLogger.Log("GameWebSocketService", $"Party invitation declined by userId={partyInvDeclined.inviteeUserId}");
+                            OnPartyInvitationDeclined?.Invoke(partyInvDeclined);
+                        }
+                        break;
+
+                    case "party_invitation_cancelled":
+                        var partyInvCancelled = JsonUtility.FromJson<PartyInvitationResponseEvent>(messageData.data);
+                        if (partyInvCancelled != null)
+                        {
+                            ConditionalLogger.Log("GameWebSocketService", $"Party invitation cancelled by inviter userId={partyInvCancelled.inviterUserId}");
+                            OnPartyInvitationCancelled?.Invoke(partyInvCancelled);
+                            APICache.Invalidate(APICache.KEY_PARTY_INVITATIONS);
+                        }
+                        break;
+
+                    case "party_invitation_expired":
+                        var partyInvExpired = JsonUtility.FromJson<PartyInvitationResponseEvent>(messageData.data);
+                        if (partyInvExpired != null)
+                        {
+                            ConditionalLogger.Log("GameWebSocketService", $"Party invitation expired: invitationId={partyInvExpired.invitationId}");
+                            OnPartyInvitationExpired?.Invoke(partyInvExpired);
+                            APICache.Invalidate(APICache.KEY_PARTY_INVITATIONS);
+                        }
+                        break;
+
                     case "party_member_joined":
                         var partyJoined = JsonUtility.FromJson<PartyMemberJoinedEvent>(messageData.data);
                         if (partyJoined != null)
@@ -793,6 +829,23 @@ namespace NightHunt.Services.Game
                         // Reuse OnFriendRemoved so HomeView refreshes the friend list display.
                         OnFriendRemoved?.Invoke(new FriendRemovedEvent());
                         break;
+
+                    // room_disbanded: room no longer exists (host disbanded or host disconnected).
+                    case "room_disbanded":
+                        var roomDisbanded = JsonUtility.FromJson<RoomDisbandedEvent>(messageData.data);
+                        if (roomDisbanded != null)
+                            OnRoomDisbanded?.Invoke(roomDisbanded);
+                        break;
+
+                    // you_were_kicked: sent exclusively to the kicked player.
+                    case "you_were_kicked":
+                        var youWereKicked = JsonUtility.FromJson<YouWereKickedEvent>(messageData.data);
+                        if (youWereKicked != null)
+                            OnYouWereKicked?.Invoke(youWereKicked);
+                        break;
+
+                    case "pong":
+                        break; // heartbeat response — silently ignore
 
                     default:
                         ConditionalLogger.LogWarning("GameWebSocketService", $"Unknown message type: {messageData.type}");
@@ -940,6 +993,21 @@ namespace NightHunt.Services.Game
         {
             public string newStatus;
             public RoomResponse room;
+        }
+
+        [Serializable]
+        public class RoomDisbandedEvent
+        {
+            public long   roomId;
+            /// <summary>"disbanded" (explicit) or "owner_disconnected".</summary>
+            public string reason;
+        }
+
+        [Serializable]
+        public class YouWereKickedEvent
+        {
+            public long roomId;
+            public long kickedByUserId;
         }
 
         [Serializable]
@@ -1146,6 +1214,18 @@ namespace NightHunt.Services.Game
             public long partyId;
             public string oldStatus;
             public string newStatus;
+        }
+
+        /// <summary>
+        /// Shared DTO for party_invitation_declined / party_invitation_cancelled / party_invitation_expired.
+        /// </summary>
+        [Serializable]
+        public class PartyInvitationResponseEvent
+        {
+            public long partyId;
+            public long inviterUserId;
+            public long inviteeUserId;
+            public long invitationId;
         }
 
         /// <summary>

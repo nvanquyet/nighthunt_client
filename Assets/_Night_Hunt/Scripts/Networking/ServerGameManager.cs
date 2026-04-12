@@ -122,7 +122,19 @@ namespace NightHunt.Networking
                 return;
             }
 
-            // 2. Fallback: resolve via GameModeConfig using room's mode key (field name is "mode" in RoomResponse)
+            // 2. ServerBootstrap CLI arg (--expectedPlayers).
+            //    RoomState is always empty on a headless dedicated server — the DS doesn't
+            //    have a WebSocket connection to the backend, so match_ready never populates it.
+            //    ServerBootstrap.BootstrappedExpectedPlayers > 0 means the arg was passed.
+            if (NightHunt.Server.ServerBootstrap.BootstrappedExpectedPlayers > 0)
+            {
+                _expectedPlayerCount = NightHunt.Server.ServerBootstrap.BootstrappedExpectedPlayers;
+                if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                    Debug.Log($"[ServerGameManager] ExpectedPlayerCount resolved from ServerBootstrap.BootstrappedExpectedPlayers: {_expectedPlayerCount}");
+                return;
+            }
+
+            // 3. Fallback: resolve via GameModeConfig using room's mode key (field name is "mode" in RoomResponse)
             string modeKey = roomState?.CurrentRoom?.mode;
             if (!string.IsNullOrEmpty(modeKey))
             {
@@ -137,10 +149,10 @@ namespace NightHunt.Networking
                 }
             }
 
-            // 3. Keep Inspector value — dev mode or no data available
+            // 4. Keep Inspector value — dev mode or no data available
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.LogWarning($"[ServerGameManager] ExpectedPlayerCount using Inspector value: {_expectedPlayerCount}. " +
-                                 "Ensure RoomState is populated before scene load in production.");
+                                 "Ensure RoomState is populated or --expectedPlayers is passed before scene load in production.");
         }
 
         public override void OnStopNetwork()

@@ -7,7 +7,8 @@ namespace NightHunt.Data.DTOs
     public class MatchmakingQueueRequest
     {
         public string gameMode;
-        public string mapId;      // optional — null = any map
+        public string mapId;        // optional — null = any map
+        public bool   allowFill;   // true = fill missing slots with randoms
     }
 
     [Serializable]

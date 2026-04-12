@@ -94,9 +94,17 @@ namespace NightHunt.Audio
 
         private void OnButtonClicked()
         {
-            // No-op: sound already plays via OnPointerClick.
-            // Button.onClick subscription exists to catch programmatic Invoke() calls
-            // that skip the EventSystem (e.g. btn.onClick.Invoke() in tests).
+            // Fired when Button.onClick.Invoke() is called programmatically (bypasses
+            // the EventSystem, so OnPointerClick never fires in that path).
+            // Guard: avoid double-play when a real pointer click comes through
+            // (OnPointerClick already fired first).  We detect a pointer click in the
+            // same frame by checking whether EventSystem.currentInputModule just processed
+            // a pointer event. A simple IsPointerOverGameObject check is sufficient here.
+            if (UnityEngine.EventSystems.EventSystem.current != null &&
+                UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+                return; // real click → OnPointerClick already handled sound
+
+            TriggerClick();
         }
     }
 }

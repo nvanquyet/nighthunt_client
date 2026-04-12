@@ -42,7 +42,15 @@ namespace NightHunt.Build
             "Assets/Scenes/05_Gameplay.unity",
             "Assets/Scenes/Maps/GameMap_01.unity",
             "Assets/Scenes/Maps/GameMap_02.unity",
-            // Thêm maps mới ở đây khi có
+            // Pre-reserved map slots — enable at runtime via backend admin dashboard.
+            "Assets/Scenes/Maps/GameMap_03.unity",
+            "Assets/Scenes/Maps/GameMap_04.unity",
+            "Assets/Scenes/Maps/GameMap_05.unity",
+            "Assets/Scenes/Maps/GameMap_06.unity",
+            "Assets/Scenes/Maps/GameMap_07.unity",
+            "Assets/Scenes/Maps/GameMap_08.unity",
+            "Assets/Scenes/Maps/GameMap_09.unity",
+            "Assets/Scenes/Maps/GameMap_10.unity",
         };
 
         /// <summary>Scenes đầy đủ cho Client build.</summary>
@@ -56,7 +64,15 @@ namespace NightHunt.Build
             "Assets/Scenes/05_Gameplay.unity",
             "Assets/Scenes/Maps/GameMap_01.unity",
             "Assets/Scenes/Maps/GameMap_02.unity",
-            // Thêm maps mới ở đây khi có
+            // Pre-reserved map slots — enable at runtime via backend admin dashboard.
+            "Assets/Scenes/Maps/GameMap_03.unity",
+            "Assets/Scenes/Maps/GameMap_04.unity",
+            "Assets/Scenes/Maps/GameMap_05.unity",
+            "Assets/Scenes/Maps/GameMap_06.unity",
+            "Assets/Scenes/Maps/GameMap_07.unity",
+            "Assets/Scenes/Maps/GameMap_08.unity",
+            "Assets/Scenes/Maps/GameMap_09.unity",
+            "Assets/Scenes/Maps/GameMap_10.unity",
         };
 
         // ── Build targets ─────────────────────────────────────────────────────

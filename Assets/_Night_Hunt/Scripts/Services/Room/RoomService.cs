@@ -144,14 +144,15 @@ namespace NightHunt.Services.Room
         }
 
         // Overload with parameters
-        public async Task<ApiResult<RoomResponse>> CreateRoom(string mode, bool isPublic = true, bool isLocked = false, string password = null)
+        public async Task<ApiResult<RoomResponse>> CreateRoom(string mode, bool allowFill = true, bool isPublic = true, bool isLocked = false, string password = null)
         {
             var request = new CreateRoomRequest
             {
-                mode = mode,
-                isPublic = isPublic,
-                isLocked = isLocked,
-                password = password
+                mode      = mode,
+                allowFill = allowFill,
+                isPublic  = isPublic,
+                isLocked  = isLocked,
+                password  = password
             };
 
             return await CreateRoom(request);
@@ -199,11 +200,12 @@ namespace NightHunt.Services.Room
         }
 
         // Overload with mode string
-        public async Task<ApiResult<RoomResponse>> QuickPlay(string mode)
+        public async Task<ApiResult<RoomResponse>> QuickPlay(string mode, bool allowFill = true)
         {
             var request = new QuickPlayRequest
             {
-                mode = mode
+                mode      = mode,
+                allowFill = allowFill
             };
 
             return await QuickPlay(request);

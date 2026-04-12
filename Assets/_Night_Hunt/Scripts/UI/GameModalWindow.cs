@@ -29,17 +29,18 @@ namespace NightHunt.UI
 
         // ── Helpers ────────────────────────────────────────────────────────────
 
-        /// <summary>Đặt label và sync ngay sang cả 3 TMP text.</summary>
+        /// <summary>Đặt label và sync ngay sang cả 3 TMP text.
+        /// Shift MainButton.Start() đọc buttonText một lần — sau đó không reactive.
+        /// Ghi thẳng vào normalText/highlightedText/pressedText để đảm bảo hiển thị đúng
+        /// dù useCustomText = true hay false.</summary>
         public void SetLabel(string text)
         {
             if (mainButton == null) return;
             mainButton.buttonText = text;
-            if (!mainButton.useCustomText)
-            {
-                if (mainButton.normalText      != null) mainButton.normalText.text      = text;
-                if (mainButton.highlightedText != null) mainButton.highlightedText.text = text;
-                if (mainButton.pressedText     != null) mainButton.pressedText.text     = text;
-            }
+            // Always write directly to TMP fields — MainButton.Start() is not reactive.
+            if (mainButton.normalText      != null) mainButton.normalText.text      = text;
+            if (mainButton.highlightedText != null) mainButton.highlightedText.text = text;
+            if (mainButton.pressedText     != null) mainButton.pressedText.text     = text;
         }
 
         public void SetVisible(bool visible)
@@ -107,6 +108,7 @@ namespace NightHunt.UI
         private bool      _isOpen;
         private Coroutine _countdownCoroutine;
         private string    _countdownBaseDesc;        // lưu desc gốc để append countdown
+        private long      _activeInvitationId;       // 0 = not tracking; set by ShowCountdown(invitationId)
 
         // ══ Init ═══════════════════════════════════════════════════════════════
 
@@ -156,11 +158,12 @@ namespace NightHunt.UI
         public void ShowCountdown(
             string title,      string desc,
             int    seconds,
-            Action onConfirm   = null,
-            Action onExpire    = null,
-            bool   showConfirm = true,
-            string confirmText = "Xác nhận",
-            string cancelText  = "Hủy")
+            Action onConfirm    = null,
+            Action onExpire     = null,
+            bool   showConfirm  = true,
+            string confirmText  = "X\u00e1c nh\u1eadn",
+            string cancelText   = "H\u1ee7y",
+            long   invitationId = 0)
         {
             PrepareContent(title, desc, showInput: false, placeholder: null);
             ConfigureSlots(
@@ -168,13 +171,21 @@ namespace NightHunt.UI
                 s2: false,       l2: null,
                 s3: true,        l3: cancelText);
 
-            _runtimeBtn1      = onConfirm;
-            _runtimeBtn1Input = null;
-            _runtimeBtn2      = null;
-            _runtimeBtn3      = onExpire;
+            _runtimeBtn1       = onConfirm;
+            _runtimeBtn1Input  = null;
+            _runtimeBtn2       = null;
+            _runtimeBtn3       = onExpire;
             _countdownBaseDesc = desc;
+            _activeInvitationId = invitationId;
             StartCountdown(seconds);
             DoOpen();
+        }
+
+        /// <summary>Close the modal only if it was opened for the given invitation ID.</summary>
+        public void DismissIfMatchingInvitation(long invitationId)
+        {
+            if (_activeInvitationId != 0 && _activeInvitationId == invitationId)
+                Close();
         }
 
         // ── ShowInput ──────────────────────────────────────────────────────────
@@ -257,6 +268,7 @@ namespace NightHunt.UI
         {
             if (!_isOpen) return;
             _isOpen = false;
+            _activeInvitationId = 0;
             StopCountdown();
             modalManager?.ModalWindowOut();
         }

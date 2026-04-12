@@ -155,7 +155,7 @@ namespace NightHunt.UI
 
             // Button state
             SetButtonsInteractable(true);
-            if (statusText != null) statusText.text = "Đang chờ xác nhận…";
+            if (statusText != null) statusText.text = "Waiting for confirmation…";
 
             // Fade in
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
@@ -195,7 +195,7 @@ namespace NightHunt.UI
             _accepted = true;
             SetButtonsInteractable(false);
             StopCountdown();
-            if (statusText != null) statusText.text = "Đã chấp nhận — chờ players khác…";
+            if (statusText != null) statusText.text = "Accepted — waiting for other players…";
             OnAccepted?.Invoke();
         }
 

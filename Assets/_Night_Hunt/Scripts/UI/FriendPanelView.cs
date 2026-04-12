@@ -177,7 +177,18 @@ namespace NightHunt.UI
         public void RefreshAll()
         {
             LoadFriends();
-            if (_activeTab == FriendTab.MoreFriends) LoadFriendRequests();
+            LoadFriendRequests(); // always reload regardless of active tab
+        }
+
+        /// <summary>
+        /// Bypass the short-lived cooldown cache and reload friend requests immediately.
+        /// Call from HomeView on WS events that change the pending request list
+        /// (friend_request_received, friend_request_cancelled, friend_request_declined).
+        /// </summary>
+        public void ForceRefreshFriendRequests()
+        {
+            _friendService?.InvalidatePendingRequestsCache();
+            LoadFriendRequests();
         }
 
         /// <summary>Update a friend's status badge in-place (from WS friend_status_changed).</summary>
@@ -417,12 +428,21 @@ namespace NightHunt.UI
                 && item.Friend.IsOnline
                 && !item.Friend.IsInParty;
 
-            var anchor = item.GetComponent<RectTransform>();
             contextMenu?.Show(
-                anchor:    anchor,
-                canInvite: canInvite,
-                onInvite:  () => OnInviteToParty(item.Friend),
-                onRemove:  () => _ = OnRemoveFriend(item.Friend));
+                anchorPoint:   item.ContextMenuAnchor,
+                canInvite:     canInvite,
+                userId:        item.Friend?.userId ?? 0L,
+                onViewProfile: () => OnViewProfile(item.Friend),
+                onInvite:      () => OnInviteToParty(item.Friend),
+                onRemove:      () => _ = OnRemoveFriend(item.Friend));
+        }
+
+        private void OnViewProfile(FriendResponse friend)
+        {
+            _activeContextItem = null;
+            if (friend == null) return;
+            Debug.Log($"[FriendPanel] ViewProfile: userId={friend.userId} username={friend.username}");
+            // TODO: Open profile screen when implemented.
         }
 
         private void OnInviteToParty(FriendResponse friend)

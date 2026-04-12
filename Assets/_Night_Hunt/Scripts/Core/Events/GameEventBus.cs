@@ -26,6 +26,8 @@ namespace NightHunt.Core
         public event Action<GameWebSocketService.SwapRequestEvent> OnSwapRequest;
         public event Action<GameWebSocketService.SwapRequestStatusEvent> OnSwapRequestStatus;
         public event Action<GameWebSocketService.GameStartingEvent> OnGameStarting;
+        public event Action<GameWebSocketService.RoomDisbandedEvent> OnRoomDisbanded;
+        public event Action<GameWebSocketService.YouWereKickedEvent> OnYouWereKicked;
         public event Action OnForceLogout;
         public event Action OnSessionExpired;
         public event Action OnWebSocketDisconnected;
@@ -56,8 +58,16 @@ namespace NightHunt.Core
 
         private System.Collections.IEnumerator DelayedSubscribe()
         {
-            // Wait for GameManager to be fully initialized
-            yield return new WaitForEndOfFrame();
+            // Wait until GameManager and GameWebSocket are both ready (up to 15 seconds)
+            float timeout = 15f;
+            float elapsed = 0f;
+            while (elapsed < timeout)
+            {
+                if (GameManager.Instance != null && GameManager.Instance.GameWebSocket != null)
+                    break;
+                yield return null;
+                elapsed += Time.unscaledDeltaTime;
+            }
             SubscribeToServices();
         }
 
@@ -85,6 +95,8 @@ namespace NightHunt.Core
                 ws.OnSwapRequest += HandleSwapRequest;
                 ws.OnSwapRequestStatus += HandleSwapRequestStatus;
                 ws.OnGameStarting += HandleGameStarting;
+                ws.OnRoomDisbanded += HandleRoomDisbanded;
+                ws.OnYouWereKicked += HandleYouWereKicked;
                 ws.OnForceLogout += HandleForceLogout;
                 ws.OnSessionExpired += HandleSessionExpired;
                 ws.OnDisconnected += HandleWebSocketDisconnected;
@@ -135,6 +147,8 @@ namespace NightHunt.Core
                 ws.OnSwapRequest -= HandleSwapRequest;
                 ws.OnSwapRequestStatus -= HandleSwapRequestStatus;
                 ws.OnGameStarting -= HandleGameStarting;
+                ws.OnRoomDisbanded -= HandleRoomDisbanded;
+                ws.OnYouWereKicked -= HandleYouWereKicked;
                 ws.OnForceLogout -= HandleForceLogout;
                 ws.OnSessionExpired -= HandleSessionExpired;
                 ws.OnDisconnected -= HandleWebSocketDisconnected;
@@ -175,6 +189,8 @@ namespace NightHunt.Core
         private void HandleSwapRequest(GameWebSocketService.SwapRequestEvent evt) => OnSwapRequest?.Invoke(evt);
         private void HandleSwapRequestStatus(GameWebSocketService.SwapRequestStatusEvent evt) => OnSwapRequestStatus?.Invoke(evt);
         private void HandleGameStarting(GameWebSocketService.GameStartingEvent evt) => OnGameStarting?.Invoke(evt);
+        private void HandleRoomDisbanded(GameWebSocketService.RoomDisbandedEvent evt) => OnRoomDisbanded?.Invoke(evt);
+        private void HandleYouWereKicked(GameWebSocketService.YouWereKickedEvent evt) => OnYouWereKicked?.Invoke(evt);
         private void HandleForceLogout() => OnForceLogout?.Invoke();
         private void HandleSessionExpired() => OnSessionExpired?.Invoke();
         private void HandleWebSocketDisconnected() => OnWebSocketDisconnected?.Invoke();

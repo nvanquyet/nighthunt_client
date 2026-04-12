@@ -67,8 +67,10 @@ namespace NightHunt.UI
         [SerializeField] private string[]        tips = { };
 
         [Header("Settings")]
-        [SerializeField] private float fadeDuration   = 0.3f;
+        [SerializeField] private float fadeDuration    = 0.3f;
         [SerializeField] private float delayAfterReady = 1.5f;
+        [Tooltip("Seconds before the overlay gives up waiting for AllPlayersReadyEvent and returns to Home. 0 = no timeout.")]
+        [SerializeField] private float connectionTimeout = 45f;
         [SerializeField] private NightHunt.Config.SceneId targetMapId = NightHunt.Config.SceneId.GameMap_01;
 
         // ── Default tips ───────────────────────────────────────────────────────
@@ -87,6 +89,7 @@ namespace NightHunt.UI
         private float          _progressTarget;
         private float          _progressCurrent;
         private Coroutine      _fadeCoroutine;
+        private Coroutine      _timeoutCoroutine;
         private bool           _isVisible;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -140,6 +143,7 @@ namespace NightHunt.UI
         /// <summary>Ẩn overlay (dùng khi cancel hoặc error).</summary>
         public void Hide()
         {
+            StopTimeout();
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeOut());
         }
@@ -162,6 +166,7 @@ namespace NightHunt.UI
             ShowRandomTip();
 
             SubscribeEvents();
+            StartTimeout();
 
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeIn());
@@ -171,6 +176,41 @@ namespace NightHunt.UI
             // the scene transition (DontDestroyOnLoad via PersistentUICanvas). Once all
             // players have spawned the server fires AllPlayersReadyEvent → we hide.
             SceneLoader.LoadGame(targetMapId);
+        }
+
+        private void StartTimeout()
+        {
+            StopTimeout();
+            if (connectionTimeout > 0f)
+                _timeoutCoroutine = StartCoroutine(TimeoutRoutine());
+        }
+
+        private void StopTimeout()
+        {
+            if (_timeoutCoroutine != null)
+            {
+                StopCoroutine(_timeoutCoroutine);
+                _timeoutCoroutine = null;
+            }
+        }
+
+        private IEnumerator TimeoutRoutine()
+        {
+            yield return new WaitForSecondsRealtime(connectionTimeout);
+            if (!_isVisible) yield break; // already hidden by AllPlayersReady
+
+            Debug.LogWarning("[MatchLoadingOverlay] Connection timeout — returning to Home.");
+            UnsubscribeEvents();
+            Hide();
+
+            // Give fade a moment then show error and navigate home
+            yield return new WaitForSecondsRealtime(fadeDuration + 0.1f);
+            NightHunt.State.RoomState.Instance?.ClearRoom();
+            GameModalWindow.Instance?.ShowNotice(
+                "Kết nối thất bại",
+                "Không thể kết nối tới server trận đấu. Vui lòng thử lại.",
+                closeText: "Về trang chủ",
+                onClose:   () => NightHunt.UI.UINavigator.Instance?.GoHome());
         }
 
         private void SetStage(MatchLoadStage stage)
@@ -207,6 +247,7 @@ namespace NightHunt.UI
 
         private void OnAllPlayersReady(AllPlayersReadyEvent _)
         {
+            StopTimeout();
             SetStage(MatchLoadStage.AllReady);
             // Game scene is already loaded (triggered inside ShowInternal).
             // Wait for progress-bar animation then hide overlay and unsubscribe.

@@ -166,7 +166,8 @@ namespace NightHunt.UI
                 var createResult = await _partyService.CreateParty();
                 if (!createResult.Success)
                 {
-                    ShowToast("L\u1ed7i", "Kh\u00f4ng th\u1ec3 t\u1ea1o nh\u00f3m.");
+                    Debug.LogWarning($"[PartyController] CreateParty failed: {createResult.Message}");
+                    ShowToast("Party", "Failed to create party.");
                     return;
                 }
                 _currentParty = createResult.Data;
@@ -176,13 +177,15 @@ namespace NightHunt.UI
             var result = await _partyService.InviteToParty(friend.userId);
             if (result.Success)
             {
-                ShowToast("\u0110\u00e3 m\u1eddi", $"\u0110\u00e3 g\u1eedi l\u1eddi m\u1eddi t\u1edbi {friend.username}.");
+                ShowToast("Invited", $"Invite sent to {friend.username}.");
+                Debug.Log($"[PartyController] Invite sent to userId={friend.userId} username='{friend.username}'");
                 friendPanelView?.SetInvitePending(friend.userId, true);
                 StartCoroutine(ClearInvitePendingAfter(friend.userId, 30f));
             }
             else
             {
-                ShowToast("L\u1ed7i m\u1eddi", result.Message ?? "Kh\u00f4ng th\u1ec3 m\u1eddi ng\u01b0\u1eddi ch\u01a1i.");
+                Debug.LogWarning($"[PartyController] InviteToParty failed: {result.Message}");
+                ShowToast("Invite Error", result.Message ?? "Could not invite player.");
             }
         }
 
@@ -212,8 +215,8 @@ namespace NightHunt.UI
             if (partySize > newMode.playersPerTeam)
             {
                 if (modeDropdown != null) modeDropdown.SetDropdownIndex(_selectedModeIndex);
-                ShowToast("Kh\u00f4ng th\u1ec3 \u0111\u1ed5i ch\u1ebf \u0111\u1ed9",
-                    $"Party \u0111ang c\u00f3 {partySize} ng\u01b0\u1eddi \u2014 vui l\u00f2ng gi\u1ea3m v\u1ec1 {newMode.playersPerTeam} tr\u01b0\u1edbc.");
+                ShowToast("Mode Change",
+                    $"Party has {partySize} members — reduce to {newMode.playersPerTeam} first.");
                 return;
             }
             _selectedModeIndex = index;
@@ -347,14 +350,15 @@ namespace NightHunt.UI
             {
                 var r = await GameManager.Instance.BackendClient.PostAsync<object>(
                     Constants.API_MATCHMAKING_QUEUE,
-                    new MatchmakingQueueRequest { gameMode = modeKey, mapId = mapId });
+                    new MatchmakingQueueRequest { gameMode = modeKey, mapId = mapId, allowFill = allowFill });
                 success = r.Success;
             }
 
             if (!success)
             {
                 SetQueueState(RankedQueueState.Idle);
-                Debug.LogWarning("[PartyController] Kh\u00f4ng th\u1ec3 v\u00e0o h\u00e0ng ch\u1edd matchmaking.");
+                Debug.LogWarning("[PartyController] Failed to join matchmaking queue.");
+                ShowToast("Matchmaking", "Failed to join queue. Please try again.");
             }
         }
 
@@ -417,6 +421,9 @@ namespace NightHunt.UI
             _ws.OnMatchCancelled          += HandleMatchCancelled;
 
             _ws.OnPartyInvitationReceived += HandlePartyInvitationReceived;
+            _ws.OnPartyInvitationDeclined  += HandlePartyInvitationDeclined;
+            _ws.OnPartyInvitationCancelled += HandlePartyInvitationCancelled;
+            _ws.OnPartyInvitationExpired   += HandlePartyInvitationExpired;
             _ws.OnPartyMemberJoined       += HandlePartyMemberJoined;
             _ws.OnPartyMemberLeft         += HandlePartyMemberLeft;
             _ws.OnPartyMemberKicked       += HandlePartyMemberKicked;
@@ -432,6 +439,9 @@ namespace NightHunt.UI
             _ws.OnMatchReady              -= HandleMatchReady;
             _ws.OnMatchCancelled          -= HandleMatchCancelled;
             _ws.OnPartyInvitationReceived -= HandlePartyInvitationReceived;
+            _ws.OnPartyInvitationDeclined  -= HandlePartyInvitationDeclined;
+            _ws.OnPartyInvitationCancelled -= HandlePartyInvitationCancelled;
+            _ws.OnPartyInvitationExpired   -= HandlePartyInvitationExpired;
             _ws.OnPartyMemberJoined       -= HandlePartyMemberJoined;
             _ws.OnPartyMemberLeft         -= HandlePartyMemberLeft;
             _ws.OnPartyMemberKicked       -= HandlePartyMemberKicked;
@@ -543,25 +553,57 @@ namespace NightHunt.UI
 
             _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
-            if (!string.IsNullOrEmpty(e.reason))
-                ShowToast("Ghép trận", $"Hủy trận: {e.reason}");
+            string reason = !string.IsNullOrEmpty(e.reason) ? e.reason : "Match was cancelled.";
+            ShowToast("Matchmaking", $"Match cancelled: {reason}");
+            Debug.Log($"[PartyController] MatchCancelled — reason={e.reason}");
         }
 
         // ── Party ─────────────────────────────────────────────────────────────
 
         private void HandlePartyInvitationReceived(GameWebSocketService.PartyInvitationEvent e)
         {
-            string inviterName  = string.IsNullOrEmpty(e.inviterUsername) ? "Ai \u0111\u00f3" : e.inviterUsername;
+            string inviterName  = string.IsNullOrEmpty(e.inviterUsername) ? "Someone" : e.inviterUsername;
             long   invitationId = e.invitationId;
             GameModalWindow.Instance?.ShowCountdown(
-                title:       "L\u1eddi m\u1eddi Party",
-                desc:        $"<b>{inviterName}</b> m\u1eddi b\u1ea1n v\u00e0o party",
-                seconds:     30,
-                onConfirm:   () => _ = AcceptPartyInvitation(invitationId),
-                onExpire:    () => _ = DeclinePartyInvitation(invitationId),
-                showConfirm: true,
-                confirmText: "\u0110\u1ed3ng \u00fd",
-                cancelText:  "T\u1eeb ch\u1ed1i");
+                title:        "Party Invitation",
+                desc:         $"<b>{inviterName}</b> invited you to join their party.",
+                seconds:      30,
+                onConfirm:    () => _ = AcceptPartyInvitation(invitationId),
+                onExpire:     () => _ = DeclinePartyInvitation(invitationId),
+                showConfirm:  true,
+                confirmText:  "Accept",
+                cancelText:   "Decline",
+                invitationId: invitationId);
+        }
+
+        // Invitee declined our invite — clear the pending spinner on their friend row.
+        private void HandlePartyInvitationDeclined(GameWebSocketService.PartyInvitationResponseEvent e)
+        {
+            friendPanelView?.SetInvitePending(e.inviteeUserId, false);
+            Debug.Log($"[PartyController] PartyInvitationDeclined \u2014 inviteeUserId={e.inviteeUserId} invitationId={e.invitationId}");
+        }
+
+        // The inviter withdrew their invite — close the countdown popup.
+        private void HandlePartyInvitationCancelled(GameWebSocketService.PartyInvitationResponseEvent e)
+        {
+            GameModalWindow.Instance?.DismissIfMatchingInvitation(e.invitationId);
+            Debug.Log($"[PartyController] PartyInvitationCancelled \u2014 inviterUserId={e.inviterUserId} invitationId={e.invitationId}");
+        }
+
+        // Invitation timed out — inviter clears spinner; invitee popup already handled by countdown.
+        private void HandlePartyInvitationExpired(GameWebSocketService.PartyInvitationResponseEvent e)
+        {
+            long myId = _sessionState?.UserId ?? 0L;
+            if (myId == e.inviterUserId)
+            {
+                friendPanelView?.SetInvitePending(e.inviteeUserId, false);
+                Debug.Log($"[PartyController] PartyInvitationExpired (I'm inviter) \u2014 inviteeUserId={e.inviteeUserId}");
+            }
+            else
+            {
+                GameModalWindow.Instance?.DismissIfMatchingInvitation(e.invitationId);
+                Debug.Log($"[PartyController] PartyInvitationExpired (I'm invitee) \u2014 inviterUserId={e.inviterUserId}");
+            }
         }
 
         private async Task AcceptPartyInvitation(long invitationId)
@@ -575,7 +617,8 @@ namespace NightHunt.UI
             }
             else
             {
-                ShowToast("Party", result.Message ?? "Kh\u00f4ng th\u1ec3 tham gia party.");
+                ShowToast("Party", result.Message ?? "Failed to join party.");
+                Debug.LogWarning($"[PartyController] AcceptInvitation failed: {result.Message}");
             }
         }
 
@@ -588,12 +631,18 @@ namespace NightHunt.UI
         private void HandlePartyMemberJoined(GameWebSocketService.PartyMemberJoinedEvent e)
         {
             friendPanelView?.SetInvitePending(e.userId, false);
+            string name = string.IsNullOrEmpty(e.username) ? "A player" : e.username;
+            ShowToast("Party", $"{name} joined the party.");
+            Debug.Log($"[PartyController] PartyMemberJoined — userId={e.userId} username='{e.username}'");
             _ = RefreshParty();
         }
 
         private void HandlePartyMemberLeft(GameWebSocketService.PartyMemberLeftEvent e)
         {
-            if (e.userId == (_sessionState?.UserId ?? -1L)) _currentParty = null;
+            bool isSelf = e.userId == (_sessionState?.UserId ?? -1L);
+            if (isSelf) _currentParty = null;
+            ShowToast("Party", isSelf ? "You left the party." : "A party member left.");
+            Debug.Log($"[PartyController] PartyMemberLeft — userId={e.userId} isSelf={isSelf}");
             _ = RefreshParty();
         }
 
@@ -602,8 +651,9 @@ namespace NightHunt.UI
             if (e.kickedUserId == (_sessionState?.UserId ?? -1L))
             {
                 _currentParty = null;
-                ShowToast("Party", "B\u1ea1n \u0111\u00e3 b\u1ecb kick kh\u1ecfi party.");
+                ShowToast("Party", "You were kicked from the party.");
             }
+            Debug.Log($"[PartyController] PartyMemberKicked — kickedUserId={e.kickedUserId} kickerUserId={e.kickerUserId}");
             _ = RefreshParty();
         }
 
@@ -611,11 +661,17 @@ namespace NightHunt.UI
         {
             _currentParty = null;
             RefreshPartyDisplay();
-            ShowToast("Party", "Party \u0111\u00e3 b\u1ecb gi\u1ea3i t\u00e1n.");
+            ShowToast("Party", "The party has been disbanded.");
+            Debug.Log($"[PartyController] PartyDisbanded — partyId={e.partyId}");
         }
 
         private void HandlePartyHostChanged(GameWebSocketService.PartyHostChangedEvent e)
-            => _ = RefreshParty();
+        {
+            if (e.newHostUserId == (_sessionState?.UserId ?? -1L))
+                ShowToast("Party", "You are now the party host.");
+            Debug.Log($"[PartyController] PartyHostChanged — new hostUserId={e.newHostUserId}");
+            _ = RefreshParty();
+        }
 
         private void HandlePartyStatusChanged(GameWebSocketService.PartyStatusChangedEvent e)
             => _ = RefreshParty();

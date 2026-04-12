@@ -436,7 +436,7 @@ namespace NightHunt.Services.Friend
             }
         }
 
-        private void InvalidatePendingRequestsCache()
+        public void InvalidatePendingRequestsCache()
         {
             _lastPendingRequestsResult = null;
             _lastPendingRequestsAt = DateTime.MinValue;

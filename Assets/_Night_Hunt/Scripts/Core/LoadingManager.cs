@@ -197,11 +197,13 @@ namespace NightHunt.Core
             // ── Step 5: Kiểm tra backend có hoạt động không ─────────────────
             yield return StartCoroutine(WaitForBackendHealth());
 
-            // ── Step 5.5: Fetch game config (modes + maps) from backend ──────
-            yield return StartCoroutine(FetchGameConfigFlow());
-
             // ── Step 6: Remember Me / Auto-Login check ───────────────────
             yield return StartCoroutine(CheckAutoLoginFlow());
+
+            // ── Step 6.5: Fetch game config (modes + maps) from backend ──────
+            // Must run AFTER auth — endpoints require a valid Bearer token.
+            if (_targetPanel != PanelType.Login)
+                yield return StartCoroutine(FetchGameConfigFlow());
 
             // ── Step 7: Đảm bảo thời gian tối thiểu ────────────────────────
             float elapsed = Time.time - startTime;
@@ -366,14 +368,25 @@ namespace NightHunt.Core
                 }
 
                 if (_retryRequested && Application.internetReachability == NetworkReachability.NotReachable)
-                    ToastService.Instance?.Show("Vẫn mất mạng", "Chưa phát hiện kết nối internet.");
+                {
+                    var _ts = NightHunt.UI.ToastService.Instance;
+                    if (_ts == null)
+                    {
+                        Debug.LogWarning("[LoadingManager] ToastService.Instance is null — cannot show toast 'No Internet'.");
+                    }
+                    else
+                    {
+                        Debug.Log("[LoadingManager] Requesting toast: 'No Internet' — 'No internet connection detected.'");
+                        _ts.Show("No Internet", "No internet connection detected.");
+                    }
+                }
 
                 _retryRequested = false;
             }
 
             ShowRetryButton(false);
             UpdateLoadingUI("Kết nối đã khôi phục!", 0.44f);
-            yield return new WaitForSeconds(0.3f);
+            yield return new WaitForSeconds(0.3f); 
             Debug.Log("[LoadingManager] Internet restored — continuing.");
         }
 
@@ -440,33 +453,73 @@ namespace NightHunt.Core
                     yield break;
                 }
 
-                // Xác định loại lỗi cho Toast rõ ràng hơn
-                bool serverError = req.responseCode >= 500;
-                string errorMsg = serverError
-                    ? "⚠️ Server đang bảo trì. Vui lòng thử lại sau."
-                    : "⚠️ Không kết nối được server.";
+                // ── Classify error ────────────────────────────────────────────
+                bool is502        = req.responseCode == 502;
+                bool is503        = req.responseCode == 503;
+                bool isGatewayErr = is502 || is503;
+                bool serverError  = req.responseCode >= 500;
+
+                string errorMsg;
+                if (is502)
+                    errorMsg = "⚠️ Server starting up (502). Retrying...";
+                else if (is503)
+                    errorMsg = "⚠️ Server unavailable (503). Retrying...";
+                else if (serverError)
+                    errorMsg = "⚠️ Server error. Please try again later.";
+                else
+                    errorMsg = "⚠️ Cannot reach server.";
 
                 UpdateLoadingUI(errorMsg, 0.50f);
                 ShowRetryButton(true);
 
-                // 📋 ENHANCED DEBUG LOG: Detailed error info
+                // ── Log details ───────────────────────────────────────────────
                 Debug.LogWarning($"[LoadingManager] ❌ Backend health FAILED:");
-                Debug.LogWarning($"  Result: {req.result}");
+                Debug.LogWarning($"  Result:      {req.result}");
                 Debug.LogWarning($"  Status Code: {req.responseCode}");
-                Debug.LogWarning($"  Error: {req.error}");
-                
-                // Log response body if available (might contain useful error info)
-                if (!string.IsNullOrEmpty(req.downloadHandler?.text))
-                {
-                    Debug.LogWarning($"  Response Body: {req.downloadHandler.text}");
-                }
+                Debug.LogWarning($"  Error:       {req.error}");
+                Debug.LogWarning($"  URL:         {url}");
 
-                // Diagnose specific connection issues
-                if (req.result == UnityWebRequest.Result.ConnectionError)
+                if (!string.IsNullOrEmpty(req.downloadHandler?.text))
+                    Debug.LogWarning($"  Response Body: {req.downloadHandler.text}");
+
+                // ── Per-status diagnosis ──────────────────────────────────────
+                if (req.result == UnityWebRequest.Result.ProtocolError)
                 {
-                    // Case-insensitive SSL detection + Curl error 60 (CN mismatch)
+                    if (is502)
+                    {
+                        Debug.LogError($"[LoadingManager] 🔴 HTTP 502 Bad Gateway — proxy is up but backend app is NOT ready.");
+                        Debug.LogError($"  Causes:");
+                        Debug.LogError($"    1. Spring Boot / backend is still starting (JVM warmup can take 10–30 s).");
+                        Debug.LogError($"    2. Backend crashed right after start — check server process logs.");
+                        Debug.LogError($"    3. Backend is bound to wrong port — proxy upstream doesn't match.");
+                        Debug.LogError($"    4. Docker container restarting (OOM or crash loop).");
+                        Debug.LogError($"  Action: auto-retrying every 2 s until backend responds 200.");
+                    }
+                    else if (is503)
+                    {
+                        Debug.LogError($"[LoadingManager] 🔴 HTTP 503 Service Unavailable — backend overloaded or in maintenance.");
+                        Debug.LogError($"  Action: auto-retrying every 5 s.");
+                    }
+                    else if (req.responseCode == 404)
+                    {
+                        Debug.LogError($"[LoadingManager] 🔴 HTTP 404 — health endpoint not found.");
+                        Debug.LogError($"  Check health path: {url}");
+                        Debug.LogError($"  Expected: /api/actuator/health");
+                    }
+                    else if (req.responseCode == 401 || req.responseCode == 403)
+                    {
+                        Debug.LogError($"[LoadingManager] 🔴 HTTP {req.responseCode} — health endpoint requires auth.");
+                        Debug.LogError($"  Fix: allow unauthenticated access to /api/actuator/health on server.");
+                    }
+                    else
+                    {
+                        Debug.LogError($"[LoadingManager] 🔴 PROTOCOL ERROR - HTTP {req.responseCode}");
+                    }
+                }
+                else if (req.result == UnityWebRequest.Result.ConnectionError)
+                {
                     bool isSslError = req.error != null &&
-                        (req.error.IndexOf("SSL",        System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        (req.error.IndexOf("SSL",         System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                          req.error.IndexOf("certificate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                          req.error.IndexOf("Cert",        System.StringComparison.OrdinalIgnoreCase) >= 0 ||
                          req.error.IndexOf("CA",          System.StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -475,73 +528,46 @@ namespace NightHunt.Core
 
                     if (isSslError)
                     {
-                        bool isLocalHost = url.IndexOf("localhost",  System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                           url.Contains("127.0.0.1");
+                        bool isLocalHost  = url.IndexOf("localhost", System.StringComparison.OrdinalIgnoreCase) >= 0 || url.Contains("127.0.0.1");
                         bool isCnMismatch = req.error.IndexOf("mismatch",    System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                            req.error.IndexOf("Common Name",  System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                            req.error.IndexOf("CN",           System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                            req.error.IndexOf("Cert verify",  System.StringComparison.OrdinalIgnoreCase) >= 0;
-
+                                            req.error.IndexOf("Common Name", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                            req.error.IndexOf("Cert verify", System.StringComparison.OrdinalIgnoreCase) >= 0;
                         if (isLocalHost)
                         {
-                            // Local dev: mkcert CA not trusted
-                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (local) — mkcert CA chua duoc install vao Windows");
-                            Debug.LogError($"  URL: {url}");
-                            Debug.LogError($"  Fix: Chay Tools/setup-dev-cert.ps1 hoac 'mkcert -install' trong PowerShell");
-                            Debug.LogError($"  Sau do RESTART Unity Editor");
+                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (local) — mkcert CA not installed in Windows.");
+                            Debug.LogError($"  Fix: run Tools/setup-dev-cert.ps1 or 'mkcert -install', then RESTART Unity Editor.");
                         }
                         else if (isCnMismatch)
                         {
-                            // Cloud server: certificate CN does not match the host being connected to
-                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (cloud CN mismatch) — Certificate CN khong khop voi host");
-                            Debug.LogError($"  URL: {url}");
-                            Debug.LogError($"  Host dang ket noi: {_backendConfig?.apiHost}");
-                            Debug.LogError($"  Nguyen nhan co the:");
-                            Debug.LogError($"    1. 'prodApiHost' trong BackendConfig sai hoac khong khop voi CN tren cert cua server");
-                            Debug.LogError($"    2. Server dang dung self-signed cert (mkcert) thay vi Let's Encrypt");
-                            Debug.LogError($"    3. Trong editor: bat 'Force Production In Editor' tren BackendConfig de test cloud");
-                            Debug.LogError($"  Raw error: {req.error}");
+                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (CN mismatch) — cert CN does not match host '{_backendConfig?.apiHost}'.");
+                            Debug.LogError($"  Fix: check 'prodApiHost' in BackendConfig matches the CN on the server cert.");
                         }
                         else
                         {
-                            // Cloud server: cert not trusted (CA chain issue)
-                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (cloud) — Server cert khong duoc trust");
-                            Debug.LogError($"  URL: {url}");
-                            Debug.LogError($"  Kiem tra: server co Let's Encrypt cert hop le khong?");
-                            Debug.LogError($"  Raw error: {req.error}");
+                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (untrusted CA) — check server has a valid Let's Encrypt cert.");
                         }
                     }
                     else
                     {
-                        Debug.LogError($"[LoadingManager] CONNECTION ERROR:");
-                        Debug.LogError($"  URL: {url}");
-                        Debug.LogError($"  1. Server chua chay tren {_backendConfig?.apiHost ?? "localhost:8443"}");
-                        Debug.LogError($"  2. SSL cert chua duoc setup — chay Tools/setup-dev-cert.ps1");
-                        Debug.LogError($"  3. Port bi block boi Firewall");
-                    }
-                }
-                else if (req.result == UnityWebRequest.Result.ProtocolError)
-                {
-                    Debug.LogError($"[LoadingManager] 🔴 PROTOCOL ERROR - HTTP {req.responseCode}");
-                    if (req.responseCode == 404)
-                    {
-                        Debug.LogError($"  Health path problem! Check if path is correct: {url}");
-                        Debug.LogError($"  Expected: https://localhost:8443/api/actuator/health");
-                        Debug.LogError($"  Actual: {url}");
+                        Debug.LogError($"[LoadingManager] CONNECTION ERROR — cannot reach {_backendConfig?.apiHost ?? "localhost:8443"}.");
+                        Debug.LogError($"  1. Proxy/server not running.  2. Firewall blocking port.  3. SSL cert missing.");
                     }
                 }
 
-                // Tự retry sau 5s hoặc ngay khi user bấm Retry
+                // ── Smart retry delay: 502/503 get shorter auto-retry (server booting) ──
+                // If 502 → retry every 2 s automatically (don't wait 5 s or user press).
+                // Other failures → 5 s wait or user presses Retry button.
                 _retryRequested = false;
-                float waited = 0f;
-                while (!_retryRequested && waited < 5f)
+                float retryDelay = isGatewayErr ? 2f : 5f;
+                float waited     = 0f;
+                while (!_retryRequested && waited < retryDelay)
                 {
                     waited += Time.deltaTime;
                     yield return null;
                 }
                 _retryRequested = false;
 
-                UpdateLoadingUI("Đang thử lại...", 0.50f);
+                UpdateLoadingUI("Retrying...", 0.50f);
                 yield return new WaitForSeconds(0.2f);
             }
         }
@@ -549,7 +575,18 @@ namespace NightHunt.Core
         private void OnRetryClicked()
         {
             _retryRequested = true;
-            ToastService.Instance?.Show("Đang thử lại", "Đang kiểm tra kết nối...");
+            {
+                var _ts = NightHunt.UI.ToastService.Instance;
+                if (_ts == null)
+                {
+                    Debug.LogWarning("[LoadingManager] ToastService.Instance is null — cannot show toast 'Retrying'.");
+                }
+                else
+                {
+                    Debug.Log("[LoadingManager] Requesting toast: 'Retrying' — 'Checking connection...'");
+                    _ts.Show("Retrying", "Checking connection...");
+                }
+            }
             Debug.Log("[LoadingManager] Retry requested.");
         }
 

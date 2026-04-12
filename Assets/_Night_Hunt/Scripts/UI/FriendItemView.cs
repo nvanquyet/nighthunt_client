@@ -31,6 +31,19 @@ namespace NightHunt.UI
         [Header("Interaction")]
         [SerializeField] private Button rowButton;
 
+        [Header("Context Menu Anchor")]
+        [Tooltip("Optional — place a child RectTransform at the exact spot where the context menu\n"
+               + "should appear (e.g. bottom-right corner, middle of row, etc.).\n"
+               + "Leave empty to use the row's own RectTransform.")]
+        [SerializeField] private RectTransform contextMenuAnchor;
+
+        /// <summary>
+        /// The RectTransform whose world pivot the context menu is anchored to.
+        /// Returns <see cref="contextMenuAnchor"/> if assigned, otherwise falls back to the row's own RT.
+        /// </summary>
+        public RectTransform ContextMenuAnchor =>
+            contextMenuAnchor != null ? contextMenuAnchor : (RectTransform)transform;
+
         // ── Runtime ──────────────────────────────────────────────────────────
 
         private Action<FriendItemView> _onSelected;

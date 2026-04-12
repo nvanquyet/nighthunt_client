@@ -45,8 +45,18 @@ namespace NightHunt.Config
         private SceneEntry[] scenes = new SceneEntry[]
         {
             new() { id = SceneId.Home,       sceneName = "01_Home"    },
-            new() { id = SceneId.GameMap_01,  sceneName = "02_Map_01" },
-            new() { id = SceneId.GameMap_02,  sceneName = "02_Map_02" },
+            new() { id = SceneId.GameMap_01, sceneName = "02_Map_01"  },
+            new() { id = SceneId.GameMap_02, sceneName = "02_Map_02"  },
+            // Pre-reserved slots. Scene files must be created + added to Build Settings
+            // before enabling the corresponding map entry in the admin dashboard.
+            new() { id = SceneId.GameMap_03, sceneName = "02_Map_03"  },
+            new() { id = SceneId.GameMap_04, sceneName = "02_Map_04"  },
+            new() { id = SceneId.GameMap_05, sceneName = "02_Map_05"  },
+            new() { id = SceneId.GameMap_06, sceneName = "02_Map_06"  },
+            new() { id = SceneId.GameMap_07, sceneName = "02_Map_07"  },
+            new() { id = SceneId.GameMap_08, sceneName = "02_Map_08"  },
+            new() { id = SceneId.GameMap_09, sceneName = "02_Map_09"  },
+            new() { id = SceneId.GameMap_10, sceneName = "02_Map_10"  },
         };
 
         // ── Public API ─────────────────────────────────────────────────────────
@@ -126,10 +136,29 @@ namespace NightHunt.Config
         Home        = 0,
 
         // ── Gameplay Maps ───────────────────────────────────────────────
-        /// <summary>Map 1 — tên file scene config trong Inspector.</summary>
+        /// <summary>Map 1 — Industrial Zone.</summary>
         GameMap_01  = 100,
-        /// <summary>Map 2.</summary>
+        /// <summary>Map 2 — Arctic Base.</summary>
         GameMap_02  = 101,
-        // Thêm mới: GameMap_03 = 102, GameMap_04 = 103, ...
+        // Pre-reserved slots — scenes baked into every build.
+        // Enable new maps at runtime via backend admin panel
+        // without releasing a client update.
+        // Just POST /api/admin/config/maps with sceneName = "GameMap_0X".
+        /// <summary>Map 3 — pre-reserved (scene must be in Build Settings).</summary>
+        GameMap_03  = 102,
+        /// <summary>Map 4 — pre-reserved.</summary>
+        GameMap_04  = 103,
+        /// <summary>Map 5 — pre-reserved.</summary>
+        GameMap_05  = 104,
+        /// <summary>Map 6 — pre-reserved.</summary>
+        GameMap_06  = 105,
+        /// <summary>Map 7 — pre-reserved.</summary>
+        GameMap_07  = 106,
+        /// <summary>Map 8 — pre-reserved.</summary>
+        GameMap_08  = 107,
+        /// <summary>Map 9 — pre-reserved.</summary>
+        GameMap_09  = 108,
+        /// <summary>Map 10 — pre-reserved.</summary>
+        GameMap_10  = 109,
     }
 }

@@ -1,11 +1,11 @@
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using NightHunt.Common;
 using NightHunt.Config;
 using NightHunt.Data.DTOs;
 using NightHunt.Services.Backend;
+using NightHunt.Utils;
 using UnityEngine;
-
+ 
 namespace NightHunt.Services.Config
 {
     /// <summary>
@@ -47,8 +47,10 @@ namespace NightHunt.Services.Config
                 return false;
             }
 
-            var modesTask = _backendClient.GetAsync<List<GameModeResponseDTO>>(Constants.API_GAME_MODES);
-            var mapsTask  = _backendClient.GetAsync<List<GameMapResponseDTO>>(Constants.API_MAPS);
+            // NOTE: Use T[] (array) not List<T> — Unity's JsonUtility cannot deserialize
+            // generic List<T> inside a generic ApiResult<T> wrapper. Arrays work correctly.
+            var modesTask = _backendClient.GetAsync<GameModeResponseDTO[]>(Constants.API_GAME_MODES);
+            var mapsTask  = _backendClient.GetAsync<GameMapResponseDTO[]>(Constants.API_MAPS);
 
             await Task.WhenAll(modesTask, mapsTask);
 
@@ -57,24 +59,32 @@ namespace NightHunt.Services.Config
             var modesResult = modesTask.Result;
             if (modesResult.Success && modesResult.Data != null)
             {
-                GameModeConfig.LoadFromRemote(modesResult.Data.ToArray());
-                Debug.Log($"[GameConfigService] Loaded {modesResult.Data.Count} game modes from server.");
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"Server returned {modesResult.Data.Length} game modes:");
+                foreach (var m in modesResult.Data)
+                    sb.AppendLine($"  > key={m.modeKey}  display=\"{m.displayName}\"  allowFill={m.allowFill}  status={m.modeStatus}  matchmakingEnabled={m.matchmakingEnabled}  isDevMode={m.isDevMode}");
+                ConditionalLogger.Log("gameconfig", sb.ToString());
+
+                GameModeConfig.LoadFromRemote(modesResult.Data);
             }
             else
             {
-                Debug.LogWarning($"[GameConfigService] Game modes fetch failed: {modesResult.Message} — using local defaults.");
+                Debug.LogWarning($"[GameConfigService] Game modes fetch failed: {modesResult.Message} — using local .asset defaults.");
+                ConditionalLogger.LogWarning("gameconfig", $"Fetch failed: {modesResult.Message}");
                 ok = false;
             }
 
             var mapsResult = mapsTask.Result;
             if (mapsResult.Success && mapsResult.Data != null)
             {
-                MapConfig.LoadFromRemote(mapsResult.Data.ToArray());
-                Debug.Log($"[GameConfigService] Loaded {mapsResult.Data.Count} maps from server.");
+                MapConfig.LoadFromRemote(mapsResult.Data);
+                ConditionalLogger.Log("gameconfig", $"Loaded {mapsResult.Data.Length} maps from server.");
+                Debug.Log($"[GameConfigService] Loaded {mapsResult.Data.Length} maps from server.");
             }
             else
             {
                 Debug.LogWarning($"[GameConfigService] Maps fetch failed: {mapsResult.Message} — using local defaults.");
+                ConditionalLogger.LogWarning("gameconfig", $"Maps fetch failed: {mapsResult.Message}");
                 ok = false;
             }
 

@@ -147,8 +147,11 @@ namespace NightHunt.Server
 
         private IEnumerator RegisterWithBackend()
         {
-            string url  = $"{_backendUrl}/ds/register";
-            string json = $"{{\"serverId\":\"{_serverId}\",\"serverSecret\":\"{_serverSecret}\",\"maxPlayers\":{GetEnv("MAX_PLAYERS", "16")}}}";
+            string url      = $"{_backendUrl}/ds/register";
+            int    maxPlayers = int.TryParse(GetEnv("MAX_PLAYERS", "16"), out int mp) ? mp : 16;
+            // Include port and status so backend matchmaking allocator can route players to this DS.
+            string json = $"{{\"serverId\":\"{_serverId}\",\"port\":{_gamePort},\"status\":\"ready\"," +
+                          $"\"maxPlayers\":{maxPlayers},\"serverSecret\":\"{_serverSecret}\"}}";
 
             using var req = new UnityWebRequest(url, "POST");
             req.uploadHandler   = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));

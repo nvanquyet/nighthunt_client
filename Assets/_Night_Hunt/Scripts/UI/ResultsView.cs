@@ -85,7 +85,41 @@ namespace NightHunt.UI
         {
             _lastMatchResult = evt;
             ShowResults(evt);
+            ShowMatchResultToast(evt);
             StartCoroutine(CountdownCoroutine());
+        }
+
+        private void ShowMatchResultToast(MatchEndedEvent evt)
+        {
+            var session  = SessionState.Instance;
+            var registry = RegistryService.Instance;
+            int localTeam = -1;
+            if (session != null && registry != null)
+            {
+                var np = registry.GetActivePlayerByBackendId(session.UserId.ToString());
+                if (np != null) localTeam = np.TeamId;
+            }
+
+            string title, message;
+            if (evt.WinnerTeamId == -1)
+            {
+                title   = "DRAW";
+                message = "The match ended in a draw.";
+            }
+            else if (evt.WinnerTeamId == localTeam)
+            {
+                title   = "VICTORY";
+                message = "Your team won the match!";
+            }
+            else
+            {
+                title   = "DEFEAT";
+                message = "Your team was defeated.";
+            }
+
+            Debug.Log($"[ResultsView] Match ended: {title} — winnerTeamId={evt.WinnerTeamId} localTeam={localTeam}");
+            var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+            toast?.Show(title, message);
         }
 
         private void ShowResults(MatchEndedEvent evt)

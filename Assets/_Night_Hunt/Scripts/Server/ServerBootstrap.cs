@@ -38,7 +38,16 @@ namespace NightHunt.Server
         private string _backendUrl;
         private string _serverSecret;
         private int    _maxPlayers;
+        private int    _expectedPlayers = -1; // -1 = not set → ServerGameManager uses its own default
         private string _mapId; // e.g. "map_01", "map_02" — empty = dùng scene hiện tại
+
+        /// <summary>
+        /// Expected player count parsed from --expectedPlayers CLI arg.
+        /// ServerGameManager.ResolveExpectedPlayerCount() reads this as a priority fallback
+        /// when RoomState is unavailable (always the case on a headless dedicated server).
+        /// -1 = not set (ServerGameManager will use its Inspector default).
+        /// </summary>
+        public static int BootstrappedExpectedPlayers { get; private set; } = -1;
 
         // ─────────────────────────────────────────────────────────────────────────
 
@@ -55,12 +64,14 @@ namespace NightHunt.Server
             // 1. Call POST /api/internal/allocate → get serverId + devSecret
             // 2. Paste serverId → fallbackServerId, devSecret → fallbackServerSecret
             // 3. Press Play — server will register with backend successfully.
-            _serverId     = fallbackServerId;
-            _gamePort     = fallbackPort;
-            _backendUrl   = fallbackBackendUrl;
-            _serverSecret = fallbackServerSecret;
-            _maxPlayers   = fallbackMaxPlayers;
-            _mapId        = fallbackMapId;
+            _serverId         = fallbackServerId;
+            _gamePort         = fallbackPort;
+            _backendUrl       = fallbackBackendUrl;
+            _serverSecret     = fallbackServerSecret;
+            _maxPlayers       = fallbackMaxPlayers;
+            _mapId            = fallbackMapId;
+            _expectedPlayers  = 1; // Editor: default to 1 so solo test works without waiting for more players
+            BootstrappedExpectedPlayers = _expectedPlayers;
             Debug.LogWarning($"[ServerBootstrap] EDITOR MODE — serverId='{_serverId}' backendUrl='{_backendUrl}'. " +
                              "Fill fallbackServerId/fallbackServerSecret from POST /api/internal/allocate if registration fails.");
 #endif
@@ -96,17 +107,22 @@ namespace NightHunt.Server
                     case "--serverPort":   ushort.TryParse(args[i + 1], out _gamePort); break;
                     case "--backendUrl":   _backendUrl   = args[i + 1]; break;
                     case "--serverSecret": _serverSecret = args[i + 1]; break;
-                    case "--maxPlayers":   int.TryParse(args[i + 1], out _maxPlayers); break;
-                    case "--mapId":        _mapId        = args[i + 1]; break;
+                    case "--maxPlayers":      int.TryParse(args[i + 1], out _maxPlayers);      break;
+                    case "--expectedPlayers": int.TryParse(args[i + 1], out _expectedPlayers); break;
+                    case "--mapId":           _mapId = args[i + 1];                             break;
                 }
             }
 
+            // Expose to ServerGameManager which reads this before RoomState can be checked on DS.
+            BootstrappedExpectedPlayers = _expectedPlayers;
+
             Debug.Log("[ServerBootstrap] Args parsed:" +
-                      $"\n  ServerId   : {_serverId}" +
-                      $"\n  Port       : {_gamePort}" +
-                      $"\n  BackendUrl : {_backendUrl}" +
-                      $"\n  MaxPlayers : {_maxPlayers}" +
-                      $"\n  MapId      : {(string.IsNullOrEmpty(_mapId) ? "(default/current scene)" : _mapId)}");
+                      $"\n  ServerId         : {_serverId}" +
+                      $"\n  Port             : {_gamePort}" +
+                      $"\n  BackendUrl       : {_backendUrl}" +
+                      $"\n  MaxPlayers       : {_maxPlayers}" +
+                      $"\n  ExpectedPlayers  : {(_expectedPlayers < 0 ? "(not set — ServerGameManager default)" : _expectedPlayers.ToString())}" +
+                      $"\n  MapId            : {(string.IsNullOrEmpty(_mapId) ? "(default/current scene)" : _mapId)}");
         }
 
         // ─────────────────────────────────────────────────────────────────────────

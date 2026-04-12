@@ -186,6 +186,8 @@ namespace NightHunt.UI
             {
                 HandleRememberMe(result.data.refreshToken);
                 onLoginSuccess?.Invoke();   // Inspector: wire animation/sound ở đây
+                // Fetch game config now that we have a valid token
+                _ = GameManager.Instance?.GameConfigService?.FetchAsync();
                 UINavigator.Instance?.GoHome();
             }
             else if (result.ErrorCode == ErrorCodes.AUTH_SESSION_CONFLICT)

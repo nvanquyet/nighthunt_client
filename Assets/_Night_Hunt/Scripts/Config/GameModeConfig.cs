@@ -149,6 +149,12 @@ namespace NightHunt.Config
                 entries[remoteModes.Length + i] = devEntries[i];
 
             Instance.modes = entries;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"[GameModeConfig] LoadFromRemote complete — {entries.Length} total entries written to Instance.modes:");
+            foreach (var e in entries)
+                sb.AppendLine($"  > [{(e.isEnabled ? "ON " : "OFF")}] key={e.modeKey}  display=\"{e.displayName}\"  allowFill={e.allowFill}  isDevMode={e.isDevMode}");
+            Debug.Log(sb.ToString());
         }
 
         /// <summary>All entries (enabled and disabled).</summary>

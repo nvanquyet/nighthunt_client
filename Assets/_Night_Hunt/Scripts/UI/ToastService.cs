@@ -1,49 +1,76 @@
 using System;
 using System.Collections.Generic;
+using NightHunt.Core;
 using UnityEngine;
 using Michsky.MUIP;
 
 namespace NightHunt.UI
 {
-    public class ToastService : MonoBehaviour
+    /// <summary>
+    /// ToastService — MUIP NotificationManager pool.
+    ///
+    /// SETUP REQUIRED (Inspector):
+    ///   • prefab    — assign a MUIP NotificationManager prefab.
+    ///                 Use Context Menu → "NightHunt/Auto-Assign Toast Prefab" to find it.
+    ///                 If null at runtime, Show() degrades gracefully with a warning log.
+    ///   • container — RectTransform anchor (e.g. top-right corner of PersistentUICanvas).
+    /// </summary>
+    public class ToastService : SingletonPersistent<ToastService>
     {
-        public static ToastService Instance;
-
         [SerializeField] private RectTransform container;
         [SerializeField] private NotificationManager prefab;
         [SerializeField] private int maxVisible = 3;
 
-        private List<NotificationManager> pool = new();
-        private Queue<ToastRequest> waiting = new();
+        private readonly List<NotificationManager>          pool      = new();
+        private readonly Queue<ToastRequest>                waiting   = new();
+        private readonly Dictionary<NotificationManager, Action> callbacks = new();
 
-        private Dictionary<NotificationManager, Action> callbacks = new();
+        private bool _prefabMissing;
 
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
-            Instance = this;
+            if (prefab == null)
+            {
+                _prefabMissing = true;
+                Debug.LogError(
+                    "[ToastService] 'prefab' field is not assigned!\n" +
+                    "Toasts will NOT show. Fix: assign a MUIP NotificationManager prefab in Inspector.\n" +
+                    "Use Context Menu → 'NightHunt/Auto-Assign Toast Prefab' to auto-find.");
+                return;
+            }
+
+            if (container == null)
+            {
+                Debug.LogWarning("[ToastService] 'container' RectTransform is not assigned. Toasts will be parented at root.");
+            }
 
             for (int i = 0; i < maxVisible; i++)
             {
                 var item = Instantiate(prefab, container);
                 item.gameObject.SetActive(false);
-
                 var captured = item;
-
-                item.onClose.AddListener(() =>
-                {
-                    HandleClose(captured);
-                });
-
+                item.onClose.AddListener(() => HandleClose(captured));
+                Debug.Log($"[ToastService] Attached onClose listener to {item.name}");
                 pool.Add(item);
             }
+
+            Debug.Log($"[ToastService] Initialized pool with {pool.Count} items. container={(container==null?"null":container.name)}");
         }
 
         public void Show(string title, string message, Action onConfirm = null)
         {
-            var item = GetAvailableItem();
+            if (_prefabMissing)
+            {
+                Debug.LogWarning($"[ToastService] Cannot show toast '{title}' — prefab not assigned.");
+                return;
+            }
 
+            Debug.Log($"[ToastService] Show requested: '{title}' — '{message}'");
+
+            var item = GetAvailableItem();
             if (item == null)
             {
+                Debug.Log($"[ToastService] No available item; enqueueing toast '{title}'");
                 waiting.Enqueue(new ToastRequest(title, message, onConfirm));
                 return;
             }
@@ -58,12 +85,13 @@ namespace NightHunt.UI
                 if (!item.gameObject.activeSelf)
                     return item;
             }
-
+            Debug.Log("[ToastService] GetAvailableItem: none available");
             return null;
         }
 
         private void ShowItem(NotificationManager item, string title, string message, Action callback)
         {
+            Debug.Log($"[ToastService] ShowItem -> item={item?.name ?? "null"}, title='{title}'");
             item.title = title;
             item.description = message;
 
@@ -73,13 +101,16 @@ namespace NightHunt.UI
             item.transform.SetAsFirstSibling();
 
             item.UpdateUI();
+            Debug.Log($"[ToastService] Updated UI for {item.name} and opening");
             item.Open();
         }
 
         private void HandleClose(NotificationManager item)
         {
+            Debug.Log($"[ToastService] HandleClose called for {item?.name ?? "null"}");
             if (callbacks.TryGetValue(item, out var cb))
             {
+                Debug.Log($"[ToastService] Invoking callback for {item.name}");
                 cb?.Invoke();
                 callbacks.Remove(item);
             }
@@ -89,6 +120,7 @@ namespace NightHunt.UI
             if (waiting.Count > 0)
             {
                 var next = waiting.Dequeue();
+                Debug.Log($"[ToastService] Dequeued next toast '{next.title}' — showing now");
                 ShowItem(item, next.title, next.message, next.callback);
             }
         }
