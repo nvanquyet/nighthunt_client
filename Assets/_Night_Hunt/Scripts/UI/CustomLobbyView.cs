@@ -65,7 +65,7 @@ namespace NightHunt.UI
         [System.Serializable]
         public class NavigationButtonEntry
         {
-            public Button    button;
+            public Button button;
             [Tooltip("Fired sau khi room đã rời/giải tán (hoặc ngay lập tức nếu chưa ở trong room).\nWire trong Inspector: ví dụ UINavigator.GoHome().")]
             public UnityEvent onConfirmed;
         }
@@ -76,13 +76,13 @@ namespace NightHunt.UI
 
         // ── Join / Create Panel ───────────────────────────────────────────────
         [Header("Join / Create Panel")]
-        [SerializeField] private GameObject     joinCreatePanel;
-        [SerializeField] private Button         btnCreateRoom;
-        [SerializeField] private Button         btnQuickJoin;
-        [SerializeField] private GameObject     codeInputContainer;   // hidden until btn click
+        [SerializeField] private GameObject joinCreatePanel;
+        [SerializeField] private Button btnCreateRoom;
+        [SerializeField] private Button btnQuickJoin;
+        [SerializeField] private GameObject codeInputContainer;   // hidden until btn click
         [SerializeField] private TMP_InputField joinCodeInput;
         [Tooltip("Two-state action button:\n  1st click → reveals joinCodeInput container, label changes to 'Tham gia'.\n  2nd click → submits the code (calls JoinByCode).")]
-        [SerializeField] private Button         btn_CodeAction;
+        [SerializeField] private Button btn_CodeAction;
         [Tooltip("Label on btn_CodeAction. Default: 'Nhập code'. After revealing input: 'Tham gia'.")]
         [SerializeField] private TextMeshProUGUI codeActionLabel;
 
@@ -96,59 +96,42 @@ namespace NightHunt.UI
 
         // ── In-Room Panel ──────────────────────────────────────────────────────
         [Header("In-Room Panel")]
-        [SerializeField] private GameObject     inRoomPanel;
+        [SerializeField] private GameObject inRoomPanel;
 
         // ── Settings (left side — visible to all, editable by host only) ─────
         [Header("Settings Panel")]
         [SerializeField] private TextMeshProUGUI roomCodeText;
-        [SerializeField] private Button          btnCopyCode;
-        [SerializeField] private CustomDropdown  modeDropdown;
-        [SerializeField] private CustomDropdown  mapDropdown;
+        [SerializeField] private Button btnCopyCode;
+        [SerializeField] private CustomDropdown modeDropdown;
+        [SerializeField] private CustomDropdown mapDropdown;
 
-        // ── Password (SwitchManager) ──────────────────────────────────────────
-        [Tooltip("SwitchManager cho bật/tắt mật khẩu phòng.")]
-        [SerializeField] private Michsky.UI.Shift.SwitchManager   passwordSwitch;
-        [SerializeField] private GameObject      passwordInputContainer;
-        [SerializeField] private TMP_InputField  passwordInput;
-
-        // ── Public / Private (SwitchManager) ─────────────────────────────────
-        [Tooltip("SwitchManager cho public/private phòng.")]
-        [SerializeField] private Michsky.UI.Shift.SwitchManager   publicSwitch;
-
-        [SerializeField] private Button          btnSave;
+        [SerializeField] private Button btnSave;
 
         // ── Team Slots (right side) ───────────────────────────────────────────
         [Header("Team Slots")]
-        [SerializeField] private Transform  team1Container;
-        [SerializeField] private Transform  team2Container;
+        [SerializeField] private Transform team1Container;
+        [SerializeField] private Transform team2Container;
         [SerializeField] private GameObject playerSlotPrefab;
-
-        // ── Auto-Fill Toggle (SwitchManager — shown for 2v2+ modes only) ────────
-        [Header("Auto-Fill")]
-        [Tooltip("Container GameObject shown/hidden based on whether current mode supports auto-fill.\nHide for 1v1; show for 2v2+.")]
-        [SerializeField] private GameObject     autoFillContainer;
-        [Tooltip("SwitchManager for the auto-fill toggle. On = server may fill empty slots.\n'Invoke At Start' must be OFF in Inspector.")]
-        [SerializeField] private Michsky.UI.Shift.SwitchManager autoFillSwitch;
 
         // ── Action Buttons ────────────────────────────────────────────────────
         [Header("Actions")]
-        [SerializeField] private Button          btnReady;
+        [SerializeField] private Button btnReady;
         [SerializeField] private TextMeshProUGUI readyButtonText;
-        [SerializeField] private Button          btnStart;
+        [SerializeField] private Button btnStart;
         [SerializeField] private TextMeshProUGUI startButtonText;
-        [SerializeField] private Button          btnLeaveOrDisband;
+        [SerializeField] private Button btnLeaveOrDisband;
         [SerializeField] private TextMeshProUGUI leaveOrDisbandText;
 
         // ── Slot Context Menu ──────────────────────────────────────────────────
         [Header("Slot Context Menu")]
         [Tooltip("Root GameObject of the shared context menu panel. Shown/hidden by code.")]
-        [SerializeField] private GameObject      slotContextMenu;
-        [SerializeField] private Button          btn_CM_ViewProfile;
+        [SerializeField] private GameObject slotContextMenu;
+        [SerializeField] private Button btn_CM_ViewProfile;
         [Tooltip("Non-host: always shown on others' slots. Initiates slot-swap countdown.")]
-        [SerializeField] private Button          btn_CM_RequestSwap;
-        [SerializeField] private Button          btn_CM_Kick;
-        [SerializeField] private Button          btn_CM_TransferOwner;
-        [SerializeField] private Button          btn_CM_Close;
+        [SerializeField] private Button btn_CM_RequestSwap;
+        [SerializeField] private Button btn_CM_Kick;
+        [SerializeField] private Button btn_CM_TransferOwner;
+        [SerializeField] private Button btn_CM_Close;
 
         // ── Status ────────────────────────────────────────────────────────────
         [Header("Status")]
@@ -158,9 +141,9 @@ namespace NightHunt.UI
         // SERVICES
         // ══════════════════════════════════════════════════════════════════════
 
-        private RoomService  _roomService;
+        private RoomService _roomService;
         private PartyService _partyService;
-        private RoomState    _roomState;
+        private RoomState _roomState;
         private SessionState _sessionState;
 
         // ══════════════════════════════════════════════════════════════════════
@@ -168,29 +151,27 @@ namespace NightHunt.UI
         // ══════════════════════════════════════════════════════════════════════
 
         private readonly Dictionary<string, PlayerSlotView> _slotViews = new();
-        private int   _maxSlotsPerTeam = 2;
-        private string _lastStatus     = null;
-        private bool   _refreshPending = false;
-        private float  _lastRefreshTime = 0f;
+        private int _maxSlotsPerTeam = 2;
+        private string _lastStatus = null;
+        private bool _refreshPending = false;
+        private float _lastRefreshTime = 0f;
         private const float REFRESH_THROTTLE = 0.1f;
 
         // Mode selector
-        private string[] _modeModeKeys     = Array.Empty<string>();
-        private bool[]   _modeAllowFills   = Array.Empty<bool>();
+        private string[] _modeModeKeys = Array.Empty<string>();
         private string[] _modeDisplayNames = Array.Empty<string>();
         private int _currentModeIdx = 0;
-        private string[] _mapIds           = Array.Empty<string>();
-        private string[] _mapDisplayNames  = Array.Empty<string>();
+        private string[] _mapIds = Array.Empty<string>();
+        private string[] _mapDisplayNames = Array.Empty<string>();
         private int _currentMapIdx = 0;
 
         // Staged settings
-        private string _pendingMode      = "2v2";
-        private bool   _pendingAllowFill = true;
-        private string _pendingMapId     = "map_01";
-        private bool   _pendingIsPublic = true;
-        private bool   _pendingIsLocked = false;
-        private bool   _pendingPasswordChanged = false;
-        private bool   _settingsDirty   = false;
+        private string _pendingMode = "2v2";
+        private string _pendingMapId = "map_01";
+        private bool _pendingIsPublic = true;
+        private bool _pendingIsLocked = false;
+        private bool _pendingPasswordChanged = false;
+        private bool _settingsDirty = false;
 
         // Swap request tracking (requester side)
         private long _pendingSwapRequestId = 0L;
@@ -205,7 +186,7 @@ namespace NightHunt.UI
         private bool _codeInputVisible = false;
 
         // Shared slot context menu
-        private PlayerSlotView _contextMenuTargetSV  = null;
+        private PlayerSlotView _contextMenuTargetSV = null;
         private bool _closeContextMenuNextFrame = false;
         private float _menuShownTime = -1f;
 
@@ -217,14 +198,14 @@ namespace NightHunt.UI
         {
             if (GameManager.Instance != null)
             {
-                _roomService  = GameManager.Instance.RoomService;
+                _roomService = GameManager.Instance.RoomService;
                 _partyService = GameManager.Instance.PartyService;
                 _sessionState = GameManager.Instance.SessionState;
             }
             _roomState = RoomState.Instance;
 
             if (btnCreateRoom != null) btnCreateRoom.onClick.AddListener(OnCreateRoomClicked);
-            if (btnQuickJoin  != null) btnQuickJoin.onClick.AddListener(OnQuickJoinClicked);
+            if (btnQuickJoin != null) btnQuickJoin.onClick.AddListener(OnQuickJoinClicked);
             if (btn_CodeAction != null) btn_CodeAction.onClick.AddListener(OnEnterCodeClicked);
 
             if (navigationButtons != null)
@@ -251,38 +232,19 @@ namespace NightHunt.UI
                 mapDropdown.onValueChanged.AddListener(OnMapDropdownChanged);
             }
 
-            // SwitchManager listeners — NOTE: "Invoke At Start" must be OFF in Inspector.
-            if (passwordSwitch != null)
-            {
-                passwordSwitch.OnEvents.AddListener(OnPasswordSwitchOn);
-                passwordSwitch.OffEvents.AddListener(OnPasswordSwitchOff);
-            }
-            if (passwordInput != null)
-                passwordInput.onValueChanged.AddListener(OnPasswordInputChanged);
-            if (publicSwitch != null)
-            {
-                publicSwitch.OnEvents.AddListener(OnPublicSwitchOn);
-                publicSwitch.OffEvents.AddListener(OnPublicSwitchOff);
-            }
+            // Password/public switch UI removed — no listeners to register.
 
             if (btnSave != null) btnSave.onClick.AddListener(OnSaveClicked);
 
-            // Auto-fill SwitchManager
-            if (autoFillSwitch != null)
-            {
-                autoFillSwitch.OnEvents.AddListener(OnAutoFillSwitchOn);
-                autoFillSwitch.OffEvents.AddListener(OnAutoFillSwitchOff);
-            }
-
-            if (btnReady          != null) btnReady.onClick.AddListener(OnReadyClicked);
-            if (btnStart          != null) btnStart.onClick.AddListener(OnStartClicked);
+            if (btnReady != null) btnReady.onClick.AddListener(OnReadyClicked);
+            if (btnStart != null) btnStart.onClick.AddListener(OnStartClicked);
             if (btnLeaveOrDisband != null) btnLeaveOrDisband.onClick.AddListener(OnLeaveOrDisbandClicked);
 
-            if (btn_CM_ViewProfile   != null) btn_CM_ViewProfile.onClick.AddListener(OnCM_ViewProfile);
-            if (btn_CM_RequestSwap   != null) btn_CM_RequestSwap.onClick.AddListener(OnCM_RequestSwap);
-            if (btn_CM_Kick          != null) btn_CM_Kick.onClick.AddListener(OnCM_Kick);
+            if (btn_CM_ViewProfile != null) btn_CM_ViewProfile.onClick.AddListener(OnCM_ViewProfile);
+            if (btn_CM_RequestSwap != null) btn_CM_RequestSwap.onClick.AddListener(OnCM_RequestSwap);
+            if (btn_CM_Kick != null) btn_CM_Kick.onClick.AddListener(OnCM_Kick);
             if (btn_CM_TransferOwner != null) btn_CM_TransferOwner.onClick.AddListener(OnCM_TransferOwner);
-            if (btn_CM_Close        != null) btn_CM_Close.onClick.AddListener(HideSlotContextMenu);
+            if (btn_CM_Close != null) btn_CM_Close.onClick.AddListener(HideSlotContextMenu);
             slotContextMenu?.SetActive(false);
 
             codeInputContainer?.SetActive(false);
@@ -291,7 +253,7 @@ namespace NightHunt.UI
         private void Start()
         {
             _hasAutoLeft = false;
-            bool inRoom  = _roomState != null && _roomState.IsInRoom;
+            bool inRoom = _roomState != null && _roomState.IsInRoom;
             ShowState(inRoom ? UIState.InRoom : UIState.JoinCreate);
             if (inRoom) RefreshRoomDisplay();
         }
@@ -310,7 +272,7 @@ namespace NightHunt.UI
                 _closeContextMenuNextFrame = true;
         }
 
-        private void OnEnable()  { /* CanvasGroup navigation does NOT call OnEnable. OnShow() handles init. */ }
+        private void OnEnable() { /* CanvasGroup navigation does NOT call OnEnable. OnShow() handles init. */ }
         private void OnDisable() { /* CanvasGroup navigation does NOT call OnDisable. OnHide() handles cleanup. */ }
 
         // ─────────────────────────────────────────────
@@ -319,10 +281,10 @@ namespace NightHunt.UI
 
         public void OnShow()
         {
-            _hasAutoLeft    = false;
-            _lastStatus     = null;
+            _hasAutoLeft = false;
+            _lastStatus = null;
             _refreshPending = false;
-            _settingsDirty  = false;
+            _settingsDirty = false;
             SubscribeEvents();
 
             BuildModeList();
@@ -354,32 +316,32 @@ namespace NightHunt.UI
 
             if (state == UIState.JoinCreate)
             {
-                // Hide all in-room action buttons so they don't bleed into the join/create view.
                 btnStart?.gameObject.SetActive(false);
                 btnReady?.gameObject.SetActive(false);
                 btnLeaveOrDisband?.gameObject.SetActive(false);
-                autoFillContainer?.SetActive(false);
                 ResetCodeInput();
                 SetStatus("");
             }
-            else // UIState.InRoom
+            else // InRoom
             {
-                // Show leave/disband button immediately; Start and Ready are controlled by RefreshRoomDisplayImmediate.
+                // ── FIX: Ẩn tường minh create/join buttons phòng trường hợp
+                // chúng nằm ngoài joinCreatePanel hierarchy
+                btnCreateRoom?.gameObject.SetActive(false);
+                btnQuickJoin?.gameObject.SetActive(false);
+                btn_CodeAction?.gameObject.SetActive(false);
+                codeInputContainer?.SetActive(false);
+
                 btnLeaveOrDisband?.gameObject.SetActive(true);
-
-                // Lock settings until host/non-host role is confirmed by RefreshRoomDisplay.
-                if (modeDropdown != null) modeDropdown.Interactable(false);
-                if (mapDropdown  != null) mapDropdown.Interactable(false);
-                SetSwitchInteractable(passwordSwitch, false);
-                SetSwitchInteractable(publicSwitch,   false);
-                SetSwitchInteractable(autoFillSwitch, false);
-                if (btnSave != null) btnSave.interactable = false;
-
-                // Hide Start/Ready initially — RefreshRoomDisplayImmediate sets the correct one.
                 btnStart?.gameObject.SetActive(false);
                 btnReady?.gameObject.SetActive(false);
+
+                if (modeDropdown != null) modeDropdown.Interactable(false);
+                if (mapDropdown != null) mapDropdown.Interactable(false);
+                if (btnSave != null) btnSave.interactable = false;
             }
         }
+
+        // Switch helpers removed — no SwitchManager UI in this view.
 
         // ══════════════════════════════════════════════════════════════════════
         // JOIN / CREATE ACTIONS
@@ -388,10 +350,10 @@ namespace NightHunt.UI
         private void OnCreateRoomClicked() =>
             _ = CheckPartyThenRun(async () =>
             {
-                NLog($"CreateRoom mode={_pendingMode} allowFill={_pendingAllowFill}");
+                NLog($"CreateRoom mode={_pendingMode}");
                 SetStatus("Creating room...");
                 var result = await _roomService.CreateRoom(
-                    _pendingMode, allowFill: _pendingAllowFill, isPublic: true, isLocked: false, password: null);
+                    _pendingMode, allowFill: false, isPublic: true, isLocked: false, password: null);
                 NLog($"CreateRoom result: success={result.Success} msg={result.Message}");
 
                 if (result.Success && result.Data != null)
@@ -413,9 +375,9 @@ namespace NightHunt.UI
         private void OnQuickJoinClicked() =>
             _ = CheckPartyThenRun(async () =>
             {
-                NLog($"QuickPlay mode={_pendingMode} allowFill={_pendingAllowFill}");
+                NLog($"QuickPlay mode={_pendingMode}");
                 SetStatus("Finding room...");
-                var result = await _roomService.QuickPlay(_pendingMode, _pendingAllowFill);
+                var result = await _roomService.QuickPlay(_pendingMode, false);
                 NLog($"QuickPlay result: success={result.Success} msg={result.Message}");
 
                 if (result.Success && result.Data != null)
@@ -473,14 +435,14 @@ namespace NightHunt.UI
 
             bool needPass = result.Message != null && (
                 result.Message.IndexOf("password", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                result.Message.IndexOf("locked",   StringComparison.OrdinalIgnoreCase) >= 0);
+                result.Message.IndexOf("locked", StringComparison.OrdinalIgnoreCase) >= 0);
 
             if (needPass)
             {
                 SetStatus("");
                 GameModalWindow.Instance?.ShowInput(
-                    title:       "Enter Password",
-                    desc:        $"Room <b>{code}</b> requires a password.",
+                    title: "Enter Password",
+                    desc: $"Room <b>{code}</b> requires a password.",
                     placeholder: "Password...",
                     onConfirm: async pass =>
                     {
@@ -512,7 +474,7 @@ namespace NightHunt.UI
         {
             _codeInputVisible = false;
             codeInputContainer?.SetActive(false);
-            if (joinCodeInput   != null) joinCodeInput.text = "";
+            if (joinCodeInput != null) joinCodeInput.text = "";
             if (codeActionLabel != null) codeActionLabel.text = "Enter Code";
         }
 
@@ -526,34 +488,40 @@ namespace NightHunt.UI
                 return;
             }
 
-            // ── FIX: Set _hasAutoLeft = true BEFORE showing the modal.
-            // If the panel fades out while the modal is still open (e.g. external navigation),
-            // AutoLeaveOrDisband() will correctly skip because _hasAutoLeft is already true.
-            // On cancel we restore it so the next attempt still works.
             _hasAutoLeft = true;
-
             bool isHost = IsLocalPlayerHost();
+
             GameModalWindow.Instance?.ShowConfirm(
-                title:       isHost ? "Disband Room?" : "Leave Room?",
-                desc:        isHost
+                title: isHost ? "Disband Room?" : "Leave Room?",
+                desc: isHost
                     ? "All players will be removed from the room."
                     : "Are you sure you want to leave?",
                 onConfirm: async () =>
                 {
-                    NLog($"NavigateAway confirmed \u2014 isHost={isHost}");
+                    NLog($"NavigateAway confirmed — isHost={isHost}");
+
                     if (isHost) await DisbandSilent();
-                    else        await LeaveSilent();
-                    onConfirmed?.Invoke();
+                    else await LeaveSilent();
+
+                    // ── FIX: Chuyển về JoinCreate TRƯỚC khi navigate
+                    ShowState(UIState.JoinCreate);
+
+                    // ── FIX: Show notice để user biết đã xử lý xong
+                    GameModalWindow.Instance?.ShowNotice(
+                        title: isHost ? "Room Disbanded" : "Left Room",
+                        desc: isHost ? "The room has been disbanded." : "You have left the room.",
+                        closeText: "OK",
+                        onClose: () => onConfirmed?.Invoke()   // Navigate SAU khi user đóng notice
+                    );
                 },
                 onCancel: () =>
                 {
                     _hasAutoLeft = false;
                 },
                 confirmText: isHost ? "Disband" : "Leave",
-                cancelText:  "Cancel"
+                cancelText: "Cancel"
             );
         }
-
         // ══════════════════════════════════════════════════════════════════════
         // PARTY CHECK HELPER
         // ══════════════════════════════════════════════════════════════════════
@@ -572,7 +540,7 @@ namespace NightHunt.UI
             bool inParty = partyResult.Success && partyResult.Data != null;
             if (!inParty) { await action(); return; }
 
-            bool   isHost = partyResult.Data.hostUserId == (_sessionState?.UserId ?? -1L);
+            bool isHost = partyResult.Data.hostUserId == (_sessionState?.UserId ?? -1L);
             string partyStatus = partyResult.Data.partyStatus ?? "";
 
             // Party in ranked matchmaking queue — block entirely, must cancel queue first.
@@ -586,7 +554,7 @@ namespace NightHunt.UI
             }
 
             string title = isHost ? "Disband Party?" : "Leave Party?";
-            string desc  = isHost
+            string desc = isHost
                 ? "You are the host. This will disband your current party."
                 : "You are in a party. Proceeding will remove you from it.";
 
@@ -612,9 +580,9 @@ namespace NightHunt.UI
                     SetStatus("");
                     await action();
                 },
-                onCancel:    null,
+                onCancel: null,
                 confirmText: isHost ? "Disband" : "Leave Party",
-                cancelText:  "Cancel"
+                cancelText: "Cancel"
             );
         }
 
@@ -665,7 +633,7 @@ namespace NightHunt.UI
                         ShowState(UIState.JoinCreate);
                     },
                     confirmText: "Disband",
-                    cancelText:  "Cancel"
+                    cancelText: "Cancel"
                 );
             }
             else
@@ -684,7 +652,7 @@ namespace NightHunt.UI
                         ShowState(UIState.JoinCreate);
                     },
                     confirmText: "Leave",
-                    cancelText:  "Cancel"
+                    cancelText: "Cancel"
                 );
             }
         }
@@ -714,6 +682,7 @@ namespace NightHunt.UI
             catch { }
             _roomState?.ClearRoom();
             ClearRoomUI();
+            ShowState(UIState.JoinCreate);
         }
 
         private async System.Threading.Tasks.Task LeaveSilent()
@@ -726,49 +695,45 @@ namespace NightHunt.UI
             catch { }
             _roomState?.ClearRoom();
             ClearRoomUI();
+            ShowState(UIState.JoinCreate);
         }
 
         private void ClearRoomUI()
         {
-            // Reset UI elements so no stale room data remains after leaving/disbanding
             ResetCodeInput();
             if (roomCodeText != null) roomCodeText.text = "";
 
-            // Reset pending settings to defaults (server-provided arrays may be empty)
-            _pendingMode      = _modeModeKeys.Length > 0 ? _modeModeKeys[0] : string.Empty;
-            _pendingAllowFill = _modeAllowFills.Length > 0 ? _modeAllowFills[0] : true;
-            _pendingMapId     = _mapIds.Length > 0 ? _mapIds[0] : string.Empty;
-            _pendingIsPublic  = true;
-            _pendingIsLocked  = false;
+            // ── FIX: Xóa slot views + toàn bộ children còn sót trong containers
+            foreach (var sv in _slotViews.Values)
+                if (sv != null) DestroyImmediate(sv.gameObject);
+            _slotViews.Clear();
+
+            // Xóa sạch bất kỳ child nào còn sót (edge case khi sv == null)
+            ClearContainer(team1Container);
+            ClearContainer(team2Container);
+
+            _lastStatus = null;    // ← Reset để InitPendingSettings chạy lại khi vào phòng mới
+            _settingsDirty = false;
+
+            // Reset pending settings về default...
+            _pendingMode = _modeModeKeys.Length > 0 ? _modeModeKeys[0] : string.Empty;
+            _pendingMapId = _mapIds.Length > 0 ? _mapIds[0] : string.Empty;
+            _pendingIsPublic = true;
+            _pendingIsLocked = false;
             _pendingPasswordChanged = false;
             SetSettingsDirty(false);
 
-            // Clear dropdowns and disable if empty
             if (modeDropdown != null)
-            {
-                if (_modeDisplayNames.Length > 0)
-                    PopulateDropdown(modeDropdown, new List<string>(_modeDisplayNames), 0);
-                else
-                {
-                    modeDropdown.items.Clear();
-                    modeDropdown.SetupDropdown();
-                }
-            }
+                PopulateDropdown(modeDropdown, new List<string>(_modeDisplayNames), 0);
             if (mapDropdown != null)
-            {
-                if (_mapDisplayNames.Length > 0)
-                    PopulateDropdown(mapDropdown, new List<string>(_mapDisplayNames), 0);
-                else
-                {
-                    mapDropdown.items.Clear();
-                    mapDropdown.SetupDropdown();
-                }
-            }
+                PopulateDropdown(mapDropdown, new List<string>(_mapDisplayNames), 0);
+        }
 
-            // Clear player slots
-            foreach (var sv in _slotViews.Values)
-                if (sv != null) Destroy(sv.gameObject);
-            _slotViews.Clear();
+        private static void ClearContainer(Transform container)
+        {
+            if (container == null) return;
+            for (int i = container.childCount - 1; i >= 0; i--)
+                DestroyImmediate(container.GetChild(i).gameObject);
         }
 
         // ══════════════════════════════════════════════════════════════════════
@@ -782,44 +747,6 @@ namespace NightHunt.UI
             SetStatus("Room code copied!");
         }
 
-        private void OnAutoFillSwitchOn()  => OnAutoFillSwitchChanged(true);
-        private void OnAutoFillSwitchOff() => OnAutoFillSwitchChanged(false);
-
-        private void OnAutoFillSwitchChanged(bool isOn)
-        {
-            if (!IsLocalPlayerHost())
-            {
-                SetSwitchSilent(autoFillSwitch, !isOn);
-                return;
-            }
-            _pendingAllowFill = isOn;
-            NLog($"AutoFill toggle changed: allowFill={isOn}");
-            SetSettingsDirty(true);
-        }
-
-        private void SyncAutoFillToggle(bool isHost, bool waiting)
-        {
-            // Auto-fill only relevant for modes with 2+ players per team.
-            bool modeSupportsAutoFill = ModeSupportsAutoFill(_pendingMode);
-            autoFillContainer?.SetActive(modeSupportsAutoFill);
-            if (autoFillSwitch != null)
-            {
-                SetSwitchSilent(autoFillSwitch, _pendingAllowFill);
-                SetSwitchInteractable(autoFillSwitch, modeSupportsAutoFill && isHost && waiting);
-            }
-        }
-
-        /// <summary>Returns true if the mode has 2+ players per team (auto-fill toggle is relevant).</summary>
-        private static bool ModeSupportsAutoFill(string modeKey)
-        {
-            if (string.IsNullOrEmpty(modeKey)) return true;
-            // 1v1 has only 1 player per team — fill makes no sense.
-            if (modeKey.StartsWith("1v", StringComparison.OrdinalIgnoreCase)) return false;
-            foreach (var m in GameModeConfig.GetEnabled())
-                if (m.modeKey == modeKey) return m.playersPerTeam > 1;
-            return true; // unknown mode — show toggle by default
-        }
-
         private void OnModeDropdownChanged(int idx)
         {
             if (!IsLocalPlayerHost())
@@ -827,14 +754,9 @@ namespace NightHunt.UI
                 if (modeDropdown != null) modeDropdown.SetDropdownIndex(_currentModeIdx);
                 return;
             }
-            _currentModeIdx   = idx;
-            _pendingMode      = _modeModeKeys.Length > idx ? _modeModeKeys[idx] : "2v2";
-            // Reset allowFill to the mode's default when the mode changes.
-            _pendingAllowFill = _modeAllowFills.Length > idx ? _modeAllowFills[idx] : true;
-            // Reflect default in toggle UI.
-            SetSwitchSilent(autoFillSwitch, _pendingAllowFill);
-            autoFillContainer?.SetActive(ModeSupportsAutoFill(_pendingMode));
-            NLog($"ModeChanged idx={idx} key={_pendingMode} allowFill={_pendingAllowFill}");
+            _currentModeIdx = idx;
+            _pendingMode = _modeModeKeys.Length > idx ? _modeModeKeys[idx] : "2v2";
+            NLog($"ModeChanged idx={idx} key={_pendingMode}");
             BuildMapList(_pendingMode, _pendingMapId);
             SyncMapDropdown(isInteractable: true);
             SetSettingsDirty(true);
@@ -848,45 +770,11 @@ namespace NightHunt.UI
                 return;
             }
             _currentMapIdx = Mathf.Clamp(idx, 0, Math.Max(0, _mapIds.Length - 1));
-            _pendingMapId  = _mapIds.Length > _currentMapIdx ? _mapIds[_currentMapIdx] : GetFallbackMapId(_pendingMode);
+            _pendingMapId = _mapIds.Length > _currentMapIdx ? _mapIds[_currentMapIdx] : GetFallbackMapId(_pendingMode);
             SetSettingsDirty(true);
         }
 
-        private void OnPasswordSwitchOn()  => OnPasswordSwitchChanged(true);
-        private void OnPasswordSwitchOff() => OnPasswordSwitchChanged(false);
-        private void OnPublicSwitchOn()    => OnPublicSwitchChanged(true);
-        private void OnPublicSwitchOff()   => OnPublicSwitchChanged(false);
-
-        private void OnPasswordSwitchChanged(bool isOn)
-        {
-            if (!IsLocalPlayerHost())
-            {
-                SetSwitchSilent(passwordSwitch, !isOn);
-                return;
-            }
-            passwordInputContainer?.SetActive(isOn);
-            _pendingIsLocked = isOn;
-            if (!isOn) _pendingPasswordChanged = true;
-            SetSettingsDirty(true);
-        }
-
-        private void OnPasswordInputChanged(string _)
-        {
-            if (!IsLocalPlayerHost()) return;
-            _pendingPasswordChanged = true;
-            SetSettingsDirty(true);
-        }
-
-        private void OnPublicSwitchChanged(bool isPublic)
-        {
-            if (!IsLocalPlayerHost())
-            {
-                SetSwitchSilent(publicSwitch, !isPublic);
-                return;
-            }
-            _pendingIsPublic = isPublic;
-            SetSettingsDirty(true);
-        }
+        // Password/public switch handlers removed.
 
         private void OnSaveClicked() => _ = SaveSettingsAsync();
 
@@ -898,16 +786,14 @@ namespace NightHunt.UI
 
         private void InitPendingSettings(RoomResponse room)
         {
-            int modeIdx      = FindModeIndex(room.mode, room.allowFill);
-            _currentModeIdx  = modeIdx >= 0 ? modeIdx : 0;
-            _pendingMode     = room.mode     ?? (_modeModeKeys.Length > 0 ? _modeModeKeys[0] : "2v2");
-            _pendingAllowFill = _modeAllowFills.Length > _currentModeIdx ? _modeAllowFills[_currentModeIdx] : room.allowFill;
-            _pendingMapId    = NormalizeMapId(_pendingMode, room.mapId);
+            int modeIdx = FindModeIndex(room.mode);
+            _currentModeIdx = modeIdx >= 0 ? modeIdx : 0;
+            _pendingMode = room.mode ?? (_modeModeKeys.Length > 0 ? _modeModeKeys[0] : "2v2");
+            _pendingMapId = NormalizeMapId(_pendingMode, room.mapId);
             _pendingIsPublic = room.isPublic;
             _pendingIsLocked = room.isLocked;
             _pendingPasswordChanged = false;
             BuildMapList(_pendingMode, _pendingMapId);
-            if (passwordInput != null) passwordInput.text = "";
             SetSettingsDirty(false);
         }
 
@@ -928,87 +814,45 @@ namespace NightHunt.UI
         {
             if (!IsLocalPlayerHost() || !_settingsDirty) return;
 
-            string passwordPayload = GetPasswordPayloadForSave();
-            if (_pendingIsLocked && string.IsNullOrEmpty(passwordPayload))
-            {
-                GameModalWindow.Instance?.ShowNotice(
-                    "Password Required",
-                    "Room is locked - please enter a password before saving.");
-                return;
-            }
+            string passwordPayload = null; // password input removed
 
             bool success = await ApplySetting(new UpdateRoomSettingsRequest
             {
-                mode      = _pendingMode,
-                allowFill = _pendingAllowFill,
-                mapId     = _pendingMapId,
-                isPublic  = _pendingIsPublic,
-                isLocked  = _pendingIsLocked,
-                password  = passwordPayload
+                mode = _pendingMode,
+                allowFill = false,
+                mapId = _pendingMapId,
+                isPublic = _pendingIsPublic,
+                isLocked = _pendingIsLocked,
+                password = passwordPayload
             });
 
             if (success)
                 SetSettingsDirty(false);
         }
 
-        // ── SwitchManager Helpers ─────────────────────────────────────────────
-
-        private static void SetSwitchSilent(Michsky.UI.Shift.SwitchManager sw, bool value)
-        {
-            if (sw == null) return;
-            sw.isOn = value;
-            if (sw.switchAnimator != null)
-                sw.switchAnimator.Play(value ? "Switch On" : "Switch Off");
-        }
-
-        private static void SetSwitchInteractable(Michsky.UI.Shift.SwitchManager sw, bool interactable)
-        {
-            if (sw == null) return;
-            var btn = sw.GetComponent<Button>();
-            if (btn != null) btn.interactable = interactable;
-        }
-
         // ── Mode List Helpers ─────────────────────────────────────────────────
 
         private void BuildModeList()
         {
-            var enabled  = GameModeConfig.GetEnabled();
-            var keys     = new List<string>();
-            var fills    = new List<bool>();
-            var names    = new List<string>();
+            var enabled = GameModeConfig.GetEnabled();
+            var keys = new List<string>();
+            var names = new List<string>();
             foreach (var m in enabled)
             {
                 keys.Add(m.modeKey);
-                fills.Add(m.allowFill);
                 names.Add(m.displayName);
             }
 
             if (keys.Count == 0)
-            {
-                // No modes loaded from config — do NOT fall back to hardcoded modes.
-                // Leave lists empty and log an error so the issue is visible in logs.
-                Debug.LogError("[CustomLobbyView] GameModeConfig empty — expected server-provided modes. Remove hardcoded fallbacks and ensure GameConfigService.FetchAsync() ran successfully.");
-            }
+                Debug.LogError("[CustomLobbyView] GameModeConfig empty — ensure GameConfigService.FetchAsync() ran successfully.");
 
-            _modeModeKeys     = keys.ToArray();
-            _modeAllowFills   = fills.ToArray();
+            _modeModeKeys = keys.ToArray();
             _modeDisplayNames = names.ToArray();
-            _pendingMode      = _modeModeKeys.Length > 0 ? _modeModeKeys[0] : string.Empty;
-            _pendingAllowFill = _modeAllowFills.Length > 0 ? _modeAllowFills[0] : true;
-
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"[CustomLobbyView] BuildModeList — {_modeModeKeys.Length} items in dropdown:");
-            for (int i = 0; i < _modeModeKeys.Length; i++)
-                sb.AppendLine($"  [{i}] key={_modeModeKeys[i]}  allowFill={_modeAllowFills[i]}  display=\"{_modeDisplayNames[i]}\"");
-            sb.AppendLine($"  → pending default: key={_pendingMode}  allowFill={_pendingAllowFill}");
-            Debug.Log(sb.ToString());
+            _pendingMode = _modeModeKeys.Length > 0 ? _modeModeKeys[0] : string.Empty;
         }
 
-        private int FindModeIndex(string modeKey, bool allowFill)
+        private int FindModeIndex(string modeKey)
         {
-            for (int i = 0; i < _modeModeKeys.Length; i++)
-                if (_modeModeKeys[i] == modeKey && _modeAllowFills[i] == allowFill)
-                    return i;
             return Array.IndexOf(_modeModeKeys, modeKey);
         }
 
@@ -1021,7 +865,7 @@ namespace NightHunt.UI
                 Debug.LogError($"[CustomLobbyView] No maps available for mode={modeKey}. Ensure server provides MapConfig.");
             }
 
-            _mapIds          = maps.Select(m => m.mapId).ToArray();
+            _mapIds = maps.Select(m => m.mapId).ToArray();
             _mapDisplayNames = maps.Select(m => m.displayName).ToArray();
 
             _currentMapIdx = Array.IndexOf(_mapIds, preferredMapId);
@@ -1058,19 +902,6 @@ namespace NightHunt.UI
             return maps.Length > 0 ? maps[0].mapId : string.Empty;
         }
 
-        private string GetPasswordPayloadForSave()
-        {
-            var room = _roomState?.CurrentRoom;
-            if (!_pendingIsLocked) return "";
-
-            bool roomAlreadyLocked = room?.isLocked ?? false;
-            string enteredPassword = passwordInput?.text.Trim() ?? "";
-
-            if (_pendingPasswordChanged || !roomAlreadyLocked)
-                return enteredPassword;
-
-            return null;
-        }
 
         private static int GetSlotsForMode(string modeKey)
         {
@@ -1109,10 +940,10 @@ namespace NightHunt.UI
 
             _contextMenuTargetSV = sv;
             bool isHost = IsLocalPlayerHost();
-            if (btn_CM_RequestSwap   != null) btn_CM_RequestSwap.gameObject.SetActive(!isHost);
-            if (btn_CM_Kick          != null) btn_CM_Kick.gameObject.SetActive(isHost);
+            if (btn_CM_RequestSwap != null) btn_CM_RequestSwap.gameObject.SetActive(!isHost);
+            if (btn_CM_Kick != null) btn_CM_Kick.gameObject.SetActive(isHost);
             if (btn_CM_TransferOwner != null) btn_CM_TransferOwner.gameObject.SetActive(isHost);
-            if (slotContextMenu      != null) slotContextMenu.SetActive(true);
+            if (slotContextMenu != null) slotContextMenu.SetActive(true);
             _menuShownTime = Time.unscaledTime;
         }
 
@@ -1152,13 +983,13 @@ namespace NightHunt.UI
             string targetName = target.Player.username ?? "Player";
             NLog($"SwapRequest sent to {targetName} requestId={_pendingSwapRequestId}");
             GameModalWindow.Instance?.ShowCountdown(
-                title:       "Swap Request",
-                desc:        $"Waiting for <b>{targetName}</b> to accept...",
-                seconds:     15,
-                onConfirm:   null,
-                onExpire:    () => { _ = CancelSwapSilent(_pendingSwapRequestId); _pendingSwapRequestId = 0L; },
+                title: "Swap Request",
+                desc: $"Waiting for <b>{targetName}</b> to accept...",
+                seconds: 15,
+                onConfirm: null,
+                onExpire: () => { _ = CancelSwapSilent(_pendingSwapRequestId); _pendingSwapRequestId = 0L; },
                 showConfirm: false,
-                cancelText:  "Cancel Request");
+                cancelText: "Cancel Request");
         }
 
         private void OnCM_Kick()
@@ -1197,7 +1028,7 @@ namespace NightHunt.UI
                     if (!result.Success) SetStatus($"Transfer failed: {result.Message}");
                 },
                 confirmText: "Transfer",
-                cancelText:  "Cancel"
+                cancelText: "Cancel"
             );
         }
 
@@ -1223,7 +1054,7 @@ namespace NightHunt.UI
                 }
                 return;
             }
-            _refreshPending  = false;
+            _refreshPending = false;
             _lastRefreshTime = now;
             RefreshRoomDisplayImmediate();
         }
@@ -1231,7 +1062,7 @@ namespace NightHunt.UI
         private IEnumerator DelayedRefresh()
         {
             yield return new WaitForSeconds(REFRESH_THROTTLE);
-            _refreshPending  = false;
+            _refreshPending = false;
             _lastRefreshTime = Time.time;
             RefreshRoomDisplayImmediate();
         }
@@ -1239,7 +1070,7 @@ namespace NightHunt.UI
         private void RefreshRoomDisplayImmediate()
         {
             if (_roomState == null || !_roomState.IsInRoom) return;
-            var room    = _roomState.CurrentRoom;
+            var room = _roomState.CurrentRoom;
             bool isHost = IsLocalPlayerHost();
             bool waiting = room.status == Constants.ROOM_STATUS_WAITING;
             bool usePendingSettings = isHost && waiting && _settingsDirty;
@@ -1250,12 +1081,12 @@ namespace NightHunt.UI
             // ── Init pending settings once per new room ────────────────────────
             if (_lastStatus == null) InitPendingSettings(room);
 
-            string activeMode    = usePendingSettings ? _pendingMode    : room.mode;
-            string activeMapId   = usePendingSettings ? _pendingMapId   : NormalizeMapId(room.mode, room.mapId);
-            bool activeIsPublic  = usePendingSettings ? _pendingIsPublic : room.isPublic;
-            bool activeIsLocked  = usePendingSettings ? _pendingIsLocked : room.isLocked;
+            string activeMode = usePendingSettings ? _pendingMode : room.mode;
+            string activeMapId = usePendingSettings ? _pendingMapId : NormalizeMapId(room.mode, room.mapId);
+            bool activeIsPublic = usePendingSettings ? _pendingIsPublic : room.isPublic;
+            bool activeIsLocked = usePendingSettings ? _pendingIsLocked : room.isLocked;
 
-            int modeIdx = FindModeIndex(activeMode, usePendingSettings ? _pendingAllowFill : room.allowFill);
+            int modeIdx = FindModeIndex(activeMode);
             if (modeIdx >= 0) _currentModeIdx = modeIdx;
             BuildMapList(activeMode, activeMapId);
 
@@ -1266,14 +1097,7 @@ namespace NightHunt.UI
             }
             SyncMapDropdown(isHost && waiting);
 
-            // ── Password SwitchManager ─────────────────────────────────────────
-            SetSwitchSilent(passwordSwitch, activeIsLocked);
-            SetSwitchInteractable(passwordSwitch, isHost && waiting);
-            passwordInputContainer?.SetActive(activeIsLocked && isHost && waiting);
-
-            // ── Public SwitchManager ───────────────────────────────────────────
-            SetSwitchSilent(publicSwitch, activeIsPublic);
-            SetSwitchInteractable(publicSwitch, isHost && waiting);
+            // Password/public switches removed — no UI to update.
 
             // ── Save button ────────────────────────────────────────────────────
             if (btnSave != null) btnSave.interactable = isHost && waiting && _settingsDirty;
@@ -1282,7 +1106,7 @@ namespace NightHunt.UI
             _maxSlotsPerTeam = GetSlotsForMode(room.mode);
 
             // ── Start button (host) ────────────────────────────────────────────
-            bool full     = (room.players?.Count ?? 0) >= _maxSlotsPerTeam * 2;
+            bool full = (room.players?.Count ?? 0) >= _maxSlotsPerTeam * 2;
             bool allReady = full && (room.players?.All(p => p.isReady) ?? false);
 
             if (btnStart != null)
@@ -1325,8 +1149,8 @@ namespace NightHunt.UI
                 for (int slotIdx = 0; slotIdx < _maxSlotsPerTeam; slotIdx++)
                 {
                     var player = players?.FirstOrDefault(p => p.team == team && p.slot == slotIdx);
-                    var go     = Instantiate(playerSlotPrefab, container);
-                    var sv     = ComponentResolver.Find<PlayerSlotView>(go)
+                    var go = Instantiate(playerSlotPrefab, container);
+                    var sv = ComponentResolver.Find<PlayerSlotView>(go)
                                     .OnSelf().InChildren().Resolve();
 
                     if (sv == null) continue;
@@ -1346,39 +1170,39 @@ namespace NightHunt.UI
         private void SubscribeEvents()
         {
             if (GameEventBus.Instance == null) return;
-            GameEventBus.Instance.OnRoomUpdated       += HandleRoomUpdated;
-            GameEventBus.Instance.OnPlayerJoined      += HandlePlayerJoined;
-            GameEventBus.Instance.OnPlayerLeft        += HandlePlayerLeft;
-            GameEventBus.Instance.OnPlayerReady       += HandlePlayerReady;
-            GameEventBus.Instance.OnTeamChanged       += HandleTeamChanged;
+            GameEventBus.Instance.OnRoomUpdated += HandleRoomUpdated;
+            GameEventBus.Instance.OnPlayerJoined += HandlePlayerJoined;
+            GameEventBus.Instance.OnPlayerLeft += HandlePlayerLeft;
+            GameEventBus.Instance.OnPlayerReady += HandlePlayerReady;
+            GameEventBus.Instance.OnTeamChanged += HandleTeamChanged;
             GameEventBus.Instance.OnRoomStatusChanged += HandleRoomStatusChanged;
-            GameEventBus.Instance.OnRoomDisbanded      += HandleRoomDisbanded;
-            GameEventBus.Instance.OnYouWereKicked      += HandleYouWereKicked;
-            GameEventBus.Instance.OnSwapRequest       += HandleSwapRequest;
+            GameEventBus.Instance.OnRoomDisbanded += HandleRoomDisbanded;
+            GameEventBus.Instance.OnYouWereKicked += HandleYouWereKicked;
+            GameEventBus.Instance.OnSwapRequest += HandleSwapRequest;
             GameEventBus.Instance.OnSwapRequestStatus += HandleSwapRequestStatus;
-            GameEventBus.Instance.OnForceLogout       += HandleForceLogout;
-            GameEventBus.Instance.OnSessionExpired    += HandleSessionExpired;
-            GameEventBus.Instance.OnAppFocusGained    += HandleAppFocusGained;
-            GameEventBus.Instance.OnAppResumed        += HandleAppResumed;
+            GameEventBus.Instance.OnForceLogout += HandleForceLogout;
+            GameEventBus.Instance.OnSessionExpired += HandleSessionExpired;
+            GameEventBus.Instance.OnAppFocusGained += HandleAppFocusGained;
+            GameEventBus.Instance.OnAppResumed += HandleAppResumed;
         }
 
         private void UnsubscribeEvents()
         {
             if (GameEventBus.Instance == null) return;
-            GameEventBus.Instance.OnRoomUpdated       -= HandleRoomUpdated;
-            GameEventBus.Instance.OnPlayerJoined      -= HandlePlayerJoined;
-            GameEventBus.Instance.OnPlayerLeft        -= HandlePlayerLeft;
-            GameEventBus.Instance.OnPlayerReady       -= HandlePlayerReady;
-            GameEventBus.Instance.OnTeamChanged       -= HandleTeamChanged;
+            GameEventBus.Instance.OnRoomUpdated -= HandleRoomUpdated;
+            GameEventBus.Instance.OnPlayerJoined -= HandlePlayerJoined;
+            GameEventBus.Instance.OnPlayerLeft -= HandlePlayerLeft;
+            GameEventBus.Instance.OnPlayerReady -= HandlePlayerReady;
+            GameEventBus.Instance.OnTeamChanged -= HandleTeamChanged;
             GameEventBus.Instance.OnRoomStatusChanged -= HandleRoomStatusChanged;
-            GameEventBus.Instance.OnRoomDisbanded      -= HandleRoomDisbanded;
-            GameEventBus.Instance.OnYouWereKicked      -= HandleYouWereKicked;
-            GameEventBus.Instance.OnSwapRequest       -= HandleSwapRequest;
+            GameEventBus.Instance.OnRoomDisbanded -= HandleRoomDisbanded;
+            GameEventBus.Instance.OnYouWereKicked -= HandleYouWereKicked;
+            GameEventBus.Instance.OnSwapRequest -= HandleSwapRequest;
             GameEventBus.Instance.OnSwapRequestStatus -= HandleSwapRequestStatus;
-            GameEventBus.Instance.OnForceLogout       -= HandleForceLogout;
-            GameEventBus.Instance.OnSessionExpired    -= HandleSessionExpired;
-            GameEventBus.Instance.OnAppFocusGained   -= HandleAppFocusGained;
-            GameEventBus.Instance.OnAppResumed        -= HandleAppResumed;
+            GameEventBus.Instance.OnForceLogout -= HandleForceLogout;
+            GameEventBus.Instance.OnSessionExpired -= HandleSessionExpired;
+            GameEventBus.Instance.OnAppFocusGained -= HandleAppFocusGained;
+            GameEventBus.Instance.OnAppResumed -= HandleAppResumed;
         }
 
         // ══════════════════════════════════════════════════════════════════════
@@ -1411,6 +1235,14 @@ namespace NightHunt.UI
 
         private void HandleTeamChanged(GameWebSocketService.TeamChangedEvent evt)
         {
+            // ── LOG CHI TIẾT ──
+            NLog($"[TEAM_CHANGED] hasRoom={evt.room != null} " +
+                 $"roomPlayerCount={evt.room?.players?.Count ?? -1}");
+            if (evt.room?.players != null)
+                foreach (var p in evt.room.players)
+                    NLog($"  player={p.username} team={p.team} slot={p.slot}");
+            // ── END LOG ──
+
             if (evt.room != null) _roomState?.SetRoom(evt.room);
             RefreshRoomDisplay();
         }
@@ -1421,7 +1253,7 @@ namespace NightHunt.UI
             if (evt.room != null) _roomState?.SetRoom(evt.room);
 
             if (evt.newStatus == Constants.ROOM_STATUS_IN_GAME
-                && _lastStatus  != Constants.ROOM_STATUS_IN_GAME)
+                && _lastStatus != Constants.ROOM_STATUS_IN_GAME)
             {
                 _hasAutoLeft = true;
                 MatchLoadingOverlay.Instance?.Show();
@@ -1430,10 +1262,10 @@ namespace NightHunt.UI
                      && _lastStatus != Constants.ROOM_STATUS_CLOSED)
             {
                 _hasAutoLeft = true;
-                    _roomState?.ClearRoom();
-                    ClearRoomUI();
-                    ShowState(UIState.JoinCreate);
-                    GameModalWindow.Instance?.ShowNotice("Room Closed", "The host has disbanded the room.");
+                _roomState?.ClearRoom();
+                ClearRoomUI();
+                ShowState(UIState.JoinCreate);
+                GameModalWindow.Instance?.ShowNotice("Room Closed", "The host has disbanded the room.");
             }
 
             _lastStatus = evt.newStatus;
@@ -1476,41 +1308,47 @@ namespace NightHunt.UI
             long myId = _sessionState?.UserId ?? 0L;
             if (evt.targetUserId != myId) return;
 
-            long   requestId     = evt.requestId;
+            long requestId = evt.requestId;
             string requesterName = evt.fromUsername ?? "Player";
             NLog($"SwapRequest received from {requesterName} requestId={requestId}");
 
             GameModalWindow.Instance?.ShowCountdown(
-                title:       "Swap Request",
-                desc:        $"<b>{requesterName}</b> wants to swap seats with you.",
-                seconds:     15,
-                onConfirm:   () => _ = AcceptSwapSilent(requestId),
-                onExpire:    () => _ = RejectSwapSilent(requestId),
+                title: "Swap Request",
+                desc: $"<b>{requesterName}</b> wants to swap seats with you.",
+                seconds: 15,
+                onConfirm: () => _ = AcceptSwapSilent(requestId),
+                onExpire: () => _ = RejectSwapSilent(requestId),
                 showConfirm: true,
                 confirmText: "Accept",
-                cancelText:  "Decline"
+                cancelText: "Decline"
             );
         }
 
         private void HandleSwapRequestStatus(GameWebSocketService.SwapRequestStatusEvent evt)
         {
-            NLog($"SwapRequestStatus requestId={evt.requestId} status={evt.status} pending={_pendingSwapRequestId}");
+            // ── LOG CHI TIẾT ──
+            NLog($"[SWAP_STATUS] requestId={evt.requestId} status={evt.status} " +
+                 $"hasRoom={evt.room != null} " +
+                 $"roomPlayerCount={evt.room?.players?.Count ?? -1}");
+            if (evt.room?.players != null)
+                foreach (var p in evt.room.players)
+                    NLog($"  player={p.username} team={p.team} slot={p.slot} ready={p.isReady}");
+            // ── END LOG ──
+
             bool isOurRequest = (evt.requestId == _pendingSwapRequestId || evt.requestId == 0L)
                                 && _pendingSwapRequestId != 0L;
-
             if (isOurRequest)
             {
                 _pendingSwapRequestId = 0L;
                 GameModalWindow.Instance?.Close();
-
                 if (evt.status == "REJECTED" || evt.status == "CANCELLED")
-                    GameModalWindow.Instance?.ShowNotice(
-                        "Swap Declined", "The player declined your swap request.");
+                    GameModalWindow.Instance?.ShowNotice("Swap Declined", "The player declined your swap request.");
             }
 
             if (evt.room != null) _roomState?.SetRoom(evt.room);
             RefreshRoomDisplay();
         }
+
 
         private void HandleForceLogout()
         {
@@ -1521,7 +1359,7 @@ namespace NightHunt.UI
                 "Signed Out",
                 "Your account was signed in from another location.",
                 closeText: "OK",
-                onClose:   LoginView.Logout
+                onClose: LoginView.Logout
             );
         }
 
@@ -1534,12 +1372,12 @@ namespace NightHunt.UI
                 "Session Expired",
                 "Your session has expired. Please log in again.",
                 closeText: "OK",
-                onClose:   LoginView.Logout
+                onClose: LoginView.Logout
             );
         }
 
         private void HandleAppFocusGained() => RefreshRoomDisplay();
-        private void HandleAppResumed()     => RefreshRoomDisplay();
+        private void HandleAppResumed() => RefreshRoomDisplay();
 
         // ══════════════════════════════════════════════════════════════════════
         // HELPERS
