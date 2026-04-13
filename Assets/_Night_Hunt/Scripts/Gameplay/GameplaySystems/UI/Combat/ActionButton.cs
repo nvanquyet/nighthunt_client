@@ -1,3 +1,4 @@
+#if !UNITY_SERVER
 using System;
 using System.Collections;
 using UnityEngine;
@@ -190,3 +191,4 @@ namespace NightHunt.GameplaySystems.UI.Combat
         }
     }
 }
+#endif // !UNITY_SERVER

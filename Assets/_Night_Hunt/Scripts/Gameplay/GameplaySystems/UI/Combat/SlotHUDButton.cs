@@ -1,3 +1,4 @@
+#if !UNITY_SERVER
 using UnityEngine;
 using UnityEngine.EventSystems;
 using NightHunt.Gameplay.Input.Handlers.Combat;
@@ -81,3 +82,4 @@ namespace NightHunt.GameplaySystems.UI.Combat
         }
     }
 }
+#endif // !UNITY_SERVER

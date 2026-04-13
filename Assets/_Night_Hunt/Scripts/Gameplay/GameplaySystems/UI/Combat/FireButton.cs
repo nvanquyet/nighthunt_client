@@ -1,3 +1,4 @@
+#if !UNITY_SERVER
 using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -269,4 +270,4 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _combatInputHandler?.BindAttackIndicators(_rangeIndicator, this);
         }
     }
-}
+}#endif // !UNITY_SERVER
