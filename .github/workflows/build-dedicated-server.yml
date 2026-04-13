@@ -38,6 +38,19 @@ jobs:
       version: ${{ steps.gen-version.outputs.version }}
 
     steps:
+      # ── Free disk space trước khi pull Unity Docker image (~25-30 GB) ────────
+      # GitHub runner Ubuntu chỉ có ~14 GB free → cần dọn pre-installed bloat
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache:           false   # Giữ lại tool cache (git, node, ...)
+          android:              true    # ~9 GB
+          dotnet:               true    # ~2 GB
+          haskell:              true    # ~1 GB
+          large-packages:       true    # ~4 GB (gcc, clang, ...)
+          docker-images:        true    # xoá image cũ
+          swap-storage:         true    # Tắt swap (dùng disk cho layer)
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
