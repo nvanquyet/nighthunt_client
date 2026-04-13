@@ -270,4 +270,5 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _combatInputHandler?.BindAttackIndicators(_rangeIndicator, this);
         }
     }
-}#endif // !UNITY_SERVER
+}
+#endif // !UNITY_SERVER
