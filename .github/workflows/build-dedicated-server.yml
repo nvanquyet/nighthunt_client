@@ -1,17 +1,21 @@
 name: "Build & Deploy Dedicated Server"
 
 # ── Trigger ───────────────────────────────────────────────────────────────────
+# Build KHÔNG tự động theo push thông thường.
+# Để trigger build DS, dùng một trong hai cách:
+#
+#   1. Commit message chứa [build-ds]:
+#        git commit -m "fix: fix server logic [build-ds]"
+#        git push origin main
+#
+#   2. Thủ công qua GitHub UI / gh CLI:
+#        gh workflow run build-dedicated-server.yml --ref main
+#
 on:
   push:
     branches: [ main ]
-    paths:
-      - "Assets/**"
-      - "Packages/**"
-      - "ProjectSettings/**"
-      - "Build/Server/**"
-      - ".github/workflows/build-dedicated-server.yml"
 
-  # Build thủ công
+  # Build thủ công qua GitHub UI hoặc gh CLI
   workflow_dispatch:
     inputs:
       force_rebuild:
@@ -34,6 +38,12 @@ jobs:
   build-unity:
     name: "Unity Linux Server Build"
     runs-on: ubuntu-latest
+    # Chỉ build khi:
+    #   - Trigger thủ công (workflow_dispatch), HOẶC
+    #   - Push với commit message chứa [build-ds]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[build-ds]')
     outputs:
       version: ${{ steps.gen-version.outputs.version }}
 
@@ -112,6 +122,7 @@ jobs:
     name: "Docker Build & Push"
     runs-on: ubuntu-latest
     needs: build-unity
+    if: needs.build-unity.result == 'success'
     permissions:
       contents: read
       packages: write   # Cần để push lên GHCR
@@ -179,7 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ build-unity, build-docker ]
     environment: NightHunt   # Cần để đọc VPS_BACKEND_URL từ environment variable
-    if: ${{ vars.VPS_BACKEND_URL != '' }}
+    if: needs.build-docker.result == 'success' && vars.VPS_BACKEND_URL != ''
 
     steps:
       - name: Notify backend - new image available
