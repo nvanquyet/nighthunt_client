@@ -1,6 +1,8 @@
 using System.Collections;
+using System.Collections.Generic;
 using NightHunt.Config;
 using NightHunt.Core;
+using NightHunt.Data.DTOs;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.State;
 using TMPro;
@@ -10,19 +12,21 @@ using UnityEngine.UI;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// MatchLoadingOverlay — Full-screen overlay hiển thị trong khi kết nối server
-    /// và spawn players, trước khi load gameplay scene thật sự.
+    /// MatchLoadingOverlay — Full-screen overlay hiển thị trong khi kết nối server và spawn players.
     ///
-    /// Vòng đời:
-    ///   1. Gắn vào PersistentUICanvas (DontDestroyOnLoad).
-    ///   2. Ẩn mặc định khi khởi động.
-    ///   3. <see cref="Show"/> được gọi khi match bắt đầu (từ CustomLobbyView / HomeView).
-    ///   4. External systems gọi <see cref="MarkConnected"/> / <see cref="MarkSpawning"/>.
-    ///   5. Khi nhận <see cref="AllPlayersReadyEvent"/> → delay ngắn → <see cref="SceneLoader.LoadGame"/>.
+    /// Thay thế team labels / single progress bằng 2 danh sách PlayerCard (theo team).
+    /// Mỗi card: avatar (CharacterDatabase), tên, ELO, rank, progress cá nhân.
+    /// Overall progress bar theo dõi trạng thái kết nối chung.
     ///
-    /// Khác với LoadingManager (bootstrap startup):
-    ///   • LoadingManager    = app startup, auto-login check.
-    ///   • MatchLoadingOverlay = match connecting, chỉ show khi có match.
+    /// Inspector layout gợi ý:
+    ///   MatchLoadingOverlay (Panel + CanvasGroup)
+    ///   ├── MapNameText                    ← optional
+    ///   ├── StatusText
+    ///   ├── OverallProgressBar
+    ///   ├── TipText
+    ///   ├── VSLabel                        ← "VS"
+    ///   ├── TeamAContainer (HorizontalLayoutGroup / GridLayout)
+    ///   └── TeamBContainer
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class MatchLoadingOverlay : MonoBehaviour
@@ -38,7 +42,6 @@ namespace NightHunt.UI
                 {
                     if (PersistentUICanvas.Instance != null)
                         _instance = PersistentUICanvas.Instance.MatchLoadingOverlay;
-
                     if (_instance == null)
                         _instance = FindFirstObjectByType<MatchLoadingOverlay>();
                 }
@@ -49,28 +52,35 @@ namespace NightHunt.UI
         // ── Inspector ──────────────────────────────────────────────────────────
 
         [Header("Panel")]
-        [SerializeField] private GameObject panel;           // Root panel GameObject
-        [SerializeField] private CanvasGroup canvasGroup;    // Để fade in/out
+        [SerializeField] private GameObject  panel;
+        [SerializeField] private CanvasGroup canvasGroup;
 
-        [Header("Team Info")]
-        [SerializeField] private TextMeshProUGUI teamALabel;
-        [SerializeField] private TextMeshProUGUI teamBLabel;
+        [Header("Overall Status")]
+        [SerializeField] private TextMeshProUGUI statusText;
+        [SerializeField] private Slider          overallProgressBar;
+        [SerializeField] private TextMeshProUGUI overallPercentText;
+        [SerializeField] private TextMeshProUGUI mapNameText;   // optional
+
+        [Header("VS Label")]
         [SerializeField] private TextMeshProUGUI vsLabel;
 
-        [Header("Progress")]
-        [SerializeField] private Slider          progressBar;
-        [SerializeField] private TextMeshProUGUI statusText;
-        [SerializeField] private TextMeshProUGUI progressPercentText;
+        [Header("Player Cards — prefab + containers")]
+        [Tooltip("Prefab có component MatchPlayerCardView.")]
+        [SerializeField] private GameObject  playerCardPrefab;
+        [Tooltip("Container bên trái — Team A.")]
+        [SerializeField] private Transform   teamAContainer;
+        [Tooltip("Container bên phải — Team B.")]
+        [SerializeField] private Transform   teamBContainer;
 
         [Header("Tips")]
         [SerializeField] private TextMeshProUGUI tipText;
         [SerializeField] private string[]        tips = { };
 
         [Header("Settings")]
-        [SerializeField] private float fadeDuration    = 0.3f;
-        [SerializeField] private float delayAfterReady = 1.5f;
-        [Tooltip("Seconds before the overlay gives up waiting for AllPlayersReadyEvent and returns to Home. 0 = no timeout.")]
-        [SerializeField] private float connectionTimeout = 45f;
+        [SerializeField] private float fadeDuration           = 0.3f;
+        [SerializeField] private float minimumDisplayDuration = 10f;
+        [SerializeField] private float delayAfterReady        = 1.5f;
+        [SerializeField] private float connectionTimeout       = 45f;
         [SerializeField] private NightHunt.Config.SceneId targetMapId = NightHunt.Config.SceneId.GameMap_01;
 
         // ── Default tips ───────────────────────────────────────────────────────
@@ -85,25 +95,25 @@ namespace NightHunt.UI
 
         // ── State ──────────────────────────────────────────────────────────────
 
-        private MatchLoadStage _stage  = MatchLoadStage.Connecting;
+        private MatchLoadStage _stage;
         private float          _progressTarget;
         private float          _progressCurrent;
         private Coroutine      _fadeCoroutine;
         private Coroutine      _timeoutCoroutine;
         private bool           _isVisible;
+        private float          _showTime;
+
+        // card lists indexed by userId
+        private readonly Dictionary<long, MatchPlayerCardView> _cards = new();
+        private int _totalExpected;
+        private int _spawnedCount;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
         private void Awake()
         {
-            if (_instance != null && _instance != this)
-            {
-                Destroy(gameObject);
-                return;
-            }
+            if (_instance != null && _instance != this) { Destroy(gameObject); return; }
             _instance = this;
-
-            // Ẩn ngay khi khởi động
             SetVisibleImmediate(false);
         }
 
@@ -116,31 +126,25 @@ namespace NightHunt.UI
         private void Update()
         {
             if (!_isVisible) return;
-
-            // Smooth progress bar animation
             _progressCurrent = Mathf.MoveTowards(_progressCurrent, _progressTarget, Time.deltaTime * 0.4f);
-
-            if (progressBar          != null) progressBar.value        = _progressCurrent;
-            if (progressPercentText  != null) progressPercentText.text = $"{Mathf.RoundToInt(_progressCurrent * 100f)}%";
+            if (overallProgressBar != null) overallProgressBar.value = _progressCurrent;
+            if (overallPercentText != null) overallPercentText.text  = $"{Mathf.RoundToInt(_progressCurrent * 100f)}%";
         }
 
         // ── Public API ─────────────────────────────────────────────────────────
 
-        /// <summary>Hiện overlay và bắt đầu flow kết nối server.</summary>
         public void Show(NightHunt.Config.SceneId mapId)
         {
             targetMapId = mapId;
             ShowInternal();
         }
 
-        /// <summary>Hiện overlay với map ID hiện tại (default hoặc đã set).</summary>
         public void Show()
         {
             targetMapId = ResolveTargetMap();
             ShowInternal();
         }
 
-        /// <summary>Ẩn overlay (dùng khi cancel hoặc error).</summary>
         public void Hide()
         {
             StopTimeout();
@@ -148,22 +152,27 @@ namespace NightHunt.UI
             _fadeCoroutine = StartCoroutine(FadeOut());
         }
 
-        /// <summary>Gọi khi transport kết nối xong với server.</summary>
-        public void MarkConnected() => SetStage(MatchLoadStage.ServerReady);
+        public void MarkDsReady()    => SetStage(MatchLoadStage.Connecting);
+        public void MarkConnected()  => SetStage(MatchLoadStage.ServerReady);
+        public void MarkSpawning()   => SetStage(MatchLoadStage.Spawning);
 
-        /// <summary>Gọi khi server bắt đầu spawn characters.</summary>
-        public void MarkSpawning() => SetStage(MatchLoadStage.Spawning);
-
-        /// <summary>Override map sẽ được load. Gọi trước Show().</summary>
         public void SetTargetMap(NightHunt.Config.SceneId mapId) => targetMapId = mapId;
 
         // ── Internal ───────────────────────────────────────────────────────────
 
         private void ShowInternal()
         {
-            SetStage(MatchLoadStage.Connecting);
-            RefreshTeamInfo();
+            _showTime        = Time.realtimeSinceStartup;
+            _progressTarget  = 0f;
+            _progressCurrent = 0f;
+            _spawnedCount    = 0;
+
+            SetStage(MatchLoadStage.DsBooting);
+            BuildPlayerCards();
+            RefreshMapLabel();
             ShowRandomTip();
+
+            if (vsLabel != null) vsLabel.text = "VS";
 
             SubscribeEvents();
             StartTimeout();
@@ -171,12 +180,220 @@ namespace NightHunt.UI
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeIn());
 
-            // Load game scene immediately so MatchNetworkConnector (placed in the game map
-            // scene) can Start() and connect to the relay/DS. The overlay persists through
-            // the scene transition (DontDestroyOnLoad via PersistentUICanvas). Once all
-            // players have spawned the server fires AllPlayersReadyEvent → we hide.
             SceneLoader.LoadGame(targetMapId);
         }
+
+        // ── Player Cards ───────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Đọc RoomState.CurrentRoom.players → spawn cards vào 2 container theo team.
+        /// Local player sử dụng SessionState.SelectedCharacterId để lấy avatar đúng.
+        /// </summary>
+        private void BuildPlayerCards()
+        {
+            ClearCards();
+
+            if (playerCardPrefab == null)
+            {
+                Debug.LogWarning("[MatchLoadingOverlay] playerCardPrefab chưa được gán trong Inspector.");
+                return;
+            }
+
+            var room    = RoomState.Instance?.CurrentRoom;
+            var session = NightHunt.Core.GameManager.Instance?.SessionState;
+            long localUserId = session?.UserId ?? 0L;
+
+            var players = room?.players;
+            if (players == null || players.Count == 0)
+            {
+                // Dev mode: chỉ có local player
+                SpawnCard(teamAContainer, localUserId,
+                          session?.Username ?? "Player",
+                          session?.SelectedCharacterId,
+                          elo: -1, rank: null, team: 1);
+                return;
+            }
+
+            _totalExpected = players.Count;
+
+            foreach (var p in players)
+            {
+                Transform container = p.team == 1 ? teamAContainer : teamBContainer;
+
+                // Local player → characterId từ SessionState
+                string charId = (p.userId == localUserId)
+                    ? session?.SelectedCharacterId
+                    : null;   // remote players: không biết character → fallback to default
+
+                SpawnCard(container, p.userId, p.username, charId,
+                          elo: -1, rank: null, team: p.team);
+            }
+        }
+
+        private void SpawnCard(Transform container, long userId, string playerName,
+                               string characterId, int elo, string rank, int team)
+        {
+            if (container == null || playerCardPrefab == null) return;
+
+            var go   = Instantiate(playerCardPrefab, container);
+            var card = go.GetComponent<MatchPlayerCardView>();
+            if (card == null)
+            {
+                Debug.LogError("[MatchLoadingOverlay] playerCardPrefab thiếu component MatchPlayerCardView!");
+                Destroy(go);
+                return;
+            }
+
+            card.Initialize(playerName, characterId, elo, rank, team);
+            card.ResetToConnecting();
+            _cards[userId] = card;
+        }
+
+        private void ClearCards()
+        {
+            _cards.Clear();
+            ClearContainer(teamAContainer);
+            ClearContainer(teamBContainer);
+        }
+
+        private static void ClearContainer(Transform t)
+        {
+            if (t == null) return;
+            for (int i = t.childCount - 1; i >= 0; i--)
+                Destroy(t.GetChild(i).gameObject);
+        }
+
+        // ── Stage ──────────────────────────────────────────────────────────────
+
+        private void SetStage(MatchLoadStage stage)
+        {
+            _stage = stage;
+            switch (stage)
+            {
+                case MatchLoadStage.DsBooting:
+                    SetStatus("Starting game server\u2026");
+                    _progressTarget = 0.15f;
+                    foreach (var c in _cards.Values) c.SetProgress(0.1f, "Connecting\u2026");
+                    break;
+
+                case MatchLoadStage.Connecting:
+                    SetStatus("Connecting to server\u2026");
+                    _progressTarget = 0.3f;
+                    break;
+
+                case MatchLoadStage.ServerReady:
+                    SetStatus("Connected. Loading match…");
+                    _progressTarget = 0.5f;
+                    // Advance all cards to "Connected" state
+                    foreach (var c in _cards.Values) c.SetProgress(0.5f, "Connected");
+                    break;
+
+                case MatchLoadStage.Spawning:
+                    SetStatus("Spawning players…");
+                    _progressTarget = 0.75f;
+                    foreach (var c in _cards.Values) c.SetProgress(0.6f, "Loading…");
+                    break;
+
+                case MatchLoadStage.AllReady:
+                    SetStatus("All players ready! Preparing match…");
+                    _progressTarget = 1f;
+                    foreach (var c in _cards.Values) c.MarkReady();
+                    break;
+            }
+        }
+
+        // ── Event Handlers ─────────────────────────────────────────────────────
+
+        private void OnSpawningStarted(SpawningStartedEvent _) => MarkSpawning();
+
+        private void OnPlayerSpawned(PlayerSpawnedEvent e)
+        {
+            _spawnedCount = e.SpawnedCount;
+            _totalExpected = e.ExpectedCount > 0 ? e.ExpectedCount : _totalExpected;
+
+            // Overall progress bar: map spawn fraction to [0.75..0.98]
+            if (_stage == MatchLoadStage.Spawning && _totalExpected > 0)
+            {
+                float f = (float)_spawnedCount / _totalExpected;
+                _progressTarget = Mathf.Lerp(0.75f, 0.98f, f);
+            }
+
+            // Update status
+            SetStatus($"{_spawnedCount} / {_totalExpected} players ready");
+
+            // Mark Nth card as ready (we don't know which userId spawned, so we iterate)
+            // Strategy: mark ready in order of List<cards> up to spawnedCount
+            int idx = 0;
+            foreach (var card in _cards.Values)
+            {
+                idx++;
+                if (idx <= _spawnedCount)
+                    card.MarkReady();
+                else
+                    card.SetProgress(Mathf.Lerp(0.6f, 0.9f, (float)_spawnedCount / Mathf.Max(1, _totalExpected)));
+            }
+        }
+
+        private void OnAllPlayersReady(AllPlayersReadyEvent _)
+        {
+            StopTimeout();
+            SetStage(MatchLoadStage.AllReady);
+
+            float elapsed    = Time.realtimeSinceStartup - _showTime;
+            float remaining  = Mathf.Max(0f, minimumDisplayDuration - elapsed);
+            float totalDelay = remaining + delayAfterReady;
+
+            Debug.Log($"[MatchLoadingOverlay] All players ready. Elapsed={elapsed:F1}s — hiding in {totalDelay:F1}s.");
+            Invoke(nameof(HideOnReady), totalDelay);
+        }
+
+        private void HideOnReady()
+        {
+            UnsubscribeEvents();
+            Debug.Log("[MatchLoadingOverlay] All players ready — hiding overlay.");
+            Hide();
+        }
+
+        // ── Helpers ────────────────────────────────────────────────────────────
+
+        private static SceneId ResolveTargetMap()
+        {
+            string mapId = RoomState.Instance?.DsMapId;
+            if (string.IsNullOrWhiteSpace(mapId))
+                mapId = RoomState.Instance?.CurrentRoom?.mapId;
+
+            if (!string.IsNullOrWhiteSpace(mapId)
+                && MapConfig.TryGetById(mapId, out MapEntry entry))
+                return entry.sceneId;
+
+            return SceneId.GameMap_01;
+        }
+
+        private void RefreshMapLabel()
+        {
+            if (mapNameText == null) return;
+            string mapId = RoomState.Instance?.DsMapId
+                        ?? RoomState.Instance?.CurrentRoom?.mapId;
+            if (!string.IsNullOrEmpty(mapId)
+                && MapConfig.TryGetById(mapId, out MapEntry entry))
+                mapNameText.text = entry.displayName;
+            else
+                mapNameText.text = "";
+        }
+
+        private void SetStatus(string msg)
+        {
+            if (statusText != null) statusText.text = msg;
+        }
+
+        private void ShowRandomTip()
+        {
+            string[] pool = (tips != null && tips.Length > 0) ? tips : DefaultTips;
+            if (tipText != null && pool.Length > 0)
+                tipText.text = pool[Random.Range(0, pool.Length)];
+        }
+
+        // ── Timeout ────────────────────────────────────────────────────────────
 
         private void StartTimeout()
         {
@@ -197,13 +414,12 @@ namespace NightHunt.UI
         private IEnumerator TimeoutRoutine()
         {
             yield return new WaitForSecondsRealtime(connectionTimeout);
-            if (!_isVisible) yield break; // already hidden by AllPlayersReady
+            if (!_isVisible) yield break;
 
             Debug.LogWarning("[MatchLoadingOverlay] Connection timeout — returning to Home.");
             UnsubscribeEvents();
             Hide();
 
-            // Give fade a moment then show error and navigate home
             yield return new WaitForSecondsRealtime(fadeDuration + 0.1f);
             NightHunt.State.RoomState.Instance?.ClearRoom();
             GameModalWindow.Instance?.ShowNotice(
@@ -213,135 +429,23 @@ namespace NightHunt.UI
                 onClose:   () => NightHunt.UI.UINavigator.Instance?.GoHome());
         }
 
-        private void SetStage(MatchLoadStage stage)
-        {
-            _stage = stage;
-            switch (stage)
-            {
-                case MatchLoadStage.Connecting:
-                    SetStatus("Connecting to server…");
-                    _progressTarget = 0.1f;
-                    break;
-
-                case MatchLoadStage.ServerReady:
-                    SetStatus("Server ready. Spawning players…");
-                    _progressTarget = 0.5f;
-                    break;
-
-                case MatchLoadStage.Spawning:
-                    SetStatus("Spawning players…");
-                    _progressTarget = 0.75f;
-                    break;
-
-                case MatchLoadStage.AllReady:
-                    SetStatus("All players ready! Starting…");
-                    _progressTarget = 1f;
-                    break;
-            }
-        }
-
-        private void OnSpawningStarted(SpawningStartedEvent _)
-        {
-            MarkSpawning();
-        }
-
-        private void OnAllPlayersReady(AllPlayersReadyEvent _)
-        {
-            StopTimeout();
-            SetStage(MatchLoadStage.AllReady);
-            // Game scene is already loaded (triggered inside ShowInternal).
-            // Wait for progress-bar animation then hide overlay and unsubscribe.
-            Invoke(nameof(HideOnReady), delayAfterReady);
-        }
-
-        private void HideOnReady()
-        {
-            UnsubscribeEvents();
-            Debug.Log("[MatchLoadingOverlay] All players ready — hiding overlay.");
-            Hide();
-        }
-
-        private static SceneId ResolveTargetMap()
-        {
-            // Prefer DsMapId (set directly from match_ready WS event, most reliable)
-            string mapId = RoomState.Instance?.DsMapId;
-            // Fallback to current room's mapId
-            if (string.IsNullOrWhiteSpace(mapId))
-                mapId = RoomState.Instance?.CurrentRoom?.mapId;
-
-            if (!string.IsNullOrWhiteSpace(mapId)
-                && MapConfig.TryGetById(mapId, out MapEntry entry))
-            {
-                return entry.sceneId;
-            }
-
-            return SceneId.GameMap_01;
-        }
-
-        private void RefreshTeamInfo()
-        {
-            var room = RoomState.Instance?.CurrentRoom;
-            if (room?.players == null || room.players.Count == 0)
-            {
-                // Fallback khi không có data (dev mode)
-                if (teamALabel != null) teamALabel.text = "Team A";
-                if (teamBLabel != null) teamBLabel.text = "Team B";
-                if (vsLabel    != null) vsLabel.text    = "VS";
-                return;
-            }
-
-            // Gộp tên player theo team. RoomPlayerResponse.team = 1 hoặc 2.
-            var teamANames = new System.Collections.Generic.List<string>();
-            var teamBNames = new System.Collections.Generic.List<string>();
-
-            foreach (var p in room.players)
-            {
-                string name = string.IsNullOrEmpty(p.username) ? $"Player {p.userId}" : p.username;
-                if (p.team == 1) teamANames.Add(name);
-                else             teamBNames.Add(name);
-            }
-
-            if (teamALabel != null)
-                teamALabel.text = teamANames.Count > 0
-                    ? string.Join("\n", teamANames)
-                    : "Team A";
-
-            if (teamBLabel != null)
-                teamBLabel.text = teamBNames.Count > 0
-                    ? string.Join("\n", teamBNames)
-                    : "Team B";
-
-            if (vsLabel != null)
-                vsLabel.text = "VS";
-        }
-
-        private void SetStatus(string msg)
-        {
-            if (statusText != null) statusText.text = msg;
-        }
-
-        private void ShowRandomTip()
-        {
-            string[] pool = (tips != null && tips.Length > 0) ? tips : DefaultTips;
-            if (tipText != null && pool.Length > 0)
-                tipText.text = pool[Random.Range(0, pool.Length)];
-        }
-
-        // ── Event subscription ─────────────────────────────────────────────────
+        // ── Event Subscription ─────────────────────────────────────────────────
 
         private void SubscribeEvents()
         {
             GameplayEventBus.Instance?.Subscribe<SpawningStartedEvent>(OnSpawningStarted);
+            GameplayEventBus.Instance?.Subscribe<PlayerSpawnedEvent>(OnPlayerSpawned);
             GameplayEventBus.Instance?.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
         }
 
         private void UnsubscribeEvents()
         {
             GameplayEventBus.Instance?.Unsubscribe<SpawningStartedEvent>(OnSpawningStarted);
+            GameplayEventBus.Instance?.Unsubscribe<PlayerSpawnedEvent>(OnPlayerSpawned);
             GameplayEventBus.Instance?.Unsubscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
         }
 
-        // ── Fade helpers ───────────────────────────────────────────────────────
+        // ── Fade ───────────────────────────────────────────────────────────────
 
         private IEnumerator FadeIn()
         {
@@ -393,9 +497,10 @@ namespace NightHunt.UI
 
     public enum MatchLoadStage
     {
-        Connecting,   // Đang kết nối transport
-        ServerReady,  // Server đã ready, chờ spawn
-        Spawning,     // Đang spawn characters
-        AllReady,     // Tất cả players ready → load scene
+        DsBooting,
+        Connecting,
+        ServerReady,
+        Spawning,
+        AllReady,
     }
 }

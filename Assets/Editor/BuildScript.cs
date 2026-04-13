@@ -56,7 +56,7 @@ public static class BuildScript
         Debug.Log("╔══════════════════════════════════════════╗");
         Debug.Log("║  NightHunt — Dedicated Server Build      ║");
         Debug.Log("╚══════════════════════════════════════════╝");
-        RunBuild(SERVER_SCENES, DS_BUILD_PATH, "NightHuntServer",
+        RunBuild(SERVER_SCENES, DS_BUILD_PATH, "NightHuntDS",
                  BuildTarget.StandaloneLinux64, StandaloneBuildSubtarget.Server);
     }
 

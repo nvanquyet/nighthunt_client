@@ -104,10 +104,20 @@ namespace NightHunt.Config
             {
                 var dto = remoteMaps[i];
 
-                // Convert sceneName string ("GameMap_01") to SceneId enum
+                // Convert sceneName string to SceneId enum.
+                // The server sends the actual Unity scene file name ("02_Map_01"),
+                // so first try a reverse lookup via SceneConfig (file name → enum).
+                // Fall back to Enum.TryParse for backward compat if server ever sends "GameMap_01".
                 SceneId sceneId = SceneId.GameMap_01; // safe fallback
                 if (!string.IsNullOrEmpty(dto.sceneName))
-                    Enum.TryParse(dto.sceneName, out sceneId);
+                {
+                    if (SceneConfig.TryGetSceneIdByName(dto.sceneName, out SceneId byName))
+                        sceneId = byName;
+                    else if (Enum.TryParse<SceneId>(dto.sceneName, ignoreCase: false, out SceneId byEnum))
+                        sceneId = byEnum;
+                    else
+                        Debug.LogWarning($"[MapConfig] Unknown sceneName '{dto.sceneName}' for map '{dto.mapId}' — defaulting to GameMap_01.");
+                }
 
                 entries[i] = new MapEntry
                 {

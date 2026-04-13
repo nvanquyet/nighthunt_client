@@ -10,10 +10,12 @@ echo "╔═══════════════════════�
 echo "║   NightHunt Dedicated Server             ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
-echo "  Server ID   : ${SERVER_ID:-NOT_SET}"
-echo "  Game Port   : ${GAME_PORT:-7777}"
-echo "  Backend URL : ${BACKEND_URL:-NOT_SET}"
-echo "  Max Players : ${MAX_PLAYERS:-16}"
+echo "  Server ID        : ${SERVER_ID:-NOT_SET}"
+echo "  Game Port        : ${GAME_PORT:-7777}"
+echo "  Backend URL      : ${BACKEND_URL:-NOT_SET}"
+echo "  Max Players      : ${MAX_PLAYERS:-16}"
+echo "  Expected Players : ${EXPECTED_PLAYERS:-NOT_SET}"
+echo "  Map ID           : ${MAP_ID:-map_01}"
 echo ""
 
 # ── Validate required environment variables ───────────────────────────────────
@@ -50,9 +52,10 @@ exec /app/NightHuntServer                              \
     -batchmode                                         \
     -nographics                                        \
     -logFile /app/logs/server-$(date +%Y%m%d-%H%M%S).log \
-    --serverId     "${SERVER_ID}"                      \
-    --serverPort   "${GAME_PORT:-7777}"                \
-    --backendUrl   "${BACKEND_URL}"                    \
-    --serverSecret "${SERVER_SECRET}"                  \
-    --maxPlayers   "${MAX_PLAYERS:-16}"                \
-    --mapId        "${MAP_ID:-map_01}"
+    --serverId        "${SERVER_ID}"                   \
+    --serverPort      "${GAME_PORT:-7777}"             \
+    --backendUrl      "${BACKEND_URL}"                 \
+    --serverSecret    "${SERVER_SECRET}"               \
+    --maxPlayers      "${MAX_PLAYERS:-16}"             \
+    --expectedPlayers "${EXPECTED_PLAYERS:-2}"         \
+    --mapId           "${MAP_ID:-map_01}"

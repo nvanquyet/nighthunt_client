@@ -4,6 +4,7 @@ using FishNet.Managing;
 using FishNet.Managing.Scened;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.SceneManagement;
 
 namespace NightHunt.Server
 {
@@ -17,7 +18,7 @@ namespace NightHunt.Server
     ///   4. Đăng ký với Backend API (POST /api/ds/register)
     ///   5. Gửi heartbeat định kỳ (POST /api/ds/heartbeat)
     ///
-    /// Gắn script này vào GameObject trong Scene: 99_Dedicated_Server
+    /// Gắn script này vào GameObject trong Scene: 00_DS_Boot
     /// </summary>
     public class ServerBootstrap : MonoBehaviour
     {
@@ -196,7 +197,7 @@ namespace NightHunt.Server
                     Debug.Log("[ServerBootstrap] ✓ Registered with backend successfully!");
                     WriteHealthFile();
                     StartCoroutine(HeartbeatLoop());
-                    LoadGameScene(); // Load đúng map scene theo mapId
+                    LoadGameScene();
                     yield break;
                 }
 
@@ -248,7 +249,66 @@ namespace NightHunt.Server
                 ReplaceScenes = ReplaceOption.All,
                 Options       = new LoadOptions { AllowStacking = false },
             };
+
+            // Subscribe to FishNet SceneManager.OnLoadEnd to know when map scene is ready,
+            // then POST /ds/game-ready so clients can start connecting.
+            networkManager.SceneManager.OnLoadEnd += OnGameSceneLoadEnd;
             networkManager.SceneManager.LoadGlobalScenes(sld);
+        }
+
+        private void OnGameSceneLoadEnd(SceneLoadEndEventArgs args)
+        {
+            foreach (var scene in args.LoadedScenes)
+            {
+                if (scene.name.StartsWith("02_Map_", StringComparison.OrdinalIgnoreCase))
+                {
+                    networkManager.SceneManager.OnLoadEnd -= OnGameSceneLoadEnd;
+                    Debug.Log($"[ServerBootstrap] Game scene '{scene.name}' loaded — notifying backend game-ready.");
+                    // Wait one extra second for all MonoBehaviour Awake()/Start() to complete
+                    StartCoroutine(NotifyGameReadyDelayed(1.5f));
+                    return;
+                }
+            }
+        }
+
+        private IEnumerator NotifyGameReadyDelayed(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            yield return NotifyGameReady();
+        }
+
+        /// <summary>
+        /// POST /api/ds/game-ready — tells backend DS is fully ready.
+        /// Backend broadcasts "ds_ready" WebSocket event to all players in the match,
+        /// allowing clients to start connecting to this DS.
+        /// </summary>
+        private IEnumerator NotifyGameReady()
+        {
+            var body = new GameReadyRequest { serverId = _serverId, serverSecret = _serverSecret };
+            string json = JsonUtility.ToJson(body);
+
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                using var req = new UnityWebRequest($"{_backendUrl}/api/ds/game-ready", "POST");
+                req.uploadHandler   = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.SetRequestHeader("X-DS-Secret", _serverSecret);
+                req.timeout = 10;
+
+                yield return req.SendWebRequest();
+
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    Debug.Log("[ServerBootstrap] ✓ ds/game-ready notified — clients can now connect.");
+                    yield break;
+                }
+
+                Debug.LogWarning($"[ServerBootstrap] game-ready attempt {attempt}/3 failed: {req.responseCode} {req.error}");
+                if (attempt < 3) yield return new WaitForSeconds(2f);
+            }
+
+            Debug.LogError("[ServerBootstrap] Failed to notify game-ready after 3 attempts. Clients may connect via retry.");
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -328,6 +388,13 @@ namespace NightHunt.Server
         {
             public string serverId;
             public int    currentPlayers;
+            public string serverSecret;
+        }
+
+        [Serializable]
+        private struct GameReadyRequest
+        {
+            public string serverId;
             public string serverSecret;
         }
     }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -173,6 +173,9 @@ namespace NightHunt.UI
         private bool _pendingPasswordChanged = false;
         private bool _settingsDirty = false;
 
+        // Guard: set to true when we change dropdowns programmatically to suppress OnValueChanged callbacks
+        private bool _updatingDropdown = false;
+
         // Swap request tracking (requester side)
         private long _pendingSwapRequestId = 0L;
 
@@ -219,6 +222,7 @@ namespace NightHunt.UI
             if (btnCopyCode != null) btnCopyCode.onClick.AddListener(OnCopyCodeClicked);
 
             BuildModeList();
+            _updatingDropdown = true;
             if (modeDropdown != null)
             {
                 PopulateDropdown(modeDropdown, new List<string>(_modeDisplayNames), 0);
@@ -231,6 +235,7 @@ namespace NightHunt.UI
                 PopulateDropdown(mapDropdown, new List<string>(_mapDisplayNames), _currentMapIdx);
                 mapDropdown.onValueChanged.AddListener(OnMapDropdownChanged);
             }
+            _updatingDropdown = false;
 
             // Password/public switch UI removed — no listeners to register.
 
@@ -288,8 +293,10 @@ namespace NightHunt.UI
             SubscribeEvents();
 
             BuildModeList();
+            _updatingDropdown = true;
             if (modeDropdown != null)
                 PopulateDropdown(modeDropdown, new List<string>(_modeDisplayNames), _currentModeIdx);
+            _updatingDropdown = false;
 
             bool inRoom = _roomState != null && _roomState.IsInRoom;
             ShowState(inRoom ? UIState.InRoom : UIState.JoinCreate);
@@ -316,6 +323,12 @@ namespace NightHunt.UI
 
             if (state == UIState.JoinCreate)
             {
+                // Re-enable join/create buttons in case they were individually disabled during InRoom state.
+                // Unity SetActive(false) on individual children persists even when parent is re-shown.
+                btnCreateRoom?.gameObject.SetActive(true);
+                btnQuickJoin?.gameObject.SetActive(true);
+                btn_CodeAction?.gameObject.SetActive(true);
+
                 btnStart?.gameObject.SetActive(false);
                 btnReady?.gameObject.SetActive(false);
                 btnLeaveOrDisband?.gameObject.SetActive(false);
@@ -324,8 +337,7 @@ namespace NightHunt.UI
             }
             else // InRoom
             {
-                // ── FIX: Ẩn tường minh create/join buttons phòng trường hợp
-                // chúng nằm ngoài joinCreatePanel hierarchy
+                // Hide join/create buttons explicitly in case they sit outside joinCreatePanel hierarchy
                 btnCreateRoom?.gameObject.SetActive(false);
                 btnQuickJoin?.gameObject.SetActive(false);
                 btn_CodeAction?.gameObject.SetActive(false);
@@ -723,10 +735,12 @@ namespace NightHunt.UI
             _pendingPasswordChanged = false;
             SetSettingsDirty(false);
 
+            _updatingDropdown = true;
             if (modeDropdown != null)
                 PopulateDropdown(modeDropdown, new List<string>(_modeDisplayNames), 0);
             if (mapDropdown != null)
                 PopulateDropdown(mapDropdown, new List<string>(_mapDisplayNames), 0);
+            _updatingDropdown = false;
         }
 
         private static void ClearContainer(Transform container)
@@ -749,6 +763,7 @@ namespace NightHunt.UI
 
         private void OnModeDropdownChanged(int idx)
         {
+            if (_updatingDropdown) return; // Programmatic update — ignore
             if (!IsLocalPlayerHost())
             {
                 if (modeDropdown != null) modeDropdown.SetDropdownIndex(_currentModeIdx);
@@ -764,6 +779,7 @@ namespace NightHunt.UI
 
         private void OnMapDropdownChanged(int idx)
         {
+            if (_updatingDropdown) return; // Programmatic update — ignore
             if (!IsLocalPlayerHost())
             {
                 if (mapDropdown != null) mapDropdown.SetDropdownIndex(_currentMapIdx);
@@ -1090,12 +1106,14 @@ namespace NightHunt.UI
             if (modeIdx >= 0) _currentModeIdx = modeIdx;
             BuildMapList(activeMode, activeMapId);
 
+            _updatingDropdown = true;
             if (modeDropdown != null)
             {
                 modeDropdown.SetDropdownIndex(_currentModeIdx);
                 modeDropdown.Interactable(isHost && waiting);
             }
             SyncMapDropdown(isHost && waiting);
+            _updatingDropdown = false;
 
             // Password/public switches removed — no UI to update.
 
@@ -1131,13 +1149,17 @@ namespace NightHunt.UI
 
             // ── Team slots ─────────────────────────────────────────────────────
             UpdatePlayerSlots(room.players);
+
+            // Track current status so InitPendingSettings only fires once per room entry
+            _lastStatus = room.status;
         }
 
         private void UpdatePlayerSlots(List<RoomPlayerResponse> players)
         {
-            foreach (var sv in _slotViews.Values)
-                if (sv != null) Destroy(sv.gameObject);
+            // Use immediate destroy so containers are clean before we add new slots
             _slotViews.Clear();
+            ClearContainer(team1Container);
+            ClearContainer(team2Container);
 
             bool isHost = IsLocalPlayerHost();
 
@@ -1235,16 +1257,34 @@ namespace NightHunt.UI
 
         private void HandleTeamChanged(GameWebSocketService.TeamChangedEvent evt)
         {
-            // ── LOG CHI TIẾT ──
-            NLog($"[TEAM_CHANGED] hasRoom={evt.room != null} " +
-                 $"roomPlayerCount={evt.room?.players?.Count ?? -1}");
+            NLog($"[TEAM_CHANGED] userId={evt.userId} newTeam={evt.team} newSlot={evt.slot} " +
+                 $"hasRoom={evt.room != null} roomPlayerCount={evt.room?.players?.Count ?? -1}");
             if (evt.room?.players != null)
                 foreach (var p in evt.room.players)
                     NLog($"  player={p.username} team={p.team} slot={p.slot}");
-            // ── END LOG ──
 
-            if (evt.room != null) _roomState?.SetRoom(evt.room);
-            RefreshRoomDisplay();
+            if (evt.room != null)
+            {
+                _roomState?.SetRoom(evt.room);
+                RefreshRoomDisplay();
+            }
+            else
+            {
+                // room field not populated — patch local state manually and refresh
+                Debug.LogWarning("[CustomLobby] team_changed: room is null — patching RoomState manually");
+                var current = _roomState?.CurrentRoom;
+                if (current?.players != null)
+                {
+                    var player = current.players.Find(p => p.userId == evt.userId);
+                    if (player != null)
+                    {
+                        player.team = evt.team;
+                        player.slot = evt.slot;
+                        _roomState?.SetRoom(current);
+                    }
+                }
+                RefreshRoomDisplay();
+            }
         }
 
         private void HandleRoomStatusChanged(GameWebSocketService.RoomStatusChangedEvent evt)

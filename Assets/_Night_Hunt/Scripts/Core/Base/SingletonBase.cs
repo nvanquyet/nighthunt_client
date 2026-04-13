@@ -33,8 +33,12 @@ namespace NightHunt.Core
 
         protected virtual void Awake()
         {
-            // Duplicate detection
-            if (_instance != null && _instance != this)
+            // Duplicate detection — use Unity's == null which properly detects
+            // destroyed objects. A scene-scoped Singleton's static _instance may
+            // still hold a C# reference to a destroyed object after scene unload.
+            // Unity's == null returns true for destroyed objects; C# != null does NOT.
+            bool instanceIsDestroyedOrNull = _instance == null || !_instance;
+            if (!instanceIsDestroyedOrNull && _instance != this)
             {
                 Debug.LogWarning($"[{typeof(T).Name}] Duplicate instance found — destroying {gameObject.name}.");
                 Destroy(gameObject);

@@ -195,7 +195,7 @@ namespace NightHunt.UI
 
         private void RefreshGameModeSelector()
         {
-            _enabledModes      = GameModeConfig.GetEnabled();
+            _enabledModes      = GameModeConfig.GetMatchmakingEnabled();
             _selectedModeIndex = 0;
 
             if (modeDropdown == null) { OnGameModeChanged(0); return; }
@@ -419,6 +419,7 @@ namespace NightHunt.UI
             _ws.OnMatchFound              += HandleMatchFound;
             _ws.OnMatchReady              += HandleMatchReady;
             _ws.OnMatchCancelled          += HandleMatchCancelled;
+            _ws.OnDsReady                 += HandleDsReady;
 
             _ws.OnPartyInvitationReceived += HandlePartyInvitationReceived;
             _ws.OnPartyInvitationDeclined  += HandlePartyInvitationDeclined;
@@ -438,6 +439,7 @@ namespace NightHunt.UI
             _ws.OnMatchFound              -= HandleMatchFound;
             _ws.OnMatchReady              -= HandleMatchReady;
             _ws.OnMatchCancelled          -= HandleMatchCancelled;
+            _ws.OnDsReady                 -= HandleDsReady;
             _ws.OnPartyInvitationReceived -= HandlePartyInvitationReceived;
             _ws.OnPartyInvitationDeclined  -= HandlePartyInvitationDeclined;
             _ws.OnPartyInvitationCancelled -= HandlePartyInvitationCancelled;
@@ -523,6 +525,12 @@ namespace NightHunt.UI
                 new MatchmakingAcceptRequest { lobbyToken = lobbyToken });
         }
 
+        private void HandleDsReady(GameWebSocketService.DsReadyEvent e)
+        {
+            Debug.Log($"[PartyController] ds_ready: DS at {e.dsIp}:{e.dsPort} matchId={e.matchId}");
+            NetworkGameManager.Instance?.NotifyDsReady();
+        }
+
         private void HandleMatchReady(GameWebSocketService.MatchReadyEvent e)
         {
             // Ẩn overlay "tìm thấy trận" (nếu đang mở)
@@ -531,7 +539,7 @@ namespace NightHunt.UI
             _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
 
-            // Lưu DS info vào RoomState để MatchNetworkConnector dùng khi scene load
+            // Lưu DS info vào RoomState để NetworkGameManager dùng khi scene load
             if (ushort.TryParse(e.dsPort.ToString(), out ushort dsPort))
                 RoomState.Instance?.SetDedicatedServer(e.dsIp, dsPort, e.matchId, e.mapId);
 
@@ -543,6 +551,16 @@ namespace NightHunt.UI
                 sceneId = mapEntry.sceneId;
             }
 
+            // Guard: never load the Home scene as a game scene.
+            // This can happen if MapConfig.asset has a map entry with sceneId = 0 (Home)
+            // because the ScriptableObject was created but the inspector value was not set.
+            if (sceneId == NightHunt.Config.SceneId.Home)
+            {
+                Debug.LogError($"[PartyController] match_ready resolved sceneId=Home for mapId='{e.mapId}' — this is a misconfiguration. Falling back to GameMap_01.");
+                sceneId = NightHunt.Config.SceneId.GameMap_01;
+            }
+
+            Debug.Log($"[PartyController] match_ready mapId={e.mapId} → sceneId={sceneId}");
             MatchLoadingOverlay.Instance?.Show(sceneId);
         }
 

@@ -1,9 +1,13 @@
 using FishNet.Managing;
+using FishNet.Managing.Scened;
 using FishNet.Transporting;
 using NightHunt.Core;
 using NightHunt.State;
+using NightHunt.UI;
+using NightHunt.Services.Game;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace NightHunt.Networking
 {
@@ -36,6 +40,17 @@ namespace NightHunt.Networking
         public bool IsServer => networkManager != null && networkManager.IsServerStarted;
         public bool IsClient => networkManager != null && networkManager.IsClientStarted;
 
+        [Header("Auto-Connect Retry")]
+        [Tooltip("Seconds to wait before re-attempting connection on failure.")]
+        [SerializeField] private float _retryDelay = 3f;
+        [SerializeField] private int   _maxRetries = 2;
+
+        private int  _retryCount;
+        private bool _connectionStarted;
+        private bool _connected;
+        private bool _dsReady;          // true after ds_ready WS received
+        private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
+
         protected override void OnSingletonAwake()
         {
             if (networkManager == null)
@@ -46,10 +61,36 @@ namespace NightHunt.Networking
             }
         }
 
+        private void Start()
+        {
+#if UNITY_SERVER
+            // DS is started by ServerBootstrap — no client auto-connect needed.
+            return;
+#endif
+            if (networkManager == null) return;
+            networkManager.SceneManager.OnLoadEnd               += OnSceneLoadEnd;
+            networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
+            if (GameWebSocketService.Instance != null)
+                GameWebSocketService.Instance.OnDsReady += OnDsReadyReceived;
+        }
+
+        protected override void OnDestroy()
+        {
+            if (networkManager != null)
+            {
+                networkManager.SceneManager.OnLoadEnd               -= OnSceneLoadEnd;
+                networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
+            }
+            if (GameWebSocketService.Instance != null)
+                GameWebSocketService.Instance.OnDsReady -= OnDsReadyReceived;
+            base.OnDestroy();
+        }
+
         // ── Dedicated Server (Ranked mode) ────────────────────────────────────
 
         /// <summary>
-        /// Start Server only (dedicated server build).
+        /// Start FishNet Server only (dedicated server build / dev tools).
+        /// Called by NetworkStartMenu (dev tool).
         /// </summary>
         public void StartServer()
         {
@@ -128,6 +169,191 @@ namespace NightHunt.Networking
             SetTransportAddress(relayIp, relayPort);
             if (!networkManager.ClientManager.StartConnection())
                 Debug.LogError("[NetworkGameManager] Failed to start relay client connection!");
+        }
+
+        // ── Auto-connect (triggered by scene load) ────────────────────────────
+
+        /// <summary>
+        /// Called by FishNet SceneManager after any scene finishes loading.
+        /// When a game map scene loads, automatically connects to the server
+        /// based on the current RoomState.
+        /// </summary>
+        private void OnSceneLoadEnd(SceneLoadEndEventArgs args)
+        {
+            foreach (Scene scene in args.LoadedScenes)
+            {
+                // Game map scenes are named "02_Map_XX"
+                if (scene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    _gameSceneLoaded = true;
+                    TryConnectIfReady();
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Called by PartyController when a ds_ready WS event is received.
+        /// Sets the DS-ready flag and attempts connection if the game scene is also loaded.
+        /// </summary>
+        public void NotifyDsReady()
+        {
+            _dsReady = true;
+            Debug.Log("[NetworkGameManager] DS is ready — checking if scene loaded to connect.");
+            MatchLoadingOverlay.Instance?.MarkDsReady();
+            TryConnectIfReady();
+        }
+
+        private void OnDsReadyReceived(GameWebSocketService.DsReadyEvent _) => NotifyDsReady();
+
+        /// <summary>
+        /// Initiates connection only when BOTH the game scene is loaded AND the DS signals ready.
+        /// Relay games do not need ds_ready (no dedicated server), so they bypass the flag check.
+        /// </summary>
+        private void TryConnectIfReady()
+        {
+            if (_connectionStarted) return;
+
+            var room = RoomState.Instance;
+            if (room == null) return;
+
+            // Relay mode: connect as soon as the scene loads (no DS boot wait)
+            if (room.CurrentGameMode == GameMode.Custom_Relay)
+            {
+                if (!_gameSceneLoaded) return;
+            }
+            else // Ranked_DS: require both scene loaded AND DS ready
+            {
+                if (!_gameSceneLoaded || !_dsReady) return;
+            }
+
+            _retryCount        = 0;
+            _connectionStarted = false;
+            _connected         = false;
+            AutoConnectFromRoomState();
+        }
+
+        private void OnClientConnectionState(ClientConnectionStateArgs args)
+        {
+            switch (args.ConnectionState)
+            {
+                case LocalConnectionState.Started:
+                    _connected = true;
+                    Debug.Log("[NetworkGameManager] ✅ Client connected to match server.");
+                    MatchLoadingOverlay.Instance?.MarkConnected();
+                    break;
+
+                case LocalConnectionState.Stopped:
+                    if (_connectionStarted && !_connected)
+                    {
+                        Debug.LogWarning("[NetworkGameManager] Connection to match server failed.");
+                        _connectionStarted = false;
+                        TryRetry();
+                    }
+                    break;
+            }
+        }
+
+        private void AutoConnectFromRoomState()
+        {
+            var room = RoomState.Instance;
+            if (room == null)
+            {
+                Debug.LogWarning("[NetworkGameManager] RoomState not found — skipping auto-connect (dev mode).");
+                return;
+            }
+
+            switch (room.CurrentGameMode)
+            {
+                case GameMode.Custom_Relay:
+                    AutoConnectRelay(room);
+                    break;
+
+                case GameMode.Ranked_DS:
+                    AutoConnectDS(room);
+                    break;
+
+                default:
+                    // GameMode.None → dev / editor test, NetworkStartMenu handles it
+                    Debug.Log("[NetworkGameManager] GameMode.None — skipping auto-connect (use NetworkStartMenu for dev testing).");
+                    break;
+            }
+        }
+
+        private void AutoConnectRelay(RoomState room)
+        {
+            if (string.IsNullOrEmpty(room.RelayIp) || room.RelayPort == 0)
+            {
+                Debug.LogError("[NetworkGameManager] Custom_Relay mode but RelayIp/Port not set in RoomState!");
+                return;
+            }
+
+            _connectionStarted = true;
+            _connected         = false;
+
+            if (room.IsHostPlayer)
+            {
+                Debug.Log($"[NetworkGameManager] Starting HOST via relay {room.RelayIp}:{room.RelayPort} session={room.RelaySessionId}");
+                StartHostWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
+
+                int expected = room.PlayerCount > 0 ? room.PlayerCount : 2;
+                if (ServerGameManager.Instance != null)
+                {
+                    ServerGameManager.Instance.SetExpectedPlayerCount(expected);
+                    Debug.Log($"[NetworkGameManager] Host: expectedPlayerCount set to {expected}");
+                }
+                else
+                {
+                    Debug.LogWarning("[NetworkGameManager] ServerGameManager.Instance null — expectedPlayerCount not applied.");
+                }
+            }
+            else
+            {
+                Debug.Log($"[NetworkGameManager] Connecting CLIENT via relay {room.RelayIp}:{room.RelayPort}");
+                StartClientWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
+            }
+        }
+
+        private void AutoConnectDS(RoomState room)
+        {
+            if (string.IsNullOrEmpty(room.DsIp) || room.DsPort == 0)
+            {
+                Debug.LogError("[NetworkGameManager] Ranked_DS mode but DsIp/DsPort not set in RoomState!");
+                return;
+            }
+
+            _connectionStarted = true;
+            _connected         = false;
+
+            Debug.Log($"[NetworkGameManager] Connecting to DS {room.DsIp}:{room.DsPort}");
+            StartClientDS(room.DsIp, room.DsPort);
+        }
+
+        private void TryRetry()
+        {
+            if (_retryCount >= _maxRetries)
+            {
+                Debug.LogError("[NetworkGameManager] Max retries reached — returning to home.");
+                Invoke(nameof(LoadHome), 1.5f);
+                return;
+            }
+            _retryCount++;
+            Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
+            Invoke(nameof(RetryConnect), _retryDelay);
+        }
+
+        private void RetryConnect()
+        {
+            _connected = false;
+            AutoConnectFromRoomState();
+        }
+
+        private void LoadHome()
+        {
+            _dsReady         = false;
+            _gameSceneLoaded = false;
+            RoomState.Instance?.ClearRoom();
+            SceneLoader.LoadHome();
         }
 
         // ── Disconnect ────────────────────────────────────────────────────────

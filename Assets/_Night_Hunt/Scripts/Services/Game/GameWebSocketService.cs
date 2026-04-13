@@ -81,6 +81,12 @@ namespace NightHunt.Services.Game
         public event Action<MatchFoundEvent>     OnMatchFound;
         public event Action<MatchReadyEvent>     OnMatchReady;
         public event Action<MatchCancelledEvent> OnMatchCancelled;
+        /// <summary>
+        /// Fired when the dedicated server has fully loaded its game scene and is ready to accept connections.
+        /// Subscribe to this event to actually connect the FishNet client to the DS (instead of connecting
+        /// immediately on match_ready, which fires before the DS finishes booting).
+        /// </summary>
+        public event Action<DsReadyEvent>        OnDsReady;
         
         // Friend Events
         public event Action<FriendStatusChangedEvent> OnFriendStatusChanged;
@@ -522,6 +528,10 @@ namespace NightHunt.Services.Game
                                 teamChanged.team = teamChanged.newTeam;
                                 teamChanged.slot = teamChanged.newSlot;
                             }
+                            Debug.Log($"[GameWebSocketService] team_changed parsed: " +
+                                      $"userId={teamChanged.userId} newTeam={teamChanged.team} newSlot={teamChanged.slot} " +
+                                      $"hasRoom={teamChanged.room != null} players={teamChanged.room?.players?.Count ?? -1}\n" +
+                                      $"  rawData={messageData.data}");
                             OnTeamChanged?.Invoke(teamChanged);
                         }
                         break;
@@ -532,8 +542,8 @@ namespace NightHunt.Services.Game
                         {
                             // NOTE: Relay session info (relayHost/relayPort) comes from the
                             // "game_starting" event which fires BEFORE room_status_changed.
-                            // RoomState.SetRelaySession() is called there so MatchNetworkConnector
-                            // can connect when the loading scene opens.
+                            // RoomState.SetRelaySession() is called there so NetworkGameManager
+                            // can auto-connect when the map scene loads.
                             OnRoomStatusChanged?.Invoke(roomStatusChanged);
                         }
                         break;
@@ -581,7 +591,7 @@ namespace NightHunt.Services.Game
 
                     // game_starting fires before room_status_changed IN_GAME.
                     // Custom-relay mode: stores relayHost/relayPort in RoomState so
-                    // MatchNetworkConnector can connect when the loading scene opens.
+                    // NetworkGameManager can auto-connect when the map scene loads.
                     case "game_starting":
                         var gameStarting = JsonUtility.FromJson<GameStartingEvent>(messageData.data);
                         if (gameStarting != null)
@@ -626,6 +636,15 @@ namespace NightHunt.Services.Game
                         var matchCancelled = JsonUtility.FromJson<MatchCancelledEvent>(messageData.data);
                         if (matchCancelled != null)
                             OnMatchCancelled?.Invoke(matchCancelled);
+                        break;
+
+                    case "ds_ready":
+                        var dsReady = JsonUtility.FromJson<DsReadyEvent>(messageData.data);
+                        if (dsReady != null)
+                        {
+                            Debug.Log($"[GameWebSocketService] ds_ready: DS {dsReady.dsIp}:{dsReady.dsPort} ready for matchId={dsReady.matchId}");
+                            OnDsReady?.Invoke(dsReady);
+                        }
                         break;
 
                     // ────────────────────────────────────────────────────────────
@@ -1068,10 +1087,22 @@ namespace NightHunt.Services.Game
             public string reason;
         }
 
+        /// <summary>
+        /// Fired when the dedicated server has fully loaded and is ready to accept player connections.
+        /// Client should connect to dsIp:dsPort only after receiving this event.
+        /// </summary>
+        [Serializable]
+        public class DsReadyEvent
+        {
+            public string matchId;
+            public string dsIp;
+            public int    dsPort;
+            public string mapId;
+            public string serverId;
+        }
+
         // ════════════════════════════════════════════════════════════════════
         // Friend Event DTOs
-        // Server field names are primary (what JsonUtility deserializes).
-        // Compatibility aliases are filled in HandleMessage before the event is fired.
         // ════════════════════════════════════════════════════════════════════
 
         [Serializable]

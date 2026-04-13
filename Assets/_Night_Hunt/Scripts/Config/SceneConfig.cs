@@ -86,6 +86,20 @@ namespace NightHunt.Config
         public static string HomeSceneName => GetSceneName(SceneId.Home);
 
         /// <summary>
+        /// Reverse lookup: find SceneId by Unity scene file name (e.g. "02_Map_01" → SceneId.GameMap_01).
+        /// Returns false if no matching entry — caller should fallback.
+        /// </summary>
+        public static bool TryGetSceneIdByName(string sceneName, out SceneId id)
+        {
+            id = SceneId.Home;
+            if (Instance == null) return false;
+            foreach (var entry in Instance.scenes)
+                if (entry.sceneName == sceneName)
+                { id = entry.id; return true; }
+            return false;
+        }
+
+        /// <summary>
         /// Trả về tất cả SceneId là GameMap.
         /// Dùng cho UI chọn map hoặc matchmaking random map.
         /// </summary>

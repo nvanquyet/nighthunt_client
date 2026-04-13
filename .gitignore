@@ -136,3 +136,8 @@ docker/dedicated-server/build/
 # TestResults (Unity test runner output)
 [Aa]ssets/[Tt]est[Rr]esults/
 [Tt]est[Rr]esults/
+
+# deploy.ps1 named params accidentally created as files
+-GhcrOwner
+-AdminSecret
+-GhToken

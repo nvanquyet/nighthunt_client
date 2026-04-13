@@ -27,8 +27,11 @@ namespace NightHunt.Config
         [Tooltip("If true, server may fill empty slots with solo players.")]
         public bool allowFill;
 
-        [Tooltip("If false, displayed as 'Coming Soon' and cannot be selected.")]
+        [Tooltip("If false, displayed as 'Coming Soon' and cannot be selected in any mode.")]
         public bool isEnabled;
+
+        [Tooltip("If true, this mode can be queued via matchmaking (ranked / quick-play).")]
+        public bool matchmakingEnabled;
 
         [Tooltip("Dev/test only. Shown in Editor and Development builds — never in production.")]
         public bool isDevMode;
@@ -141,7 +144,8 @@ namespace NightHunt.Config
                     description    = dto.description,
                     playersPerTeam = dto.playersPerTeam,
                     allowFill      = dto.allowFill,
-                    isEnabled      = dto.matchmakingEnabled && dto.modeStatus == "AVAILABLE",
+                    isEnabled          = dto.modeStatus == "AVAILABLE",
+                    matchmakingEnabled = dto.matchmakingEnabled,
                     isDevMode      = dto.isDevMode   // propagate dev flag from server
                 };
             }
@@ -153,7 +157,7 @@ namespace NightHunt.Config
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"[GameModeConfig] LoadFromRemote complete — {entries.Length} total entries written to Instance.modes:");
             foreach (var e in entries)
-                sb.AppendLine($"  > [{(e.isEnabled ? "ON " : "OFF")}] key={e.modeKey}  display=\"{e.displayName}\"  allowFill={e.allowFill}  isDevMode={e.isDevMode}");
+                sb.AppendLine($"  > [{(e.isEnabled ? "ON " : "OFF")}] key={e.modeKey}  display=\"{e.displayName}\"  allowFill={e.allowFill}  mmEnabled={e.matchmakingEnabled}  isDevMode={e.isDevMode}");
             Debug.Log(sb.ToString());
         }
 
@@ -168,18 +172,40 @@ namespace NightHunt.Config
             return Instance.modes;
         }
 
-        /// <summary>Only enabled entries — plus dev entries in Editor and Development builds.</summary>
+        /// <summary>
+        /// Entries available for custom lobby (status=AVAILABLE) — plus dev entries in Editor/Development builds.
+        /// Does NOT filter by matchmakingEnabled; use <see cref="GetMatchmakingEnabled"/> for the matchmaking queue.
+        /// </summary>
         public static GameModeEntry[] GetEnabled()
         {
             var all   = GetAll();
             int count = 0;
             foreach (var m in all)
-                if (m.isEnabled || (m.isDevMode && Debug.isDebugBuild)) count++;
+                if ((m.isEnabled && !m.isDevMode) || (m.isDevMode && Debug.isDebugBuild)) count++;
 
             var result = new GameModeEntry[count];
             int i = 0;
             foreach (var m in all)
-                if (m.isEnabled || (m.isDevMode && Debug.isDebugBuild)) result[i++] = m;
+                if ((m.isEnabled && !m.isDevMode) || (m.isDevMode && Debug.isDebugBuild)) result[i++] = m;
+            return result;
+        }
+
+        /// <summary>
+        /// Entries that can be queued via matchmaking (isEnabled AND matchmakingEnabled),
+        /// plus dev entries in Editor/Development builds.
+        /// Use this in <see cref="NightHunt.UI.PartyController"/> mode selector.
+        /// </summary>
+        public static GameModeEntry[] GetMatchmakingEnabled()
+        {
+            var all   = GetAll();
+            int count = 0;
+            foreach (var m in all)
+                if ((m.isEnabled && m.matchmakingEnabled && !m.isDevMode) || (m.isDevMode && Debug.isDebugBuild)) count++;
+
+            var result = new GameModeEntry[count];
+            int i = 0;
+            foreach (var m in all)
+                if ((m.isEnabled && m.matchmakingEnabled && !m.isDevMode) || (m.isDevMode && Debug.isDebugBuild)) result[i++] = m;
             return result;
         }
 

@@ -347,6 +347,10 @@ namespace NightHunt.Networking
                 RpcOnSpawningStarted();
             }
 
+            // Notify all clients of per-player spawn progress so the loading overlay
+            // can show "N / M players ready" in real-time.
+            RpcOnPlayerSpawned(serverData.DisplayName, _spawnedPlayerCount, _expectedPlayerCount);
+
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.Log(
                 $"[ServerGameManager] === âœ… Spawn complete ({_spawnedPlayerCount}/{_expectedPlayerCount}) - {serverData.DisplayName}, Team: {serverData.TeamId} ===");
@@ -383,11 +387,29 @@ namespace NightHunt.Networking
             GameplayEventBus.Instance?.Publish(new SpawningStartedEvent());
         }
 
+        /// <summary>
+        /// Broadcast to all clients every time any player finishes spawning.
+        /// MatchLoadingOverlay subscribes to <see cref="PlayerSpawnedEvent"/> (published here)
+        /// to update the "N / M players ready" counter in real-time.
+        /// </summary>
+        [ObserversRpc]
+        private void RpcOnPlayerSpawned(string displayName, int spawnedCount, int expectedCount)
+        {
+            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                Debug.Log($"[ServerGameManager] CLIENT: Player spawned — {displayName} ({spawnedCount}/{expectedCount})");
+            GameplayEventBus.Instance?.Publish(new PlayerSpawnedEvent
+            {
+                DisplayName   = displayName,
+                SpawnedCount  = spawnedCount,
+                ExpectedCount = expectedCount
+            });
+        }
+
         [ObserversRpc]
         private void RpcOnAllPlayersReady()
         {
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] CLIENT: All players ready â€” dismissing loading screen.");
+                Debug.Log("[ServerGameManager] CLIENT: All players ready — dismissing loading screen.");
             GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
 

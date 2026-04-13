@@ -38,41 +38,19 @@ namespace NightHunt.Build
         /// <summary>Scenes cần thiết cho Dedicated Server (headless, không có UI).</summary>
         private static readonly string[] DsScenes =
         {
-            "Assets/Scenes/01_Bootstrap.unity",
-            "Assets/Scenes/05_Gameplay.unity",
-            "Assets/Scenes/Maps/GameMap_01.unity",
-            "Assets/Scenes/Maps/GameMap_02.unity",
-            // Pre-reserved map slots — enable at runtime via backend admin dashboard.
-            "Assets/Scenes/Maps/GameMap_03.unity",
-            "Assets/Scenes/Maps/GameMap_04.unity",
-            "Assets/Scenes/Maps/GameMap_05.unity",
-            "Assets/Scenes/Maps/GameMap_06.unity",
-            "Assets/Scenes/Maps/GameMap_07.unity",
-            "Assets/Scenes/Maps/GameMap_08.unity",
-            "Assets/Scenes/Maps/GameMap_09.unity",
-            "Assets/Scenes/Maps/GameMap_10.unity",
+            "Assets/_Night_Hunt/Scenes/00_DS_Boot.unity",
+            "Assets/_Night_Hunt/Scenes/02_Map_01.unity",
+            // Thêm map mới ở đây khi có:
+            // "Assets/_Night_Hunt/Scenes/02_Map_02.unity",
         };
 
         /// <summary>Scenes đầy đủ cho Client build.</summary>
         private static readonly string[] ClientScenes =
         {
-            "Assets/Scenes/01_Bootstrap.unity",
-            "Assets/Scenes/02_Home.unity",
-            "Assets/Scenes/03_CharacterSelect.unity",
-            "Assets/Scenes/04_Lobby.unity",
-            "Assets/Scenes/06_MatchLoading.unity",
-            "Assets/Scenes/05_Gameplay.unity",
-            "Assets/Scenes/Maps/GameMap_01.unity",
-            "Assets/Scenes/Maps/GameMap_02.unity",
-            // Pre-reserved map slots — enable at runtime via backend admin dashboard.
-            "Assets/Scenes/Maps/GameMap_03.unity",
-            "Assets/Scenes/Maps/GameMap_04.unity",
-            "Assets/Scenes/Maps/GameMap_05.unity",
-            "Assets/Scenes/Maps/GameMap_06.unity",
-            "Assets/Scenes/Maps/GameMap_07.unity",
-            "Assets/Scenes/Maps/GameMap_08.unity",
-            "Assets/Scenes/Maps/GameMap_09.unity",
-            "Assets/Scenes/Maps/GameMap_10.unity",
+            "Assets/_Night_Hunt/Scenes/01_Home.unity",
+            "Assets/_Night_Hunt/Scenes/02_Map_01.unity",
+            // Thêm map mới ở đây khi có:
+            // "Assets/_Night_Hunt/Scenes/02_Map_02.unity",
         };
 
         // ── Build targets ─────────────────────────────────────────────────────

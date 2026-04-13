@@ -44,7 +44,7 @@ namespace NightHunt.Data.DTOs
         public string   mapId;             // "map_01"
         public string   displayName;       // "Industrial Zone"
         public string   description;
-        public string   sceneName;         // "GameMap_01" — maps to SceneId enum via Enum.TryParse
+        public string   sceneName;         // Unity scene file name, e.g. "02_Map_01" — matched via SceneConfig reverse lookup
         public string[] supportedModes;    // null = all modes; non-null = ["2v2","3v3"]
         public bool     isLocked;          // @JsonProperty("isLocked") on backend → key "isLocked"
         public int      displayOrder;

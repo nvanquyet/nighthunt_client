@@ -8,7 +8,7 @@ on:
       - "Assets/**"
       - "Packages/**"
       - "ProjectSettings/**"
-      - "docker/dedicated-server/**"
+      - "Build/Server/**"
       - ".github/workflows/build-dedicated-server.yml"
 
   # Build thủ công
@@ -21,8 +21,7 @@ on:
 
 # ── Environment ───────────────────────────────────────────────────────────────
 env:
-  # ⚠️ Thay đúng Unity version của project
-  UNITY_VERSION: "2022.3.20f1"
+  UNITY_VERSION: "6000.0.39f1"
 
   # Docker image sẽ được push lên GitHub Container Registry
   REGISTRY:   ghcr.io
@@ -73,7 +72,7 @@ jobs:
         with:
           unityVersion:     ${{ env.UNITY_VERSION }}
           targetPlatform:   StandaloneLinux64
-          buildName:        NightHuntServer
+          buildName:        NightHuntDS
           buildsPath:       Builds
           # Dedicated Server mode + chạy BuildScript.BuildDedicatedServer
           customParameters: >-
@@ -85,8 +84,8 @@ jobs:
           echo "=== Build output ==="
           ls -lah Builds/DedicatedServer/
           # Đảm bảo binary tồn tại và có quyền execute
-          test -f Builds/DedicatedServer/NightHuntServer || (echo "❌ Binary not found!" && exit 1)
-          chmod +x Builds/DedicatedServer/NightHuntServer
+          test -f Builds/DedicatedServer/NightHuntDS.x86_64 || (echo "❌ Binary not found!" && exit 1)
+          chmod +x Builds/DedicatedServer/NightHuntDS.x86_64
           echo "✅ Binary verified"
 
       # Upload artifact để job build-docker dùng
@@ -96,8 +95,6 @@ jobs:
           name:           ds-build-${{ steps.gen-version.outputs.version }}
           path:           Builds/DedicatedServer/
           retention-days: 7
-
-  # ── Job 2: Build & Push Docker Image ────────────────────────────────────────
   build-docker:
     name: "Docker Build & Push"
     runs-on: ubuntu-latest
@@ -110,19 +107,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Download Unity build từ job trước
+      # Download Unity build từ job trước vào Docker build context
       - name: Download DS build artifact
         uses: actions/download-artifact@v4
         with:
           name: ds-build-${{ needs.build-unity.outputs.version }}
-          # Download đúng vào Docker build context
-          path: docker/dedicated-server/build/
+          path: Build/Server/
 
       - name: Prepare Docker context
         run: |
           echo "=== Docker context ==="
-          ls -lah docker/dedicated-server/build/
-          chmod +x docker/dedicated-server/build/NightHuntServer
+          ls -lah Build/Server/
+          chmod +x Build/Server/NightHuntDS.x86_64
           echo "✅ Context ready"
 
       - name: Login to GitHub Container Registry
@@ -147,8 +143,8 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
-          context:     docker/dedicated-server
-          file:        docker/dedicated-server/Dockerfile
+          context:     Build/Server
+          file:        Build/Server/Dockerfile
           push:        true
           tags:        ${{ steps.meta.outputs.tags }}
           labels:      ${{ steps.meta.outputs.labels }}
@@ -176,7 +172,7 @@ jobs:
       - name: Notify backend - new image available
         run: |
           curl -s -f -X POST "${{ vars.VPS_BACKEND_URL }}/api/admin/ds/update-image" \
-            -H "Authorization: Bearer ${{ secrets.BACKEND_ADMIN_SECRET }}" \
+            -H "X-Admin-Secret: ${{ secrets.BACKEND_ADMIN_SECRET }}" \
             -H "Content-Type: application/json" \
             -d '{
               "version":  "${{ needs.build-unity.outputs.version }}",

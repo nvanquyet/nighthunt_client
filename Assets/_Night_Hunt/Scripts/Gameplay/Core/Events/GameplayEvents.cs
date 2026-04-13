@@ -11,6 +11,22 @@ namespace NightHunt.Gameplay.Core.Events
         public float Timestamp => Time.time;
     }
 
+    /// <summary>
+    /// One player has successfully spawned on the server.
+    /// Fired after EVERY individual spawn so clients can show per-player progress
+    /// (e.g. "2 / 4 players joined").
+    /// </summary>
+    public struct PlayerSpawnedEvent : IGameplayEvent
+    {
+        public float  Timestamp    => Time.time;
+        /// <summary>Display name of the player who just spawned.</summary>
+        public string DisplayName;
+        /// <summary>How many players have spawned so far (including this one).</summary>
+        public int    SpawnedCount;
+        /// <summary>Total expected players for this match.</summary>
+        public int    ExpectedCount;
+    }
+
     /// <summary>All expected players have spawned. Clients should dismiss loading screen.</summary>
     public struct AllPlayersReadyEvent : IGameplayEvent
     {

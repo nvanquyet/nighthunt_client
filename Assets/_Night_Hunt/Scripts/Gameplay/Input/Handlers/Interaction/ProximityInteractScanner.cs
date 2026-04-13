@@ -130,10 +130,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             var found = new List<IInteractable>(hitCount);
             for (int i = 0; i < hitCount; i++)
             {
+                // Silent resolve — it is normal for colliders (terrain, player body, etc.)
+                // to not implement IInteractable. No warning needed.
                 var interactable = ComponentResolver.Find<IInteractable>(_overlapBuffer[i])
                                                     .InParent()
                                                     .InRootChildren()
-                                                    .OrLogWarning("[Auto] IInteractable not found")
                                                     .Resolve();
                 if (interactable == null) continue;
                 if (found.Contains(interactable)) continue; // already found via another collider
