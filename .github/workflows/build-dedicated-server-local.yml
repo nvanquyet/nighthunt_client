@@ -1,0 +1,199 @@
+name: "Build & Deploy DS (Self-Hosted)"
+
+# ── Trigger ───────────────────────────────────────────────────────────────────
+# Chỉ chạy thủ công — dành cho build trên máy local thay vì GitHub-hosted runner
+on:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Force rebuild"
+        type: boolean
+        default: false
+
+env:
+  UNITY_VERSION: "6000.0.39f1"
+  REGISTRY:      ghcr.io
+  IMAGE_NAME:    ${{ github.repository_owner }}/nighthunt-ds
+
+jobs:
+
+  # ── Job 1: Build Unity DS trực tiếp bằng Unity.exe trên máy Windows ─────────
+  build-unity:
+    name: "Unity Build (Local Machine)"
+    runs-on: self-hosted        # ← Chạy trên runner cài ở máy mình
+    timeout-minutes: 60
+
+    outputs:
+      version: ${{ steps.gen-version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Generate version
+        id: gen-version
+        shell: pwsh
+        run: |
+          $version = (Get-Date -Format "yyyyMMdd") + "-" + ("${{ github.sha }}".Substring(0,8))
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $version"
+
+      # Tìm Unity.exe tự động từ Unity Hub installation
+      - name: Find Unity installation
+        id: find-unity
+        shell: pwsh
+        run: |
+          $unityExe = "C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}\Editor\Unity.exe"
+          if (-not (Test-Path $unityExe)) {
+            # Fallback: tìm bất kỳ Unity 6000.x nào
+            $unityExe = Get-ChildItem "C:\Program Files\Unity\Hub\Editor\*\Editor\Unity.exe" `
+              | Where-Object { $_.FullName -match "6000" } `
+              | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $unityExe -or -not (Test-Path $unityExe)) {
+            Write-Error "Unity ${{ env.UNITY_VERSION }} not found. Install via Unity Hub."
+            exit 1
+          }
+          Write-Host "Found Unity: $unityExe"
+          echo "unity_exe=$unityExe" >> $env:GITHUB_OUTPUT
+
+      # Build DS — KHÔNG mở Unity Editor UI, không cần switch profile
+      - name: Build Unity Dedicated Server
+        shell: pwsh
+        run: |
+          $logFile = "${{ github.workspace }}\unity-build.log"
+          $buildOutput = "${{ github.workspace }}\Build\Server\NightHuntDS"
+
+          Write-Host "=== Starting DS Build ==="
+          Write-Host "Unity: ${{ steps.find-unity.outputs.unity_exe }}"
+          Write-Host "Output: $buildOutput"
+
+          & "${{ steps.find-unity.outputs.unity_exe }}" `
+            -quit `
+            -batchmode `
+            -nographics `
+            -projectPath "${{ github.workspace }}" `
+            -buildMethod "NightHunt.Build.BuildScript.BuildDedicatedServer" `
+            -buildOutput "$buildOutput" `
+            -standaloneBuildSubtarget "Server" `
+            -disableBurstCompilation `
+            -logFile "$logFile"
+
+          $exitCode = $LASTEXITCODE
+
+          # Luôn in log (dù pass hay fail)
+          if (Test-Path $logFile) {
+            Write-Host "=== Unity Build Log (last 80 lines) ==="
+            Get-Content $logFile | Select-Object -Last 80
+          }
+
+          if ($exitCode -ne 0) {
+            Write-Error "Unity build failed with exit code: $exitCode"
+            exit $exitCode
+          }
+          Write-Host "=== Build SUCCESS ==="
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          $buildDir = "${{ github.workspace }}\Build\Server"
+          Write-Host "=== Build output ==="
+          Get-ChildItem $buildDir | Format-Table Name, Length, LastWriteTime
+
+          $binary = Get-ChildItem $buildDir -Filter "NightHuntDS*" | Select-Object -First 1
+          if (-not $binary) {
+            Write-Error "Binary not found in Build\Server\"
+            exit 1
+          }
+          Write-Host "Binary: $($binary.FullName) ($([math]::Round($binary.Length/1MB, 1)) MB)"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name:           ds-build-${{ steps.gen-version.outputs.version }}
+          path:           Build/Server/
+          retention-days: 7
+
+  # ── Job 2: Docker build & push (cần Docker Desktop trên máy) ─────────────────
+  build-docker:
+    name: "Docker Build & Push (Local)"
+    runs-on: self-hosted
+    needs: build-unity
+    if: needs.build-unity.result == 'success'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download DS build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ds-build-${{ needs.build-unity.outputs.version }}
+          path: Build/Server/
+
+      - name: Prepare Docker context
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "docker\dedicated-server\build" | Out-Null
+          Copy-Item "Build\Server\*" "docker\dedicated-server\build\" -Recurse -Force
+          Write-Host "=== Docker context ==="
+          Get-ChildItem "docker\dedicated-server\build" | Format-Table Name, Length
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.build-unity.outputs.version }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context:   docker/dedicated-server
+          file:      docker/dedicated-server/Dockerfile
+          push:      true
+          tags:      ${{ steps.meta.outputs.tags }}
+          labels:    ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+
+  # ── Job 3: Notify Backend ─────────────────────────────────────────────────────
+  notify-backend:
+    name: "Notify Backend"
+    runs-on: self-hosted
+    needs: [ build-unity, build-docker ]
+    environment: NightHunt
+    if: needs.build-docker.result == 'success' && vars.VPS_BACKEND_URL != ''
+
+    steps:
+      - name: Notify backend - new image available
+        shell: pwsh
+        run: |
+          $body = @{
+            version  = "${{ needs.build-unity.outputs.version }}"
+            imageRef = "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-unity.outputs.version }}"
+          } | ConvertTo-Json
+
+          Invoke-RestMethod `
+            -Uri "${{ vars.VPS_BACKEND_URL }}/api/admin/ds/update-image" `
+            -Method POST `
+            -Headers @{ "X-Admin-Secret" = "${{ secrets.BACKEND_ADMIN_SECRET }}"; "Content-Type" = "application/json" } `
+            -Body $body
+          Write-Host "Backend notified successfully"

@@ -58,9 +58,9 @@ jobs:
           android:              true    # ~9 GB
           dotnet:               true    # ~2 GB
           haskell:              true    # ~1 GB
-          large-packages:       true    # ~4 GB (gcc, clang, ...)
+          large-packages:       false  # Tắt — apt remove mất 10+ phút, khiến runner crash timeout
           docker-images:        true    # xoá image cũ
-          swap-storage:         true    # Tắt swap (dùng disk cho layer)
+          swap-storage:         false  # GIỮ swap — Unity cần fallback khi RAM đầy
 
       - name: Checkout
         uses: actions/checkout@v4
