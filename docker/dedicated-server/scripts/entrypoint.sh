@@ -46,9 +46,21 @@ echo "✅ Environment validated"
 echo "🚀 Starting Unity Dedicated Server..."
 echo ""
 
+# ── Find DS binary (Unity có thể output NightHuntDS hoặc NightHuntDS.x86_64) ─
+if [ -f "/app/NightHuntDS.x86_64" ]; then
+    DS_BINARY="/app/NightHuntDS.x86_64"
+elif [ -f "/app/NightHuntDS" ]; then
+    DS_BINARY="/app/NightHuntDS"
+else
+    echo "❌ ERROR: No DS binary found in /app/ (expected NightHuntDS or NightHuntDS.x86_64)"
+    ls -la /app/
+    exit 1
+fi
+echo "📦 Using binary: ${DS_BINARY}"
+
 # ── Start Unity DS ────────────────────────────────────────────────────────────
 # Log file: /app/logs/server-<timestamp>.log
-exec /app/NightHuntDS.x86_64                           \
+exec "${DS_BINARY}"                                    \
     -batchmode                                         \
     -nographics                                        \
     -logFile /app/logs/server-$(date +%Y%m%d-%H%M%S).log \

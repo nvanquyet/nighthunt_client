@@ -150,7 +150,8 @@ jobs:
           # Dockerfile does: COPY ./build/ /app/  (relative to context = docker/dedicated-server/)
           mkdir -p docker/dedicated-server/build
           cp -r Build/Server/* docker/dedicated-server/build/
-          chmod +x docker/dedicated-server/build/NightHuntDS.x86_64 2>/dev/null || true
+          chmod +x docker/dedicated-server/build/NightHuntDS.x86_64 2>/dev/null || \
+          chmod +x docker/dedicated-server/build/NightHuntDS          2>/dev/null || true
           echo "=== Docker context ==="
           ls -lah docker/dedicated-server/build/
           echo "✅ Context ready"

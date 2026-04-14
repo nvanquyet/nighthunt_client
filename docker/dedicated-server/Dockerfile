@@ -32,8 +32,8 @@ COPY --chown=gameserver:gameserver ./build/ /app/
 COPY --chown=gameserver:gameserver ./scripts/entrypoint.sh   /app/entrypoint.sh
 COPY --chown=gameserver:gameserver ./scripts/health-check.sh /app/health-check.sh
 
-# Cấp quyền execute
-RUN chmod +x /app/NightHuntDS.x86_64 \
+# Cấp quyền execute (Unity có thể output NightHuntDS hoặc NightHuntDS.x86_64)
+RUN (chmod +x /app/NightHuntDS.x86_64 2>/dev/null || chmod +x /app/NightHuntDS 2>/dev/null || echo "WARNING: DS binary not found") \
     && chmod +x /app/entrypoint.sh \
     && chmod +x /app/health-check.sh \
     && mkdir -p /app/logs
