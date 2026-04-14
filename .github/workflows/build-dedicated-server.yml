@@ -95,12 +95,10 @@ jobs:
         with:
           unityVersion:     ${{ env.UNITY_VERSION }}
           targetPlatform:   StandaloneLinux64
-          buildName:        NightHuntDS
-          buildsPath:       Builds
-          # Dedicated Server mode + chạy BuildScript.BuildDedicatedServer
+          buildMethod:      NightHunt.Build.BuildScript.BuildDedicatedServer
+          # -standaloneBuildSubtarget và -buildOutput passed riêng, KHÔNG dùng -executeMethod (tránh duplicate với buildMethod)
           customParameters: >-
             -standaloneBuildSubtarget Server
-            -executeMethod NightHunt.Build.BuildScript.BuildDedicatedServer
             -buildOutput Build/Server/NightHuntDS
 
       - name: Verify build output
