@@ -72,6 +72,35 @@ namespace NightHunt.Networking
             networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
             if (GameWebSocketService.Instance != null)
                 GameWebSocketService.Instance.OnDsReady += OnDsReadyReceived;
+
+            // ── Fix A: scene-scoped singleton starts INSIDE the map scene ────
+            // SceneLoader.LoadGame() uses Unity's SceneManager.LoadScene() which does NOT
+            // fire FishNet's SceneManager.OnLoadEnd. If this instance started inside a map
+            // scene, mark the flag immediately.
+            var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (activeScene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.Log($"[NetworkGameManager] Started inside map scene '{activeScene.name}' — setting _gameSceneLoaded = true.");
+                _gameSceneLoaded = true;
+            }
+
+            // ── Fix B: ds_ready may have arrived before this instance subscribed ─
+            // GameWebSocketService broadcasts ds_ready once. If the previous scene's
+            // NetworkGameManager was destroyed before receiving it (or it arrived during
+            // scene transition), _dsReady stays false even though DS is up.
+            // Fallback: if RoomState already has DsIp set (from match_ready or ds_ready
+            // handled by GameWebSocketService directly), treat DS as ready.
+            if (!_dsReady
+                && RoomState.Instance?.CurrentGameMode == GameMode.Ranked_DS
+                && !string.IsNullOrEmpty(RoomState.Instance?.DsIp))
+            {
+                Debug.Log("[NetworkGameManager] RoomState has DsIp set — assuming ds_ready already received, setting _dsReady = true.");
+                _dsReady = true;
+            }
+
+            // Try connect now if both flags are already true (most common case in map scene)
+            if (_gameSceneLoaded)
+                TryConnectIfReady();
         }
 
         protected override void OnDestroy()
@@ -215,18 +244,46 @@ namespace NightHunt.Networking
             if (_connectionStarted) return;
 
             var room = RoomState.Instance;
-            if (room == null) return;
+            if (room == null)
+            {
+                Debug.LogWarning("[NetworkGameManager] TryConnectIfReady: RoomState is null — cannot auto-connect. " +
+                                 "Use NetworkStartMenu for dev/editor testing (GameMode.None path).");
+                return;
+            }
 
             // Relay mode: connect as soon as the scene loads (no DS boot wait)
             if (room.CurrentGameMode == GameMode.Custom_Relay)
             {
-                if (!_gameSceneLoaded) return;
+                if (!_gameSceneLoaded)
+                {
+                    Debug.Log("[NetworkGameManager] TryConnectIfReady: waiting for map scene to load (Relay mode).");
+                    return;
+                }
             }
-            else // Ranked_DS: require both scene loaded AND DS ready
+            else if (room.CurrentGameMode == GameMode.Ranked_DS)
             {
-                if (!_gameSceneLoaded || !_dsReady) return;
+                if (!_gameSceneLoaded)
+                {
+                    Debug.Log("[NetworkGameManager] TryConnectIfReady: waiting for map scene to load (Ranked_DS mode).");
+                    return;
+                }
+                if (!_dsReady)
+                {
+                    Debug.Log($"[NetworkGameManager] TryConnectIfReady: waiting for ds_ready WS event " +
+                              $"(DsIp={room.DsIp} DsPort={room.DsPort}). " +
+                              "DS may still be booting — this is expected if DS was just allocated.");
+                    return;
+                }
+            }
+            else
+            {
+                // GameMode.None — dev/editor; NetworkStartMenu handles connection manually
+                Debug.Log("[NetworkGameManager] TryConnectIfReady: GameMode.None — skipping auto-connect. " +
+                          "Use NetworkStartMenu buttons (StartServer / StartClientLocal / StartClient) for testing.");
+                return;
             }
 
+            Debug.Log($"[NetworkGameManager] ✅ Both conditions met (_gameSceneLoaded={_gameSceneLoaded}, _dsReady={_dsReady}) — auto-connecting.");
             _retryCount        = 0;
             _connectionStarted = false;
             _connected         = false;

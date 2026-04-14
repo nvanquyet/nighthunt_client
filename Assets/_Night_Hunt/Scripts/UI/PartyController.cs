@@ -87,7 +87,6 @@ namespace NightHunt.UI
         // Queue
         private RankedQueueState _queueState        = RankedQueueState.Idle;
         private float            _searchElapsed     = 0f;
-        private string           _pendingLobbyToken;
 
         // Mode
         private GameModeEntry[] _enabledModes      = Array.Empty<GameModeEntry>();
@@ -331,6 +330,14 @@ namespace NightHunt.UI
 
         private async Task StartQueue()
         {
+            // Block if already in a custom room — must leave first.
+            if (RoomState.Instance != null && RoomState.Instance.IsInRoom)
+            {
+                ShowToast("Xếp hạng", "Hãy rời phòng custom trước khi vào xếp hạng.");
+                SetQueueState(RankedQueueState.Idle);
+                return;
+            }
+
             string modeKey   = SelectedMode.modeKey;
             string mapId     = _currentMaps.Length > 0 ? _currentMaps[_selectedMapIdx].mapId : null;
             bool   allowFill = SelectedMode.allowFill;
@@ -370,7 +377,6 @@ namespace NightHunt.UI
             else
                 await GameManager.Instance.BackendClient.DeleteAsync<object>(Constants.API_MATCHMAKING_QUEUE);
 
-            _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
         }
 
@@ -456,73 +462,13 @@ namespace NightHunt.UI
 
         private void HandleMatchFound(GameWebSocketService.MatchFoundEvent e)
         {
-            _pendingLobbyToken = e.lobbyToken;
-            SetQueueState(RankedQueueState.Idle);   // dừng timer "đang tìm trận"
+            SetQueueState(RankedQueueState.Idle);   // stop search timer
 
-            long localUserId = _sessionState?.UserId ?? 0L;
-
-            var overlay = MatchFoundOverlay.Instance;
-            if (overlay != null)
-            {
-                // Unwire cũ trước để không bị double-subscribe nếu match_found đến nhiều lần
-                overlay.OnAccepted -= OnMatchFoundAccepted;
-                overlay.OnDeclined -= OnMatchFoundDeclined;
-                overlay.OnAccepted += OnMatchFoundAccepted;
-                overlay.OnDeclined += OnMatchFoundDeclined;
-
-                overlay.Show(
-                    lobbyToken:     e.lobbyToken,
-                    gameMode:       e.gameMode,
-                    mapId:          null,                   // match_found chưa có mapId — chỉ có ở match_ready
-                    playerIds:      e.playerIds,
-                    localUserId:    localUserId,
-                    timeoutSeconds: e.acceptTimeoutSeconds);
-            }
-            else
-            {
-                // Fallback: không có overlay → auto-accept (giữ hành vi cũ)
-                Debug.LogWarning("[PartyController] MatchFoundOverlay not found — auto-accepting.");
-                _ = SendAcceptAsync(e.lobbyToken);
-            }
-        }
-
-        private async void OnMatchFoundAccepted()
-        {
-            var overlay = MatchFoundOverlay.Instance;
-            if (overlay != null)
-            {
-                overlay.OnAccepted -= OnMatchFoundAccepted;
-                overlay.OnDeclined -= OnMatchFoundDeclined;
-            }
-            await SendAcceptAsync(_pendingLobbyToken);
-        }
-
-        private async void OnMatchFoundDeclined()
-        {
-            var overlay = MatchFoundOverlay.Instance;
-            if (overlay != null)
-            {
-                overlay.OnAccepted -= OnMatchFoundAccepted;
-                overlay.OnDeclined -= OnMatchFoundDeclined;
-            }
-
-            string token = _pendingLobbyToken;
-            _pendingLobbyToken = null;
-
-            if (!string.IsNullOrEmpty(token))
-                await GameManager.Instance.BackendClient.PostAsync<object>(
-                    Constants.API_MATCHMAKING_DECLINE,
-                    new MatchmakingDeclineRequest { lobbyToken = token });
-
-            SetQueueState(RankedQueueState.Idle);
-        }
-
-        private async System.Threading.Tasks.Task SendAcceptAsync(string lobbyToken)
-        {
-            if (string.IsNullOrEmpty(lobbyToken)) return;
-            await GameManager.Instance.BackendClient.PostAsync<object>(
-                Constants.API_MATCHMAKING_ACCEPT,
-                new MatchmakingAcceptRequest { lobbyToken = lobbyToken });
+            // Show overlay with player names — server starts DS immediately, no accept needed.
+            MatchFoundOverlay.Instance?.Show(
+                gameMode:    e.gameMode,
+                playerIds:   e.playerIds,
+                localUserId: _sessionState?.UserId ?? 0L);
         }
 
         private void HandleDsReady(GameWebSocketService.DsReadyEvent e)
@@ -536,7 +482,6 @@ namespace NightHunt.UI
             // Ẩn overlay "tìm thấy trận" (nếu đang mở)
             MatchFoundOverlay.Instance?.Hide();
 
-            _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
 
             // Lưu DS info vào RoomState để NetworkGameManager dùng khi scene load
@@ -569,7 +514,6 @@ namespace NightHunt.UI
             // Ẩn overlay "tìm thấy trận" (nếu đang mở)
             MatchFoundOverlay.Instance?.Hide();
 
-            _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
             string reason = !string.IsNullOrEmpty(e.reason) ? e.reason : "Match was cancelled.";
             ShowToast("Matchmaking", $"Match cancelled: {reason}");

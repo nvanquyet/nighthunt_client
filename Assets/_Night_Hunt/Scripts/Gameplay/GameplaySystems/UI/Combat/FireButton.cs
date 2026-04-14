@@ -1,5 +1,4 @@
-#if !UNITY_SERVER
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using NightHunt.Gameplay.Input.Handlers.Combat;
@@ -11,28 +10,28 @@ namespace NightHunt.GameplaySystems.UI.Combat
     /// <summary>
     /// On-screen fire button for mobile / controller UI.
     ///
-    /// PointerDown  → <see cref="CombatInputHandler.SimulateFire"/>(true)  — begins firing.
-    /// PointerUp    → <see cref="CombatInputHandler.SimulateFire"/>(false) — stops  firing.
+    /// PointerDown  ΓåÆ <see cref="CombatInputHandler.SimulateFire"/>(true)  ΓÇö begins firing.
+    /// PointerUp    ΓåÆ <see cref="CombatInputHandler.SimulateFire"/>(false) ΓÇö stops  firing.
     ///
     /// MOBA-style visual feedback:
-    ///   • <see cref="ButtonPulseRing"/>  — 2-D expanding ring around this button (UI-space).
-    ///   • <see cref="RangeIndicator"/>   — world-space ring shown while button is held (Show on Down, Hide on Up).
+    ///   ΓÇó <see cref="ButtonPulseRing"/>  ΓÇö 2-D expanding ring around this button (UI-space).
+    ///   ΓÇó <see cref="RangeIndicator"/>   ΓÇö world-space ring shown while button is held (Show on Down, Hide on Up).
     ///
     /// Inspector setup:
-    ///   • <c>_combatInputHandler</c>  — leave null to auto-find at Awake.
-    ///   • <c>_pulseRing</c>           — auto-found on same GO.
-    ///   • <c>_rangeIndicator</c>      — assign RangeIndicator GO from scene, then call
+    ///   ΓÇó <c>_combatInputHandler</c>  ΓÇö leave null to auto-find at Awake.
+    ///   ΓÇó <c>_pulseRing</c>           ΓÇö auto-found on same GO.
+    ///   ΓÇó <c>_rangeIndicator</c>      ΓÇö assign RangeIndicator GO from scene, then call
     ///     <see cref="BindRangeIndicator"/> after player spawns to set follow-target + range.
     ///
     /// Mobile joystick aim:
-    ///   Drag on this button → forwards drag direction to CombatInputHandler so the
+    ///   Drag on this button ΓåÆ forwards drag direction to CombatInputHandler so the
     ///   character rotates while firing.  Finger lift clears the override.
     /// </summary>
     public class FireButton : ActionButton, IDragHandler, IBeginDragHandler, IEndDragHandler
     {
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         //  Inspector
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
         [Header("Fire Button")]
         [Tooltip("The CombatInputHandler belonging to the local player. " +
@@ -48,21 +47,21 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] private RangeIndicator _rangeIndicator;
 
         [Header("Mobile Virtual Joystick")]
-        [Tooltip("VariableJoystick on a child GO — must be DISABLED in the scene by default. " +
+        [Tooltip("VariableJoystick on a child GO ΓÇö must be DISABLED in the scene by default. " +
                  "Set mode = Floating. FireButton enables it after the hold delay and disables it on release.")]
         [SerializeField] private VariableJoystick _joystick;
         [Tooltip("Hold duration in seconds before the joystick visual appears. Short taps fire straight ahead.")]
         [SerializeField] private float _holdDelay = 0.25f;
 
-        // ── Runtime joystick state ────────────────────────────────────────────
+        // ΓöÇΓöÇ Runtime joystick state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         private Coroutine        _holdTimer;
         private bool             _joystickStarted;
         /// <summary>PointerDown event cached on press; used to position the joystick once the hold delay fires.</summary>
         private PointerEventData _pressEventData;
 
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         //  Unity Lifecycle
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
         protected override void Awake()
         {
@@ -84,7 +83,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         }
 
         /// <summary>
-        /// Bind this button to the local player’s CombatInputHandler.
+        /// Bind this button to the local playerΓÇÖs CombatInputHandler.
         /// Must be called by the HUD orchestrator (CombatHUDPanel) after the local player spawns.
         /// </summary>
         public void Initialize(CombatInputHandler handler)
@@ -92,9 +91,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _combatInputHandler = handler;
         }
 
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         //  Pointer Events
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
         public override void OnPointerDown(PointerEventData eventData)
         {
@@ -104,10 +103,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _combatInputHandler?.SimulateFire(true);   // frame 1: aim = current player facing direction
             _pulseRing?.Play();
 
-            Debug.Log($"[FireButton] OnPointerDown — screenPos={eventData.position:F0}  " +
+            Debug.Log($"[FireButton] OnPointerDown ΓÇö screenPos={eventData.position:F0}  " +
                       $"joystickAssigned={_joystick != null}  handler={_combatInputHandler != null}");
 
-            // Start hold timer — joystick enables only after _holdDelay seconds.
+            // Start hold timer ΓÇö joystick enables only after _holdDelay seconds.
             if (_holdTimer != null) StopCoroutine(_holdTimer);
             _holdTimer = StartCoroutine(HoldTimerCo());
         }
@@ -127,15 +126,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _rangeIndicator?.Hide();
         }
 
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         //  Mobile Virtual Joystick (IDragHandler / IBeginDragHandler / IEndDragHandler)
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         //  Hold-delay pattern:
-        //    PointerDown  → SimulateFire(true) + start hold timer
-        //    < holdDelay  → quick tap — fires straight, joystick not shown
-        //    ≥ holdDelay  → VariableJoystick appears at press position
-        //    OnDrag       → package handles clamp/thumb; read Direction; camera-relative XZ
-        //    PointerUp    → hide joystick, clear aim, SimulateFire(false)
+        //    PointerDown  ΓåÆ SimulateFire(true) + start hold timer
+        //    < holdDelay  ΓåÆ quick tap ΓÇö fires straight, joystick not shown
+        //    ΓëÑ holdDelay  ΓåÆ VariableJoystick appears at press position
+        //    OnDrag       ΓåÆ package handles clamp/thumb; read Direction; camera-relative XZ
+        //    PointerUp    ΓåÆ hide joystick, clear aim, SimulateFire(false)
 
         public void OnBeginDrag(PointerEventData eventData)
         {
@@ -145,25 +144,25 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public void OnDrag(PointerEventData eventData)
         {
             if (!_joystickStarted) StartJoystick(eventData);
-            if (_joystick == null) return;   // no joystick assigned — keep frame-1 direction
+            if (_joystick == null) return;   // no joystick assigned ΓÇö keep frame-1 direction
 
             _joystick.OnDrag(eventData);
             Vector2 joystickDir = CamRelativeXZ(_joystick.Direction);
 
-            Debug.Log($"[FireButton] OnDrag — rawDir={_joystick.Direction:F2}  " +
+            Debug.Log($"[FireButton] OnDrag ΓÇö rawDir={_joystick.Direction:F2}  " +
                       $"camRelXZ={joystickDir:F2}  mag={joystickDir.magnitude:F2}");
 
             _combatInputHandler?.SetFireMobileJoystick(joystickDir, active: true);
         }
 
-        // IEndDragHandler — OnPointerUp fires TRƯỚC EndDrag (Unity EventSystem dispatch order).
-        // Mọi cleanup đã được xử lý trong OnPointerUp (joystick hide + SimulateFire(false)).
-        // OnEndDrag chỉ là safety net cho edge case drag kết thúc mà không có PointerUp
-        // (ví dụ: pointer rời khỏi màn hình trong khi drag).
+        // IEndDragHandler ΓÇö OnPointerUp fires TR╞»ß╗ÜC EndDrag (Unity EventSystem dispatch order).
+        // Mß╗ìi cleanup ─æ├ú ─æ╞░ß╗úc xß╗¡ l├╜ trong OnPointerUp (joystick hide + SimulateFire(false)).
+        // OnEndDrag chß╗ë l├á safety net cho edge case drag kß║┐t th├║c m├á kh├┤ng c├│ PointerUp
+        // (v├¡ dß╗Ñ: pointer rß╗¥i khß╗Åi m├án h├¼nh trong khi drag).
         public void OnEndDrag(PointerEventData eventData)
         {
-            // _joystickStarted đã bị set = false trong OnPointerUp nên block này
-            // chỉ chạy ở edge case pointer-left-screen.
+            // _joystickStarted ─æ├ú bß╗ï set = false trong OnPointerUp n├¬n block n├áy
+            // chß╗ë chß║íy ß╗ƒ edge case pointer-left-screen.
             if (_joystickStarted && _joystick != null)
             {
                 _joystick.OnPointerUp(eventData);
@@ -171,7 +170,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
             _joystickStarted = false;
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
-            // Gọi SimulateFire(false) nếu vẫn còn đang fire (edge case không có PointerUp).
+            // Gß╗ìi SimulateFire(false) nß║┐u vß║½n c├▓n ─æang fire (edge case kh├┤ng c├│ PointerUp).
             _combatInputHandler?.SimulateFire(false);
         }
 
@@ -210,13 +209,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
             return new Vector2(world.x, world.z);
         }
 
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         //  Visual Feedback
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
         /// <summary>
         /// Trigger the 2D button pulse ring. Called from keyboard/hardware fire path.
-        /// (Range indicator is not shown for keyboard fire — it is only shown while the
+        /// (Range indicator is not shown for keyboard fire ΓÇö it is only shown while the
         /// touch/mouse button is physically held via OnPointerDown/OnPointerUp.)
         /// </summary>
         public void TriggerAttackFeedback()
@@ -224,9 +223,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _pulseRing?.Play();
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        //  Public API — runtime rebinding
-        // ─────────────────────────────────────────────────────────────────────
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        //  Public API ΓÇö runtime rebinding
+        // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
         /// <summary>Rebind to a new CombatInputHandler (called when local player changes).</summary>
         public void Bind(CombatInputHandler handler)
@@ -271,4 +270,3 @@ namespace NightHunt.GameplaySystems.UI.Combat
         }
     }
 }
-#endif // !UNITY_SERVER

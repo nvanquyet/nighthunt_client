@@ -85,6 +85,8 @@ namespace NightHunt.Gameplay.Core.Events
         public int Score;
         /// <summary>Change in ELO (positive = gain, negative = loss). 0 for Custom mode.</summary>
         public int EloChange;
+        /// <summary>Coins awarded this match (always >= 0 for all modes).</summary>
+        public long CoinChange;
     }
 
     // ── Beacon ────────────────────────────────────────────────────────────────

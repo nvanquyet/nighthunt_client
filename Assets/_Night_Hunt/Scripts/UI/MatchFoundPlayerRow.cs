@@ -9,14 +9,12 @@ namespace NightHunt.UI
     ///
     /// Inspector slots:
     ///   nameText       — TextMeshProUGUI: hiển thị userId hoặc username khi có
-    ///   statusIcon     — Image: màu xanh khi ACCEPTED, xám khi PENDING
+    ///   statusIcon     — Image: màu amber trong khi server đang khởi động
     ///   localIndicator — GameObject (optional): show nếu đây là local player (e.g. "(Bạn)")
     ///
     /// Flow:
-    ///   1. MatchFoundOverlay.PopulatePlayers() → row.Bind(userId, isLocalPlayer)
-    ///      → hiện userId tạm thời, status = PENDING (xám)
-    ///   2. Khi player accept → MatchFoundOverlay.MarkPlayerAccepted(userId)
-    ///      → row.SetAccepted(true) → status = ACCEPTED (xanh)
+    ///   MatchFoundOverlay.PopulatePlayers() → row.Bind(userId, isLocalPlayer)
+    ///   Overlay là thông tin thuần — không có accept/decline.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class MatchFoundPlayerRow : MonoBehaviour
@@ -25,9 +23,8 @@ namespace NightHunt.UI
         [SerializeField] private Image           statusIcon;
         [SerializeField] private GameObject      localIndicator;   // "(Bạn)" label — optional
 
-        // ── Colors ────────────────────────────────────────────────────────────
-        private static readonly Color PendingColor  = new Color(0.55f, 0.55f, 0.55f, 1f);   // grey
-        private static readonly Color AcceptedColor = new Color(0.18f, 0.82f, 0.42f, 1f);   // green
+        // ── Colors ────────────────────────────────────────────────────────────────────────────────────
+        private static readonly Color LoadingColor = new Color(0.95f, 0.72f, 0.17f, 1f);    // amber
 
         // ── Public ────────────────────────────────────────────────────────────
 
@@ -35,7 +32,7 @@ namespace NightHunt.UI
 
         /// <summary>
         /// Bind row tới một player.
-        /// nameText hiện UserId tạm thời; màu statusIcon = PENDING.
+        /// nameText hiện UserId tạm thời; statusIcon màu amber (waiting for server).
         /// </summary>
         public void Bind(long userId, bool isLocalPlayer)
         {
@@ -44,15 +41,8 @@ namespace NightHunt.UI
             if (nameText != null)
                 nameText.text = isLocalPlayer ? $"Bạn ({userId})" : $"Player {userId}";
 
-            if (statusIcon      != null) statusIcon.color = PendingColor;
+            if (statusIcon      != null) statusIcon.color = LoadingColor;
             if (localIndicator  != null) localIndicator.SetActive(isLocalPlayer);
-        }
-
-        /// <summary>Cập nhật trạng thái visual sau khi player này đã accept.</summary>
-        public void SetAccepted(bool accepted)
-        {
-            if (statusIcon != null)
-                statusIcon.color = accepted ? AcceptedColor : PendingColor;
         }
 
         /// <summary>

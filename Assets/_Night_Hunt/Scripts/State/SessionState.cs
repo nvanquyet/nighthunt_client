@@ -23,6 +23,12 @@ namespace NightHunt.State
         /// </summary>
         public string SelectedCharacterId { get; private set; }
 
+        public long   Coins { get; private set; }
+        public int    Elo   { get; private set; }
+        public string Tier  { get; private set; }
+
+        public event Action OnProfileUpdated;
+
         public bool IsAuthenticated
         {
             get
@@ -127,6 +133,27 @@ namespace NightHunt.State
             SyncCharacterIdToPrefs(characterId);
         }
 
+        /// <summary>
+        /// Syncs full profile data from a ProfileResponse.
+        /// Called by ProfileManager after GET /api/profile.
+        /// </summary>
+        public void SetProfileData(long coins, int elo, string tier, string selectedCharacterId = null)
+        {
+            Coins = coins;
+            Elo   = elo;
+            Tier  = tier ?? Tier;
+            if (selectedCharacterId != null)
+                SetSelectedCharacterId(selectedCharacterId);
+            OnProfileUpdated?.Invoke();
+        }
+
+        /// <summary>Directly updates the coin balance (e.g. after match_ended WS event).</summary>
+        public void SetCoins(long coins)
+        {
+            Coins = coins;
+            OnProfileUpdated?.Invoke();
+        }
+
         public void ClearSession()
         {
             bool wasAuthenticated = IsAuthenticated;
@@ -137,6 +164,9 @@ namespace NightHunt.State
             Username             = null;
             // Email removed
             SelectedCharacterId  = null;
+            Coins                = 0;
+            Elo                  = 0;
+            Tier                 = null;
             ClearSavedSession();
 
             // Trigger events

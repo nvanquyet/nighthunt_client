@@ -9,6 +9,7 @@ namespace NightHunt.Data.DTOs
         public string gameMode;
         public string mapId;        // optional — null = any map
         public bool   allowFill;   // true = fill missing slots with randoms
+        public string platform;    // "MOBILE" | "PC" — auto-detected by client
     }
 
     [Serializable]
@@ -24,8 +25,8 @@ namespace NightHunt.Data.DTOs
     }
 
     /// <summary>
-    /// Sent by any connected client to POST /api/matches/{matchId}/result after match ends.
-    /// The backend validates the matchId against the authenticated user's active match.
+    /// Sent by the Custom relay host to POST /api/match/end/custom after match ends.
+    /// Must match backend MatchEndRequest.
     /// </summary>
     [Serializable]
     public class MatchResultRequest
@@ -33,13 +34,14 @@ namespace NightHunt.Data.DTOs
         public string matchId;
         public int    winnerTeamId;   // -1 = draw
         public string endReason;      // "TeamEliminated" | "TimerExpired" | "Draw"
-        public List<MatchResultPlayerEntry> players;
+        public List<MatchResultPlayerEntry> playerResults;
     }
 
     [Serializable]
     public class MatchResultPlayerEntry
     {
-        public string backendPlayerId;
+        public long   userId;         // backend user ID (long)
+        public string displayName;
         public int    teamId;
         public int    kills;
         public int    deaths;

@@ -88,6 +88,10 @@ namespace NightHunt.Data.DTOs
         public string tier;
         public int    totalWins;
         public int    totalLosses;
+        /// <summary>Current in-game coin balance.</summary>
+        public long   coins;
+        /// <summary>Device platform: "MOBILE" | "PC" | null.</summary>
+        public string platform;
     }
 
     /// <summary>Body for PUT /api/profile/character.</summary>

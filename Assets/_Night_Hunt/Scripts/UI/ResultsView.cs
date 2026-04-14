@@ -5,6 +5,7 @@ using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Networking;
+using NightHunt.Services.Game;
 using NightHunt.State;
 using TMPro;
 using UnityEngine;
@@ -42,6 +43,10 @@ namespace NightHunt.UI
 
         [SerializeField] private TextMeshProUGUI _eloChangeText;
 
+        [Header("Coin Reward (all modes)")]
+        [SerializeField] private GameObject _coinPanel;
+        [SerializeField] private TextMeshProUGUI _coinRewardText;
+
         [Header("Navigation")] [SerializeField]
         private Button _continueButton;
 
@@ -54,6 +59,10 @@ namespace NightHunt.UI
 
         // Last match end result (cached for post-match backend call)
         private MatchEndedEvent? _lastMatchResult;
+
+        // Per-player rows cached for async coin update (populated in BuildScoreboard)
+        private readonly System.Collections.Generic.Dictionary<string, ResultRowView> _playerRows
+            = new System.Collections.Generic.Dictionary<string, ResultRowView>();
 
         // ──────────────────────────────────────────────────────────────────────
 
@@ -68,11 +77,15 @@ namespace NightHunt.UI
                 _continueButton.onClick.AddListener(OnContinueClicked);
 
             GameplayEventBus.Instance?.Subscribe<MatchEndedEvent>(OnMatchEnded);
+            if (GameWebSocketService.Instance != null)
+                GameWebSocketService.Instance.OnMatchEnded += HandleMatchEndedWs;
         }
 
         private void OnDestroy()
         {
             GameplayEventBus.Instance?.Unsubscribe<MatchEndedEvent>(OnMatchEnded);
+            if (GameWebSocketService.Instance != null)
+                GameWebSocketService.Instance.OnMatchEnded -= HandleMatchEndedWs;
         }
 
         #endregion
@@ -182,6 +195,10 @@ namespace NightHunt.UI
                     ? $"ELO <color=#00FF88>+{eloChange}</color>"
                     : $"ELO <color=#FF4444>{eloChange}</color>";
             }
+
+            // Coin reward panel (all modes) — shows pending until backend WS arrives
+            if (_coinPanel != null) _coinPanel.SetActive(true);
+            if (_coinRewardText != null) _coinRewardText.text = "Calculating rewards…";
         }
 
         private void BuildScoreboard(MatchResult[] results)
@@ -192,6 +209,8 @@ namespace NightHunt.UI
             foreach (Transform t in _scoreboardContainer)
                 Destroy(t.gameObject);
 
+            _playerRows.Clear();
+
             foreach (var r in results)
             {
                 var go = Instantiate(_resultRowPrefab, _scoreboardContainer);
@@ -200,7 +219,29 @@ namespace NightHunt.UI
                     .InChildren()
                     .OrLogWarning("[Auto] ResultRowView not found")
                     .Resolve();
-                row?.SetData(r);
+                if (row != null)
+                {
+                    row.SetData(r);
+                    if (!string.IsNullOrEmpty(r.BackendPlayerId))
+                        _playerRows[r.BackendPlayerId] = row;
+                }
+            }
+        }
+
+        private void HandleMatchEndedWs(GameWebSocketService.MatchEndedWsEvent evt)
+        {
+            if (evt?.playerResults == null) return;
+            var session = SessionState.Instance;
+
+            foreach (var row in evt.playerResults)
+            {
+                // Update per-row coin display
+                if (_playerRows.TryGetValue(row.userId.ToString(), out var rowView))
+                    rowView.SetCoinChange(row.coinChange);
+
+                // Update local player coin summary banner
+                if (session != null && row.userId == session.UserId && _coinRewardText != null)
+                    _coinRewardText.text = $"<color=#FFD700>+{row.coinChange}</color> coins earned";
             }
         }
 
@@ -253,12 +294,25 @@ namespace NightHunt.UI
             var roomState = RoomState.Instance;
             if (backend == null || roomState == null) return;
 
+            // Only the Custom_Relay HOST reports to backend.
+            // For Ranked_DS the Dedicated Server calls /api/match/end/ranked directly.
+            var mode = roomState.CurrentGameMode;
+            if (mode != NightHunt.Networking.GameMode.Custom_Relay)
+            {
+                Debug.Log($"[ResultsView] Mode={mode} — skipping client result report (DS handles ranked).");
+                return;
+            }
+
+            // Custom_Relay host check: only the FishNet host should call this endpoint.
+            if (!roomState.IsHostPlayer)
+            {
+                Debug.Log("[ResultsView] Not relay host — skipping result report.");
+                return;
+            }
+
             string matchId = roomState.CurrentMatchId;
             if (string.IsNullOrEmpty(matchId))
-            {
-                // Custom_Relay uses room matchId
                 matchId = roomState.CurrentRoom?.matchId ?? string.Empty;
-            }
 
             if (string.IsNullOrEmpty(matchId))
             {
@@ -274,13 +328,15 @@ namespace NightHunt.UI
             {
                 foreach (var r in evt.Value.PlayerResults)
                 {
+                    long uid = long.TryParse(r.BackendPlayerId, out long parsed) ? parsed : 0L;
                     playerEntries.Add(new MatchResultPlayerEntry
                     {
-                        backendPlayerId = r.BackendPlayerId,
-                        teamId          = r.TeamId,
-                        kills           = r.Kills,
-                        deaths          = r.Deaths,
-                        score           = r.Score,
+                        userId      = uid,
+                        displayName = r.DisplayName ?? string.Empty,
+                        teamId      = r.TeamId,
+                        kills       = r.Kills,
+                        deaths      = r.Deaths,
+                        score       = r.Score,
                     });
                 }
             }
@@ -290,10 +346,11 @@ namespace NightHunt.UI
                 matchId      = matchId,
                 winnerTeamId = evt.Value.WinnerTeamId,
                 endReason    = evt.Value.Reason.ToString(),
-                players      = playerEntries,
+                playerResults = playerEntries,
             };
 
-            string endpoint = string.Format(Constants.API_MATCH_RESULT, matchId);
+            // Custom relay host sends to /api/match/end/custom
+            string endpoint = Constants.API_MATCH_END_CUSTOM;
             var result = await backend.PostAsync<object>(endpoint, request);
 
             if (!result.Success)
@@ -329,9 +386,9 @@ namespace NightHunt.UI
             hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 4f;
             hlg.padding = new RectOffset(6, 6, 2, 2);
 
-            string[] colNames   = { "NameText", "TeamText", "KillsText", "DeathsText", "ScoreText", "EloText" };
-            string[] colSamples = { "PlayerX",  "Team A",   "5",          "2",           "1200",      "+25" };
-            float[]  colWidths  = { 160f, 70f, 50f, 50f, 70f, 60f };
+            string[] colNames   = { "NameText", "TeamText", "KillsText", "DeathsText", "ScoreText", "EloText", "CoinText" };
+            string[] colSamples = { "PlayerX",  "Team A",   "5",          "2",           "1200",      "+25",      "+100" };
+            float[]  colWidths  = { 160f, 70f, 50f, 50f, 70f, 60f, 60f };
 
             for (int i = 0; i < colNames.Length; i++)
             {
@@ -350,7 +407,7 @@ namespace NightHunt.UI
                 UnityEditor.EditorUtility.SetDirty(this);
             }
             Debug.Log($"[ResultsView] Created ResultRow_Template at {path}. " +
-                      "Add ResultRowView component and wire nameText/teamText/killsText/deathsText/scoreText/eloText.");
+                      "Add ResultRowView component and wire nameText/teamText/killsText/deathsText/scoreText/eloText/coinText.");
         }
 #endif
     }
@@ -366,6 +423,7 @@ namespace NightHunt.UI
         [SerializeField] private TextMeshProUGUI deathsText;
         [SerializeField] private TextMeshProUGUI scoreText;
         [SerializeField] private TextMeshProUGUI eloText;
+        [SerializeField] private TextMeshProUGUI coinText;
 
         public void SetData(MatchResult r)
         {
@@ -379,6 +437,15 @@ namespace NightHunt.UI
                 if (r.EloChange == 0) eloText.text = "-";
                 else eloText.text = r.EloChange > 0 ? $"+{r.EloChange}" : r.EloChange.ToString();
             }
+            if (coinText != null)
+                coinText.text = r.CoinChange > 0 ? $"+{r.CoinChange}" : "-";
+        }
+
+        /// <summary>Called async when backend confirms coin reward (after WS match_ended arrives).</summary>
+        public void SetCoinChange(long coinChange)
+        {
+            if (coinText != null)
+                coinText.text = coinChange > 0 ? $"<color=#FFD700>+{coinChange}</color>" : "-";
         }
     }
 }

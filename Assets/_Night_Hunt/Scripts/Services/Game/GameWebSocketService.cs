@@ -87,6 +87,11 @@ namespace NightHunt.Services.Game
         /// immediately on match_ready, which fires before the DS finishes booting).
         /// </summary>
         public event Action<DsReadyEvent>        OnDsReady;
+        /// <summary>
+        /// Fired when the backend has processed match results (ELO + coins). Contains per-player coin/ELO
+        /// changes. Use to refresh the results screen and update SessionState.Coins.
+        /// </summary>
+        public event Action<MatchEndedWsEvent>   OnMatchEnded;
         
         // Friend Events
         public event Action<FriendStatusChangedEvent> OnFriendStatusChanged;
@@ -863,6 +868,28 @@ namespace NightHunt.Services.Game
                             OnYouWereKicked?.Invoke(youWereKicked);
                         break;
 
+                    case "match_ended":
+                        var matchEnded = JsonUtility.FromJson<MatchEndedWsEvent>(messageData.data);
+                        if (matchEnded != null)
+                        {
+                            // Update local player's coin balance immediately so SessionState is fresh
+                            // before ResultsView tries to display it.
+                            var session = SessionState.Instance;
+                            if (session != null && matchEnded.playerResults != null)
+                            {
+                                foreach (var row in matchEnded.playerResults)
+                                {
+                                    if (row.userId == session.UserId)
+                                    {
+                                        session.SetCoins(row.coinsTotal);
+                                        break;
+                                    }
+                                }
+                            }
+                            OnMatchEnded?.Invoke(matchEnded);
+                        }
+                        break;
+
                     case "pong":
                         break; // heartbeat response — silently ignore
 
@@ -1271,6 +1298,38 @@ namespace NightHunt.Services.Game
             public string      relayHost;  // relay server host
             public int         relayPort;  // relay server port (0 if not relay)
             public RoomResponse room;      // updated room state at game start
+        }
+
+        // ── Match End event (server → client after ELO/coin processing) ─────
+
+        /// <summary>
+        /// Sent by the backend after processing a match end result (ELO update + coin credit).
+        /// Mirrors MatchEndResponse on the server. Received by all match participants.
+        /// </summary>
+        [Serializable]
+        public class MatchEndedWsEvent
+        {
+            public string              matchId;
+            public int                 winnerTeamId;
+            public string              endReason;
+            public PlayerResultWsRow[] playerResults;
+        }
+
+        [Serializable]
+        public class PlayerResultWsRow
+        {
+            public long   userId;
+            public string displayName;
+            public int    teamId;
+            public int    kills;
+            public int    deaths;
+            public int    score;
+            public int    eloBefore;
+            public int    eloAfter;
+            public int    eloChange;
+            public string tier;
+            public long   coinChange;  // coins awarded this match
+            public long   coinsTotal;  // updated coin balance after this match
         }
     }
 }

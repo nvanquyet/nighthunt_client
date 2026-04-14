@@ -15,21 +15,16 @@ namespace NightHunt.UI
     /// Vòng đời:
     ///   1. Gắn vào PersistentUICanvas (DontDestroyOnLoad) — ẩn mặc định.
     ///   2. PartyController.HandleMatchFound() gọi <see cref="Show"/> với data từ WS.
-    ///   3. Overlay hiện countdown + danh sách player. Player nhấn Accept → gọi <see cref="OnAcceptClicked"/>.
-    ///   4. Khi all accepted  → backend gửi WS "match_ready" → PartyController xử lý.
-    ///   5. <see cref="Hide"/> được gọi sau khi nhận match_ready hoặc match_cancelled.
+    ///   3. Overlay hiện thông tin trận + danh sách player — không cần xác nhận.
+    ///   4. <see cref="Hide"/> được gọi sau khi nhận match_ready hoặc match_cancelled.
     ///
     /// Inspector slots:
     ///   panel            — Root GameObject
     ///   canvasGroup      — Fade in/out
-    ///   countdownText    — "12s" (đếm ngược accept timeout)
-    ///   countdownFill    — Image radial fill (0→1)
-    ///   gameModeText     — "2v2 — Industrial Zone"
+    ///   gameModeText     — "2v2 — ngẫu nhiên"
     ///   playerListParent — ScrollRect content chứa các MatchFoundPlayerRow
     ///   playerRowPrefab  — Prefab có MatchFoundPlayerRow component
-    ///   btn_Accept       — MUIP/standard button (xanh lá)
-    ///   btn_Decline      — MUIP/standard button (đỏ)
-    ///   statusText       — "Đang chờ xác nhận…" / "Đã chấp nhận"
+    ///   statusText       — "Đã ghép trận — đang vào..."
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class MatchFoundOverlay : MonoBehaviour
@@ -63,35 +58,19 @@ namespace NightHunt.UI
         [SerializeField] private TextMeshProUGUI gameModeText;
         [SerializeField] private TextMeshProUGUI mapNameText;
 
-        [Header("Countdown")]
-        [SerializeField] private TextMeshProUGUI countdownText;
-        [SerializeField] private Image           countdownFill;     // radial fill — 1→0
-
         [Header("Player List")]
         [SerializeField] private Transform  playerListParent;
         [SerializeField] private GameObject playerRowPrefab;        // must have MatchFoundPlayerRow
-
-        [Header("Buttons")]
-        [SerializeField] private Button btn_Accept;
-        [SerializeField] private Button btn_Decline;
 
         [Header("Status")]
         [SerializeField] private TextMeshProUGUI statusText;
 
         [Header("Settings")]
-        [SerializeField] private float fadeDuration      = 0.25f;
-        [SerializeField] private int   defaultTimeoutSec = 30;      // fallback if backend sends 0
-
-        // ── Events — bắt bởi PartyController ─────────────────────────────────
-
-        public event Action OnAccepted;   // player nhấn Accept
-        public event Action OnDeclined;   // player nhấn Decline hoặc timeout
+        [SerializeField] private float fadeDuration = 0.25f;
 
         // ── Runtime ───────────────────────────────────────────────────────────
 
-        private Coroutine _countdownCoroutine;
         private Coroutine _fadeCoroutine;
-        private bool      _accepted;
         private bool      _isVisible;
 
         private readonly List<MatchFoundPlayerRow> _rows = new();
@@ -112,98 +91,36 @@ namespace NightHunt.UI
 
         private void Start()
         {
-            if (btn_Accept  != null) btn_Accept .onClick.AddListener(OnAcceptClicked);
-            if (btn_Decline != null) btn_Decline.onClick.AddListener(OnDeclineClicked);
+            // No buttons to wire — overlay is informational only.
         }
 
         // ── Public API ─────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Hiện overlay với thông tin match_found.
+        /// Hiện overlay thông tin ghép trận (không có nút xác nhận).
         /// </summary>
-        /// <param name="lobbyToken">Token dùng để Accept/Decline</param>
-        /// <param name="gameMode">Chuỗi mode: "2v2" / "3v3" / "5v5"</param>
-        /// <param name="mapId">mapId từ WS (nullable). Nếu có, resolve displayName từ MapConfig.</param>
-        /// <param name="playerIds">Mảng userId của tất cả players được ghép.</param>
-        /// <param name="localUserId">UserId của client hiện tại — highlight row này.</param>
-        /// <param name="timeoutSeconds">Số giây để accept. 0 = dùng defaultTimeoutSec.</param>
-        public void Show(
-            string   lobbyToken,
-            string   gameMode,
-            string   mapId,
-            long[]   playerIds,
-            long     localUserId,
-            int      timeoutSeconds = 0)
+        public void Show(string gameMode, long[] playerIds, long localUserId)
         {
-            _accepted = false;
-            int secs = timeoutSeconds > 0 ? timeoutSeconds : defaultTimeoutSec;
-
             // Populate match info
             if (gameModeText != null) gameModeText.text = FormatMode(gameMode);
-
-            if (mapNameText != null)
-            {
-                string mapDisplay = "Ngẫu nhiên";
-                if (!string.IsNullOrEmpty(mapId)
-                    && NightHunt.Config.MapConfig.TryGetById(mapId, out NightHunt.Config.MapEntry entry))
-                    mapDisplay = entry.displayName;
-                mapNameText.text = mapDisplay;
-            }
+            if (mapNameText  != null) mapNameText.text  = "Đang vào máy chủ...";
 
             // Populate player rows
             PopulatePlayers(playerIds, localUserId);
 
-            // Button state
-            SetButtonsInteractable(true);
-            if (statusText != null) statusText.text = "Waiting for confirmation…";
+            // Status
+            if (statusText != null) statusText.text = "Đã ghép trận — đang khởi động server...";
 
             // Fade in
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeIn());
-
-            // Countdown
-            if (_countdownCoroutine != null) StopCoroutine(_countdownCoroutine);
-            _countdownCoroutine = StartCoroutine(CountdownRoutine(secs));
         }
 
         /// <summary>Ẩn overlay (gọi sau match_ready hoặc match_cancelled).</summary>
         public void Hide()
         {
-            StopCountdown();
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeOut());
-        }
-
-        /// <summary>
-        /// Đánh dấu một player đã accept — cập nhật row icon.
-        /// Gọi khi nhận WS event "player_accepted" (nếu backend gửi).
-        /// </summary>
-        public void MarkPlayerAccepted(long userId)
-        {
-            foreach (var row in _rows)
-            {
-                if (row != null && row.UserId == userId)
-                    row.SetAccepted(true);
-            }
-        }
-
-        // ── Button Handlers ───────────────────────────────────────────────────
-
-        private void OnAcceptClicked()
-        {
-            if (_accepted) return;
-            _accepted = true;
-            SetButtonsInteractable(false);
-            StopCountdown();
-            if (statusText != null) statusText.text = "Accepted — waiting for other players…";
-            OnAccepted?.Invoke();
-        }
-
-        private void OnDeclineClicked()
-        {
-            StopCountdown();
-            Hide();
-            OnDeclined?.Invoke();
         }
 
         // ── Internal ──────────────────────────────────────────────────────────
@@ -227,46 +144,6 @@ namespace NightHunt.UI
                 row.Bind(uid, isLocalPlayer: uid == localUserId);
                 _rows.Add(row);
             }
-        }
-
-        private IEnumerator CountdownRoutine(int totalSeconds)
-        {
-            float remaining = totalSeconds;
-
-            while (remaining > 0f)
-            {
-                remaining -= Time.unscaledDeltaTime;
-                float clamped = Mathf.Max(0f, remaining);
-
-                if (countdownText != null)
-                    countdownText.text = Mathf.CeilToInt(clamped).ToString();
-
-                if (countdownFill != null)
-                    countdownFill.fillAmount = clamped / totalSeconds;
-
-                yield return null;
-            }
-
-            // Timeout — auto-decline
-            if (countdownText != null) countdownText.text = "0";
-            if (countdownFill != null) countdownFill.fillAmount = 0f;
-
-            Debug.Log("[MatchFoundOverlay] Accept timeout — auto-declining.");
-            Hide();
-            OnDeclined?.Invoke();
-        }
-
-        private void StopCountdown()
-        {
-            if (_countdownCoroutine == null) return;
-            StopCoroutine(_countdownCoroutine);
-            _countdownCoroutine = null;
-        }
-
-        private void SetButtonsInteractable(bool value)
-        {
-            if (btn_Accept  != null) btn_Accept .interactable = value;
-            if (btn_Decline != null) btn_Decline.interactable = value;
         }
 
         // ── Fade ──────────────────────────────────────────────────────────────

@@ -111,14 +111,15 @@ namespace NightHunt.Networking
         [Server]
         private void ResolveExpectedPlayerCount()
         {
-            // 1. Ranked DS: room already has all slots filled → use PlayerCount directly
             var roomState = RoomState.Instance;
-            if (roomState != null && roomState.CurrentGameMode == GameMode.Ranked_DS
-                && roomState.PlayerCount > 0)
+
+            // 1. RoomState.PlayerCount is populated by match_ready (Ranked_DS) or by custom lobby
+            //    room data (Custom_Relay host). Use it for both modes.
+            if (roomState != null && roomState.PlayerCount > 0)
             {
                 _expectedPlayerCount = roomState.PlayerCount;
                 if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                    Debug.Log($"[ServerGameManager] ExpectedPlayerCount resolved from RoomState: {_expectedPlayerCount}");
+                    Debug.Log($"[ServerGameManager] ExpectedPlayerCount resolved from RoomState: {_expectedPlayerCount} (mode={roomState.CurrentGameMode})");
                 return;
             }
 

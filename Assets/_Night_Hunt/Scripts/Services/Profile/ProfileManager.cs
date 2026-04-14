@@ -50,8 +50,12 @@ namespace NightHunt.Services.Profile
             var result = await backendClient.GetAsync<ProfileResponse>(Constants.API_PROFILE_GET);
             if (result.Success && result.Data != null)
             {
-                sessionState.SetSelectedCharacterId(result.Data.selectedCharacterId);
-                Debug.Log($"[ProfileManager] Profile fetched — selectedCharacterId={result.Data.selectedCharacterId ?? "null"}");
+                sessionState.SetProfileData(
+                    result.Data.coins,
+                    result.Data.elo,
+                    result.Data.tier,
+                    result.Data.selectedCharacterId);
+                Debug.Log($"[ProfileManager] Profile fetched — elo={result.Data.elo} tier={result.Data.tier} coins={result.Data.coins} char={result.Data.selectedCharacterId ?? "null"}");
             }
             else
             {

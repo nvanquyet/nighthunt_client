@@ -100,15 +100,19 @@ jobs:
           # Dedicated Server mode + chạy BuildScript.BuildDedicatedServer
           customParameters: >-
             -standaloneBuildSubtarget Server
-            -executeMethod BuildScript.BuildDedicatedServer
+            -executeMethod NightHunt.Build.BuildScript.BuildDedicatedServer
+            -buildOutput Build/Server/NightHuntDS
 
       - name: Verify build output
         run: |
           echo "=== Build output ==="
-          ls -lah Builds/DedicatedServer/
-          # Đảm bảo binary tồn tại và có quyền execute
-          test -f Builds/DedicatedServer/NightHuntDS.x86_64 || (echo "❌ Binary not found!" && exit 1)
-          chmod +x Builds/DedicatedServer/NightHuntDS.x86_64
+          ls -lah Build/Server/
+          # NightHunt.Build.BuildScript.BuildDedicatedServer outputs to Build/Server/NightHuntDS
+          # Unity appends .x86_64 automatically for StandaloneLinux64
+          test -f Build/Server/NightHuntDS.x86_64 || \
+          test -f Build/Server/NightHuntDS || \
+          (echo "❌ Binary not found in Build/Server/! Check Unity build log." && exit 1)
+          chmod +x Build/Server/NightHuntDS.x86_64 2>/dev/null || chmod +x Build/Server/NightHuntDS 2>/dev/null || true
           echo "✅ Binary verified"
 
       # Upload artifact để job build-docker dùng
@@ -116,7 +120,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name:           ds-build-${{ steps.gen-version.outputs.version }}
-          path:           Builds/DedicatedServer/
+          path:           Build/Server/
           retention-days: 7
   build-docker:
     name: "Docker Build & Push"
@@ -140,9 +144,15 @@ jobs:
 
       - name: Prepare Docker context
         run: |
-          echo "=== Docker context ==="
+          echo "=== Artifact contents ==="
           ls -lah Build/Server/
-          chmod +x Build/Server/NightHuntDS.x86_64
+          # Copy Unity build output INTO docker/dedicated-server/build/
+          # Dockerfile does: COPY ./build/ /app/  (relative to context = docker/dedicated-server/)
+          mkdir -p docker/dedicated-server/build
+          cp -r Build/Server/* docker/dedicated-server/build/
+          chmod +x docker/dedicated-server/build/NightHuntDS.x86_64 2>/dev/null || true
+          echo "=== Docker context ==="
+          ls -lah docker/dedicated-server/build/
           echo "✅ Context ready"
 
       - name: Login to GitHub Container Registry
@@ -167,8 +177,8 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
-          context:     Build/Server
-          file:        Build/Server/Dockerfile
+          context:     docker/dedicated-server
+          file:        docker/dedicated-server/Dockerfile
           push:        true
           tags:        ${{ steps.meta.outputs.tags }}
           labels:      ${{ steps.meta.outputs.labels }}
