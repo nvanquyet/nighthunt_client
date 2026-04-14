@@ -48,7 +48,7 @@ echo ""
 
 # ── Start Unity DS ────────────────────────────────────────────────────────────
 # Log file: /app/logs/server-<timestamp>.log
-exec /app/NightHuntServer                              \
+exec /app/NightHuntDS.x86_64                           \
     -batchmode                                         \
     -nographics                                        \
     -logFile /app/logs/server-$(date +%Y%m%d-%H%M%S).log \

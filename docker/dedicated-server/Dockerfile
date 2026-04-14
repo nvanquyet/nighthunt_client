@@ -33,7 +33,7 @@ COPY --chown=gameserver:gameserver ./scripts/entrypoint.sh   /app/entrypoint.sh
 COPY --chown=gameserver:gameserver ./scripts/health-check.sh /app/health-check.sh
 
 # Cấp quyền execute
-RUN chmod +x /app/NightHuntServer \
+RUN chmod +x /app/NightHuntDS.x86_64 \
     && chmod +x /app/entrypoint.sh \
     && chmod +x /app/health-check.sh \
     && mkdir -p /app/logs
