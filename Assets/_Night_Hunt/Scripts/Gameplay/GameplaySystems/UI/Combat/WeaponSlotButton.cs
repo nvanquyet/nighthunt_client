@@ -1,3 +1,4 @@
+#if !UNITY_SERVER
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -277,3 +278,4 @@ namespace NightHunt.GameplaySystems.UI.Combat
         }
     }
 }
+#endif // !UNITY_SERVER
