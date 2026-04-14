@@ -36,7 +36,7 @@ namespace NightHunt.Config
         // ── Production settings ──────────────────────────────────────────────
         [Header("Production Settings")]
         [Tooltip("Host khi build Release — domain thật với Let's Encrypt cert")]
-        public string prodApiHost = "api.nighthunt.com";
+        public string prodApiHost = "vawnwuyest.me";
 
         // ── SSL / Security ───────────────────────────────────────────────────
         [Header("SSL / Security")]
