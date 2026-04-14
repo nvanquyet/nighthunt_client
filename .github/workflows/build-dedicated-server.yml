@@ -38,6 +38,7 @@ jobs:
   build-unity:
     name: "Unity Linux Server Build"
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     # Chỉ build khi:
     #   - Trigger thủ công (workflow_dispatch), HOẶC
     #   - Push với commit message chứa [build-ds]
@@ -100,6 +101,7 @@ jobs:
           customParameters: >-
             -standaloneBuildSubtarget Server
             -buildOutput Build/Server/NightHuntDS
+            -disableBurstCompilation
 
       - name: Verify build output
         run: |
