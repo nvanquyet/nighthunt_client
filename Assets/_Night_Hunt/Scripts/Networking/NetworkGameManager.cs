@@ -452,9 +452,9 @@ namespace NightHunt.Networking
         {
             var transport = networkManager.TransportManager.Transport;
             if (transport == null) { Debug.LogWarning("[NetworkGameManager] Transport is null!"); return; }
-            var t = transport.GetType();
-            TrySetProperty(transport, t, "ClientAddress", address);
-            TrySetProperty(transport, t, "Port", targetPort);
+            transport.SetClientAddress(address);
+            transport.SetPort(targetPort);
+            Debug.Log($"[NetworkGameManager] Transport address set → {address}:{targetPort} (type={transport.GetType().Name})");
         }
 
         private void SetTransportServerBindAddress(string bindAddress)
