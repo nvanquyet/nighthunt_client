@@ -63,10 +63,11 @@ jobs:
           swap-storage:         false  # GIỮ swap — Unity cần fallback khi RAM đầy
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
         with:
-          lfs: true        # Git LFS cho asset lớn
+          lfs: true
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # Version tag: YYYYMMDD-<short-sha>
       - name: Generate version
