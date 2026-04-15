@@ -55,6 +55,11 @@ namespace NightHunt.Server
 
         private void Awake()
         {
+            // Survive scene changes: 00_DS_Boot gets unloaded when map scene loads (ReplaceScenes=All).
+            // HeartbeatLoop, SubscribeMatchEnd, and NotifyGameReady all live on this object →
+            // must persist across the scene transition.
+            DontDestroyOnLoad(gameObject);
+
             // Disable tất cả MonoBehaviour không cần trong server
             Application.targetFrameRate = 30;
             QualitySettings.vSyncCount  = 0;
