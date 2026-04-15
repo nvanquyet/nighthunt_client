@@ -65,9 +65,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.2.2
         with:
-          lfs: true
+          lfs: false        # DS build is headless — no textures/audio/models needed
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache LFS objects (avoid re-downloading on future runs)
+        uses: actions/cache@v4
+        with:
+          path: .git/lfs
+          key: lfs-${{ runner.os }}-${{ hashFiles('.gitattributes') }}-${{ github.sha }}
+          restore-keys: |
+            lfs-${{ runner.os }}-${{ hashFiles('.gitattributes') }}-
+            lfs-${{ runner.os }}-
 
       # Version tag: YYYYMMDD-<short-sha>
       - name: Generate version
