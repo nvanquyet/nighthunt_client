@@ -51,6 +51,9 @@ namespace NightHunt.Networking
         private bool _dsReady;          // true after ds_ready WS received
         private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
 
+        // Survives scene transitions: set true only when ds_ready WS event is received
+        private static bool s_dsReadyReceived = false;
+
         protected override void OnSingletonAwake()
         {
             if (networkManager == null)
@@ -85,16 +88,12 @@ namespace NightHunt.Networking
             }
 
             // ── Fix B: ds_ready may have arrived before this instance subscribed ─
-            // GameWebSocketService broadcasts ds_ready once. If the previous scene's
-            // NetworkGameManager was destroyed before receiving it (or it arrived during
-            // scene transition), _dsReady stays false even though DS is up.
-            // Fallback: if RoomState already has DsIp set (from match_ready or ds_ready
-            // handled by GameWebSocketService directly), treat DS as ready.
-            if (!_dsReady
-                && RoomState.Instance?.CurrentGameMode == GameMode.Ranked_DS
-                && !string.IsNullOrEmpty(RoomState.Instance?.DsIp))
+            // s_dsReadyReceived is static and survives scene transitions.
+            // It is set ONLY when ds_ready WS event is received (NOT from match_ready).
+            if (!_dsReady && s_dsReadyReceived
+                && RoomState.Instance?.CurrentGameMode == GameMode.Ranked_DS)
             {
-                Debug.Log("[NetworkGameManager] RoomState has DsIp set — assuming ds_ready already received, setting _dsReady = true.");
+                Debug.Log("[NetworkGameManager] Fix B: ds_ready was received before this instance subscribed — setting _dsReady = true.");
                 _dsReady = true;
             }
 
@@ -227,6 +226,7 @@ namespace NightHunt.Networking
         /// </summary>
         public void NotifyDsReady()
         {
+            s_dsReadyReceived = true;
             _dsReady = true;
             Debug.Log("[NetworkGameManager] DS is ready — checking if scene loaded to connect.");
             MatchLoadingOverlay.Instance?.MarkDsReady();
@@ -407,8 +407,9 @@ namespace NightHunt.Networking
 
         private void LoadHome()
         {
-            _dsReady         = false;
-            _gameSceneLoaded = false;
+            s_dsReadyReceived = false;
+            _dsReady          = false;
+            _gameSceneLoaded  = false;
             RoomState.Instance?.ClearRoom();
             SceneLoader.LoadHome();
         }

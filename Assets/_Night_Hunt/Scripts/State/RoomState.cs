@@ -85,15 +85,29 @@ namespace NightHunt.State
             IsHostPlayer = isHost;
         }
 
-        /// <summary>Store dedicated server info when a Ranked match is found.</summary>
+        /// <summary>
+        /// Called on match_ready: stores match/map info but NOT DS ip:port.
+        /// Client must wait for ds_ready before connecting to DS.
+        /// </summary>
+        public void SetMatchReady(string matchId, string mapId)
+        {
+            CurrentGameMode = GameMode.Ranked_DS;
+            CurrentMatchId  = matchId;
+            DsMapId         = mapId;
+            IsHostPlayer    = false;
+        }
+
+        /// <summary>
+        /// Called on ds_ready: stores DS ip:port. Safe to connect after this.
+        /// </summary>
         public void SetDedicatedServer(string ip, ushort port, string matchId, string mapId = null)
         {
             CurrentGameMode = GameMode.Ranked_DS;
-            DsIp = ip;
-            DsPort = port;
-            CurrentMatchId = matchId;
-            DsMapId = mapId;
-            IsHostPlayer = false;
+            DsIp            = ip;
+            DsPort          = port;
+            CurrentMatchId  = matchId;
+            DsMapId         = mapId ?? DsMapId;
+            IsHostPlayer    = false;
         }
 
         /// <summary>Clear all network session data (called on match end / leave).</summary>

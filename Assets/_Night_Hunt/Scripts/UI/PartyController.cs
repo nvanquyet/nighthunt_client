@@ -484,9 +484,8 @@ namespace NightHunt.UI
 
             SetQueueState(RankedQueueState.Idle);
 
-            // Lưu DS info vào RoomState để NetworkGameManager dùng khi scene load
-            if (ushort.TryParse(e.dsPort.ToString(), out ushort dsPort))
-                RoomState.Instance?.SetDedicatedServer(e.dsIp, dsPort, e.matchId, e.mapId);
+            // Chỉ lưu matchId/mapId — DsIp/Port sẽ được set khi nhận ds_ready
+            RoomState.Instance?.SetMatchReady(e.matchId, e.mapId);
 
             // Resolve scene đúng từ mapId
             NightHunt.Config.SceneId sceneId = NightHunt.Config.SceneId.GameMap_01;

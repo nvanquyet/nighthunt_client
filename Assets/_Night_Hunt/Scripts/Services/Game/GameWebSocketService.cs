@@ -629,10 +629,8 @@ namespace NightHunt.Services.Game
                         var matchReady = JsonUtility.FromJson<MatchReadyEvent>(messageData.data);
                         if (matchReady != null)
                         {
-                            // Store DS info in RoomState immediately
-                            if (RoomState.Instance != null && !string.IsNullOrEmpty(matchReady.dsIp))
-                                RoomState.Instance.SetDedicatedServer(
-                                    matchReady.dsIp, (ushort)matchReady.dsPort, matchReady.matchId, matchReady.mapId);
+                            // Only store matchId/mapId — DsIp/Port set later on ds_ready
+                            RoomState.Instance?.SetMatchReady(matchReady.matchId, matchReady.mapId);
                             OnMatchReady?.Invoke(matchReady);
                         }
                         break;
