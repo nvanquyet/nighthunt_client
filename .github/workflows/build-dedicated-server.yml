@@ -1,27 +1,41 @@
 name: "Build & Deploy Dedicated Server"
 
-# ── Trigger ───────────────────────────────────────────────────────────────────
-# Build KHÔNG tự động theo push thông thường.
-# Để trigger build DS, dùng một trong hai cách:
+# ══════════════════════════════════════════════════════════════════════════════
+# TRIGGER — 2 cách duy nhất để build DS:
 #
-#   1. Commit message chứa [build-ds]:
-#        git commit -m "fix: fix server logic [build-ds]"
+#   1. Commit message chứa [build-ds]  →  push lên main
+#        git commit -m "fix: cập nhật server logic [build-ds]"
 #        git push origin main
+#      Workflow chỉ trigger khi thay đổi trong Assets/ Packages/ hoặc docker/.
+#      Nếu chỉ sửa CI config (.github/), workflow KHÔNG chạy.
 #
-#   2. Thủ công qua GitHub UI / gh CLI:
-#        gh workflow run build-dedicated-server.yml --ref main
-#
+#   2. Thủ công qua GitHub UI hoặc gh CLI:
+#        gh workflow run "Build & Deploy Dedicated Server" --ref main
+# ══════════════════════════════════════════════════════════════════════════════
 on:
   push:
     branches: [ main ]
+    paths:
+      # Unity source — bất kỳ thay đổi Assets/Packages nào đều có thể cần rebuild
+      - 'Assets/**'
+      - 'Packages/**'
+      # DS Docker image/entrypoint
+      - 'docker/dedicated-server/**'
+      # Build script Unity (nếu có thay đổi cách build)
+      - 'scripts/**'
 
-  # Build thủ công qua GitHub UI hoặc gh CLI
+  # Build thủ công — bỏ qua path filter và [build-ds] check
   workflow_dispatch:
     inputs:
       force_rebuild:
         description: "Force rebuild (bỏ qua cache)"
         type: boolean
         default: false
+
+# Hủy run cũ nếu có run mới hơn đang chờ (tránh queue build thừa)
+concurrency:
+  group: ds-build-${{ github.ref }}
+  cancel-in-progress: true
 
 # ── Environment ───────────────────────────────────────────────────────────────
 env:
@@ -39,9 +53,14 @@ jobs:
     name: "Unity Linux Server Build"
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    # Chỉ build khi:
-    #   - Trigger thủ công (workflow_dispatch), HOẶC
-    #   - Push với commit message chứa [build-ds]
+    # ─────────────────────────────────────────────────────────────────────────
+    # CHỈ BUILD KHI:
+    #   A) Trigger thủ công (workflow_dispatch → không cần [build-ds])
+    #   B) Commit message có [build-ds]  →  git commit -m "... [build-ds]"
+    #
+    # Lý do: Unity build mất 60-90 phút + tốn quota GitHub Actions.
+    # Không phải mọi thay đổi Unity đều cần rebuild DS binary.
+    # ─────────────────────────────────────────────────────────────────────────
     if: >-
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.head_commit.message, '[build-ds]')
