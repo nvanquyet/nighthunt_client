@@ -103,25 +103,40 @@ jobs:
             -buildOutput Build/Server/NightHuntDS
             -disableBurstCompilation
 
+      - name: Locate and stage UnityPlayer.so
+        run: |
+          echo "=== Searching entire workspace for UnityPlayer.so ==="
+          find . -name "UnityPlayer.so" 2>/dev/null | sort || true
+
+          # game-ci may output UnityPlayer.so outside Build/Server/ (e.g. workspace root or Build/)
+          UNITY_SO=$(find . -name "UnityPlayer.so" 2>/dev/null | head -1)
+          if [ -n "${UNITY_SO}" ]; then
+            echo "✅ Found: ${UNITY_SO}"
+            if [ "${UNITY_SO}" != "./Build/Server/UnityPlayer.so" ]; then
+              cp "${UNITY_SO}" Build/Server/UnityPlayer.so
+              echo "✅ Copied to Build/Server/UnityPlayer.so"
+            fi
+          else
+            echo "⚠️  UnityPlayer.so not found anywhere in workspace."
+            echo "    game-ci image may be missing Linux Dedicated Server module."
+            echo "    Checking Unity installation path..."
+            find /opt/unity -name "UnityPlayer.so" 2>/dev/null | head -5 || true
+          fi
+
       - name: Verify build output
         run: |
-          echo "=== Build output (recursive) ==="
+          echo "=== Build/Server contents ==="
           find Build/Server -type f | sort
           echo ""
           # Check binary
           test -f Build/Server/NightHuntDS.x86_64 || \
           test -f Build/Server/NightHuntDS || \
-          (echo "❌ Binary not found in Build/Server/! Check Unity build log." && exit 1)
+          (echo "❌ Binary not found!" && exit 1)
           chmod +x Build/Server/NightHuntDS.x86_64 2>/dev/null || chmod +x Build/Server/NightHuntDS 2>/dev/null || true
-          # Check UnityPlayer.so (required runtime library for Linux DS)
-          UNITY_SO=$(find Build/Server -name "UnityPlayer.so" 2>/dev/null | head -1)
-          if [ -z "${UNITY_SO}" ]; then
-            echo "❌ UnityPlayer.so NOT FOUND in Build/Server! DS will crash at runtime."
-            echo "   Unity should output this file next to the binary or in *_Data/Plugins/x86_64/"
-            exit 1
-          fi
-          echo "✅ Binary verified"
-          echo "✅ UnityPlayer.so found at: ${UNITY_SO}"
+          # Check UnityPlayer.so
+          test -f Build/Server/UnityPlayer.so || \
+          (echo "❌ UnityPlayer.so missing — DS will crash. Check game-ci Unity image modules." && exit 1)
+          echo "✅ Binary + UnityPlayer.so verified"
 
       # Upload artifact để job build-docker dùng
       - name: Upload build artifact
