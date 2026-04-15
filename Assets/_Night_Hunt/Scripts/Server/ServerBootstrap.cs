@@ -199,7 +199,6 @@ namespace NightHunt.Server
                     Debug.Log("[ServerBootstrap] ✓ Registered with backend successfully!");
                     WriteHealthFile();
                     StartCoroutine(HeartbeatLoop());
-                    SubscribeMatchEnd();
                     LoadGameScene();
                     yield break;
                 }
@@ -266,17 +265,40 @@ namespace NightHunt.Server
                 if (scene.name.StartsWith("02_Map_", StringComparison.OrdinalIgnoreCase))
                 {
                     networkManager.SceneManager.OnLoadEnd -= OnGameSceneLoadEnd;
-                    Debug.Log($"[ServerBootstrap] Game scene '{scene.name}' loaded — notifying backend game-ready.");
-                    // Wait one extra second for all MonoBehaviour Awake()/Start() to complete
-                    StartCoroutine(NotifyGameReadyDelayed(1.5f));
+                    Debug.Log($"[ServerBootstrap] Game scene '{scene.name}' loaded — running post-scene setup.");
+                    // Wait 1.5s for all MonoBehaviour Awake()/Start() to complete, then:
+                    //   1. Subscribe to MatchEndManager (it now exists in the map scene)
+                    //   2. Notify backend DS is ready for clients
+                    StartCoroutine(PostSceneLoadSetup(1.5f));
                     return;
                 }
             }
         }
 
-        private IEnumerator NotifyGameReadyDelayed(float delay)
+        /// <summary>
+        /// Runs after game scene fully loads:
+        ///   1. Subscribes to MatchEndManager.OnMatchEnded (single definition here, no race condition)
+        ///   2. Calls POST /api/ds/game-ready so backend can broadcast ds_ready to players
+        /// </summary>
+        private IEnumerator PostSceneLoadSetup(float delay)
         {
             yield return new WaitForSeconds(delay);
+
+#if UNITY_SERVER
+            // MatchEndManager is now in the map scene — subscribe exactly once here
+            var matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
+            if (matchEndManager != null)
+            {
+                matchEndManager.OnMatchEnded += OnMatchEnded;
+                Debug.Log("[ServerBootstrap] ✓ Subscribed to MatchEndManager.OnMatchEnded");
+            }
+            else
+            {
+                Debug.LogError("[ServerBootstrap] MatchEndManager not found after scene load — " +
+                               "game-end reporting to backend is DISABLED. Check scene setup.");
+            }
+#endif
+
             yield return NotifyGameReady();
         }
 
@@ -355,43 +377,6 @@ namespace NightHunt.Server
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Subscribe vào MatchEndManager.OnMatchEnded (server-only event).
-        /// Khi game kết thúc: DS gửi kết quả về backend rồi tự shutdown.
-        /// </summary>
-        private void SubscribeMatchEnd()
-        {
-#if UNITY_SERVER
-            var matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
-            if (matchEndManager != null)
-            {
-                matchEndManager.OnMatchEnded += OnMatchEnded;
-                Debug.Log("[ServerBootstrap] Subscribed to MatchEndManager.OnMatchEnded");
-            }
-            else
-            {
-                // MatchEndManager chưa có trong boot scene — sẽ có sau khi map scene load
-                // Subscribe lại sau 5s khi scene đã load
-                StartCoroutine(SubscribeMatchEndDelayed());
-            }
-#endif
-        }
-
-        private System.Collections.IEnumerator SubscribeMatchEndDelayed()
-        {
-            yield return new WaitForSeconds(5f);
-            var matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
-            if (matchEndManager != null)
-            {
-                matchEndManager.OnMatchEnded += OnMatchEnded;
-                Debug.Log("[ServerBootstrap] Subscribed to MatchEndManager.OnMatchEnded (delayed)");
-            }
-            else
-            {
-                Debug.LogWarning("[ServerBootstrap] MatchEndManager not found — game-end reporting disabled!");
-            }
-        }
 
         private void OnMatchEnded(int winnerTeamId, NightHunt.Gameplay.Match.MatchEndReason reason)
         {
