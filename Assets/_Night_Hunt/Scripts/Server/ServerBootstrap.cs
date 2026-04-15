@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using FishNet.Managing;
 using FishNet.Managing.Scened;
+using NightHunt.Gameplay.Core.Events;   // MatchEndReason
+using NightHunt.Gameplay.Match;          // MatchEndManager
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
@@ -291,7 +293,7 @@ namespace NightHunt.Server
 
 #if UNITY_SERVER
             // MatchEndManager is now in the map scene — subscribe exactly once here
-            var matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
+            var matchEndManager = FindFirstObjectByType<MatchEndManager>();
             if (matchEndManager != null)
             {
                 matchEndManager.OnMatchEnded += OnMatchEnded;
@@ -383,7 +385,7 @@ namespace NightHunt.Server
 
         // ─────────────────────────────────────────────────────────────────────────
 
-        private void OnMatchEnded(int winnerTeamId, NightHunt.Gameplay.Match.MatchEndReason reason)
+        private void OnMatchEnded(int winnerTeamId, MatchEndReason reason)
         {
             Debug.Log($"[ServerBootstrap] Match ended — winnerTeam={winnerTeamId}, reason={reason}. Reporting to backend...");
             StartCoroutine(ReportMatchEndAndShutdown(winnerTeamId, reason));
@@ -393,10 +395,10 @@ namespace NightHunt.Server
         /// Gửi kết quả match về backend (POST /api/match/end/ranked) rồi tự shutdown.
         /// DS thu thập player data từ MatchEndManager / RegistryService.
         /// </summary>
-        private System.Collections.IEnumerator ReportMatchEndAndShutdown(int winnerTeamId, NightHunt.Gameplay.Match.MatchEndReason reason)
+        private System.Collections.IEnumerator ReportMatchEndAndShutdown(int winnerTeamId, MatchEndReason reason)
         {
             // Thu thập kết quả từng player từ MatchEndManager
-            var matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
+            var matchEndManager = FindFirstObjectByType<MatchEndManager>();
             MatchResult[] playerResults = matchEndManager != null
                 ? matchEndManager.GetFinalResults(winnerTeamId, reason)
                 : System.Array.Empty<MatchResult>();
