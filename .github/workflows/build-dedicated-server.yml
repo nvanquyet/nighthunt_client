@@ -181,7 +181,7 @@ jobs:
     if: needs.build-unity.result == 'success'
     permissions:
       contents: read
-      packages: write   # Cần để push lên GHCR
+      packages: write
 
     steps:
       - name: Checkout
@@ -213,8 +213,9 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          # GITHUB_TOKEN auto-available, packages:write declared above — no extra secret needed
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # Dùng GHCR_TOKEN PAT (write:packages) thay GITHUB_TOKEN vì package nighthunt-ds
+          # không linked tới repo này → GITHUB_TOKEN bị 403 khi push
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
