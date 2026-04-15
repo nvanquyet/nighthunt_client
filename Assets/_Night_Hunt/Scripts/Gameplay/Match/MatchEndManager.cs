@@ -116,6 +116,42 @@ namespace NightHunt.Gameplay.Match
         /// <summary>Register a beacon provider (BeaconManager calls this on Awake).</summary>
         public void RegisterBeaconProvider(IBeaconProvider provider) => _beaconProvider = provider;
 
+        /// <summary>
+        /// Returns final per-player results for reporting to backend (called by ServerBootstrap).
+        /// Aggregates kills, deaths, scores from tracked dictionaries + RegistryService.
+        /// </summary>
+        public MatchResult[] GetFinalResults(int winnerTeamId, MatchEndReason reason)
+        {
+            var registry = RegistryService.Instance;
+            if (registry == null) return System.Array.Empty<MatchResult>();
+
+            var results = new System.Collections.Generic.List<MatchResult>();
+            var allPlayers = registry.GetAllPlayers();
+
+            foreach (var np in allPlayers)
+            {
+                var data = registry.GetPrivateDataByFishNetId(np.OwnerId);
+                if (data == null) continue;
+
+                string pid = data.BackendPlayerId ?? string.Empty;
+                _playerKillCount.TryGetValue(pid, out int kills);
+                _playerDeathCount.TryGetValue(pid, out int deaths);
+                float score = GetTotalScore(np.TeamId);
+
+                results.Add(new MatchResult
+                {
+                    BackendPlayerId = pid,
+                    DisplayName     = np.DisplayName ?? string.Empty,
+                    TeamId          = np.TeamId,
+                    Kills           = kills,
+                    Deaths          = deaths,
+                    Score           = score,
+                });
+            }
+
+            return results.ToArray();
+        }
+
         /// <summary>Called by CaptureZoneObjective every second to tick score.</summary>
         public void AddObjectiveScore(int teamId, float deltaScore)
         {

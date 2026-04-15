@@ -41,6 +41,7 @@ namespace NightHunt.Server
         private int    _maxPlayers;
         private int    _expectedPlayers = -1; // -1 = not set → ServerGameManager uses its own default
         private string _mapId; // e.g. "map_01", "map_02" — empty = dùng scene hiện tại
+        private string _matchId; // Set từ DS allocation (via ENV hoặc game-ready response)
 
         /// <summary>
         /// Expected player count parsed from --expectedPlayers CLI arg.
@@ -111,6 +112,7 @@ namespace NightHunt.Server
                     case "--maxPlayers":      int.TryParse(args[i + 1], out _maxPlayers);      break;
                     case "--expectedPlayers": int.TryParse(args[i + 1], out _expectedPlayers); break;
                     case "--mapId":           _mapId = args[i + 1];                             break;
+                    case "--matchId":         _matchId = args[i + 1];                          break;
                 }
             }
 
@@ -197,6 +199,7 @@ namespace NightHunt.Server
                     Debug.Log("[ServerBootstrap] ✓ Registered with backend successfully!");
                     WriteHealthFile();
                     StartCoroutine(HeartbeatLoop());
+                    SubscribeMatchEnd();
                     LoadGameScene();
                     yield break;
                 }
@@ -354,6 +357,117 @@ namespace NightHunt.Server
         // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
+        /// Subscribe vào MatchEndManager.OnMatchEnded (server-only event).
+        /// Khi game kết thúc: DS gửi kết quả về backend rồi tự shutdown.
+        /// </summary>
+        private void SubscribeMatchEnd()
+        {
+#if UNITY_SERVER
+            var matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
+            if (matchEndManager != null)
+            {
+                matchEndManager.OnMatchEnded += OnMatchEnded;
+                Debug.Log("[ServerBootstrap] Subscribed to MatchEndManager.OnMatchEnded");
+            }
+            else
+            {
+                // MatchEndManager chưa có trong boot scene — sẽ có sau khi map scene load
+                // Subscribe lại sau 5s khi scene đã load
+                StartCoroutine(SubscribeMatchEndDelayed());
+            }
+#endif
+        }
+
+        private System.Collections.IEnumerator SubscribeMatchEndDelayed()
+        {
+            yield return new WaitForSeconds(5f);
+            var matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
+            if (matchEndManager != null)
+            {
+                matchEndManager.OnMatchEnded += OnMatchEnded;
+                Debug.Log("[ServerBootstrap] Subscribed to MatchEndManager.OnMatchEnded (delayed)");
+            }
+            else
+            {
+                Debug.LogWarning("[ServerBootstrap] MatchEndManager not found — game-end reporting disabled!");
+            }
+        }
+
+        private void OnMatchEnded(int winnerTeamId, NightHunt.Gameplay.Match.MatchEndReason reason)
+        {
+            Debug.Log($"[ServerBootstrap] Match ended — winnerTeam={winnerTeamId}, reason={reason}. Reporting to backend...");
+            StartCoroutine(ReportMatchEndAndShutdown(winnerTeamId, reason));
+        }
+
+        /// <summary>
+        /// Gửi kết quả match về backend (POST /api/match/end/ranked) rồi tự shutdown.
+        /// DS thu thập player data từ MatchEndManager / RegistryService.
+        /// </summary>
+        private System.Collections.IEnumerator ReportMatchEndAndShutdown(int winnerTeamId, NightHunt.Gameplay.Match.MatchEndReason reason)
+        {
+            // Thu thập kết quả từng player từ MatchEndManager
+            var matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
+            MatchResult[] playerResults = matchEndManager != null
+                ? matchEndManager.GetFinalResults(winnerTeamId, reason)
+                : System.Array.Empty<MatchResult>();
+
+            // Build request body
+            var entries = new System.Collections.Generic.List<MatchEndPlayerEntry>();
+            foreach (var r in playerResults)
+            {
+                entries.Add(new MatchEndPlayerEntry
+                {
+                    userId      = r.BackendPlayerId,
+                    displayName = r.DisplayName,
+                    teamId      = r.TeamId,
+                    kills       = r.Kills,
+                    deaths      = r.Deaths,
+                    score       = r.Score,
+                });
+            }
+
+            var body = new MatchEndRequest
+            {
+                serverId      = _serverId,
+                serverSecret  = _serverSecret,
+                matchId       = _matchId,      // set từ game-ready response hoặc DS allocation
+                winnerTeamId  = winnerTeamId,
+                endReason     = reason.ToString(),
+                playerResults = entries.ToArray(),
+            };
+            string json = JsonUtility.ToJson(body);
+
+            // POST với retry 3 lần
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                using var req = new UnityWebRequest($"{_backendUrl}/api/match/end/ranked", "POST");
+                req.uploadHandler   = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.SetRequestHeader("X-DS-Secret", _serverSecret);
+                req.timeout = 10;
+
+                yield return req.SendWebRequest();
+
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    Debug.Log($"[ServerBootstrap] ✓ Match result reported (matchId={_matchId}, winner={winnerTeamId}).");
+                    break;
+                }
+
+                Debug.LogWarning($"[ServerBootstrap] game-end report attempt {attempt}/3 failed: {req.responseCode} {req.error}");
+                if (attempt < 3) yield return new WaitForSeconds(2f);
+            }
+
+            // Cho client 5s đọc kết quả rồi shutdown
+            Debug.Log("[ServerBootstrap] Shutting down in 5s...");
+            yield return new WaitForSeconds(5f);
+            Application.Quit(0);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
         /// Tạo/cập nhật file /app/logs/.healthy.
         /// Docker HEALTHCHECK script kiểm tra file này để xác định server còn alive.
         /// </summary>
@@ -396,6 +510,28 @@ namespace NightHunt.Server
         {
             public string serverId;
             public string serverSecret;
+        }
+
+        [Serializable]
+        private struct MatchEndRequest
+        {
+            public string serverId;
+            public string serverSecret;
+            public string matchId;
+            public int    winnerTeamId;
+            public string endReason;
+            public MatchEndPlayerEntry[] playerResults;
+        }
+
+        [Serializable]
+        private struct MatchEndPlayerEntry
+        {
+            public string userId;
+            public string displayName;
+            public int    teamId;
+            public int    kills;
+            public int    deaths;
+            public float  score;
         }
     }
 }
