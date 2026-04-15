@@ -194,7 +194,8 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          # GITHUB_TOKEN auto-available, packages:write declared above — no extra secret needed
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -228,13 +229,13 @@ jobs:
           echo "| Version | \`${{ needs.build-unity.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\` |" >> $GITHUB_STEP_SUMMARY
 
-  # ── Job 3: Notify Backend về image mới + push git tag ──────────────────────
+  # ── Job 3: Notify Backend + cập nhật .env.production trên VPS + push git tag ─
   notify-backend:
     name: "Notify Backend"
     runs-on: ubuntu-latest
     needs: [ build-unity, build-docker ]
     if: needs.build-docker.result == 'success'
-    environment: NightHunt   # Cho phép đọc vars.VPS_BACKEND_URL
+    environment: NightHunt   # Đọc vars.VPS_BACKEND_URL + secrets VPS_HOST/VPS_USER/VPS_SSH_KEY
     permissions:
       contents: write         # Cần để push git tag
 
@@ -245,27 +246,61 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Notify backend - new image available
+      # Bước 1: Gọi backend API để pull image mới vào Docker cache ngay lập tức
+      - name: Notify backend - pull new image
         run: |
+          VERSION="${{ needs.build-unity.outputs.version }}"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
           curl -s -f -X POST "${{ vars.VPS_BACKEND_URL }}/api/admin/ds/update-image" \
             -H "X-Admin-Secret: ${{ secrets.BACKEND_ADMIN_SECRET }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "version":  "${{ needs.build-unity.outputs.version }}",
-              "imageRef": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-unity.outputs.version }}"
-            }' \
-          && echo "✅ Backend notified" \
+            -d "{\"version\":\"${VERSION}\",\"imageRef\":\"${IMAGE_REF}\"}" \
+          && echo "✅ Backend notified — will pull ${IMAGE_REF}" \
           || echo "⚠️ Backend notify failed (non-fatal)"
 
+      # Bước 2: SSH vào VPS để cập nhật DS_IMAGE_REF trong .env.production
+      # → Sau khi backend khởi động lại (next deploy), sẽ dùng đúng image mới.
+      - name: Update DS_IMAGE_REF in .env.production on VPS
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host:     ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          port:     22
+          script: |
+            set -e
+            VERSION="${{ needs.build-unity.outputs.version }}"
+            IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+            ENV_FILE="/opt/nighthunt/.env.production"
+
+            echo "=== Updating DS_IMAGE_REF → ${IMAGE_REF} ==="
+            sed -i "s|^DS_IMAGE_REF=.*|DS_IMAGE_REF=${IMAGE_REF}|" "${ENV_FILE}"
+            grep "DS_IMAGE_REF" "${ENV_FILE}"
+            echo "✅ .env.production updated"
+
+      # Bước 3: Push git tag để tracking phiên bản DS chính xác trên GHCR
       - name: Push git tag
         run: |
           VERSION="${{ needs.build-unity.outputs.version }}"
           TAG="ds/${VERSION}"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          # Delete local/remote tag if it already exists (e.g. re-run)
           git tag -d "${TAG}" 2>/dev/null || true
           git push origin ":refs/tags/${TAG}" 2>/dev/null || true
-          git tag -a "${TAG}" -m "DS image built: ghcr.io/${{ env.IMAGE_NAME }}:${VERSION}"
+          git tag -a "${TAG}" \
+            -m "DS image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
           git push origin "${TAG}"
           echo "✅ Git tag pushed: ${TAG}"
+
+      - name: Job Summary
+        run: |
+          VERSION="${{ needs.build-unity.outputs.version }}"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+          echo "## ✅ DS Deploy Complete" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| GHCR push | \`${IMAGE_REF}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| GHCR push | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend notified | ${{ vars.VPS_BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| .env.production | DS_IMAGE_REF updated |" >> $GITHUB_STEP_SUMMARY
+          echo "| Git tag | \`ds/${VERSION}\` |" >> $GITHUB_STEP_SUMMARY
