@@ -133,7 +133,7 @@ namespace NightHunt.Gameplay.Match
                 var data = registry.GetPrivateDataByFishNetId(np.OwnerId);
                 if (data == null) continue;
 
-                string pid = data.BackendPlayerId ?? string.Empty;
+                string pid = data?.BackendPlayerId ?? string.Empty;
                 _playerKillCount.TryGetValue(pid, out int kills);
                 _playerDeathCount.TryGetValue(pid, out int deaths);
                 float score = GetTotalScore(np.TeamId);
@@ -145,7 +145,7 @@ namespace NightHunt.Gameplay.Match
                     TeamId          = np.TeamId,
                     Kills           = kills,
                     Deaths          = deaths,
-                    Score           = score,
+                    Score           = Mathf.RoundToInt(score),
                 });
             }
 
