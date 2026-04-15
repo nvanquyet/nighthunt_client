@@ -105,15 +105,23 @@ jobs:
 
       - name: Verify build output
         run: |
-          echo "=== Build output ==="
-          ls -lah Build/Server/
-          # NightHunt.Build.BuildScript.BuildDedicatedServer outputs to Build/Server/NightHuntDS
-          # Unity appends .x86_64 automatically for StandaloneLinux64
+          echo "=== Build output (recursive) ==="
+          find Build/Server -type f | sort
+          echo ""
+          # Check binary
           test -f Build/Server/NightHuntDS.x86_64 || \
           test -f Build/Server/NightHuntDS || \
           (echo "❌ Binary not found in Build/Server/! Check Unity build log." && exit 1)
           chmod +x Build/Server/NightHuntDS.x86_64 2>/dev/null || chmod +x Build/Server/NightHuntDS 2>/dev/null || true
+          # Check UnityPlayer.so (required runtime library for Linux DS)
+          UNITY_SO=$(find Build/Server -name "UnityPlayer.so" 2>/dev/null | head -1)
+          if [ -z "${UNITY_SO}" ]; then
+            echo "❌ UnityPlayer.so NOT FOUND in Build/Server! DS will crash at runtime."
+            echo "   Unity should output this file next to the binary or in *_Data/Plugins/x86_64/"
+            exit 1
+          fi
           echo "✅ Binary verified"
+          echo "✅ UnityPlayer.so found at: ${UNITY_SO}"
 
       # Upload artifact để job build-docker dùng
       - name: Upload build artifact

@@ -59,6 +59,27 @@ fi
 echo "📦 Using binary: ${DS_BINARY}"
 
 # ── Start Unity DS ────────────────────────────────────────────────────────────
+# UnityPlayer.so must be on LD_LIBRARY_PATH.
+# Unity may place it next to the binary OR inside NightHuntDS_Data/Plugins/x86_64/
+DS_DIR=$(dirname "${DS_BINARY}")
+
+UNITY_SO=$(find /app -name "UnityPlayer.so" 2>/dev/null | head -1)
+if [ -n "${UNITY_SO}" ]; then
+    SO_DIR=$(dirname "${UNITY_SO}")
+    export LD_LIBRARY_PATH="${SO_DIR}:${DS_DIR}:${LD_LIBRARY_PATH}"
+    echo "✅ Found UnityPlayer.so at: ${UNITY_SO}"
+else
+    echo "⚠️  WARNING: UnityPlayer.so not found — DS may crash with 'cannot open shared object file'"
+    export LD_LIBRARY_PATH="${DS_DIR}:${LD_LIBRARY_PATH}"
+fi
+
+cd "${DS_DIR}"
+echo "📂 Working dir    : $(pwd)"
+echo "📚 LD_LIBRARY_PATH : ${LD_LIBRARY_PATH}"
+echo "📋 /app contents:"
+find /app -maxdepth 3 -type f | sort
+echo ""
+
 # Log file: /app/logs/server-<timestamp>.log
 exec "${DS_BINARY}"                                    \
     -batchmode                                         \
