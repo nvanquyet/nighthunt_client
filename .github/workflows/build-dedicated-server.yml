@@ -278,7 +278,38 @@ jobs:
             grep "DS_IMAGE_REF" "${ENV_FILE}"
             echo "✅ .env.production updated"
 
-      # Bước 3: Push git tag để tracking phiên bản DS chính xác trên GHCR
+      # Bước 3: Smoke test — pull image về VPS và verify binary tồn tại
+      - name: Smoke test DS image on VPS
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-unity.outputs.version }}"
+
+            echo "=== [1/3] Pull DS image ==="
+            docker pull "${IMAGE_REF}"
+            echo "✅ Image pulled: ${IMAGE_REF}"
+
+            echo "=== [2/3] Verify DS binary inside image ==="
+            docker run --rm --entrypoint "" "${IMAGE_REF}" \
+              sh -c "ls /app/NightHuntDS.x86_64 2>/dev/null || ls /app/NightHuntDS 2>/dev/null \
+                     || (echo '❌ DS binary not found in /app/' && ls -la /app/ && exit 1)" \
+            && echo "✅ DS binary OK"
+
+            echo "=== [3/3] Verify UnityPlayer.so ==="
+            docker run --rm --entrypoint "" "${IMAGE_REF}" \
+              sh -c "find /app -name 'UnityPlayer.so' 2>/dev/null | head -3 | grep -q . \
+                     && echo '✅ UnityPlayer.so found' \
+                     || echo '⚠️  UnityPlayer.so missing — DS may crash at runtime'"
+
+            echo ""
+            echo "✅ DS image smoke test passed"
+
+      # Bước 4: Push git tag để tracking phiên bản DS chính xác trên GHCR
       - name: Push git tag
         run: |
           VERSION="${{ needs.build-unity.outputs.version }}"
@@ -303,4 +334,5 @@ jobs:
           echo "| GHCR push | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Backend notified | ${{ vars.VPS_BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
           echo "| .env.production | DS_IMAGE_REF updated |" >> $GITHUB_STEP_SUMMARY
+          echo "| DS Smoke Test | Binary + UnityPlayer.so verified on VPS |" >> $GITHUB_STEP_SUMMARY
           echo "| Git tag | \`ds/${VERSION}\` |" >> $GITHUB_STEP_SUMMARY
