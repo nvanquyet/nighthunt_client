@@ -80,11 +80,11 @@ echo "📋 /app contents:"
 find /app -maxdepth 3 -type f | sort
 echo ""
 
-# Log file: /app/logs/server-<timestamp>.log
+# Log to stdout so `docker logs` captures all Unity output
 exec "${DS_BINARY}"                                    \
     -batchmode                                         \
     -nographics                                        \
-    -logFile /app/logs/server-$(date +%Y%m%d-%H%M%S).log \
+    -logFile -                                         \
     --serverId        "${SERVER_ID}"                   \
     --serverPort      "${GAME_PORT:-7777}"             \
     --backendUrl      "${BACKEND_URL}"                 \

@@ -36,7 +36,13 @@ COPY --chown=gameserver:gameserver ./scripts/health-check.sh /app/health-check.s
 RUN (chmod +x /app/NightHuntDS.x86_64 2>/dev/null || chmod +x /app/NightHuntDS 2>/dev/null || echo "WARNING: DS binary not found") \
     && chmod +x /app/entrypoint.sh \
     && chmod +x /app/health-check.sh \
-    && mkdir -p /app/logs
+    && mkdir -p /app/logs \
+    && chown gameserver:gameserver /app/logs
+
+# Install CA certificates for Unity HTTPS calls (e.g. DS register to backend)
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-ca-certificates
 
 USER gameserver
 
