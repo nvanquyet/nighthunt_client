@@ -53,10 +53,6 @@ namespace NightHunt.Networking
         private NightHunt.Gameplay.Input.Handlers.Movement.MovementInputHandler _cachedMovementHandler;
         private NightHunt.Gameplay.Input.Handlers.Camera.CameraInputHandler _cachedCameraHandler;
 
-        // Guard: FishNet fires both OnStartClient and OnOwnershipClient for the local player's
-        // own spawn — this flag ensures SetupOwnerSide() only runs once per network lifetime.
-        private bool _ownerSideInitialized = false;
-
 
         // ── PUBLIC PLAYER DATA ────────────────────────────────────────────────
         // SyncVar ensures FishNet includes the current value in every spawn packet
@@ -101,39 +97,32 @@ namespace NightHunt.Networking
             // Initialize GameplaySystemsBridge with Dependency Injection
             // Get all system components
             var inventory = ComponentResolver.Find<IInventorySystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IInventorySystem not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IInventorySystem not found")
                 .Resolve();
             var equipment = ComponentResolver.Find<IEquipmentSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IEquipmentSystem not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IEquipmentSystem not found")
                 .Resolve();
             var weapon = ComponentResolver.Find<IWeaponSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IWeaponSystem not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IWeaponSystem not found")
                 .Resolve();
             var itemSelection = ComponentResolver.Find<IItemSelectionSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IItemSelectionSystem not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IItemSelectionSystem not found")
                 .Resolve();
             var statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IPlayerStatSystem not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IPlayerStatSystem not found")
                 .Resolve();
             var itemUse = ComponentResolver.Find<IItemUseSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IItemUseSystem not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IItemUseSystem not found")
                 .Resolve();
             var attachment = ComponentResolver.Find<IAttachmentSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IAttachmentSystem not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IAttachmentSystem not found")
                 .Resolve();
 
             // Create bridge with DI
@@ -207,7 +196,6 @@ namespace NightHunt.Networking
         public override void OnStopClient()
         {
             base.OnStopClient();
-            _ownerSideInitialized = false; // reset so it can run again on rejoin/reconnect
             _playerData.OnChange -= OnPlayerDataChanged;
             _isAlive.OnChange -= OnAliveStateChanged;
             PlayerPublicRegistry.Instance.Unregister((int)this.ObjectId);
@@ -222,13 +210,6 @@ namespace NightHunt.Networking
 
         private void OnPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next, bool asServer)
         {
-            // On a listen server, FishNet fires this callback TWICE per SyncVar write:
-            // once with asServer=true (server side) and once with asServer=false (client side).
-            // Skip the server-side call when the client is also running to prevent
-            // OnPublicDataChanged from firing 2x (which causes FogTeamVisibilityBinder
-            // and any UI subscriber to refresh redundantly).
-            if (asServer && IsClientInitialized) return;
-
             PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
             OnPublicDataChanged?.Invoke(prev, next);
         }
@@ -276,12 +257,6 @@ namespace NightHunt.Networking
 
         private void SetupOwnerSide()
         {
-            // Guard: FishNet fires both OnStartClient (IsOwner=true) AND OnOwnershipClient
-            // for the local player's own spawn. Skip the second call to prevent double
-            // initialization of HUD, input, AimSystem, etc.
-            if (_ownerSideInitialized) return;
-            _ownerSideInitialized = true;
-
             // Owner only: Enable camera and input
             EnableInput();
 
@@ -303,17 +278,14 @@ namespace NightHunt.Networking
 
             // Lấy các refs cần thiết cho BindCombatSystems
             var weaponSystem = ComponentResolver.Find<NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] NightHunt.GameplaySystems.Core.Interfaces.IWeaponSystem not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IWeaponSystem not found")
                 .Resolve();
 
             // CameraStateManager nằm trên player prefab (hoặc child)
             var cameraStateManager = ComponentResolver.Find<NightHunt.Gameplay.Camera.CameraStateManager>(this)
-                .OnSelf()
-                .InChildren()
-                .InParent()
-                .OrLogWarning("[Auto] NightHunt.Gameplay.Camera.CameraStateManager not found")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] CameraStateManager not found")
                 .Resolve();
 
             if (cameraStateManager == null)
@@ -337,18 +309,9 @@ namespace NightHunt.Networking
             if (aimSystem != null)
             {
                 var statSystem = ComponentResolver.Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
-                                     .OnSelf()
-                                     .InChildren()
-                                     .OrLogWarning(
-                                         "[Auto] NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
-                                     .Resolve()
-                                 ?? ComponentResolver.Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
-                                     .OnSelf()
-                                     .InChildren()
-                                     .InParent()
-                                     .OrLogWarning(
-                                         "[Auto] NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem not found")
-                                     .Resolve();
+                    .OnSelf().InChildren().InParent()
+                    .OrLogWarning("[NetworkPlayer] IPlayerStatSystem not found — AimSystem will use fallback VisionRange")
+                    .Resolve();
                 if (statSystem == null)
                     Debug.LogWarning(
                         "[NetworkPlayer] IPlayerStatSystem not found on player — AimSystem will use fallback VisionRange.");
@@ -360,9 +323,8 @@ namespace NightHunt.Networking
 
                 // Propagate AimSystem to WeaponVFXController so trail length = VisionRange.
                 ComponentResolver.Find<NightHunt.GameplaySystems.Weapon.WeaponVFXController>(this)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] NightHunt.GameplaySystems.Weapon.WeaponVFXController not found")
+                    .OnSelf().InChildren()
+                    .OrLogWarning("[NetworkPlayer] WeaponVFXController not found")
                     .Resolve()
                     ?.Initialize(aimSystem);
             }
@@ -391,9 +353,8 @@ namespace NightHunt.Networking
 
             // Bind ItemUseSystem so fire button calls ExecuteThrow during throwable mode.
             var cachedItemUse = ComponentResolver.Find<IItemUseSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IItemUseSystem not found for CombatHandler binding")
+                .OnSelf().InChildren().InParent()
+                .OrLogWarning("[NetworkPlayer] IItemUseSystem not found for CombatHandler binding")
                 .Resolve();
             inputManager.CombatHandler?.BindItemUseSystem(cachedItemUse);
         }

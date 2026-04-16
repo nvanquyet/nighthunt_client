@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using UnityEngine;
 using FishNet.Object;
-using NightHunt.Audio;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
@@ -10,7 +9,6 @@ using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Gameplay.Character;
 using NightHunt.GameplaySystems.Weapon;
-using NightHunt.GameplaySystems.Stat;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.ItemUse
@@ -19,7 +17,7 @@ namespace NightHunt.GameplaySystems.ItemUse
     /// Orchestrates item usage on the server, routing consumables to
     /// <see cref="ConsumableHandler"/> and throwables to <see cref="ThrowableHandler"/>.
     /// </summary>
-    public class ItemUseSystem : NetworkBehaviour, IItemUseSystem
+    public class ItemUseSystem : NetworkBehaviour, IItemUseSystem, IDisposable
     {
         #region Serialized Fields
 
@@ -83,9 +81,9 @@ namespace NightHunt.GameplaySystems.ItemUse
         }
 
 #if UNITY_EDITOR
-        protected override void OnValidate()
+        [ContextMenu("Validate References")]
+        private void OnValidate()
         {
-            base.OnValidate();
             ValidateReferences();
         }
 #endif
@@ -140,22 +138,13 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         private void InitializeHandlers()
         {
-            // Resolve orchestrator for ConsumableHandler (Bug #15 fix — survive recalc cycles)
-            var orchestrator = ComponentResolver.Find<IStatApplyOrchestrator>(this)
-                .OnSelf().InChildren().InParent().InRootChildren()
-                .OrLogWarning("[ItemUseSystem] IStatApplyOrchestrator not found — consumable mods use legacy path")
-                .Resolve();
-
             // Auto-create handlers if not assigned
             if (_consumableHandler == null)
             {
                 _consumableHandler = gameObject.AddComponent<ConsumableHandler>();
-                _consumableHandler.Initialize(_statSystem, orchestrator);
-            }
-            else if (_consumableHandler != null)
-            {
-                // Inspector-assigned handler: still wire orchestrator
-                _consumableHandler.Initialize(_statSystem, orchestrator);
+                if (_statSystem == null)
+                    Debug.LogWarning("[ItemUseSystem] ConsumableHandler created but IPlayerStatSystem is null — consumable effects won't apply.");
+                _consumableHandler.Initialize(_statSystem);
             }
 
             if (_throwableHandler == null)
@@ -252,11 +241,6 @@ namespace NightHunt.GameplaySystems.ItemUse
             // Guard: might have been cancelled during wind-up.
             if (!_isUsingItem || _currentItem == null)
                 yield break;
-
-            // Play throw release sound (per-throwable-type clip on the definition).
-            if (def.ThrowSound != null && AudioManager.HasInstance)
-                AudioManager.Instance.Play3D(def.ThrowSound, transform.position,
-                    AudioManager.Instance.GroupWeapon);
 
             _throwableHandler.SpawnProjectile(def, transform, aimTarget);
             DetachItemFromHand();
@@ -411,9 +395,9 @@ namespace NightHunt.GameplaySystems.ItemUse
         #region Hand Model
 
         /// <summary>
-        /// Instantiate the throwable's EquippedPrefab on the right-hand bone (WeaponR) so
-        /// the player visually holds the item while in throw-aim mode.
-        /// Uses the same parent and local transform as WeaponModelController.
+        /// Instantiate the throwable's <see cref="PhysicalItemDefinition.HeldPrefab"/> on the
+        /// right-hand bone (WeaponR) so the player visually holds the item while in
+        /// throw-aim mode.  Uses the same parent and local transform as WeaponModelController.
         /// </summary>
         private void SpawnItemInHand(ThrowableDefinition def)
         {
@@ -520,11 +504,24 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         #endregion
 
-        public override void OnStopNetwork()
+        #region IDisposable Implementation
+
+        public void Dispose()
         {
-            base.OnStopNetwork();
-            if (_isUsingItem) CancelUse();
-            if (_useCoroutine != null) { StopCoroutine(_useCoroutine); _useCoroutine = null; }
+            // Cancel any ongoing item use
+            if (_isUsingItem)
+            {
+                CancelUse();
+            }
+
+            // Stop any running coroutines
+            if (_useCoroutine != null)
+            {
+                StopCoroutine(_useCoroutine);
+                _useCoroutine = null;
+            }
         }
+
+        #endregion
     }
 }

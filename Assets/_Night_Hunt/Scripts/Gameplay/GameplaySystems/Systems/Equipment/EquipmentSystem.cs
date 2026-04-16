@@ -7,9 +7,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.Core.Base;
 using NightHunt.Utilities;
-using NightHunt.GameplaySystems.Core;
 
 namespace NightHunt.GameplaySystems.Equipment
 {
@@ -17,7 +15,7 @@ namespace NightHunt.GameplaySystems.Equipment
     /// Manages equipment slot assignment (head, body, legs, feet) for a networked player.
     /// All slot mutations are server-authoritative via SyncDictionary.
     /// </summary>
-    public class EquipmentSystem : BaseNetworkGameplaySystem, IEquipmentSystem
+    public class EquipmentSystem : NetworkBehaviour, IEquipmentSystem, IDisposable
     {
         #region Serialized Fields
         
@@ -29,7 +27,8 @@ namespace NightHunt.GameplaySystems.Equipment
         private IInventorySystem _inventorySystem;
         private IAttachmentSystem _attachmentSystem;
         
-        private bool _enableDebugLogs => _debugConfig != null && _debugConfig.EnableWeaponDebugLogs;
+        [Header("Debug")]
+        [SerializeField] private bool _enableDebugLogs = false;
         
         #endregion
         
@@ -54,17 +53,34 @@ namespace NightHunt.GameplaySystems.Equipment
         
         #region NetworkBehaviour Lifecycle
         
-        protected override void OnNetworkStarted()
+        public override void OnStartNetwork()
         {
+            base.OnStartNetwork();
+            
             _equippedItems.OnChange += OnEquipmentChanged;
             
             if (!IsServerInitialized)
                 RebuildEquipmentCache();
         }
         
-        protected override void OnNetworkStopped()
+        public override void OnStopNetwork()
         {
+            base.OnStopNetwork();
+            
             _equippedItems.OnChange -= OnEquipmentChanged;
+            _equipmentCache.Clear();
+        }
+        
+        #endregion
+        
+        #region IDisposable Implementation
+        
+        public void Dispose()
+        {
+            // Unsubscribe from network events
+            _equippedItems.OnChange -= OnEquipmentChanged;
+            
+            // Clear cache
             _equipmentCache.Clear();
         }
         
@@ -72,23 +88,39 @@ namespace NightHunt.GameplaySystems.Equipment
         
         #region Initialization
         
-        protected override void OnResolveReferences()
+        private void Awake()
         {
-            _inventorySystem = this.ResolveWithFallback<IInventorySystem>(_inventorySystemComponent,
-                "[EquipmentSystem] IInventorySystem not found");
+            ValidateReferences();
+        }
+        
+        private void ValidateReferences()
+        {
+            _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
+                .UseExisting(_inventorySystemComponent)
+                .OnSelf().InChildren().InParent().InRootChildren()
+                .OrLogWarning("[EquipmentSystem] IInventorySystem not found")
+                .Resolve();
 
-            _attachmentSystem = this.ResolveWithFallback<IAttachmentSystem>(null,
-                "[EquipmentSystem] IAttachmentSystem not found — DetachAttachmentsOnUnequip will be skipped");
+            if (_inventorySystem is InventorySystem invConcrete)
+                _inventorySystemComponent = invConcrete;
+
+            _attachmentSystem = ComponentResolver.Find<IAttachmentSystem>(this)
+                .OnSelf().InChildren().InParent().InRootChildren()
+                .OrLogWarning("[EquipmentSystem] IAttachmentSystem not found — DetachAttachmentsOnUnequip will be skipped")
+                .Resolve();
 
             if (_inventoryConfig == null)
                 Debug.LogError("[EquipmentSystem] InventoryConfig is null!");
+
+            if (_inventorySystem == null)
+                Debug.LogError("[EquipmentSystem] IInventorySystem is null!");
         }
         
 #if UNITY_EDITOR
         [ContextMenu("Validate References")]
         protected override void OnValidate()
         {
-            OnResolveReferences();
+            ValidateReferences();
         }
 #endif
         
@@ -278,7 +310,14 @@ namespace NightHunt.GameplaySystems.Equipment
 
         private void RebuildEquipmentCache()
         {
-            SlotCacheHelper.Rebuild(_equippedItems, id => _inventorySystem?.GetItemByInstanceID(id), _equipmentCache);
+            _equipmentCache.Clear();
+            
+            foreach (var kvp in _equippedItems)
+            {
+                var item = _inventorySystem?.GetItemByInstanceID(kvp.Value);
+                if (item != null)
+                    _equipmentCache[kvp.Key] = item;
+            }
         }
         
         #endregion

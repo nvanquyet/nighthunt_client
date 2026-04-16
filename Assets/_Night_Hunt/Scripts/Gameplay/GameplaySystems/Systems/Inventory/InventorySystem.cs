@@ -11,7 +11,6 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.GameplaySystems.Loot;
-using NightHunt.Core.Base;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Inventory
@@ -20,7 +19,7 @@ namespace NightHunt.GameplaySystems.Inventory
     /// Server-authoritative inventory using SyncList. Provides O(1) item access
     /// via ID and index caches, and broadcasts change events for UI synchronisation.
     /// </summary>
-    public class InventorySystem : BaseNetworkGameplaySystem, IInventorySystem
+    public class InventorySystem : NetworkBehaviour, IInventorySystem, IDisposable
     {
         #region Serialized Fields
 
@@ -39,7 +38,7 @@ namespace NightHunt.GameplaySystems.Inventory
         [Tooltip("Auto-cleanup invalid items on sync")] [SerializeField]
         private bool _autoCleanupInvalidItems = true;
 
-        private bool _enableDebugLogs => _debugConfig != null && _debugConfig.EnableInventoryDebugLogs;
+        [Header("Debug")] [SerializeField] private bool _enableDebugLogs = false;
 
         #endregion
 
@@ -85,17 +84,34 @@ namespace NightHunt.GameplaySystems.Inventory
 
         #region NetworkBehaviour Lifecycle
 
-        protected override void OnNetworkStarted()
+        public override void OnStartNetwork()
         {
+            base.OnStartNetwork();
+
             _items.OnChange += OnItemsChanged;
 
             if (!IsServerInitialized)
                 RebuildAllCaches();
         }
 
-        protected override void OnNetworkStopped()
+        public override void OnStopNetwork()
         {
+            base.OnStopNetwork();
+
             _items.OnChange -= OnItemsChanged;
+            ClearAllCaches();
+        }
+
+        #endregion
+
+        #region IDisposable Implementation
+
+        public void Dispose()
+        {
+            // Unsubscribe from network events
+            _items.OnChange -= OnItemsChanged;
+
+            // Clear all caches
             ClearAllCaches();
         }
 
@@ -103,23 +119,40 @@ namespace NightHunt.GameplaySystems.Inventory
 
         #region Initialization
 
-        protected override void OnResolveReferences()
+        private void Awake()
         {
-            _statSystem = this.ResolveWithFallback<IPlayerStatSystem>(_statSystemComponent,
-                "[InventorySystem] IPlayerStatSystem not found — weight updates will not work");
+            ValidateReferences();
+        }
+
+        private void ValidateReferences()
+        {
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
+                .UseExisting(_statSystemComponent)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrLogWarning("[Auto] IPlayerStatSystem not found")
+                .Resolve();
+
+            if (_statSystem is PlayerStatSystem statConcrete)
+                _statSystemComponent = statConcrete;
 
             if (_gameplayConfig == null)
                 Debug.LogError("[InventorySystem] GameplayConfig is null!");
 
             if (_inventoryConfig == null)
                 Debug.LogError("[InventorySystem] InventoryConfig is null!");
+
+            if (_statSystem == null)
+                Debug.LogWarning("[InventorySystem] IPlayerStatSystem is null - weight updates will not work!");
         }
 
 #if UNITY_EDITOR
         [ContextMenu("Validate References")]
         protected override void OnValidate()
         {
-            OnResolveReferences();
+            ValidateReferences();
         }
 #endif
 
@@ -212,56 +245,6 @@ namespace NightHunt.GameplaySystems.Inventory
             AddItemServer(itemDefinitionID, quantity);
         }
 
-        /// <summary>
-        /// Restore a full <see cref="ItemInstanceData"/> snapshot into inventory,
-        /// preserving all runtime state (magazine, resource, attachments).
-        /// Used by <see cref="WorldItem.RequestPickup"/> so that dropped-then-picked-up
-        /// guns retain their ammo count rather than resetting to full.
-        /// </summary>
-        public void AddItemFromData(ItemInstanceData data)
-        {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[InventorySystem] AddItemFromData: server-only!");
-                return;
-            }
-
-            if (string.IsNullOrEmpty(data.DefinitionID))
-            {
-                Debug.LogWarning("[InventorySystem] AddItemFromData: empty DefinitionID, skipping.");
-                return;
-            }
-
-            var itemDef = ItemDatabase.GetDefinition(data.DefinitionID);
-            if (itemDef == null)
-            {
-                Debug.LogError($"[InventorySystem] AddItemFromData: unknown definition '{data.DefinitionID}'");
-                return;
-            }
-
-            // Reconstruct the ItemInstance restoring all persisted runtime values.
-            var restored = new ItemInstance(data.DefinitionID, Mathf.Max(1, data.Quantity), GetNextAvailableIndex())
-            {
-                InstanceID       = !string.IsNullOrEmpty(data.InstanceID) ? data.InstanceID : System.Guid.NewGuid().ToString(),
-                CurrentMagazine  = data.CurrentMagazine,
-                CurrentResource  = data.CurrentResource,
-                AttachedItems    = data.AttachedItems != null ? (string[])data.AttachedItems.Clone() : null,
-                CustomData       = data.CustomData,
-                CreatedTimestamp = data.CreatedTimestamp != 0 ? data.CreatedTimestamp : DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-            };
-
-            AddToAllCaches(restored);
-            _items.Add(restored.ToData());
-            ItemDatabase.RegisterInstance(restored);
-
-            OnItemAdded?.Invoke(restored);
-            ScheduleWeightUpdate();
-
-            if (_enableDebugLogs)
-                Debug.Log($"[InventorySystem] AddItemFromData: restored '{data.DefinitionID}' " +
-                          $"×{data.Quantity} mag={data.CurrentMagazine} id={restored.InstanceID}");
-        }
-
         [Server]
         private void AddItemServer(string itemDefinitionID, int quantity)
         {
@@ -330,6 +313,54 @@ namespace NightHunt.GameplaySystems.Inventory
                 Debug.Log(
                     $"[InventorySystem] Added item {itemDefinitionID} (qty: {originalQuantity}, weight: {itemWeight:F2}kg). Total weight: {CalculateTotalWeight():F2}kg");
             }
+        }
+
+        /// <summary>
+        /// Restore an item from serialized data (world pickup / deserialization).
+        /// Preserves runtime state and always creates a new inventory slot (no stacking).
+        /// Server-side only.
+        /// </summary>
+        public void AddItemFromData(ItemInstanceData data)
+        {
+            if (!IsServerInitialized)
+            {
+                Debug.LogWarning("[InventorySystem] AddItemFromData: server-only!");
+                return;
+            }
+
+            if (data.InstanceID == null)
+            {
+                Debug.LogWarning("[InventorySystem] AddItemFromData: invalid data (no InstanceID)");
+                return;
+            }
+
+            // Convert to runtime instance
+            var item = data.ToInstance();
+
+            // Ensure unique InstanceID
+            if (string.IsNullOrEmpty(item.InstanceID))
+                item.InstanceID = Guid.NewGuid().ToString("N");
+
+            if (_itemCache.ContainsKey(item.InstanceID))
+            {
+                if (_enableDebugLogs)
+                    Debug.LogWarning($"[InventorySystem] AddItemFromData: instance already exists {item.InstanceID}");
+                return;
+            }
+
+            // Assign inventory index (next free slot)
+            item.InventoryIndex = GetNextAvailableIndex();
+
+            // Register in caches and SyncList
+            AddToAllCaches(item);
+            _items.Add(item.ToData());
+            ItemDatabase.RegisterInstance(item);
+
+            OnItemAdded?.Invoke(item);
+            ScheduleWeightUpdate();
+
+            if (_enableDebugLogs)
+                Debug.Log($"[InventorySystem] Restored item {item.DefinitionID} x{item.Quantity} at index {item.InventoryIndex}");
         }
 
         #endregion

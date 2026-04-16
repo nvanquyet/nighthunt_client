@@ -5,7 +5,6 @@ using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Networking;
-using NightHunt.Services.Game;
 using NightHunt.State;
 using TMPro;
 using UnityEngine;
@@ -43,10 +42,6 @@ namespace NightHunt.UI
 
         [SerializeField] private TextMeshProUGUI _eloChangeText;
 
-        [Header("Coin Reward (all modes)")]
-        [SerializeField] private GameObject _coinPanel;
-        [SerializeField] private TextMeshProUGUI _coinRewardText;
-
         [Header("Navigation")] [SerializeField]
         private Button _continueButton;
 
@@ -59,10 +54,6 @@ namespace NightHunt.UI
 
         // Last match end result (cached for post-match backend call)
         private MatchEndedEvent? _lastMatchResult;
-
-        // Per-player rows cached for async coin update (populated in BuildScoreboard)
-        private readonly System.Collections.Generic.Dictionary<string, ResultRowView> _playerRows
-            = new System.Collections.Generic.Dictionary<string, ResultRowView>();
 
         // ──────────────────────────────────────────────────────────────────────
 
@@ -77,15 +68,11 @@ namespace NightHunt.UI
                 _continueButton.onClick.AddListener(OnContinueClicked);
 
             GameplayEventBus.Instance?.Subscribe<MatchEndedEvent>(OnMatchEnded);
-            if (GameWebSocketService.Instance != null)
-                GameWebSocketService.Instance.OnMatchEnded += HandleMatchEndedWs;
         }
 
         private void OnDestroy()
         {
             GameplayEventBus.Instance?.Unsubscribe<MatchEndedEvent>(OnMatchEnded);
-            if (GameWebSocketService.Instance != null)
-                GameWebSocketService.Instance.OnMatchEnded -= HandleMatchEndedWs;
         }
 
         #endregion
@@ -195,10 +182,6 @@ namespace NightHunt.UI
                     ? $"ELO <color=#00FF88>+{eloChange}</color>"
                     : $"ELO <color=#FF4444>{eloChange}</color>";
             }
-
-            // Coin reward panel (all modes) — shows pending until backend WS arrives
-            if (_coinPanel != null) _coinPanel.SetActive(true);
-            if (_coinRewardText != null) _coinRewardText.text = "Calculating rewards…";
         }
 
         private void BuildScoreboard(MatchResult[] results)
@@ -209,39 +192,15 @@ namespace NightHunt.UI
             foreach (Transform t in _scoreboardContainer)
                 Destroy(t.gameObject);
 
-            _playerRows.Clear();
-
             foreach (var r in results)
             {
                 var go = Instantiate(_resultRowPrefab, _scoreboardContainer);
                 var row = ComponentResolver.Find<ResultRowView>(go)
                     .OnSelf()
                     .InChildren()
-                    .OrLogWarning("[Auto] ResultRowView not found")
+                    .OrLogWarning("[ResultsView] ResultRowView not found")
                     .Resolve();
-                if (row != null)
-                {
-                    row.SetData(r);
-                    if (!string.IsNullOrEmpty(r.BackendPlayerId))
-                        _playerRows[r.BackendPlayerId] = row;
-                }
-            }
-        }
-
-        private void HandleMatchEndedWs(GameWebSocketService.MatchEndedWsEvent evt)
-        {
-            if (evt?.playerResults == null) return;
-            var session = SessionState.Instance;
-
-            foreach (var row in evt.playerResults)
-            {
-                // Update per-row coin display
-                if (_playerRows.TryGetValue(row.userId.ToString(), out var rowView))
-                    rowView.SetCoinChange(row.coinChange);
-
-                // Update local player coin summary banner
-                if (session != null && row.userId == session.UserId && _coinRewardText != null)
-                    _coinRewardText.text = $"<color=#FFD700>+{row.coinChange}</color> coins earned";
+                row?.SetData(r);
             }
         }
 
@@ -386,9 +345,9 @@ namespace NightHunt.UI
             hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 4f;
             hlg.padding = new RectOffset(6, 6, 2, 2);
 
-            string[] colNames   = { "NameText", "TeamText", "KillsText", "DeathsText", "ScoreText", "EloText", "CoinText" };
-            string[] colSamples = { "PlayerX",  "Team A",   "5",          "2",           "1200",      "+25",      "+100" };
-            float[]  colWidths  = { 160f, 70f, 50f, 50f, 70f, 60f, 60f };
+            string[] colNames   = { "NameText", "TeamText", "KillsText", "DeathsText", "ScoreText", "EloText" };
+            string[] colSamples = { "PlayerX",  "Team A",   "5",          "2",           "1200",      "+25" };
+            float[]  colWidths  = { 160f, 70f, 50f, 50f, 70f, 60f };
 
             for (int i = 0; i < colNames.Length; i++)
             {
@@ -407,7 +366,7 @@ namespace NightHunt.UI
                 UnityEditor.EditorUtility.SetDirty(this);
             }
             Debug.Log($"[ResultsView] Created ResultRow_Template at {path}. " +
-                      "Add ResultRowView component and wire nameText/teamText/killsText/deathsText/scoreText/eloText/coinText.");
+                      "Add ResultRowView component and wire nameText/teamText/killsText/deathsText/scoreText/eloText.");
         }
 #endif
     }
@@ -423,7 +382,6 @@ namespace NightHunt.UI
         [SerializeField] private TextMeshProUGUI deathsText;
         [SerializeField] private TextMeshProUGUI scoreText;
         [SerializeField] private TextMeshProUGUI eloText;
-        [SerializeField] private TextMeshProUGUI coinText;
 
         public void SetData(MatchResult r)
         {
@@ -437,15 +395,6 @@ namespace NightHunt.UI
                 if (r.EloChange == 0) eloText.text = "-";
                 else eloText.text = r.EloChange > 0 ? $"+{r.EloChange}" : r.EloChange.ToString();
             }
-            if (coinText != null)
-                coinText.text = r.CoinChange > 0 ? $"+{r.CoinChange}" : "-";
-        }
-
-        /// <summary>Called async when backend confirms coin reward (after WS match_ended arrives).</summary>
-        public void SetCoinChange(long coinChange)
-        {
-            if (coinText != null)
-                coinText.text = coinChange > 0 ? $"<color=#FFD700>+{coinChange}</color>" : "-";
         }
     }
 }

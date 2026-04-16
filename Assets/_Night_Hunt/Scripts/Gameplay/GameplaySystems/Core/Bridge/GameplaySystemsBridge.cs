@@ -351,33 +351,6 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         public void DropItem(string instanceID, int qty = 1)
         {
             if (!ValidateSystem(_inventory, "Inventory")) return;
-
-            // Must unequip before dropping so weapon/equipment HUD clears immediately.
-            // Check weapon slots.
-            if (_weapon != null)
-            {
-                foreach (var kvp in _weapon.GetAllWeapons())
-                {
-                    if (kvp.Value?.InstanceID == instanceID)
-                    {
-                        _weapon.UnequipWeapon(kvp.Key);
-                        break;
-                    }
-                }
-            }
-            // Check equipment slots.
-            if (_equipment != null)
-            {
-                foreach (var kvp in _equipment.GetAllEquippedItems())
-                {
-                    if (kvp.Value?.InstanceID == instanceID)
-                    {
-                        _equipment.UnequipItem(kvp.Key);
-                        break;
-                    }
-                }
-            }
-
             _inventory.DropItem(instanceID, qty);
         }
 

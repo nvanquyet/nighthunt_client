@@ -123,6 +123,19 @@ namespace NightHunt.UI
             _fadeCoroutine = StartCoroutine(FadeOut());
         }
 
+        /// <summary>
+        /// Đánh dấu một player đã accept — cập nhật row icon.
+        /// Gọi khi nhận WS event "player_accepted" (nếu backend gửi).
+        /// </summary>
+        public void MarkPlayerAccepted(long userId)
+        {
+            foreach (var row in _rows)
+            {
+                if (row != null && row.UserId == userId)
+                    row.SetAccepted(true);
+            }
+        }
+
         // ── Internal ──────────────────────────────────────────────────────────
 
         private void PopulatePlayers(long[] playerIds, long localUserId)

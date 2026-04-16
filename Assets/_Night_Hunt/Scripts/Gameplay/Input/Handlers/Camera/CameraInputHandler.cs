@@ -14,10 +14,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
         [Header("Camera Settings")]
         [FormerlySerializedAs("rotationSpeed")]
         [SerializeField] private float _rotationSpeed = 90f;
-#pragma warning disable CS0414
         [FormerlySerializedAs("zoomSpeed")]
         [SerializeField] private float _zoomSpeed = 5f;
-#pragma warning restore CS0414
 
         private InputActionMap cameraActionMap;
         private InputAction rotateLeftAction;
@@ -198,17 +196,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
             OnZoom?.Invoke(scrollValue);
         }
 
-        #endregion
-
-        #region Mobile API
-
         /// <summary>
-        /// Fire a one-shot zoom event from MobilePinchZoomBridge.
-        /// No-op when input is disabled so it is safe to call unconditionally.
+        /// Called by mobile UI (pinch/slider) to directly set zoom value.
+        /// Invokes the same event as the native InputSystem zoom action.
         /// </summary>
-        public void SetMobileZoom(float delta)
+        public void SetMobileZoom(float value)
         {
-            if (inputEnabled) OnZoom?.Invoke(delta);
+            OnZoom?.Invoke(value);
         }
 
         #endregion

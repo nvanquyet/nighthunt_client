@@ -45,10 +45,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         // AnimateCancelAndRestore which would restore the source slot visual incorrectly.
         private bool _dropHandled;
 
-private DropQuantityDialog GetDropQuantityDialog()
+        private DropQuantityDialog GetDropQuantityDialog()
         {
             if (_dropQuantityDialog == null)
-                Debug.LogError("[DragDropController] DropQuantityDialog is not assigned in the inspector!");
+            {
+                // Scene-level UI singleton — acceptable lazy fallback for a missing Inspector assignment.
+                _dropQuantityDialog = FindFirstObjectByType<DropQuantityDialog>(FindObjectsInactive.Include);
+            }
 
             return _dropQuantityDialog;
         }
@@ -143,7 +146,7 @@ private DropQuantityDialog GetDropQuantityDialog()
                     hoverView = ComponentResolver.Find<ItemSlotView>(r.gameObject)
                         .InParent()
                         .InRootChildren()
-                        .OrLogWarning("[Auto] ItemSlotView not found")
+                        .OrLogWarning("[DragDropController] ItemSlotView not found")
                         .Resolve();
                     if (hoverView != null)
                         break;
@@ -262,7 +265,7 @@ private DropQuantityDialog GetDropQuantityDialog()
             var cg = ComponentResolver.Find<CanvasGroup>(_activeGhost)
                 .OnSelf()
                 .InChildren()
-                .OrLogWarning("[Auto] CanvasGroup not found")
+                .OrLogWarning("[DragDropController] CanvasGroup not found on ghost")
                 .Resolve();
             if (cg != null)
             {
@@ -283,7 +286,7 @@ private DropQuantityDialog GetDropQuantityDialog()
                 var cg = ComponentResolver.Find<CanvasGroup>(_activeGhost)
                     .OnSelf()
                     .InChildren()
-                    .OrLogWarning("[Auto] CanvasGroup not found")
+                    .OrLogWarning("[DragDropController] CanvasGroup not found on ghost")
                     .Resolve();
                 if (cg != null)
                 {
@@ -317,7 +320,7 @@ private DropQuantityDialog GetDropQuantityDialog()
                 var cg = ComponentResolver.Find<CanvasGroup>(_activeGhost)
                     .OnSelf()
                     .InChildren()
-                    .OrLogWarning("[Auto] CanvasGroup not found")
+                    .OrLogWarning("[DragDropController] CanvasGroup not found on ghost")
                     .Resolve();
                 if (cg != null)
                 {
