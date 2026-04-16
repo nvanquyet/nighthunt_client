@@ -16,6 +16,7 @@ echo "  Backend URL      : ${BACKEND_URL:-NOT_SET}"
 echo "  Max Players      : ${MAX_PLAYERS:-16}"
 echo "  Expected Players : ${EXPECTED_PLAYERS:-NOT_SET}"
 echo "  Map ID           : ${MAP_ID:-map_01}"
+echo "  Match ID         : ${MATCH_ID:-(none)}"
 echo ""
 
 # ── Validate required environment variables ───────────────────────────────────
@@ -91,4 +92,5 @@ exec "${DS_BINARY}"                                    \
     --serverSecret    "${SERVER_SECRET}"               \
     --maxPlayers      "${MAX_PLAYERS:-16}"             \
     --expectedPlayers "${EXPECTED_PLAYERS:-2}"         \
-    --mapId           "${MAP_ID:-map_01}"
+    --mapId           "${MAP_ID:-map_01}"              \
+    ${MATCH_ID:+--matchId "${MATCH_ID}"}
