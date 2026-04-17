@@ -61,3 +61,4 @@ HEALTHCHECK \
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 # build: 20260417-063509
+# trigger: 20260417-064509
