@@ -1079,7 +1079,7 @@ namespace NightHunt.Services.Game
         public class SwapRequestStatusEvent
         {
             public long requestId;
-            public string status; // "ACCEPTED" or "REJECTED"
+            public string status; // "ACCEPTED", "REJECTED", "CANCELLED", or "EXPIRED"
             public RoomResponse room; // Updated room state
         }
 

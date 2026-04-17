@@ -1380,6 +1380,8 @@ namespace NightHunt.UI
                 GameModalWindow.Instance?.Close();
                 if (evt.status == "REJECTED" || evt.status == "CANCELLED")
                     GameModalWindow.Instance?.ShowNotice("Swap Declined", "The player declined your swap request.");
+                else if (evt.status == "EXPIRED")
+                    GameModalWindow.Instance?.ShowNotice("Swap Expired", "The swap request has expired.");
             }
 
             if (evt.room != null) _roomState?.SetRoom(evt.room);
