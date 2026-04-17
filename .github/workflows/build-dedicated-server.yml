@@ -15,16 +15,11 @@ name: "Build & Deploy Dedicated Server"
 on:
   push:
     branches: [ main ]
-    paths:
-      # Unity source — bất kỳ thay đổi Assets/Packages nào đều có thể cần rebuild
-      - 'Assets/**'
-      - 'Packages/**'
-      # DS Docker image/entrypoint
-      - 'docker/dedicated-server/**'
-      # Build script Unity (nếu có thay đổi cách build)
-      - 'scripts/**'
+    # Không dùng paths filter ở đây vì GitHub áp dụng paths TRƯỚC khi check
+    # commit message → empty commit với [build-ds] sẽ bị block hoàn toàn.
+    # Thay vào đó, build-unity job đã có if: contains(..., '[build-ds]') để guard.
 
-  # Build thủ công — bỏ qua path filter và [build-ds] check
+  # Build thủ công — bỏ qua [build-ds] check
   workflow_dispatch:
     inputs:
       force_rebuild:
