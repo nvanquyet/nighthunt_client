@@ -605,11 +605,12 @@ namespace NightHunt.Core
         {
             if (UINavigator.Instance == null)
             {
-                Debug.LogError("[LoadingManager] UINavigator.Instance is null!");
+                Debug.LogError("[FLOW][LoadingManager] Navigate — UINavigator.Instance is null!");
                 Hide();
                 return;
             }
 
+            Debug.Log($"[FLOW][LoadingManager] Navigate → {_targetPanel}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             // Hide loading panel BEFORE showing target panel to ensure it doesn't block raycasts
             Hide();
             UINavigator.Instance.ShowPanel(_targetPanel, forceInstant: false);

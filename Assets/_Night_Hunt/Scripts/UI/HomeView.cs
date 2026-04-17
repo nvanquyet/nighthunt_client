@@ -127,33 +127,39 @@ namespace NightHunt.UI
             float now = Time.unscaledTime;
             if (now - _lastOnShowTime < ON_SHOW_MIN_INTERVAL)
             {
-                Debug.Log("[HomeView] OnShow — debounced (called too recently, skipping duplicate)");
+                Debug.Log("[FLOW][HomeView] OnShow — debounced (called too recently, skipping)");
                 return;
             }
             _lastOnShowTime = now;
 
-            Debug.Log("[HomeView] OnShow — starting home screen initialization");
+            Debug.Log($"[FLOW][HomeView] ── OnShow START  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
-            Debug.Log("[HomeView] Step 1: RefreshProfile (local cache — username, thumbnail)");
+            Debug.Log("[FLOW][HomeView] [1/5] RefreshProfile — local cache (username, thumbnail)");
             RefreshProfile();
 
-            Debug.Log("[HomeView] Step 2: RefreshProfileFromServer → GET /api/profile (rank, ELO, selectedCharacterId)");
-            _ = RefreshProfileFromServer();
+            Debug.Log("[FLOW][HomeView] [2/5] RefreshProfileFromServer → GET /api/profile");
+            var profileTask = RefreshProfileFromServer();
 
-            Debug.Log("[HomeView] Step 3: CheckAndShowReconnectPopup");
+            Debug.Log("[FLOW][HomeView] [3/5] CheckAndShowReconnectPopup");
             await CheckAndShowReconnectPopup();
 
-            Debug.Log("[HomeView] Step 4: FriendPanelView.RefreshFriendListAndBadge → GET /api/friends + /api/friends/requests/incoming");
+            Debug.Log("[FLOW][HomeView] [4/5] FriendPanelView.RefreshFriendListAndBadge → GET /api/friends + requests");
             friendPanelView?.RefreshFriendListAndBadge();
 
-            Debug.Log("[HomeView] Step 5: PartyController.OnHomeShown → GET /api/party/current");
-            partyController?.OnHomeShown();
+            Debug.Log("[FLOW][HomeView] [5/5] PartyController.OnHomeShown → GET /api/party/current");
+            if (partyController != null) await partyController.OnHomeShownAsync();
+
+            // Wait for profile fetch to complete (started in step 2) so data is fresh when home shows.
+            await profileTask;
 
             var loading = PersistentUICanvas.Instance?.LoadingManager;
             if (loading != null && loading.IsShowing()) loading.Hide();
 
-            Debug.Log("[HomeView] OnShow complete");
+            Debug.Log($"[FLOW][HomeView] ── OnShow COMPLETE — all data fetched  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             onHomeShown?.Invoke();
+
+            // Notify UINavigator that all player data is ready — enables interactive elements.
+            UINavigator.Instance?.NotifyPlayerDataLoaded();
         }
 
         /// <summary>Called by UINavigator right before the Home panel fades out.</summary>

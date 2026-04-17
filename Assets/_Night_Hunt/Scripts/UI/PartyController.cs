@@ -145,12 +145,20 @@ namespace NightHunt.UI
         // PUBLIC API — called by HomeView / FriendPanelView
         // ══════════════════════════════════════════════════════════════════════
 
-        /// <summary>Called by HomeView.OnShow() — resets queue and refreshes party.</summary>
-        public async void OnHomeShown()
+        /// <summary>
+        /// Called by HomeView.OnShow() — resets queue and refreshes party from server.
+        /// Returns a Task so HomeView can await completion before firing OnPlayerDataLoaded.
+        /// </summary>
+        public async Task OnHomeShownAsync()
         {
+            Debug.Log($"[FLOW][PartyController] OnHomeShownAsync START  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             SetQueueState(RankedQueueState.Idle);
             await RefreshParty();
+            Debug.Log($"[FLOW][PartyController] OnHomeShownAsync DONE — party={(_currentParty != null ? $"id={_currentParty.partyId} members={_currentParty.members?.Count}" : "none")}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
         }
+
+        /// <summary>Legacy void overload kept for any Inspector/legacy callers.</summary>
+        public async void OnHomeShown() => await OnHomeShownAsync();
 
         /// <summary>
         /// Invite a friend to the party. Creates a new party first if none exists.
@@ -337,8 +345,9 @@ namespace NightHunt.UI
             // Block if already in a custom room — must leave first.
             if (RoomState.Instance != null && RoomState.Instance.IsInRoom)
             {
-                ShowToast("Xếp hạng", "Hãy rời phòng custom before vào xếp hạng.");
+                ShowToast("Xếp hạng", "Hãy rời phòng custom trước khi vào xếp hạng.");
                 SetQueueState(RankedQueueState.Idle);
+                Debug.Log("[FLOW][PartyController] StartQueue BLOCKED — still in custom room");
                 return;
             }
 
@@ -346,35 +355,59 @@ namespace NightHunt.UI
             string mapId     = _currentMaps.Length > 0 ? _currentMaps[_selectedMapIdx].mapId : null;
             bool   allowFill = SelectedMode.allowFill;
 
+            // 1v1 mode (playersPerTeam == 1): always solo-queue, party is irrelevant.
+            // Party can still EXIST on the home screen (friend party persists), but
+            // 1v1 queuing is inherently individual — do not send party members into queue.
+            bool isSoloMode = SelectedMode.playersPerTeam <= 1;
+
+            // For multi-player modes, queue as party only if current player is party host.
+            bool isPartyHost = !isSoloMode &&
+                               _currentParty != null &&
+                               _currentParty.hostUserId == (_sessionState?.UserId ?? -1L);
+
+            int partyMemberCount = _currentParty?.members?.Count ?? 0;
+            Debug.Log($"[FLOW][PartyController] StartQueue — mode='{modeKey}' playersPerTeam={SelectedMode.playersPerTeam} " +
+                      $"isSoloMode={isSoloMode} isPartyHost={isPartyHost} " +
+                      $"partyMembers={partyMemberCount} mapId='{mapId}'  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+
             SetQueueState(RankedQueueState.Searching);
             _searchElapsed = 0f;
 
             bool success;
-            bool isPartyHost = _currentParty != null &&
-                               _currentParty.hostUserId == (_sessionState?.UserId ?? -1L);
             if (isPartyHost)
             {
+                Debug.Log($"[FLOW][PartyController] → POST /api/party/queue (party queue) members={partyMemberCount}");
                 var r = await _partyService.QueueParty(modeKey, allowFill, mapId);
                 success = r.Success;
+                if (!success) Debug.LogWarning($"[FLOW][PartyController] Party queue FAILED: code={r.ErrorCode} msg='{r.Message}'");
             }
             else
             {
+                string soloReason = isSoloMode ? " [solo mode — party not used]" :
+                                    _currentParty == null ? " [no party]" : " [not party host — queuing solo]";
+                Debug.Log($"[FLOW][PartyController] → POST /api/matchmaking/queue (solo queue){soloReason}");
                 var r = await GameManager.Instance.BackendClient.PostAsync<object>(
                     Constants.API_MATCHMAKING_QUEUE,
                     new MatchmakingQueueRequest { gameMode = modeKey, mapId = mapId, allowFill = allowFill });
                 success = r.Success;
+                if (!success) Debug.LogWarning($"[FLOW][PartyController] Solo queue FAILED: code={r.ErrorCode} msg='{r.Message}'");
             }
 
             if (!success)
             {
                 SetQueueState(RankedQueueState.Idle);
-                Debug.LogWarning("[PartyController] Failed to join matchmaking queue.");
-                ShowToast("Matchmaking", "Failed to join queue. Please try again.");
+                Debug.LogWarning("[FLOW][PartyController] Queue failed → Idle");
+                ShowToast("Matchmaking", "Không thể vào hàng chờ. Vui lòng thử lại.");
+            }
+            else
+            {
+                Debug.Log($"[FLOW][PartyController] Queue request sent OK — waiting for match_ready WS event");
             }
         }
 
         private async Task CancelQueue()
         {
+            Debug.Log($"[FLOW][PartyController] CancelQueue — isPartyHost={_currentParty != null && _currentParty.IsInQueue}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             bool isPartyHost = _currentParty != null && _currentParty.IsInQueue && _partyService != null;
             if (isPartyHost)
                 await _partyService.CancelQueue();
@@ -470,30 +503,12 @@ namespace NightHunt.UI
 
         private void HandleMatchReady(GameWebSocketService.MatchReadyEvent e)
         {
+            Debug.Log($"[FLOW][PartyController] ◀ match_ready received — matchId={e.matchId} mode={e.gameMode} mapId={e.mapId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             SetQueueState(RankedQueueState.Idle);
 
-            // Chỉ lưu matchId/mapId — DsIp/Port sẽ set khi nhận ds_ready
-            RoomState.Instance?.SetMatchReady(e.matchId, e.mapId);
-
-            // Resolve scene đúng từ mapId
-            NightHunt.Config.SceneId sceneId = NightHunt.Config.SceneId.GameMap_01;
-            if (!string.IsNullOrEmpty(e.mapId)
-                && MapConfig.TryGetById(e.mapId, out MapEntry mapEntry))
-            {
-                sceneId = mapEntry.sceneId;
-            }
-
-            // Guard: never load the Home scene as a game scene.
-            // This can happen if MapConfig.asset has a map entry with sceneId = 0 (Home)
-            // because the ScriptableObject was created but the inspector value was not set.
-            if (sceneId == NightHunt.Config.SceneId.Home)
-            {
-                Debug.LogError($"[PartyController] match_ready resolved sceneId=Home for mapId='{e.mapId}' — this is a misconfiguration. Falling back to GameMap_01.");
-                sceneId = NightHunt.Config.SceneId.GameMap_01;
-            }
-
-            Debug.Log($"[PartyController] match_ready mapId={e.mapId} → sceneId={sceneId}");
-            MatchLoadingOverlay.Instance?.Show(sceneId);
+            // NOTE: MatchFlowCoordinator (persistent) is the primary handler for match_ready.
+            // PartyController only resets queue state here — scene load is handled by MFC.
+            // Keeping this handler only for queue UI reset (belt-and-suspenders).
         }
 
         private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent e)
@@ -501,7 +516,7 @@ namespace NightHunt.UI
             SetQueueState(RankedQueueState.Idle);
             string reason = !string.IsNullOrEmpty(e.reason) ? e.reason : "Match was cancelled.";
             ShowToast("Matchmaking", $"Match cancelled: {reason}");
-            Debug.Log($"[PartyController] MatchCancelled — reason={e.reason}");
+            Debug.Log($"[FLOW][PartyController] ◀ match_cancelled — reason='{e.reason}'");
         }
 
         // ── Party ─────────────────────────────────────────────────────────────
@@ -578,8 +593,8 @@ namespace NightHunt.UI
         {
             friendPanelView?.SetInvitePending(e.userId, false);
             string name = string.IsNullOrEmpty(e.username) ? "A player" : e.username;
-            ShowToast("Party", $"{name} joined the party.");
-            Debug.Log($"[PartyController] PartyMemberJoined — userId={e.userId} username='{e.username}'");
+            ShowToast("Party", $"{name} đã vào party.");
+            Debug.Log($"[PARTY][PartyController] ◀ member_joined — userId={e.userId} username='{e.username}'");
             _ = RefreshParty();
         }
 
@@ -587,8 +602,8 @@ namespace NightHunt.UI
         {
             bool isSelf = e.userId == (_sessionState?.UserId ?? -1L);
             if (isSelf) _currentParty = null;
-            ShowToast("Party", isSelf ? "You left the party." : "A party member left.");
-            Debug.Log($"[PartyController] PartyMemberLeft — userId={e.userId} isSelf={isSelf}");
+            ShowToast("Party", isSelf ? "Bạn đã rời party." : "Một thành viên đã rời party.");
+            Debug.Log($"[PARTY][PartyController] ◀ member_left — userId={e.userId} isSelf={isSelf}");
             _ = RefreshParty();
         }
 
@@ -597,9 +612,9 @@ namespace NightHunt.UI
             if (e.kickedUserId == (_sessionState?.UserId ?? -1L))
             {
                 _currentParty = null;
-                ShowToast("Party", "You were kicked from the party.");
+                ShowToast("Party", "Bạn đã bị kick khỏi party.");
             }
-            Debug.Log($"[PartyController] PartyMemberKicked — kickedUserId={e.kickedUserId} kickerUserId={e.kickerUserId}");
+            Debug.Log($"[PARTY][PartyController] ◀ member_kicked — kickedUserId={e.kickedUserId} by={e.kickerUserId}");
             _ = RefreshParty();
         }
 
@@ -607,20 +622,23 @@ namespace NightHunt.UI
         {
             _currentParty = null;
             RefreshPartyDisplay();
-            ShowToast("Party", "The party has been disbanded.");
-            Debug.Log($"[PartyController] PartyDisbanded — partyId={e.partyId}");
+            ShowToast("Party", "Party đã bị giải tán.");
+            Debug.Log($"[PARTY][PartyController] ◀ party_disbanded — partyId={e.partyId}");
         }
 
         private void HandlePartyHostChanged(GameWebSocketService.PartyHostChangedEvent e)
         {
-            if (e.newHostUserId == (_sessionState?.UserId ?? -1L))
-                ShowToast("Party", "You are now the party host.");
-            Debug.Log($"[PartyController] PartyHostChanged — new hostUserId={e.newHostUserId}");
+            bool iAmNewHost = e.newHostUserId == (_sessionState?.UserId ?? -1L);
+            if (iAmNewHost) ShowToast("Party", "Bạn đã trở thành host của party.");
+            Debug.Log($"[PARTY][PartyController] ◀ host_changed — newHostUserId={e.newHostUserId} iAmNewHost={iAmNewHost}");
             _ = RefreshParty();
         }
 
         private void HandlePartyStatusChanged(GameWebSocketService.PartyStatusChangedEvent e)
-            => _ = RefreshParty();
+        {
+            Debug.Log($"[PARTY][PartyController] ◀ party_status_changed — refreshing party");
+            _ = RefreshParty();
+        }
 
         // ══════════════════════════════════════════════════════════════════════
         // HELPERS

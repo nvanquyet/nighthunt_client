@@ -98,7 +98,7 @@ namespace NightHunt.UI
         {
             if (_currentPanel == PanelType.Login) return;
             _currentPanel = PanelType.Login;
-            Debug.Log("[UINavigator] → Login");
+            Debug.Log($"[FLOW][UINavigator] ──▶ LOGIN  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             OnGoLogin?.Invoke();
             OnPanelChanged?.Invoke(PanelType.Login);
         }
@@ -111,7 +111,7 @@ namespace NightHunt.UI
         {
             if (_currentPanel == PanelType.Home) return;
             _currentPanel = PanelType.Home;
-            Debug.Log("[UINavigator] → Home");
+            Debug.Log($"[FLOW][UINavigator] ──▶ HOME  (data loading...)  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             OnGoHome?.Invoke();
             OnPanelChanged?.Invoke(PanelType.Home);
         }
@@ -124,9 +124,20 @@ namespace NightHunt.UI
         {
             if (_currentPanel == PanelType.Lobby) return;
             _currentPanel = PanelType.Lobby;
-            Debug.Log("[UINavigator] → Lobby");
+            Debug.Log($"[FLOW][UINavigator] ──▶ LOBBY  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             OnGoLobby?.Invoke();
             OnPanelChanged?.Invoke(PanelType.Lobby);
+        }
+
+        /// <summary>
+        /// Called by HomeView after all async data fetches in OnShow() complete.
+        /// Fires <see cref="OnPlayerDataLoaded"/> so subscribers (PLAY button, invite UI, etc.)
+        /// know they can safely render server-driven content.
+        /// </summary>
+        public void NotifyPlayerDataLoaded()
+        {
+            Debug.Log($"[FLOW][UINavigator] ◆ OnPlayerDataLoaded — profile + party + friends ready  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            OnPlayerDataLoaded?.Invoke();
         }
 
         /// <summary>
