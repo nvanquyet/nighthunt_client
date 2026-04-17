@@ -67,6 +67,7 @@ namespace NightHunt.UI
             ws.OnDsReady        += HandleDsReady;
             ws.OnMatchCancelled += HandleMatchCancelled;
             ws.OnMatchEnded     += HandleMatchEnded;
+            ws.OnRoomDisbanded  += HandleRoomDisbandedDuringGame;
             _wsSubscribed = true;
         }
 
@@ -81,6 +82,7 @@ namespace NightHunt.UI
                 ws.OnDsReady        -= HandleDsReady;
                 ws.OnMatchCancelled -= HandleMatchCancelled;
                 ws.OnMatchEnded     -= HandleMatchEnded;
+                ws.OnRoomDisbanded  -= HandleRoomDisbandedDuringGame;
             }
             _wsSubscribed = false;
         }
@@ -171,6 +173,20 @@ namespace NightHunt.UI
             // MatchFlowCoordinator resets flow state so the next match starts clean.
             Debug.Log($"[MFC] match_ended \u25ba matchId={e.matchId} winner={e.winnerTeamId} reason={e.endReason}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             _lastHandledMatchId = null;
+        }
+
+        // ── room_disbanded (global handler — covers game scene where CustomLobbyView is inactive) ──
+
+        /// <summary>
+        /// Handles room_disbanded arriving at any time (including during gameplay).
+        /// CustomLobbyView only handles this when it is active; this persistent handler
+        /// ensures RoomState is always cleared, preventing the "leave custom room" block
+        /// from triggering on the next ranked queue attempt.
+        /// </summary>
+        private void HandleRoomDisbandedDuringGame(GameWebSocketService.RoomDisbandedEvent evt)
+        {
+            Debug.Log($"[MFC] room_disbanded ▶ roomId={evt.roomId} reason={evt.reason} — clearing RoomState.  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            RoomState.Instance?.ClearRoom();
         }
 
         // ── Public: reset (called by RoomState.ClearRoom via NetworkGameManager) ──

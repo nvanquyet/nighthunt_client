@@ -314,12 +314,13 @@ namespace NightHunt.Core
                 UpdateLoadingUI("Đăng nhập success!", 0.88f);
                 yield return new WaitForSeconds(0.1f);
 
-                // Còn trong room → vào thẳng Lobby
-                bool wasInRoom = GameManager.Instance?.RoomState != null
-                              && GameManager.Instance.RoomState.IsInRoom
-                              && !string.IsNullOrEmpty(GameManager.Instance.RoomState.RoomId.ToString());
+                // Always clear stale room state on (re-)login.
+                // The backend may have disbanded the room while the client was offline.
+                // Routing to Lobby with a stale RoomState causes "leave custom room" blocks.
+                NightHunt.State.RoomState.Instance?.ClearRoom();
+                NightHunt.State.RoomState.Instance?.ClearNetworkSession();
 
-                _targetPanel = wasInRoom ? PanelType.Lobby : PanelType.Home;
+                _targetPanel = PanelType.Home;
                 Debug.Log($"[LoadingManager] AutoLogin OK → target={_targetPanel}");
             }
             else

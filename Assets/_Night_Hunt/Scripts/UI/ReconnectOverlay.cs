@@ -133,6 +133,9 @@ namespace NightHunt.UI
         private void OnReturnHomeClicked()
         {
             Hide();
+            // Clear stale room/network state before returning to Home.
+            NightHunt.State.RoomState.Instance?.ClearRoom();
+            NightHunt.State.RoomState.Instance?.ClearNetworkSession();
             // NetworkGameManager will also call LoadHome after max retries;
             // this button lets the user skip the final wait.
             SceneLoader.LoadHome();
