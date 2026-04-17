@@ -77,6 +77,13 @@ namespace NightHunt.UI
         /// <summary>Fired mỗi khi panel thay đổi. Param = panel mới.</summary>
         public event System.Action<PanelType> OnPanelChanged;
 
+        /// <summary>
+        /// Fired bởi HomeView sau khi tất cả async data fetches hoàn tất
+        /// (profile, party, friends). Subscribe để biết khi nào safe để render
+        /// server-driven content (PLAY button, invite UI, ...).
+        /// </summary>
+        public event System.Action OnPlayerDataLoaded;
+
         // ─────────────────────────────────────────────
         // Lifecycle
         // ─────────────────────────────────────────────
