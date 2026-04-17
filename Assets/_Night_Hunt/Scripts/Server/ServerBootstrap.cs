@@ -18,7 +18,7 @@ namespace NightHunt.Server
     ///   2. Set port cho FishNet Tugboat transport
     ///   3. Start FishNet Server
     ///   4. Đăng ký với Backend API (POST /api/ds/register)
-    ///   5. Gửi heartbeat định kỳ (POST /api/ds/heartbeat)
+    ///   5. Send heartbeat định kỳ (POST /api/ds/heartbeat)
     ///
     /// Gắn script này vào GameObject trong Scene: 00_DS_Boot
     /// </summary>
@@ -81,7 +81,7 @@ namespace NightHunt.Server
             _mapId            = fallbackMapId;
             _expectedPlayers  = 1; // Editor: default to 1 so solo test works without waiting for more players
             BootstrappedExpectedPlayers = _expectedPlayers;
-            Debug.LogWarning($"[ServerBootstrap] EDITOR MODE — serverId='{_serverId}' backendUrl='{_backendUrl}'. " +
+                Debug.LogWarning($"[DS-Boot] EDITOR MODE \u2014 serverId='{_serverId}' backendUrl='{_backendUrl}'. " +
                              "Fill fallbackServerId/fallbackServerSecret from POST /api/internal/allocate if registration fails.");
 #endif
 
@@ -90,7 +90,7 @@ namespace NightHunt.Server
 
             if (networkManager == null)
             {
-                Debug.LogError("[ServerBootstrap] NetworkManager not found in scene!");
+                Debug.LogError("[DS-Boot] NetworkManager not found in scene!");
                 Application.Quit(1);
                 return;
             }
@@ -126,34 +126,35 @@ namespace NightHunt.Server
             // Expose to ServerGameManager which reads this before RoomState can be checked on DS.
             BootstrappedExpectedPlayers = _expectedPlayers;
 
-            Debug.Log("[ServerBootstrap] Args parsed:" +
+            Debug.Log("[DS-Boot] Args parsed:" +
                       $"\n  ServerId         : {_serverId}" +
                       $"\n  Port             : {_gamePort}" +
                       $"\n  BackendUrl       : {_backendUrl}" +
                       $"\n  MaxPlayers       : {_maxPlayers}" +
-                      $"\n  ExpectedPlayers  : {(_expectedPlayers < 0 ? "(not set — ServerGameManager default)" : _expectedPlayers.ToString())}" +
-                      $"\n  MapId            : {(string.IsNullOrEmpty(_mapId) ? "(default/current scene)" : _mapId)}");
+                      $"\n  ExpectedPlayers  : {(_expectedPlayers < 0 ? "(not set \u2014 ServerGameManager default)" : _expectedPlayers.ToString())}" +
+                      $"\n  MapId            : {(string.IsNullOrEmpty(_mapId) ? "(default/current scene)" : _mapId)}" +
+                      $"\n  MatchId          : {(string.IsNullOrEmpty(_matchId) ? "(not provided)" : _matchId)}");
         }
 
         // ─────────────────────────────────────────────────────────────────────────
 
         private IEnumerator BootSequence()
         {
-            Debug.Log("[ServerBootstrap] ═══ Boot Sequence Start ═══");
+            Debug.Log("[DS-Boot] ═══ Boot Sequence Start ═══");
 
-            // Step 1: Chờ 1 frame để mọi Awake() khác chạy xong
+            // Step 1: Wait 1 frame để mọi Awake() khác chạy xong
             yield return null;
 
             // Step 2: Set port vào Tugboat transport
             var transport = networkManager.TransportManager.Transport;
             transport.SetPort(_gamePort);
-            Debug.Log($"[ServerBootstrap] Port set → {_gamePort}");
+            Debug.Log($"[DS-Boot] Port set → {_gamePort}");
 
             // Step 3: Khởi động FishNet Server
             networkManager.ServerManager.StartConnection();
-            Debug.Log("[ServerBootstrap] FishNet Server starting...");
+            Debug.Log("[DS-Boot] Step 3: FishNet ServerManager.StartConnection()...");
 
-            // Step 4: Chờ server active (timeout 10s)
+            // Step 4: Wait server active (timeout 10s)
             float elapsed = 0f;
             while (!networkManager.ServerManager.Started && elapsed < 10f)
             {
@@ -163,12 +164,12 @@ namespace NightHunt.Server
 
             if (!networkManager.ServerManager.Started)
             {
-                Debug.LogError("[ServerBootstrap] Server failed to start within 10s! Shutting down.");
+                Debug.LogError("[DS-Boot] FATAL: FishNet Server failed to start within 10s! Shutting down.");
                 Application.Quit(1);
                 yield break;
             }
 
-            Debug.Log($"[ServerBootstrap] ✓ FishNet Server active on port {_gamePort}");
+            Debug.Log($"[DS-Boot] ✓ FishNet Server active on port {_gamePort}");
 
             // Step 5: Đăng ký với backend
             yield return RegisterWithBackend();
@@ -181,7 +182,7 @@ namespace NightHunt.Server
             // Retry 3 lần (backend có thể chưa ready ngay khi container mới start)
             for (int attempt = 1; attempt <= 3; attempt++)
             {
-                Debug.Log($"[ServerBootstrap] Register attempt {attempt}/3...");
+                Debug.Log($"[DS-Boot] Step 4 Register attempt {attempt}/3 \u2192 POST {_backendUrl}/api/ds/register (serverId={_serverId} port={_gamePort} maxPlayers={_maxPlayers})");
 
                 string json = JsonUtility.ToJson(new RegisterRequest
                 {
@@ -203,23 +204,22 @@ namespace NightHunt.Server
 
                 if (req.result == UnityWebRequest.Result.Success)
                 {
-                    Debug.Log("[ServerBootstrap] ✓ Registered with backend successfully!");
+                    Debug.Log("[DS-Boot] Step 4 OK: Registered with backend. Step 5: Loading game scene...");
                     WriteHealthFile();
                     StartCoroutine(HeartbeatLoop());
                     LoadGameScene();
                     yield break;
                 }
 
-                Debug.LogWarning($"[ServerBootstrap] Register failed: {req.responseCode} {req.error}");
+                Debug.LogWarning($"[DS-Boot] Step 4 FAILED attempt {attempt}/3: HTTP={req.responseCode} err={req.error} body={req.downloadHandler?.text}");
 
                 if (attempt < 3)
                     yield return new WaitForSeconds(3f);
             }
 
-            // Nếu không register được → server này sẽ không có ai vào
+            // Nếu không register được → server này sẽ not available ai vào
             // Vẫn chạy nhưng log error để backend biết
-            Debug.LogError("[ServerBootstrap] Failed to register after 3 attempts. " +
-                           "Server running but NOT visible to matchmaking!");
+            Debug.LogError("[DS-Boot] Step 4 ERROR: Failed to register after 3 attempts. Server running but NOT visible to matchmaking!");
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -235,21 +235,22 @@ namespace NightHunt.Server
         ///   Map scene có NetworkManager riêng → FishNet destroy duplicate (DestroyNewest) → dùng boot NM.
         ///
         /// Client KHÔNG cần gọi hàm này. FishNet SceneManager tự sync scene cho client.
-        /// Thêm map mới: thêm case vào switch + thêm scene vào BuildScript.SERVER_SCENES.
+        /// Add map mới: thêm case vào switch + thêm scene vào BuildScript.SERVER_SCENES.
         /// </summary>
         private void LoadGameScene()
         {
-            // Với dedicated boot scene, LUÔN load map (không còn trường hợp "đã ở đúng scene")
-            string sceneName = _mapId switch
+            // Resolve scene name via MapConfig + SceneConfig — no hardcoded map names.
+            // When a new map is added: add it in MapConfig.asset + SceneConfig.asset only.
+            string sceneName = "02_Map_01"; // safe fallback
+            if (!string.IsNullOrEmpty(_mapId))
             {
-                "map_01" => "02_Map_01",
-                "map_02" => "02_Map_02",
-                // Thêm map mới ở đây:
-                // "map_03" => "02_Map_03",
-                _ => "02_Map_01", // fallback về map_01
-            };
+                if (NightHunt.Config.MapConfig.TryGetById(_mapId, out NightHunt.Config.MapEntry mapEntry))
+                    sceneName = NightHunt.Config.SceneConfig.GetSceneName(mapEntry.sceneId);
+                else
+                    Debug.LogWarning($"[DS-Boot] mapId='{_mapId}' not found in MapConfig — falling back to '{sceneName}'");
+            }
 
-            Debug.Log($"[ServerBootstrap] mapId='{_mapId}' → loading scene '{sceneName}'...");
+            Debug.Log($"[DS-Boot] mapId='{_mapId}' → loading scene '{sceneName}'...");
 
             // ReplaceScenes=All: unload 00_DS_Boot, load map scene.
             // NetworkManager (DontDestroyOnLoad=1) tự survive sang scene mới.
@@ -272,7 +273,7 @@ namespace NightHunt.Server
                 if (scene.name.StartsWith("02_Map_", StringComparison.OrdinalIgnoreCase))
                 {
                     networkManager.SceneManager.OnLoadEnd -= OnGameSceneLoadEnd;
-                    Debug.Log($"[ServerBootstrap] Game scene '{scene.name}' loaded — running post-scene setup.");
+                    Debug.Log($"[DS-Boot] Game scene '{scene.name}' loaded — running post-scene setup.");
                     // Wait 1.5s for all MonoBehaviour Awake()/Start() to complete, then:
                     //   1. Subscribe to MatchEndManager (it now exists in the map scene)
                     //   2. Notify backend DS is ready for clients
@@ -297,11 +298,11 @@ namespace NightHunt.Server
             if (matchEndManager != null)
             {
                 matchEndManager.OnMatchEnded += OnMatchEnded;
-                Debug.Log("[ServerBootstrap] ✓ Subscribed to MatchEndManager.OnMatchEnded");
+                Debug.Log("[DS-Boot] ✓ Subscribed to MatchEndManager.OnMatchEnded");
             }
             else
             {
-                Debug.LogError("[ServerBootstrap] MatchEndManager not found after scene load — " +
+                Debug.LogError("[DS-Boot] Step 6 ERROR: MatchEndManager not found after scene load \u2014 " +
                                "game-end reporting to backend is DISABLED. Check scene setup.");
             }
 #endif
@@ -332,21 +333,21 @@ namespace NightHunt.Server
 
                 if (req.result == UnityWebRequest.Result.Success)
                 {
-                    Debug.Log("[ServerBootstrap] ✓ ds/game-ready notified — clients can now connect.");
+                    Debug.Log($"[DS-Boot] Step 7 OK: game-ready notified \u2192 backend will broadcast ds_ready to players.  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                     yield break;
                 }
 
-                Debug.LogWarning($"[ServerBootstrap] game-ready attempt {attempt}/3 failed: {req.responseCode} {req.error}");
+                Debug.LogWarning($"[DS-Boot] Step 7 FAILED attempt {attempt}/3: HTTP={req.responseCode} err={req.error} body={req.downloadHandler?.text}");
                 if (attempt < 3) yield return new WaitForSeconds(2f);
             }
 
-            Debug.LogError("[ServerBootstrap] Failed to notify game-ready after 3 attempts. Clients may connect via retry.");
+            Debug.LogError("[DS-Boot] Step 7 ERROR: Failed to notify game-ready after 3 attempts. Clients may time out waiting for ds_ready WS.");
         }
 
         // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Gửi heartbeat mỗi 30s để backend biết server còn alive.
+        /// Send heartbeat mỗi 30s để backend biết server còn alive.
         /// Backend timeout = 90s (3 lần miss) → mark server dead → cleanup container.
         /// </summary>
         private IEnumerator HeartbeatLoop()
@@ -359,6 +360,8 @@ namespace NightHunt.Server
                     yield break;
 
                 int currentPlayers = networkManager.ServerManager.Clients.Count;
+
+                Debug.Log($"[DS-Boot] Heartbeat — players={currentPlayers}/{_maxPlayers} matchId={_matchId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
                 string json = JsonUtility.ToJson(new HeartbeatRequest
                 {
@@ -379,7 +382,7 @@ namespace NightHunt.Server
                 if (req.result == UnityWebRequest.Result.Success)
                     WriteHealthFile(); // Refresh timestamp để health check biết server còn alive
                 else
-                    Debug.LogWarning($"[ServerBootstrap] Heartbeat failed: {req.error}");
+                    Debug.LogWarning($"[DS-Boot] Heartbeat failed: {req.error}");
             }
         }
 
@@ -387,12 +390,12 @@ namespace NightHunt.Server
 
         private void OnMatchEnded(int winnerTeamId, MatchEndReason reason)
         {
-            Debug.Log($"[ServerBootstrap] Match ended — winnerTeam={winnerTeamId}, reason={reason}. Reporting to backend...");
+            Debug.Log($"[DS-Boot] Match ended — winnerTeam={winnerTeamId}, reason={reason}. Reporting to backend...");
             StartCoroutine(ReportMatchEndAndShutdown(winnerTeamId, reason));
         }
 
         /// <summary>
-        /// Gửi kết quả match về backend (POST /api/match/end/ranked) rồi tự shutdown.
+        /// Send kết quả match về backend (POST /api/match/end/ranked) rồi tự shutdown.
         /// DS thu thập player data từ MatchEndManager / RegistryService.
         /// </summary>
         private System.Collections.IEnumerator ReportMatchEndAndShutdown(int winnerTeamId, MatchEndReason reason)
@@ -443,16 +446,16 @@ namespace NightHunt.Server
 
                 if (req.result == UnityWebRequest.Result.Success)
                 {
-                    Debug.Log($"[ServerBootstrap] ✓ Match result reported (matchId={_matchId}, winner={winnerTeamId}).");
+                    Debug.Log($"[DS-Boot] ✓ Match result reported (matchId={_matchId}, winner={winnerTeamId}).");
                     break;
                 }
 
-                Debug.LogWarning($"[ServerBootstrap] game-end report attempt {attempt}/3 failed: {req.responseCode} {req.error}");
+                Debug.LogWarning($"[DS-Boot] game-end report attempt {attempt}/3 failed: {req.responseCode} {req.error}");
                 if (attempt < 3) yield return new WaitForSeconds(2f);
             }
 
             // Cho client 5s đọc kết quả rồi shutdown
-            Debug.Log("[ServerBootstrap] Shutting down in 5s...");
+            Debug.Log("[DS-Boot] Shutting down in 5s...");
             yield return new WaitForSeconds(5f);
             Application.Quit(0);
         }
@@ -460,8 +463,8 @@ namespace NightHunt.Server
         // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Tạo/cập nhật file /app/logs/.healthy.
-        /// Docker HEALTHCHECK script kiểm tra file này để xác định server còn alive.
+        /// Create/update file /app/logs/.healthy.
+        /// Docker HEALTHCHECK script check file này để xác định server còn alive.
         /// </summary>
         private static void WriteHealthFile()
         {
@@ -473,7 +476,7 @@ namespace NightHunt.Server
             catch (Exception e)
             {
                 // Không crash server vì health file - chỉ là monitoring
-                Debug.LogWarning($"[ServerBootstrap] Could not write health file: {e.Message}");
+                Debug.LogWarning($"[DS-Boot] Could not write health file: {e.Message}");
             }
         }
 

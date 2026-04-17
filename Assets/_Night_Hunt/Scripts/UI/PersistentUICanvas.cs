@@ -20,7 +20,6 @@ namespace NightHunt.UI
 
         [Header("UI Components")]        [SerializeField] private LoadingManager     loadingManager;
         [SerializeField] private MatchLoadingOverlay matchLoadingOverlay;
-        [SerializeField] private MatchFoundOverlay   matchFoundOverlay;
         [SerializeField] private PingDisplay         pingDisplay;
         [SerializeField] private ToastService        toastService;
 
@@ -28,7 +27,6 @@ namespace NightHunt.UI
         public Canvas              Canvas               => canvas;
         public LoadingManager      LoadingManager       => loadingManager;
         public MatchLoadingOverlay MatchLoadingOverlay  => matchLoadingOverlay;
-        public MatchFoundOverlay   MatchFoundOverlay    => matchFoundOverlay;
         public PingDisplay         PingDisplay          => pingDisplay;
         public ToastService        ToastService         => toastService;
 
@@ -43,7 +41,7 @@ namespace NightHunt.UI
 
         private void SetupCanvas()
         {
-            // Tự động tạo Canvas nếu chưa có
+            // Tự động tạo Canvas nếu not yet available
             if (canvas == null)
             {
                 canvas = ComponentResolver.Find<Canvas>(this)
@@ -59,9 +57,9 @@ namespace NightHunt.UI
 
             // Setup Canvas
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 9999; // High sorting order để luôn hiển thị trên cùng
+            canvas.sortingOrder = 9999; // High sorting order để luôn display trên cùng
 
-            // Tự động tạo CanvasScaler nếu chưa có
+            // Tự động tạo CanvasScaler nếu not yet available
             if (canvasScaler == null)
             {
                 canvasScaler = ComponentResolver.Find<CanvasScaler>(this)
@@ -77,10 +75,10 @@ namespace NightHunt.UI
 
             // Setup CanvasScaler
             canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            // canvasScaler.referenceResolution = new Vector2(1920, 1080);
-            // canvasScaler.matchWidthOrHeight = 0.5f;
+            canvasScaler.referenceResolution = new Vector2(1920, 1080);
+            canvasScaler.matchWidthOrHeight = 0.5f;
 
-            // Tự động tạo GraphicRaycaster nếu chưa có
+            // Tự động tạo GraphicRaycaster nếu not yet available
             if (graphicRaycaster == null)
             {
                 graphicRaycaster = ComponentResolver.Find<GraphicRaycaster>(this)
@@ -108,7 +106,7 @@ namespace NightHunt.UI
         }
 
         /// <summary>
-        /// Tạo PersistentUICanvas nếu chưa có
+        /// Create PersistentUICanvas nếu not yet available
         /// </summary>
         public static PersistentUICanvas GetOrCreate()
         {
@@ -117,18 +115,18 @@ namespace NightHunt.UI
                 return Instance;
             }
 
-            // Tạo mới
+            // Create mới
             GameObject canvasGO = new GameObject("PersistentUICanvas");
             PersistentUICanvas persistentCanvas = canvasGO.AddComponent<PersistentUICanvas>();
 
-            // Tạo các UI components
+            // Create các UI components
             persistentCanvas.CreateUIComponents();
 
             return persistentCanvas;
         }
 
         /// <summary>
-        /// Tạo các UI components nếu chưa có
+        /// Create các UI components nếu not yet available
         /// </summary>
         private void CreateUIComponents()
         {
@@ -160,7 +158,7 @@ namespace NightHunt.UI
             // Only auto-assign in edit mode — at runtime components are created dynamically in CreateUIComponents()
             if (Application.isPlaying) return;
 
-            // Auto-assign references nếu chưa có
+            // Auto-assign references nếu not yet available
             if (canvas == null)
             {
                 canvas = ComponentResolver.Find<Canvas>(this)

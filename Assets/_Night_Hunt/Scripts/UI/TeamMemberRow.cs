@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Character.Data;
 
 namespace NightHunt.UI
@@ -42,7 +43,7 @@ namespace NightHunt.UI
                 _avatarIcon.enabled = _avatarIcon.sprite != null;
             }
 
-            // Alive state khởi tạo
+            // Alive state initialize
             RefreshAliveVisual(player.IsAlive);
         }
 

@@ -98,6 +98,12 @@ namespace NightHunt.GameplaySystems.Aim
 
         private void Awake()
         {
+#if UNITY_SERVER
+            // DS build: AimSystem is client-only (camera raycast / world cursor).
+            // Disable immediately so no Update() logic runs on the headless server.
+            enabled = false;
+            return;
+#endif
             // NOTE: IPlayerStatSystem is NOT resolved here. AimSystem is a scene object;
             // PlayerStatSystem is a NetworkBehaviour on the player prefab spawned at runtime.
             // _playerStats is set via Initialize(playerRoot, statSystem) called by NetworkPlayer.

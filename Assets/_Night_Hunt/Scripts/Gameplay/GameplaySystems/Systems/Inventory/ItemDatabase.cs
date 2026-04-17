@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.Core;
 using NightHunt.GameplaySystems.Core.Data;
@@ -167,7 +167,9 @@ namespace NightHunt.GameplaySystems.Inventory
                 return;
             }
             
-            // Load from Resources (first time only)
+            // Synchronous load from Resources (first time only).
+            // For frame-spike-free loading call LoadFromResourcesAsync() from a MonoBehaviour
+            // (e.g. MatchLoadingOverlay) before player spawn instead.
             var definitions = Resources.LoadAll<ItemDefinition>(_itemDefinitionsPath);
             
             if (definitions != null && definitions.Length > 0)
@@ -178,12 +180,48 @@ namespace NightHunt.GameplaySystems.Inventory
                 foreach (var def in definitions)
                     RegisterDefinition(def);
                 
-                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                    Debug.Log($"[ItemDatabase] Loaded & cached {definitions.Length} from Resources/{_itemDefinitionsPath}");
+                Debug.Log($"[ItemDatabase] Load complete — {definitions.Length} items registered.");
             }
             else
             {
                 Debug.LogWarning($"[ItemDatabase] No items found in Resources/{_itemDefinitionsPath}");
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously loads all ItemDefinition assets from the Resources folder.
+        /// Call this from a MonoBehaviour (e.g. MatchLoadingOverlay) before player spawn
+        /// to avoid a synchronous frame spike on first item lookup.
+        /// </summary>
+        /// <example>
+        /// yield return StartCoroutine(ItemDatabase.Instance.LoadFromResourcesAsync());
+        /// </example>
+        public System.Collections.IEnumerator LoadFromResourcesAsync()
+        {
+            // If already loaded (sync or async), re-register from cache and return.
+            if (_resourcesLoaded && _cachedResourceDefinitions != null)
+            {
+                foreach (var def in _cachedResourceDefinitions)
+                    RegisterDefinition(def);
+                yield break;
+            }
+
+            var definitions = Resources.LoadAll<ItemDefinition>(_itemDefinitionsPath);
+            if (definitions != null && definitions.Length > 0)
+            {
+                _cachedResourceDefinitions = new ItemDefinition[definitions.Length];
+                for (int i = 0; i < definitions.Length; i++)
+                {
+                    var def = definitions[i] as ItemDefinition;
+                    _cachedResourceDefinitions[i] = def;
+                    RegisterDefinition(def);
+                }
+                _resourcesLoaded = true;
+                Debug.Log($"[ItemDatabase] Load complete — {definitions.Length} items registered.");
+            }
+            else
+            {
+                Debug.LogWarning($"[ItemDatabase] LoadFromResourcesAsync: No items found in Resources/{_itemDefinitionsPath}");
             }
         }
         

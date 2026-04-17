@@ -10,9 +10,9 @@ namespace NightHunt.Gameplay.Camera.Spectator
 {
     /// <summary>
     /// Trung tâm điều khiển camera gameplay + spectator.
-    /// - Theo dõi SpectateManager để set Follow/LookAt cho CinemachineCamera.
-    /// - Lắng nghe CharacterLifecycleController của local player để auto vào/ra spectate.
-    /// - Lắng nghe SpectatorInputHandler để next/prev player.
+    /// - Tracks SpectateManager để set Follow/LookAt cho CinemachineCamera.
+    /// - Listens for CharacterLifecycleController của local player để auto vào/ra spectate.
+    /// - Listens for SpectatorInputHandler để next/prev player.
     /// </summary>
     public sealed class GameCameraController : MonoBehaviour
     {

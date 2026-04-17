@@ -33,7 +33,7 @@ namespace NightHunt.Core
         [Tooltip("Nếu true, sẽ destroy duplicate instances")]
         [SerializeField] private bool destroyDuplicates = true;
 
-        [Tooltip("Nếu true, sẽ tự động tạo instance nếu chưa có (chỉ cho singleton)")]
+        [Tooltip("Nếu true, sẽ tự động tạo instance nếu not yet available (chỉ cho singleton)")]
 #pragma warning disable CS0414
         [SerializeField] private bool autoCreateIfMissing = false;
 #pragma warning restore CS0414
@@ -73,7 +73,7 @@ namespace NightHunt.Core
 
         /// <summary>
         /// ⚠️ DEPRECATED — Override OnSingletonAwake() in SingletonPersistent&lt;T&gt; instead
-        /// Được gọi khi object được set làm persistent (chỉ instance chính)
+        /// Được gọi khi object set làm persistent (chỉ instance chính)
         /// Override để thực hiện initialization
         /// </summary>
         protected virtual void OnPersistentAwake()
@@ -82,7 +82,7 @@ namespace NightHunt.Core
         }
 
         /// <summary>
-        /// Tạo instance nếu chưa có (chỉ hoạt động nếu autoCreateIfMissing = true)
+        /// Create instance nếu not yet available (chỉ hoạt động nếu autoCreateIfMissing = true)
         /// </summary>
         public static T GetOrCreateInstance<T>() where T : PersistentObject
         {

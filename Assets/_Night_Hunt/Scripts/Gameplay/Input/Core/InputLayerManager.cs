@@ -14,8 +14,8 @@ namespace NightHunt.Gameplay.Input.Core
     /// Nguyên tắc:
     ///   • Chỉ class này được Enable/Disable ActionMap.
     ///   • Các handler KHÔNG tự gọi map.Enable() / map.Disable().
-    ///   • Dùng <see cref="PushContext"/> / <see cref="PopContext"/> để chuyển state,
-    ///     thay vì gọi <see cref="TransitionToState"/> trực tiếp từ nhiều nơi.
+    ///   • Uses <see cref="PushContext"/> / <see cref="PopContext"/> để chuyển state,
+    ///     instead of gọi <see cref="TransitionToState"/> trực tiếp từ nhiều nơi.
     ///
     /// Bảng preset Context → Layer:
     /// <code>
@@ -75,6 +75,11 @@ namespace NightHunt.Gameplay.Input.Core
                 InputLayer.Spectator | InputLayer.UI | InputLayer.Team
             },
             {
+                // Free-fly mode: Camera + Spectator nav actions + UI. Player/Combat disabled.
+                InputState.SpectatorFreeCamera,
+                InputLayer.Camera | InputLayer.Spectator | InputLayer.UI
+            },
+            {
                 InputState.PlayerDead,
                 InputLayer.UI | InputLayer.Team
             },
@@ -100,6 +105,8 @@ namespace NightHunt.Gameplay.Input.Core
                 InputState.Camera,
                 InputLayer.Camera
             },
+            // InputState.DroneControl is defined in the enum but intentionally omitted here:
+            // no DroneInputHandler exists yet. Add an entry when drone mechanics are implemented.
         };
 
         // ── ActionMap name → Layer mapping ────────────────────────────────────────
@@ -174,7 +181,7 @@ namespace NightHunt.Gameplay.Input.Core
         {
             if (inputConfig == null)
             {
-                Debug.LogError("[InputLayerManager] InputConfig chưa được assign!");
+                Debug.LogError("[InputLayerManager] InputConfig not yet assign!");
                 return;
             }
 
@@ -192,7 +199,7 @@ namespace NightHunt.Gameplay.Input.Core
                 if (MapNameToLayer.TryGetValue(map.name, out var layer))
                     _layerToMap[layer] = map;
                 else
-                    Debug.LogWarning($"[InputLayerManager] ActionMap '{map.name}' không có mapping → bỏ qua.");
+                    Debug.LogWarning($"[InputLayerManager] ActionMap '{map.name}' not available mapping → bỏ qua.");
             }
 
             // Validate critical maps
@@ -200,7 +207,7 @@ namespace NightHunt.Gameplay.Input.Core
                 if (!_layerToMap.ContainsKey(pair.Value))
                     Debug.LogWarning($"[InputLayerManager] Không tìm thấy ActionMap '{pair.Key}' trong asset.");
 
-            Debug.Log("[InputLayerManager] Initialized thành công.");
+            Debug.Log("[InputLayerManager] Initialized success.");
         }
 
         #endregion
@@ -229,13 +236,13 @@ namespace NightHunt.Gameplay.Input.Core
         }
 
         /// <summary>
-        /// Pop về context trước đó. Nếu stack rỗng → fallback <see cref="InputState.PlayerAlive"/>.
+        /// Pop về context trước đó. Nếu stack empty → fallback <see cref="InputState.PlayerAlive"/>.
         /// </summary>
         public void PopContext()
         {
             if (_contextStack.Count == 0)
             {
-                Debug.LogWarning("[InputLayerManager] PopContext: stack rỗng → fallback PlayerAlive");
+                Debug.LogWarning("[InputLayerManager] PopContext: stack empty → fallback PlayerAlive");
                 ApplyContext(InputState.PlayerAlive);
                 return;
             }
@@ -250,7 +257,7 @@ namespace NightHunt.Gameplay.Input.Core
 
         /// <summary>
         /// Bật/tắt thủ công một layer ngoài preset context.
-        /// Dùng khi cần tweak (VD: tạm tắt Camera nhưng giữ nguyên context Gameplay).
+        /// Uses when needed tweak (VD: tạm tắt Camera nhưng giữ nguyên context Gameplay).
         /// </summary>
         public void SetLayerEnabled(InputLayer layer, bool enabled)
         {
@@ -302,7 +309,7 @@ namespace NightHunt.Gameplay.Input.Core
         public InputAction GetAction(string mapName, string actionName)
             => GetActionMap(mapName)?.FindAction(actionName);
 
-        /// <summary>Legacy: kiểm tra map có enabled không.</summary>
+        /// <summary>Legacy: check map có enabled không.</summary>
         public bool IsActionMapEnabled(string mapName)
         {
             var map = GetActionMap(mapName);

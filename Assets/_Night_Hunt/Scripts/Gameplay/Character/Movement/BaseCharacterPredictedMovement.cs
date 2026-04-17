@@ -326,7 +326,7 @@ namespace NightHunt.Gameplay.Character
             //   → Trả Vector3.zero khi KHÔNG fire → fallback về camera yaw ✅
             //
             // Priority 2 (raycast trực tiếp tại đây): ĐÃ BỎ
-            //   CombatInputHandler đã xử lý raycast nội bộ và expose qua GetAimDirection().
+            //   CombatInputHandler đã handle raycast nội bộ và expose qua GetAimDirection().
             //   Nếu để Priority 2 ở đây sẽ bypass _isFiring gate
             //   → character LUÔN nhìn theo chuột dù không bấm bắn ← đây là bug cũ.
             //
@@ -616,7 +616,7 @@ namespace NightHunt.Gameplay.Character
                 {
                     Debug.LogError(
                         $"[DIAG][⚠️ VEL POST-APPLY] Sau ApplyMovement: velocity=({appliedVel.x:F3},{appliedVel.y:F3},{appliedVel.z:F3}) " +
-                        $"dù không có input! Check ApplyMovement log bên dưới.");
+                        $"dù not available input! Check ApplyMovement log bên dưới.");
                 }
             }
         }

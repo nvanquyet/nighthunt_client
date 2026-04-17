@@ -12,34 +12,34 @@ using NightHunt.Utilities;
 namespace NightHunt.GameplaySystems.Loot
 {
     /// <summary>
-    /// Server-authoritative manager quản lý toàn bộ World object spawn lifecycle.
+    /// Server-authoritative manager for the full World-object spawn lifecycle.
     ///
-    /// TRÁCH NHIỆM:
-    ///   1. Khi server start: tìm tất cả WorldItemSpawnPoint trong scene và khởi động spawn-loop.
-    ///   2. API spawn: SpawnWorldItem, SpawnWorldContainer — dùng prefab có sẵn.
-    ///   3. Implement IDropHandler để InventorySystem gọi khi player drop item.
+    /// RESPONSIBILITIES:
+    ///   1. On server start: discover all WorldItemSpawnPoint objects in the scene and begin spawn loops.
+    ///   2. Spawn API: SpawnWorldItem, SpawnWorldContainer — uses pre-assigned prefabs.
+    ///   3. Implement IDropHandler so InventorySystem can call on player drop.
     ///
     /// ═══════════════════════════════════════════════════════════════════════════
-    /// CRITICAL — THỨ TỰ SPAWN ĐÚNG:
+    /// CRITICAL — CORRECT SPAWN ORDER:
     ///
-    ///   ❌ SAI (cũ):
-    ///      ServerManager.Spawn(netObj);     ← FishNet fires OnStartClient() NGAY ĐÂY
-    ///      worldItem.Initialize(data);      ← quá trễ, OnStartClient đã chạy rồi
+    ///   ❌ WRONG (old):
+    ///      ServerManager.Spawn(netObj);     ← FishNet fires OnStartClient() HERE
+    ///      worldItem.Initialize(data);      ← too late, OnStartClient already ran
     ///
-    ///   ✅ ĐÚNG (mới):
-    ///      worldItem.InitializeBeforeSpawn(data);   ← set data trực tiếp, chưa có SyncVar
-    ///      ServerManager.Spawn(netObj);              ← FishNet embed SyncVar vào spawn packet
-    ///                                                   → client nhận đủ data ngay lần đầu
+    ///   ✅ CORRECT (new):
+    ///      worldItem.InitializeBeforeSpawn(data);   ← set data directly, not yet available SyncVar
+    ///      ServerManager.Spawn(netObj);              ← FishNet embeds SyncVar into spawn packet
+    ///                                                   → client receives full data on first sync
     ///
-    /// Lý do:
-    ///   - Host mode: OnStartClient() chạy synchronously BÊN TRONG ServerManager.Spawn().
-    ///     Nếu data chưa set trước Spawn → OnStartClient thấy SyncVar rỗng → không spawn model.
-    ///   - Dedicated server: SyncVar value được embed vào spawn packet khi Spawn() được gọi.
-    ///     Nếu Initialize() gọi sau Spawn → client nhận spawn packet không có data → miss model.
+    /// Reason:
+    ///   - Host mode: OnStartClient() runs synchronously INSIDE ServerManager.Spawn().
+    ///     If data is not set before Spawn, OnStartClient sees an empty SyncVar → no model spawned.
+    ///   - Dedicated server: SyncVar value is embedded in the spawn packet when Spawn() is called.
+    ///     If Initialize() is called after Spawn → client receives spawn packet with no data → misses model.
     ///
-    ///   InitializeBeforeSpawn() set data trực tiếp lên field + SyncVar TRƯỚC Spawn(),
-    ///   nên khi FishNet build spawn packet, SyncVar đã có value → được embed vào packet.
-    ///   Cả host lẫn dedicated server client đều nhận đúng data ngay lần đầu.
+    ///   InitializeBeforeSpawn() sets data directly onto the field + SyncVar BEFORE Spawn(),
+    ///   so when FishNet builds the spawn packet the SyncVar already has a value → embedded in packet.
+    ///   Both host and dedicated-server clients receive correct data on first sync.
     /// ═══════════════════════════════════════════════════════════════════════════
     /// </summary>
     public class WorldSpawnManager : NetworkBehaviour, IDropHandler
@@ -50,19 +50,26 @@ namespace NightHunt.GameplaySystems.Loot
 
         // ── Prefab references ────────────────────────────────────────────────────
 
-        [Header("Network Prefabs — gán prefab có NetworkObject component")]
-        [Tooltip("Prefab WorldItem (item rơi đất). Phải có NetworkObject + WorldItem component.")]
+        [Header("Network Prefabs")]
+        [Tooltip("WorldItem prefab (item on the ground). Must have NetworkObject + WorldItem components.")]
         [SerializeField]
         private GameObject worldItemPrefab;
 
-        [Tooltip(
-            "Prefab WorldContainer (thùng / crate / rương / chest). Phải có NetworkObject + WorldContainer component.")]
+        [Tooltip("WorldContainer prefab (crate / chest). Must have NetworkObject + WorldContainer components.")]
         [SerializeField]
         private GameObject worldContainerPrefab;
+
+        // ── Limits ───────────────────────────────────────────────────────────────
+
+        [Header("Spawn Limits")]
+        [Tooltip("Maximum number of active WorldItem NetworkObjects allowed at once. When reached, the oldest unclaimed item is despawned before a new one is spawned.")]
+        [SerializeField] private int _maxActiveItems = 100;
 
         // ── Internal ─────────────────────────────────────────────────────────────
 
         private readonly List<WorldItemSpawnPoint> _spawnPoints = new();
+        // Oldest-first queue of active WorldItems for limit enforcement.
+        private readonly Queue<WorldItem> _activeWorldItems = new();
 
         // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -174,7 +181,7 @@ namespace NightHunt.GameplaySystems.Loot
 
             if (worldItemPrefab == null)
             {
-                Debug.LogError("[WorldSpawnManager] SpawnWorldItem: worldItemPrefab chưa được gán!");
+                Debug.LogError("[WorldSpawnManager] SpawnWorldItem: worldItemPrefab is not assigned!");
                 return null;
             }
 
@@ -194,27 +201,46 @@ namespace NightHunt.GameplaySystems.Loot
             if (netObj == null || worldItem == null)
             {
                 Debug.LogError(
-                    "[WorldSpawnManager] SpawnWorldItem: worldItemPrefab thiếu NetworkObject hoặc WorldItem!");
+                    "[WorldSpawnManager] SpawnWorldItem: worldItemPrefab is missing NetworkObject or WorldItem component!");
                 Destroy(go);
                 return null;
             }
 
-            // ── 2. InitializeBeforeSpawn — SET DATA TRƯỚC KHI SPAWN ──────────────
-            //    Ghi data trực tiếp vào field + SyncVar nội bộ của WorldItem.
-            //    Khi FishNet build spawn packet ở bước 3, SyncVar đã có value
-            //    và được embed vào packet → client nhận đủ data ngay lần đầu.
+            // ── 2. InitializeBeforeSpawn — SET DATA BEFORE SPAWN ──────────────
+            //    Write data directly onto the WorldItem field + internal SyncVar.
+            //    When FishNet builds the spawn packet in step 3, the SyncVar already
+            //    has a value and is embedded in the packet → client receives full data
+            //    on the very first sync.
             worldItem.InitializeBeforeSpawn(data, lootableConfig);
 
             Debug.Log($"[WorldSpawnManager] SpawnWorldItem: InitializeBeforeSpawn done. " +
                       $"defID='{data.DefinitionID}' pos={position}. About to Spawn...");
 
-            // ── 3. Spawn — FishNet tạo NetworkObject, gửi packet tới clients ──────
+            // ── 3. Enforce active-item limit ──────────────────────────────────────
+            if (_maxActiveItems > 0 && _activeWorldItems.Count >= _maxActiveItems)
+            {
+                if (_activeWorldItems.TryDequeue(out var oldest) && oldest != null)
+                {
+                    Debug.LogWarning($"[WorldSpawnManager] Active item limit ({_maxActiveItems}) reached — despawning oldest item '{oldest.name}'.");
+                    ServerManager.Despawn(oldest.NetworkObject);
+                }
+            }
+
+            // ── 4. Spawn — FishNet creates the NetworkObject and sends packet to clients ──
             ServerManager.Spawn(netObj);
 
             Debug.Log($"[WorldSpawnManager] SpawnWorldItem: Spawned. " +
                       $"NetId={netObj.ObjectId} Observers={netObj.Observers.Count} defID='{data.DefinitionID}'");
 
-            // ── 4. Đăng ký sourcePoint callback ──────────────────────────────────
+            // ── 5. Track and register sourcePoint callback ────────────────────────
+            _activeWorldItems.Enqueue(worldItem);
+            worldItem.OnDespawned += () =>
+            {
+                // Remove from queue when despawned (can't efficiently remove from middle,
+                // so we just let the limit enforcement clean up stale entries).
+                // Re-enqueue with a null guard is not needed — the item won't spawn again.
+            };
+
             if (sourcePoint != null)
             {
                 sourcePoint.RegisterActive();
@@ -243,7 +269,7 @@ namespace NightHunt.GameplaySystems.Loot
 
             if (worldContainerPrefab == null)
             {
-                Debug.LogError("[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab chưa được gán!");
+                Debug.LogError("[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab is not assigned!");
                 return null;
             }
 
@@ -262,12 +288,12 @@ namespace NightHunt.GameplaySystems.Loot
             if (netObj == null || container == null)
             {
                 Debug.LogError(
-                    "[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab thiếu NetworkObject hoặc WorldContainer!");
+                    "[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab is missing NetworkObject or WorldContainer component!");
                 Destroy(go);
                 return null;
             }
 
-            // Set data trước Spawn (tương tự WorldItem)
+            // Set data before Spawn (same pattern as WorldItem)
             container.InitializeBeforeSpawn(config.SpawnTable, config.SpawnLocked,
                 config.LootableConfig,
                 config.ContainerAutoReset,

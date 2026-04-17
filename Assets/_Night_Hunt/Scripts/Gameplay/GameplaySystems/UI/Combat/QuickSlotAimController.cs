@@ -92,7 +92,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         /// <summary>
         /// True khi controller đang trong aim mode (chờ confirm/cancel).
-        /// Dùng bởi <see cref="QuickSlotHUDButton"/> để quyết định có start hold-timer/joystick không.
+        /// Uses bởi <see cref="QuickSlotHUDButton"/> để quyết định có start hold-timer/joystick không.
         /// </summary>
         public bool IsInAimMode => _inAimMode;
 
@@ -271,13 +271,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         /// <summary>
         /// Phiên bản phòng thủ của <see cref="OnMobileDragEnd"/> — chỉ thực thi nếu aim mode
-        /// vẫn còn active. Được gọi từ <see cref="QuickSlotHUDButton.OnEndDrag"/> để tránh
-        /// double-resolve khi <see cref="QuickSlotHUDButton.OnPointerUp"/> đã xử lý trước.
+        /// vẫn còn active. Được called from <see cref="QuickSlotHUDButton.OnEndDrag"/> để tránh
+        /// double-resolve khi <see cref="QuickSlotHUDButton.OnPointerUp"/> đã handle trước.
         /// </summary>
         public void OnMobileDragEndIfStillActive(float joystickMagnitude)
         {
-            // _inAimMode đã được reset về false nếu OnPointerUp đã gọi OnMobileDragEnd trước.
-            // Guard này đảm bảo không có double Confirm/Cancel.
+            // _inAimMode has been reset về false nếu OnPointerUp đã gọi OnMobileDragEnd trước.
+            // Guard này đảm bảo not available double Confirm/Cancel.
             if (!_inAimMode) return;
             OnMobileDragEnd(joystickMagnitude);
         }        // ─────────────────────────────────────────────────────────────────────

@@ -142,8 +142,13 @@ namespace NightHunt.GameplaySystems.Core.Bridge
             // Wire up events
             WireEvents();
             
-            IsReady = true;
-            Debug.Log("[GameplaySystemsBridge] Initialized - all systems wired.");
+            // IsReady is true only when all mandatory systems are present.
+            bool allReady = inventory != null && equipment != null && weapon != null && statSystem != null;
+            IsReady = allReady;
+            if (allReady)
+                Debug.Log("[GameplaySystemsBridge] Initialized — all systems wired.");
+            else
+                Debug.LogError("[GameplaySystemsBridge] Initialized with missing mandatory systems — bridge NOT ready.");
         }
         
         #endregion

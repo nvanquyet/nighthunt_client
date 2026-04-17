@@ -71,7 +71,7 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
 
             if (_uiActionMap == null)
             {
-                Debug.LogError("[UIInputHandler] 'UI' action map không tìm thấy trong InputLayerManager!");
+                Debug.LogError("[UIInputHandler] 'UI' action map not found trong InputLayerManager!");
                 return;
             }
 
@@ -79,9 +79,9 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
             _openMenuAction   = _uiActionMap.FindAction("OpenMenu");
             _toggleMapAction  = _uiActionMap.FindAction("ToggleMap");
 
-            if (_cancelAction    == null) Debug.LogWarning("[UIInputHandler] 'Cancel' action không tìm thấy");
-            if (_openMenuAction  == null) Debug.LogWarning("[UIInputHandler] 'OpenMenu' action không tìm thấy");
-            if (_toggleMapAction == null) Debug.LogWarning("[UIInputHandler] 'ToggleMap' action không tìm thấy");
+            if (_cancelAction    == null) Debug.LogWarning("[UIInputHandler] 'Cancel' action not found");
+            if (_openMenuAction  == null) Debug.LogWarning("[UIInputHandler] 'OpenMenu' action not found");
+            if (_toggleMapAction == null) Debug.LogWarning("[UIInputHandler] 'ToggleMap' action not found");
         }
 
         // ── IInputHandler Implementation ──────────────────────────────────────────

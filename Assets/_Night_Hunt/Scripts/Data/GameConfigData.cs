@@ -104,10 +104,10 @@ namespace NightHunt.Data
     [Serializable]
     public class MatchPhaseConfigData
     {
-        [Tooltip("Enum định danh Phase. Dùng để lookup và so sánh trong code. Không cần đổi.")]
+        [Tooltip("Enum định danh Phase. Uses để lookup và so sánh trong code. Không cần đổi.")]
         public NightHunt.Gameplay.Match.MatchPhaseState PhaseType;
 
-        [Tooltip("Tên hiển thị trên UI/Log. Tùy biến được, chỉ dùng để đọc, không dùng compare.")]
+        [Tooltip("Tên display trên UI/Log. Tùy biến được, chỉ dùng để đọc, không dùng compare.")]
         public string DisplayName;
 
         [Tooltip("Thời lượng tối thiểu của Phase, tính bằng phút.\n" +
@@ -120,7 +120,7 @@ namespace NightHunt.Data
         public int DurationMax;
 
         [Header("Respawn")]
-        [Tooltip("Cho phép hồi sinh trong Phase này không?\n" +
+        [Tooltip("Allows hồi sinh trong Phase này không?\n" +
                  "Default: true cho cả 3 Phase.")]
         public bool RespawnEnabled;
 
@@ -129,7 +129,7 @@ namespace NightHunt.Data
         public float RespawnDelay;
 
         [Header("Multipliers")]
-        [Tooltip("Nhân điểm số cho mọi action trong Phase này.\n" +
+        [Tooltip("Nhân score cho mọi action trong Phase này.\n" +
                  "Default: Preparation=1.0×, Hunt=2.0×, Lockdown=3.0×")]
         public float ScoreMultiplier;
 
@@ -138,7 +138,7 @@ namespace NightHunt.Data
         public float SurvivalMultiplier;
 
         [Header("UI")]
-        [Tooltip("Số giây trước khi Phase kết thúc để bắn PhaseWarningEvent.\n" +
+        [Tooltip("Số giây before Phase kết thúc để bắn PhaseWarningEvent.\n" +
                  "Default: 30s cho tất cả Phase.")]
         public float WarningTime;
     }

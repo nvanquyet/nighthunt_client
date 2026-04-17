@@ -45,9 +45,6 @@ namespace NightHunt.Audio
         [SerializeField, Min(0.05f)] private float sprintStepInterval = 0.28f;
         [Tooltip("Minimum speed (m/s) to trigger any footstep sound.")]
         [SerializeField, Min(0f)] private float minMoveSpeed = 0.5f;
-        [Tooltip("Speed (m/s) at or above which movement is treated as Sprint (louder/heavier clips).")]
-        [SerializeField, Min(0f)] private float sprintSpeedThreshold = 5.5f;
-
         [Header("Volumes")]
         [SerializeField, Range(0f, 1f)] private float footstepVolume  = 0.75f;
         [SerializeField, Range(0f, 1f)] private float jumpVolume      = 0.8f;

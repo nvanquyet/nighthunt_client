@@ -13,7 +13,7 @@ namespace NightHunt.Editor.Tools
     ///
     /// Menu: NightHunt / Tools / Setup Full UI Hierarchy
     ///
-    /// Tạo toàn bộ cây Canvas → Sub-panels hoàn chỉnh:
+    /// Create toàn bộ cây Canvas → Sub-panels hoàn chỉnh:
     ///   ① GameHUD_Canvas (Screen Space Overlay, sortOrder=0)
     ///       ├─ [PlayerHUD]     HP/Stamina/Armor/Speed/Weight sliders
     ///       ├─ [CombatHUD]     FireButton + WeaponSlots + QuickSlots (mobile joystick)
@@ -602,7 +602,7 @@ namespace NightHunt.Editor.Tools
         }
 
         /// <summary>
-        /// Tạo một thanh stat (Slider) + label trong parent.
+        /// Create một thanh stat (Slider) + label trong parent.
         /// rowIndex = 0, 1, 2… dùng để tính Y offset.
         /// </summary>
         private static void CreateStatBar(Transform parent, string goName, string label, Color fillColor,

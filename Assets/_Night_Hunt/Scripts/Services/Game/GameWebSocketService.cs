@@ -78,7 +78,6 @@ namespace NightHunt.Services.Game
         public event Action<YouWereKickedEvent> OnYouWereKicked;
 
         // Matchmaking Events
-        public event Action<MatchFoundEvent>     OnMatchFound;
         public event Action<MatchReadyEvent>     OnMatchReady;
         public event Action<MatchCancelledEvent> OnMatchCancelled;
         /// <summary>
@@ -619,34 +618,43 @@ namespace NightHunt.Services.Game
                         break;
 
                     // Matchmaking Events
-                    case "match_found":
-                        var matchFound = JsonUtility.FromJson<MatchFoundEvent>(messageData.data);
-                        if (matchFound != null)
-                            OnMatchFound?.Invoke(matchFound);
-                        break;
-
                     case "match_ready":
                         var matchReady = JsonUtility.FromJson<MatchReadyEvent>(messageData.data);
                         if (matchReady != null)
                         {
-                            // Only store matchId/mapId — DsIp/Port set later on ds_ready
-                            RoomState.Instance?.SetMatchReady(matchReady.matchId, matchReady.mapId);
+                            Debug.Log($"[GWS] match_ready ▶ matchId={matchReady.matchId} mode={matchReady.gameMode} mapId={matchReady.mapId} roomCode={matchReady.roomCode} dsIp={matchReady.dsIp} dsPort={matchReady.dsPort}");
+                            // Pass gameMode so SetMatchReady can detect Custom_Relay
+                            // even if game_starting fired before RoomState was ready.
+                            RoomState.Instance?.SetMatchReady(matchReady.matchId, matchReady.mapId, matchReady.gameMode);
                             OnMatchReady?.Invoke(matchReady);
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[GWS] match_ready — failed to deserialize payload: {messageData.data}");
                         }
                         break;
 
                     case "match_cancelled":
                         var matchCancelled = JsonUtility.FromJson<MatchCancelledEvent>(messageData.data);
                         if (matchCancelled != null)
+                        {
+                            Debug.Log($"[GWS] match_cancelled ▶ reason={matchCancelled.reason}");
                             OnMatchCancelled?.Invoke(matchCancelled);
+                        }
                         break;
 
                     case "ds_ready":
                         var dsReady = JsonUtility.FromJson<DsReadyEvent>(messageData.data);
                         if (dsReady != null)
                         {
-                            Debug.Log($"[GameWebSocketService] ds_ready: DS {dsReady.dsIp}:{dsReady.dsPort} ready for matchId={dsReady.matchId}");
+                            Debug.Log($"[GWS] ds_ready ▶ dsIp={dsReady.dsIp} dsPort={dsReady.dsPort} matchId={dsReady.matchId} mapId={dsReady.mapId} serverId={dsReady.serverId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+                            // Store DS address in RoomState so NetworkGameManager can read it.
+                            RoomState.Instance?.SetDedicatedServer(dsReady.dsIp, (ushort)dsReady.dsPort, dsReady.matchId, dsReady.mapId);
                             OnDsReady?.Invoke(dsReady);
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[GWS] ds_ready — failed to deserialize payload: {messageData.data}");
                         }
                         break;
 
@@ -1076,20 +1084,6 @@ namespace NightHunt.Services.Game
         }
 
         // ── Matchmaking event data ───────────────────────────────────────────
-
-        [Serializable]
-        public class MatchFoundEvent
-        {
-            public string lobbyToken;
-            public string gameMode;
-            public long[] playerIds;
-            /// <summary>
-            /// Số giây để accept trước khi auto-decline.
-            /// Backend đặt qua matchmaking.accept-timeout-seconds config.
-            /// 0 = dùng defaultTimeoutSec trong MatchFoundOverlay.
-            /// </summary>
-            public int acceptTimeoutSeconds;
-        }
 
         [Serializable]
         public class MatchReadyEvent

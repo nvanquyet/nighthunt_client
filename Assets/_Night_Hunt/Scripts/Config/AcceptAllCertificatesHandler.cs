@@ -4,8 +4,8 @@ namespace NightHunt.Config
 {
     /// <summary>
     /// CertificateHandler that bypasses SSL validation.
-    /// Dùng khi server cloud dùng self-signed cert (mkcert) với IP trực tiếp,
-    /// chưa có domain + Let's Encrypt.
+    /// Uses khi server cloud dùng self-signed cert (mkcert) với IP trực tiếp,
+    /// not yet available domain + Let's Encrypt.
     ///
     /// ⚠️  CHỈ dùng cho dev/staging. KHÔNG dùng cho Production release.
     ///     Kiểm soát bằng BackendConfig.allowSelfSignedCert.

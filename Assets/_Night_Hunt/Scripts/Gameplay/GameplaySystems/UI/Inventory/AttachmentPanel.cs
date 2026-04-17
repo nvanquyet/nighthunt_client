@@ -6,12 +6,13 @@ using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Attachment;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Panel hiển thị attachment slots của một equipment item.
+    /// Panel display attachment slots của một equipment item.
     /// Show khi hover/select equipment item có attachment slots.
     /// </summary>
     public class AttachmentPanel : MonoBehaviour
@@ -144,7 +145,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             else
             {
                 _pinnedItem = null;
-                // Auto hide nếu không còn hover
+                // Auto hide nếu no longer hover
                 if (_currentItem == null)
                 {
                     if (_panelRoot != null)

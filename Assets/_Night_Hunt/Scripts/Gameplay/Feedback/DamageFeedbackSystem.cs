@@ -230,7 +230,7 @@ namespace NightHunt.Gameplay.Feedback
             headshotColor       = Color.red;
             indicatorLifetime   = 0.5f;
             UnityEditor.EditorUtility.SetDirty(this);
-            Debug.Log("[DamageFeedbackSystem] Reset to default values. Lưu scene để áp dụng.");
+            Debug.Log("[DamageFeedbackSystem] Reset to default values. Save scene để áp dụng.");
         }
 #endif
     }

@@ -4,7 +4,7 @@ namespace NightHunt.Networking.Player
 {
     /// <summary>
     /// PRIVATE SERVER DATA - RegistryService giữ
-    /// Chứa sensitive info như BackendPlayerId
+    /// Contains sensitive info như BackendPlayerId
     /// </summary>
     [Serializable]
     public struct PlayerRegistryData

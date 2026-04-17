@@ -4,6 +4,7 @@ using NightHunt.Gameplay.Camera.Spectator;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Respawn;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Systems;
@@ -14,7 +15,7 @@ namespace NightHunt.Gameplay.Core.State
 {
     /// <summary>
     /// Bridges PlayerStatSystem (Health) với CharacterStateMachine
-    /// và phát sự kiện lifecycle (OnDied/OnRespawned) cho các hệ khác nghe.
+    /// và phát event lifecycle (OnDied/OnRespawned) cho các hệ khác nghe.
     /// Không phụ thuộc movement hay combat.
     /// </summary>
     [DisallowMultipleComponent]

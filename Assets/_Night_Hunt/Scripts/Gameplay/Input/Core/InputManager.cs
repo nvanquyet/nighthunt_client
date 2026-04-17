@@ -12,8 +12,8 @@ namespace NightHunt.Gameplay.Input.Core
 {
     /// <summary>
     /// Facade cung cấp tham chiếu nhanh tới các handler cụ thể.
-    /// <para><b>Quản lý state / enable-disable ActionMap:</b>
-    /// Dùng <see cref="InputLayerManager"/> – đây là Single Source of Truth.</para>
+    /// <para><b>Manages state / enable-disable ActionMap:</b>
+    /// Uses <see cref="InputLayerManager"/> – đây là Single Source of Truth.</para>
     /// <para><b>Không bao giờ</b> gọi <c>map.Enable()</c> / <c>map.Disable()</c> từ đây.</para>
     /// </summary>
     public class InputManager : Singleton<InputManager>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Services.Friend;
+using NightHunt.Utils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -441,8 +442,8 @@ namespace NightHunt.UI
         {
             _activeContextItem = null;
             if (friend == null) return;
-            Debug.Log($"[FriendPanel] ViewProfile: userId={friend.userId} username={friend.username}");
-            // TODO: Open profile screen when implemented.
+            ConditionalLogger.Log("FriendPanel", $"ViewProfile: userId={friend.userId} username={friend.username}");
+            PlayerProfilePanel.Instance?.Show(friend.userId, friend.username);
         }
 
         private void OnInviteToParty(FriendResponse friend)

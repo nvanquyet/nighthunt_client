@@ -108,7 +108,7 @@ namespace NightHunt.Gameplay.Objective
                 if (InstanceFinder.NetworkManager.ServerManager.Objects.Spawned
                        .TryGetValue(shooterNetObjId, out var nob))
                 {
-                    var player = nob.GetComponent<NightHunt.Networking.NetworkPlayer>();
+                    var player = nob.GetComponent<NetworkPlayer>();
                     if (player != null)
                         _lastAttackerTeamId = player.TeamId;
                 }

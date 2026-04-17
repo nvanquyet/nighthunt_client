@@ -38,7 +38,7 @@ namespace NightHunt.GameplaySystems.Inventory
         [Tooltip("Auto-cleanup invalid items on sync")] [SerializeField]
         private bool _autoCleanupInvalidItems = true;
 
-        [Header("Debug")] [SerializeField] private bool _enableDebugLogs = false;
+        [Header("Debug")] [SerializeField] private bool _debugLogs = false;
 
         #endregion
 
@@ -139,10 +139,10 @@ namespace NightHunt.GameplaySystems.Inventory
                 _statSystemComponent = statConcrete;
 
             if (_gameplayConfig == null)
-                Debug.LogError("[InventorySystem] GameplayConfig is null!");
+                Debug.LogWarning("[InventorySystem] GameplayConfig is null!");
 
             if (_inventoryConfig == null)
-                Debug.LogError("[InventorySystem] InventoryConfig is null!");
+                Debug.LogWarning("[InventorySystem] InventoryConfig is null!");
 
             if (_statSystem == null)
                 Debug.LogWarning("[InventorySystem] IPlayerStatSystem is null - weight updates will not work!");
@@ -263,7 +263,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             int originalQuantity = quantity;
 
-            if (_enableDebugLogs)
+            if (_debugLogs)
                 Debug.Log($"[InventorySystem] Adding {quantity}x {itemDef.DisplayName}");
 
             // PERFORMANCE: Try stack with existing items (uses cached list)
@@ -275,7 +275,7 @@ namespace NightHunt.GameplaySystems.Inventory
                 {
                     // Fully stacked - batch weight update
                     ScheduleWeightUpdate();
-                    if (_enableDebugLogs)
+                    if (_debugLogs)
                     {
                         float itemWeight = itemDef.GetTotalWeight(originalQuantity);
                         Debug.Log(
@@ -307,7 +307,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             ScheduleWeightUpdate();
 
-            if (_enableDebugLogs)
+            if (_debugLogs)
             {
                 float itemWeight = itemDef.GetTotalWeight(originalQuantity);
                 Debug.Log(
@@ -343,7 +343,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             if (_itemCache.ContainsKey(item.InstanceID))
             {
-                if (_enableDebugLogs)
+                if (_debugLogs)
                     Debug.LogWarning($"[InventorySystem] AddItemFromData: instance already exists {item.InstanceID}");
                 return;
             }
@@ -359,7 +359,7 @@ namespace NightHunt.GameplaySystems.Inventory
             OnItemAdded?.Invoke(item);
             ScheduleWeightUpdate();
 
-            if (_enableDebugLogs)
+            if (_debugLogs)
                 Debug.Log($"[InventorySystem] Restored item {item.DefinitionID} x{item.Quantity} at index {item.InventoryIndex}");
         }
 
@@ -425,7 +425,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             ScheduleWeightUpdate();
 
-            if (_enableDebugLogs)
+            if (_debugLogs)
                 Debug.Log(
                     $"[InventorySystem] Removed {quantity} of {item?.DefinitionID ?? instanceID} (remaining: {item?.Quantity ?? 0})");
         }
@@ -454,7 +454,7 @@ namespace NightHunt.GameplaySystems.Inventory
             if (_itemCache.ContainsKey(item.InstanceID))
             {
                 // Already in slots – nothing to do
-                if (_enableDebugLogs)
+                if (_debugLogs)
                     Debug.LogWarning($"[InventorySystem] RestoreItemToSlots: {item.InstanceID} is already in slots");
                 return;
             }
@@ -472,7 +472,7 @@ namespace NightHunt.GameplaySystems.Inventory
             ScheduleWeightUpdate();
             OnItemAdded?.Invoke(item);
 
-            if (_enableDebugLogs)
+            if (_debugLogs)
                 Debug.Log(
                     $"[InventorySystem] RestoreItemToSlots: restored {item.DefinitionID} x{item.Quantity} at index {item.InventoryIndex}");
         }
@@ -488,7 +488,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             if (!_itemCache.TryGetValue(instanceID, out var item))
             {
-                if (_enableDebugLogs)
+                if (_debugLogs)
                     Debug.LogWarning($"[InventorySystem] SyncItemState: item not found in cache: {instanceID}");
                 return;
             }
@@ -539,7 +539,7 @@ namespace NightHunt.GameplaySystems.Inventory
             // PERFORMANCE: Use cached list instead of LINQ
             if (!_itemsByDefinition.TryGetValue(itemDefinitionID, out var items))
             {
-                if (_enableDebugLogs)
+                if (_debugLogs)
                     Debug.LogWarning($"[InventorySystem] No items of type: {itemDefinitionID}");
                 return;
             }
@@ -578,7 +578,7 @@ namespace NightHunt.GameplaySystems.Inventory
         {
             if (!IsServerInitialized)
             {
-                // Client-side: gửi lên server qua ServerRpc thay vì silently fail.
+                // Client-side: gửi lên server qua ServerRpc instead of silently fail.
                 RequestDropRpc(instanceID, quantity);
                 return;
             }
@@ -613,7 +613,7 @@ namespace NightHunt.GameplaySystems.Inventory
                 return;
             }
 
-            // Gỡ attachments trước khi drop nếu có config
+            // Gỡ attachments before drop nếu có config
             if (_inventoryConfig != null && _inventoryConfig.ReturnAttachmentsToInventoryOnDrop)
             {
                 if (item.AttachedItems != null && item.AttachedItems.Length > 0)
@@ -640,7 +640,7 @@ namespace NightHunt.GameplaySystems.Inventory
                         // Gỡ attachments và return vào inventory
                         attachmentSystem.DetachAllFromItem(instanceID);
 
-                        // Refresh item reference sau khi detach
+                        // Refresh item reference after detach
                         item = GetItemByInstanceID(instanceID);
                         if (item == null)
                         {
@@ -675,7 +675,7 @@ namespace NightHunt.GameplaySystems.Inventory
                 Debug.LogError("[InventorySystem] DropItem: WorldSpawnManager.Instance is null!");
             }
 
-            // Remove from inventory (sau khi đã spawn world item)
+            // Remove from inventory (after đã spawn world item)
             RemoveItemServer(instanceID, dropQty);
         }
 
@@ -866,7 +866,7 @@ namespace NightHunt.GameplaySystems.Inventory
             foreach (var item in items)
                 UpdateItemDataOptimized(item);
 
-            if (_enableDebugLogs)
+            if (_debugLogs)
                 Debug.Log($"[InventorySystem] BatchAssignIndices: reassigned {items.Count} items");
         }
 
@@ -924,7 +924,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             BatchAssignIndicesServer(assignments);
 
-            if (_enableDebugLogs)
+            if (_debugLogs)
                 Debug.Log($"[InventorySystem] SortByType: sorted {allItems.Count} items");
         }
 
@@ -1249,7 +1249,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             _statSystem.AddModifier(PlayerStatType.CurrentWeight, weightMod);
 
-            if (_enableDebugLogs)
+            if (_debugLogs)
                 Debug.Log(
                     $"[InventorySystem] Updated total weight: {totalWeight:F2}kg → PlayerStatSystem.CurrentWeight");
         }

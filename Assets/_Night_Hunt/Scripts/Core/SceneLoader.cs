@@ -5,10 +5,10 @@ using NightHunt.Config;
 namespace NightHunt.Core
 {
     /// <summary>
-    /// SceneLoader — Quản lý chuyển đổi scene thật sự (load/unload Unity scenes).
+    /// SceneLoader — Manages chuyển đổi scene thật sự (load/unload Unity scenes).
     ///
     /// Nguyên tắc rõ ràng:
-    ///   • SceneLoader CHỈ dùng khi cần load scene thật:
+    ///   • SceneLoader CHỈ dùng when needed load scene thật:
     ///       - LoadHome()    : Trở về 01_Home từ gameplay scene
     ///       - LoadGame(id)  : Vào gameplay scene (GameMap_xx)
     ///   • Điều hướng UI bên trong 01_Home → dùng <see cref="UINavigator"/> trực tiếp
@@ -31,7 +31,7 @@ namespace NightHunt.Core
 
         /// <summary>
         /// Load về 01_Home từ gameplay scene.
-        /// Dùng khi match kết thúc (ResultsView) hoặc khi cần restart flow từ gameplay.
+        /// Uses khi match kết thúc (ResultsView) hoặc when needed restart flow từ gameplay.
         /// </summary>
         public static void LoadHome()
         {
@@ -41,7 +41,7 @@ namespace NightHunt.Core
 
         /// <summary>
         /// Load gameplay scene theo SceneId.
-        /// Gọi sau khi MatchLoadingOverlay xác nhận tất cả player đã ready.
+        /// Call after MatchLoadingOverlay xác nhận tất cả player đã ready.
         /// </summary>
         public static void LoadGame(SceneId mapId = SceneId.GameMap_01)
         {

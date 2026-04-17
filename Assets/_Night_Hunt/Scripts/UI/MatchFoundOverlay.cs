@@ -10,13 +10,13 @@ using UnityEngine.UI;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// MatchFoundOverlay — Full-screen overlay hiển thị khi backend gửi "match_found".
+    /// MatchFoundOverlay — Full-screen overlay display khi backend gửi "match_found".
     ///
     /// Vòng đời:
     ///   1. Gắn vào PersistentUICanvas (DontDestroyOnLoad) — ẩn mặc định.
     ///   2. PartyController.HandleMatchFound() gọi <see cref="Show"/> với data từ WS.
     ///   3. Overlay hiện thông tin trận + danh sách player — không cần xác nhận.
-    ///   4. <see cref="Hide"/> được gọi sau khi nhận match_ready hoặc match_cancelled.
+    ///   4. <see cref="Hide"/> is called after nhận match_ready hoặc match_cancelled.
     ///
     /// Inspector slots:
     ///   panel            — Root GameObject
@@ -37,13 +37,7 @@ namespace NightHunt.UI
             get
             {
                 if (_instance == null)
-                {
-                    if (PersistentUICanvas.Instance != null)
-                        _instance = PersistentUICanvas.Instance.MatchFoundOverlay;
-
-                    if (_instance == null)
-                        _instance = FindFirstObjectByType<MatchFoundOverlay>();
-                }
+                    _instance = FindFirstObjectByType<MatchFoundOverlay>();
                 return _instance;
             }
         }
@@ -97,26 +91,26 @@ namespace NightHunt.UI
         // ── Public API ─────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Hiện overlay thông tin ghép trận (không có nút xác nhận).
+        /// Hiện overlay thông tin ghép trận (not available nút xác nhận).
         /// </summary>
         public void Show(string gameMode, long[] playerIds, long localUserId)
         {
             // Populate match info
             if (gameModeText != null) gameModeText.text = FormatMode(gameMode);
-            if (mapNameText  != null) mapNameText.text  = "Đang vào máy chủ...";
+            if (mapNameText  != null) mapNameText.text  = "Connecting to server…";
 
             // Populate player rows
             PopulatePlayers(playerIds, localUserId);
 
             // Status
-            if (statusText != null) statusText.text = "Đã ghép trận — đang khởi động server...";
+            if (statusText != null) statusText.text = "Match found — starting server…";
 
             // Fade in
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeIn());
         }
 
-        /// <summary>Ẩn overlay (gọi sau match_ready hoặc match_cancelled).</summary>
+        /// <summary>Hide overlay (gọi sau match_ready hoặc match_cancelled).</summary>
         public void Hide()
         {
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
@@ -124,8 +118,8 @@ namespace NightHunt.UI
         }
 
         /// <summary>
-        /// Đánh dấu một player đã accept — cập nhật row icon.
-        /// Gọi khi nhận WS event "player_accepted" (nếu backend gửi).
+        /// Đánh dấu một player đã accept — update row icon.
+        /// Call khi nhận WS event "player_accepted" (nếu backend gửi).
         /// </summary>
         public void MarkPlayerAccepted(long userId)
         {

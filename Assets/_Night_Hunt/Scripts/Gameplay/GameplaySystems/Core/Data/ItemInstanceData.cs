@@ -40,14 +40,14 @@ namespace NightHunt.GameplaySystems.Core.Data
         /// <summary>Custom data string (JSON, quest data, etc.).</summary>
         public string CustomData;
 
-        /// <summary>Unix timestamp khi item được tạo.</summary>
+        /// <summary>Unix timestamp khi item is created.</summary>
         public long CreatedTimestamp;
 
         #region Conversion
 
         /// <summary>
         /// Convert to runtime ItemInstance.
-        /// Gọi trên client khi nhận sync data.
+        /// Call trên client khi nhận sync data.
         /// </summary>
         public ItemInstance ToInstance()
         {
@@ -69,9 +69,9 @@ namespace NightHunt.GameplaySystems.Core.Data
         /// <summary>
         /// So sánh toàn bộ runtime-relevant fields để FishNet SyncList dirty-detection hoạt động đúng.
         ///
-        /// FishNet gọi Equals() trước khi mark SyncList element dirty.
+        /// FishNet gọi Equals() before mark SyncList element dirty.
         /// Nếu thiếu field (CurrentMagazine, CurrentResource, InventoryIndex, AttachedItems),
-        /// các thay đổi đó sẽ không được broadcast tới clients.
+        /// các thay đổi đó sẽ not allowed broadcast tới clients.
         /// </summary>
         public override bool Equals(object obj)
         {

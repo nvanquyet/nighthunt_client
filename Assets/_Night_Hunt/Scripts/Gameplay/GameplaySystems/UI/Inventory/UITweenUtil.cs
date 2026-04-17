@@ -4,7 +4,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
     /// Wrapper tween an toàn.
-    /// Hiện tại chỉ set giá trị tức thời, sau này có DOTween có thể mở rộng tại đây.
+    /// Hiện tại chỉ set value tức thời, sau này có DOTween có thể mở rộng tại đây.
     /// </summary>
     public static class UITweenUtil
     {

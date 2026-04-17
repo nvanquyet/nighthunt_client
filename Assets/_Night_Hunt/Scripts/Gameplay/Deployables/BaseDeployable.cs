@@ -8,9 +8,9 @@ using NightHunt.Gameplay.Character.Combat;
 namespace NightHunt.Gameplay.Deployables
 {
     /// <summary>
-    /// Lớp cơ sở (Base Class) cho tất cả các thiết bị/vật phẩm có thể đặt xuống đất.
-    /// Quản lý Máu, Trạng thái (Placed/Active), Logic bị phá huỷ.
-    /// Visual nên được xử lý thông qua prefab hierarchy, không cần script tham chiếu ở base.
+    /// Lớp cơ sở (Base Class) cho tất cả các thiết bị/item có thể đặt xuống đất.
+    /// Manages Máu, Trạng thái (Placed/Active), Logic bị phá huỷ.
+    /// Visual nên được handle thông qua prefab hierarchy, không cần script tham chiếu ở base.
     /// </summary>
     public abstract class BaseDeployable : NetworkBehaviour, IHittable
     {
@@ -67,7 +67,7 @@ namespace NightHunt.Gameplay.Deployables
             OnDeployablePlaced();
         }
 
-        /// <summary>Server: Nhận sát thương.</summary>
+        /// <summary>Server: Receive sát thương.</summary>
         [Server]
         public virtual void TakeDamage(int damage)
         {
@@ -100,7 +100,7 @@ namespace NightHunt.Gameplay.Deployables
             Invoke(nameof(DespawnDeployable), 2f);
         }
 
-        /// <summary>Server: Lifecycle method gọi khi cắm thành công.</summary>
+        /// <summary>Server: Lifecycle method gọi khi cắm success.</summary>
         [Server]
         protected virtual void OnDeployablePlaced() { }
 

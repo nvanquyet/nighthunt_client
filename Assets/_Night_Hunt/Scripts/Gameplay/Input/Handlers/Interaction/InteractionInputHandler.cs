@@ -96,7 +96,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             if (pickupAction == null)    pickupAction    = playerMap.FindAction("Pickup");
             if (logNearbyAction == null) logNearbyAction = playerMap.FindAction("LogNearby");
 
-            // Chỉ set true sau khi đảm bảo có map
+            // Chỉ set true after đảm bảo có map
             inputEnabled = true;
 
             if (interactAction != null)

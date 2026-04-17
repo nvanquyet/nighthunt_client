@@ -7,6 +7,7 @@ using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.GameplaySystems.World;
 
@@ -37,7 +38,7 @@ namespace NightHunt.Gameplay.Objective
         [SerializeField] private int _scorePerSecond = 20;
 
         [Header("Debug")]
-        [Tooltip("Bật/tắt hiển thị vòng bo và text thông số ngay trong màn hình Scene Editor")]
+        [Tooltip("Bật/tắt display vòng bo và text thông số ngay trong screen Scene Editor")]
         [SerializeField] private bool _showDebug = true;
 
         // ── SyncVars ──
@@ -230,7 +231,7 @@ namespace NightHunt.Gameplay.Objective
                 text += $"Tiến độ: {(_syncProgress.Value * 100):F1}%\n";
                 string teamStr = _syncControllingTeam.Value switch {
                     -2 => "Tranh Chấp (Contested)",
-                    -1 => "Trống (None)",
+                    -1 => "Empty (None)",
                      _ => $"Team {_syncControllingTeam.Value}"
                 };
                 text += $"Trạng thái: {teamStr}\n";

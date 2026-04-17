@@ -5,7 +5,7 @@ using UnityEngine.Events;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Panel types được dùng trong toàn bộ codebase để identify màn hình hiện tại.
+    /// Panel types được dùng trong toàn bộ codebase để identify screen hiện tại.
     /// </summary>
     public enum PanelType
     {
@@ -19,7 +19,7 @@ namespace NightHunt.UI
     /// UINavigator — Event-driven navigation hub.
     ///
     /// THIẾT KẾ:
-    ///   UINavigator KHÔNG tự quản lý panel nào cả.
+    ///   UINavigator KHÔNG tự manage panel nào cả.
     ///   Nó chỉ fire UnityEvent tương ứng → bạn wire trong Inspector với
     ///   bất kỳ hành động nào: Play animator, SetActive, gọi method, v.v.
     ///
@@ -35,7 +35,7 @@ namespace NightHunt.UI
     ///
     /// TRONG CODE:
     ///   UINavigator.Instance.GoLogin();   // fired từ LoadingManager
-    ///   UINavigator.Instance.GoHome();    // fired sau login thành công
+    ///   UINavigator.Instance.GoHome();    // fired sau login success
     ///   UINavigator.Instance.GoLobby();   // fired khi join room
     ///
     /// TRUY VẤN TRẠNG THÁI:
@@ -71,7 +71,7 @@ namespace NightHunt.UI
 
         private PanelType _currentPanel = PanelType.None;
 
-        /// <summary>Panel hiện tại đang hiển thị.</summary>
+        /// <summary>Panel hiện tại đang display.</summary>
         public PanelType CurrentPanel => _currentPanel;
 
         /// <summary>Fired mỗi khi panel thay đổi. Param = panel mới.</summary>
@@ -131,7 +131,7 @@ namespace NightHunt.UI
 
         /// <summary>
         /// Force navigate dù đang ở cùng panel (bypass guard).
-        /// Dùng khi cần refresh / re-trigger event trên cùng panel.
+        /// Uses when needed refresh / re-trigger event trên cùng panel.
         /// </summary>
         public void GoForce(PanelType target)
         {
@@ -151,7 +151,7 @@ namespace NightHunt.UI
 
         /// <summary>
         /// Navigate bằng PanelType enum.
-        /// Dùng từ LoadingManager: ShowPanel(_targetPanel)
+        /// Uses từ LoadingManager: ShowPanel(_targetPanel)
         /// </summary>
         public void ShowPanel(PanelType target, bool forceInstant = false)
         {

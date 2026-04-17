@@ -6,7 +6,7 @@ namespace NightHunt.Config
     public class BackendConfig : ScriptableObject
     {
         [Header("Environment")]
-        [Tooltip("Chỉ để hiển thị / debug — URL được quyết định bởi build target")]
+        [Tooltip("Chỉ để display / debug — URL được quyết định bởi build target")]
         public EnvironmentProfile environment = EnvironmentProfile.Development;
 
         public enum EnvironmentProfile
@@ -23,13 +23,13 @@ namespace NightHunt.Config
 
 #if UNITY_EDITOR
         [Header("Editor Cloud Testing")]
-        [Tooltip("Bật để kết nối thẳng tới cloud từ Unity Editor (dùng prodApiHost). " +
+        [Tooltip("Bật để connect thẳng tới cloud từ Unity Editor (dùng prodApiHost). " +
                  "Tắt để dùng localhost mkcert bình thường. KHÔNG commit flag này lên git ở trạng thái true.")]
         public bool forceProductionInEditor = false;
 #endif
 
         [Header("Development Build Cloud Testing")]
-        [Tooltip("Bật khi build Development Build mà muốn connect tới cloud thật (dùng prodApiHost thay vì localhost). " +
+        [Tooltip("Bật khi build Development Build mà muốn connect tới cloud thật (dùng prodApiHost instead of localhost). " +
                  "KHÔNG bật khi test local. KHÔNG commit ở trạng thái true.")]
         public bool forceProductionOnDevBuild = false;
 
@@ -40,8 +40,8 @@ namespace NightHunt.Config
 
         // ── SSL / Security ───────────────────────────────────────────────────
         [Header("SSL / Security")]
-        [Tooltip("Cho phép self-signed cert (mkcert) trên cloud dev/staging server.\n" +
-                 "Dùng khi server dùng IP trực tiếp (vd: 20.2.235.140) chưa có domain + Let's Encrypt.\n" +
+        [Tooltip("Allows self-signed cert (mkcert) trên cloud dev/staging server.\n" +
+                 "Uses khi server dùng IP trực tiếp (vd: 20.2.235.140) not yet available domain + Let's Encrypt.\n" +
                  "KHÔNG bật cho Production release. KHÔNG commit ở trạng thái true.")]
         public bool allowSelfSignedCert = false;
 
@@ -50,7 +50,7 @@ namespace NightHunt.Config
         [Tooltip("WS endpoint path — phải khớp với server config")]
         public string wsPath = "/api/ws/game";
 
-        [Tooltip("(Optional) Override toàn bộ WebSocket base URL, ví dụ: wss://custom-host:9000. Để trống để dùng giá trị tự động từ apiHost.")]
+        [Tooltip("(Optional) Override toàn bộ WebSocket base URL, ví dụ: wss://custom-host:9000. Để trống để dùng value tự động từ apiHost.")]
         public string overrideWsBaseUrl = "";
 
         [Tooltip("Timeout HTTP request (giây)")]

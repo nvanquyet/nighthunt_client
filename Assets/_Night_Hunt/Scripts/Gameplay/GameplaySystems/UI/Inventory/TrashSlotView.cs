@@ -6,7 +6,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
     /// Trash slot - drop items vào đây để xóa khỏi inventory.
-    /// Chỉ nhận drop, không hiển thị item.
+    /// Chỉ nhận drop, không display item.
     /// </summary>
     [RequireComponent(typeof(ItemSlotView))]
     public class TrashSlotView : MonoBehaviour, IDropHandler

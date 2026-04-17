@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 
 namespace NightHunt.Gameplay.AntiCamping
 {

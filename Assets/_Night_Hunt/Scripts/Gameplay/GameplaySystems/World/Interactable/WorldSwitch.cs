@@ -1,4 +1,4 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using System;
 using UnityEngine;
@@ -16,10 +16,10 @@ namespace NightHunt.GameplaySystems.World
     ///   - Toggle switch: mỗi lần Interact() đổi state On↔Off → trigger OnActivated / OnDeactivated.
     ///   - Button (OneTimeUse): chỉ trigger 1 lần → OnActivated, sau đó CanInteract = false.
     ///   - State sync qua SyncVar.
-    ///   - Dùng UnityEvent để kết nối với bất kỳ logic nào mà không cần code thêm.
+    ///   - Uses UnityEvent để connect với bất kỳ logic nào mà không cần code thêm.
     ///
     /// SETUP:
-    ///   1. Thêm WorldSwitch vào GameObject trên Scene.
+    ///   1. Add WorldSwitch vào GameObject trên Scene.
     ///   2. Gán InteractableConfig (Type = Switch hoặc Button).
     ///   3. Wire UnityEvents OnActivated / OnDeactivated trong Inspector.
     /// </summary>
@@ -140,10 +140,10 @@ namespace NightHunt.GameplaySystems.World
             // Distance check — server-side re-validation.
             if (playerNob != null)
             {
-                var player = ComponentResolver.Find<NightHunt.Networking.NetworkPlayer>(playerNob)
+                var player = ComponentResolver.Find<NightHunt.Networking.Player.NetworkPlayer>(playerNob)
                     .OnSelf()
                     .InChildren()
-                    .OrLogWarning("[Auto] NightHunt.Networking.NetworkPlayer not found")
+                    .OrLogWarning("[Auto] NightHunt.Networking.Player.NetworkPlayer not found")
                     .Resolve();
                 if (player != null)
                 {

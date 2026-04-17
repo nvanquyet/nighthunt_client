@@ -6,9 +6,9 @@ namespace NightHunt.GameplaySystems.World
     /// Scene component đánh dấu một vị trí spawn World object (item/container/chest).
     ///
     /// DESIGN:
-    ///   - Chỉ chứa dữ liệu vị trí + WorldSpawnConfig.
+    ///   - Chỉ chứa data vị trí + WorldSpawnConfig.
     ///   - WorldSpawnManager đọc tất cả WorldItemSpawnPoint trong scene khi server start
-    ///     và quản lý toàn bộ lifecycle (spawn → loot → respawn).
+    ///     và manage toàn bộ lifecycle (spawn → loot → respawn).
     ///   - Không chứa logic spawn — đúng SRP.
     ///
     /// Gizmos:
@@ -60,7 +60,7 @@ namespace NightHunt.GameplaySystems.World
             }
         }
 
-        /// <summary>True nếu đã đạt MaxActive và không thể spawn thêm.</summary>
+        /// <summary>True nếu đã đạt MaxActive và cannot spawn thêm.</summary>
         public bool IsFull => spawnConfig != null && _activeCount >= spawnConfig.MaxActive;
 
         internal void RegisterActive()   { _activeCount++; _spawnCount++; }

@@ -18,14 +18,14 @@ namespace NightHunt.GameplaySystems.Core.Configs
         public float HoldDuration = 1.0f;
 
         [Header("Auto Loot")]
-        [Tooltip("Cho phép auto loot (chỉ áp dụng cho WorldItem với Instant mode)")]
+        [Tooltip("Allows auto loot (chỉ áp dụng cho WorldItem với Instant mode)")]
         public bool AllowAutoLoot = true;
 
         [Header("UI Settings")]
         [Tooltip("Hiển thị prompt text khi có thể interact")]
         public bool ShowPrompt = true;
 
-        [Tooltip("Prompt text hiển thị (ví dụ: 'Press E to Open', 'Hold E to Loot')")]
+        [Tooltip("Prompt text display (ví dụ: 'Press E to Open', 'Hold E to Loot')")]
         [TextArea(1, 2)]
         public string PromptText = "Press E to Interact";
 

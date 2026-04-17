@@ -11,7 +11,7 @@ using UnityEngine;
 using Unity.Cinemachine;
 using NightHunt.Utilities;
 
-namespace NightHunt.Networking
+namespace NightHunt.Networking.Player
 {
     /// <summary>
     /// NETWORK PLAYER - Player object representation

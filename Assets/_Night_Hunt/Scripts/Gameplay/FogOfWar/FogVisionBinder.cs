@@ -9,7 +9,7 @@ namespace NightHunt.Gameplay.FogOfWar
 {
     /// <summary>
     /// Binds player VisionRange stat to FogOfWarRevealer3D.ViewRadius.
-    /// - Đọc stat qua IPlayerStatSystem (GetStat / OnStatChanged).
+    /// - Read stat qua IPlayerStatSystem (GetStat / OnStatChanged).
     /// - Chỉ dùng cho local client (fog là visual client-side).
     /// - Khi player chết, tắt revealer để không reveal FOW qua fog.
     /// </summary>
@@ -17,7 +17,7 @@ namespace NightHunt.Gameplay.FogOfWar
     public class FogVisionBinder : MonoBehaviour
     {
         [Header("Config")]
-        [Tooltip("Fallback nếu stat system chưa sẵn sàng hoặc không có VisionRange.")]
+        [Tooltip("Fallback nếu stat system not ready hoặc not available VisionRange.")]
         [SerializeField] private float defaultViewRadius = 15f;
 
         private FogOfWarRevealer3D _revealer;

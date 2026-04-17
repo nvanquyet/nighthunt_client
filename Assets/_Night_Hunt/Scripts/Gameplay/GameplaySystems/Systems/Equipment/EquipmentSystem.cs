@@ -110,10 +110,10 @@ namespace NightHunt.GameplaySystems.Equipment
                 .Resolve();
 
             if (_inventoryConfig == null)
-                Debug.LogError("[EquipmentSystem] InventoryConfig is null!");
+                Debug.LogWarning("[EquipmentSystem] InventoryConfig is null!");
 
             if (_inventorySystem == null)
-                Debug.LogError("[EquipmentSystem] IInventorySystem is null!");
+                Debug.LogWarning("[EquipmentSystem] IInventorySystem is null!");
         }
         
 #if UNITY_EDITOR

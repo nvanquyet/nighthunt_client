@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -12,9 +12,9 @@ public class PrEndLevelZone : MonoBehaviour {
     // Use this for initialization
     void Start () {
         //Check if it´s going to work ok
-        if (transform.GetComponentInParent<PrGameSetup>() == false && FindObjectOfType<PrGameSetup>() != null)
+        if (transform.GetComponentInParent<PrGameSetup>() == false && FindFirstObjectByType<PrGameSetup>() != null)
         {
-            transform.SetParent(FindObjectOfType<PrGameSetup>().transform);
+            transform.SetParent(FindFirstObjectByType<PrGameSetup>().transform);
         }
         else if (transform.GetComponentInParent<PrGameSetup>() == false)
         {

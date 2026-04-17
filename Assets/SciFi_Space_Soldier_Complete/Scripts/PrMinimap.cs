@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -51,7 +51,7 @@ public class PrMinimap : MonoBehaviour
     Bounds CalculateSceneBounds()
     {
         Bounds b = new Bounds();
-        foreach (Renderer r in GameObject.FindObjectsOfType<Renderer>())
+        foreach (Renderer r in FindObjectsByType<Renderer>(FindObjectsSortMode.None))
         {
             b.Encapsulate(r.bounds);
         }

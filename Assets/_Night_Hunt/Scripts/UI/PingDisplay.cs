@@ -15,8 +15,8 @@ namespace NightHunt.UI
 {
     /// <summary>
     /// Ping Display - Tự động chuyển giữa backend ping và headless server ping
-    /// - Backend ping: Khi chưa kết nối FishNet
-    /// - Headless ping: Khi đã kết nối FishNet
+    /// - Backend ping: Khi not yet connected FishNet
+    /// - Headless ping: Khi connected FishNet
     /// Sử dụng Singleton pattern để dễ access
     /// </summary>
     public class PingDisplay : MonoBehaviour

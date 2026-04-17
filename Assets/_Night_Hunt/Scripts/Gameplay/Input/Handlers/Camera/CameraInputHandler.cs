@@ -124,11 +124,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
         {
             if (inputEnabled) return;
 
-            // Retry nếu Awake chạy trước khi InputLayerManager sẵn sàng
+            // Retry nếu Awake chạy before InputLayerManager ready
             if (cameraActionMap == null) InitializeActions();
             if (cameraActionMap == null)
             {
-                Debug.LogError("[CameraInputHandler] cameraActionMap null – không thể EnableInput!");
+                Debug.LogError("[CameraInputHandler] cameraActionMap null – cannot EnableInput!");
                 return;
             }
             else
@@ -191,8 +191,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
 
         private void OnZoomPerformed(InputAction.CallbackContext context)
         {
-            // ZoomInOut is an Axis (float)
-            float scrollValue = context.ReadValue<float>();
+            // ZoomInOut is an Axis (float) — scaled by _zoomSpeed for sensitivity control.
+            float scrollValue = context.ReadValue<float>() * _zoomSpeed;
             OnZoom?.Invoke(scrollValue);
         }
 

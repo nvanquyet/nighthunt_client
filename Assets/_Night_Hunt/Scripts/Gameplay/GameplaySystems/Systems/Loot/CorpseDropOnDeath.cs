@@ -144,7 +144,7 @@ namespace NightHunt.GameplaySystems.Loot
                         attachmentSystem.DetachAllFromItem(kvp.Value.InstanceID);
                     }
 
-                    // Refresh item reference sau khi unequip
+                    // Refresh item reference after unequip
                     var refreshedItem = inventorySystem?.GetItemByInstanceID(kvp.Value?.InstanceID);
                     if (refreshedItem != null)
                     {
@@ -153,7 +153,7 @@ namespace NightHunt.GameplaySystems.Loot
                 }
             }
 
-            // 2. Inventory items (sau khi equipment đã unequip)
+            // 2. Inventory items (after equipment đã unequip)
             if (inventorySystem != null)
             {
                 foreach (var item in inventorySystem.GetAllItems())
@@ -166,12 +166,12 @@ namespace NightHunt.GameplaySystems.Loot
         }
 
         /// <summary>
-        /// SERVER: Clear player systems sau khi đã collect items
+        /// SERVER: Clear player systems after đã collect items
         /// </summary>
         [Server]
         private void ClearPlayerSystems()
         {
-            // Clear inventory (sau khi đã collect)
+            // Clear inventory (after đã collect)
             if (inventorySystem != null)
                 inventorySystem.ClearInventory();
         }

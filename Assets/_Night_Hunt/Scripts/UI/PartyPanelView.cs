@@ -5,6 +5,7 @@ using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Services.Party;
 using NightHunt.Services.Friend;
+using NightHunt.Utils;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -204,7 +205,7 @@ namespace NightHunt.UI
         private void OnLeavePartyClicked()
         {
             GameModalWindow.Instance?.ShowConfirm(
-                "Rời party?",
+                "Leave Party?",
                 "Bạn có chắc muốn rời khỏi party?",
                 onConfirm: async () =>
                 {
@@ -220,7 +221,7 @@ namespace NightHunt.UI
                         Debug.LogError($"[PartyPanel] Failed to leave party: {result.Message}");
                     }
                 },
-                confirmText: "Rời party", cancelText: "Hủy");
+                confirmText: "Leave Party", cancelText: "Cancel");
         }
 
         private void OnRefreshPartyClicked()
@@ -251,9 +252,17 @@ namespace NightHunt.UI
 
         private async void OnTransferLeader(long memberId)
         {
-            // TransferLeader endpoint not yet implemented on server — no-op for now
-            Debug.LogWarning("[PartyPanel] TransferLeader is pending backend implementation.");
-            await System.Threading.Tasks.Task.CompletedTask;
+            if (_partyService == null) return;
+            var result = await _partyService.TransferLeader(memberId);
+            if (result.Success)
+            {
+                ConditionalLogger.Log("PartyPanel", $"Leader transferred to userId={memberId}");
+                LoadParty(); // Refresh party view
+            }
+            else
+            {
+                ConditionalLogger.LogError("PartyPanel", $"TransferLeader failed: {result.Message}");
+            }
         }
 
         #endregion

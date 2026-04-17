@@ -50,6 +50,10 @@ namespace NightHunt.Networking
         private bool _connected;
         private bool _dsReady;          // true after ds_ready WS received
         private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
+        private bool _matchEnded;       // true after a clean match end — suppresses TryRetry
+
+        /// <summary>Fired on each retry attempt (currentAttempt, maxAttempts).</summary>
+        public event System.Action<int, int> OnRetryAttempt;
 
         // Survives scene transitions: set true only when ds_ready WS event is received
         private static bool s_dsReadyReceived = false;
@@ -60,7 +64,7 @@ namespace NightHunt.Networking
             {
                 networkManager = FindFirstObjectByType<NetworkManager>();
                 if (networkManager == null)
-                    Debug.LogError("[NetworkGameManager] NetworkManager not found! Please add NetworkManager to scene.");
+                    Debug.LogError("[NGM] NetworkManager not found! Please add NetworkManager to scene.");
             }
         }
 
@@ -73,6 +77,7 @@ namespace NightHunt.Networking
             if (networkManager == null) return;
             networkManager.SceneManager.OnLoadEnd               += OnSceneLoadEnd;
             networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded  += OnUnitySceneLoaded;
             if (GameWebSocketService.Instance != null)
                 GameWebSocketService.Instance.OnDsReady += OnDsReadyReceived;
 
@@ -83,7 +88,7 @@ namespace NightHunt.Networking
             var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
             if (activeScene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase))
             {
-                Debug.Log($"[NetworkGameManager] Started inside map scene '{activeScene.name}' — setting _gameSceneLoaded = true.");
+                Debug.Log($"[NGM] Started inside map scene '{activeScene.name}' — setting _gameSceneLoaded = true.");
                 _gameSceneLoaded = true;
             }
 
@@ -93,7 +98,7 @@ namespace NightHunt.Networking
             if (!_dsReady && s_dsReadyReceived
                 && RoomState.Instance?.CurrentGameMode == GameMode.Ranked_DS)
             {
-                Debug.Log("[NetworkGameManager] Fix B: ds_ready was received before this instance subscribed — setting _dsReady = true.");
+                Debug.Log("[NGM] Fix B: ds_ready was received before this instance subscribed — setting _dsReady = true.");
                 _dsReady = true;
             }
 
@@ -109,9 +114,33 @@ namespace NightHunt.Networking
                 networkManager.SceneManager.OnLoadEnd               -= OnSceneLoadEnd;
                 networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
             }
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnUnitySceneLoaded;
             if (GameWebSocketService.Instance != null)
                 GameWebSocketService.Instance.OnDsReady -= OnDsReadyReceived;
             base.OnDestroy();
+        }
+
+        /// <summary>
+        /// Called by Unity SceneManager when any scene finishes loading.
+        /// Handles the case where SceneLoader.LoadGame() uses Unity's LoadScene
+        /// (which does not fire FishNet's OnLoadEnd).
+        /// </summary>
+        private void OnUnitySceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase))
+            {
+                _gameSceneLoaded = true;
+                TryConnectIfReady();
+            }
+        }
+
+        /// <summary>
+        /// Resets static connection flags. Call at the start of every new matchmaking cycle
+        /// (e.g. from RoomState.ClearRoom) so stale ds_ready signals don't leak across matches.
+        /// </summary>
+        public static void ResetConnectionFlags()
+        {
+            s_dsReadyReceived = false;
         }
 
         // ── Dedicated Server (Ranked mode) ────────────────────────────────────
@@ -122,12 +151,12 @@ namespace NightHunt.Networking
         /// </summary>
         public void StartServer()
         {
-            if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
-            Debug.Log($"[NetworkGameManager] Starting Dedicated Server on port {port}...");
+            if (networkManager == null) { Debug.LogError("[NGM] NetworkManager is null!"); return; }
+            Debug.Log($"[NGM] Starting Dedicated Server on port {port}...");
             if (!networkManager.ServerManager.StartConnection())
-                Debug.LogError("[NetworkGameManager] Failed to start server!");
+                Debug.LogError("[NGM] Failed to start server!");
             else
-                Debug.Log("[NetworkGameManager] Dedicated Server started successfully!");
+                Debug.Log("[NGM] Dedicated Server started successfully!");
         }
 
         /// <summary>
@@ -135,13 +164,13 @@ namespace NightHunt.Networking
         /// </summary>
         public void StartClientDS(string dsIp = null, ushort dsPort = 0)
         {
-            if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
+            if (networkManager == null) { Debug.LogError("[NGM] NetworkManager is null!"); return; }
             string ip = string.IsNullOrEmpty(dsIp) ? defaultServerAddress : dsIp;
             ushort p  = dsPort > 0 ? dsPort : port;
-            Debug.Log($"[NetworkGameManager] Connecting to DS {ip}:{p}...");
+            Debug.Log($"[NGM] Connecting to DS {ip}:{p}...");
             SetTransportAddress(ip, p);
             if (!networkManager.ClientManager.StartConnection())
-                Debug.LogError("[NetworkGameManager] Failed to start DS client connection!");
+                Debug.LogError("[NGM] Failed to start DS client connection!");
         }
 
         /// <summary>Legacy overload kept for backwards compatibility.</summary>
@@ -150,39 +179,104 @@ namespace NightHunt.Networking
         // ── Relay (Custom mode) ───────────────────────────────────────────────
 
         /// <summary>
-        /// Start FishNet HOST through the relay – used by the room owner (Custom mode).
+        /// Start FishNet HOST in relay mode – used by the room owner (Custom mode).
         ///
-        /// How it works:
-        ///   1. FishNet Server binds locally (loopback only – not internet-exposed).
-        ///   2. FishNet Client connects outbound to relay:sessionPort
-        ///      (relay registered this connection as "host" via POST /api/relay/create).
-        ///   3. Relay forwards all subsequent packets between host and clients.
+        /// Relay topology (transparent UDP forwarding):
+        ///   - Relay VPS has a dedicated UDP port per session (allocated by relay_server.py).
+        ///   - All non-host players connect outbound to relay:sessionPort → relay forwards to host.
+        ///   - Host's FishNet Server binds 0.0.0.0:localPort to receive forwarded packets.
+        ///   - Host also starts FishNet Client → connects to local loopback (host player view).
+        ///   - A UDP heartbeat keeps the NAT hole open: relay:sessionPort ← host (prevents NAT timeout).
         ///
-        /// NOTE: This requires the Tugboat transport to be configured so the *server*
-        /// bind address is 127.0.0.1 (localhost) and the *client* address is the relay.
-        /// A custom RelayTransport shim (future work) will handle the packet header.
+        /// Why this works across different networks / mobile:
+        ///   All connections are OUTBOUND from each player's device to the relay VPS.
+        ///   NAT routers always allow outbound connections. The relay forwards packets
+        ///   back through the established NAT state — no port forwarding needed.
+        ///
+        /// Requirements:
+        ///   - relay_server.py running on VPS (see docker-compose.yml).
+        ///   - VPS firewall: open UDP port range 7777–7900.
+        ///   - Host machine: FishNet Server port (7777) must accept packets from relay's IP
+        ///     (no local firewall blocking UDP 7777 from external IPs).
         /// </summary>
         public void StartHostWithRelay(string relayIp, ushort relayPort, string sessionId)
         {
-            if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
-            Debug.Log($"[NetworkGameManager] Starting HOST via Relay {relayIp}:{relayPort} session={sessionId}");
+            if (networkManager == null) { Debug.LogError("[NGM] NetworkManager is null!"); return; }
+            Debug.Log($"[NGM] Starting HOST via Relay {relayIp}:{relayPort} session={sessionId}");
 
-            // Bind server to loopback so it never accepts direct internet connections
-            SetTransportServerBindAddress("127.0.0.1");
+            // Bind server to all interfaces so the relay can forward packets to us.
+            // The relay's IP sends us UDP; our server must accept it (not localhost-only).
+            SetTransportServerBindAddress("0.0.0.0");
 
-            // Start server (loopback only)
+            // Start FishNet Server — game logic runs here, accepts forwarded client packets.
             if (!networkManager.ServerManager.StartConnection())
             {
-                Debug.LogError("[NetworkGameManager] Failed to start relay host server!");
+                Debug.LogError("[NGM] Failed to start relay host server!");
                 return;
             }
 
-            // Connect client side to relay (host traffic is proxied by relay to all clients)
-            SetTransportAddress(relayIp, relayPort);
+            // Host's own FishNet Client connects to localhost (loopback) — no relay needed for host player.
+            // The relay only carries traffic for REMOTE clients.
+            // GetPort() reads Tugboat's configured server port (default 7777).
+            ushort localPort = networkManager.TransportManager.Transport?.GetPort() ?? 7777;
+            SetTransportAddress("127.0.0.1", localPort);  // local server port (Tugboat default 7777)
             if (!networkManager.ClientManager.StartConnection())
-                Debug.LogError("[NetworkGameManager] Failed to start relay host client!");
-            else
-                Debug.Log("[NetworkGameManager] Relay Host started.");
+            {
+                Debug.LogError("[NGM] Failed to start relay host local client!");
+                return;
+            }
+
+            // Start heartbeat: send periodic UDP packets from the host's SERVER port to relay.
+            // This keeps the NAT mapping alive so the relay can route client packets back to us.
+            StartRelayHeartbeat(relayIp, relayPort, sessionId);
+
+            Debug.Log("[NGM] Relay Host started. Heartbeat active to keep NAT hole open.");
+        }
+
+        private System.Collections.IEnumerator _heartbeatCoroutine;
+
+        private void StartRelayHeartbeat(string relayIp, ushort relayPort, string sessionId)
+        {
+            if (_heartbeatCoroutine != null)
+                StopCoroutine(_heartbeatCoroutine);
+            _heartbeatCoroutine = RelayHeartbeatRoutine(relayIp, relayPort, sessionId);
+            StartCoroutine(_heartbeatCoroutine);
+        }
+
+        private System.Collections.IEnumerator RelayHeartbeatRoutine(string relayIp, ushort relayPort, string sessionId)
+        {
+            // Send a tiny UDP packet to the relay every 10 seconds from the host's perspective.
+            // This ensures the NAT mapping (relay → host) stays alive (most NATs expire after 30-120s).
+            // We use a raw UdpClient so we can control the source port to match FishNet's server port.
+            System.Net.Sockets.UdpClient udp = null;
+            byte[] ping = System.Text.Encoding.ASCII.GetBytes("NHRELAY_PING");
+            var remoteEp = new System.Net.IPEndPoint(System.Net.IPAddress.Parse(relayIp), relayPort);
+
+            try
+            {
+                udp = new System.Net.Sockets.UdpClient();
+                udp.ExclusiveAddressUse = false;
+                // Bind to any available port — just need outbound NAT hole from this machine.
+                udp.Client.SetSocketOption(System.Net.Sockets.SocketOptionLevel.Socket,
+                    System.Net.Sockets.SocketOptionName.ReuseAddress, true);
+                udp.Client.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Any, 0));
+                Debug.Log($"[NGM] Relay heartbeat started → {relayIp}:{relayPort}");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[NGM] Relay heartbeat socket failed: {e.Message}");
+                yield break;
+            }
+
+            while (networkManager != null && (networkManager.IsServerStarted || networkManager.IsClientStarted))
+            {
+                try { udp.Send(ping, ping.Length, remoteEp); }
+                catch (System.Exception e) { Debug.LogWarning($"[NGM] Heartbeat send failed: {e.Message}"); }
+                yield return new UnityEngine.WaitForSeconds(10f);
+            }
+
+            udp?.Close();
+            Debug.Log("[NGM] Relay heartbeat stopped.");
         }
 
         /// <summary>
@@ -192,11 +286,11 @@ namespace NightHunt.Networking
         /// </summary>
         public void StartClientWithRelay(string relayIp, ushort relayPort, string sessionId)
         {
-            if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
-            Debug.Log($"[NetworkGameManager] Connecting CLIENT via Relay {relayIp}:{relayPort} session={sessionId}");
+            if (networkManager == null) { Debug.LogError("[NGM] NetworkManager is null!"); return; }
+            Debug.Log($"[NGM] Connecting CLIENT via Relay {relayIp}:{relayPort} session={sessionId}");
             SetTransportAddress(relayIp, relayPort);
             if (!networkManager.ClientManager.StartConnection())
-                Debug.LogError("[NetworkGameManager] Failed to start relay client connection!");
+                Debug.LogError("[NGM] Failed to start relay client connection!");
         }
 
         // ── Auto-connect (triggered by scene load) ────────────────────────────
@@ -228,11 +322,24 @@ namespace NightHunt.Networking
         {
             s_dsReadyReceived = true;
             _dsReady = true;
-            Debug.Log("[NetworkGameManager] DS is ready — checking if scene loaded to connect.");
+            var room = RoomState.Instance;
+            Debug.Log($"[NGM] NotifyDsReady \u25ba dsIp={room?.DsIp} dsPort={room?.DsPort} gameSceneLoaded={_gameSceneLoaded}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             MatchLoadingOverlay.Instance?.MarkDsReady();
             TryConnectIfReady();
         }
-
+        /// <summary>
+        /// Called by MatchFlowCoordinator on match_ready when mode is Custom_Relay.
+        /// Relay games do not wait for ds_ready — connect as soon as scene loads.
+        /// Sets _dsReady=true so TryConnectIfReady() does not block on the DS flag.
+        /// </summary>
+        public void NotifyRelayReady()
+        {
+            s_dsReadyReceived = true;
+            _dsReady = true;
+            var room = RoomState.Instance;
+            Debug.Log($"[NGM] NotifyRelayReady ▶ relayIp={room?.RelayIp} relayPort={room?.RelayPort} isHost={room?.IsHostPlayer} gameSceneLoaded={_gameSceneLoaded}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            TryConnectIfReady();
+        }
         private void OnDsReadyReceived(GameWebSocketService.DsReadyEvent _) => NotifyDsReady();
 
         /// <summary>
@@ -246,7 +353,7 @@ namespace NightHunt.Networking
             var room = RoomState.Instance;
             if (room == null)
             {
-                Debug.LogWarning("[NetworkGameManager] TryConnectIfReady: RoomState is null — cannot auto-connect. " +
+                Debug.LogWarning("[NGM] TryConnectIfReady: RoomState is null — cannot auto-connect. " +
                                  "Use NetworkStartMenu for dev/editor testing (GameMode.None path).");
                 return;
             }
@@ -256,7 +363,7 @@ namespace NightHunt.Networking
             {
                 if (!_gameSceneLoaded)
                 {
-                    Debug.Log("[NetworkGameManager] TryConnectIfReady: waiting for map scene to load (Relay mode).");
+                    Debug.Log("[NGM] TryConnectIfReady: WAITING for map scene (Relay mode).");
                     return;
                 }
             }
@@ -264,26 +371,22 @@ namespace NightHunt.Networking
             {
                 if (!_gameSceneLoaded)
                 {
-                    Debug.Log("[NetworkGameManager] TryConnectIfReady: waiting for map scene to load (Ranked_DS mode).");
+                    Debug.Log("[NGM] TryConnectIfReady: WAITING for map scene (Ranked_DS mode).");
                     return;
                 }
                 if (!_dsReady)
                 {
-                    Debug.Log($"[NetworkGameManager] TryConnectIfReady: waiting for ds_ready WS event " +
-                              $"(DsIp={room.DsIp} DsPort={room.DsPort}). " +
-                              "DS may still be booting — this is expected if DS was just allocated.");
+                    Debug.Log($"[NGM] TryConnectIfReady: WAITING for ds_ready WS \u2014 DsIp={room.DsIp} DsPort={room.DsPort}. DS may still be booting.");
                     return;
                 }
             }
             else
             {
-                // GameMode.None — dev/editor; NetworkStartMenu handles connection manually
-                Debug.Log("[NetworkGameManager] TryConnectIfReady: GameMode.None — skipping auto-connect. " +
-                          "Use NetworkStartMenu buttons (StartServer / StartClientLocal / StartClient) for testing.");
+                Debug.Log("[NGM] TryConnectIfReady: GameMode.None \u2014 skipping (use NetworkStartMenu for dev).");
                 return;
             }
 
-            Debug.Log($"[NetworkGameManager] ✅ Both conditions met (_gameSceneLoaded={_gameSceneLoaded}, _dsReady={_dsReady}) — auto-connecting.");
+            Debug.Log($"[NGM] TryConnectIfReady PASS — sceneLoaded={_gameSceneLoaded} dsReady={_dsReady}. Starting auto-connect.");
             _retryCount        = 0;
             _connectionStarted = false;
             _connected         = false;
@@ -294,16 +397,30 @@ namespace NightHunt.Networking
         {
             switch (args.ConnectionState)
             {
+                case LocalConnectionState.Starting:
+                    Debug.Log($"[NGM] FishNet client STARTING — t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+                    break;
+
                 case LocalConnectionState.Started:
                     _connected = true;
-                    Debug.Log("[NetworkGameManager] ✅ Client connected to match server.");
+                    Debug.Log($"[NGM] FishNet client CONNECTED  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                     MatchLoadingOverlay.Instance?.MarkConnected();
                     break;
 
+                case LocalConnectionState.Stopping:
+                    Debug.Log($"[NGM] FishNet client STOPPING — t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+                    break;
+
                 case LocalConnectionState.Stopped:
+                    Debug.Log($"[NGM] FishNet client STOPPED — connectionStarted={_connectionStarted} wasConnected={_connected} matchEnded={_matchEnded}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                     if (_connectionStarted && !_connected)
                     {
-                        Debug.LogWarning("[NetworkGameManager] Connection to match server failed.");
+                        if (_matchEnded)
+                        {
+                            Debug.Log("[NGM] Match ended cleanly — skipping reconnect retry.");
+                            return;
+                        }
+                        Debug.LogWarning($"[NGM] FishNet connect FAILED (never reached Started) — attempt {_retryCount + 1}/{_maxRetries}.");
                         _connectionStarted = false;
                         TryRetry();
                     }
@@ -316,7 +433,7 @@ namespace NightHunt.Networking
             var room = RoomState.Instance;
             if (room == null)
             {
-                Debug.LogWarning("[NetworkGameManager] RoomState not found — skipping auto-connect (dev mode).");
+                Debug.LogWarning("[NGM] RoomState not found — skipping auto-connect (dev mode).");
                 return;
             }
 
@@ -332,7 +449,7 @@ namespace NightHunt.Networking
 
                 default:
                     // GameMode.None → dev / editor test, NetworkStartMenu handles it
-                    Debug.Log("[NetworkGameManager] GameMode.None — skipping auto-connect (use NetworkStartMenu for dev testing).");
+                    Debug.Log("[NGM] GameMode.None — skipping auto-connect (use NetworkStartMenu for dev testing).");
                     break;
             }
         }
@@ -341,7 +458,7 @@ namespace NightHunt.Networking
         {
             if (string.IsNullOrEmpty(room.RelayIp) || room.RelayPort == 0)
             {
-                Debug.LogError("[NetworkGameManager] Custom_Relay mode but RelayIp/Port not set in RoomState!");
+                Debug.LogError($"[NGM] AutoConnectRelay FAILED \u2014 RelayIp='{room.RelayIp}' RelayPort={room.RelayPort} not set in RoomState!");
                 return;
             }
 
@@ -350,23 +467,23 @@ namespace NightHunt.Networking
 
             if (room.IsHostPlayer)
             {
-                Debug.Log($"[NetworkGameManager] Starting HOST via relay {room.RelayIp}:{room.RelayPort} session={room.RelaySessionId}");
+                Debug.Log($"[NGM] AutoConnectRelay HOST \u2014 relayIp={room.RelayIp} relayPort={room.RelayPort} session={room.RelaySessionId} playerCount={room.PlayerCount}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                 StartHostWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
 
                 int expected = room.PlayerCount > 0 ? room.PlayerCount : 2;
                 if (ServerGameManager.Instance != null)
                 {
                     ServerGameManager.Instance.SetExpectedPlayerCount(expected);
-                    Debug.Log($"[NetworkGameManager] Host: expectedPlayerCount set to {expected}");
+                    Debug.Log($"[NGM] Relay HOST: expectedPlayerCount set to {expected}");
                 }
                 else
                 {
-                    Debug.LogWarning("[NetworkGameManager] ServerGameManager.Instance null — expectedPlayerCount not applied.");
+                    Debug.LogWarning("[NGM] ServerGameManager.Instance null \u2014 expectedPlayerCount not applied.");
                 }
             }
             else
             {
-                Debug.Log($"[NetworkGameManager] Connecting CLIENT via relay {room.RelayIp}:{room.RelayPort}");
+                Debug.Log($"[NGM] AutoConnectRelay CLIENT \u2014 relayIp={room.RelayIp} relayPort={room.RelayPort} session={room.RelaySessionId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                 StartClientWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
             }
         }
@@ -375,14 +492,15 @@ namespace NightHunt.Networking
         {
             if (string.IsNullOrEmpty(room.DsIp) || room.DsPort == 0)
             {
-                Debug.LogError("[NetworkGameManager] Ranked_DS mode but DsIp/DsPort not set in RoomState!");
+                Debug.LogError($"[NGM] AutoConnectDS FAILED \u2014 DsIp='{room.DsIp}' DsPort={room.DsPort} not set in RoomState! " +
+                               "GWS.SetDedicatedServer must be called on ds_ready before reaching here.");
                 return;
             }
 
             _connectionStarted = true;
             _connected         = false;
 
-            Debug.Log($"[NetworkGameManager] Connecting to DS {room.DsIp}:{room.DsPort}");
+            Debug.Log($"[NGM] AutoConnectDS \u25ba dsIp={room.DsIp} dsPort={room.DsPort} matchId={room.CurrentMatchId} mapId={room.DsMapId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             StartClientDS(room.DsIp, room.DsPort);
         }
 
@@ -390,12 +508,13 @@ namespace NightHunt.Networking
         {
             if (_retryCount >= _maxRetries)
             {
-                Debug.LogError("[NetworkGameManager] Max retries reached — returning to home.");
+                Debug.LogError($"[NGM] TryRetry \u2014 max retries ({_maxRetries}) reached \u2014 returning to Home.");
                 Invoke(nameof(LoadHome), 1.5f);
                 return;
             }
             _retryCount++;
-            Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
+            OnRetryAttempt?.Invoke(_retryCount, _maxRetries);
+            Debug.LogWarning($"[NGM] TryRetry \u25ba attempt {_retryCount}/{_maxRetries} \u2014 retrying in {_retryDelay}s");
             Invoke(nameof(RetryConnect), _retryDelay);
         }
 
@@ -405,11 +524,19 @@ namespace NightHunt.Networking
             AutoConnectFromRoomState();
         }
 
+        /// <summary>Signals that the match ended cleanly — suppresses TryRetry on disconnect.</summary>
+        public void NotifyMatchEnded()
+        {
+            _matchEnded = true;
+            Debug.Log("[NGM] Match ended — retry suppressed.");
+        }
+
         private void LoadHome()
         {
             s_dsReadyReceived = false;
             _dsReady          = false;
             _gameSceneLoaded  = false;
+            _matchEnded       = false;
             RoomState.Instance?.ClearRoom();
             SceneLoader.LoadHome();
         }
@@ -438,8 +565,13 @@ namespace NightHunt.Networking
         /// <summary>Immediately stop all FishNet connections.</summary>
         public void Disconnect()
         {
+            if (_heartbeatCoroutine != null)
+            {
+                StopCoroutine(_heartbeatCoroutine);
+                _heartbeatCoroutine = null;
+            }
             if (networkManager == null) return;
-            Debug.Log("[NetworkGameManager] Disconnecting...");
+            Debug.Log("[NGM] Disconnecting...");
             if (IsServer) networkManager.ServerManager.StopConnection(true);
             if (IsClient) networkManager.ClientManager.StopConnection();
         }
@@ -452,10 +584,10 @@ namespace NightHunt.Networking
         private void SetTransportAddress(string address, ushort targetPort)
         {
             var transport = networkManager.TransportManager.Transport;
-            if (transport == null) { Debug.LogWarning("[NetworkGameManager] Transport is null!"); return; }
+            if (transport == null) { Debug.LogWarning("[NGM] Transport is null!"); return; }
             transport.SetClientAddress(address);
             transport.SetPort(targetPort);
-            Debug.Log($"[NetworkGameManager] Transport address set → {address}:{targetPort} (type={transport.GetType().Name})");
+            Debug.Log($"[NGM] Transport address set → {address}:{targetPort} (type={transport.GetType().Name})");
         }
 
         private void SetTransportServerBindAddress(string bindAddress)
@@ -479,11 +611,11 @@ namespace NightHunt.Networking
                     return;
                 }
                 if (logMissing)
-                    Debug.LogWarning($"[NetworkGameManager] Property '{propName}' not found on {type.Name}.");
+                    Debug.LogWarning($"[NGM] Property '{propName}' not found on {type.Name}.");
             }
             catch (System.Exception e)
             {
-                Debug.LogWarning($"[NetworkGameManager] Could not set '{propName}': {e.Message}");
+                Debug.LogWarning($"[NGM] Could not set '{propName}': {e.Message}");
             }
         }
 
@@ -498,11 +630,11 @@ namespace NightHunt.Networking
                 var backend = NightHunt.Core.GameManager.Instance?.BackendClient;
                 if (backend == null) return;
                 await backend.DeleteAsync<object>($"/api/relay/{sessionId}");
-                Debug.Log($"[NetworkGameManager] Relay session {sessionId} cleaned up.");
+                Debug.Log($"[NGM] Relay session {sessionId} cleaned up.");
             }
             catch (System.Exception e)
             {
-                Debug.LogWarning($"[NetworkGameManager] Relay cleanup failed (non-fatal): {e.Message}");
+                Debug.LogWarning($"[NGM] Relay cleanup failed (non-fatal): {e.Message}");
             }
         }
     }

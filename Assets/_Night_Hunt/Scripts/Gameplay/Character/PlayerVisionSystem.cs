@@ -1,7 +1,8 @@
-﻿using UnityEngine;
+using UnityEngine;
 using FishNet.Object;
 using FOW;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 
 namespace NightHunt.Gameplay.Player
 {

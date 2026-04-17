@@ -3,6 +3,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using UnityEngine;
 using NightHunt.Utilities;
 

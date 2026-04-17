@@ -21,7 +21,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Range(0.01f, 1f)]
         public float MinMovementSpeedPercent = 0.1f; // 10% min speed
         
-        [Tooltip("Weight percent tối đa trước khi đạt min speed (1.5 = 150%)")]
+        [Tooltip("Weight percent tối đa before đạt min speed (1.5 = 150%)")]
         [Min(1f)]
         public float MaxOverweightPercent = 1.5f; // 150% weight
         
@@ -40,7 +40,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Tooltip("Movement có interrupt item usage không")]
         public bool MovementInterruptsUsage = false;
         
-        [Tooltip("Khoảng cách tối đa có thể di chuyển trong lúc usage (meters)")]
+        [Tooltip("Khoảng cách tối đa có thể di chuyển during usage (meters)")]
         [Min(0f)]
         public float MaxUsageMovementDistance = 2f;
         

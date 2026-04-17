@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+#if UNITY_EDITOR
 using UnityEngine;
 using System.Collections;
 using UnityEditor;
@@ -475,7 +475,9 @@ public class PrDungeonGenerator : ScriptableWizard
         UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene(), null,false);
 
         //Generate Navigation Mesh
+#pragma warning disable CS0618
         UnityEditor.AI.NavMeshBuilder.BuildNavMesh();
+#pragma warning restore CS0618
         
         //Delete Default Objects if they are in the scene
         if (GameObject.Find("Main Camera"))

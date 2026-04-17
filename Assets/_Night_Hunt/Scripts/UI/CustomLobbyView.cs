@@ -66,7 +66,7 @@ namespace NightHunt.UI
         public class NavigationButtonEntry
         {
             public Button button;
-            [Tooltip("Fired sau khi room đã rời/giải tán (hoặc ngay lập tức nếu chưa ở trong room).\nWire trong Inspector: ví dụ UINavigator.GoHome().")]
+            [Tooltip("Fired after room đã rời/giải tán (hoặc ngay lập tức nếu chưa ở trong room).\nWire trong Inspector: ví dụ UINavigator.GoHome().")]
             public UnityEvent onConfirmed;
         }
 
@@ -170,7 +170,9 @@ namespace NightHunt.UI
         private string _pendingMapId = "map_01";
         private bool _pendingIsPublic = true;
         private bool _pendingIsLocked = false;
+#pragma warning disable CS0414
         private bool _pendingPasswordChanged = false;
+#pragma warning restore CS0414
         private bool _settingsDirty = false;
 
         // Guard: set to true when we change dropdowns programmatically to suppress OnValueChanged callbacks
@@ -518,7 +520,7 @@ namespace NightHunt.UI
                     // ── FIX: Chuyển về JoinCreate TRƯỚC khi navigate
                     ShowState(UIState.JoinCreate);
 
-                    // ── FIX: Show notice để user biết đã xử lý xong
+                    // ── FIX: Show notice để user biết đã handle xong
                     GameModalWindow.Instance?.ShowNotice(
                         title: isHost ? "Room Disbanded" : "Left Room",
                         desc: isHost ? "The room has been disbanded." : "You have left the room.",
@@ -715,12 +717,12 @@ namespace NightHunt.UI
             ResetCodeInput();
             if (roomCodeText != null) roomCodeText.text = "";
 
-            // ── FIX: Xóa slot views + toàn bộ children còn sót trong containers
+            // ── FIX: Remove slot views + toàn bộ children còn sót trong containers
             foreach (var sv in _slotViews.Values)
                 if (sv != null) DestroyImmediate(sv.gameObject);
             _slotViews.Clear();
 
-            // Xóa sạch bất kỳ child nào còn sót (edge case khi sv == null)
+            // Remove sạch bất kỳ child nào còn sót (edge case khi sv == null)
             ClearContainer(team1Container);
             ClearContainer(team2Container);
 
@@ -732,7 +734,6 @@ namespace NightHunt.UI
             _pendingMapId = _mapIds.Length > 0 ? _mapIds[0] : string.Empty;
             _pendingIsPublic = true;
             _pendingIsLocked = false;
-            _pendingPasswordChanged = false;
             SetSettingsDirty(false);
 
             _updatingDropdown = true;
@@ -808,7 +809,6 @@ namespace NightHunt.UI
             _pendingMapId = NormalizeMapId(_pendingMode, room.mapId);
             _pendingIsPublic = room.isPublic;
             _pendingIsLocked = room.isLocked;
-            _pendingPasswordChanged = false;
             BuildMapList(_pendingMode, _pendingMapId);
             SetSettingsDirty(false);
         }
@@ -822,7 +822,6 @@ namespace NightHunt.UI
                 SetStatus($"Settings error: {result.Message}");
                 return false;
             }
-            _pendingPasswordChanged = false;
             return true;
         }
 
@@ -976,9 +975,7 @@ namespace NightHunt.UI
             HideSlotContextMenu();
             if (uid == 0L) return;
             NLog($"ViewProfile userId={uid} username={uname}");
-            // Navigate to profile panel via UINavigator (wire in Inspector if a profile panel exists).
-            // For now show a toast/notice. Replace with UINavigator.GoProfile(uid) once panel is ready.
-            NightHunt.UI.ToastService.Instance?.Show("Profile", uname ?? uid.ToString(), () => { });
+            PlayerProfilePanel.Instance?.Show(uid, uname);
         }
 
         private async void OnCM_RequestSwap()

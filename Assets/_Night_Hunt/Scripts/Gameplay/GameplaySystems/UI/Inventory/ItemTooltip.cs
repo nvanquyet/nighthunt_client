@@ -12,7 +12,7 @@ using NightHunt.Utilities;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Tooltip hiển thị thông tin item khi hover.
+    /// Tooltip display thông tin item khi hover.
     /// Hiển thị: Name, Description, Item Stats, Player Modifiers (nếu equipped)
     /// </summary>
     public class ItemTooltip : MonoBehaviour

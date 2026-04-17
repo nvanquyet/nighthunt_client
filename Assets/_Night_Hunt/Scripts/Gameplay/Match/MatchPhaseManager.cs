@@ -14,25 +14,25 @@ namespace NightHunt.Gameplay.Match
 {
     /// <summary>
     /// Manages match phases (Phase 1: Preparation, Phase 2: Hunt, Phase 3: Lockdown).
-    /// Hoạt động hoàn toàn bằng Event-Driven (Các hệ thống khác tự Subscribe vào OnPhaseStarted).
+    /// Ho?t ??ng ho�n to�n b?ng Event-Driven (C�c h? th?ng kh�c t? Subscribe v�o OnPhaseStarted).
     /// </summary>
     public class MatchPhaseManager : NetworkBehaviour
     {
         [Header("Phase Settings")]
         [SerializeField] private MatchPhaseState initialState = MatchPhaseState.Preparation;
 
-        [Tooltip("Thời gian đếm ngược (giây) trước khi Phase đầu tiên bắt đầu sau khi BeginMatch() được gọi.\n" +
-                 "Ví dụ: 5 → server đếm ngược 5-4-3-2-1 → StartPhase(Preparation).\n" +
-                 "Đặt 0 để bắt đầu ngay lập tức (không có countdown).")]
+        [Tooltip("Th?i gian ??m ng??c (gi�y) tr??c khi Phase ??u ti�n b?t ??u after BeginMatch() ???c g?i.\n" +
+                 "V� d?: 5 ? server ??m ng??c 5-4-3-2-1 ? StartPhase(Preparation).\n" +
+                 "??t 0 ?? b?t ??u ngay l?p t?c (kh�ng c� countdown).")]
         [Min(0f)]
         [SerializeField] private float _delayBeforeFirstPhase = 5f;
 
         [Header("Phase Config Data")]
-        [Tooltip("Config data cho tá»«ng phase (Preparation, Hunt, Lockdown). Assign trong Inspector.")]
+        [Tooltip("Config data cho từng phase (Preparation, Hunt, Lockdown). Assign trong Inspector.")]
         [SerializeField] private List<MatchPhaseConfigData> phaseConfigs = new List<MatchPhaseConfigData>();
         [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
-        // âœ… Event system - decoupled communication
+        // ✅ Event system - decoupled communication
         public event Action<MatchPhaseState, string> OnPhaseStarted; // (newPhase, phaseName)
         public event Action<MatchPhaseState, MatchPhaseState> OnPhaseTransitioned; // (oldPhase, newPhase)        /// <summary>Fired on server when the Lockdown (Phase 3) timer runs out. Used by MatchEndManager for score-based win resolution.</summary>
         public event Action OnLockdownTimerExpired;
@@ -80,10 +80,10 @@ namespace NightHunt.Gameplay.Match
                 Debug.Log("[MatchPhaseManager] Server started");
         }
 
-        // ── Match Start with Countdown ────────────────────────────────────────
+        // ?? Match Start with Countdown ????????????????????????????????????????
 
         /// <summary>
-        /// Server: Begin the match — countdown <see cref="_delayBeforeFirstPhase"/> seconds
+        /// Server: Begin the match � countdown <see cref="_delayBeforeFirstPhase"/> seconds
         /// then start <see cref="initialState"/>.
         /// Called by ServerGameManager after all players have spawned.
         /// </summary>
@@ -113,7 +113,7 @@ namespace NightHunt.Gameplay.Match
                 remaining--;
             }
 
-            // Tick 0 → clients show "GO!" / "Bắt Đầu!"
+            // Tick 0 ? clients show "GO!" / "B?t ??u!"
             RpcMatchCountdown(0);
             StartPhase(initialState);
         }
@@ -164,7 +164,7 @@ namespace NightHunt.Gameplay.Match
             if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
                 Debug.Log($"[MatchPhaseManager] Phase state changed: {previousState} -> {newState}");
 
-            // âœ… Trigger event cho subscribers (ServerGameManager, Bootstrap, etc.)
+            // ✅ Trigger event cho subscribers (ServerGameManager, Bootstrap, etc.)
             OnPhaseTransitioned?.Invoke(previousState, newState);
         }
 
@@ -198,7 +198,7 @@ namespace NightHunt.Gameplay.Match
                 return;
             }
 
-            // ✅ Lookup bằng enum PhaseType — type-safe, không bị typo string
+            // ? Lookup b?ng enum PhaseType � type-safe, kh�ng b? typo string
             MatchPhaseConfigData config = phaseConfigs.Find(c => c.PhaseType == phase);
             if (config == null)
             {
@@ -215,7 +215,7 @@ namespace NightHunt.Gameplay.Match
             currentPhaseConfig = config;
             _warningSent = false;
 
-            // Display name: dùng field DisplayName nếu có, fallback về tên enum
+            // Display name: d�ng field DisplayName n?u c�, fallback v? t�n enum
             string displayName = !string.IsNullOrEmpty(config.DisplayName)
                 ? config.DisplayName
                 : phase.ToString();
@@ -240,12 +240,12 @@ namespace NightHunt.Gameplay.Match
 
             hasStartedFirstPhase = true;
 
-            // ✅ Broadcast — pass enum state + display name (kông phải raw string const nữa)
+            // ? Broadcast � pass enum state + display name (k�ng ph?i raw string const n?a)
             OnPhaseStarted?.Invoke(phase, displayName);
         }
 
         /// <summary>
-        /// Tên chuẩn của các Phase - Dùng để sync chuỗi trên toàn hệ thống
+        /// T�n chu?n c?a c�c Phase - D�ng ?? sync chu?i tr�n to�n h? th?ng
         /// </summary>
         public static class PhaseNames
         {
@@ -283,7 +283,7 @@ namespace NightHunt.Gameplay.Match
                 {
                     _warningSent = true;
                     if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
-                        Debug.Log($"[MatchPhaseManager] ⚠️ Phase warning: {CurrentPhase} ends in {remaining:F0}s");
+                        Debug.Log($"[MatchPhaseManager] ?? Phase warning: {CurrentPhase} ends in {remaining:F0}s");
                     RpcPhaseWarning(CurrentPhase, remaining);
                 }
             }
@@ -310,10 +310,10 @@ namespace NightHunt.Gameplay.Match
         {
             MatchPhaseState nextPhase = GetNextPhase(CurrentPhase);
 
-            // Lockdown is the final phase — fire timer-expired event for score-based win resolution.
+            // Lockdown is the final phase � fire timer-expired event for score-based win resolution.
             if (CurrentPhase == MatchPhaseState.Lockdown)
             {
-                Debug.Log("[MatchPhaseManager] Lockdown timer expired — notifying MatchEndManager.");
+                Debug.Log("[MatchPhaseManager] Lockdown timer expired � notifying MatchEndManager.");
                 OnLockdownTimerExpired?.Invoke();
                 return;
             }

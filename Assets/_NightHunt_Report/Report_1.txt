@@ -1,0 +1,306 @@
+                   │
+│  [02_Map_01] ◄──────────────────────────────────────────────────── │
+│       │  ServerGameManager (NetworkBehaviour)                       │
+│       │  MatchPhaseManager (NetworkBehaviour, SyncVar)              │
+│       │  MatchEndManager (NetworkBehaviour)                         │
+│       │  ScoringSystem (NetworkBehaviour)                           │
+│       │  SpawnSystem, RespawnSystem, ZoneSystem                     │
+│       │  BossSpawnManager, ObjectiveSystem                          │
+│                                                                      │
+│  [01_Home] (Client)                                                  │
+│       │  GameManager (SingletonPersistent)                          │
+│       │  ├── AuthService, RoomService, FriendService, PartyService  │
+│       │  ├── GameWebSocketService (NativeWebSocket)                 │
+│       │  ├── SessionState, RoomState                                │
+│       │  └── UINavigator → PanelType (Login/Home/Lobby/...)        │
+│       │                                                              │
+│       │  WS Events: match_ready → RoomState.DsIp/DsPort            │
+│       │             ds_ready   → NetworkGameManager.NotifyDsReady() │
+│       │                                                              │
+│       │  MatchLoadingOverlay.Show() → SceneLoader.LoadGame()        │
+│       ▼                                                              │
+│  [02_Map_01] (Client)                                                │
+│       │  NetworkGameManager → StartClientDS(DsIp, DsPort)          │
+│       │  ClientNetworkHandler → RpcSendPlayerData                   │
+│       │  ServerGameManager.OnClientDataReceived → SpawnPlayer       │
+│       │  MatchLoadingOverlay tracks: DsBooting→Connecting→Spawning  │
+└─────────────────────────────────────────────────────────────────────┘
+
+
+---
+
+2. PHÂN TÍCH CHI TIẾT TỪNG HỆ THỐNG
+
+🔴 A. NETWORK CONNECTION FLOW — VẤN ĐỀ PHÁT HIỆN
+
+CLIENT FLOW (Ranked_DS):
+  match_ready WS → RoomState.DsIp/DsPort set
+  ds_ready WS    → NetworkGameManager.NotifyDsReady() + s_dsReadyReceived=true (static)
+  SceneLoader.LoadGame() → Unity SceneManager.LoadScene() [KHÔNG phải FishNet]
+  
+  ⚠ VẤN ĐỀ 1: SceneLoader dùng Unity SceneManager.LoadScene() nhưng
+     NetworkGameManager.OnSceneLoadEnd() lắng nghe FishNet SceneManager.OnLoadEnd
+     → Fix A đã có (check activeScene.name trong Start()) nhưng là workaround
+     → ĐÚNG CHUẨN: nên dùng FishNet SceneManager.LoadGlobalScenes() cho client
+     hoặc đồng nhất 1 cách load scene
+
+  ⚠ VẤN ĐỀ 2: s_dsReadyReceived là static field trên NetworkGameManager
+     → Nếu player reconnect vào match mới, flag cũ vẫn còn → auto-connect sai
+     → Cần reset khi RoomState.ClearRoom() được gọi
+
+  ⚠ VẤN ĐỀ 3: Relay mode (Custom_Relay) dùng SetTransportServerBindAddress("127.0.0.1")
+     nhưng không có RelayTransport shim → packet header không được xử lý
+     → Relay mode chưa hoàn chỉnh, cần RelayTransport hoặc bỏ hẳn
+
+  ⚠ VẤN ĐỀ 4: Reconnect flow — khi client disconnect giữa chừng:
+     - _connectionStarted = true → TryConnectIfReady() bị block
+     - TryRetry() chỉ retry 2 lần rồi LoadHome()
+     - Không có cơ chế "rejoin" nếu player bị drop nhưng match vẫn đang chạy
+     → Cần: sau khi reconnect FishNet, server phải re-spawn player tại vị trí cũ
+       hoặc respawn point, không spawn mới hoàn toàn
+
+
+🔴 B. MATCH LOADING FLOW — VẤN ĐỀ
+
+MatchLoadingOverlay.ShowInternal():
+  1. BuildPlayerCards() — đọc RoomState.CurrentRoom.players
+  2. SubscribeEvents() — GameplayEventBus (SpawningStarted, PlayerSpawned, AllPlayersReady)
+  3. SceneLoader.LoadGame(targetMapId) ← LOAD SCENE NGAY LẬP TỨC
+
+  ⚠ VẤN ĐỀ 5: Overlay gọi SceneLoader.LoadGame() bên trong ShowInternal()
+     → Overlay và scene load bị coupling chặt
+     → Nếu overlay chưa show xong (fade-in) thì scene đã load → UI flicker
+
+  ⚠ VẤN ĐỀ 6: MatchLoadStage.DsBooting → Connecting → ServerReady → Spawning → AllReady
+     Nhưng stage "Connecting" chỉ được set khi MarkDsReady() được gọi từ NetworkGameManager
+     → Nếu ds_ready đến TRƯỚC khi overlay show → stage bị skip
+     → Cần: overlay check trạng thái hiện tại khi show, không chỉ lắng nghe event
+
+  ⚠ VẤN ĐỀ 7: connectionTimeout = 45s hardcode trong Inspector
+     → Không có fallback UI rõ ràng khi timeout (chỉ GameModalWindow notice)
+     → Cần: retry button + clear error message
+
+
+🔴 C. PHASE SYSTEM — VẤN ĐỀ
+
+MatchPhaseManager:
+  Phase 1 (Preparation) → Phase 2 (Hunt) → Phase 3 (Lockdown)
+  
+  ⚠ VẤN ĐỀ 8: Phase duration dùng Random.Range(DurationMin, DurationMax) * 60f
+     → Duration không deterministic → client/server có thể hiển thị khác nhau
+     → networkPhaseDuration.Value được sync nhưng chỉ set 1 lần khi StartPhase()
+     → OK nếu client đọc từ SyncVar, nhưng cần verify client dùng networkPhaseDuration
+       chứ không tự tính lại
+
+  ⚠ VẤN ĐỀ 9: PhaseWarning chỉ gửi 1 lần (_warningSent flag) nhưng reset khi phase mới
+     → Nếu client join muộn (late-join), không nhận được warning đã qua
+     → Cần: client sync remaining time từ SyncVar khi join
+
+  ⚠ VẤN ĐỀ 10: ZoneSystem, BossSpawnManager, ObjectiveSystem không có reference
+     rõ ràng đến MatchPhaseManager để biết phase nào đang chạy
+     → Chúng subscribe GameplayEventBus nhưng không có guarantee về thứ tự init
+     → Cần: explicit dependency injection hoặc GameBootstrap orchestrator
+
+
+🔴 D. SCORING & ELO — VẤN ĐỀ
+
+ScoringSystem:
+  ⚠ VẤN ĐỀ 11: ScoringSystem.AwardScore() publish ScoreEvent nhưng
+     MatchEndManager.AddObjectiveScore() và AddKill() là 2 hệ thống riêng biệt
+     → Có 2 nguồn score: ScoringSystem (per-player) và MatchEndManager (per-team)
+     → Khi GetFinalResults() được gọi, dùng _scoringSystem.GetPlayerScore() cho player
+       nhưng dùng _teamObjectiveScore/_teamKillScore cho team → KHÔNG NHẤT QUÁN
+     → Cần: 1 nguồn duy nhất cho score
+
+  ⚠ VẤN ĐỀ 12: ELO calculation:
+     - MatchResult.EloChange = 0 (hardcode trong BuildResults())
+     - ServerBootstrap.ReportMatchEndAndShutdown() POST /api/match/end/ranked
+     - Backend tính ELO server-side → OK về security
+     - Nhưng client không nhận ELO change ngay sau match
+     - GameWebSocketService.OnMatchEnded (MatchEndedWsEvent) có thể chứa ELO
+       nhưng ResultsView chưa subscribe event này rõ ràng
+     → Cần: ResultsView subscribe OnMatchEnded WS event để hiển thị ELO change
+
+  ⚠ VẤN ĐỀ 13: ScoreSync dùng SyncVar<string> (JSON) để sync scores
+     → JSON serialization mỗi frame khi có score change → GC pressure
+     → Cần: SyncList<PlayerScore> hoặc custom serializer
+
+
+🔴 E. GAMEPLAY SYSTEMS — VẤN ĐỀ
+
+Inventory/Item/Stat:
+  ⚠ VẤN ĐỀ 14: StatApplyOrchestrator, ItemStatComputer, PlayerStatSystem
+     là 3 layer riêng biệt nhưng flow không rõ ràng:
+     - Khi equip item → EquipmentSystem → StatApplyOrchestrator → PlayerStatSystem
+     - Khi unequip → reverse flow
+     → Cần: diagram rõ ràng + unit test cho stat calculation
+
+  ⚠ VẤN ĐỀ 15: WeaponSystem bị split thành 5 partial files:
+     WeaponSystem.cs, WeaponSystem.Fire.cs, WeaponSystem.Reload.cs,
+     WeaponSystem.UnEquip.cs, WeaponSystem.NetworkSync.cs
+     → Partial class OK nhưng cần đảm bảo không có circular dependency
+     → Fire.cs gọi HitscanWeapon/ProjectileWeapon → cần verify network authority
+
+  ⚠ VẤN ĐỀ 16: WorldDropManager, WorldSpawnManager, WorldContainer, WorldItem
+     đều là NetworkBehaviour → nhiều NetworkObject trong scene → performance
+     → Cần: pool-based approach, chỉ spawn NetworkObject khi cần
+
+  ⚠ VẤN ĐỀ 17: ItemDatabase load từ Resources/Database/Items/ItemDatabase.asset
+     → Resources.Load() không async → có thể gây frame spike khi load
+     → Cần: Addressables hoặc preload trong loading screen
+
+
+🔴 F. FOG OF WAR & SPECTATOR — VẤN ĐỀ
+
+FogVisionBinder:
+  ✅ Đúng: chỉ enable revealer cho local player + ally
+  ✅ Đúng: disable khi chết, enable khi respawn
+  
+  ⚠ VẤN ĐỀ 18: Khi spectate player khác team:
+     - FogTeamVisibilityBinder.IsEnemyToLocal = true → revealer disabled
+     - Nhưng spectator nên thấy FOW của người đang spectate, không phải của mình
+     → Cần: khi spectate, tạm thời enable revealer của target player
+       hoặc disable FOW hoàn toàn cho spectator
+
+SpectateManager:
+  ✅ Đúng: SwitchSpectatedPlayer dùng PlayerPublicRegistry (không FindObjectsOfType)
+  
+  ⚠ VẤN ĐỀ 19: Khi spectate, UI (HUD, inventory, health bar) vẫn hiển thị
+     data của local player chứ không phải spectated player
+     → Cần: UI components check SpectateManager.GetCurrentPlayer() thay vì
+       luôn dùng local player
+     → GameHUD, PlayerHUDPanel, CombatHUDPanel cần update
+
+  ⚠ VẤN ĐỀ 20: CameraStateManager không có reference đến SpectateManager
+     → Camera không tự follow spectated player khi switch
+     → Cần: SpectateManager.OnCurrentPlayerChanged → CameraStateManager.SetTarget()
+
+
+🔴 G. AUDIO SYSTEM — VẤN ĐỀ
+
+AudioManager, AudioLibrary, AudioPool3D:
+  ⚠ VẤN ĐỀ 21: AudioManager là custom system nhưng project cũng có
+     "Shift - Complete Sci-Fi UI" package với audio system riêng
+     → Có thể có 2 audio system chạy song song → conflict
+     → Cần: quyết định dùng 1 system, bridge hoặc loại bỏ cái còn lại
+
+  ⚠ VẤN ĐỀ 22: CharacterAudioController, CombatAudioController, WeaponAudioController
+     đều là MonoBehaviour riêng biệt → nhiều GetComponent calls
+     → Cần: merge vào 1 controller hoặc cache references
+
+  ⚠ VẤN ĐỀ 23: AudioSettingsPanel và GraphicsSettingsPanel trong Settings
+     nhưng không rõ có save/load settings từ PlayerPrefs hay không
+     → Cần: verify persistence
+
+
+🔴 H. IK SYSTEM — VẤN ĐỀ
+
+CharacterRig, CharacterAnimationController:
+  ⚠ VẤN ĐỀ 24: CharacterRig tồn tại nhưng không thấy IK solver rõ ràng
+     → Không có AimIK, FootIK, HandIK references trong scan
+     → Cần: verify IK setup trong prefab Character 01.prefab
+     → Nếu dùng Unity Animation Rigging package → cần check constraints
+     → Nếu dùng FinalIK → cần check license
+
+  ⚠ VẤN ĐỀ 25: CharacterAnimationController không sync animation state qua network
+     → Chỉ local animation, không có NetworkAnimator
+     → Cần: verify xem animation được sync qua movement state hay riêng biệt
+
+
+🔴 I. PREDICTION SYSTEM — VẤN ĐỀ
+
+RigidbodyPredictedMovement (extends BaseCharacterPredictedMovement):
+  ✅ Đúng: dùng FishNet Prediction V2 pattern (Replicate/Reconcile)
+  ✅ Đúng: drag = 0 để tránh divergence với MovePosition
+  
+  ⚠ VẤN ĐỀ 26: PredictedAttack, PredictedInteraction là separate predicted behaviours
+     → Mỗi cái có InputBuffer riêng → có thể desync nếu không tick cùng lúc
+     → Cần: 1 InputBuffer duy nhất cho tất cả predicted inputs
+
+  ⚠ VẤN ĐỀ 27: HybridReconciliation, SmoothReconciliation, SnapReconciliation
+     là 3 strategy riêng nhưng không rõ cái nào đang được dùng
+     → Cần: document rõ strategy nào cho movement, attack, interaction
+
+
+---
+
+3. KẾ HOẠCH REFACTOR — ƯU TIÊN THEO MỨC ĐỘ CRITICAL
+
+🔥 PRIORITY 1 — CRITICAL (Blocking production)
+
+P1.1 — Fix Scene Load + Connection Flow
+HIỆN TẠI:
+  SceneLoader.LoadGame() → Unity SceneManager.LoadScene()
+  NetworkGameManager lắng nghe FishNet SceneManager.OnLoadEnd → KHÔNG FIRE
+
+REFACTOR:
+  Option A (Recommended): Giữ Unity SceneManager nhưng dùng SceneManager.sceneLoaded event
+    trong NetworkGameManager thay vì FishNet OnLoadEnd
+    
+  Option B: Migrate sang FishNet SceneManager.LoadGlobalScenes() cho client
+    (phức tạp hơn, cần test kỹ)
+
+  Fix s_dsReadyReceived reset:
+    RoomState.ClearRoom() → NetworkGameManager.ResetConnectionFlags()
+    Hoặc: s_dsReadyReceived = false trong LoadHome()
+    ✅ Đã có trong LoadHome() nhưng cần verify tất cả exit paths đều gọi LoadHome()
+
+
+P1.2 — Fix Reconnect Flow
+HIỆN TẠI:
+  Disconnect → TryRetry (2 lần) → LoadHome()
+  Không có "rejoin" — player mất toàn bộ progress
+
+REFACTOR:
+  1. RegistryService đã lưu data khi UnregisterPlayer() → tốt
+  2. Cần: ServerGameManager.OnPlayerReconnected(conn, backendId)
+     - Tìm lại player data từ RegistryService bằng backendId
+     - Re-spawn tại respawn point hoặc vị trí cuối
+     - Re-assign ownership
+  3. Client: sau khi reconnect FishNet, gửi lại ClientNetworkHandler data
+     với flag isReconnect = true
+  4. Timeout: nếu reconnect không thành công trong 30s → LoadHome()
+
+
+P1.3 — Fix Score System Unification
+HIỆN TẠI:
+  ScoringSystem (per-player score) ≠ MatchEndManager (per-team score)
+  2 nguồn dữ liệu → inconsistent results
+
+REFACTOR:
+  ScoringSystem là SINGLE SOURCE OF TRUTH:
+  - AwardKill() → ScoringSystem.AwardKill() → cũng gọi MatchEndManager.AddKill()
+  - Hoặc: MatchEndManager đọc từ ScoringSystem thay vì tự track
+  - GetFinalResults() dùng ScoringSystem.GetPlayerScore() cho cả player lẫn team
+
+
+🟠 PRIORITY 2 — HIGH (Gameplay breaking)
+
+P2.1 — Fix Spectator + FOW + UI
+SpectateManager.OnCurrentPlayerChanged → broadcast tới:
+  1. CameraStateManager.SetTarget(player.transform)
+  2. FogVisionBinder: khi spectate, enable revealer của target, disable của local
+  3. GameHUD, PlayerHUDPanel: bind tới SpectateManager.GetCurrentPlayer()
+     thay vì hardcode local player
+  4. KillFeedUI, TeamMemberRow: không cần thay đổi (global data)
+
+FOW khi spectate:
+  - Tạo SpectatorFogBinder: khi spectate bắt đầu, copy ViewRadius từ target
+  - Khi spectate kết thúc, restore local revealer
+
+
+P2.2 — Fix Phase → System Coordination
+`
+HIỆN TẠI:
+  ZoneSystem, BossSpawnManager, ObjectiveSystem subscribe GameplayEventBus
+  nhưng không có guarantee về init order
+
+REFACTOR: GameBootstrap làm orchestrator
+  GameBootstrap.OnStartServer():
+    1. Wait for MatchPhaseManager.OnPhaseStarted
+    2. Phase 1 → Enable WorldSpawnManager (loot spawn)
+    3. Phase 2 → Enable BossSpawnManager, ObjectiveSystem
+    4. Phase 3 → Enable ZoneSystem lockdown, disable respawn beacons
+  
+  Explicit dependency: không dùng FindFirstObjectByType trong Awake()
+  Dùng [SerializeField] references hoặc GameBootstrap inje

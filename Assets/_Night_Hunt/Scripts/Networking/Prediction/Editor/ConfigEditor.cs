@@ -6,7 +6,7 @@ namespace NightHunt.Networking.Prediction.Editor
 {
     /// <summary>
     /// Custom editor cho PredictionConfig ScriptableObject.
-    /// Cung cấp preset configurations và validation.
+    /// Provides preset configurations và validation.
     /// </summary>
     [CustomEditor(typeof(PredictionConfig))]
     public class ConfigEditor : UnityEditor.Editor

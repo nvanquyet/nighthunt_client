@@ -303,7 +303,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
         public int GridHeight;
         
         [Header("UI")]
-        [Tooltip("Icon mặc định cho inventory slot trống (khi chưa có item)")]
+        [Tooltip("Icon mặc định cho inventory slot trống (khi not yet available item)")]
         public Sprite DefaultEmptyIcon;
         
         public int TotalSlots => GridWidth * GridHeight;

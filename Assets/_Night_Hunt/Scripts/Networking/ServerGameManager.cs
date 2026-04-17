@@ -33,8 +33,8 @@ namespace NightHunt.Networking
 
         [Header("Match Settings")]
         [Tooltip("Total players expected before starting Phase 1.\n" +
-                 "Tự động resolve từ RoomState.PlayerCount (Ranked) hoặc GameModeConfig khi OnStartNetwork.\n" +
-                 "Chỉ cần đặt thủ công khi test trong Editor (dev mode, GameMode.None).")]
+                 "T? ??ng resolve t? RoomState.PlayerCount (Ranked) ho?c GameModeConfig khi OnStartNetwork.\n" +
+                 "Ch? c?n ??t th? c�ng khi test trong Editor (dev mode, GameMode.None).")]
         [SerializeField]
         private int _expectedPlayerCount = 2;
         [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
@@ -44,7 +44,7 @@ namespace NightHunt.Networking
         private int _spawnedPlayerCount = 0;
 
         // Tracking
-        private Dictionary<int, GameObject> _spawnedPlayers = new(); // FishNet ClientId â†’ GameObject
+        private Dictionary<int, GameObject> _spawnedPlayers = new(); // FishNet ClientId → GameObject
 
         /// <summary>Fired on server when all expected players have spawned.</summary>
         public event System.Action OnAllPlayersReady;
@@ -100,12 +100,12 @@ namespace NightHunt.Networking
 
             // Auto-resolve expected player count from RoomState (set by backend match_ready WS).
             // Priority: RoomState.PlayerCount (Ranked_DS, most accurate)
-            //           → GameModeConfig lookup by modeKey
-            //           → keep Inspector value (dev/editor fallback)
+            //           ? GameModeConfig lookup by modeKey
+            //           ? keep Inspector value (dev/editor fallback)
             ResolveExpectedPlayerCount();
 
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] ✅ Initialized");
+                Debug.Log("[ServerGameManager] ? Initialized");
         }
 
         [Server]
@@ -124,7 +124,7 @@ namespace NightHunt.Networking
             }
 
             // 2. ServerBootstrap CLI arg (--expectedPlayers).
-            //    RoomState is always empty on a headless dedicated server — the DS doesn't
+            //    RoomState is always empty on a headless dedicated server � the DS doesn't
             //    have a WebSocket connection to the backend, so match_ready never populates it.
             //    ServerBootstrap.BootstrappedExpectedPlayers > 0 means the arg was passed.
             if (NightHunt.Server.ServerBootstrap.BootstrappedExpectedPlayers > 0)
@@ -150,7 +150,7 @@ namespace NightHunt.Networking
                 }
             }
 
-            // 4. Keep Inspector value — dev mode or no data available
+            // 4. Keep Inspector value � dev mode or no data available
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.LogWarning($"[ServerGameManager] ExpectedPlayerCount using Inspector value: {_expectedPlayerCount}. " +
                                  "Ensure RoomState is populated or --expectedPlayers is passed before scene load in production.");
@@ -200,16 +200,16 @@ namespace NightHunt.Networking
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Player connected - FishNet ClientId: {fishnetClientId}");
 
-            //Spawn ClientNetworkHandler cho client nÃ y
+            //Spawn ClientNetworkHandler cho client này
             ClientNetworkHandler cnh = Instantiate(clientNetworkHandlerPrefab);
             _networkManager.ServerManager.Spawn(cnh.gameObject, conn);
 
-            // ClientNetworkHandler sáº½ tá»± Ä‘á»™ng gá»­i data lÃªn
-            // Server chá» nháº­n data rá»“i má»›i spawn
+            // ClientNetworkHandler sẽ tự động gửi data lên
+            // Server ch�? nhận data rồi mới spawn
         }
 
         /// <summary>
-        /// Server: Nháº­n data tá»« client (called by ClientNetworkHandler)
+        /// Server: Receive data từ client (called by ClientNetworkHandler)
         /// </summary>
         [Server]
         public void OnClientDataReceived(NetworkConnection conn, PlayerRegistryData clientData)
@@ -262,7 +262,7 @@ namespace NightHunt.Networking
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Step 1: Prefab instantiated");
 
-            // STEP 2: SpawnSystem xá»­ lÃ½ (assign team, position)
+            // STEP 2: SpawnSystem handle (assign team, position)
             PlayerRegistryData serverData;
             if (_spawnSystem != null)
             {
@@ -273,12 +273,12 @@ namespace NightHunt.Networking
             else
             {
                 Debug.LogWarning(
-                    "[ServerGameManager] _spawnSystem is null â€“ spawning at origin. Assign SpawnSystem in Inspector.");
+                    "[ServerGameManager] _spawnSystem is null – spawning at origin. Assign SpawnSystem in Inspector.");
                 serverData = clientData;
                 playerObj.transform.position = Vector3.zero;
             }
 
-            // STEP 3: Network spawn FIRST â€” FishNet includes the current SyncVar
+            // STEP 3: Network spawn FIRST — FishNet includes the current SyncVar
             // values in the spawn packet it sends to all observers.  If we call
             // SetPublicData BEFORE Spawn(), the SyncVar write happens on an
             // unspawned object and FishNet may not pick it up, meaning every
@@ -331,7 +331,7 @@ namespace NightHunt.Networking
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Step 4b: ModelIndex set to {serverData.CharacterModelIndex}");
 
-            // STEP 5: Register vá»›i RegistryService (lÆ°u PRIVATE data)
+            // STEP 5: Register với RegistryService (lưu PRIVATE data)
             _registryService.RegisterPlayer(networkPlayer, serverData);
 
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
@@ -354,7 +354,7 @@ namespace NightHunt.Networking
 
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.Log(
-                $"[ServerGameManager] === âœ… Spawn complete ({_spawnedPlayerCount}/{_expectedPlayerCount}) - {serverData.DisplayName}, Team: {serverData.TeamId} ===");
+                $"[ServerGameManager] === ✅ Spawn complete ({_spawnedPlayerCount}/{_expectedPlayerCount}) - {serverData.DisplayName}, Team: {serverData.TeamId} ===");
 
             // STEP 7: Check if all expected players have spawned
             if (_spawnedPlayerCount >= _expectedPlayerCount)
@@ -367,7 +367,7 @@ namespace NightHunt.Networking
         private void OnAllPlayersSpawned()
         {
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] âœ… All players spawned â€” starting match!");
+                Debug.Log("[ServerGameManager] ✅ All players spawned — starting match!");
             OnAllPlayersReady?.Invoke();
 
             // Notify all clients: hide loading screen, show game HUD
@@ -377,14 +377,14 @@ namespace NightHunt.Networking
             if (_matchPhaseManager != null)
                 _matchPhaseManager.BeginMatch();
             else
-                Debug.LogError("[ServerGameManager] MatchPhaseManager is null — BeginMatch not called!");
+                Debug.LogError("[ServerGameManager] MatchPhaseManager is null � BeginMatch not called!");
         }
 
         [ObserversRpc]
         private void RpcOnSpawningStarted()
         {
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] CLIENT: First player spawned — advancing to Spawning stage.");
+                Debug.Log("[ServerGameManager] CLIENT: First player spawned � advancing to Spawning stage.");
             GameplayEventBus.Instance?.Publish(new SpawningStartedEvent());
         }
 
@@ -397,7 +397,7 @@ namespace NightHunt.Networking
         private void RpcOnPlayerSpawned(string displayName, int spawnedCount, int expectedCount)
         {
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log($"[ServerGameManager] CLIENT: Player spawned — {displayName} ({spawnedCount}/{expectedCount})");
+                Debug.Log($"[ServerGameManager] CLIENT: Player spawned � {displayName} ({spawnedCount}/{expectedCount})");
             GameplayEventBus.Instance?.Publish(new PlayerSpawnedEvent
             {
                 DisplayName   = displayName,
@@ -410,7 +410,7 @@ namespace NightHunt.Networking
         private void RpcOnAllPlayersReady()
         {
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] CLIENT: All players ready — dismissing loading screen.");
+                Debug.Log("[ServerGameManager] CLIENT: All players ready � dismissing loading screen.");
             GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
 
@@ -448,7 +448,7 @@ namespace NightHunt.Networking
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Cleaning up - Backend ID: {backendId}, Name: {networkPlayer.DisplayName}");
 
-            // Unregister (RegistryService lÆ°u data cho reconnect)
+            // Unregister (RegistryService lưu data cho reconnect)
             _registryService.UnregisterPlayer(networkPlayer);
 
             // SpawnSystem cleanup
@@ -462,10 +462,10 @@ namespace NightHunt.Networking
             _spawnedPlayers.Remove(fishnetClientId);
 
             if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log($"[ServerGameManager] âœ… Cleanup complete for ClientId: {fishnetClientId}");
+                Debug.Log($"[ServerGameManager] ✅ Cleanup complete for ClientId: {fishnetClientId}");
         }
 #if UNITY_EDITOR
-        // ── Editor — Context Menu: Auto-assign Known Prefabs ──────────────────
+        // ?? Editor � Context Menu: Auto-assign Known Prefabs ??????????????????
 
         [ContextMenu("NightHunt/Auto-Assign Player & Handler Prefabs")]
         private void Editor_AutoAssignPrefabs()
@@ -489,7 +489,7 @@ namespace NightHunt.Networking
                         break;
                     }
                 }
-                if (playerPrefab == null) Debug.LogWarning("[ServerGameManager] playerPrefab not found — assign manually.");
+                if (playerPrefab == null) Debug.LogWarning("[ServerGameManager] playerPrefab not found � assign manually.");
             }
 
             if (clientNetworkHandlerPrefab == null)

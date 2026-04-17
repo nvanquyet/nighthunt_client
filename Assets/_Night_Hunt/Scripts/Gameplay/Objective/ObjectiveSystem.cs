@@ -32,7 +32,11 @@ namespace NightHunt.Gameplay.Objective
             base.OnStartServer();
 
             if (_phaseManager == null)
+            {
                 _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+                if (_phaseManager == null)
+                    Debug.LogWarning("[ObjectiveSystem] MatchPhaseManager not found — assign it in the Inspector.");
+            }
 
             if (_phaseManager != null)
                 _phaseManager.OnPhaseStarted += OnPhaseStarted;
@@ -49,7 +53,7 @@ namespace NightHunt.Gameplay.Objective
 
         private void OnPhaseStarted(MatchPhaseState phase, string displayName)
         {
-            // So sánh bằng enum — type-safe
+            // Enum comparison is type-safe — no string parsing needed.
             ActivateObjectivesForPhase(phase);
         }
 

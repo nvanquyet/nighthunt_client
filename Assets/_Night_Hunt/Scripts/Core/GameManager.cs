@@ -6,6 +6,7 @@ using NightHunt.Services.Config;
 using NightHunt.Services.Friend;
 using NightHunt.Services.Party;
 using NightHunt.Services.Game;
+using NightHunt.Services.Profile;
 using NightHunt.Services.Room;
 using NightHunt.State;
 using NightHunt.Core;
@@ -17,8 +18,8 @@ using NightHunt.GameplaySystems.Core.Configs;
 namespace NightHunt.Core
 {
     /// <summary>
-    /// GameManager - Persistent manager tá»“n táº¡i xuyÃªn suá»‘t vÃ²ng Ä‘á»i app.
-    /// Single-scene setup: khÃ´ng cÃ²n phá»¥ thuá»™c SceneLoader / scene name check.
+    /// GameManager - Persistent manager persists throughout vòng đ�?i app.
+    /// Single-scene setup: no longer depends on SceneLoader / scene name check.
     /// </summary>
     public class GameManager : SingletonPersistent<GameManager>
     {
@@ -31,6 +32,7 @@ namespace NightHunt.Core
         [SerializeField] private PartyService         partyService;
         [SerializeField] private RoomService          roomService;
         [SerializeField] private GameWebSocketService gameWebSocketService;
+        [SerializeField] private ProfileManager       profileManager;
 
         [Header("Config")]
         [SerializeField] private Config.InstanceConfig instanceConfig;
@@ -40,7 +42,7 @@ namespace NightHunt.Core
         [SerializeField] private RoomState    roomState;
         [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
-        // â”€â”€ Public getters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Public getters ────────────────────────────────────────────────
         public BackendHttpClient    BackendClient    => backendHttpClient;
         public AuthService          AuthService      => authService;
         public GameConfigService    GameConfigService=> gameConfigService;
@@ -48,19 +50,20 @@ namespace NightHunt.Core
         public PartyService         PartyService   => partyService;
         public RoomService          RoomService    => roomService;
         public GameWebSocketService GameWebSocket  => gameWebSocketService;
+        public ProfileManager       ProfileManager => profileManager;
         public SessionState         SessionState   => sessionState;
         public RoomState            RoomState      => roomState;
         public Config.InstanceConfig InstanceConfig => instanceConfig;
 
-        // â”€â”€ App lifecycle events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── App lifecycle events ──────────────────────────────────────────
         public event Action OnAppFocusLost;
         public event Action OnAppFocusGained;
         public event Action OnAppPaused;
         public event Action OnAppResumed;
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
         // Lifecycle
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
 
         protected override void OnSingletonAwake()
         {
@@ -69,9 +72,9 @@ namespace NightHunt.Core
             EnsurePersistentUICanvas();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
         // Init
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
 
         private void ConfigureRunInBackground()
         {
@@ -98,6 +101,7 @@ namespace NightHunt.Core
             friendService     = ResolveOrAdd<FriendService>(friendService);
             partyService      = ResolveOrAdd<PartyService>(partyService);
             roomService       = ResolveOrAdd<RoomService>(roomService);
+            profileManager    = ResolveOrAdd<ProfileManager>(profileManager);
             sessionState      = ResolveOrAdd<SessionState>(sessionState);
             roomState         = ResolveOrAdd<RoomState>(roomState);
             gameWebSocketService = ResolveOrAdd<GameWebSocketService>(gameWebSocketService);
@@ -114,7 +118,7 @@ namespace NightHunt.Core
                 Debug.Log("[GameManager] All services initialized");
         }
 
-        /// <summary>Resolve component tá»« self/children hoáº·c AddComponent náº¿u khÃ´ng cÃ³.</summary>
+        /// <summary>Resolve component từ self/children hoặc AddComponent nếu not available.</summary>
         private T ResolveOrAdd<T>(T existing) where T : Component
         {
             if (existing != null) return existing;
@@ -128,9 +132,9 @@ namespace NightHunt.Core
             return found != null ? found : gameObject.AddComponent<T>();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
         // Generic service getter
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
 
         public T GetService<T>() where T : Component
         {
@@ -141,14 +145,14 @@ namespace NightHunt.Core
                 .Resolve();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        // App Lifecycle â€” Quit
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
+        // App Lifecycle — Quit
+        // ─────────────────────────────────────────────────────────────────
 
         private async void OnApplicationQuit()
         {
             if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                Debug.Log("[GameManager] Application quitting â€” cleaning up...");
+                Debug.Log("[GameManager] Application quitting — cleaning up...");
             await CleanupOnExit();
 
             if (gameWebSocketService != null)
@@ -158,9 +162,9 @@ namespace NightHunt.Core
             }
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        // App Lifecycle â€” Pause / Focus (Mobile & PC)
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
+        // App Lifecycle — Pause / Focus (Mobile & PC)
+        // ─────────────────────────────────────────────────────────────────
 
         private void OnApplicationPause(bool pauseStatus)
         {
@@ -168,7 +172,7 @@ namespace NightHunt.Core
             if (pauseStatus)
             {
                 if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                    Debug.Log("[GameManager] App paused â†’ disconnect WS (keep room)");
+                    Debug.Log("[GameManager] App paused → disconnect WS (keep room)");
                 DisconnectWebSocket();
                 OnAppPaused?.Invoke();
             }
@@ -200,7 +204,7 @@ namespace NightHunt.Core
             if (!hasFocus)
             {
                 if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                    Debug.Log("[GameManager] App lost focus â†’ disconnect WS (keep room)");
+                    Debug.Log("[GameManager] App lost focus → disconnect WS (keep room)");
                 DisconnectWebSocket();
                 OnAppFocusLost?.Invoke();
             }
@@ -225,9 +229,9 @@ namespace NightHunt.Core
 #endif
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
         // Resume handler
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
 
         private async void HandleApplicationResumed()
         {
@@ -238,7 +242,7 @@ namespace NightHunt.Core
             if (!shouldRefresh)
             {
                 if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                    Debug.Log("[GameManager] Refresh on focus disabled â€” skipping");
+                    Debug.Log("[GameManager] Refresh on focus disabled — skipping");
                 return;
             }
 
@@ -261,27 +265,27 @@ namespace NightHunt.Core
             RefreshCurrentPanelData();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        // Refresh data â€” dÃ¹ng UINavigator thay vÃ¬ scene name
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
+        // Refresh data — dùng UINavigator instead of scene name
+        // ─────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Refresh dá»¯ liá»‡u dá»±a trÃªn panel Ä‘ang hiá»ƒn thá»‹.
-        /// Single-scene: khÃ´ng cÃ²n check SceneManager.GetActiveScene().name.
+        /// Refresh data dựa trên panel đang display.
+        /// Single-scene: no longer check SceneManager.GetActiveScene().name.
         /// </summary>
         private async void RefreshCurrentPanelData()
         {
             if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated)
             {
                 if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                    Debug.Log("[GameManager] Not authenticated â€” skip refresh");
+                    Debug.Log("[GameManager] Not authenticated — skip refresh");
                 return;
             }
 
             var nav = UINavigator.Instance;
             if (nav == null)
             {
-                Debug.LogWarning("[GameManager] UINavigator not found â€” skip refresh");
+                Debug.LogWarning("[GameManager] UINavigator not found — skip refresh");
                 return;
             }
 
@@ -298,19 +302,19 @@ namespace NightHunt.Core
                         break;
 
                     case PanelType.Home:
-                        // Home khÃ´ng cáº§n refresh Ä‘áº·c biá»‡t
+                        // Home không cần refresh đặc biệt
                         if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                            Debug.Log("[GameManager] Home panel â€” no refresh needed");
+                            Debug.Log("[GameManager] Home panel — no refresh needed");
                         break;
 
                     case PanelType.Login:
                         if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                            Debug.Log("[GameManager] Login panel — no refresh needed");
+                            Debug.Log("[GameManager] Login panel � no refresh needed");
                         break;
 
                     default:
                         if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
-                            Debug.Log($"[GameManager] Panel {nav.CurrentPanel} — no refresh logic defined");
+                            Debug.Log($"[GameManager] Panel {nav.CurrentPanel} � no refresh logic defined");
                         break;
                 }
             }
@@ -341,9 +345,9 @@ namespace NightHunt.Core
             }
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
         // Cleanup on exit
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
 
         private async System.Threading.Tasks.Task CleanupOnExit()
         {
@@ -370,14 +374,14 @@ namespace NightHunt.Core
             catch (Exception ex) { Debug.LogError($"[GameManager] Cleanup error: {ex.Message}"); }
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
         // Helpers
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────
 
         private void DisconnectWebSocket()
         {
             if (gameWebSocketService == null) return;
-            // disableReconnect: true — prevent OnClose from scheduling a competing
+            // disableReconnect: true � prevent OnClose from scheduling a competing
             // backoff reconnect. HandleApplicationResumed() will reconnect on focus-return.
             try { gameWebSocketService.Disconnect(disableReconnect: true); }
             catch (Exception ex) { Debug.LogWarning($"[GameManager] WS disconnect: {ex.Message}"); }

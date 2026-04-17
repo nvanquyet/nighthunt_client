@@ -5,7 +5,7 @@ namespace NightHunt.Gameplay.Character
 {
     /// <summary>
     /// Interface cho tất cả movement controllers.
-    /// Cho phép swap giữa predicted và normal movement dễ dàng.
+    /// Allows swap giữa predicted và normal movement dễ dàng.
     /// </summary>
     public interface IMovementController
     {

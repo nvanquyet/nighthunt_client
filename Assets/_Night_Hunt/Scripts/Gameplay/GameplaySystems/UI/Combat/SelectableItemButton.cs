@@ -14,48 +14,48 @@ namespace NightHunt.GameplaySystems.UI.Combat
     /// <summary>
     /// Collapsed HUD slot button for a single item type (Throwable or Consumable).
     ///
-    /// Extends <see cref="SlotHUDButton"/> â€” shares the same base as
+    /// Extends <see cref="SlotHUDButton"/> — shares the same base as
     /// <see cref="WeaponSlotButton"/>: DOTween press animation, double-click
     /// detection, and CombatInputHandler fire-blocking.
     ///
-    /// â”€â”€ Click State Machine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    /// ── Click State Machine ──────────────────────────────────────────────────
     ///
     ///   EMPTY (nothing tracked):
-    ///     â€¢ Press â†’ fires <see cref="OnExpandRequested"/> so <see cref="ItemFilterPanel"/>
+    ///     • Press → fires <see cref="OnExpandRequested"/> so <see cref="ItemFilterPanel"/>
     ///               can open the expanded list for the player to pick something.
     ///
     ///   TRACKED / IDLE (item remembered but not selected in system):
-    ///     â€¢ Press         â†’ RequestSelectItem (re-select)
-    ///     â€¢ Double-press  â†’ RequestCancelSelection (clear)
+    ///     • Press         → RequestSelectItem (re-select)
+    ///     • Double-press  → RequestCancelSelection (clear)
     ///
     ///   SELECTED (item in server SelectedItem, not yet armed):
-    ///     â€¢ Press         â†’ RequestUseSelectedItem (holster weapon + arm item)
-    ///     â€¢ Double-press  â†’ RequestCancelSelection (clear)
+    ///     • Press         → RequestUseSelectedItem (holster weapon + arm item)
+    ///     • Double-press  → RequestCancelSelection (clear)
     ///
     ///   ARMED (item in hand, IsUsingItem == true):
-    ///     â€¢ Press         â†’ RequestCancelSelection (put away, re-equip weapon)
-    ///     â€¢ Double-press  â†’ RequestCancelSelection (same)
+    ///     • Press         → RequestCancelSelection (put away, re-equip weapon)
+    ///     • Double-press  → RequestCancelSelection (same)
     ///
-    /// â”€â”€ Auto-fill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    /// ── Auto-fill ────────────────────────────────────────────────────────────
     ///   On Initialize and whenever the tracked slot becomes empty, the button
     ///   automatically searches the player's inventory for the first matching
     ///   item and quietly calls RequestSelectItem on it.
     ///
-    /// â”€â”€ Inspector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    ///   _icon          â€“ Item icon Image (collapsed view).
-    ///   _quantityText  â€“ Stack quantity TMP text.
-    ///   _emptyIndicator â€“ Shown when no item is tracked.
+    /// ── Inspector ────────────────────────────────────────────────────────────
+    ///   _icon          – Item icon Image (collapsed view).
+    ///   _quantityText  – Stack quantity TMP text.
+    ///   _emptyIndicator – Shown when no item is tracked.
     /// </summary>
     public class SelectableItemButton : SlotHUDButton
     {
-        // â”€â”€ Inspector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Inspector ─────────────────────────────────────────────────────────────
 
         [Header("Item Display")]
         [SerializeField] private Image      _icon;
         [SerializeField] private TMP_Text   _quantityText;
         [SerializeField] private GameObject _emptyIndicator;
 
-        // â”€â”€ Runtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Runtime ───────────────────────────────────────────────────────────────
 
         private ItemType             _filterType;
         private IItemSelectionSystem _selectionSystem;
@@ -70,9 +70,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         private string _trackedInstanceId;
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Events
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Fired when the slot is empty and the user presses the button.
@@ -81,9 +81,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public event Action OnExpandRequested;
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         protected override void OnDestroy()
         {
@@ -91,9 +91,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             base.OnDestroy();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Public API
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Bind to the local player's systems.
@@ -122,7 +122,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// <summary>
         /// Explicitly set the tracked item (called by <see cref="ItemFilterPanel"/>
         /// when the user picks an item from the expanded list).
-        /// Does NOT send any RPC â€” the caller is responsible for RequestSelectItem.
+        /// Does NOT send any RPC — the caller is responsible for RequestSelectItem.
         /// </summary>
         public void SetTrackedItem(string instanceId)
         {
@@ -131,9 +131,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             RefreshDisplay();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  SlotHUDButton override
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         public override void OnPointerDown(PointerEventData eventData)
         {
@@ -143,15 +143,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             bool isDouble = ConsumeDoubleClick();
 
-            // â”€â”€ Double-click: always cancel / put away â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Double-click: always cancel / put away ──────────────────────────
             if (isDouble)
             {
-                Debug.Log($"[SelectableItemButton:{_filterType}] double-click â†’ RequestCancelSelection");
+                Debug.Log($"[SelectableItemButton:{_filterType}] double-click → RequestCancelSelection");
                 _selectionSystem.RequestCancelSelection();
                 return;
             }
 
-            // â”€â”€ Determine current state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Determine current state ─────────────────────────────────────────
             bool hasTracked = !string.IsNullOrEmpty(_trackedInstanceId);
 
             // IsArmed: the tracked item is currently held in hand and being used.
@@ -166,42 +166,42 @@ namespace NightHunt.GameplaySystems.UI.Combat
                            && !isArmed
                            && _selectionSystem.SelectedItem?.InstanceID == _trackedInstanceId;
 
-            Debug.Log($"[SelectableItemButton:{_filterType}] press â€” tracked='{_trackedInstanceId}' " +
+            Debug.Log($"[SelectableItemButton:{_filterType}] press — tracked='{_trackedInstanceId}' " +
                       $"isSelected={isSelected} isArmed={isArmed}");
 
-            // â”€â”€ Empty slot â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Empty slot ──────────────────────────────────────────────────────
             if (!hasTracked)
             {
-                Debug.Log($"[SelectableItemButton:{_filterType}] empty â†’ OnExpandRequested");
+                Debug.Log($"[SelectableItemButton:{_filterType}] empty → OnExpandRequested");
                 OnExpandRequested?.Invoke();
                 return;
             }
 
-            // â”€â”€ Armed: item is in the player's hand already â†’ put it away â”€â”€â”€â”€â”€â”€â”€
+            // ── Armed: item is in the player's hand already → put it away ───────
             if (isArmed)
             {
-                Debug.Log($"[SelectableItemButton:{_filterType}] armed â†’ RequestCancelSelection");
+                Debug.Log($"[SelectableItemButton:{_filterType}] armed → RequestCancelSelection");
                 _selectionSystem.RequestCancelSelection();
                 return;
             }
 
-            // â”€â”€ Selected but not yet armed â†’ ARM (holster weapon + hold item) â”€â”€â”€
+            // ── Selected but not yet armed → ARM (holster weapon + hold item) ───
             if (isSelected)
             {
-                Debug.Log($"[SelectableItemButton:{_filterType}] selected â†’ RequestUseSelectedItem");
+                Debug.Log($"[SelectableItemButton:{_filterType}] selected → RequestUseSelectedItem");
                 _selectionSystem.RequestUseSelectedItem();
                 return;
             }
 
-            // â”€â”€ Tracked but not currently selected (e.g. another panel stole it,
-            //    or server cancelled) â†’ re-select so the player can arm next click. â”€
-            Debug.Log($"[SelectableItemButton:{_filterType}] tracked not selected â†’ RequestSelectItem('{_trackedInstanceId}')");
+            // ── Tracked but not currently selected (e.g. another panel stole it,
+            //    or server cancelled) → re-select so the player can arm next click. ─
+            Debug.Log($"[SelectableItemButton:{_filterType}] tracked not selected → RequestSelectItem('{_trackedInstanceId}')");
             _selectionSystem.RequestSelectItem(_trackedInstanceId);
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Display
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void RefreshDisplay()
         {
@@ -228,14 +228,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _emptyIndicator.SetActive(!hasItem);
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Auto-fill
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// If the tracked slot is empty and the player has a matching item in their
         /// inventory, silently select it and track it.  No visual confirmation needed
-        /// â€” the collapsed icon will update automatically via the selection event.
+        /// — the collapsed icon will update automatically via the selection event.
         /// </summary>
         private void TryAutoFill()
         {
@@ -251,7 +251,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 var def = ItemDatabase.GetDefinition(inv.DefinitionID);
                 if (def == null || def.Type != _filterType) continue;
 
-                Debug.Log($"[SelectableItemButton:{_filterType}] TryAutoFill â†’ RequestSelectItem('{inv.InstanceID}')");
+                Debug.Log($"[SelectableItemButton:{_filterType}] TryAutoFill → RequestSelectItem('{inv.InstanceID}')");
                 _trackedInstanceId = inv.InstanceID;  // optimistic local update before RPC confirms
                 _selectionSystem.RequestSelectItem(inv.InstanceID);
                 RefreshDisplay();
@@ -259,9 +259,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Event Subscriptions
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void Subscribe()
         {
@@ -293,7 +293,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
         }
 
-        // â”€â”€ Selection events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Selection events ─────────────────────────────────────────────────────
 
         private void HandleItemSelected(ItemInstance item)
         {
@@ -307,14 +307,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private void HandleItemDeselected()
         {
-            // A deselect does NOT clear _trackedInstanceId â€” the item is still
+            // A deselect does NOT clear _trackedInstanceId — the item is still
             // remembered so the next click can quickly re-select + arm it.
             // Only a full inventory removal clears the tracked slot.
             Debug.Log($"[SelectableItemButton:{_filterType}] HandleItemDeselected (tracking '{_trackedInstanceId}')");
             RefreshDisplay();
         }
 
-        // â”€â”€ Inventory events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Inventory events ─────────────────────────────────────────────────────
 
         private void HandleInventoryItemAdded(ItemInstance item)
         {
@@ -354,7 +354,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
                 if (fullyGone)
                 {
-                    Debug.Log($"[SelectableItemButton:{_filterType}] tracked item depleted â†’ clearing + TryAutoFill");
+                    Debug.Log($"[SelectableItemButton:{_filterType}] tracked item depleted → clearing + TryAutoFill");
                     _trackedInstanceId = null;
                     RefreshDisplay();
                     TryAutoFill();
@@ -362,9 +362,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Helpers
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private ItemInstance GetItemByInstanceId(string instanceId)
         {

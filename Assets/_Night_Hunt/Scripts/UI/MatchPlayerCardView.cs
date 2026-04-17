@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// MatchPlayerCardView — một card hiển thị thông tin 1 player trong MatchLoadingOverlay.
+    /// MatchPlayerCardView — một card display thông tin 1 player trong MatchLoadingOverlay.
     ///
     /// Inspector layout gợi ý:
     ///   Root (MatchPlayerCard prefab)
@@ -24,7 +24,7 @@ namespace NightHunt.UI
     {
         [Header("Avatar")]
         [SerializeField] private Image            avatarImage;
-        [SerializeField] private Sprite           defaultAvatar;   // fallback nếu không tìm thấy
+        [SerializeField] private Sprite           defaultAvatar;   // fallback nếu not found
 
         [Header("Info")]
         [SerializeField] private TextMeshProUGUI  nameText;

@@ -14,13 +14,13 @@ namespace NightHunt.Gameplay.Boss
     ///   - BossController tự gom tất cả TurretGun qua OnValidate.
     ///
     /// DEFAULT FACING (hướng mặc định):
-    ///   Lưu transform.forward lúc Awake (= rotation được đặt trong prefab).
-    ///   Dùng để:
-    ///     1. Idle sweep — khi không có target, turret quét sang trái/phải
+    ///   Save transform.forward lúc Awake (= rotation được đặt trong prefab).
+    ///   Uses để:
+    ///     1. Idle sweep — khi not available target, turret quét sang trái/phải
     ///        quanh góc trực chiến này (giống radar), KHÔNG quay 360°.
     ///        Điều này đảm bảo mỗi turret phụ trách đúng sector của nó.
     ///     2. Return to default — khi vừa mất target, quay về góc gốc trước
-    ///        khi bắt đầu idle sweep.
+    ///        khi start idle sweep.
     ///
     /// NETWORK SYNC:
     ///   _syncLookDir (SyncVar Vector3): Server ghi hướng nhìn hiện tại,
@@ -28,13 +28,13 @@ namespace NightHunt.Gameplay.Boss
     ///
     /// VFX:
     ///   Sử dụng Object Pooling của game (ProjectilePool). TurretGun KHÔNG tự chứa ParticleSystem 
-    ///   hay Tracer. Mọi luồng hình ảnh bắn đạn được ProjectileComponent lo trọn gói.
+    ///   hay Tracer. Mọi flow hình ảnh bắn đạn được ProjectileComponent lo trọn gói.
     /// </summary>
     public class TurretGun : NetworkBehaviour
     {
         // ── Inspector ────────────────────────────────────────────────────────────
         [Header("Turret Parts")]
-        [Tooltip("Transform phần xoay của mô hình (đầu/thân trên của turret)")]
+        [Tooltip("Transform phần xoay của model (đầu/thân trên của turret)")]
         [SerializeField] private Transform _turretHead;
         [Tooltip("Empty Transform đặt ngay họng súng — origin của vị trí đạn bay ra")]
         [SerializeField] private Transform _firePoint;
@@ -42,7 +42,7 @@ namespace NightHunt.Gameplay.Boss
         [Header("Rotation Config")]
         [Tooltip("Tốc độ xoay bám target (deg/s). Client dùng để Slerp _turretHead")]
         [SerializeField] private float _trackSpeed = 180f;
-        [Tooltip("Tốc độ quét idle khi không có target (deg/s). Quét trái/phải quanh góc prefab")]
+        [Tooltip("Tốc độ quét idle khi not available target (deg/s). Quét trái/phải quanh góc prefab")]
         [SerializeField] private float _idleSweepSpeed = 20f;
         [Tooltip("Biên độ quét idle sang mỗi bên (độ). 0 = không quét, đứng yên")]
         [SerializeField] private float _idleSweepAngle = 45f;
@@ -76,7 +76,7 @@ namespace NightHunt.Gameplay.Boss
 
         private void Awake()
         {
-            // Lưu hướng mặc định từ rotation của prefab.
+            // Save hướng mặc định từ rotation của prefab.
             // Đây là sector turret này phụ trách — idle sweep sẽ quét quanh đây.
             _defaultForward = transform.forward;
         }
@@ -86,7 +86,7 @@ namespace NightHunt.Gameplay.Boss
         public override void OnStartServer()
         {
             base.OnStartServer();
-            // Khởi tạo SyncVar về hướng mặc định ngay khi spawn
+            // Khởi tạo SyncVar về hướng mặc định ngay on spawn
             _syncLookDir.Value = _defaultForward;
         }
 
@@ -119,7 +119,7 @@ namespace NightHunt.Gameplay.Boss
 
         /// <summary>
         /// BossController gọi mỗi Server tick.
-        /// - Có target: xoay về phía target, check LoS, trả về true nếu sẵn sàng bắn.
+        /// - Có target: xoay về phía target, check LoS, trả về true nếu ready bắn.
         /// - Không target: quét idle quanh góc prefab, trả về false.
         /// </summary>
         [Server]

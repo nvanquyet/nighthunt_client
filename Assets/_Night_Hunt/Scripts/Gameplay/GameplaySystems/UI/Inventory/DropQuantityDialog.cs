@@ -176,7 +176,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             
             if (_dropButton != null)
             {
-                // Drop button chỉ hiển thị khi có slider (quantity > 2)
+                // Drop button chỉ display khi có slider (quantity > 2)
                 _dropButton.gameObject.SetActive(showSlider);
             }
         }

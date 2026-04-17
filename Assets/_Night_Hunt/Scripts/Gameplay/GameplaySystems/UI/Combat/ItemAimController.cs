@@ -104,7 +104,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         /// <summary>
         /// True khi controller đang trong aim mode (chờ confirm/cancel).
-        /// Dùng bởi item selection button để quyết định có start hold-timer/joystick không.
+        /// Uses bởi item selection button để quyết định có start hold-timer/joystick không.
         /// </summary>
         public bool IsInAimMode => _inAimMode;
 
@@ -114,6 +114,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private void Awake()
         {
+#if UNITY_SERVER
+            // DS build: ItemAimController is client-only UI logic.
+            // Disable immediately so Update() never runs on the headless server.
+            enabled = false;
+            return;
+#endif
             _cam = Camera.main;
             HideCursor();
         }
@@ -287,13 +293,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         /// <summary>
         /// Phiên bản phòng thủ của <see cref="OnMobileDragEnd"/> — chỉ thực thi nếu aim mode
-        /// vẫn còn active. Được gọi từ OnEndDrag để tránh
-        /// double-resolve khi OnPointerUp đã xử lý trước.
+        /// vẫn còn active. Được called from OnEndDrag để tránh
+        /// double-resolve khi OnPointerUp đã handle trước.
         /// </summary>
         public void OnMobileDragEndIfStillActive(float joystickMagnitude)
         {
-            // _inAimMode đã được reset về false nếu OnPointerUp đã gọi OnMobileDragEnd trước.
-            // Guard này đảm bảo không có double Confirm/Cancel.
+            // _inAimMode has been reset về false nếu OnPointerUp đã gọi OnMobileDragEnd trước.
+            // Guard này đảm bảo not available double Confirm/Cancel.
             if (!_inAimMode) return;
             OnMobileDragEnd(joystickMagnitude);
         }        // ─────────────────────────────────────────────────────────────────────

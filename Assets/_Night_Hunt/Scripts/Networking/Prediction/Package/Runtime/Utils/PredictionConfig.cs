@@ -32,7 +32,7 @@ namespace NightHunt.Networking.Prediction.Utils
         public float lodDistance1 = 50f;
         public float lodDistance2 = 100f;
         public float lodDistance3 = 200f;
-        public bool enableObjectPooling = false; // ← THÊM DÒNG NÀY
+        public bool enableObjectPooling = false; // ? TH�M D�NG N�Y
 
         [Header("Debug")]
         public bool showDebugGizmos = false;

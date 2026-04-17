@@ -6,6 +6,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 
 namespace NightHunt.Gameplay.Camera
 {

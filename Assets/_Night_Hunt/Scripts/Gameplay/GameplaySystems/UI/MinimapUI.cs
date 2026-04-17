@@ -1,6 +1,7 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 
 namespace NightHunt.GameplaySystems.UI
 {

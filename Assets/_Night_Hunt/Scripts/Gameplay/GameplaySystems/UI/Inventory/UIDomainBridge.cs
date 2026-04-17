@@ -8,12 +8,13 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
     /// Bridge giữa gameplay backend (GameplaySystemsBridge) và UI Inventory/HUD.
-    /// Lắng nghe event từ bridge và bắn event UI thân thiện với slot.
+    /// Listens for event từ bridge và bắn event UI thân thiện với slot.
     /// </summary>
     public enum InventorySortMode
     {

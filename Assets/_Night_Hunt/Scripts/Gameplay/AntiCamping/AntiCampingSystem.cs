@@ -310,7 +310,7 @@ namespace NightHunt.Gameplay.AntiCamping
             {
                 Debug.Log(
                     $"[AntiCampingSystem] Config values (from GameplayConfig '{_gameplayConfig.name}'):\n" +
-                    $"  CampingTimeThreshold   : {_gameplayConfig.CampingTimeThreshold}s  — đứng yên tối đa trước khi bị reveal (default: 90s)\n" +
+                    $"  CampingTimeThreshold   : {_gameplayConfig.CampingTimeThreshold}s  — đứng yên tối đa before bị reveal (default: 90s)\n" +
                     $"  CampingPositionThreshold: {_gameplayConfig.CampingPositionThreshold}m — bán kính 'đứng yên' (default: 5m)\n" +
                     $"  CampingRevealRadius    : {_gameplayConfig.CampingRevealRadius}m  — bán kính vùng bị lộ cho địch (default: 30m)\n" +
                     $"  CampingUpdateInterval  : {_gameplayConfig.CampingUpdateInterval}s  — chu kỳ check (default: 5s)\n" +
@@ -325,7 +325,7 @@ namespace NightHunt.Gameplay.AntiCamping
                     "  CampingRevealRadius    : 30m\n" +
                     "  CampingUpdateInterval  : 5s\n" +
                     $"  _healthDrainPerSecond  : {_healthDrainPerSecond} HP/s\n" +
-                    "Kéo GameplayConfig ScriptableObject vào field '_gameplayConfig' để dùng giá trị thực.");
+                    "Kéo GameplayConfig ScriptableObject vào field '_gameplayConfig' để dùng value thực.");
             }
         }
 

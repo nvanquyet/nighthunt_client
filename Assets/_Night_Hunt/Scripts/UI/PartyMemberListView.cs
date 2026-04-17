@@ -46,6 +46,7 @@ namespace NightHunt.UI
 
         private readonly List<PartyMemberAvatarView> _views = new();
         private Action<long> _onKick;
+        private Action<long> _onTransferLeader;
         private Action       _onLeave;
 
         // -- Public API -------------------------------------------------------
@@ -59,17 +60,20 @@ namespace NightHunt.UI
         /// <param name="iAmHost">True if the local player is the party host.</param>
         /// <param name="onInviteClicked">Fires when an empty "+" slot is tapped (open FriendPanelView).</param>
         /// <param name="onKick">Fires with userId when host kicks a member.</param>
+        /// <param name="onTransferLeader">Fires with userId when host transfers leadership.</param>
         /// <param name="onLeave">Fires when local player taps Leave.</param>
         public void Refresh(PartyResponse party, int maxSlots,
-                            bool         iAmHost        = false,
-                            Action       onInviteClicked = null,
-                            Action<long> onKick         = null,
-                            Action       onLeave        = null)
+                            bool         iAmHost           = false,
+                            Action       onInviteClicked    = null,
+                            Action<long> onKick             = null,
+                            Action<long> onTransferLeader   = null,
+                            Action       onLeave            = null)
         {
             if (maxSlots <= 0) maxSlots = 1;
 
-            _onKick  = onKick;
-            _onLeave = onLeave;
+            _onKick           = onKick;
+            _onTransferLeader = onTransferLeader;
+            _onLeave          = onLeave;
 
             // Show/hide host crown on the local player's fixed self-slot
             selfHostBadge?.SetActive(iAmHost);
@@ -137,12 +141,15 @@ namespace NightHunt.UI
         {
             if (view == null) return;
 
-            var anchor    = view.GetComponent<RectTransform>();
-            bool showKick = view.IAmHost && !view.IsLocalPlayer;
-            bool showLeave = view.IsLocalPlayer;
+            var anchor             = view.GetComponent<RectTransform>();
+            bool showKick          = view.IAmHost && !view.IsLocalPlayer;
+            bool showTransfer      = view.IAmHost && !view.IsLocalPlayer;
+            bool showLeave         = view.IsLocalPlayer;
 
             sharedContextMenu?.Show(anchor, showKick, showLeave,
-                                    view.MemberId, _onKick, _onLeave);
+                                    view.MemberId, _onKick, _onLeave,
+                                    showTransferLeader: showTransfer,
+                                    onTransferLeader:  _onTransferLeader);
         }
 
         private void OnDestroy() => Clear();

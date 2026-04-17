@@ -207,7 +207,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         {
                             var id = UISlotId.Inventory(i);
                             view.Initialize(_uiConfig, id);
-                            // Force reset về empty state để đảm bảo icon được set đúng
+                            // Force reset về empty state để đảm bảo icon set đúng
                             view.SetEmptyState();
                             _slotViews[id] = view;
                             DragDropController.Instance?.RegisterSlotView(view);
@@ -216,7 +216,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
             }
 
-            // Equipment slots - spawn vào _equipmentRoot (anchor được xử lý ở phần khác)
+            // Equipment slots - spawn vào _equipmentRoot (anchor được handle ở phần khác)
             if (_equipmentRoot != null && _uiConfig.InventoryConfig.EquipmentConfig != null)
             {
                 var prefab = _uiConfig.GetSlotPrefab(UISlotType.Equipment);
@@ -235,7 +235,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         {
                             var id = UISlotId.Equipment(equipmentSlot.Type);
                             view.Initialize(_uiConfig, id);
-                            // Force reset về empty state để đảm bảo icon được set đúng
+                            // Force reset về empty state để đảm bảo icon set đúng
                             view.SetEmptyState();
                             _slotViews[id] = view;
                             DragDropController.Instance?.RegisterSlotView(view);
@@ -263,7 +263,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         {
                             var id = UISlotId.Weapon(weaponSlot.Type);
                             view.Initialize(_uiConfig, id);
-                            // Force reset về empty state để đảm bảo icon được set đúng
+                            // Force reset về empty state để đảm bảo icon set đúng
                             view.SetEmptyState();
                             _slotViews[id] = view;
                             DragDropController.Instance?.RegisterSlotView(view);
@@ -295,7 +295,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 go.gameObject.SetActive(true); // Activate after initialization to avoid showing uninitialized values
             }
 
-            // Force rebuild layout sau khi spawn tất cả slots
+            // Force rebuild layout sau on spawn tất cả slots
             if (_inventoryGridRoot != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_inventoryGridRoot);
             if (_equipmentRoot != null)
@@ -305,7 +305,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_trashSlotRoot != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_trashSlotRoot);
 
-            // Hook hover events sau khi spawn tất cả slots
+            // Hook hover events sau on spawn tất cả slots
             HookSlotHoverEvents(true);
         }
 
@@ -321,7 +321,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 .Resolve();
             if (rectTransform == null) return;
 
-            // Đảm bảo GameObject active để RectTransform có thể được setup
+            // Đảm bảo GameObject active để RectTransform có thể setup
             if (!slotGO.activeSelf)
             {
                 slotGO.SetActive(true);
@@ -350,7 +350,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 .Resolve();
             if (parentLayoutGroup != null)
             {
-                // Thêm LayoutElement với preferred size nếu chưa có
+                // Add LayoutElement với preferred size nếu not yet available
                 var layoutElement = ComponentResolver.Find<UnityEngine.UI.LayoutElement>(slotGO)
                     .OnSelf()
                     .InChildren()
@@ -362,7 +362,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
 
                 // LUÔN set preferred size (override để đảm bảo không bị 0)
-                // Layout Group sẽ dùng giá trị này để layout
+                // Layout Group sẽ dùng value này để layout
                 layoutElement.preferredWidth = _slotSize.x;
                 layoutElement.preferredHeight = _slotSize.y;
 
@@ -579,7 +579,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
                 else
                 {
-                    // Item không có attachment slots hoặc hover bị tắt → hide panel
+                    // Item not available attachment slots hoặc hover bị tắt → hide panel
                     if (_attachmentPanel != null)
                         _attachmentPanel.Hide();
                 }

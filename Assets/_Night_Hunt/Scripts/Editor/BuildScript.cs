@@ -8,7 +8,7 @@ namespace NightHunt.Build
     /// <summary>
     /// BuildScript — Unity command-line build automation.
     ///
-    /// Dùng với -executeMethod khi build qua CLI hoặc CI/CD:
+    /// Uses với -executeMethod khi build qua CLI hoặc CI/CD:
     ///
     ///   Dedicated Server (Linux):
     ///     Unity.exe -quit -batchmode -nographics
@@ -35,12 +35,12 @@ namespace NightHunt.Build
     {
         // ── Scene lists ───────────────────────────────────────────────────────
 
-        /// <summary>Scenes cần thiết cho Dedicated Server (headless, không có UI).</summary>
+        /// <summary>Scenes cần thiết cho Dedicated Server (headless, not available UI).</summary>
         private static readonly string[] DsScenes =
         {
             "Assets/_Night_Hunt/Scenes/00_DS_Boot.unity",
             "Assets/_Night_Hunt/Scenes/02_Map_01.unity",
-            // Thêm map mới ở đây khi có:
+            // Add map mới ở đây khi có:
             // "Assets/_Night_Hunt/Scenes/02_Map_02.unity",
         };
 
@@ -49,7 +49,7 @@ namespace NightHunt.Build
         {
             "Assets/_Night_Hunt/Scenes/01_Home.unity",
             "Assets/_Night_Hunt/Scenes/02_Map_01.unity",
-            // Thêm map mới ở đây khi có:
+            // Add map mới ở đây khi có:
             // "Assets/_Night_Hunt/Scenes/02_Map_02.unity",
         };
 
@@ -157,7 +157,7 @@ namespace NightHunt.Build
             }
         }
 
-        /// <summary>Đọc custom arg từ command line: -argName value</summary>
+        /// <summary>Read custom arg từ command line: -argName value</summary>
         private static string GetArgOrDefault(string argName, string defaultValue)
         {
             string[] args = Environment.GetCommandLineArgs();

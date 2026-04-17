@@ -16,7 +16,7 @@ namespace NightHunt.UI
     ///
     /// Team list populate DUY NHẤT 1 LẦN khi nhận AllPlayersReadyEvent.
     /// Source: PlayerPublicRegistry (dict sẵn có, không FindObjectsByType).
-    /// Alive/dead tự cập nhật qua NetworkPlayer.OnAliveChanged bên trong TeamMemberRow.
+    /// Alive/dead tự update qua NetworkPlayer.OnAliveChanged bên trong TeamMemberRow.
     /// </summary>
     public class MatchUI : MonoBehaviour
     {

@@ -17,6 +17,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
         private InputAction nextPlayerAction;
         private InputAction previousPlayerAction;
         private InputAction exitSpectatorAction;
+        private InputAction toggleFreeCamAction;
 
         private float lastSwitchTime = 0f;
         private bool inputEnabled = false;
@@ -25,6 +26,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
         public event System.Action OnNextPlayer;
         public event System.Action OnPreviousPlayer;
         public event System.Action OnExitSpectator;
+        /// <summary>Fired when the player presses Tab to toggle free-fly vs follow mode.</summary>
+        public event System.Action OnToggleFreeCam;
 
         #region Lifecycle
 
@@ -61,9 +64,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
             if (spectatorActionMap != null)
             {
                 // InputSystem_Actions uses "NextPlayer", "PreviousPlayer", "FreeCamera" in Spectator map.
-                nextPlayerAction = spectatorActionMap.FindAction("NextPlayer");
+                // "ToggleFreeCam" must be bound to Tab in the InputActionAsset Spectator action map.
+                nextPlayerAction     = spectatorActionMap.FindAction("NextPlayer");
                 previousPlayerAction = spectatorActionMap.FindAction("PreviousPlayer");
-                exitSpectatorAction = spectatorActionMap.FindAction("FreeCamera");
+                exitSpectatorAction  = spectatorActionMap.FindAction("FreeCamera");
+                toggleFreeCamAction  = spectatorActionMap.FindAction("ToggleFreeCam");
+                if (toggleFreeCamAction == null)
+                    Debug.LogWarning("[SpectatorInputHandler] 'ToggleFreeCam' action not found in Spectator map. Add it (Tab key) in InputActionAsset.");
             }
             else
             {
@@ -109,9 +116,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
             if (exitSpectatorAction != null)
                 exitSpectatorAction.performed += OnExitSpectatorPerformed;
 
-            // NOTE: Không gọi TransitionToState ở đây!
-            // Việc chuyển context là trách nhiệm của caller (CharacterInputLifecycle, v.v.)
-            // để tránh circular dependency.
+            if (toggleFreeCamAction != null)
+                toggleFreeCamAction.performed += OnToggleFreeCamPerformed;
+
+            // NOTE: Do NOT call TransitionToState here.
+            // Context switching is the caller's responsibility (CharacterInputLifecycle, etc.)
+            // to avoid circular dependencies.
 
             Debug.Log("[SpectatorInputHandler] Input enabled");
         }
@@ -130,6 +140,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
 
             if (exitSpectatorAction != null)
                 exitSpectatorAction.performed -= OnExitSpectatorPerformed;
+
+            if (toggleFreeCamAction != null)
+                toggleFreeCamAction.performed -= OnToggleFreeCamPerformed;
 
             Debug.Log("[SpectatorInputHandler] Input disabled");
         }
@@ -157,6 +170,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Spectator
         private void OnExitSpectatorPerformed(InputAction.CallbackContext context)
         {
             OnExitSpectator?.Invoke();
+        }
+
+        private void OnToggleFreeCamPerformed(InputAction.CallbackContext context)
+        {
+            OnToggleFreeCam?.Invoke();
         }
 
         #endregion

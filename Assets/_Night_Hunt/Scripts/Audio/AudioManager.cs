@@ -140,19 +140,18 @@ namespace NightHunt.Audio
 
         /// <summary>
         /// Set a mixer exposed parameter from a 0–1 linear value.
-        /// Persists to PlayerPrefs using key = param + "SliderValue"
-        /// (same convention as ShiftUI SliderManager).
+        /// Persists to PlayerPrefs using key = "NH_Audio_" + param.
         /// </summary>
         public void SetVolume(string exposedParam, float value01)
         {
             float clamped = Mathf.Clamp(value01, 0.001f, 1f);
             mixer.SetFloat(exposedParam, Mathf.Log10(clamped) * 20f);
-            PlayerPrefs.SetFloat(exposedParam + "SliderValue", value01);
+            PlayerPrefs.SetFloat("NH_Audio_" + exposedParam, value01);
         }
 
         /// <summary>Return saved 0–1 linear volume for a param.</summary>
         public float GetVolume(string exposedParam, float defaultValue)
-            => PlayerPrefs.GetFloat(exposedParam + "SliderValue", defaultValue);
+            => PlayerPrefs.GetFloat("NH_Audio_" + exposedParam, defaultValue);
 
         private void LoadAllVolumes()
         {
@@ -169,7 +168,7 @@ namespace NightHunt.Audio
 
         private void ApplyStored(string param, float defaultVal)
         {
-            float stored = PlayerPrefs.GetFloat(param + "SliderValue", defaultVal);
+            float stored = PlayerPrefs.GetFloat("NH_Audio_" + param, defaultVal);
             float clamped = Mathf.Clamp(stored, 0.001f, 1f);
             mixer.SetFloat(param, Mathf.Log10(clamped) * 20f);
         }

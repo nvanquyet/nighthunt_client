@@ -5,7 +5,7 @@ using NightHunt.Core; // ScriptableObjectSingleton<T>
 namespace NightHunt.Config
 {
     /// <summary>
-    /// SceneConfig — Singleton ScriptableObject quản lý scene names.
+    /// SceneConfig — Singleton ScriptableObject manage scene names.
     ///
     /// Kế thừa <see cref="ScriptableObjectSingleton{T}"/> — dùng base có sẵn,
     /// không tự implement singleton.
@@ -15,8 +15,8 @@ namespace NightHunt.Config
     ///   • GameMap_xx = "02_GameMap_01"… — Gameplay scenes (nhiều map)
     ///
     /// Để thêm map mới:
-    ///   1. Thêm enum value vào <see cref="SceneId"/> (e.g. GameMap_03 = 102)
-    ///   2. Thêm entry trong Inspector của SceneConfig.asset
+    ///   1. Add enum value vào <see cref="SceneId"/> (e.g. GameMap_03 = 102)
+    ///   2. Add entry trong Inspector của SceneConfig.asset
     ///   → Không cần sửa code ở bất kỳ đâu khác.
     ///
     /// SETUP: Đặt SceneConfig.asset trong thư mục Resources/ và
@@ -31,7 +31,7 @@ namespace NightHunt.Config
         public struct SceneEntry
         {
             public SceneId id;
-            [Tooltip("Tên chính xác của scene file (không có .unity). " +
+            [Tooltip("Tên chính xác của scene file (not available .unity). " +
                      "Phải khớp với tên trong Build Settings.")]
             public string  sceneName;
         }
@@ -40,7 +40,7 @@ namespace NightHunt.Config
 
         [Header("Scene Name Mapping")]
         [Tooltip("Mỗi entry map SceneId → tên scene thật.\n" +
-                 "Thêm map mới: thêm enum value + thêm entry ở đây.")]
+                 "Add map mới: thêm enum value + thêm entry ở đây.")]
         [SerializeField]
         private SceneEntry[] scenes = new SceneEntry[]
         {
@@ -63,7 +63,7 @@ namespace NightHunt.Config
 
         /// <summary>
         /// Trả về tên scene theo SceneId.
-        /// Fallback về Home scene name nếu không tìm thấy.
+        /// Fallback về Home scene name nếu not found.
         /// </summary>
         public static string GetSceneName(SceneId id)
         {
@@ -78,8 +78,8 @@ namespace NightHunt.Config
                 if (entry.id == id)
                     return entry.sceneName;
 
-            Debug.LogWarning($"[SceneConfig] SceneId.{id} không có trong config → fallback Home.");
-            return "01_Home"; // hardcoded fallback — tránh infinite recursion nếu Home không có trong scenes
+            Debug.LogWarning($"[SceneConfig] SceneId.{id} not available trong config → fallback Home.");
+            return "01_Home"; // hardcoded fallback — tránh infinite recursion nếu Home not available trong scenes
         }
 
         /// <summary>Tên scene Home (shortcut hay dùng).</summary>
@@ -101,7 +101,7 @@ namespace NightHunt.Config
 
         /// <summary>
         /// Trả về tất cả SceneId là GameMap.
-        /// Dùng cho UI chọn map hoặc matchmaking random map.
+        /// Uses cho UI chọn map hoặc matchmaking random map.
         /// </summary>
         public static SceneId[] GetAllGameMapIds()
         {
@@ -126,7 +126,7 @@ namespace NightHunt.Config
                     Debug.LogWarning($"[SceneConfig] Duplicate SceneId.{entry.id} " +
                                      "trong scenes array!");
                 if (string.IsNullOrWhiteSpace(entry.sceneName))
-                    Debug.LogWarning($"[SceneConfig] SceneId.{entry.id} có sceneName rỗng!");
+                    Debug.LogWarning($"[SceneConfig] SceneId.{entry.id} có sceneName empty!");
             }
         }
 #endif
@@ -139,8 +139,8 @@ namespace NightHunt.Config
     ///
     /// Quy tắc:
     ///   • Home = 0  (luôn cố định)
-    ///   • GameMap bắt đầu từ 100 → không bao giờ conflict với Home
-    ///   • Dùng explicit int values → thêm mới không bao giờ shift existing values
+    ///   • GameMap start từ 100 → never conflict với Home
+    ///   • Uses explicit int values → thêm mới never shift existing values
     ///   • Đặt tên theo chức năng, không theo tên file (file có thể rename tự do)
     /// </summary>
     public enum SceneId

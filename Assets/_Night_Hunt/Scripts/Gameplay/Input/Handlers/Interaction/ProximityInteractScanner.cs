@@ -270,7 +270,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             float x = 10f;
             float y = 10f;
 
-            // Đếm trước tổng số dòng cần hiển thị (có thể có sub-lines cho lootable)
+            // Đếm trước tổng số dòng cần display (có thể có sub-lines cho lootable)
             int totalLines = Mathf.Max(1, _nearby.Count);
             foreach (var it in _nearby)
             {
@@ -302,7 +302,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
                     $"[{i}] {label} ({dist:F1} m){suffix}");
                 y += lineHeight;
 
-                // Sub-lines: hiển thị từng item bên trong lootable
+                // Sub-lines: display từng item bên trong lootable
                 if (it is ILootable lootable && lootable.GetStorage().Count > 0)
                 {
                     foreach (var item in lootable.GetStorage())

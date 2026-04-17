@@ -13,35 +13,35 @@ namespace NightHunt.GameplaySystems.UI.Combat
     /// <summary>
     /// Container managing the expand/collapse flow for a single item-type filter slot.
     ///
-    /// â”€â”€ Roles after refactor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    /// ── Roles after refactor ─────────────────────────────────────────────────────
     ///
     /// <see cref="SelectableItemButton"/> (_slotButton)
-    ///   â€” The permanent collapsed icon button the player sees in the HUD.
-    ///   â€” Manages its own icon / quantity display and auto-fill from inventory.
-    ///   â€” Click state machine: select â†’ arm â†’ cancel (double-click = cancel).
-    ///   â€” Fires <see cref="SelectableItemButton.OnExpandRequested"/> when clicked
+    ///   — The permanent collapsed icon button the player sees in the HUD.
+    ///   — Manages its own icon / quantity display and auto-fill from inventory.
+    ///   — Click state machine: select → arm → cancel (double-click = cancel).
+    ///   — Fires <see cref="SelectableItemButton.OnExpandRequested"/> when clicked
     ///     while empty so this panel can open the list.
     ///
     /// <see cref="ItemFilterButton"/> (_filterButtonPrefab)
-    ///   â€” One row per inventory item in the expanded list.
-    ///   â€” Single press â†’ RequestSelectItem + collapse panel.
-    ///   â€” Selection marker shows the currently active item.
+    ///   — One row per inventory item in the expanded list.
+    ///   — Single press → RequestSelectItem + collapse panel.
+    ///   — Selection marker shows the currently active item.
     ///
     /// This panel (ItemFilterPanel):
-    ///   â€” Manages the expand / collapse transition.
-    ///   â€” Rebuilds the ItemFilterButton list on inventory changes.
-    ///   â€” Updates selection markers on ItemFilterButtons on selection changes.
+    ///   — Manages the expand / collapse transition.
+    ///   — Rebuilds the ItemFilterButton list on inventory changes.
+    ///   — Updates selection markers on ItemFilterButtons on selection changes.
     ///
-    /// â”€â”€ Inspector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    ///   _slotButton          â€“ The SelectableItemButton that acts as the HUD icon.
-    ///   _listRoot            â€“ Root GameObject toggled on/off for the expanded list.
-    ///   _contentRoot         â€“ Parent transform for spawned ItemFilterButton instances.
-    ///   _expandButton        â€“ Arrow / chevron button to manually expand / collapse.
-    ///   _filterButtonPrefab  â€“ Prefab with an ItemFilterButton component.
+    /// ── Inspector ────────────────────────────────────────────────────────────────
+    ///   _slotButton          – The SelectableItemButton that acts as the HUD icon.
+    ///   _listRoot            – Root GameObject toggled on/off for the expanded list.
+    ///   _contentRoot         – Parent transform for spawned ItemFilterButton instances.
+    ///   _expandButton        – Arrow / chevron button to manually expand / collapse.
+    ///   _filterButtonPrefab  – Prefab with an ItemFilterButton component.
     /// </summary>
     public class ItemFilterPanel : MonoBehaviour
     {
-        // â”€â”€ Inspector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Inspector ─────────────────────────────────────────────────────────────
 
         [Header("Collapsed Slot Button")]
         [Tooltip("The SelectableItemButton displayed as the collapsed HUD icon for this filter type.")]
@@ -53,7 +53,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] private Button           _expandButton;
         [SerializeField] private ItemFilterButton _filterButtonPrefab;
 
-        // â”€â”€ Runtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Runtime ───────────────────────────────────────────────────────────────
 
         private readonly List<ItemFilterButton> _spawnedButtons = new();
 
@@ -63,9 +63,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public bool IsExpanded { get; private set; }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Public API
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Bind this panel to a filter type and the current player's systems.
@@ -86,14 +86,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _selectionSystem = selectionSystem;
             _inventorySystem = inventorySystem;
 
-            // â”€â”€ Expand button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Expand button ──────────────────────────────────────────────────
             if (_expandButton != null)
             {
                 _expandButton.onClick.RemoveListener(ToggleList);
                 _expandButton.onClick.AddListener(ToggleList);
             }
 
-            // â”€â”€ Slot button (SelectableItemButton) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Slot button (SelectableItemButton) ────────────────────────────
             if (_slotButton != null)
             {
                 // Wire expand request so clicking an empty slot opens the list.
@@ -113,7 +113,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IsExpanded = true;
             RebuildList();
             if (_listRoot != null) _listRoot.SetActive(true);
-            Debug.Log($"[ItemFilterPanel:{_filterType}] ExpandList â€” {_spawnedButtons.Count} buttons");
+            Debug.Log($"[ItemFilterPanel:{_filterType}] ExpandList — {_spawnedButtons.Count} buttons");
         }
 
         public void CollapseList()
@@ -122,9 +122,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_listRoot != null) _listRoot.SetActive(false);
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void OnDestroy()
         {
@@ -137,9 +137,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _slotButton.OnExpandRequested -= ExpandList;
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Event Subscriptions
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void Subscribe()
         {
@@ -171,29 +171,29 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Selection Events
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void HandleItemSelected(ItemInstance item)
         {
             var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
             if (def == null || def.Type != _filterType) return;
 
-            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleItemSelected '{item.InstanceID}' â†’ collapse + refresh markers");
+            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleItemSelected '{item.InstanceID}' → collapse + refresh markers");
             RefreshSelectionMarkersOnButtons();
             CollapseList();
         }
 
         private void HandleItemDeselected()
         {
-            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleItemDeselected â†’ refresh markers");
+            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleItemDeselected → refresh markers");
             RefreshSelectionMarkersOnButtons();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        //  Inventory Events (list rebuild only â€” auto-fill is in SelectableItemButton)
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Inventory Events (list rebuild only — auto-fill is in SelectableItemButton)
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void HandleInventoryItemAdded(ItemInstance item)
         {
@@ -215,9 +215,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (IsExpanded) RebuildList();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Expand / Collapse Toggle
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void ToggleList()
         {
@@ -225,9 +225,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             else            ExpandList();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Expanded List Builder
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private void RebuildList()
         {
@@ -263,9 +263,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 btn?.RefreshSelectedMarker();
         }
 
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
         //  Helpers
-        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ─────────────────────────────────────────────────────────────────────────
 
         private IReadOnlyList<ItemInstance> GetCurrentPlayerItems()
         {

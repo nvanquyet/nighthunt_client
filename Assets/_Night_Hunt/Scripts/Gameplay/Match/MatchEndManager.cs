@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using FishNet.Object;
@@ -6,6 +6,7 @@ using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using UnityEngine;
 using NightHunt.Utilities;
 

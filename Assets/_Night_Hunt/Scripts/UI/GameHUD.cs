@@ -4,6 +4,7 @@ using NightHunt.GameplaySystems.UI.Inventory;
 using NightHunt.GameplaySystems.UI.Combat;
 using NightHunt.GameplaySystems.UI.Interaction;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Input.Core;

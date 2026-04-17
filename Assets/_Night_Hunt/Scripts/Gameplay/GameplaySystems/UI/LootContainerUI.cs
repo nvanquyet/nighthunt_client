@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,6 +9,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.GameplaySystems.Core.Configs;
 
 namespace NightHunt.GameplaySystems.UI
@@ -239,8 +240,8 @@ namespace NightHunt.GameplaySystems.UI
         private void HandleContainerOpened(WorldContainer container, FishNet.Connection.NetworkConnection conn)
         {
             if (container == null) return;
-            // Strict null guard: nếu _localNob chưa được set → UI chưa sẵn sàng, bỏ qua.
-            // Nếu không có guard này, khi _localNob == null condition "_localNob != null && ... " = false
+            // Strict null guard: nếu _localNob not yet set → UI not ready, bỏ qua.
+            // Nếu not available guard này, khi _localNob == null condition "_localNob != null && ... " = false
             // → không skip → LootUI bật trên TẤT CẢ clients.
             if (_localNob == null) return;
             // Only open for the local player who triggered the open.
@@ -267,7 +268,7 @@ namespace NightHunt.GameplaySystems.UI
         private void HandleCorpseOpened(WorldCorpse corpse, FishNet.Connection.NetworkConnection conn)
         {
             if (corpse == null) return;
-            // Strict null guard: chưa khởi tạo → bỏ qua.
+            // Strict null guard: chưa initialize → bỏ qua.
             if (_localNob == null) return;
             // Only open for the local player who triggered the open.
             if (conn != null && conn != _localNob.Owner)

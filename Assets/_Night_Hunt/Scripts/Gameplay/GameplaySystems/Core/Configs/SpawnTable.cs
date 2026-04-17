@@ -43,7 +43,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
         public SpawnTableMode Mode = SpawnTableMode.FixedPlusRandom;
 
         [Header("Fixed Items (Guaranteed)")]
-        [Tooltip("Items luôn spawn (không random). Dùng cho điểm có đồ hiếm cố định.")]
+        [Tooltip("Items luôn spawn (không random). Uses cho điểm có đồ hiếm cố định.")]
         public List<LootItemEntry> FixedEntries = new List<LootItemEntry>();
 
         [Header("Random Pool")]
@@ -60,10 +60,10 @@ namespace NightHunt.GameplaySystems.Core.Configs
         public int MaxRandomCount = 2;
 
         [Header("Roll Settings")]
-        [Tooltip("Container: roll khi mở lần đầu. SpawnPoint: roll ngay khi spawn")]
+        [Tooltip("Container: roll khi mở lần đầu. SpawnPoint: roll ngay on spawn")]
         public bool RollOnOpen = true;
 
-        [Tooltip("Container: spawn ra world thay vì giữ trong storage")]
+        [Tooltip("Container: spawn ra world instead of giữ trong storage")]
         public bool DropToWorldOnOpen = false;
 
         [Header("Total Items")]

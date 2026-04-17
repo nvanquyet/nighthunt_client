@@ -10,11 +10,11 @@ using NightHunt.Utils;
 namespace NightHunt.Core
 {
     /// <summary>
-    /// LoadingManager — App startup bootstrap. Chạy một lần khi 01_Home load.
+    /// LoadingManager — App startup bootstrap. Run một lần khi 01_Home load.
     ///
     /// Flow (theo thứ tự):
-    ///   1. Chờ GameManager khởi tạo (DontDestroyOnLoad)
-    ///   2. Chờ PersistentUICanvas sẵn sàng
+    ///   1. Wait GameManager initialize (DontDestroyOnLoad)
+    ///   2. Wait PersistentUICanvas ready
     ///   3. Services warm-up (ngắn)
     ///   4. Internet check → nếu OFFLINE: block + hiện Retry button (KHÔNG xoá token)
     ///                     → nếu ONLINE: tiếp tục
@@ -23,7 +23,7 @@ namespace NightHunt.Core
     ///        - AutoLogin OK    → UINavigator.GoHome() hoặc GoLobby()
     ///        - AutoLogin FAIL  → xoá token → UINavigator.GoLogin()
     ///
-    /// Khác với MatchLoadingOverlay: LoadingManager chỉ chạy khi app khởi động,
+    /// Khác với MatchLoadingOverlay: LoadingManager chỉ chạy khi app start up,
     /// MatchLoadingOverlay chạy trước mỗi lần vào gameplay.
     /// </summary>
     public class LoadingManager : MonoBehaviour
@@ -119,7 +119,7 @@ namespace NightHunt.Core
                 }
             }
 
-            // Auto-find loadingPanel nếu chưa được assign trong Inspector
+            // Auto-find loadingPanel nếu not yet assign trong Inspector
             if (loadingPanel == null)
             {
                 // Tìm child có tên "LoadingPanel" (hoặc "Loading Panel")
@@ -131,7 +131,7 @@ namespace NightHunt.Core
                 }
                 else
                 {
-                    Debug.LogError("[LoadingManager] ❌ loadingPanel chưa được gán trong Inspector và không tìm thấy child 'LoadingPanel'.");
+                    Debug.LogError("[LoadingManager] ❌ loadingPanel not yet gán trong Inspector và not found child 'LoadingPanel'.");
                     Debug.LogError("[LoadingManager]    Gán GameObject chứa loading UI vào field 'Loading Panel' trong Inspector.");
                 }
             }
@@ -179,19 +179,19 @@ namespace NightHunt.Core
         {
             float startTime = Time.time;
 
-            // ── Step 1: Chờ GameManager ──────────────────────────────────────
+            // ── Step 1: Wait GameManager ──────────────────────────────────────
             UpdateLoadingUI("Khởi động game...", 0.05f);
             yield return StartCoroutine(WaitForGameManager());
 
-            // ── Step 2: Chờ PersistentUICanvas ──────────────────────────────
-            UpdateLoadingUI("Khởi tạo giao diện...", 0.25f);
+            // ── Step 2: Wait PersistentUICanvas ──────────────────────────────
+            UpdateLoadingUI("Khởi tạo UI...", 0.25f);
             yield return StartCoroutine(WaitForPersistentUICanvas());
 
             // ── Step 3: Services warm-up ─────────────────────────────────
-            UpdateLoadingUI("Tải dịch vụ...", 0.40f);
+            UpdateLoadingUI("Load dịch vụ...", 0.40f);
             yield return new WaitForSeconds(0.1f);
 
-            // ── Step 4: Kiểm tra kết nối internet (OS-level) ─────────────────
+            // ── Step 4: Kiểm tra connect internet (OS-level) ─────────────────
             yield return StartCoroutine(WaitForInternet());
 
             // ── Step 5: Kiểm tra backend có hoạt động không ─────────────────
@@ -227,7 +227,7 @@ namespace NightHunt.Core
         /// </summary>
         private IEnumerator FetchGameConfigFlow()
         {
-            UpdateLoadingUI("Tải cấu hình game...", 0.50f);
+            UpdateLoadingUI("Load cấu hình game...", 0.50f);
 
             if (GameManager.Instance?.GameConfigService == null)
             {
@@ -258,22 +258,22 @@ namespace NightHunt.Core
         /// <summary>
         /// Kiểm tra refreshToken local.
         /// Nếu có → gọi API AutoLogin → lấy accessToken mới.
-        /// Nếu không / thất bại → về LoginPanel.
+        /// Nếu không / failed → về LoginPanel.
         /// </summary>
         private IEnumerator CheckAutoLoginFlow()
         {
-            // ── Đọc token local ──────────────────────────────────────────────
+            // ── Read token local ──────────────────────────────────────────────
             string refreshToken = SecureStorage.GetString(KEY_REFRESH_TOKEN, "");
 
             if (string.IsNullOrEmpty(refreshToken))
             {
-                UpdateLoadingUI("Vui lòng đăng nhập...", 0.85f);
+                UpdateLoadingUI("Vui lòng log in...", 0.85f);
                 _targetPanel = PanelType.Login;
                 yield break;
             }
 
-            // ── Gọi AutoLogin API ────────────────────────────────────────────
-            UpdateLoadingUI("Đang xác thực tài khoản...", 0.60f);
+            // ── Call AutoLogin API ────────────────────────────────────────────
+            UpdateLoadingUI("Đang authenticate tài khoản...", 0.60f);
 
             bool completed = false;
             bool success   = false;
@@ -290,7 +290,7 @@ namespace NightHunt.Core
             }
             else
             {
-                // AuthService không có → về Login
+                // AuthService not available → về Login
                 Debug.LogWarning("[LoadingManager] AuthService null — skipping AutoLogin");
                 PlayerPrefs.DeleteKey(KEY_REFRESH_TOKEN);
                 PlayerPrefs.Save();
@@ -298,20 +298,20 @@ namespace NightHunt.Core
                 yield break;
             }
 
-            // ── Chờ kết quả (progress tăng dần 60% → 82%) ───────────────────
+            // ── Wait kết quả (progress tăng dần 60% → 82%) ───────────────────
             float timeout = 10f, waited = 0f;
             while (!completed && waited < timeout)
             {
                 waited += Time.deltaTime;
                 float t = Mathf.Clamp01(waited / timeout);
-                UpdateLoadingUI("Đang xác thực tài khoản...", Mathf.Lerp(0.60f, 0.82f, t));
+                UpdateLoadingUI("Đang authenticate tài khoản...", Mathf.Lerp(0.60f, 0.82f, t));
                 yield return null;
             }
 
             // ── Xử lý kết quả ───────────────────────────────────────────────
             if (success)
             {
-                UpdateLoadingUI("Đăng nhập thành công!", 0.88f);
+                UpdateLoadingUI("Đăng nhập success!", 0.88f);
                 yield return new WaitForSeconds(0.1f);
 
                 // Còn trong room → vào thẳng Lobby
@@ -324,11 +324,11 @@ namespace NightHunt.Core
             }
             else
             {
-                // Token hết hạn hoặc API lỗi → xóa token, về Login
+                // Token expired hoặc API lỗi → xóa token, về Login
                 Debug.Log("[LoadingManager] AutoLogin failed — clearing token");
                 SecureStorage.DeleteKey(KEY_REFRESH_TOKEN);
 
-                UpdateLoadingUI("Phiên đăng nhập hết hạn...", 0.88f);
+                UpdateLoadingUI("Session expired...", 0.88f);
                 yield return new WaitForSeconds(0.1f);
 
                 _targetPanel = PanelType.Login;
@@ -340,15 +340,15 @@ namespace NightHunt.Core
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Block flow đến khi có kết nối mạng.
-        /// Dùng Application.internetReachability — nhanh, không cần ping thực.
+        /// Block flow đến khi có connect network.
+        /// Uses Application.internetReachability — nhanh, không cần ping thực.
         /// QUAN TRỌNG: KHÔNG bao giờ xóa token khi offline.
         /// </summary>
         private IEnumerator WaitForInternet()
         {
             if (Application.internetReachability != NetworkReachability.NotReachable)
             {
-                UpdateLoadingUI("Kết nối sẵn sàng...", 0.44f);
+                UpdateLoadingUI("Kết nối ready...", 0.44f);
                 yield break;
             }
 
@@ -357,7 +357,7 @@ namespace NightHunt.Core
 
             while (Application.internetReachability == NetworkReachability.NotReachable)
             {
-                UpdateLoadingUI("⚠️ Mất kết nối internet. Kiểm tra mạng rồi bấm Thử lại.", 0.42f);
+                UpdateLoadingUI("⚠️ Mất connect internet. Kiểm tra network rồi bấm Retry.", 0.42f);
 
                 _retryRequested = false;
                 float waited = 0f;
@@ -395,9 +395,9 @@ namespace NightHunt.Core
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Ping GET {_healthPath} để xác nhận server đang chạy.
+        /// Ping GET {_healthPath} để xác nhận server running.
         /// Block flow nếu server không phản hồi, cho phép retry thủ công hoặc tự động sau 5s.
-        /// Phân biệt rõ: "không kết nối được" vs "server trả lỗi 5xx (bảo trì)".
+        /// Phân biệt rõ: "không connect được" vs "server trả lỗi 5xx (bảo trì)".
         /// </summary>
         private IEnumerator WaitForBackendHealth()
         {
@@ -448,7 +448,7 @@ namespace NightHunt.Core
                 if (ok)
                 {
                     ShowRetryButton(false);
-                    UpdateLoadingUI("Server sẵn sàng!", 0.58f);
+                    UpdateLoadingUI("Server ready!", 0.58f);
                     Debug.Log($"[LoadingManager] ✅ Backend health check PASSED - Status: {req.responseCode}");
                     yield break;
                 }
@@ -640,7 +640,7 @@ namespace NightHunt.Core
             while (PersistentUICanvas.Instance == null && elapsed < timeout)
             {
                 elapsed += Time.deltaTime;
-                UpdateLoadingUI("Khởi tạo giao diện...", Mathf.Lerp(0.25f, 0.42f, elapsed / timeout));
+                UpdateLoadingUI("Khởi tạo UI...", Mathf.Lerp(0.25f, 0.42f, elapsed / timeout));
                 yield return null;
             }
 
@@ -669,7 +669,7 @@ namespace NightHunt.Core
                 UpdateLoadingUI(message, progressBar != null ? progressBar.value : 0f);
         }
 
-        /// <summary>Ẩn loading overlay.</summary>
+        /// <summary>Hide loading overlay.</summary>
         public void Hide()
         {
             if (loadingPanel != null)

@@ -84,7 +84,8 @@ MonoBehaviour:
   <ComponentIndex>k__BackingField: 0
   <PredictedSpawn>k__BackingField: {fileID: 0}
   <PredictedOwner>k__BackingField: {fileID: 0}
-  NetworkBehaviours: []
+  NetworkBehaviours:
+  - {fileID: 550566998960121790}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -109,15 +110,15 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 65535
+  <PrefabId>k__BackingField: 2
   <SpawnableCollectionId>k__BackingField: 0
-  <AssetPathHash>k__BackingField: 4515151519669579278
+  <AssetPathHash>k__BackingField: 6372488330230002767
   <SceneId>k__BackingField: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: 0, y: 0, z: 0, w: 0}
-    Scale: {x: 0, y: 0, z: 0}
-    IsValid: 0
+    Rotation: {x: 0, y: 0, z: 0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
 --- !u!114 &550566998960121790
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -130,16 +131,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 84ee41739ab59744fbd13755a20395b4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 255
+  _componentIndexCache: 0
   _addedNetworkObject: {fileID: 4128472038404713297}
-  _networkObjectCache: {fileID: 0}
-  maxHP: 500
-  placeTime: 5
-  respawnDelay: 15
-  minDistanceFromOtherBeacons: 30
-  beaconModel: {fileID: 6701804679448267595}
-  placementIndicator: {fileID: 8210933706422292245}
-  placementEffect: {fileID: 0}
+  _networkObjectCache: {fileID: 4128472038404713297}
 --- !u!1 &8210933706422292245
 GameObject:
   m_ObjectHideFlags: 0

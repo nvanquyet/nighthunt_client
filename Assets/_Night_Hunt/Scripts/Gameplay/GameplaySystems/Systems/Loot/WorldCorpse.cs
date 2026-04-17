@@ -1,4 +1,4 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using System;
@@ -10,6 +10,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Loot
@@ -25,12 +26,12 @@ namespace NightHunt.GameplaySystems.Loot
 
         [Header("Settings")]
         [FormerlySerializedAs("maxInteractDistance")]
-        [SerializeField] private float _maxInteractDistance = 3f; // fallback khi không có LootableConfig
+        [SerializeField] private float _maxInteractDistance = 3f; // fallback khi not available LootableConfig
 
         [FormerlySerializedAs("despawnTime")]
         [SerializeField] private float _despawnTime = 300f; // 5 phút
 
-        // Runtime config — inject khi spawn (không gán trên prefab).
+        // Runtime config — inject on spawn (không gán trên prefab).
         private LootableConfig _lootableConfig;
 
         // SYNC
@@ -196,7 +197,7 @@ namespace NightHunt.GameplaySystems.Loot
                 .Resolve();
             if (player == null)
             {
-                Debug.LogWarning("[WorldCorpse] RequestOpen: không tìm thấy NetworkPlayer.");
+                Debug.LogWarning("[WorldCorpse] RequestOpen: not found NetworkPlayer.");
                 return;
             }
 

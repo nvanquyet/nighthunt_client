@@ -20,7 +20,7 @@ namespace NightHunt.Gameplay.Boss
     /// BossController — Server-authoritative coordinator của một Boss Point.
     ///
     /// MỘT BossController điều phối NHIỀU TurretGun (multi-barrel support).
-    /// Mỗi TurretGun có FirePoint + MuzzleFlash riêng và xử lý VFX cục bộ.
+    /// Mỗi TurretGun có FirePoint + MuzzleFlash riêng và handle VFX cục bộ.
     ///
     /// FLOW HOÀN CHỈNH:
     ///
@@ -119,15 +119,15 @@ namespace NightHunt.Gameplay.Boss
         [SerializeField] private WorldSpawnConfig _bossRewardConfig;
 
         [Header("Scoring")]
-        [Tooltip("Số điểm thưởng cho team hạ Boss (trước khi nhân Phase Multiplier).")]
+        [Tooltip("Số điểm thưởng cho team hạ Boss (before nhân Phase Multiplier).")]
         [SerializeField] private int _bossKillScore = 500;
 
         [Header("Debug")]
-        [Tooltip("Bật/tắt hiển thị vòng bo và Menu Text thông số Boss trên Scene Editor")]
+        [Tooltip("Bật/tắt display vòng bo và Menu Text thông số Boss trên Scene Editor")]
         [SerializeField] private bool _showDebug = true;
 
         [Header("Death")]
-        [Tooltip("Giây sau khi Boss chết trước khi NetworkObject bị Despawn")]
+        [Tooltip("Giây after Boss chết before NetworkObject bị Despawn")]
         [SerializeField] private float _despawnDelay = 3f;
 
         // ── Runtime (Server only) ─────────────────────────────────────────────────
@@ -146,7 +146,8 @@ namespace NightHunt.Gameplay.Boss
         public float     AttackRadius => _attackRadius;
         public bool      IsDead    => _syncState.Value == BossState.Dead;
         public event Action<BossController> Died;
-
+        /// <summary>Raised on all clients when HP changes. Args: (currentHp, maxHp).</summary>
+        public event System.Action<float, float> OnHealthChanged;
         // ── Dependency Setup ───────────────────────────────────────────────────────
         [Server]
         public void SetDynamicRewardConfig(WorldSpawnConfig rewardConfig)
@@ -193,6 +194,8 @@ namespace NightHunt.Gameplay.Boss
         {
             base.OnStartClient();
 
+            _syncHp.OnChange += OnHpSyncChanged;
+
             // Collect turrets in case the serialized list is empty on this peer
             if (_turretGuns == null || _turretGuns.Count == 0)
                 _turretGuns = new List<TurretGun>(GetComponentsInChildren<TurretGun>(includeInactive: true));
@@ -205,6 +208,17 @@ namespace NightHunt.Gameplay.Boss
             }
             else
                 Debug.LogWarning($"[BossController] '{_bossId}': _projectilePrefab is NULL on client — projectile visuals will NOT appear! Assign in prefab Inspector.");
+        }
+
+        public override void OnStopClient()
+        {
+            base.OnStopClient();
+            _syncHp.OnChange -= OnHpSyncChanged;
+        }
+
+        private void OnHpSyncChanged(float prev, float next, bool asServer)
+        {
+            OnHealthChanged?.Invoke(next, _maxHp);
         }
 
         // ── Server Update ──────────────────────────────────────────────────────────
@@ -362,7 +376,7 @@ namespace NightHunt.Gameplay.Boss
                                  $"Damage NOT applied. Check player prefab has PlayerHealthSystem.");
             }
 
-            // Gọi ObserversRpc báo cho Client lôi đạn từ Pool ra bắn (Chỉ là hình ảnh)
+            // Call ObserversRpc báo cho Client lôi đạn từ Pool ra bắn (Chỉ là hình ảnh)
             // NOTE: aimPoint is passed as the hitscan endpoint so TurretGun.RpcSpawnProjectileVisual
             //       can teleport the visual directly to the impact position.
             gun.RpcSpawnProjectileVisual(aimPoint, true, _projectileSpeed);
@@ -421,7 +435,7 @@ namespace NightHunt.Gameplay.Boss
                                  $"Add ProjectilePool component to a persistent GameObject in the scene.");
             }
 
-            // Gọi Clients spawn VFX của đạn đó
+            // Call Clients spawn VFX của đạn đó
             // NOTE: Passes direction (not a point) so TurretGun uses it as a fly direction.
             gun.RpcSpawnProjectileVisual(dir, false, _projectileSpeed);
         }
@@ -495,7 +509,7 @@ namespace NightHunt.Gameplay.Boss
             Transform topThreat = GetHighestThreatTarget();
             if (topThreat != null)
             {
-                var np = topThreat.GetComponentInParent<NightHunt.Networking.NetworkPlayer>();
+                var np = topThreat.GetComponentInParent<NightHunt.Networking.Player.NetworkPlayer>();
                 if (np != null) killerTeam = np.TeamId;
             }
 

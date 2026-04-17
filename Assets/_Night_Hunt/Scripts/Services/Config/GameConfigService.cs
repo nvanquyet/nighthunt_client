@@ -29,7 +29,7 @@ namespace NightHunt.Services.Config
                 _backendClient = Core.GameManager.Instance.BackendClient;
 
             if (_backendClient == null)
-                _backendClient = FindFirstObjectByType<BackendHttpClient>();
+                Debug.LogError("[GameConfigService] BackendClient not available — ensure GameManager is initialized before GameConfigService.");
         }
 
         // ── Public API ────────────────────────────────────────────────────────

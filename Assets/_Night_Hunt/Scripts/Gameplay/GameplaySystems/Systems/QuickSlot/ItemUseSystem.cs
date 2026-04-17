@@ -82,7 +82,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
 #if UNITY_EDITOR
         [ContextMenu("Validate References")]
-        private void OnValidate()
+        protected override void OnValidate()
         {
             ValidateReferences();
         }

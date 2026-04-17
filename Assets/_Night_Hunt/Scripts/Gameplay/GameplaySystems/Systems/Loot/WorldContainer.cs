@@ -1,4 +1,4 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using System;
@@ -10,6 +10,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Loot
@@ -18,8 +19,8 @@ namespace NightHunt.GameplaySystems.Loot
     /// Thùng chứa / Crate / Barrel — player có thể mở và loot.
     /// Network-synced: All clients see same contents.
     ///
-    /// Dùng InitializeBeforeSpawn() (gọi TRƯỚC ServerManager.Spawn)
-    /// thay vì Initialize() (gọi sau Spawn) — tương tự WorldItem.
+    /// Uses InitializeBeforeSpawn() (gọi TRƯỚC ServerManager.Spawn)
+    /// instead of Initialize() (gọi sau Spawn) — tương tự WorldItem.
     /// </summary>
     public class WorldContainer : NetworkBehaviour, ILootable, IHoldInteractable
     {
@@ -167,7 +168,7 @@ namespace NightHunt.GameplaySystems.Loot
         // ── Server API ────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Gọi TRƯỚC ServerManager.Spawn() để SyncVar được embed vào spawn packet.
+        /// Call TRƯỚC ServerManager.Spawn() để SyncVar embedded in spawn packet.
         /// Tương tự WorldItem.InitializeBeforeSpawn() — xem comment ở đó.
         ///
         /// LƯU Ý: KHÔNG ĐƯỢC dùng [Server] attribute VÀ KHÔNG guard NetworkManager ở đây!
@@ -195,7 +196,7 @@ namespace NightHunt.GameplaySystems.Loot
             syncIsLocked.Value = locked;
             syncIsOpen.Value = false;
 
-            // Roll items ngay lúc spawn — không đợi player mở (mặc định khởi tạo luôn)
+            // Roll items ngay lúc spawn — không đợi player mở (mặc định initialize luôn)
             RollLootInternal();
 
             if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
@@ -242,7 +243,7 @@ namespace NightHunt.GameplaySystems.Loot
                 .Resolve();
             if (player == null)
             {
-                Debug.LogWarning("[WorldContainer] RequestOpen: NetworkPlayer không tìm thấy.");
+                Debug.LogWarning("[WorldContainer] RequestOpen: NetworkPlayer not found.");
                 RpcOnOpenRejected(conn);
                 return;
             }
@@ -262,7 +263,7 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            // Items đã được roll tại InitializeBeforeSpawn → không cần roll lại.
+            // Items has been roll tại InitializeBeforeSpawn → không cần roll lại.
             // Nếu DropToWorldOnOpen=true: scatter pending items ra world khi lần đầu mở.
             if (_pendingDropResults != null && _pendingDropResults.Count > 0)
             {
@@ -302,7 +303,7 @@ namespace NightHunt.GameplaySystems.Loot
         {
             if (spawnTable == null)
             {
-                Debug.LogWarning("[WorldContainer] RollLootInternal: SpawnTable là NULL — container sẽ rỗng!");
+                Debug.LogWarning("[WorldContainer] RollLootInternal: SpawnTable là NULL — container sẽ empty!");
                 hasRolled = true;
                 syncHasRolled.Value = true;
                 return;
@@ -401,7 +402,7 @@ namespace NightHunt.GameplaySystems.Loot
                 .Resolve();
             if (inventory == null)
             {
-                Debug.LogWarning("[WorldContainer] RequestTakeItem: IInventorySystem không tìm thấy.");
+                Debug.LogWarning("[WorldContainer] RequestTakeItem: IInventorySystem not found.");
                 return;
             }
 
@@ -510,7 +511,7 @@ namespace NightHunt.GameplaySystems.Loot
 
             _autoResetCoroutine = null;
             if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                Debug.Log($"[WorldContainer] Reset xong — sẵn sàng loot lại. storage={storage.Count} ObjId={ObjectId}");
+                Debug.Log($"[WorldContainer] Reset xong — ready loot lại. storage={storage.Count} ObjId={ObjectId}");
         }
 
         // ── ObserversRpc ──────────────────────────────────────────────────────────

@@ -11,10 +11,10 @@ namespace NightHunt.Networking.Player
         public static PlayerPublicRegistry Instance { get; private set; }
 
         private readonly Dictionary<int, PlayerPublicData> players
-            = new(); // FishNetId → PublicData
+            = new(); // FishNetId ? PublicData
 
         private readonly Dictionary<int, NetworkPlayer> networkPlayers
-            = new(); // FishNetId → PublicData 
+            = new(); // FishNetId ? PublicData 
 
         private void Awake()
         {
@@ -46,7 +46,7 @@ namespace NightHunt.Networking.Player
             return result;
         }
 
-        // Thêm vào PlayerPublicRegistry.cs
+        // Th�m v�o PlayerPublicRegistry.cs
         public List<NetworkPlayer> GetPlayersByTeam(int teamId)
         {
             var result = new List<NetworkPlayer>();

@@ -143,7 +143,7 @@ namespace NightHunt.Gameplay.FogOfWar
         }
 
         /// <summary>
-        /// Gọi lại RefreshVisibilityForLocalTeam mỗi khi data của object này thay đổi (vd. team switch).
+        /// Call lại RefreshVisibilityForLocalTeam mỗi khi data của object này thay đổi (vd. team switch).
         /// </summary>
         private void OnNetworkPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next)
         {
@@ -204,7 +204,7 @@ namespace NightHunt.Gameplay.FogOfWar
             int objectTeamId;
             if (!TryGetObjectTeamId(out objectTeamId))
             {
-                // Nếu object không có team (neutral) → tuỳ design, ở đây cho luôn visible.
+                // Nếu object not available team (neutral) → tuỳ design, ở đây cho luôn visible.
                 Log("No object team detected, treating as neutral (visible).");
                 RemoveHiderIfExists();
                 SetEnemyState(false);

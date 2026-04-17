@@ -12,11 +12,11 @@ using UnityEngine.UI;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// MatchLoadingOverlay — Full-screen overlay hiển thị trong khi kết nối server và spawn players.
+    /// MatchLoadingOverlay — Full-screen overlay display trong on connection server và spawn players.
     ///
     /// Thay thế team labels / single progress bằng 2 danh sách PlayerCard (theo team).
     /// Mỗi card: avatar (CharacterDatabase), tên, ELO, rank, progress cá nhân.
-    /// Overall progress bar theo dõi trạng thái kết nối chung.
+    /// Overall progress bar theo dõi trạng thái connect chung.
     ///
     /// Inspector layout gợi ý:
     ///   MatchLoadingOverlay (Panel + CanvasGroup)
@@ -180,13 +180,14 @@ namespace NightHunt.UI
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeIn());
 
-            SceneLoader.LoadGame(targetMapId);
+            // NOTE: SceneLoader.LoadGame() is called by MatchFlowCoordinator AFTER Show().
+            // Do NOT call it here — doing so would load the scene twice.
         }
 
         // ── Player Cards ───────────────────────────────────────────────────────
 
         /// <summary>
-        /// Đọc RoomState.CurrentRoom.players → spawn cards vào 2 container theo team.
+        /// Read RoomState.CurrentRoom.players → spawn cards vào 2 container theo team.
         /// Local player sử dụng SessionState.SelectedCharacterId để lấy avatar đúng.
         /// </summary>
         private void BuildPlayerCards()
@@ -195,7 +196,7 @@ namespace NightHunt.UI
 
             if (playerCardPrefab == null)
             {
-                Debug.LogWarning("[MatchLoadingOverlay] playerCardPrefab chưa được gán trong Inspector.");
+                Debug.LogWarning("[MatchLoadingOverlay] playerCardPrefab not yet gán trong Inspector.");
                 return;
             }
 
@@ -423,9 +424,9 @@ namespace NightHunt.UI
             yield return new WaitForSecondsRealtime(fadeDuration + 0.1f);
             NightHunt.State.RoomState.Instance?.ClearRoom();
             GameModalWindow.Instance?.ShowNotice(
-                "Kết nối thất bại",
-                "Không thể kết nối tới server trận đấu. Vui lòng thử lại.",
-                closeText: "Về trang chủ",
+                "Connection Failed",
+                "Unable to connect to the match server. Please try again.",
+                closeText: "Return to Home",
                 onClose:   () => NightHunt.UI.UINavigator.Instance?.GoHome());
         }
 

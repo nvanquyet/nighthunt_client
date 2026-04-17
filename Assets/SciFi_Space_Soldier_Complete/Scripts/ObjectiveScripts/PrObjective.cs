@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -71,7 +71,7 @@ public class PrObjective : MonoBehaviour {
     // Use this for initialization
     void Start () {
 
-        objectivesManager = FindObjectOfType<PrObjectivesManager>();
+        objectivesManager = FindFirstObjectByType<PrObjectivesManager>();
         if (objectivesManager)
         {
             transform.parent = objectivesManager.transform;

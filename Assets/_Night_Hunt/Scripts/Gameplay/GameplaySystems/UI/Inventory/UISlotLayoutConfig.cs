@@ -32,7 +32,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Tooltip("Background icon/sprite cho từng rarity level của item")]
         public RarityBackgroundConfig[] RarityBackgrounds;
 
-        [Tooltip("Background mặc định cho các item không có rarity hoặc rarity không được định nghĩa")]
+        [Tooltip("Background mặc định cho các item not available rarity hoặc rarity not allowed định nghĩa")]
         public Sprite DefaultBackground;
 
         [Header("Attachment UI")]
@@ -85,7 +85,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Range(10, 50)]
         public int DefaultExtraEmptySlots = 20;
 
-        [Tooltip("Số empty slots tối thiểu luôn hiển thị.")]
+        [Tooltip("Số empty slots tối thiểu luôn display.")]
         [Range(5, 30)]
         public int MinimumEmptySlots = 10;
 

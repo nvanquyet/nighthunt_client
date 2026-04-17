@@ -242,9 +242,9 @@ namespace NightHunt.Gameplay.StatSystem.Configs
         [Tooltip("Numeric format string (e.g. '0', '0.0')")]
         public string DisplayFormat;
 
-        [Tooltip("True = giá trị cao hơn = tốt hơn (Damage, Accuracy). " +
-                 "False = giá trị thấp hơn = tốt hơn (Recoil, Spread, Weight). " +
-                 "Dùng để hiển thị màu trong tooltip: xanh (tốt) / đỏ (xấu)")]
+        [Tooltip("True = value cao hơn = tốt hơn (Damage, Accuracy). " +
+                 "False = value thấp hơn = tốt hơn (Recoil, Spread, Weight). " +
+                 "Uses để display màu trong tooltip: xanh (tốt) / đỏ (xấu)")]
         public bool IsPositiveStat;
     }
 

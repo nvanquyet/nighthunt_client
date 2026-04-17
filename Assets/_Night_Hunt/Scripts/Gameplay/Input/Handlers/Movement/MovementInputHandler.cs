@@ -123,11 +123,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         {
             if (inputEnabled) return;
 
-            // Retry nếu Awake chạy trước khi InputLayerManager sẵn sàng
+            // Retry nếu Awake chạy before InputLayerManager ready
             if (playerActionMap == null) InitializeActions();
             if (playerActionMap == null)
             {
-                Debug.LogError("[MovementInputHandler] playerActionMap null – không thể EnableInput!");
+                Debug.LogError("[MovementInputHandler] playerActionMap null – cannot EnableInput!");
                 return;
             }
 

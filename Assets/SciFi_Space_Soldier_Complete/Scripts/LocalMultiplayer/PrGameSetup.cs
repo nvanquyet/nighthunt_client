@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 using UnityEngine.UI;
 using System.Collections.Generic;
@@ -215,7 +215,7 @@ public class PrGameSetup : MonoBehaviour {
                 }
             }
 
-            PrItemsSpawner[] itemSpawners = FindObjectsOfType<PrItemsSpawner>();
+            PrItemsSpawner[] itemSpawners = FindObjectsByType<PrItemsSpawner>(FindObjectsSortMode.None);
             if (itemSpawners.Length > 0)
             {
                 foreach (PrItemsSpawner itemSpawner in itemSpawners)
@@ -542,7 +542,7 @@ public class PrGameSetup : MonoBehaviour {
 
     void CallEnemiesToStop()
     {
-        PrAIController[] Enemies = FindObjectsOfType(typeof(PrAIController)) as PrAIController[];
+        PrAIController[] Enemies = FindObjectsByType<PrAIController>(FindObjectsSortMode.None);
         if (Enemies.Length != 0)
         {
             foreach (PrAIController enemy in Enemies)
@@ -550,7 +550,7 @@ public class PrGameSetup : MonoBehaviour {
                 enemy.StopAllActivities();
             }
         }
-        PrEnemySpawner[] spawners = FindObjectsOfType(typeof(PrEnemySpawner)) as PrEnemySpawner[];
+        PrEnemySpawner[] spawners = FindObjectsByType<PrEnemySpawner>(FindObjectsSortMode.None);
         foreach (var s in spawners)
         {
             s.SpawnerEnabled = false;

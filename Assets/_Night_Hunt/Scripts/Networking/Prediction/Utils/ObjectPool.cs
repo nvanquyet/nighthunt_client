@@ -5,7 +5,7 @@ namespace NightHunt.Networking.Prediction.Utils
 {
     /// <summary>
     /// Generic object pool cho zero-allocation prediction system.
-    /// Dùng để pool state snapshots và các objects khác.
+    /// Uses để pool state snapshots và các objects khác.
     /// </summary>
     /// <typeparam name="T">Type của object cần pool (phải là class với parameterless constructor)</typeparam>
     public class ObjectPool<T> where T : class, new()
@@ -31,7 +31,7 @@ namespace NightHunt.Networking.Prediction.Utils
         }
 
         /// <summary>
-        /// Lấy object từ pool hoặc tạo mới nếu pool rỗng.
+        /// Lấy object từ pool hoặc tạo mới nếu pool empty.
         /// </summary>
         /// <returns>Object từ pool hoặc object mới</returns>
         public T Get()
@@ -41,7 +41,7 @@ namespace NightHunt.Networking.Prediction.Utils
                 return _pool.Pop();
             }
 
-            // Pool rỗng, tạo object mới
+            // Pool empty, tạo object mới
             _currentSize++;
             return new T();
         }
@@ -71,7 +71,7 @@ namespace NightHunt.Networking.Prediction.Utils
         }
 
         /// <summary>
-        /// Xóa tất cả objects trong pool.
+        /// Remove tất cả objects trong pool.
         /// </summary>
         public void Clear()
         {

@@ -9,7 +9,7 @@ namespace NightHunt.Gameplay.Respawn
     public class RespawnConfig : ScriptableObject
     {
         [Header("Global Respawn Positioning")]
-        [Tooltip("Bán kính tối thiểu của Safe Zone khi Hồi sinh trong Phase-3")]
+        [Tooltip("Bán kính tối thiểu của Safe Zone khi Respawn trong Phase-3")]
         public float SafeZoneRespawnRadius = 20f;
     }
 }

@@ -11,18 +11,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
     /// Dynamic crosshair that expands based on weapon spread / movement.
     ///
     /// Inspector setup:
-    ///   â€¢ Assign the four line RectTransforms (top / bottom / left / right).
-    ///   â€¢ Call <see cref="Bind"/> once CombatHUDPanel has an IWeaponSystem ready.
-    ///   â€¢ Spread also driven from outside via <see cref="AddMovementSpread"/>.
+    ///   • Assign the four line RectTransforms (top / bottom / left / right).
+    ///   • Call <see cref="Bind"/> once CombatHUDPanel has an IWeaponSystem ready.
+    ///   • Spread also driven from outside via <see cref="AddMovementSpread"/>.
     ///
     /// Color states:
-    ///   â€¢ White  â€” normal
-    ///   â€¢ Orange â€” reloading
-    ///   â€¢ Red    â€” depleted (no mag + no reserve)
+    ///   • White  — normal
+    ///   • Orange — reloading
+    ///   • Red    — depleted (no mag + no reserve)
     /// </summary>
     public class CrosshairUI : MonoBehaviour
     {
-        // â”€â”€ Inspector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Inspector ─────────────────────────────────────────────────────────
         [Header("Lines")] [SerializeField] private RectTransform _topLine;
         [SerializeField] private RectTransform _bottomLine;
         [SerializeField] private RectTransform _leftLine;
@@ -50,7 +50,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] private Color _reloadColor = new Color(1f, 0.6f, 0f);
         [SerializeField] private Color _noAmmoColor = Color.red;
 
-        // â”€â”€ Runtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Runtime ───────────────────────────────────────────────────────────
         private IWeaponSystem _weaponSystem;
         private float _currentSpread;
         private float _targetSpread;
@@ -59,7 +59,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private int _lastMag = -1; // detect shots by mag decreasing
         private bool _isBound;
 
-        // â”€â”€ Binding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Binding ───────────────────────────────────────────────────────────
 
         public void Bind(IWeaponSystem weaponSystem)
         {
@@ -96,7 +96,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _maxAdditionalSpread);
         }
 
-        // â”€â”€ Unity lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Unity lifecycle ───────────────────────────────────────────────────
 
         private void OnDestroy() => Unbind();
 
@@ -110,7 +110,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             ApplyColor();
         }
 
-        // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Helpers ───────────────────────────────────────────────────────────
 
         private void ApplyLines(float gap)
         {
@@ -147,7 +147,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (img != null) img.color = c;
         }
 
-        // â”€â”€ Event handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Event handlers ────────────────────────────────────────────────────
 
         // currentMag, totalReserve, magazineCapacity
         private void HandleAmmoChanged(int currentMag, int totalReserve, int capacity)

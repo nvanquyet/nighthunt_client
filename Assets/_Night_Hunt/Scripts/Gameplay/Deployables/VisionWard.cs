@@ -7,8 +7,8 @@ using NightHunt.Gameplay.FogOfWar;
 namespace NightHunt.Gameplay.Deployables
 {
     /// <summary>
-    /// Mắt Soi Sáng (Vision Ward) - Cung cấp tầm nhìn (Ánh sáng FOW) cho cục bộ đồng đội,
-    /// Tàng hình nếu kẻ địch đi ngan qua. Bị tiêu diệt nếu bắn 3 hit (máu = 30).
+    /// Mắt Soi Sáng (Vision Ward) - Provides tầm nhìn (Ánh sáng FOW) cho cục bộ teammate,
+    /// Tàng hình nếu enemy đi ngan qua. Bị tiêu diệt nếu bắn 3 hit (máu = 30).
     /// Kế thừa toàn bộ Máu, Destroy, Trạng Thái Cắm từ BaseDeployable.
     /// </summary>
     [RequireComponent(typeof(FogOfWarRevealer3D))]
@@ -37,7 +37,7 @@ namespace NightHunt.Gameplay.Deployables
             base.OnStartNetwork();
             _revealer.ViewRadius = visionRadius;
             
-            // Xử lý logic hiển thị ngay khi spawn (Bật đèn nếu phe ta)
+            // Xử lý logic display ngay on spawn (Bật đèn nếu phe ta)
             UpdateVisionState();
         }
 
@@ -46,7 +46,7 @@ namespace NightHunt.Gameplay.Deployables
         {
             base.OnDeployablePlaced();
             
-            Debug.Log($"[VisionWard] Team {_ownerTeamId.Value} đặt mắt thành công! Máu: {_currentHP.Value}");
+            Debug.Log($"[VisionWard] Team {_ownerTeamId.Value} đặt mắt success! Máu: {_currentHP.Value}");
             
             // Nếu có lifetime hẹn giờ chết
             if (lifetimeSeconds > 0)
@@ -74,14 +74,14 @@ namespace NightHunt.Gameplay.Deployables
 
         private void UpdateVisionState()
         {
-            // Mắt chưa cắm thành công => tắt đèn
+            // Mắt chưa cắm success => tắt đèn
             if (!_isPlaced.Value || !_isActive.Value) 
             {
                 _revealer.enabled = false;
                 return;
             }
 
-            // Nếu cắm thành công: Ai là Địch => Đèn Tắt (màn hình tối thui) | Ai là Phải Ta => Đèn Bật (sáng nguyên vùng)
+            // Nếu cắm success: Ai là Địch => Đèn Tắt (screen tối thui) | Ai là Phải Ta => Đèn Bật (sáng nguyên vùng)
             bool isEnemy = CheckIfEnemyForLocalClient();
             _revealer.enabled = !isEnemy;
         }

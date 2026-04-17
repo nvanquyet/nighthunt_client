@@ -28,7 +28,7 @@ namespace NightHunt.Gameplay.Respawn
 
         public override void OnStartNetwork()
         {
-            // HP được Initialize từ Server trước khi Spawn.
+            // HP được Initialize từ Server before Spawn.
             // Client chỉ cần quan tâm sync vars.
             base.OnStartNetwork();
 
@@ -57,12 +57,12 @@ namespace NightHunt.Gameplay.Respawn
         protected override void OnDeployablePlaced()
         {
             base.OnDeployablePlaced();
-            Debug.Log($"[RespawnBeacon] Kích hoạt Trạm Hồi Sinh cho Team {_ownerTeamId.Value} thành công!");
-            // Gọi ra effect khói/âm thanh ở đây nếu muốn
+            Debug.Log($"[RespawnBeacon] Kích hoạt Trạm Hồi Sinh cho Team {_ownerTeamId.Value} success!");
+            // Call ra effect khói/âm thanh ở đây nếu muốn
         }
 
         /// <summary>
-        /// Server: Hỏi xem người chơi Team này có quyền hồi sinh ở đây không?
+        /// Server: Hỏi xem player Team này có quyền hồi sinh ở đây không?
         /// </summary>
         [Server]
         public bool CanRespawnHere(int teamId)
@@ -77,7 +77,7 @@ namespace NightHunt.Gameplay.Respawn
             return true;
         }
 
-        // Custom giao diện (UI) nếu máu thay đổi
+        // Custom UI (UI) nếu máu thay đổi
         protected override void OnHPChanged(int oldHP, int newHP, bool asServer)
         {
             base.OnHPChanged(oldHP, newHP, asServer);

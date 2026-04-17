@@ -2,7 +2,7 @@ namespace NightHunt.Gameplay.Input
 {
     // ──────────────────────────────────────────────────────────────────────────────
     //  InputLayer – Flags enum, mỗi bit = 1 ActionMap
-    //  Dùng để OR các map lại thành context preset
+    //  Uses để OR các map lại thành context preset
     // ──────────────────────────────────────────────────────────────────────────────
     /// <summary>
     /// Các tầng input tương ứng với từng ActionMap trong InputSystem_Actions.
@@ -29,7 +29,7 @@ namespace NightHunt.Gameplay.Input
     // ──────────────────────────────────────────────────────────────────────────────
     /// <summary>
     /// Trạng thái gameplay tổng thể, mỗi state có một preset InputLayer.
-    /// <para>Dùng <see cref="Core.InputLayerManager.PushContext"/> /
+    /// <para>Uses <see cref="Core.InputLayerManager.PushContext"/> /
     /// <see cref="Core.InputLayerManager.PopContext"/> để chuyển đổi.</para>
     /// </summary>
     public enum InputState
@@ -45,19 +45,22 @@ namespace NightHunt.Gameplay.Input
         /// <summary>Đang xem bản đồ – chỉ Camera + UI</summary>
         MapOpen,
 
-        /// <summary>Pause menu – chỉ UI</summary>
+        /// <summary>Pause menu — UI only</summary>
         Paused,
 
-        /// <summary>Đang điều khiển Drone / Thiết bị viễn thám</summary>
+        /// <summary>Controlling a drone / remote-sensing device. Reserved — no DroneInputHandler exists yet.</summary>
         DroneControl,
 
-        /// <summary>Đang spectate sau khi chết</summary>
+        /// <summary>Spectating after death</summary>
         Spectating,
 
-        /// <summary>Đã chết, chờ respawn – chỉ UI + Team</summary>
+        /// <summary>Free-fly spectator camera — Camera ON, Spectator ON, UI ON. Everything else OFF.</summary>
+        SpectatorFreeCamera,
+
+        /// <summary>Dead, waiting for respawn — UI + Team only</summary>
         PlayerDead,
 
-        /// <summary>Cutscene / loading – không nhận input</summary>
+        /// <summary>Cutscene / loading — no input accepted</summary>
         Cinematic = 8,
 
         /// <summary>Scout mode (move + camera, không combat)</summary>
@@ -70,7 +73,7 @@ namespace NightHunt.Gameplay.Input
         InDialogue = 11,
 
         // ── Legacy aliases (giữ lại để tránh break code cũ) ──────────────────
-        // ⚠️ PHẢI đặt CUỐI, SAU tất cả giá trị thực, để tránh C# auto-increment collision
+        // ⚠️ PHẢI đặt CUỐI, SAU tất cả value thực, để tránh C# auto-increment collision
         /// <inheritdoc cref="Paused"/>
         MenuOpen = Paused,
     }

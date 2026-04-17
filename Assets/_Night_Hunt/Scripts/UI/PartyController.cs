@@ -55,7 +55,7 @@ namespace NightHunt.UI
         [Header("Navigation")]
         [Tooltip("Nút mở Custom Lobby. Nếu đang ghép trận sẽ show modal xác nhận trước.")]
         [SerializeField] private Button btn_CustomLobby;
-        [Tooltip("Action thực thi sau khi xác nhận (hoặc ngay lập tức nếu không đang ghép trận).\nWire trong Inspector: ví dụ MainPanelManager.OpenPanel(CustomGame).")]
+        [Tooltip("Action thực thi after xác nhận (hoặc ngay lập tức nếu không đang ghép trận).\nWire trong Inspector: ví dụ MainPanelManager.OpenPanel(CustomGame).")]
         [SerializeField] private UnityEvent evt_CustomLobbyConfirmed;
 
         // ── Party Display Sub-Views ───────────────────────────────────────────
@@ -289,12 +289,16 @@ namespace NightHunt.UI
                            _currentParty.hostUserId == (_sessionState?.UserId ?? -1L);
 
             memberListView?.Refresh(_currentParty, maxSlots,
-                iAmHost:         iAmHost,
-                onInviteClicked: OnInviteSlotClicked,
+                iAmHost:          iAmHost,
+                onInviteClicked:  OnInviteSlotClicked,
                 onKick: uid => GameModalWindow.Instance?.ShowConfirm(
                     "Kick th\u00e0nh vi\u00ean?", "B\u1ea1n c\u00f3 ch\u1eafc mu\u1ed1n kick th\u00e0nh vi\u00ean n\u00e0y?",
                     onConfirm: async () => { if (_partyService != null) await _partyService.KickMember(uid); },
                     confirmText: "Kick", cancelText: "H\u1ee7y"),
+                onTransferLeader: uid => GameModalWindow.Instance?.ShowConfirm(
+                    "Chuy\u1ec3n leader?", $"Chuy\u1ec3n vai tr\u00f2 leader cho th\u00e0nh vi\u00ean n\u00e0y?",
+                    onConfirm: async () => { if (_partyService != null) await _partyService.TransferLeader(uid); },
+                    confirmText: "Chuy\u1ec3n", cancelText: "H\u1ee7y"),
                 onLeave: () => GameModalWindow.Instance?.ShowConfirm(
                     "R\u1eddi party?", "B\u1ea1n c\u00f3 ch\u1eafc mu\u1ed1n r\u1eddi kh\u1ecfi party?",
                     onConfirm: async () => { if (_partyService != null) await _partyService.LeaveParty(); },
@@ -333,7 +337,7 @@ namespace NightHunt.UI
             // Block if already in a custom room — must leave first.
             if (RoomState.Instance != null && RoomState.Instance.IsInRoom)
             {
-                ShowToast("Xếp hạng", "Hãy rời phòng custom trước khi vào xếp hạng.");
+                ShowToast("Xếp hạng", "Hãy rời phòng custom before vào xếp hạng.");
                 SetQueueState(RankedQueueState.Idle);
                 return;
             }
@@ -422,7 +426,6 @@ namespace NightHunt.UI
             if (_ws == null) _ws = GameWebSocketService.Instance;
             if (_ws == null) return;
 
-            _ws.OnMatchFound              += HandleMatchFound;
             _ws.OnMatchReady              += HandleMatchReady;
             _ws.OnMatchCancelled          += HandleMatchCancelled;
             _ws.OnDsReady                 += HandleDsReady;
@@ -442,7 +445,6 @@ namespace NightHunt.UI
         private void UnsubscribeWSEvents()
         {
             if (_ws == null) return;
-            _ws.OnMatchFound              -= HandleMatchFound;
             _ws.OnMatchReady              -= HandleMatchReady;
             _ws.OnMatchCancelled          -= HandleMatchCancelled;
             _ws.OnDsReady                 -= HandleDsReady;
@@ -460,17 +462,6 @@ namespace NightHunt.UI
 
         // ── Matchmaking ───────────────────────────────────────────────────────
 
-        private void HandleMatchFound(GameWebSocketService.MatchFoundEvent e)
-        {
-            SetQueueState(RankedQueueState.Idle);   // stop search timer
-
-            // Show overlay with player names — server starts DS immediately, no accept needed.
-            MatchFoundOverlay.Instance?.Show(
-                gameMode:    e.gameMode,
-                playerIds:   e.playerIds,
-                localUserId: _sessionState?.UserId ?? 0L);
-        }
-
         private void HandleDsReady(GameWebSocketService.DsReadyEvent e)
         {
             Debug.Log($"[PartyController] ds_ready: DS at {e.dsIp}:{e.dsPort} matchId={e.matchId}");
@@ -479,12 +470,9 @@ namespace NightHunt.UI
 
         private void HandleMatchReady(GameWebSocketService.MatchReadyEvent e)
         {
-            // Ẩn overlay "tìm thấy trận" (nếu đang mở)
-            MatchFoundOverlay.Instance?.Hide();
-
             SetQueueState(RankedQueueState.Idle);
 
-            // Chỉ lưu matchId/mapId — DsIp/Port sẽ được set khi nhận ds_ready
+            // Chỉ lưu matchId/mapId — DsIp/Port sẽ set khi nhận ds_ready
             RoomState.Instance?.SetMatchReady(e.matchId, e.mapId);
 
             // Resolve scene đúng từ mapId
@@ -510,9 +498,6 @@ namespace NightHunt.UI
 
         private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent e)
         {
-            // Ẩn overlay "tìm thấy trận" (nếu đang mở)
-            MatchFoundOverlay.Instance?.Hide();
-
             SetQueueState(RankedQueueState.Idle);
             string reason = !string.IsNullOrEmpty(e.reason) ? e.reason : "Match was cancelled.";
             ShowToast("Matchmaking", $"Match cancelled: {reason}");

@@ -325,7 +325,7 @@ namespace NightHunt.Gameplay.Scoring
                 new ScoreSystemData { Action = "SurvivalMinute",   BaseScore = 5,   PhaseMultiplier = 1f,   Notes = "1 point per minute alive" },
             };
             UnityEditor.EditorUtility.SetDirty(this);
-            Debug.Log("[ScoringSystem] _scoreConfigList populated with 6 default entries from GameDesign JSON. Lưu scene để áp dụng.");
+            Debug.Log("[ScoringSystem] _scoreConfigList populated with 6 default entries from GameDesign JSON. Save scene để áp dụng.");
         }
 
         [UnityEngine.ContextMenu("NightHunt/Log Score Config Summary")]
@@ -333,7 +333,7 @@ namespace NightHunt.Gameplay.Scoring
         {
             if (_scoreConfigList == null || _scoreConfigList.Count == 0)
             {
-                Debug.LogWarning("[ScoringSystem] _scoreConfigList trống! Chạy 'NightHunt/Setup Default Score Configs' trước.");
+                Debug.LogWarning("[ScoringSystem] _scoreConfigList trống! Run 'NightHunt/Setup Default Score Configs' trước.");
                 return;
             }
             var sb = new System.Text.StringBuilder("[ScoringSystem] Score configs:\n");

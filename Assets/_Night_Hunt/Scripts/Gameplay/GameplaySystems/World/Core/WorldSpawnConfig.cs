@@ -9,10 +9,10 @@ namespace NightHunt.GameplaySystems.World
     /// Xác định:
     ///   - Loại object sẽ spawn (Item / Container / Chest)
     ///   - SpawnTable (tỷ lệ item sẽ roll)
-    ///   - Thời gian respawn sau khi bị loot
+    ///   - Thời gian respawn after bị loot
     ///   - Số lượng active tối đa
     ///
-    /// Usage: Tạo asset qua menu "World/World Spawn Config"
+    /// Usage: Create asset qua menu "World/World Spawn Config"
     ///        và gán vào WorldItemSpawnPoint trên scene.
     /// </summary>
     [CreateAssetMenu(fileName = "WorldSpawnConfig", menuName = "NightHunt/Gameplay/World Spawn Config")]
@@ -25,23 +25,23 @@ namespace NightHunt.GameplaySystems.World
         public WorldSpawnType SpawnType = WorldSpawnType.Item;
 
         [Header("Loot Table")]
-        [Tooltip("Bảng tỷ lệ item. Roll khi spawn (Item) hoặc khi mở (Container/Chest).")]
+        [Tooltip("Bảng tỷ lệ item. Roll on spawn (Item) hoặc khi mở (Container/Chest).")]
         public SpawnTable SpawnTable;
 
         [Header("Respawn Settings")]
-        [Tooltip("Spawn-point này có spawn lại sau khi bị loot/despawn không?\n" +
+        [Tooltip("Spawn-point này có spawn lại after bị loot/despawn không?\n" +
                  "  false → chỉ spawn 1 lần duy nhất (one-shot)\n" +
                  "  true  → spawn lại sau RespawnTime")]
         public bool CanRespawn = true;
 
-        [Tooltip("Thời gian chờ (giây) trước khi spawn lại.\n" +
+        [Tooltip("Thời gian chờ (giây) trước on spawn lại.\n" +
                  "Chỉ dùng khi CanRespawn = true.")]
         [Min(1f)]
         public float RespawnTime = 120f;
 
         [Tooltip("Số lần spawn tối đa tại điểm này.\n" +
                  "  0 = không giới hạn (∞)\n" +
-                 "  > 0 = sau khi đạt giới hạn, điểm này ngưng vĩnh viễn.\n" +
+                 "  > 0 = after đạt giới hạn, điểm này ngưng vĩnh viễn.\n" +
                  "Chỉ dùng khi CanRespawn = true.")]
         [Min(0)]
         public int MaxRespawnCount = 0;
@@ -58,17 +58,17 @@ namespace NightHunt.GameplaySystems.World
         public float ScatterRadius = 1.5f;
 
         [Header("Container / Chest — chỉ dùng khi SpawnType = Container/Chest")]
-        [Tooltip("Container / Chest bị khóa ngay khi spawn.\n" +
+        [Tooltip("Container / Chest bị khóa ngay on spawn.\n" +
                  "Player cần key hoặc unlock logic để mở.")]
         public bool SpawnLocked = false;
 
         [Header("Container — Auto Reset")]
-        [Tooltip("Container / Chest có tự reset trạng thái sau khi đã bị loot không?\n" +
+        [Tooltip("Container / Chest có tự reset trạng thái after đã bị loot không?\n" +
                  "  false → đã loot xập thì cần respawn mới\n" +
                  "  true  → sau ContainerResetDelay giây, rương ‘reset’ lại (có thể mở lại, roll loot mới)")]
         public bool ContainerAutoReset = false;
 
-        [Tooltip("Thời gian (giây) trước khi container tự reset trạng thái.\n" +
+        [Tooltip("Thời gian (giây) before container tự reset trạng thái.\n" +
                  "Chỉ dùng khi ContainerAutoReset = true.")]
         [Min(1f)]
         public float ContainerResetDelay = 60f;
@@ -77,7 +77,7 @@ namespace NightHunt.GameplaySystems.World
         [Tooltip("Cấu hình cách player tương tác với object spawn ra từ điểm này.\n" +
                  "  Instant → nhấn 1 phát pickup/open\n" +
                  "  Hold    → giữ nút theo HoldDuration\n" +
-                 "Nếu null, WorldItem/Container sẽ dùng giá trị mặc định (Instant, 3m).")]
+                 "Nếu null, WorldItem/Container sẽ dùng value mặc định (Instant, 3m).")]
         public LootableConfig LootableConfig;
     }
 }

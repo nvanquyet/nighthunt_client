@@ -2,6 +2,7 @@ using NightHunt.Gameplay.Spectator;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.GameplaySystems.UI.Combat;
 using NightHunt.GameplaySystems.Aim;
 using UnityEngine;
@@ -124,12 +125,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _hasReceivedPlayerEvent = true;
             Debug.Log($"[UIRootController] OnCurrentPlayerChanged: player={player?.name ?? "null"}");
 
-            // Đổi player hiển thị UI → reset mọi drag-drop đang diễn ra
+            // Đổi player display UI → reset mọi drag-drop đang diễn ra
             DragDropController.Instance?.ResetAll();
 
             _domainBridge?.Dispose();
             
-            // Tạo bridge mới
+            // Create bridge mới
             _domainBridge = new UIDomainBridge();
             _domainBridge.InitializeForCurrentPlayer();
 

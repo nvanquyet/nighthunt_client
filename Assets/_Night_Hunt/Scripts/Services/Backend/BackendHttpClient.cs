@@ -404,9 +404,9 @@ namespace NightHunt.Services.Backend
                             Debug.Log(
                                 "[BackendHttpClient] Starting ForceLogoutCoroutine for active session (AUTH_FORCE_LOGOUT)");
                             StartCoroutine(ForceLogoutCoroutine(
-                                title: "Cảnh báo đăng nhập",
+                                title: "Warning log in",
                                 message: message ??
-                                         "Có người khác đã đăng nhập vào tài khoản của bạn từ thiết bị khác. Bạn sẽ bị đăng xuất."
+                                         "Có người khác đã log in vào tài khoản của bạn từ thiết bị khác. Bạn sẽ bị log out."
                             ));
                         }
                         else
@@ -438,7 +438,7 @@ namespace NightHunt.Services.Backend
                             Debug.Log(
                                 "[BackendHttpClient] Showing login blocked notice (AUTH_FORCE_LOGOUT during new login attempt)");
                             ShowLoginBlockedNotice(message ??
-                                                   "Tài khoản này đã được đăng nhập ở nơi khác. Vui lòng thử lại sau.");
+                                                   "Tài khoản này has been log in ở nơi khác. Vui lòng thử lại sau.");
                         }
                     }
                 }
@@ -460,9 +460,9 @@ namespace NightHunt.Services.Backend
                         {
                             Debug.Log("[BackendHttpClient] Starting ForceLogoutCoroutine for session expired");
                             StartCoroutine(ForceLogoutCoroutine(
-                                title: "Phiên đăng nhập hết hạn",
+                                title: "Session expired",
                                 message: message ??
-                                         "Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại để tiếp tục."
+                                         "Phiên log in của bạn đã expired. Vui lòng log in lại để tiếp tục."
                             ));
                         }
                         else
@@ -481,7 +481,7 @@ namespace NightHunt.Services.Backend
             if (noticePopup != null)
             {
                 noticePopup.Show(
-                    title: "Đăng nhập thất bại",
+                    title: "Đăng nhập failed",
                     message: message
                 );
             }
@@ -498,8 +498,8 @@ namespace NightHunt.Services.Backend
             if (noticePopup != null)
             {
                 noticePopup.Show(
-                    title: title ?? "Cảnh báo",
-                    message: message ?? "Phiên đăng nhập đã hết hạn. Bạn sẽ bị đăng xuất."
+                    title: title ?? "Warning",
+                    message: message ?? "Phiên log in đã expired. Bạn sẽ bị log out."
                 );
             }
 

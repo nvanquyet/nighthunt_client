@@ -9,11 +9,11 @@ namespace NightHunt.Gameplay.FogOfWar
 {
     /// <summary>
     /// Runtime debug tool cho FOW team visibility.
-    /// Dùng khi test offline (start server + client thủ công, không có backend).
+    /// Uses khi test offline (start server + client thủ công, not available backend).
     ///
     /// SETUP:
     ///   Attach vào bất kỳ GO nào trong scene (ví dụ: DebugTools).
-    ///   Chạy chỉ trên server hoặc host — các method ServerRpc đảm bảo thay đổi propagate đến mọi client.
+    ///   Run chỉ trên server hoặc host — các method ServerRpc đảm bảo thay đổi propagate đến mọi client.
     ///
     /// USAGE — Inspector Context Menu (right-click component):
     ///   "Print All Player Teams"   → log danh sách tất cả player + team của họ
@@ -35,7 +35,7 @@ namespace NightHunt.Gameplay.FogOfWar
         // ── Server helpers ──────────────────────────────────────────────────────
 
         /// <summary>
-        /// Trả về tất cả NetworkPlayer hiện đang spawn trong scene.
+        /// Trả về tất cả NetworkPlayer hiện spawning trong scene.
         /// </summary>
         private static List<NetworkPlayer> GetAllNetworkPlayers()
         {

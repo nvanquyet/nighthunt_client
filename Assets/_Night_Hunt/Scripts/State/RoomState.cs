@@ -69,6 +69,7 @@ namespace NightHunt.State
             {
                 CurrentRoom = null;
                 ClearNetworkSession();
+                NetworkGameManager.ResetConnectionFlags();
                 OnRoomLeft?.Invoke();
             }
         }
@@ -87,14 +88,25 @@ namespace NightHunt.State
 
         /// <summary>
         /// Called on match_ready: stores match/map info but NOT DS ip:port.
-        /// Client must wait for ds_ready before connecting to DS.
+        /// For Ranked_DS: client must wait for ds_ready before connecting.
+        /// For Custom_Relay: mode is already set by game_starting — do NOT overwrite.
         /// </summary>
-        public void SetMatchReady(string matchId, string mapId)
+        public void SetMatchReady(string matchId, string mapId, string gameModeStr = null)
         {
-            CurrentGameMode = GameMode.Ranked_DS;
-            CurrentMatchId  = matchId;
-            DsMapId         = mapId;
-            IsHostPlayer    = false;
+            // Detect relay from game_starting (already set) OR from gameMode string in match_ready.
+            bool isCustom = CurrentGameMode == GameMode.Custom_Relay
+                || (!string.IsNullOrEmpty(gameModeStr)
+                    && gameModeStr.IndexOf("custom", System.StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (!isCustom)
+            {
+                CurrentGameMode = GameMode.Ranked_DS;
+                IsHostPlayer    = false;  // DS games have no host player concept
+            }
+            // else: preserve Custom_Relay + IsHostPlayer set by game_starting
+
+            CurrentMatchId = matchId;
+            DsMapId        = mapId;
         }
 
         /// <summary>

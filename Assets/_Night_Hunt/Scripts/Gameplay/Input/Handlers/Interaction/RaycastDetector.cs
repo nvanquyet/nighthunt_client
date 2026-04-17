@@ -4,6 +4,7 @@ using UnityEngine.Serialization;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using Object = UnityEngine.Object;
 using NightHunt.Utilities;
 
@@ -90,7 +91,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         {
             if (!IsOwner) return;
             // Chỉ raycast khi Player layer active (tức là đang trong PlayerAlive / ScoutMode)
-            // Dùng IsLayerActive thay vì so sánh enum state cụ thể → robust hơn khi thêm state mới
+            // Uses IsLayerActive instead of so sánh enum state cụ thể → robust hơn khi thêm state mới
             var ilm = NightHunt.Gameplay.Input.Core.InputLayerManager.Instance;
             if (ilm != null && !ilm.IsLayerActive(NightHunt.Gameplay.Input.InputLayer.Player))
             {

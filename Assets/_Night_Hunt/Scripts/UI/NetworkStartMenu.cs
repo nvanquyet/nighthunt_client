@@ -77,7 +77,7 @@ namespace NightHunt.UI
         }
 
         /// <summary>
-        /// Start Server - Tạo dedicated server
+        /// Start Server - Create dedicated server
         /// </summary>
         private void OnStartServerClicked()
         {
@@ -104,7 +104,7 @@ namespace NightHunt.UI
         }
 
         /// <summary>
-        /// Start Client Local - Test local (kết nối localhost)
+        /// Start Client Local - Test local (connect localhost)
         /// </summary>
         private void OnStartClientLocalClicked()
         {

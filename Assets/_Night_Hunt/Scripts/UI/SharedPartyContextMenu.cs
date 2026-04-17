@@ -43,12 +43,14 @@ namespace NightHunt.UI
 
         [Header("Action Buttons")]
         [SerializeField] private Button btn_ViewProfile;
+        [SerializeField] private Button btn_TransferLeader;
         [SerializeField] private Button btn_Kick;
         [SerializeField] private Button btn_Leave;
 
         // ── Runtime ──────────────────────────────────────────────────────────
 
         private Action<long> _onKick;
+        private Action<long> _onTransferLeader;
         private Action       _onLeave;
         private long         _userId;
 
@@ -78,10 +80,11 @@ namespace NightHunt.UI
                 img.raycastTarget = true;
             }
 
-            if (backdrop        != null) backdrop.onClick.AddListener(Hide);
-            if (btn_ViewProfile != null) btn_ViewProfile.onClick.AddListener(OnViewProfile);
-            if (btn_Kick        != null) btn_Kick.onClick.AddListener(OnKick);
-            if (btn_Leave       != null) btn_Leave.onClick.AddListener(OnLeave);
+            if (backdrop          != null) backdrop.onClick.AddListener(Hide);
+            if (btn_ViewProfile   != null) btn_ViewProfile.onClick.AddListener(OnViewProfile);
+            if (btn_TransferLeader!= null) btn_TransferLeader.onClick.AddListener(OnTransferLeader);
+            if (btn_Kick          != null) btn_Kick.onClick.AddListener(OnKick);
+            if (btn_Leave         != null) btn_Leave.onClick.AddListener(OnLeave);
 
             Hide();
         }
@@ -101,15 +104,18 @@ namespace NightHunt.UI
         /// <param name="onKick">Called with userId when Kick is pressed.</param>
         /// <param name="onLeave">Called when Leave is pressed.</param>
         public void Show(RectTransform anchor, bool showKick, bool showLeave,
-                         long userId, Action<long> onKick, Action onLeave)
+                         long userId, Action<long> onKick, Action onLeave,
+                         bool showTransferLeader = false, Action<long> onTransferLeader = null)
         {
-            _userId  = userId;
-            _onKick  = onKick;
-            _onLeave = onLeave;
+            _userId           = userId;
+            _onKick           = onKick;
+            _onLeave          = onLeave;
+            _onTransferLeader = onTransferLeader;
 
-            if (btn_ViewProfile != null) btn_ViewProfile.gameObject.SetActive(true);
-            if (btn_Kick        != null) btn_Kick.gameObject.SetActive(showKick);
-            if (btn_Leave       != null) btn_Leave.gameObject.SetActive(showLeave);
+            if (btn_ViewProfile    != null) btn_ViewProfile.gameObject.SetActive(true);
+            if (btn_TransferLeader != null) btn_TransferLeader.gameObject.SetActive(showTransferLeader);
+            if (btn_Kick           != null) btn_Kick.gameObject.SetActive(showKick);
+            if (btn_Leave          != null) btn_Leave.gameObject.SetActive(showLeave);
 
             // ── FIX 2: Bring the whole menu tree to the top of its sibling list ──
             // Guarantees it renders above every party slot item (same as FriendContextMenu).
@@ -180,7 +186,15 @@ namespace NightHunt.UI
         private void OnViewProfile()
         {
             Hide();
-            // TODO: open profile panel for _userId
+            PlayerProfilePanel.Instance?.Show(_userId);
+        }
+
+        private void OnTransferLeader()
+        {
+            var cb = _onTransferLeader;
+            var id = _userId;
+            Hide();
+            cb?.Invoke(id);
         }
 
         private void OnKick()

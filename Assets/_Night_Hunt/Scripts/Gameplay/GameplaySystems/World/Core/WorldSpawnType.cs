@@ -7,7 +7,7 @@ namespace NightHunt.GameplaySystems.World
     /// </summary>
     public enum WorldSpawnType
     {
-        /// <summary>Item rơi trên đất (WorldItem) — scatter từ SpawnTable</summary>
+        /// <summary>Item dropped on the ground (WorldItem) — scatter từ SpawnTable</summary>
         Item,
 
         /// <summary>Thùng chứa / Crate / Rương / Chest (WorldContainer)</summary>

@@ -334,9 +334,37 @@ namespace NightHunt.Services.Party
             }
         }
 
-        // NOTE: TransferLeader is intentionally omitted.
-        // The server does not have a /party/transfer-leader endpoint yet.
-        // When the backend adds it, implement: POST /api/party/transfer-leader { newLeaderId }
+        /// <summary>
+        /// POST /api/party/transfer-leader — transfer host role to another member (current host only).
+        /// </summary>
+        public async Task<ApiResult<PartyResponse>> TransferLeader(long newLeaderId)
+        {
+            if (sessionState == null || !sessionState.IsAuthenticated)
+                return ApiResult<PartyResponse>.Error("Not authenticated");
+
+            LoadingOverlay.Show("Transferring leader...");
+            try
+            {
+                var body   = new { newLeaderId };
+                var result = await backendClient.PostAsync<PartyResponse>(Constants.API_PARTY_TRANSFER_LEADER, body);
+                if (result.Success)
+                    APICache.Invalidate(APICache.KEY_PARTY_STATE);
+                else
+                    LoadingOverlay.ShowError(result.Message ?? "Failed to transfer leader");
+                return result;
+            }
+            catch (Exception ex)
+            {
+                ConditionalLogger.LogError("PartyService", $"TransferLeader error: {ex.Message}", ex);
+                LoadingOverlay.ShowError("Network error");
+                return ApiResult<PartyResponse>.Error(ex.Message);
+            }
+            finally
+            {
+                await Task.Delay(500);
+                LoadingOverlay.Hide();
+            }
+        }
 
         // ══════════════════════════════════════════════════════════════════════
         // PARTY MATCHMAKING

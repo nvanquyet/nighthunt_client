@@ -7,7 +7,7 @@ using UnityEngine;
 namespace NightHunt.Networking
 {
     /// <summary>
-    /// RegistryService - Lưu trữ PlayerRegistryData (private server data)
+    /// RegistryService - Save trữ PlayerRegistryData (private server data)
     /// Server-side only - clients không access
     /// </summary>
     public class RegistryService : Singleton<RegistryService>
@@ -55,7 +55,7 @@ namespace NightHunt.Networking
                 return;
             }
             
-            // Lưu private data
+            // Save private data
             _playerDataByBackendId[backendId] = privateData;
             
             // Mapping

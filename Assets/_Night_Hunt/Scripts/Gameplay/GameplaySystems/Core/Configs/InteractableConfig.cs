@@ -8,7 +8,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
     public enum InteractionType
     {
         Generic,    // Trigger bất kỳ (default)
-        Door,       // Mở / Đóng có animation
+        Door,       // Mở / Close có animation
         Switch,     // Toggle on/off
         Button,     // One-shot trigger event
         Terminal,   // Mở UI
@@ -61,7 +61,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
                  "  true  → sau AutoResetDelay giây, trạng thái tự reset (cửa tự đóng, switch tự tắt)")]
         public bool AutoReset = false;
 
-        [Tooltip("Thời gian (giây) trước khi tự reset.\nChỉ dùng khi AutoReset = true.")]
+        [Tooltip("Thời gian (giây) before tự reset.\nChỉ dùng khi AutoReset = true.")]
         [Min(0.5f)]
         public float AutoResetDelay = 10f;
 

@@ -13,11 +13,11 @@ namespace NightHunt.GameplaySystems.World
     ///
     /// DESIGN:
     ///   - Implements IHoldInteractable: HoldDuration > 0 nếu config = Hold, else 0 (Instant).
-    ///   - PlayerInteractionSystem xử lý cả hai mode tự động qua interface.
+    ///   - PlayerInteractionSystem handle cả hai mode tự động qua interface.
     ///   - State (IsOpen) sync qua SyncVar cho tất cả client.
     ///
     /// SETUP:
-    ///   1. Thêm WorldDoor component vào door GameObject trên Scene.
+    ///   1. Add WorldDoor component vào door GameObject trên Scene.
     ///   2. Gán InteractableConfig asset (Create → GameplaySystems → Config → Interactable Config).
     ///   3. Gán Animator (nếu có) → WorldDoor tự gọi SetBool("IsOpen", ...) khi toggle.
     /// </summary>
@@ -34,12 +34,12 @@ namespace NightHunt.GameplaySystems.World
         [Tooltip("Tên bool parameter trong Animator điều khiển trạng thái cửa.")] [SerializeField]
         private string _animatorBoolName = "IsOpen";
 
-        [Header("Fallback Visual (khi không có Animator)")]
+        [Header("Fallback Visual (khi not available Animator)")]
         [Tooltip("Renderer dùng để đổi màu khi mở/đóng cửa. Tự động tìm trên GameObject nếu để trống.")]
         [SerializeField] private Renderer _fallbackRenderer;
-        [Tooltip("Màu fallback khi cửa đóng (chỉ dùng khi không có Animator).")]
+        [Tooltip("Màu fallback khi cửa đóng (chỉ dùng khi not available Animator).")]
         [SerializeField] private Color _closedColor = Color.white;
-        [Tooltip("Màu fallback khi cửa mở (chỉ dùng khi không có Animator).")]
+        [Tooltip("Màu fallback khi cửa mở (chỉ dùng khi not available Animator).")]
         [SerializeField] private Color _openColor   = new Color(0.35f, 0.85f, 0.35f);
 
         [Header("State")] [Tooltip("Trạng thái ban đầu khi scene load.")] [SerializeField]
@@ -60,8 +60,8 @@ namespace NightHunt.GameplaySystems.World
         // ── IHoldInteractable ────────────────────────────────────────────────────
 
         /// <summary>
-        /// 0 = Instant (InteractionMode != Hold hoặc không có config).
-        /// > 0 = giây player phải giữ nút trước khi Interact() fire.
+        /// 0 = Instant (InteractionMode != Hold hoặc not available config).
+        /// > 0 = giây player phải giữ nút before Interact() fire.
         /// </summary>
         public float HoldDuration
             => _config?.InteractionMode == LootInteractionMode.Hold ? _config.HoldDuration : 0f;
@@ -161,10 +161,10 @@ namespace NightHunt.GameplaySystems.World
             // Distance check — server-side re-validation.
             if (playerNob != null)
             {
-                var player = ComponentResolver.Find<NightHunt.Networking.NetworkPlayer>(playerNob)
+                var player = ComponentResolver.Find<NightHunt.Networking.Player.NetworkPlayer>(playerNob)
                     .OnSelf()
                     .InChildren()
-                    .OrLogWarning("[Auto] NightHunt.Networking.NetworkPlayer not found")
+                    .OrLogWarning("[Auto] NightHunt.Networking.Player.NetworkPlayer not found")
                     .Resolve();
                 if (player != null)
                 {

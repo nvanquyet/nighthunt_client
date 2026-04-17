@@ -280,7 +280,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         [ObserversRpc]
         private void RpcExplode(Vector3 position, Quaternion rotation)
         {
-            // VFX — bật DetonationVFX child thay vì Instantiate prefab mới
+            // VFX — bật DetonationVFX child instead of Instantiate prefab mới
             _projectileBase?.TriggerDetonation(position, rotation);
 
             // SFX — route through AudioManager (3D, mixer-controlled, pooled — no GC)

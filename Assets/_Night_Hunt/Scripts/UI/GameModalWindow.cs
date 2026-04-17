@@ -20,7 +20,7 @@ namespace NightHunt.UI
     [Serializable]
     public class ModalButtonSlot
     {
-        [Tooltip("MainButton component — quản lý text cho cả 3 trạng thái (normal/highlighted/pressed).")]
+        [Tooltip("MainButton component — manage text cho cả 3 trạng thái (normal/highlighted/pressed).")]
         public MainButton mainButton;
 
         [Space(4)]
@@ -31,7 +31,7 @@ namespace NightHunt.UI
 
         /// <summary>Đặt label và sync ngay sang cả 3 TMP text.
         /// Shift MainButton.Start() đọc buttonText một lần — sau đó không reactive.
-        /// Ghi thẳng vào normalText/highlightedText/pressedText để đảm bảo hiển thị đúng
+        /// Ghi thẳng vào normalText/highlightedText/pressedText để đảm bảo display đúng
         /// dù useCustomText = true hay false.</summary>
         public void SetLabel(string text)
         {
@@ -133,8 +133,8 @@ namespace NightHunt.UI
             string title,        string desc,
             Action onConfirm   = null,
             Action onCancel    = null,
-            string confirmText = "Xác nhận",
-            string cancelText  = "Hủy")
+            string confirmText = "Confirm",
+            string cancelText  = "Cancel")
         {
             PrepareContent(title, desc, showInput: false, placeholder: null);
             ConfigureSlots(
@@ -152,7 +152,7 @@ namespace NightHunt.UI
         // ── ShowCountdown ──────────────────────────────────────────────────────
 
         /// <summary>
-        /// 2 buttons + auto-expire countdown hiển thị ngay trong description.
+        /// 2 buttons + auto-expire countdown display ngay trong description.
         /// <paramref name="onExpire"/> bắn khi hết giờ HOẶC khi cancel/dismiss được nhấn.
         /// </summary>
         public void ShowCountdown(
@@ -196,8 +196,8 @@ namespace NightHunt.UI
             string         placeholder,
             Action<string> onConfirm   = null,
             Action         onCancel    = null,
-            string         confirmText = "Xác nhận",
-            string         cancelText  = "Hủy")
+            string         confirmText = "Confirm",
+            string         cancelText  = "Cancel")
         {
             PrepareContent(title, desc, showInput: true, placeholder);
             ConfigureSlots(
@@ -214,7 +214,7 @@ namespace NightHunt.UI
 
         // ── ShowNotice ─────────────────────────────────────────────────────────
 
-        /// <summary>1 button: [OK] — thông báo đơn giản.</summary>
+        /// <summary>1 button: [OK] — notification đơn giản.</summary>
         public void ShowNotice(
             string title,     string desc,
             string closeText = "OK",
@@ -236,13 +236,13 @@ namespace NightHunt.UI
         // ── ShowMulti ──────────────────────────────────────────────────────────
 
         /// <summary>
-        /// 3 buttons. Ví dụ: [Đăng xuất] [Thoát game] [Hủy].
+        /// 3 buttons. Ví dụ: [Đăng xuất] [Quit Game] [Cancel].
         /// </summary>
         public void ShowMulti(
             string title,  string desc,
             string btn1Text, Action btn1Callback,
             string btn2Text, Action btn2Callback,
-            string dismissText     = "Hủy",
+            string dismissText     = "Cancel",
             Action dismissCallback = null)
         {
             PrepareContent(title, desc, showInput: false, placeholder: null);
@@ -261,8 +261,8 @@ namespace NightHunt.UI
         // ── Close (silent — không fire callback) ──────────────────────────────
 
         /// <summary>
-        /// Đóng modal không kích hoạt bất kỳ callback nào.
-        /// Dùng khi external event đã resolve (vd: swap request được chấp nhận từ xa).
+        /// Close modal không kích hoạt bất kỳ callback nào.
+        /// Uses khi external event đã resolve (vd: swap request được chấp nhận từ xa).
         /// </summary>
         public void Close()
         {

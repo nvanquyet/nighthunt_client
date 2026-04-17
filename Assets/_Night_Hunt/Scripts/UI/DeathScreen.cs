@@ -9,6 +9,7 @@ using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Respawn;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 
 namespace NightHunt.UI
@@ -95,8 +96,8 @@ namespace NightHunt.UI
 
             if (_killedByText != null)
                 _killedByText.text = string.IsNullOrEmpty(killerName)
-                    ? "You died"
-                    : $"Killed by: {killerName}";
+                    ? "You were eliminated"
+                    : $"You were eliminated by {killerName}";
 
             // Show respawn button (hidden/greyed by default); countdown enables it.
             if (_respawnButton != null)
@@ -197,10 +198,10 @@ namespace NightHunt.UI
 
             string msg = evt.Reason switch
             {
-                "no_beacon"        => "Cần Beacon để hồi sinh!",
-                "respawn_disabled" => "Hồi sinh bị khoá ở phase này",
-                "beacon_destroyed" => "Beacon bị phá huỷ!",
-                _                  => "Không thể hồi sinh"
+                "no_beacon"        => "A Beacon is required to respawn!",
+                "respawn_disabled" => "Respawn is locked during this phase",
+                "beacon_destroyed" => "Beacon was destroyed!",
+                _                  => "Cannot respawn"
             };
 
             if (_respawnTimerText != null)
@@ -221,13 +222,13 @@ namespace NightHunt.UI
             while (remaining > 0f)
             {
                 if (_respawnTimerText != null)
-                    _respawnTimerText.text = $"Respawn in: {Mathf.CeilToInt(remaining)}";
+                    _respawnTimerText.text = $"Respawning in {Mathf.CeilToInt(remaining)}s...";
                 remaining -= Time.deltaTime;
                 yield return null;
             }
 
             if (_respawnTimerText != null)
-                _respawnTimerText.text = "Ready!";
+                _respawnTimerText.text = "Respawn now!";
 
             // Re-show and enable respawn button once countdown finishes.
             if (_respawnButton != null)

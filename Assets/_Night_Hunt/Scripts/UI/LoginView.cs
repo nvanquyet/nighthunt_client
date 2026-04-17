@@ -14,9 +14,9 @@ using UnityEngine.UI;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// LoginView - Xử lý form đăng nhập và đăng ký.
-    /// Single-scene: dùng UINavigator thay vì SceneLoader.
-    /// Hỗ trợ "Ghi nhớ đăng nhập" → lưu refreshToken vào PlayerPrefs.
+    /// LoginView - Xử lý form log in và register.
+    /// Single-scene: dùng UINavigator instead of SceneLoader.
+    /// Supports "Ghi nhớ log in" → lưu refreshToken vào PlayerPrefs.
     ///
     /// KHÔNG implement INavigableView — dùng OnEnable() tự nhiên của Unity.
     /// Shift UI dùng SetActive(true) để show panel → OnEnable tự fire.
@@ -27,7 +27,7 @@ namespace NightHunt.UI
         [Header("Login Form")]
         [SerializeField] private TMP_InputField usernameInput;
         [SerializeField] private TMP_InputField passwordInput;
-        [Tooltip("ShiftUI SwitchManager trên switch Ghi nhớ đăng nhập.")]
+        [Tooltip("ShiftUI SwitchManager trên switch Ghi nhớ log in.")]
         [SerializeField] private SwitchManager  rememberMeSwitch;
         [SerializeField] private Button         loginButton;
 
@@ -37,29 +37,29 @@ namespace NightHunt.UI
         [SerializeField] private TMP_InputField emailInput;
         [SerializeField] private TMP_InputField regPasswordInput;
         [SerializeField] private TMP_InputField confirmPasswordInput;
-        [Tooltip("ShiftUI SwitchManager trên switch Đồng ý điều khoản. saveValue=false, isOn=false, invokeAtStart=false.")]
+        [Tooltip("ShiftUI SwitchManager trên switch Agree điều khoản. saveValue=false, isOn=false, invokeAtStart=false.")]
         [SerializeField] private SwitchManager  agreeToTermsSwitch;
         [SerializeField] private Button         registerButton;
 
         // ─── Login Events ────────────────────────────────────────────────────
         [Header("Login Events")]
-        [Tooltip("Fired khi login thành công. Wire animation, sound, v.v. ở đây.")]
+        [Tooltip("Fired khi login success. Wire animation, sound, v.v. ở đây.")]
         public UnityEvent onLoginSuccess;
-        [Tooltip("Fired khi login thất bại (sau khi Toast đã show).")]
+        [Tooltip("Fired khi login failed (after Toast đã show).")]
         public UnityEvent onLoginFailed;
 
         // ─── Register Events ─────────────────────────────────────────────────
         [Header("Register Events")]
-        [Tooltip("Fired khi register thành công.")]
+        [Tooltip("Fired khi register success.")]
         public UnityEvent onRegisterSuccess;
-        [Tooltip("Fired khi register thất bại (sau khi Toast đã show).")]
+        [Tooltip("Fired khi register failed (after Toast đã show).")]
         public UnityEvent onRegisterFailed;
 
         // ─── Loading Indicators ──────────────────────────────────────────────
         [Header("Loading Indicators")]
-        [Tooltip("Spinner/indicator cục bộ hiện trong khi đang gọi Login API.")]
+        [Tooltip("Spinner/indicator cục bộ hiện trong khi calling Login API.")]
         [SerializeField] private GameObject loginLoadingIndicator;
-        [Tooltip("Spinner/indicator cục bộ hiện trong khi đang gọi Register API.")]
+        [Tooltip("Spinner/indicator cục bộ hiện trong khi calling Register API.")]
         [SerializeField] private GameObject registerLoadingIndicator;
 
         // ─── Optional refs ───────────────────────────────────────────────────
@@ -105,7 +105,7 @@ namespace NightHunt.UI
         private void OnEnable()
         {
             // Khi Shift UI / UINavigator.OnGoLogin fire SetActive(true) → OnEnable chạy.
-            // Ẩn stale loading screen nếu còn đang show.
+            // Hide stale loading screen nếu còn đang show.
             if (_loadingManager != null && _loadingManager.IsShowing())
                 _loadingManager.Hide();
 
@@ -127,14 +127,14 @@ namespace NightHunt.UI
         {
             if (rememberMeSwitch == null) return;
             bool remembered = PlayerPrefs.GetInt(LoadingManager.KEY_REMEMBER_ME, 0) == 1;
-            // AnimateSwitch() toggle trạng thái — chỉ gọi nếu khác với giá trị cần restore
+            // AnimateSwitch() toggle trạng thái — chỉ gọi nếu khác với value cần restore
             if (rememberMeSwitch.isOn != remembered)
                 rememberMeSwitch.AnimateSwitch();
         }
 
         /// <summary>
-        /// Gọi sau khi login thành công.
-        /// Lưu refreshToken nếu "Ghi nhớ đăng nhập" đang bật.
+        /// Call after login success.
+        /// Save refreshToken nếu "Ghi nhớ log in" đang bật.
         /// </summary>
         private void HandleRememberMe(string refreshToken)
         {
@@ -194,7 +194,7 @@ namespace NightHunt.UI
             {
                 // Old session was terminated — user just needs to try again once.
                 Debug.Log("[LoginView] AUTH_SESSION_CONFLICT: previous session terminated, prompting retry");
-                ShowToast("Đăng xuất thành công", result.Message ?? "Phiên trước đã bị đăng xuất. Vui lòng đăng nhập lại.");
+                ShowToast("Đăng xuất success", result.Message ?? "Phiên trước đã bị log out. Vui lòng log in lại.");
                 // Do NOT fire onLoginFailed — user can retry immediately without changing anything.
             }
             else
@@ -268,18 +268,18 @@ namespace NightHunt.UI
             if (emailInput           != null) emailInput.text           = "";
             if (regPasswordInput     != null) regPasswordInput.text     = "";
             if (confirmPasswordInput != null) confirmPasswordInput.text = "";
-            // Reset switch điều khoản về Off sau khi đăng ký thành công
+            // Reset switch điều khoản về Off after register success
             if (agreeToTermsSwitch != null && agreeToTermsSwitch.isOn)
                 agreeToTermsSwitch.AnimateSwitch();
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // Logout helper (gọi từ nơi khác nếu cần)
+        // Logout helper (called from nơi khác nếu cần)
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Đăng xuất hoàn toàn: xóa token, clear state, về LoginPanel.
-        /// Gọi từ bất kỳ đâu khi cần logout.
+        /// Call từ bất kỳ đâu when needed logout.
         /// </summary>
         public static void Logout()
         {

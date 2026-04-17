@@ -48,7 +48,7 @@ namespace NightHunt.Gameplay.Input.Core
         private void OnValidate()
         {
             if (inputActionAsset == null)
-                Debug.LogWarning("[InputConfig] InputActionAsset chưa được assign!");
+                Debug.LogWarning("[InputConfig] InputActionAsset not yet assign!");
         }
     }
 }

@@ -57,22 +57,19 @@ namespace NightHunt.Audio
                 if (entry == null || entry.slider == null || string.IsNullOrEmpty(entry.paramKey))
                     continue;
 
-                // Load stored value (same key format as ShiftUI SliderManager)
-                float stored = PlayerPrefs.GetFloat(entry.paramKey + "SliderValue", entry.defaultValue);
-                stored = Mathf.Clamp01(stored);
-
-                // Apply without firing callback first
-                entry.slider.SetValueWithoutNotify(stored);
-                UpdateLabel(entry, stored);
-
-                // Apply to mixer via AudioManager (triggers dB conversion + PlayerPrefs write)
-                if (AudioManager.HasInstance)
-                    AudioManager.Instance.SetVolume(entry.paramKey, stored);
-
-                // Wire callback — capture entry by value for lambda safety
+                // Wire callback before LoadSettings so initial apply does not double-fire.
                 var captured = entry;
-                entry.slider.onValueChanged.AddListener(v => HandleSliderChanged(captured, v));
+                entry.slider.onValueChanged.AddListener(v => SaveSettings(captured, v));
             }
+
+            LoadSettings();
+        }
+
+        private void OnEnable()
+        {
+            // Re-apply saved values when the panel becomes visible
+            // (e.g. the settings screen is reopened).
+            LoadSettings();
         }
 
         private void OnDestroy()
@@ -84,14 +81,40 @@ namespace NightHunt.Audio
             }
         }
 
-        // ── Slider Callback ────────────────────────────────────────────────────
+        // ── Load / Save ────────────────────────────────────────────
 
-        private void HandleSliderChanged(AudioSliderEntry entry, float value)
+        /// <summary>
+        /// Read saved volumes from PlayerPrefs and apply to all sliders and the mixer.
+        /// Uses prefix "NH_Audio_" + paramKey.
+        /// </summary>
+        private void LoadSettings()
+        {
+            foreach (var entry in sliders)
+            {
+                if (entry == null || entry.slider == null || string.IsNullOrEmpty(entry.paramKey))
+                    continue;
+
+                float stored = PlayerPrefs.GetFloat("NH_Audio_" + entry.paramKey, entry.defaultValue);
+                stored = Mathf.Clamp01(stored);
+
+                entry.slider.SetValueWithoutNotify(stored);
+                UpdateLabel(entry, stored);
+
+                if (AudioManager.HasInstance)
+                    AudioManager.Instance.SetVolume(entry.paramKey, stored);
+            }
+        }
+
+        /// <summary>
+        /// Persist a single channel volume to PlayerPrefs and apply to the mixer.
+        /// Called by slider.onValueChanged.
+        /// </summary>
+        private void SaveSettings(AudioSliderEntry entry, float value)
         {
             UpdateLabel(entry, value);
-
             if (!AudioManager.HasInstance) return;
             AudioManager.Instance.SetVolume(entry.paramKey, value);
+            // AudioManager.SetVolume already writes PlayerPrefs.SetFloat("NH_Audio_" + param, value).
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────
@@ -110,7 +133,7 @@ namespace NightHunt.Audio
             foreach (var entry in sliders)
             {
                 if (entry?.slider == null) continue;
-                entry.slider.value = entry.defaultValue; // fires onValueChanged → HandleSliderChanged
+                entry.slider.value = entry.defaultValue; // fires onValueChanged → SaveSettings
             }
         }
     }

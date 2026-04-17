@@ -57,7 +57,7 @@ namespace NightHunt.GameplaySystems.Attachment
 
 #if UNITY_EDITOR
         [ContextMenu("Validate References")]
-        private void OnValidate() => ValidateReferences();
+        protected override void OnValidate() => ValidateReferences();
 #endif
         
         public override void OnStartNetwork()

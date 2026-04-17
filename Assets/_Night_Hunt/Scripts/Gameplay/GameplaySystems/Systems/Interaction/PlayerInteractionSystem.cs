@@ -1,4 +1,4 @@
-﻿using FishNet.Connection;
+using FishNet.Connection;
 using FishNet.Managing;
 using FishNet.Object;
 using NightHunt.Gameplay.Input.Core;
@@ -6,6 +6,7 @@ using NightHunt.Gameplay.Input.Handlers.Interaction;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using UnityEngine;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
@@ -38,11 +39,11 @@ namespace NightHunt.GameplaySystems.Interaction
         [Header("Debug")]
         [SerializeField] private NightHuntDebugConfig _debugConfig;
 
-        // â”€â”€ Hold state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Hold state ─────────────────────────────────────────────────────────────
 
         private bool _isHolding;
         private float _holdTimer;
-        /// <summary>Current hold target â€” any IHoldInteractable (WorldContainer, WorldDoor, WorldSwitch...).</summary>
+        /// <summary>Current hold target — any IHoldInteractable (WorldContainer, WorldDoor, WorldSwitch...).</summary>
         private IHoldInteractable _holdingInteractable;
 
         // Networking
@@ -58,7 +59,7 @@ namespace NightHunt.GameplaySystems.Interaction
             }
         }
 
-        // â”€â”€ Unity lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Unity lifecycle ──────────────────────────────────────────────────────
 
         private void Awake()
         {
@@ -110,7 +111,7 @@ namespace NightHunt.GameplaySystems.Interaction
             HandleHoldInteract(Time.deltaTime);
         }
 
-        // â”€â”€ Public API (called by InteractionInputHandler via events) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Public API (called by InteractionInputHandler via events) ────────────
 
         public void HandleInteractPerformed()
         {
@@ -122,7 +123,7 @@ namespace NightHunt.GameplaySystems.Interaction
             if (target != null && target.CanInteract(gameObject))
             {
             // IHoldInteractable: WorldContainer, WorldDoor, WorldSwitch, etc.
-            // HoldDuration == 0 â†’ Instant mode (call Interact immediately).
+            // HoldDuration == 0 → Instant mode (call Interact immediately).
             if (target is IHoldInteractable holdTarget && holdTarget.HoldDuration > 0)
             {
                 _isHolding = true;
@@ -242,7 +243,7 @@ namespace NightHunt.GameplaySystems.Interaction
             }
         }
 
-        // â”€â”€ Hold interact â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Hold interact ────────────────────────────────────────────────────────
 
         private void HandleHoldInteract(float deltaTime)
         {
@@ -263,7 +264,7 @@ namespace NightHunt.GameplaySystems.Interaction
             }
         }
 
-        // â”€â”€ Pickup helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Pickup helpers ───────────────────────────────────────────────────────
 
         /// <summary>Pick up the single item currently aimed at (raycast target).</summary>
         private void PickupSingle()
@@ -358,9 +359,9 @@ namespace NightHunt.GameplaySystems.Interaction
                 Debug.Log($"[Pickup] PickupAll: triggered {count} pickup(s).");
         }
 
-        // â”€â”€ Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Helper ───────────────────────────────────────────────────────────────
 
-        // PlayerInteractionSystem luÃ´n náº±m trÃªn player GameObject â€” GetComponent<NetworkObject>() lÃ  chÃ­nh xÃ¡c.
+        // PlayerInteractionSystem luôn nằm trên player GameObject — GetComponent<NetworkObject>() là chính xác.
         private NetworkObject GetLocalPlayerNob() => ComponentResolver.Find<NetworkObject>(this)
         .OnSelf()
         .InChildren()
@@ -384,14 +385,14 @@ namespace NightHunt.GameplaySystems.Interaction
             return null;
         }
 
-        // â”€â”€ Input subscription helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Input subscription helpers ──────────────────────────────────────────
 
         private void HandleOwnerReady(NetworkPlayer player)
         {
             if (player == _networkPlayer)
             {
                 if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
-                    Debug.Log("[PlayerInteractionSystem] NetworkPlayer owner ready â†’ trying to subscribe input.");
+                    Debug.Log("[PlayerInteractionSystem] NetworkPlayer owner ready → trying to subscribe input.");
                 TrySubscribeInput();
             }
         }

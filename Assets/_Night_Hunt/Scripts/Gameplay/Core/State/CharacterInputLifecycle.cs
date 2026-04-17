@@ -92,7 +92,7 @@ namespace NightHunt.Gameplay.Core.State
         private void HandleSpectateStarted()
         {
             // SpectateManager là global — chỉ đổi input khi chính local player đang spectate.
-            // SpectateManager.StartSpectating chỉ được gọi từ local player's death flow, nên safe.
+            // SpectateManager.StartSpectating chỉ is called từ local player's death flow, nên safe.
             if (_networkObject != null && !_networkObject.IsOwner)
                 return;
 

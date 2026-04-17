@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -11,24 +12,29 @@ namespace NightHunt.UI
     ///
     /// Setup:
     ///   1. Place this panel in the GameHUD canvas.
-    ///   2. Assign _panel, _hpSlider, _bossNameText in Inspector.
+    ///   2. Assign _panel, _hpSlider, _bossNameText, _hpText in Inspector.
     ///   3. Panel starts hidden; shown when BossSpawnedEvent fires.
     ///
     /// Data flow (server-authoritative, client reads SyncVar):
-    ///   BossSpawnedEvent → show panel, cache BossController ref
-    ///   Update() polling → BossController.CurrentHp / MaxHp → slider
-    ///   BossKilledEvent  → hide panel
+    ///   BossSpawnedEvent → show panel, subscribe BossController.OnHealthChanged
+    ///   OnHealthChanged  → update HP slider and text live (no Update polling)
+    ///   BossKilledEvent  → show "Boss Defeated!", then hide panel after delay
     /// </summary>
     public class BossHUDPanel : MonoBehaviour
     {
+        private const string KilledMessage  = "Boss Defeated!";
+        private const string HpSectionLabel = "BOSS HP";
+
         [Header("UI References")]
         [SerializeField] private GameObject         _panel;
         [SerializeField] private Slider             _hpSlider;
         [SerializeField] private TextMeshProUGUI    _bossNameText;
         [SerializeField] private TextMeshProUGUI    _hpText;
+        [SerializeField] private TextMeshProUGUI    _hpLabelText;
 
         [Header("Settings")]
         [SerializeField] private string _defaultBossName = "BOSS";
+        [SerializeField] private float  _defeatedDisplayDuration = 2f;
 
         private BossController _bossController;
 
@@ -49,25 +55,15 @@ namespace NightHunt.UI
         {
             GameplayEventBus.Instance?.Unsubscribe<BossSpawnedEvent>(OnBossSpawned);
             GameplayEventBus.Instance?.Unsubscribe<BossKilledEvent>(OnBossKilled);
-        }
-
-        private void Update()
-        {
-            if (_bossController == null || _bossController.IsDead) return;
-
-            float fraction = _bossController.MaxHp > 0f
-                ? _bossController.CurrentHp / _bossController.MaxHp
-                : 0f;
-
-            if (_hpSlider   != null) _hpSlider.value = fraction;
-            if (_hpText     != null) _hpText.text    =
-                $"{Mathf.CeilToInt(_bossController.CurrentHp)} / {Mathf.CeilToInt(_bossController.MaxHp)}";
+            UnsubscribeHealth();
         }
 
         // ── Event Handlers ──────────────────────────────────────────────────
 
         private void OnBossSpawned(BossSpawnedEvent evt)
         {
+            UnsubscribeHealth();
+
             // Find the spawned BossController by ID — scan all spawned bosses.
             var allBosses = FindObjectsByType<BossController>(FindObjectsSortMode.None);
             foreach (var boss in allBosses)
@@ -85,19 +81,55 @@ namespace NightHunt.UI
                 _bossController = FindFirstObjectByType<BossController>();
             }
 
+            if (_bossController != null)
+                _bossController.OnHealthChanged += OnBossHpChanged;
+
             if (_bossNameText != null)
                 _bossNameText.text = string.IsNullOrEmpty(evt.BossId) ? _defaultBossName : evt.BossId.ToUpper();
+
+            if (_hpLabelText != null)
+                _hpLabelText.text = HpSectionLabel;
+
+            // Sync slider to current HP immediately (SyncVar may already have a value).
+            if (_bossController != null)
+                OnBossHpChanged(_bossController.CurrentHp, _bossController.MaxHp);
 
             Show();
         }
 
         private void OnBossKilled(BossKilledEvent evt)
         {
-            _bossController = null;
-            Hide();
+            UnsubscribeHealth();
+            StopAllCoroutines();
+            StartCoroutine(ShowDefeatedThenHide());
+        }
+
+        private void OnBossHpChanged(float current, float max)
+        {
+            float fraction = max > 0f ? current / max : 0f;
+            if (_hpSlider != null) _hpSlider.value = fraction;
+            if (_hpText   != null) _hpText.text    = $"{Mathf.CeilToInt(current)} / {Mathf.CeilToInt(max)}";
         }
 
         // ── Helpers ─────────────────────────────────────────────────────────
+
+        private void UnsubscribeHealth()
+        {
+            if (_bossController != null)
+            {
+                _bossController.OnHealthChanged -= OnBossHpChanged;
+                _bossController = null;
+            }
+        }
+
+        private IEnumerator ShowDefeatedThenHide()
+        {
+            if (_bossNameText != null) _bossNameText.text = KilledMessage;
+            if (_hpSlider     != null) _hpSlider.value   = 0f;
+            if (_hpText       != null) _hpText.text       = string.Empty;
+            yield return new WaitForSeconds(_defeatedDisplayDuration);
+            Hide();
+        }
 
         private void Show()
         {

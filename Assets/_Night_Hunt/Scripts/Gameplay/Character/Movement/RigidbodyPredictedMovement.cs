@@ -222,7 +222,7 @@ namespace NightHunt.Gameplay.Character
             _rigidbody.MoveRotation(transform.rotation);
             _rigidbody.angularVelocity = Vector3.zero;
 
-            // XZ tách biệt để xử lý wall-cast và slope projection.
+            // XZ tách biệt để handle wall-cast và slope projection.
             // Y = _verticalVelocity từ SimulateMovement (gravity / jump / grounded-stick).
             // useGravity = false → Unity KHÔNG thêm gravity tự động.
             // Toàn bộ gravity do SimulateMovement tính và truyền vào movement.y ở đây.
@@ -235,7 +235,7 @@ namespace NightHunt.Gameplay.Character
 
                 // ── Slope projection ─────────────────────────────────────────────
                 // Project hướng di chuyển lên mặt phẳng slope để character đi theo
-                // bề mặt thay vì đâm vào sườn dốc.
+                // bề mặt instead of đâm vào sườn dốc.
                 float slopeAngle = Vector3.Angle(Vector3.up, _groundNormal);
                 if (_isGroundedCached && slopeAngle > 1f)
                 {
@@ -274,7 +274,7 @@ namespace NightHunt.Gameplay.Character
             //   • Grounded + đang di chuyển:  dùng stick-down để bám mặt dốc
             //   • Grounded + idle:            vertDisp = 0 — KHÔNG đẩy xuống
             //     → đẩy thẳng xuống khi idle trên slope → PhysX depenetrate theo normal
-            //     → normal có component XZ → trượt dù không có input!
+            //     → normal có component XZ → trượt dù not available input!
             //   • Airborne:  tích tụ gravity mỗi tick (âm = fall, dương = jump)
             bool groundedIdle = _isGroundedCached && horizontal.sqrMagnitude <= 0.0001f && movement.y <= 0f;
             float vertDisp = groundedIdle ? 0f : movement.y * dt;

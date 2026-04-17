@@ -28,8 +28,8 @@ namespace NightHunt.Networking
         }
 
         /// <summary>
-        /// Client: Gửi data lên server bằng ServerRpc
-        /// SyncVar với ClientUnsynchronized KHÔNG truyền dữ liệu lên server - phải dùng ServerRpc
+        /// Client: Send data lên server bằng ServerRpc
+        /// SyncVar với ClientUnsynchronized KHÔNG truyền data lên server - phải dùng ServerRpc
         /// </summary>
         [Client]
         private void SendPlayerDataToServer()
@@ -39,12 +39,12 @@ namespace NightHunt.Networking
             Debug.Log(
                 $"[Client] Sending data to server - Backend ID: {data.BackendPlayerId}, Name: {data.DisplayName}");
 
-            // Gửi lên server bằng ServerRpc
+            // Send lên server bằng ServerRpc
             RpcSendPlayerData(data);
         }
 
         /// <summary>
-        /// ServerRpc: Chạy trên server, được gọi bởi client owner
+        /// ServerRpc: Run trên server, is called bởi client owner
         /// </summary>
         [ServerRpc]
         private void RpcSendPlayerData(PlayerRegistryData data)

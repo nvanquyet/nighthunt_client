@@ -21,7 +21,7 @@ namespace NightHunt.Networking.Prediction.FishNet
     /// USAGE:
     /// Derived classes MUST implement:
     /// - TimeManager_OnTick(): Build và send replicate data
-    /// - CreateReconcileData(): Tạo reconcile state
+    /// - CreateReconcileData(): Create reconcile state
     /// - [Replicate] method: Simulate movement
     /// - [Reconcile] method: Apply server state
     /// </summary>
@@ -72,7 +72,7 @@ namespace NightHunt.Networking.Prediction.FishNet
 
         /// <summary>
         /// Check if state contains Created flag.
-        /// Created = Data được tạo bởi server/client (có input thật).
+        /// Created = Data is created bởi server/client (có input thật).
         /// </summary>
         protected bool IsCreated(ReplicateState state)
         {

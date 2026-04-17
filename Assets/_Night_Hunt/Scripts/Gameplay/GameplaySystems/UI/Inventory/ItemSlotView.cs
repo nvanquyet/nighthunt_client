@@ -38,7 +38,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
 
         /// <summary>
-        /// Initialize chỉ với slot id (nếu config đã được set từ bên ngoài)
+        /// Initialize chỉ với slot id (nếu config đã set từ bên ngoài)
         /// </summary>
         public void Initialize(UISlotId id)
         {
@@ -50,7 +50,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             State = state;
 
-            // Chỉ coi là empty nếu không có item và cũng không có icon
+            // Chỉ coi là empty nếu not available item và cũng not available icon
             if (state == null || (state.Item == null && state.Icon == null))
             {
                 SetEmptyState();
@@ -149,14 +149,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _background.sprite = _uiConfig.DefaultBackground;
             }
 
-            // Ẩn stack object mặc định khi empty
+            // Hide stack object mặc định khi empty
             if (_stackObj != null)
             {
                 _stackObj.SetActive(false);
             }
             else if (_stackText != null)
             {
-                // Fallback: nếu không có stackObj thì chỉ clear text
+                // Fallback: nếu not available stackObj thì chỉ clear text
                 _stackText.text = string.Empty;
             }
 
@@ -184,7 +184,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
 
         /// <summary>
-        /// Được gọi khi slot tạm thời bị clear visual trong lúc drag.
+        /// Được gọi khi slot tạm thời bị clear visual during drag.
         /// </summary>
         public void SetHiddenForDrag()
         {

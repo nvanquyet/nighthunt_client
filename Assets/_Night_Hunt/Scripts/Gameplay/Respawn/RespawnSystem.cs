@@ -6,6 +6,7 @@ using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Zone;
 using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using System.Collections.Generic;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
@@ -272,7 +273,7 @@ namespace NightHunt.Gameplay.Respawn
                 int teamId = player != null ? player.TeamId : -1;
                 SpawnPoint sp = _spawnSystem.GetRandomSpawnPointForTeam(teamId);
 
-                // Fallback sang neutral nếu team không có spawn point riêng
+                // Fallback sang neutral nếu team not available spawn point riêng
                 if (sp == null && teamId != -1)
                     sp = _spawnSystem.GetRandomSpawnPointForTeam(-1);
 

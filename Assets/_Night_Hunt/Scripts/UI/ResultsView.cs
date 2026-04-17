@@ -55,6 +55,9 @@ namespace NightHunt.UI
         // Last match end result (cached for post-match backend call)
         private MatchEndedEvent? _lastMatchResult;
 
+        // Guard: prevent double-fire on Custom_Relay host (server-direct publish + ObserversRpc callback both fire).
+        private bool _matchEndProcessed;
+
         // ──────────────────────────────────────────────────────────────────────
 
         #region Lifecycle
@@ -83,6 +86,13 @@ namespace NightHunt.UI
 
         private void OnMatchEnded(MatchEndedEvent evt)
         {
+            // Guard: on Custom_Relay host, MatchEndedEvent fires twice:
+            //   1. Direct publish in MatchEndManager.TriggerElimination (full PlayerResults)
+            //   2. Via ObserversRpc — host-client also receives it (empty PlayerResults)
+            // The first event always carries the full data; ignore the second.
+            if (_matchEndProcessed) return;
+            _matchEndProcessed = true;
+
             _lastMatchResult = evt;
             ShowResults(evt);
             ShowMatchResultToast(evt);
@@ -237,6 +247,15 @@ namespace NightHunt.UI
             // Report match result to backend before clearing session.
             // Fire-and-forget: don't block navigation on network latency.
             _ = PostMatchResultAsync();
+
+            // Refresh local player profile so Home scene shows updated ELO/coins.
+            _ = GameManager.Instance?.ProfileManager?.FetchProfile();
+
+            // Disconnect FishNet BEFORE clearing room and loading home.
+            // Without this, on Custom_Relay the FishNet server/host keeps running inside 01_Home
+            // (NetworkManager is DontDestroyOnLoad). On Ranked_DS the DS is already shutting down
+            // but explicit client disconnect ensures a clean FishNet state.
+            NightHunt.Networking.NetworkGameManager.Instance?.Disconnect();
 
             RoomState.Instance?.ClearRoom();
 

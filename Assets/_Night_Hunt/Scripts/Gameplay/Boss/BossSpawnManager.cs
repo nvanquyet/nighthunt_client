@@ -34,7 +34,11 @@ namespace NightHunt.Gameplay.Boss
         private void Awake()
         {
             if (_phaseManager == null)
+            {
                 _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
+                if (_phaseManager == null)
+                    Debug.LogWarning("[BossSpawnManager] MatchPhaseManager not found — assign it in the Inspector.");
+            }
         }
 
         public override void OnStartServer()
@@ -158,11 +162,11 @@ namespace NightHunt.Gameplay.Boss
     [System.Serializable]
     public struct BossSpawnEntry
     {
-        [Tooltip("Prefab của Boss chứa BossController")]
+        [Tooltip("Boss prefab containing a BossController component.")]
         public GameObject BossPrefab;
-        [Tooltip("Danh sách các vị trí Boss có thể chui lên (Sẽ random chọn 1 điểm trong này)")]
+        [Tooltip("List of spawn points from which one will be selected at random.")]
         public List<BossSpawnPoint> SpawnPoints;
-        [Tooltip("Phase mà Boss này sẽ xuất hiện (Thường là Phase 2 - Hunt)")]
+        [Tooltip("Phase in which this boss spawns (typically Phase 2 - Hunt).")]
         public MatchPhaseState SpawnPhase;
     }
 }

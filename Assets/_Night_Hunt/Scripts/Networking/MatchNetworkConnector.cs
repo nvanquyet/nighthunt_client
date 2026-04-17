@@ -3,14 +3,14 @@ using UnityEngine;
 namespace NightHunt.Networking
 {
     /// <summary>
-    /// OBSOLETE — Logic đã được migrate vào <see cref="NetworkGameManager"/>.
+    /// OBSOLETE — Logic đã migrated into <see cref="NetworkGameManager"/>.
     ///
     /// NetworkGameManager tự subscribe SceneManager.OnLoadEnd và auto-connect
-    /// khi game map scene (02_Map_XX) load xong. Script này không còn cần thiết.
+    /// khi game map scene (02_Map_XX) load xong. Script này no longer needed.
     ///
-    /// Cách xử lý:
-    ///   1. Xóa component này khỏi mọi scene / prefab trong Unity Editor.
-    ///   2. Xóa file MatchNetworkConnector.cs.
+    /// Cách handle:
+    ///   1. Remove component này khỏi mọi scene / prefab trong Unity Editor.
+    ///   2. Remove file MatchNetworkConnector.cs.
     /// </summary>
     [System.Obsolete("Migrated into NetworkGameManager. Remove this component from all scenes.")]
     public sealed class MatchNetworkConnector : MonoBehaviour

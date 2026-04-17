@@ -5,7 +5,7 @@ namespace NightHunt.Gameplay.Boss
 {
     /// <summary>
     /// Đặt Component này tại các vị trí mọc Boss trên bản đồ.
-    /// Cho phép Map Designer tuỳ biến phần thưởng theo từng KHU VỰC,
+    /// Allows Map Designer tuỳ biến phần thưởng theo từng KHU VỰC,
     /// chứ không phải bị cố định theo từng CON BOSS (Prefab).
     /// </summary>
     [DisallowMultipleComponent]
