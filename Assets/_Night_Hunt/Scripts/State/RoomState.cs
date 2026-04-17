@@ -65,13 +65,11 @@ namespace NightHunt.State
 
         public void ClearRoom()
         {
-            if (IsInRoom)
-            {
-                CurrentRoom = null;
-                ClearNetworkSession();
-                NetworkGameManager.ResetConnectionFlags();
-                OnRoomLeft?.Invoke();
-            }
+            bool wasInRoom = IsInRoom;
+            CurrentRoom = null;
+            ClearNetworkSession();
+            NetworkGameManager.ResetConnectionFlags();
+            if (wasInRoom) OnRoomLeft?.Invoke();
         }
 
         // ── Network session helpers ───────────────────────────────────────────

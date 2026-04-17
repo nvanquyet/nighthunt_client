@@ -185,9 +185,8 @@ namespace NightHunt.UI
             if (result.Success)
             {
                 HandleRememberMe(result.data.refreshToken);
-                // Always reset stale room/network state on fresh login
+                // Always reset stale room/network state on fresh login (unconditional)
                 RoomState.Instance?.ClearRoom();
-                RoomState.Instance?.ClearNetworkSession();
                 onLoginSuccess?.Invoke();   // Inspector: wire animation/sound ở đây
                 // Fetch game config now that we have a valid token
                 _ = GameManager.Instance?.GameConfigService?.FetchAsync();
