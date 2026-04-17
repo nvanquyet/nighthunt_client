@@ -52,6 +52,7 @@ jobs:
   validate-secrets:
     name: "Validate Secrets"
     runs-on: ubuntu-latest
+    environment: NightHunt   # Required to access VPS_HOST / VPS_USER / VPS_SSH_KEY (environment secrets)
     steps:
       - name: Check required secrets
         env:
