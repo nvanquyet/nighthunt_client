@@ -58,19 +58,20 @@ namespace NightHunt.Gameplay.Input
         SpectatorFreeCamera,
 
         /// <summary>Dead, waiting for respawn — UI + Team only</summary>
-        PlayerDead,
+        PlayerDead,   // implicit = 8
 
+        // ── Explicit-numbered states (must be > 8 to avoid collision with PlayerDead) ──
         /// <summary>Cutscene / loading — no input accepted</summary>
-        Cinematic = 8,
+        Cinematic = 12,
 
         /// <summary>Scout mode (move + camera, không combat)</summary>
-        ScoutMode = 9,
+        ScoutMode = 13,
 
         /// <summary>Chỉ camera controls</summary>
-        Camera = 10,
+        Camera = 14,
 
         /// <summary>Dialogue – chỉ UI</summary>
-        InDialogue = 11,
+        InDialogue = 15,
 
         // ── Legacy aliases (giữ lại để tránh break code cũ) ──────────────────
         // ⚠️ PHẢI đặt CUỐI, SAU tất cả value thực, để tránh C# auto-increment collision

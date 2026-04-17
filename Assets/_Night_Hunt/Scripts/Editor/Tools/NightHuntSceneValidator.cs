@@ -41,7 +41,7 @@ namespace NightHunt.Editor.Tools
                 required: new[]
                 {
                     "FishNet.Managing.NetworkManager",
-                    "NightHunt.Networking.ServerBootstrap",
+                    "NightHunt.Server.ServerBootstrap",   // namespace is NightHunt.Server (not Networking)
                 },
                 forbidden: new[]
                 {
@@ -62,12 +62,12 @@ namespace NightHunt.Editor.Tools
                 required: new[]
                 {
                     "NightHunt.Gameplay.Core.GameBootstrap",
-                    "NightHunt.Gameplay.Match.ServerGameManager",
+                    "NightHunt.Networking.ServerGameManager",       // was NightHunt.Gameplay.Match
                     "NightHunt.Gameplay.Scoring.ScoringSystem",
                     "NightHunt.Gameplay.Match.MatchPhaseManager",
                     "NightHunt.Gameplay.Match.MatchEndManager",
-                    "NightHunt.Gameplay.Spawning.SpawnSystem",
-                    "NightHunt.Gameplay.Spawning.RespawnSystem",
+                    "NightHunt.Gameplay.Spawn.SpawnSystem",         // was NightHunt.Gameplay.Spawning
+                    "NightHunt.Gameplay.Respawn.RespawnSystem",     // was NightHunt.Gameplay.Spawning
                 },
                 forbidden: null),
         };
