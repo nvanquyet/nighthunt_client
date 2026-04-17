@@ -125,6 +125,19 @@ namespace NightHunt.UI
             // Update RoomState match info (preserves Custom_Relay mode if already set).
             RoomState.Instance?.SetMatchReady(e.matchId, e.mapId, e.gameMode);
 
+            // If match_ready already contains the DS address, pre-populate RoomState and signal NGM.
+            // This handles two cases:
+            //   1. Local testing: DS is already running, ds_ready WS may never arrive.
+            //   2. Production: server pre-allocates DS — ds_ready may arrive later and overwrite
+            //      with identical values (idempotent), or may not arrive at all.
+            // TryConnectIfReady() is safe here: it still waits for _gameSceneLoaded.
+            if (!isRelay && !string.IsNullOrEmpty(e.dsIp) && e.dsPort > 0)
+            {
+                Debug.Log($"[MFC] match_ready contains dsIp={e.dsIp}:{e.dsPort} — pre-populating RoomState + notifying NGM (no need to wait for separate ds_ready).");
+                RoomState.Instance?.SetDedicatedServer(e.dsIp, (ushort)e.dsPort, e.matchId, e.mapId);
+                NightHunt.Networking.NetworkGameManager.Instance?.NotifyDsReady();
+            }
+
             // Show overlay THEN load scene — overlay is on PersistentUICanvas (DontDestroyOnLoad).
             MatchLoadingOverlay.Instance?.Show(sceneId);
 

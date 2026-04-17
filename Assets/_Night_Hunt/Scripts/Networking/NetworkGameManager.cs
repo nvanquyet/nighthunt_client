@@ -75,7 +75,10 @@ namespace NightHunt.Networking
             return;
 #endif
             if (networkManager == null) return;
-            networkManager.SceneManager.OnLoadEnd               += OnSceneLoadEnd;
+            if (networkManager.SceneManager != null)
+                networkManager.SceneManager.OnLoadEnd += OnSceneLoadEnd;
+            else
+                Debug.LogWarning("[NGM] FishNet SceneManager component is missing on NetworkManager — OnLoadEnd not subscribed. Add SceneManager component in Inspector. Using Unity SceneManager fallback.");
             networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
             UnityEngine.SceneManagement.SceneManager.sceneLoaded  += OnUnitySceneLoaded;
             if (GameWebSocketService.Instance != null)
@@ -111,7 +114,8 @@ namespace NightHunt.Networking
         {
             if (networkManager != null)
             {
-                networkManager.SceneManager.OnLoadEnd               -= OnSceneLoadEnd;
+                if (networkManager.SceneManager != null)
+                    networkManager.SceneManager.OnLoadEnd -= OnSceneLoadEnd;
                 networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
             }
             UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnUnitySceneLoaded;
