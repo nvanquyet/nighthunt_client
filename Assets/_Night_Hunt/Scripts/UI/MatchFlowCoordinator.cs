@@ -133,9 +133,11 @@ namespace NightHunt.UI
             // TryConnectIfReady() is safe here: it still waits for _gameSceneLoaded.
             if (!isRelay && !string.IsNullOrEmpty(e.dsIp) && e.dsPort > 0)
             {
-                Debug.Log($"[MFC] match_ready contains dsIp={e.dsIp}:{e.dsPort} — pre-populating RoomState + notifying NGM (no need to wait for separate ds_ready).");
+                Debug.Log($"[MFC] match_ready contains dsIp={e.dsIp}:{e.dsPort} — pre-populating RoomState. Waiting for real ds_ready before connecting.");
                 RoomState.Instance?.SetDedicatedServer(e.dsIp, (ushort)e.dsPort, e.matchId, e.mapId);
-                NightHunt.Networking.NetworkGameManager.Instance?.NotifyDsReady();
+                // Do NOT call NotifyDsReady() here — the DS container is still booting.
+                // SignalDsReady() will be called by HandleDsReady() when the backend
+                // broadcasts ds_ready (after DS calls /api/ds/game-ready).
             }
 
             // Show overlay THEN load scene — overlay is on PersistentUICanvas (DontDestroyOnLoad).
@@ -162,8 +164,9 @@ namespace NightHunt.UI
             Debug.Log($"[MFC] ds_ready \u25ba dsIp={e.dsIp} dsPort={e.dsPort} matchId={e.matchId} mapId={e.mapId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             Debug.Log($"[MFC] ds_ready \u2014 RoomState.DsIp={room?.DsIp} RoomState.DsPort={room?.DsPort} (should match above; set by GWS)");
             // GWS.SetDedicatedServer already stored dsIp/dsPort in RoomState.
-            // Notify NetworkGameManager \u2014 it will attempt FishNet connect once scene is loaded.
-            NightHunt.Networking.NetworkGameManager.Instance?.NotifyDsReady();
+            // SignalDsReady sets the static flag (works across scene transitions) then
+            // calls NotifyDsReady() on the NGM instance if it already exists in the map scene.
+            NightHunt.Networking.NetworkGameManager.SignalDsReady();
         }
 
         // ── match_cancelled ───────────────────────────────────────────────────

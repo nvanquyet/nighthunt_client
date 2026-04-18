@@ -106,6 +106,7 @@ namespace NightHunt.Networking
             {
                 Debug.Log("[NGM] Fix B: ds_ready was received before this instance subscribed — setting _dsReady = true.");
                 _dsReady = true;
+                MatchLoadingOverlay.Instance?.MarkDsReady();
             }
 
             // Try connect now if both flags are already true (most common case in map scene)
@@ -320,6 +321,19 @@ namespace NightHunt.Networking
                     return;
                 }
             }
+        }
+
+        /// <summary>
+        /// Static entry point: signals that ds_ready WS arrived regardless of whether an
+        /// NGM instance exists yet (handles the scene-transition timing gap).
+        /// Sets the static flag first, then delegates to the instance if one is alive.
+        /// Call this from MatchFlowCoordinator.HandleDsReady() — NOT from the match_ready path.
+        /// </summary>
+        public static void SignalDsReady()
+        {
+            s_dsReadyReceived = true;
+            if (Instance != null)
+                Instance.NotifyDsReady();
         }
 
         /// <summary>
