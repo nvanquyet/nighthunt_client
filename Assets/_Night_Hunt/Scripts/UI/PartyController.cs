@@ -342,8 +342,12 @@ namespace NightHunt.UI
 
         private async Task StartQueue()
         {
-            // Block if already in a custom room — must leave first.
-            if (RoomState.Instance != null && RoomState.Instance.IsInRoom)
+            // Block only if already in an active CUSTOM room — ranked rooms don't block re-queue.
+            // A ranked room may still be tracked in RoomState (server sends room_updated on WS
+            // reconnect), but that should never prevent the player from queuing again.
+            if (RoomState.Instance != null
+                && RoomState.Instance.IsInRoom
+                && RoomState.Instance.CurrentGameMode == NightHunt.Networking.GameMode.Custom_Relay)
             {
                 ShowToast("Xếp hạng", "Hãy rời phòng custom trước khi vào xếp hạng.");
                 SetQueueState(RankedQueueState.Idle);

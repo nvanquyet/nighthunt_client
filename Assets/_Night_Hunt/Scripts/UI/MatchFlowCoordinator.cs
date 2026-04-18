@@ -200,6 +200,25 @@ namespace NightHunt.UI
         {
             Debug.Log($"[MFC] room_disbanded ▶ roomId={evt.roomId} reason={evt.reason} — clearing RoomState.  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             RoomState.Instance?.ClearRoom();
+
+            // Reset so the next match_ready is not incorrectly treated as a duplicate.
+            _lastHandledMatchId = null;
+
+            // If the player is in the game map scene but FishNet never connected (DS boot failed /
+            // connection error), navigate back to Home so they are not permanently stranded.
+            var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            bool inGameScene = activeScene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase);
+            bool fishNetConnected = NightHunt.Networking.NetworkGameManager.Instance != null
+                                 && NightHunt.Networking.NetworkGameManager.Instance.IsClient;
+
+            if (inGameScene && !fishNetConnected)
+            {
+                string reason = !string.IsNullOrEmpty(evt.reason) ? evt.reason : "unknown";
+                Debug.LogWarning($"[MFC] room_disbanded in game scene while not connected (reason={reason}) — returning to Home.");
+                var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+                toast?.Show("Trận đấu", $"Phòng bị giải tán ({reason}). Đang trở về Home...");
+                NightHunt.Core.SceneLoader.LoadHome();
+            }
         }
 
         // ── Public: reset (called by RoomState.ClearRoom via NetworkGameManager) ──
