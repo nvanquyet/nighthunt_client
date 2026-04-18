@@ -177,9 +177,21 @@ namespace NightHunt.Networking
             string ip = string.IsNullOrEmpty(dsIp) ? defaultServerAddress : dsIp;
             ushort p  = dsPort > 0 ? dsPort : port;
             Debug.Log($"[NGM] Connecting to DS {ip}:{p}...");
-            SetTransportAddress(ip, p);
-            if (!networkManager.ClientManager.StartConnection())
-                Debug.LogError("[NGM] Failed to start DS client connection!");
+            try
+            {
+                Debug.Log($"[NGM-DIAG] TransportManager={networkManager.TransportManager != null} Transport={networkManager.TransportManager?.Transport?.GetType().Name} ClientManager={networkManager.ClientManager != null}");
+                Debug.Log($"[NGM-DIAG] ClientState before connect={networkManager.TransportManager?.Transport?.GetConnectionState(false)}");
+                SetTransportAddress(ip, p);
+                Debug.Log($"[NGM-DIAG] SetTransportAddress done — calling ClientManager.StartConnection()");
+                bool started = networkManager.ClientManager.StartConnection();
+                Debug.Log($"[NGM-DIAG] StartConnection() returned={started}");
+                if (!started)
+                    Debug.LogWarning("[NGM] StartConnection returned false — client not started.");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[NGM-DIAG] EXCEPTION in StartClientDS: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         /// <summary>Legacy overload kept for backwards compatibility.</summary>
@@ -607,7 +619,9 @@ namespace NightHunt.Networking
         {
             var transport = networkManager.TransportManager.Transport;
             if (transport == null) { Debug.LogWarning("[NGM] Transport is null!"); return; }
+            Debug.Log($"[NGM-DIAG] SetTransportAddress: type={transport.GetType().Name} addr={address} port={targetPort}");
             transport.SetClientAddress(address);
+            Debug.Log($"[NGM-DIAG] SetClientAddress done");
             transport.SetPort(targetPort);
             Debug.Log($"[NGM] Transport address set → {address}:{targetPort} (type={transport.GetType().Name})");
         }
