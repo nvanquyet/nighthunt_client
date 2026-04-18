@@ -56,6 +56,11 @@ namespace NightHunt.Build
         // ── Build targets ─────────────────────────────────────────────────────
 
         /// <summary>Build Dedicated Server cho Linux x86_64 (Docker container).</summary>
+        /// <remarks>
+        /// DEMO PHASE: subtarget = Player (không có UNITY_SERVER define) để FishNet PacketIds
+        /// khớp với Unity Editor client → có thể test mà không cần build Windows client.
+        /// RELEASE: đổi lại subtarget = Server để bật Dedicated Server Optimizations.
+        /// </remarks>
         public static void BuildDedicatedServer()
         {
             string outputPath = GetArgOrDefault("-buildOutput", "Build/Server/NightHuntDS");
@@ -65,7 +70,7 @@ namespace NightHunt.Build
                 scenes           = DsScenes,
                 locationPathName = outputPath,
                 target           = BuildTarget.StandaloneLinux64,
-                subtarget        = (int)StandaloneBuildSubtarget.Server,
+                subtarget        = (int)StandaloneBuildSubtarget.Player, // DEMO: Player (not Server) so FishNet PacketIds match Editor client
                 options          = BuildOptions.None,
             };
 
