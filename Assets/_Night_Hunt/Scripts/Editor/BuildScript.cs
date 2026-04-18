@@ -1,7 +1,4 @@
 #if UNITY_EDITOR
-// ⚠️ RELEASE TODO: BuildScript.cs — đổi subtarget = Server trước khi ship
-// Search: "RELEASE_SUBTARGET" để tìm đúng chỗ
-#warning [RELEASE_SUBTARGET] DS build đang dùng StandaloneBuildSubtarget.Player (demo). Đổi sang .Server trước khi release!
 using System;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
@@ -59,11 +56,6 @@ namespace NightHunt.Build
         // ── Build targets ─────────────────────────────────────────────────────
 
         /// <summary>Build Dedicated Server cho Linux x86_64 (Docker container).</summary>
-        /// <remarks>
-        /// DEMO PHASE: subtarget = Player (không có UNITY_SERVER define) để FishNet PacketIds
-        /// khớp với Unity Editor client → có thể test mà không cần build Windows client.
-        /// RELEASE: đổi lại subtarget = Server để bật Dedicated Server Optimizations.
-        /// </remarks>
         public static void BuildDedicatedServer()
         {
             string outputPath = GetArgOrDefault("-buildOutput", "Build/Server/NightHuntDS");
@@ -73,7 +65,7 @@ namespace NightHunt.Build
                 scenes           = DsScenes,
                 locationPathName = outputPath,
                 target           = BuildTarget.StandaloneLinux64,
-                subtarget        = (int)StandaloneBuildSubtarget.Player, // RELEASE_SUBTARGET: đổi sang .Server khi release
+                subtarget        = (int)StandaloneBuildSubtarget.Server,
                 options          = BuildOptions.None,
             };
 
