@@ -365,11 +365,35 @@ jobs:
             echo ""
             echo "✅ DS image smoke test passed"
 
-      # Bước 4: Push git tag để tracking phiên bản DS chính xác trên GHCR
+      # Bước 4: Force-remove tất cả DS containers cũ → backend sẽ spawn mới với image mới
+      - name: Force-remove old DS containers on VPS
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            echo "=== Force-removing old nighthunt-ds-* containers ==="
+            OLD_CONTAINERS=$(docker ps -aq --filter "name=nighthunt-ds-" 2>/dev/null)
+            if [ -n "${OLD_CONTAINERS}" ]; then
+              echo "Found containers: ${OLD_CONTAINERS}"
+              docker rm -f ${OLD_CONTAINERS}
+              echo "✅ Old DS containers removed"
+            else
+              echo "ℹ️  No DS containers running — nothing to remove"
+            fi
+
+            echo "=== Pruning dangling images ==="
+            docker image prune -f
+            echo "✅ Dangling images pruned"
+
+      # Bước 5: Push git tag để tracking phiên bản DS chính xác trên GHCR
       - name: Push git tag
         run: |
           VERSION="${{ needs.build-unity.outputs.version }}"
           TAG="ds/${VERSION}"
+
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git tag -d "${TAG}" 2>/dev/null || true
@@ -391,4 +415,5 @@ jobs:
           echo "| Backend notified | ${{ vars.VPS_BACKEND_URL }} |" >> $GITHUB_STEP_SUMMARY
           echo "| .env.production | DS_IMAGE_REF updated |" >> $GITHUB_STEP_SUMMARY
           echo "| DS Smoke Test | Binary + UnityPlayer.so verified on VPS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Old DS containers | Force-removed (spawn fresh on next allocate) |" >> $GITHUB_STEP_SUMMARY
           echo "| Git tag | \`ds/${VERSION}\` |" >> $GITHUB_STEP_SUMMARY
