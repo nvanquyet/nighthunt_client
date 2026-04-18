@@ -1,4 +1,7 @@
 #if UNITY_EDITOR
+// ⚠️ RELEASE TODO: BuildScript.cs — đổi subtarget = Server trước khi ship
+// Search: "RELEASE_SUBTARGET" để tìm đúng chỗ
+#warning [RELEASE_SUBTARGET] DS build đang dùng StandaloneBuildSubtarget.Player (demo). Đổi sang .Server trước khi release!
 using System;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
@@ -70,7 +73,7 @@ namespace NightHunt.Build
                 scenes           = DsScenes,
                 locationPathName = outputPath,
                 target           = BuildTarget.StandaloneLinux64,
-                subtarget        = (int)StandaloneBuildSubtarget.Player, // DEMO: Player (not Server) so FishNet PacketIds match Editor client
+                subtarget        = (int)StandaloneBuildSubtarget.Player, // RELEASE_SUBTARGET: đổi sang .Server khi release
                 options          = BuildOptions.None,
             };
 
