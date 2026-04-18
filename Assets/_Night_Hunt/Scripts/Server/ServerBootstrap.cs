@@ -266,6 +266,10 @@ namespace NightHunt.Server
         /// Client KHÔNG cần gọi hàm này. FishNet SceneManager tự sync scene cho client.
         /// Add map mới: thêm case vào switch + thêm scene vào BuildScript.SERVER_SCENES.
         /// </summary>
+        // Tracks whether OnLoadEnd (FishNet) or sceneLoaded (Unity) already triggered setup.
+        // Prevents double-invocation of PostSceneLoadSetup if both fire.
+        private bool _sceneLoadSetupStarted = false;
+
         private void LoadGameScene()
         {
             // Resolve scene name via MapConfig + SceneConfig — no hardcoded map names.
@@ -281,6 +285,17 @@ namespace NightHunt.Server
 
             Debug.Log($"[DS-Boot] mapId='{_mapId}' → loading scene '{sceneName}'...");
 
+            // Subscribe Unity SceneManager as a FALLBACK.
+            // FishNet's SceneManager.OnLoadEnd is preferred, but if it silently fails
+            // (null ref, FishNet bug, etc.), Unity's sceneLoaded fires unconditionally.
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnUnitySceneLoaded;
+
+            // Start a timeout: if neither FishNet nor Unity fires the scene-loaded event
+            // within 60s, call NotifyGameReady anyway — the server IS running, just the
+            // scene load is stuck. Without this, ds_ready is never broadcast and the
+            // container is cleaned as 'dead' by the backend watchdog.
+            StartCoroutine(SceneLoadTimeout(60f));
+
             // ReplaceScenes=All: unload 00_DS_Boot, load map scene.
             // NetworkManager (DontDestroyOnLoad=1) tự survive sang scene mới.
             var sld = new SceneLoadData(sceneName)
@@ -289,10 +304,62 @@ namespace NightHunt.Server
                 Options       = new LoadOptions { AllowStacking = false },
             };
 
-            // Subscribe to FishNet SceneManager.OnLoadEnd to know when map scene is ready,
-            // then POST /ds/game-ready so clients can start connecting.
-            networkManager.SceneManager.OnLoadEnd += OnGameSceneLoadEnd;
-            networkManager.SceneManager.LoadGlobalScenes(sld);
+            // Subscribe to FishNet SceneManager.OnLoadEnd to know when map scene is ready.
+            if (networkManager.SceneManager != null)
+            {
+                networkManager.SceneManager.OnLoadEnd += OnGameSceneLoadEnd;
+                try
+                {
+                    networkManager.SceneManager.LoadGlobalScenes(sld);
+                    Debug.Log($"[DS-Boot] SceneManager.LoadGlobalScenes('{sceneName}') called successfully.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[DS-Boot] LoadGlobalScenes threw an exception: {ex.Message}\n{ex.StackTrace}");
+                    Debug.LogWarning("[DS-Boot] Falling back to Unity SceneManager.LoadScene directly.");
+                    UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
+                }
+            }
+            else
+            {
+                Debug.LogError("[DS-Boot] FishNet SceneManager is NULL — using Unity SceneManager.LoadScene fallback.");
+                UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
+            }
+        }
+
+        /// <summary>
+        /// Unity SceneManager fallback: fires for ALL scene loads, including FishNet-managed ones.
+        /// Prevents the case where FishNet's OnLoadEnd silently doesn't fire.
+        /// </summary>
+        private void OnUnitySceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+        {
+            if (!scene.name.StartsWith("02_Map_", StringComparison.OrdinalIgnoreCase)) return;
+
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnUnitySceneLoaded;
+            Debug.Log($"[DS-Boot] Unity sceneLoaded: '{scene.name}' — triggering PostSceneLoadSetup.");
+
+            if (!_sceneLoadSetupStarted)
+            {
+                _sceneLoadSetupStarted = true;
+                StartCoroutine(PostSceneLoadSetup(1.5f));
+            }
+        }
+
+        /// <summary>
+        /// Timeout fallback: if scene load never fires either event within 60s,
+        /// call NotifyGameReady directly. The FishNet server IS running — clients
+        /// can still attempt to connect; they'll just skip scene sync.
+        /// </summary>
+        private IEnumerator SceneLoadTimeout(float seconds)
+        {
+            yield return new WaitForSeconds(seconds);
+            if (!_sceneLoadSetupStarted)
+            {
+                Debug.LogError($"[DS-Boot] TIMEOUT: Scene load did not complete within {seconds}s. " +
+                               "Calling NotifyGameReady anyway so clients are not blocked forever.");
+                _sceneLoadSetupStarted = true;
+                yield return NotifyGameReady();
+            }
         }
 
         private void OnGameSceneLoadEnd(SceneLoadEndEventArgs args)
@@ -302,11 +369,15 @@ namespace NightHunt.Server
                 if (scene.name.StartsWith("02_Map_", StringComparison.OrdinalIgnoreCase))
                 {
                     networkManager.SceneManager.OnLoadEnd -= OnGameSceneLoadEnd;
-                    Debug.Log($"[DS-Boot] Game scene '{scene.name}' loaded — running post-scene setup.");
-                    // Wait 1.5s for all MonoBehaviour Awake()/Start() to complete, then:
-                    //   1. Subscribe to MatchEndManager (it now exists in the map scene)
-                    //   2. Notify backend DS is ready for clients
-                    StartCoroutine(PostSceneLoadSetup(1.5f));
+                    // Unsubscribe Unity fallback to prevent double-fire
+                    UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnUnitySceneLoaded;
+                    Debug.Log($"[DS-Boot] FishNet OnLoadEnd: scene '{scene.name}' loaded.");
+
+                    if (!_sceneLoadSetupStarted)
+                    {
+                        _sceneLoadSetupStarted = true;
+                        StartCoroutine(PostSceneLoadSetup(1.5f));
+                    }
                     return;
                 }
             }
@@ -385,10 +456,15 @@ namespace NightHunt.Server
             {
                 yield return new WaitForSeconds(30f);
 
-                if (networkManager == null || !networkManager.ServerManager.Started)
-                    yield break;
-
-                int currentPlayers = networkManager.ServerManager.Clients.Count;
+                // Do NOT exit loop when ServerManager.Started=false — that would stop heartbeats
+                // prematurely (e.g., during scene transitions) and cause the backend's dead-server
+                // watchdog to reclaim this container before game-ready is sent.
+                // The backend will reclaim the container naturally after match ends.
+                int currentPlayers = 0;
+                if (networkManager != null && networkManager.ServerManager != null && networkManager.ServerManager.Started)
+                    currentPlayers = networkManager.ServerManager.Clients.Count;
+                else
+                    Debug.LogWarning("[DS-Boot] Heartbeat: ServerManager not Started — sending anyway to keep container alive.");
 
                 Debug.Log($"[DS-Boot] Heartbeat — players={currentPlayers}/{_maxPlayers} matchId={_matchId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
