@@ -233,7 +233,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   WriteSceneObjectDetails: 1
-  ValidateRpcLengths: 1
+  ValidateRpcLengths: 0
   DisableObserversRpcLinks: 1
   DisableTargetRpcLinks: 1
   DisableServerRpcLinks: 1
