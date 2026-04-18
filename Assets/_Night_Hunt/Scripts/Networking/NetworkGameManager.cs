@@ -1,3 +1,4 @@
+using FishNet;
 using FishNet.Managing;
 using FishNet.Managing.Scened;
 using FishNet.Transporting;
@@ -60,11 +61,14 @@ namespace NightHunt.Networking
 
         protected override void OnSingletonAwake()
         {
-            if (networkManager == null)
+            if (networkManager == null || networkManager.TransportManager == null)
             {
-                networkManager = FindFirstObjectByType<NetworkManager>();
+                // InstanceFinder is FishNet's own singleton — always returns the properly initialized NM.
+                networkManager = InstanceFinder.NetworkManager ?? FindFirstObjectByType<NetworkManager>();
                 if (networkManager == null)
                     Debug.LogError("[NGM] NetworkManager not found! Please add NetworkManager to scene.");
+                else
+                    Debug.Log($"[NGM] OnSingletonAwake resolved NM via InstanceFinder/FindFirst: ClientMgr={networkManager.ClientManager != null} TransportMgr={networkManager.TransportManager != null}");
             }
         }
 
@@ -173,25 +177,24 @@ namespace NightHunt.Networking
         /// </summary>
         public void StartClientDS(string dsIp = null, ushort dsPort = 0)
         {
+            // Re-resolve via FishNet's own singleton if the cached reference lost its sub-managers
+            // (happens when lobby NM is destroyed on scene load, or map NM wasn't Awake'd yet).
+            if (networkManager == null || networkManager.TransportManager == null || networkManager.ClientManager == null)
+            {
+                var resolved = InstanceFinder.NetworkManager ?? FindFirstObjectByType<NetworkManager>();
+                if (resolved != null) networkManager = resolved;
+                Debug.Log($"[NGM] Re-resolved NM: {(networkManager != null ? $"ClientMgr={networkManager.ClientManager != null} TransportMgr={networkManager.TransportManager != null}" : "null")}");
+            }
             if (networkManager == null) { Debug.LogError("[NGM] NetworkManager is null!"); return; }
+            if (networkManager.ClientManager == null) { Debug.LogError("[NGM] ClientManager is null — FishNet NetworkManager not fully initialized!"); return; }
             string ip = string.IsNullOrEmpty(dsIp) ? defaultServerAddress : dsIp;
             ushort p  = dsPort > 0 ? dsPort : port;
             Debug.Log($"[NGM] Connecting to DS {ip}:{p}...");
-            try
-            {
-                Debug.Log($"[NGM-DIAG] TransportManager={networkManager.TransportManager != null} Transport={networkManager.TransportManager?.Transport?.GetType().Name} ClientManager={networkManager.ClientManager != null}");
-                Debug.Log($"[NGM-DIAG] ClientState before connect={networkManager.TransportManager?.Transport?.GetConnectionState(false)}");
-                SetTransportAddress(ip, p);
-                Debug.Log($"[NGM-DIAG] SetTransportAddress done — calling ClientManager.StartConnection()");
-                bool started = networkManager.ClientManager.StartConnection();
-                Debug.Log($"[NGM-DIAG] StartConnection() returned={started}");
-                if (!started)
-                    Debug.LogWarning("[NGM] StartConnection returned false — client not started.");
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"[NGM-DIAG] EXCEPTION in StartClientDS: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
-            }
+            SetTransportAddress(ip, p);
+            bool started = networkManager.ClientManager.StartConnection();
+            Debug.Log($"[NGM] FishNet client STARTING — StartConnection()={started}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            if (!started)
+                Debug.LogWarning("[NGM] StartConnection returned false — client not started.");
         }
 
         /// <summary>Legacy overload kept for backwards compatibility.</summary>
@@ -619,9 +622,7 @@ namespace NightHunt.Networking
         {
             var transport = networkManager.TransportManager.Transport;
             if (transport == null) { Debug.LogWarning("[NGM] Transport is null!"); return; }
-            Debug.Log($"[NGM-DIAG] SetTransportAddress: type={transport.GetType().Name} addr={address} port={targetPort}");
             transport.SetClientAddress(address);
-            Debug.Log($"[NGM-DIAG] SetClientAddress done");
             transport.SetPort(targetPort);
             Debug.Log($"[NGM] Transport address set → {address}:{targetPort} (type={transport.GetType().Name})");
         }
