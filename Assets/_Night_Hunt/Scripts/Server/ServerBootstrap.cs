@@ -23,6 +23,15 @@ namespace NightHunt.Server
     ///
     /// Gắn script này vào GameObject trong Scene: 00_DS_Boot
     /// </summary>
+    // ExecutionOrder -100 ensures Awake() runs BEFORE NetworkManager.Awake().
+    // FishNet's NetworkManager auto-starts the server in headless mode (_startOnHeadless=true).
+    // If we don't prevent that, two StartConnection() calls are made:
+    //   1. NetworkManager.Awake() → StartForHeadless() → StartConnection() → server starts OK
+    //   2. BootSequence → StartConnection() → NetManager.Start() sees IsRunning=true → returns false
+    //      → FishNet logs "Server failed to start" → StopConnection() → scene load blocked forever
+    // Fix: set _startOnHeadless=false in our Awake() (before NetworkManager.Awake() fires),
+    //      then call StartConnection() exactly once in BootSequence with the correct CLI port.
+    [UnityEngine.DefaultExecutionOrder(-100)]
     public class ServerBootstrap : MonoBehaviour
     {
         [Header("References")]
@@ -95,6 +104,14 @@ namespace NightHunt.Server
                 Application.Quit(1);
                 return;
             }
+
+            // CRITICAL: Prevent FishNet from auto-starting the server in headless mode.
+            // NetworkManager.Awake() calls StartForHeadless() which calls StartConnection() if
+            // _startOnHeadless=true (the default). Since our Awake() runs first (ExecutionOrder=-100),
+            // we disable that here so BootSequence can start the server exactly once, on the
+            // correct CLI-specified port, with the correct settings.
+            networkManager.ServerManager.SetStartOnHeadless(false);
+            Debug.Log("[DS-Boot] Awake: _startOnHeadless disabled — server will be started manually in BootSequence.");
 
             StartCoroutine(BootSequence());
         }
