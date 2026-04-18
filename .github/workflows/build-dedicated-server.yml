@@ -19,6 +19,10 @@ on:
     # commit message → empty commit với [build-ds] sẽ bị block hoàn toàn.
     # Thay vào đó, build-unity job đã có if: contains(..., '[build-ds]') để guard.
 
+  # Nhận dispatch từ server repo khi commit có [ds_build] → server gửi repository_dispatch
+  repository_dispatch:
+    types: [ ds_build ]
+
   # Build thủ công — bỏ qua [build-ds] check
   workflow_dispatch:
     inputs:
@@ -86,12 +90,14 @@ jobs:
     # CHỈ BUILD KHI:
     #   A) Trigger thủ công (workflow_dispatch → không cần [build-ds])
     #   B) Commit message có [build-ds]  →  git commit -m "... [build-ds]"
+    #   C) repository_dispatch từ server repo (server push [ds_build]) 
     #
     # Lý do: Unity build mất 60-90 phút + tốn quota GitHub Actions.
     # Không phải mọi thay đổi Unity đều cần rebuild DS binary.
     # ─────────────────────────────────────────────────────────────────────────
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'repository_dispatch' ||
       contains(github.event.head_commit.message, '[build-ds]')
     outputs:
       version: ${{ steps.gen-version.outputs.version }}
