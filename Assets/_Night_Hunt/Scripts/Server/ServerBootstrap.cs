@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Reflection;
 using FishNet.Managing;
 using FishNet.Managing.Scened;
 using NightHunt.Gameplay.Core.Events;   // MatchEndReason
@@ -150,6 +151,29 @@ namespace NightHunt.Server
             transport.SetPort(_gamePort);
             Debug.Log($"[DS-Boot] Port set → {_gamePort}");
 
+            // Step 2.5: Disable IPv6 on Tugboat to prevent LiteNetLib dual-stack bind conflict on Linux.
+            // Default: LiteNetLib creates an IPv6 socket with IPV6_V6ONLY=0 (Linux default), which causes
+            // that socket to claim BOTH [::]:port AND 0.0.0.0:port. The subsequent IPv4 bind then fails
+            // with EADDRINUSE. FishNet briefly reports Started=true then false → LoadGlobalScenes is a no-op
+            // → OnLoadEnd never fires → game-ready never sent → clients wait forever for ds_ready.
+            // Fix: disable IPv6 entirely so the server only binds 0.0.0.0:port (IPv4), which is sufficient.
+            if (networkManager.TransportManager.Transport is FishNet.Transporting.Tugboat.Tugboat tugboat)
+            {
+                var ipv6Field = typeof(FishNet.Transporting.Tugboat.Tugboat)
+                    .GetField("_enableIpv6",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                if (ipv6Field != null)
+                {
+                    ipv6Field.SetValue(tugboat, false);
+                    Debug.Log("[DS-Boot] Step 2.5: IPv6 disabled on Tugboat — server will bind IPv4 only (dual-stack fix).");
+                }
+                else
+                {
+                    Debug.LogWarning("[DS-Boot] Step 2.5: Could not find _enableIpv6 on Tugboat — IPv6 bind conflict may occur.");
+                }
+            }
+
             // Step 3: Khởi động FishNet Server
             networkManager.ServerManager.StartConnection();
             Debug.Log("[DS-Boot] Step 3: FishNet ServerManager.StartConnection()...");
@@ -162,14 +186,19 @@ namespace NightHunt.Server
                 yield return null;
             }
 
+            // Race-condition guard: FishNet may set Started=true briefly before the async
+            // bind failure propagates. Wait 2 extra frames for the transport to settle.
+            yield return null;
+            yield return null;
+
             if (!networkManager.ServerManager.Started)
             {
-                Debug.LogError("[DS-Boot] FATAL: FishNet Server failed to start within 10s! Shutting down.");
+                Debug.LogError($"[DS-Boot] FATAL: FishNet Server failed to start (port {_gamePort} conflict or bind error). Shutting down.");
                 Application.Quit(1);
                 yield break;
             }
 
-            Debug.Log($"[DS-Boot] ✓ FishNet Server active on port {_gamePort}");
+            Debug.Log($"[DS-Boot] ✓ FishNet Server active on port {_gamePort} (IPv4-only)");
 
             // Step 5: Đăng ký với backend
             yield return RegisterWithBackend();
