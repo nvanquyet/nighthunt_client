@@ -198,7 +198,8 @@ namespace NightHunt.Networking.Player
             base.OnOwnershipClient(prevOwner);
 
             // Ownership transferred at runtime (rare). Reset guard so FinishOwnerSetup()
-            // runs for the new owner with correct data.\n            if (IsOwner)
+            // runs for the new owner with correct data.
+            if (IsOwner)
             {
                 _ownerSetupDone = false;
                 if (!string.IsNullOrEmpty(PlayerData.DisplayName))
@@ -228,11 +229,10 @@ namespace NightHunt.Networking.Player
 
         private void OnPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next, bool asServer)
         {
-            // Always keep the public registry in sync with the latest data.
-            if (string.IsNullOrEmpty(next.DisplayName))
-                PlayerPublicRegistry.Instance?.Register((int)this.ObjectId, next, this);
-            else
-                PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
+            // Always keep the cached PlayerPublicData in the registry in sync.
+            // • Non-owners: networkPlayers entry was created in OnStartClient; this updates the players dict.
+            // • Owner:      FinishOwnerSetup() will call Register() for both dicts; this pre-populates players dict only.
+            PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
 
             OnPublicDataChanged?.Invoke(prev, next);
 
