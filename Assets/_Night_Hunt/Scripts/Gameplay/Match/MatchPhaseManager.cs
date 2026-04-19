@@ -21,9 +21,9 @@ namespace NightHunt.Gameplay.Match
         [Header("Phase Settings")]
         [SerializeField] private MatchPhaseState initialState = MatchPhaseState.Preparation;
 
-        [Tooltip("Th?i gian ??m ng??c (gi�y) tr??c khi Phase ??u ti�n b?t ??u after BeginMatch() ???c g?i.\n" +
-                 "V� d?: 5 ? server ??m ng??c 5-4-3-2-1 ? StartPhase(Preparation).\n" +
-                 "??t 0 ?? b?t ??u ngay l?p t?c (kh�ng c� countdown).")]
+        [Tooltip("Thời gian đếm ngược (giây) trước khi Phase đầu tiên bắt đầu sau khi tất cả player đã kết nối.\n" +
+                 "Timer này bắt đầu sau AllPlayersReady (server-side), độc lập với overlay minimumDisplayDuration.\n" +
+                 "Đặt 0 để bắt đầu ngay lập tức (không có countdown).")]
         [Min(0f)]
         [SerializeField] private float _delayBeforeFirstPhase = 5f;
 

@@ -125,6 +125,12 @@ namespace NightHunt.UI
             // Update RoomState match info (preserves Custom_Relay mode if already set).
             RoomState.Instance?.SetMatchReady(e.matchId, e.mapId, e.gameMode);
 
+            // Phase 3: store players from match_ready so MatchLoadingOverlay can show cards.
+            if (e.players != null && e.players.Length > 0)
+                RoomState.Instance?.SetMatchReadyPlayers(e.players);
+            else
+                Debug.LogWarning("[MFC] match_ready has no players[] — overlay will use RoomState.CurrentRoom.players fallback.");
+
             // If match_ready already contains the DS address, pre-populate RoomState and signal NGM.
             // This handles two cases:
             //   1. Local testing: DS is already running, ds_ready WS may never arrive.
@@ -185,8 +191,45 @@ namespace NightHunt.UI
         {
             // ResultsView subscribes OnMatchEnded directly for ELO/coins display.
             // MatchFlowCoordinator resets flow state so the next match starts clean.
-            Debug.Log($"[MFC] match_ended \u25ba matchId={e.matchId} winner={e.winnerTeamId} reason={e.endReason}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            Debug.Log($"[MFC] match_ended ▶ matchId={e.matchId} winner={e.winnerTeamId} reason={e.endReason}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             _lastHandledMatchId = null;
+
+            // Map WS player results → MatchResult structs so ResultsView can show real ELO/coins.
+            // FishNet RPC only carries EloChange=0 stubs for Ranked_DS — this WS event has the truth.
+            if (e.playerResults != null && e.playerResults.Length > 0)
+            {
+                var results = new NightHunt.Gameplay.Core.Events.MatchResult[e.playerResults.Length];
+                for (int i = 0; i < e.playerResults.Length; i++)
+                {
+                    var r = e.playerResults[i];
+                    results[i] = new NightHunt.Gameplay.Core.Events.MatchResult
+                    {
+                        BackendPlayerId = r.userId.ToString(),
+                        DisplayName     = r.displayName ?? string.Empty,
+                        TeamId          = r.teamId,
+                        Kills           = r.kills,
+                        Deaths          = r.deaths,
+                        Score           = r.score,
+                        EloChange       = r.eloChange,
+                        CoinChange      = r.coinChange,
+                    };
+                }
+                NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance?.Publish(
+                    new NightHunt.Gameplay.Core.Events.MatchEndedWsResultsEvent { PlayerResults = results });
+
+                // Update local coin balance immediately so Home scene shows the new total.
+                var session = NightHunt.State.SessionState.Instance;
+                if (session != null)
+                {
+                    string localId = session.UserId.ToString();
+                    foreach (var r in e.playerResults)
+                        if (r.userId.ToString() == localId)
+                        {
+                            session.UpdateCoins(r.coinsTotal);
+                            break;
+                        }
+                }
+            }
         }
 
         // ── room_disbanded (global handler — covers game scene where CustomLobbyView is inactive) ──

@@ -1097,6 +1097,23 @@ namespace NightHunt.Services.Game
             public string dsIp;
             public int    dsPort;
             public string sessionToken;
+            /// <summary>
+            /// Player list from backend (added in Phase 3).
+            /// Populated so MatchLoadingOverlay can show all player cards before DS connects.
+            /// May be null/empty for older backend versions — overlay falls back to RoomState.
+            /// </summary>
+            public MatchReadyPlayerEntry[] players;
+        }
+
+        /// <summary>Slim player summary sent inside match_ready WS payload.</summary>
+        [Serializable]
+        public class MatchReadyPlayerEntry
+        {
+            public long   userId;
+            public string username;
+            public int    team;
+            public int    elo;
+            public string tier;
         }
 
         [Serializable]

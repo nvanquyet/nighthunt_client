@@ -71,11 +71,13 @@ namespace NightHunt.UI
                 _continueButton.onClick.AddListener(OnContinueClicked);
 
             GameplayEventBus.Instance?.Subscribe<MatchEndedEvent>(OnMatchEnded);
+            GameplayEventBus.Instance?.Subscribe<MatchEndedWsResultsEvent>(OnMatchEndedWsResults);
         }
 
         private void OnDestroy()
         {
             GameplayEventBus.Instance?.Unsubscribe<MatchEndedEvent>(OnMatchEnded);
+            GameplayEventBus.Instance?.Unsubscribe<MatchEndedWsResultsEvent>(OnMatchEndedWsResults);
         }
 
         #endregion
@@ -97,6 +99,44 @@ namespace NightHunt.UI
             ShowResults(evt);
             ShowMatchResultToast(evt);
             StartCoroutine(CountdownCoroutine());
+        }
+
+        /// <summary>
+        /// Fired by MatchFlowCoordinator when the backend's match_ended WS event arrives.
+        /// Contains real ELO delta + coin reward (calculated server-side) for Ranked_DS.
+        /// Updates the already-visible results panel with accurate values.
+        /// </summary>
+        private void OnMatchEndedWsResults(MatchEndedWsResultsEvent evt)
+        {
+            if (evt.PlayerResults == null || evt.PlayerResults.Length == 0) return;
+
+            var session = SessionState.Instance;
+            if (session == null) return;
+            string localId = session.UserId.ToString();
+
+            foreach (var r in evt.PlayerResults)
+            {
+                if (r.BackendPlayerId != localId) continue;
+
+                // Update ELO change text with real server value
+                if (_eloChangeText != null)
+                {
+                    bool isRanked = NightHunt.State.RoomState.Instance?.CurrentGameMode
+                        == NightHunt.Networking.GameMode.Ranked_DS;
+                    if (isRanked)
+                    {
+                        if (_eloPanel != null) _eloPanel.SetActive(true);
+                        _eloChangeText.text = r.EloChange >= 0
+                            ? $"ELO <color=#00FF88>+{r.EloChange}</color>"
+                            : $"ELO <color=#FF4444>{r.EloChange}</color>";
+                        Debug.Log($"[ResultsView] ELO updated from WS: {r.EloChange:+#;-#;0}");
+                    }
+                }
+                break;
+            }
+
+            // Also rebuild scoreboard rows with real ELO/coin data
+            BuildScoreboard(evt.PlayerResults);
         }
 
         private void ShowMatchResultToast(MatchEndedEvent evt)

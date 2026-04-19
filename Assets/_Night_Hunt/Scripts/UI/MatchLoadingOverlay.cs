@@ -189,8 +189,9 @@ namespace NightHunt.UI
         // ── Player Cards ───────────────────────────────────────────────────────
 
         /// <summary>
-        /// Read RoomState.CurrentRoom.players → spawn cards vào 2 container theo team.
-        /// Local player sử dụng SessionState.SelectedCharacterId để lấy avatar đúng.
+        /// Read RoomState.MatchReadyPlayers (from match_ready WS) → spawn cards into 2 containers by team.
+        /// Falls back to RoomState.CurrentRoom.players if MatchReadyPlayers not populated.
+        /// Local player uses SessionState.SelectedCharacterId for avatar.
         /// </summary>
         private void BuildPlayerCards()
         {
@@ -202,37 +203,46 @@ namespace NightHunt.UI
                 return;
             }
 
-            var room    = RoomState.Instance?.CurrentRoom;
-            var session = NightHunt.Core.GameManager.Instance?.SessionState;
+            var session      = NightHunt.Core.GameManager.Instance?.SessionState;
             long localUserId = session?.UserId ?? 0L;
 
-            var players = room?.players;
-            Debug.Log($"[FLOW §2] BuildPlayerCards: CurrentRoom={(room != null ? room.roomId.ToString() : "null")} players={(players?.Count.ToString() ?? "null")} localUserId={localUserId}");
-            if (players == null || players.Count == 0)
+            // ── Priority 1: players from match_ready WS payload (Phase 3) ─────────────
+            var matchReadyPlayers = RoomState.Instance?.MatchReadyPlayers;
+            if (matchReadyPlayers != null && matchReadyPlayers.Count > 0)
             {
-                Debug.LogWarning("[FLOW §2] BuildPlayerCards: NO player list in RoomState — showing solo placeholder (match_ready WS has no players[] field). UI cards will be incomplete.");
-                // Dev mode: chỉ có local player
-                SpawnCard(teamAContainer, localUserId,
-                          session?.Username ?? "Player",
-                          session?.SelectedCharacterId,
-                          elo: -1, rank: null, team: 1);
+                Debug.Log($"[FLOW §2] BuildPlayerCards: using MatchReadyPlayers count={matchReadyPlayers.Count} localUserId={localUserId}");
+                _totalExpected = matchReadyPlayers.Count;
+                foreach (var p in matchReadyPlayers)
+                {
+                    Transform container = p.team == 1 ? teamAContainer : teamBContainer;
+                    string charId = (p.userId == localUserId) ? session?.SelectedCharacterId : null;
+                    SpawnCard(container, p.userId, p.username, charId, elo: p.elo, rank: p.tier, team: p.team);
+                }
                 return;
             }
 
-            _totalExpected = players.Count;
-
-            foreach (var p in players)
+            // ── Priority 2: players from RoomState.CurrentRoom (Custom_Relay / lobby) ──
+            var room    = RoomState.Instance?.CurrentRoom;
+            var players = room?.players;
+            Debug.Log($"[FLOW §2] BuildPlayerCards: CurrentRoom={(room != null ? room.roomId.ToString() : "null")} players={(players?.Count.ToString() ?? "null")} localUserId={localUserId}");
+            if (players != null && players.Count > 0)
             {
-                Transform container = p.team == 1 ? teamAContainer : teamBContainer;
-
-                // Local player → characterId từ SessionState
-                string charId = (p.userId == localUserId)
-                    ? session?.SelectedCharacterId
-                    : null;   // remote players: không biết character → fallback to default
-
-                SpawnCard(container, p.userId, p.username, charId,
-                          elo: -1, rank: null, team: p.team);
+                _totalExpected = players.Count;
+                foreach (var p in players)
+                {
+                    Transform container = p.team == 1 ? teamAContainer : teamBContainer;
+                    string charId = (p.userId == localUserId) ? session?.SelectedCharacterId : null;
+                    SpawnCard(container, p.userId, p.username, charId, elo: -1, rank: null, team: p.team);
+                }
+                return;
             }
+
+            // ── Fallback: no player data at all — solo placeholder ─────────────────────
+            Debug.LogWarning("[FLOW §2] BuildPlayerCards: NO player list in RoomState — showing solo placeholder. Ensure backend sends players[] in match_ready.");
+            SpawnCard(teamAContainer, localUserId,
+                      session?.Username ?? "Player",
+                      session?.SelectedCharacterId,
+                      elo: -1, rank: null, team: 1);
         }
 
         private void SpawnCard(Transform container, long userId, string playerName,
@@ -467,6 +477,11 @@ namespace NightHunt.UI
                 }
                 canvasGroup.alpha = 1f;
             }
+
+            // Overlay is now fully visible — allow the async-loaded game scene to activate.
+            // SceneLoader.LoadGame() held the scene at 90% with allowSceneActivation=false
+            // so this FadeIn animation could play without main-thread blocking.
+            NightHunt.Core.SceneLoader.ActivateLoadedScene();
         }
 
         private IEnumerator FadeOut()

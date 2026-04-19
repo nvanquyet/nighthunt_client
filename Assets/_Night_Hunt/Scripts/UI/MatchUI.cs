@@ -124,7 +124,7 @@ namespace NightHunt.UI
 
         private System.Collections.IEnumerator PopulateTeamsNextFrame()
         {
-            yield return null; // wait one frame for SyncVar deltas to process
+            yield return new WaitForSeconds(0.3f); // wait 3-5 frames for all SyncVar deltas to settle
 
             var registry = PlayerPublicRegistry.Instance;
             if (registry == null)

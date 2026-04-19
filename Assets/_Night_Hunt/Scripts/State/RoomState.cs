@@ -38,6 +38,13 @@ namespace NightHunt.State
         // Match tracking
         public string CurrentMatchId { get; private set; }
 
+        /// <summary>
+        /// Players from the match_ready WS payload (Phase 3).
+        /// Populated before DS connects so MatchLoadingOverlay can show all player cards.
+        /// May be null if backend doesn't yet include players[] in match_ready.
+        /// </summary>
+        public System.Collections.Generic.List<NightHunt.Services.Game.GameWebSocketService.MatchReadyPlayerEntry> MatchReadyPlayers { get; private set; }
+
         // Events
         public event Action<RoomResponse> OnRoomJoined;
         public event Action OnRoomLeft;
@@ -108,6 +115,17 @@ namespace NightHunt.State
         }
 
         /// <summary>
+        /// Store players received in the match_ready WS payload (Phase 3).
+        /// MatchLoadingOverlay reads this to build player cards before DS connects.
+        /// </summary>
+        public void SetMatchReadyPlayers(System.Collections.Generic.IEnumerable<NightHunt.Services.Game.GameWebSocketService.MatchReadyPlayerEntry> players)
+        {
+            MatchReadyPlayers = players != null
+                ? new System.Collections.Generic.List<NightHunt.Services.Game.GameWebSocketService.MatchReadyPlayerEntry>(players)
+                : null;
+        }
+
+        /// <summary>
         /// Called on ds_ready: stores DS ip:port. Safe to connect after this.
         /// </summary>
         public void SetDedicatedServer(string ip, ushort port, string matchId, string mapId = null)
@@ -132,6 +150,7 @@ namespace NightHunt.State
             DsPort = 0;
             DsMapId = null;
             CurrentMatchId = null;
+            MatchReadyPlayers = null;
         }
     }
 }

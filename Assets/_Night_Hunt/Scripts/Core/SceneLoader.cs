@@ -13,19 +13,27 @@ namespace NightHunt.Core
     ///       - LoadGame(id)  : Vào gameplay scene (GameMap_xx)
     ///   • Điều hướng UI bên trong 01_Home → dùng <see cref="UINavigator"/> trực tiếp
     ///
-    /// Flow chính:
-    ///   [01_Home] → UINavigator.ShowPanel(Lobby) ... match found
-    ///            → MatchLoadingOverlay.Show()
-    ///            → SceneLoader.LoadGame(GameMap_01)  ← SceneLoader được dùng ở đây
-    ///   [GameMap] → match kết thúc → ResultsView
-    ///            → SceneLoader.LoadHome()             ← và ở đây
-    ///   [01_Home] → UINavigator.ShowPanel(Home)
+    /// Async loading flow (Phase 1 fix — prevents overlay freeze):
+    ///   LoadGame() starts LoadSceneAsync with allowSceneActivation=false.
+    ///   Scene loads in the background without blocking the main thread, so
+    ///   MatchLoadingOverlay coroutines (FadeIn, countdown) run normally.
+    ///   After FadeIn completes, MatchLoadingOverlay calls ActivateLoadedScene()
+    ///   which sets allowSceneActivation=true → scene transitions.
+    ///   FishNet connects, players spawn, AllPlayersReadyEvent → overlay hides.
     /// </summary>
     public static class SceneLoader
     {
         // ── Safe names via SceneConfig ─────────────────────────────────────────
 
-        private static string HomeName    => SceneConfig.GetSceneName(SceneId.Home);
+        private static string HomeName => SceneConfig.GetSceneName(SceneId.Home);
+
+        // ── Async load state ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Pending async operation from LoadGame(). Held at 90% until
+        /// ActivateLoadedScene() is called by MatchLoadingOverlay.
+        /// </summary>
+        private static AsyncOperation _pendingSceneOp;
 
         // ── Core: Load scene thật ──────────────────────────────────────────────
 
@@ -36,18 +44,41 @@ namespace NightHunt.Core
         public static void LoadHome()
         {
             Debug.Log("[SceneLoader] LoadHome → " + HomeName);
+            // Home loads synchronously — no overlay animation during this transition.
+            _pendingSceneOp = null;
             SceneManager.LoadScene(HomeName);
         }
 
         /// <summary>
-        /// Load gameplay scene theo SceneId.
-        /// Call after MatchLoadingOverlay xác nhận tất cả player đã ready.
+        /// Starts async background load of the gameplay scene.
+        /// Holds at 90% (allowSceneActivation=false) so MatchLoadingOverlay can
+        /// display its FadeIn animation before the scene transitions.
+        /// Call <see cref="ActivateLoadedScene"/> from MatchLoadingOverlay to proceed.
         /// </summary>
         public static void LoadGame(SceneId mapId = SceneId.GameMap_01)
         {
             string sceneName = SceneConfig.GetSceneName(mapId);
-            Debug.Log($"[SceneLoader] LoadGame → {mapId} ({sceneName})");
-            SceneManager.LoadScene(sceneName);
+            Debug.Log($"[SceneLoader] LoadGame (async) → {mapId} ({sceneName})");
+            _pendingSceneOp = SceneManager.LoadSceneAsync(sceneName);
+            _pendingSceneOp.allowSceneActivation = false;
+        }
+
+        /// <summary>
+        /// Allow the scene started by LoadGame() to activate.
+        /// Called by MatchLoadingOverlay after its FadeIn animation completes,
+        /// ensuring the overlay is fully visible before the scene switches.
+        /// Safe to call even if no pending op exists (no-op).
+        /// </summary>
+        public static void ActivateLoadedScene()
+        {
+            if (_pendingSceneOp == null)
+            {
+                Debug.LogWarning("[SceneLoader] ActivateLoadedScene: no pending async op — LoadGame() may not have been called, or was already activated.");
+                return;
+            }
+            Debug.Log("[SceneLoader] ActivateLoadedScene — allowing scene activation.");
+            _pendingSceneOp.allowSceneActivation = true;
+            _pendingSceneOp = null;
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────

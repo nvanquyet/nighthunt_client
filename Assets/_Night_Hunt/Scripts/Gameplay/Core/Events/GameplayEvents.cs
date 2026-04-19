@@ -89,6 +89,19 @@ namespace NightHunt.Gameplay.Core.Events
         public long CoinChange;
     }
 
+    /// <summary>
+    /// Backend match-end WS data with real ELO + coin values.
+    /// Fired by MatchFlowCoordinator when it receives the match_ended WebSocket event
+    /// (after server has calculated ELO deltas). ResultsView subscribes to update
+    /// displayed values, since FishNet RPC only carries EloChange=0 stubs.
+    /// </summary>
+    public struct MatchEndedWsResultsEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        /// <summary>Per-player rows with real eloChange, coinChange, coinsTotal from backend.</summary>
+        public MatchResult[] PlayerResults;
+    }
+
     // ── Beacon ────────────────────────────────────────────────────────────────
 
     /// <summary>A beacon has been destroyed by an enemy or expired.</summary>
