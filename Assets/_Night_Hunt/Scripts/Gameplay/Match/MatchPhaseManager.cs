@@ -95,6 +95,7 @@ namespace NightHunt.Gameplay.Match
                 Debug.LogWarning("[MatchPhaseManager] BeginMatch called but server not ready.");
                 return;
             }
+            Debug.Log($"[FLOW §14] SERVER MatchPhaseManager.BeginMatch: countdown={_delayBeforeFirstPhase}s before {initialState}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             StartCoroutine(CountdownAndStartFirstPhase());
         }
 
@@ -121,6 +122,7 @@ namespace NightHunt.Gameplay.Match
         [ObserversRpc]
         private void RpcMatchCountdown(int secondsRemaining)
         {
+            Debug.Log($"[FLOW §14] CLIENT MatchCountdown: {secondsRemaining}s remaining  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             GameplayEventBus.Instance?.Publish(
                 new NightHunt.Gameplay.Core.Events.MatchCountdownEvent
                 {

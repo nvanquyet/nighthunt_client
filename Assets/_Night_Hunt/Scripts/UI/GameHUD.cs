@@ -110,8 +110,8 @@ namespace NightHunt.UI
 
         private void OnEnable()
         {
+            Debug.Log($"[FLOW] GameHUD.OnEnable: subscribing NetworkPlayer.OnOwnerReady  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             // Self-wire: fires only on the owning client when local player is ready.
-            // Same pattern as LootContainerUI. No external caller required.
             NetworkPlayer.OnOwnerReady += Initialize;
         }
 
@@ -169,6 +169,7 @@ namespace NightHunt.UI
             }
 
             _localNetObjId = (int)localPlayer.ObjectId;
+            Debug.Log($"[FLOW §11] GameHUD.Initialize: ObjectId={_localNetObjId} Name='{localPlayer.DisplayName}' TeamId={localPlayer.TeamId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
             if (matchUI != null)          matchUI.Initialize(localPlayer);
             if (minimapUI != null)        minimapUI.SetLocalPlayer(localPlayer);

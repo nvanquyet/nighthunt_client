@@ -99,7 +99,7 @@ namespace NightHunt.UI
             }
             _lastHandledMatchId = e.matchId;
 
-            Debug.Log($"[MFC] match_ready ▶ matchId={e.matchId} mode={e.gameMode} mapId={e.mapId} roomCode={e.roomCode} dsIp={e.dsIp} dsPort={e.dsPort}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            Debug.Log($"[FLOW §1] MFC match_ready ▶ matchId={e.matchId} mode={e.gameMode} mapId={e.mapId} roomCode={e.roomCode} dsIp={e.dsIp} dsPort={e.dsPort}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
             // Resolve scene from mapId.
             SceneId sceneId = SceneId.GameMap_01;
@@ -141,6 +141,7 @@ namespace NightHunt.UI
             }
 
             // Show overlay THEN load scene — overlay is on PersistentUICanvas (DontDestroyOnLoad).
+            Debug.Log($"[FLOW §2] MFC → Show MatchLoadingOverlay + LoadScene={sceneId}  RoomState.players={RoomState.Instance?.CurrentRoom?.players?.Count ?? 0}");
             MatchLoadingOverlay.Instance?.Show(sceneId);
 
             if (isRelay)
@@ -161,11 +162,8 @@ namespace NightHunt.UI
         private void HandleDsReady(GameWebSocketService.DsReadyEvent e)
         {
             var room = RoomState.Instance;
-            Debug.Log($"[MFC] ds_ready \u25ba dsIp={e.dsIp} dsPort={e.dsPort} matchId={e.matchId} mapId={e.mapId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            Debug.Log($"[MFC] ds_ready \u2014 RoomState.DsIp={room?.DsIp} RoomState.DsPort={room?.DsPort} (should match above; set by GWS)");
-            // GWS.SetDedicatedServer already stored dsIp/dsPort in RoomState.
-            // SignalDsReady sets the static flag (works across scene transitions) then
-            // calls NotifyDsReady() on the NGM instance if it already exists in the map scene.
+            Debug.Log($"[FLOW §4] MFC ds_ready ▶ dsIp={e.dsIp} dsPort={e.dsPort} matchId={e.matchId} mapId={e.mapId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            Debug.Log($"[FLOW §4] MFC ds_ready — RoomState.DsIp={room?.DsIp} RoomState.DsPort={room?.DsPort}");
             NightHunt.Networking.NetworkGameManager.SignalDsReady();
         }
 

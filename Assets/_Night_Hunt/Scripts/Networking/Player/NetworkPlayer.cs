@@ -168,6 +168,7 @@ namespace NightHunt.Networking.Player
             // so _playerData.Value already holds the server-assigned data.
             // For late-joining clients all existing NetworkObjects are spawned with
             // their current SyncVar snapshot, so this also sees the correct data.
+            Debug.Log($"[FLOW §10] NetworkPlayer.OnStartClient: ObjectId={ObjectId} IsOwner={IsOwner} Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId} IsAlive={IsAlive}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             PlayerPublicRegistry.Instance?.Register((int)this.ObjectId, PlayerData, this);
 
             // Listen for future data changes (name / team updates mid-game).
@@ -261,6 +262,7 @@ namespace NightHunt.Networking.Player
             EnableInput();
 
             // Notify listeners that this NetworkPlayer is fully ready on the owning client
+            Debug.Log($"[FLOW §11] NetworkPlayer.SetupOwnerSide: firing OnOwnerReady ObjectId={ObjectId} Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             OnOwnerReady?.Invoke(this);
         }
 

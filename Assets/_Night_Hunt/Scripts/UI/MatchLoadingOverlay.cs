@@ -174,6 +174,8 @@ namespace NightHunt.UI
 
             if (vsLabel != null) vsLabel.text = "VS";
 
+            Debug.Log($"[FLOW §2] MatchLoadingOverlay.ShowInternal: RoomState.CurrentRoom={RoomState.Instance?.CurrentRoom?.roomId} players={RoomState.Instance?.CurrentRoom?.players?.Count ?? 0}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+
             SubscribeEvents();
             StartTimeout();
 
@@ -205,8 +207,10 @@ namespace NightHunt.UI
             long localUserId = session?.UserId ?? 0L;
 
             var players = room?.players;
+            Debug.Log($"[FLOW §2] BuildPlayerCards: CurrentRoom={(room != null ? room.roomId.ToString() : "null")} players={(players?.Count.ToString() ?? "null")} localUserId={localUserId}");
             if (players == null || players.Count == 0)
             {
+                Debug.LogWarning("[FLOW §2] BuildPlayerCards: NO player list in RoomState — showing solo placeholder (match_ready WS has no players[] field). UI cards will be incomplete.");
                 // Dev mode: chỉ có local player
                 SpawnCard(teamAContainer, localUserId,
                           session?.Username ?? "Player",
@@ -344,7 +348,7 @@ namespace NightHunt.UI
             float remaining  = Mathf.Max(0f, minimumDisplayDuration - elapsed);
             float totalDelay = remaining + delayAfterReady;
 
-            Debug.Log($"[MatchLoadingOverlay] All players ready. Elapsed={elapsed:F1}s — hiding in {totalDelay:F1}s.");
+            Debug.Log($"[FLOW §13] MatchLoadingOverlay.OnAllPlayersReady: elapsed={elapsed:F1}s minimumDisplay={minimumDisplayDuration}s → hiding overlay in {totalDelay:F1}s  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             Invoke(nameof(HideOnReady), totalDelay);
         }
 

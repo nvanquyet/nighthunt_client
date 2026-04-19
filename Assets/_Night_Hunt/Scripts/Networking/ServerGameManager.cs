@@ -197,15 +197,11 @@ namespace NightHunt.Networking
         private void OnPlayerConnected(NetworkConnection conn)
         {
             int fishnetClientId = conn.ClientId;
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log($"[ServerGameManager] Player connected - FishNet ClientId: {fishnetClientId}");
+            Debug.Log($"[FLOW §8] SERVER OnPlayerConnected: FishNetClientId={fishnetClientId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
             //Spawn ClientNetworkHandler cho client này
             ClientNetworkHandler cnh = Instantiate(clientNetworkHandlerPrefab);
             _networkManager.ServerManager.Spawn(cnh.gameObject, conn);
-
-            // ClientNetworkHandler sẽ tự động gửi data lên
-            // Server ch�? nhận data rồi mới spawn
         }
 
         /// <summary>
@@ -215,15 +211,7 @@ namespace NightHunt.Networking
         public void OnClientDataReceived(NetworkConnection conn, PlayerRegistryData clientData)
         {
             int fishnetClientId = conn.ClientId;
-
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log(
-                $"[ServerGameManager] Received client data - FishNet ID: {fishnetClientId}, Backend ID: {clientData.BackendPlayerId}, Name: {clientData.DisplayName}");
-
-            // Data validation is the client's responsibility via RpcSendPlayerData / JWT.
-            // Server-side anti-cheat can be layered here in a future pass.
-
-            // Spawn player
+            Debug.Log($"[FLOW §9] SERVER OnClientDataReceived: FishNetId={fishnetClientId} BackendId={clientData.BackendPlayerId} Name={clientData.DisplayName}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             SpawnPlayerWorkflow(conn, clientData);
         }
 
@@ -233,9 +221,7 @@ namespace NightHunt.Networking
         private void SpawnPlayerWorkflow(NetworkConnection conn, PlayerRegistryData clientData)
         {
             int fishnetClientId = conn.ClientId;
-
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log($"[ServerGameManager] === Starting spawn workflow for ClientId: {fishnetClientId} ===");
+            Debug.Log($"[FLOW §9] SERVER SpawnPlayerWorkflow START: ClientId={fishnetClientId} Name={clientData.DisplayName}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
             // STEP 1: Instantiate prefab
             GameObject playerObj = Instantiate(playerPrefab);
@@ -259,16 +245,12 @@ namespace NightHunt.Networking
                 return;
             }
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log($"[ServerGameManager] Step 1: Prefab instantiated");
-
             // STEP 2: SpawnSystem handle (assign team, position)
             PlayerRegistryData serverData;
             if (_spawnSystem != null)
             {
                 serverData = _spawnSystem.ProcessSpawn(playerObj, conn, clientData);
-                if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                    Debug.Log($"[ServerGameManager] Step 2: SpawnSystem processed - Team: {serverData.TeamId}");
+                Debug.Log($"[FLOW §9] SERVER SpawnSystem: Name={serverData.DisplayName} TeamId={serverData.TeamId} pos={playerObj.transform.position}");
             }
             else
             {
@@ -350,11 +332,8 @@ namespace NightHunt.Networking
 
             // Notify all clients of per-player spawn progress so the loading overlay
             // can show "N / M players ready" in real-time.
+            Debug.Log($"[FLOW §9] SERVER spawn complete {_spawnedPlayerCount}/{_expectedPlayerCount}: Name={serverData.DisplayName} TeamId={serverData.TeamId} pos={playerObj?.transform.position}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             RpcOnPlayerSpawned(serverData.DisplayName, _spawnedPlayerCount, _expectedPlayerCount);
-
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log(
-                $"[ServerGameManager] === ✅ Spawn complete ({_spawnedPlayerCount}/{_expectedPlayerCount}) - {serverData.DisplayName}, Team: {serverData.TeamId} ===");
 
             // STEP 7: Check if all expected players have spawned
             if (_spawnedPlayerCount >= _expectedPlayerCount)
@@ -366,8 +345,7 @@ namespace NightHunt.Networking
         [Server]
         private void OnAllPlayersSpawned()
         {
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] ✅ All players spawned — starting match!");
+            Debug.Log($"[FLOW §12] SERVER OnAllPlayersSpawned: {_spawnedPlayerCount}/{_expectedPlayerCount} — firing RpcOnAllPlayersReady + BeginMatch  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             OnAllPlayersReady?.Invoke();
 
             // Notify all clients: hide loading screen, show game HUD
@@ -383,8 +361,7 @@ namespace NightHunt.Networking
         [ObserversRpc]
         private void RpcOnSpawningStarted()
         {
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] CLIENT: First player spawned � advancing to Spawning stage.");
+            Debug.Log($"[FLOW §9] CLIENT RpcOnSpawningStarted — publishing SpawningStartedEvent  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             GameplayEventBus.Instance?.Publish(new SpawningStartedEvent());
         }
 
@@ -396,8 +373,7 @@ namespace NightHunt.Networking
         [ObserversRpc]
         private void RpcOnPlayerSpawned(string displayName, int spawnedCount, int expectedCount)
         {
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log($"[ServerGameManager] CLIENT: Player spawned � {displayName} ({spawnedCount}/{expectedCount})");
+            Debug.Log($"[FLOW] CLIENT RpcOnPlayerSpawned: {displayName} ({spawnedCount}/{expectedCount})  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             GameplayEventBus.Instance?.Publish(new PlayerSpawnedEvent
             {
                 DisplayName   = displayName,
@@ -409,8 +385,7 @@ namespace NightHunt.Networking
         [ObserversRpc]
         private void RpcOnAllPlayersReady()
         {
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
-                Debug.Log("[ServerGameManager] CLIENT: All players ready � dismissing loading screen.");
+            Debug.Log($"[FLOW §12] CLIENT RpcOnAllPlayersReady — publishing AllPlayersReadyEvent  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
 

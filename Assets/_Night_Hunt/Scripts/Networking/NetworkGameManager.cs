@@ -435,12 +435,12 @@ namespace NightHunt.Networking
             switch (args.ConnectionState)
             {
                 case LocalConnectionState.Starting:
-                    Debug.Log($"[NGM] FishNet client STARTING — t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+                    Debug.Log($"[FLOW §5] NGM FishNet client STARTING — t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                     break;
 
                 case LocalConnectionState.Started:
                     _connected = true;
-                    Debug.Log($"[NGM] FishNet client CONNECTED  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+                    Debug.Log($"[FLOW §6] NGM FishNet client CONNECTED — t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                     MatchLoadingOverlay.Instance?.MarkConnected();
                     break;
 

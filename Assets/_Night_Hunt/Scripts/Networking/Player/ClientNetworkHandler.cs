@@ -22,8 +22,7 @@ namespace NightHunt.Networking
         {
             base.OnStartClient();
             if (!IsOwner) return;
-            Debug.Log($"Setting up ClientNetworkHandler for local player.");
-            // Client gửi data lên server qua ServerRpc
+            Debug.Log($"[FLOW §7] ClientNetworkHandler.OnStartClient: IsOwner=true — sending player data to server  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             SendPlayerDataToServer();
         }
 
@@ -35,11 +34,7 @@ namespace NightHunt.Networking
         private void SendPlayerDataToServer()
         {
             PlayerRegistryData data = GetLocalPlayerData();
-
-            Debug.Log(
-                $"[Client] Sending data to server - Backend ID: {data.BackendPlayerId}, Name: {data.DisplayName}");
-
-            // Send lên server bằng ServerRpc
+            Debug.Log($"[FLOW §7] ClientNetworkHandler sending: BackendId={data.BackendPlayerId} Name={data.DisplayName} CharModelIdx={data.CharacterModelIndex} TeamId={data.TeamId}");
             RpcSendPlayerData(data);
         }
 
@@ -50,12 +45,7 @@ namespace NightHunt.Networking
         private void RpcSendPlayerData(PlayerRegistryData data)
         {
             _cachedPlayerData = data;
-
-            Debug.Log($"[Server] Received client data - Backend ID: {data.BackendPlayerId}, Name: {data.DisplayName}");
-
-            // Basic null guard — payload is validated server-side in ServerGameManager
-
-            // Notify ServerGameManager
+            Debug.Log($"[FLOW §8] SERVER RpcSendPlayerData: BackendId={data.BackendPlayerId} Name={data.DisplayName} TeamId={data.TeamId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             ServerGameManager.Instance.OnClientDataReceived(Owner, data);
         }
 

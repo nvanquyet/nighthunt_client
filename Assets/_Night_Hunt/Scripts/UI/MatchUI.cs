@@ -115,6 +115,8 @@ namespace NightHunt.UI
             if (_teamsPopulated) return;
             _teamsPopulated = true;
 
+            Debug.Log($"[FLOW §12] MatchUI.OnAllPlayersReady: Registry has {PlayerPublicRegistry.Instance?.GetAllPlayers()?.Length ?? 0} players  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+
             // Defer to end-of-frame so all _playerData SyncVars (team IDs) have
             // settled before we read TeamId from each NetworkPlayer.
             StartCoroutine(PopulateTeamsNextFrame());
@@ -132,10 +134,16 @@ namespace NightHunt.UI
                 yield break;
             }
 
+            var team0 = registry.GetPlayersByTeam(0);
+            var team1 = registry.GetPlayersByTeam(1);
+            Debug.Log($"[FLOW §12] MatchUI.PopulateTeamsNextFrame: team0={team0.Count} players, team1={team1.Count} players (all={registry.GetAllPlayers().Length})  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            foreach (var p in registry.GetAllPlayers())
+                Debug.Log($"[FLOW §12]   Player ObjectId={p?.ObjectId} Name='{p?.DisplayName}' TeamId={p?.TeamId}");
+
             ClearTeamRows(_teamARows, teamAListParent);
             ClearTeamRows(_teamBRows, teamBListParent);
-            PopulateTeam(registry.GetPlayersByTeam(0), teamAListParent, _teamARows);
-            PopulateTeam(registry.GetPlayersByTeam(1), teamBListParent, _teamBRows);
+            PopulateTeam(team0, teamAListParent, _teamARows);
+            PopulateTeam(team1, teamBListParent, _teamBRows);
         }
 
         private static void ClearTeamRows(List<TeamMemberRow> rows, Transform parent)
