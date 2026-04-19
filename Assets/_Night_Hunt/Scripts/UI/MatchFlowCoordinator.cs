@@ -225,7 +225,7 @@ namespace NightHunt.UI
                     foreach (var r in e.playerResults)
                         if (r.userId.ToString() == localId)
                         {
-                            session.UpdateCoins(r.coinsTotal);
+                            session.SetCoins(r.coinsTotal);
                             break;
                         }
                 }
