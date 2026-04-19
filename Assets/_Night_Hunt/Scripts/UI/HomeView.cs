@@ -108,12 +108,61 @@ namespace NightHunt.UI
         // Track whether the WS was ever connected so reconnect toasts only show after the first drop.
         private bool _wsWasConnected;
 
+        // Set by LoginView.SuppressNextLoginFallback() before AuthService.Login() so the
+        // OnUserLoggedInFallback does not start a redundant OnShow() burst while LoginView
+        // is orchestrating the post-login loading overlay flow.
+        private bool _suppressLoginFallback;
+
+        // Set by PreloadDataAsync() after LoginView has already fetched all home data.
+        // OnShow() checks this flag to skip the redundant network calls on the first show.
+        private bool _homeDataPreloaded;
+
+        // ── Login-flow suppression helpers (called by LoginView) ────────────────
+
+        /// <summary>
+        /// Called by LoginView before AuthService.Login() so the OnUserLoggedIn fallback does
+        /// not fire a premature OnShow() while the post-login loading overlay is still running.
+        /// LoginView must call <see cref="ClearSuppressLoginFallback"/> on any failure path.
+        /// </summary>
+        public void SuppressNextLoginFallback() => _suppressLoginFallback = true;
+
+        /// <summary>Release the suppression flag without completing the login flow (e.g. on error).</summary>
+        public void ClearSuppressLoginFallback() => _suppressLoginFallback = false;
+
+        /// <summary>
+        /// Pre-fetches all home panel data (profile, friends, party) while the login loading
+        /// overlay is still visible.  Call this from LoginView BEFORE UINavigator.GoHome() so
+        /// the panel opens instantly with fresh data.  Sets <see cref="_homeDataPreloaded"/> so
+        /// OnShow() skips the redundant network calls on the first show after login.
+        /// </summary>
+        public async System.Threading.Tasks.Task PreloadDataAsync()
+        {
+            Debug.Log("[HomeView] PreloadDataAsync — fetching profile / friends / party before Home transition.");
+            RefreshProfile(); // populate UI from cached session data immediately
+
+            var profileTask = RefreshProfileFromServer();
+            friendPanelView?.RefreshFriendListAndBadge();
+            if (partyController != null) await partyController.OnHomeShownAsync();
+            await profileTask;
+
+            _homeDataPreloaded = true;
+            Debug.Log("[HomeView] PreloadDataAsync complete.");
+        }
+
         /// <summary>
         /// Fallback called when UINavigator.Notify() cannot reach this component (panelObject
         /// not wired in Inspector). OnShow() is effectively idempotent — safe to call twice.
         /// </summary>
         private void OnUserLoggedInFallback()
         {
+            if (_suppressLoginFallback)
+            {
+                // LoginView is managing the post-login flow (loading overlay → config → preload).
+                // It will call UINavigator.GoHome() which triggers OnShow() at the right time.
+                _suppressLoginFallback = false;
+                Debug.Log("[HomeView] OnUserLoggedIn fallback suppressed — LoginView owns post-login flow.");
+                return;
+            }
             Debug.Log("[HomeView] OnUserLoggedIn fired — calling OnShow() as UINavigator fallback");
             if (gameObject.activeInHierarchy) OnShow();
         }
@@ -133,6 +182,23 @@ namespace NightHunt.UI
             _lastOnShowTime = now;
 
             Debug.Log($"[FLOW][HomeView] ── OnShow START  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+
+            // Fast path: LoginView already fetched all home data while the loading overlay was
+            // visible.  Skip redundant network calls; just refresh the local-cache UI elements
+            // and run the reconnect check (always needed, cheap when !IsInRoom).
+            if (_homeDataPreloaded)
+            {
+                _homeDataPreloaded = false;
+                Debug.Log("[FLOW][HomeView] OnShow — data preloaded by login flow, skipping network refetch.");
+                RefreshProfile();
+                await CheckAndShowReconnectPopup();
+                var loadingOverlay = PersistentUICanvas.Instance?.LoadingManager;
+                if (loadingOverlay != null && loadingOverlay.IsShowing()) loadingOverlay.Hide();
+                Debug.Log($"[FLOW][HomeView] ── OnShow COMPLETE (preloaded)  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+                onHomeShown?.Invoke();
+                UINavigator.Instance?.NotifyPlayerDataLoaded();
+                return;
+            }
 
             Debug.Log("[FLOW][HomeView] [1/5] RefreshProfile — local cache (username, thumbnail)");
             RefreshProfile();

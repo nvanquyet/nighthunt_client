@@ -102,11 +102,30 @@ namespace NightHunt.UI
             Debug.Log($"[FLOW §1] MFC match_ready ▶ matchId={e.matchId} mode={e.gameMode} mapId={e.mapId} roomCode={e.roomCode} dsIp={e.dsIp} dsPort={e.dsPort}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
             // Resolve scene from mapId.
-            SceneId sceneId = SceneId.GameMap_01;
-            if (!string.IsNullOrEmpty(e.mapId) && MapConfig.TryGetById(e.mapId, out MapEntry mapEntry))
+            SceneId sceneId;
+            if (string.IsNullOrEmpty(e.mapId))
+            {
+                // null/empty mapId: server assigned the default map — GameMap_01 is correct.
+                sceneId = SceneId.GameMap_01;
+                Debug.Log("[MFC] match_ready — mapId is null/empty, using default GameMap_01.");
+            }
+            else if (MapConfig.TryGetById(e.mapId, out MapEntry mapEntry))
+            {
                 sceneId = mapEntry.sceneId;
+            }
             else
-                Debug.LogWarning($"[MFC] match_ready — mapId='{e.mapId}' not found in MapConfig, defaulting to GameMap_01.");
+            {
+                // Server sent a mapId the client does not recognise.
+                // Most likely cause: GameConfig was not loaded before match_ready arrived
+                // (LoginView fire-and-forget regression) or the client build is stale.
+                // Abort to prevent loading the wrong game scene.
+                Debug.LogError($"[MFC] FATAL: mapId='{e.mapId}' not found in MapConfig. " +
+                               "Config may not be loaded yet. Aborting match to prevent wrong-scene load.");
+                _lastHandledMatchId = null; // allow re-processing if server resends match_ready
+                var errorToast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+                errorToast?.Show("Match Error", "Map data is not loaded. Please restart and try again.");
+                return;
+            }
 
             // Guard: never accidentally load the Home scene as game map.
             if (sceneId == SceneId.Home)

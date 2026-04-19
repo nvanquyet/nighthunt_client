@@ -280,29 +280,28 @@ namespace NightHunt.UI
             NavigatePostMatch();
         }
 
-        private void NavigatePostMatch()
+        private async void NavigatePostMatch()
         {
             var mode = RoomState.Instance?.CurrentGameMode ?? NightHunt.Networking.GameMode.None;
 
-            // Report match result to backend before clearing session.
-            // Fire-and-forget: don't block navigation on network latency.
+            // Report match result to backend — fire-and-forget, do not block navigation.
             _ = PostMatchResultAsync();
 
-            // Refresh local player profile so Home scene shows updated ELO/coins.
-            _ = GameManager.Instance?.ProfileManager?.FetchProfile();
-
-            // Disconnect FishNet BEFORE clearing room and loading home.
+            // Disconnect FishNet and clear session before loading home.
             // Without this, on Custom_Relay the FishNet server/host keeps running inside 01_Home
             // (NetworkManager is DontDestroyOnLoad). On Ranked_DS the DS is already shutting down
             // but explicit client disconnect ensures a clean FishNet state.
             NightHunt.Networking.NetworkGameManager.Instance?.Disconnect();
-
             RoomState.Instance?.ClearRoom();
 
-            // Đang ở gameplay scene → luôn dùng SceneLoader.LoadHome() để về 01_Home.
-            // UINavigator trong 01_Home sẽ tự điều hướng đến đúng panel.
-            // (Custom_Relay cũng về Home trước, Home panel có reconnect check)
-            Debug.Log($"[ResultsView] Match ended (mode={mode}) → LoadHome");
+            // Await profile refresh so Home panel shows the updated ELO/coins immediately.
+            // Done after Disconnect/ClearRoom so the fetch does not race with scene teardown.
+            if (GameManager.Instance?.ProfileManager != null)
+                await GameManager.Instance.ProfileManager.FetchProfile();
+
+            // Always return to 01_Home via SceneLoader — UINavigator will route to the correct panel.
+            // Custom_Relay also returns here first; HomeView.CheckAndShowReconnectPopup handles it.
+            Debug.Log($"[ResultsView] Match ended (mode={mode}) \u2192 LoadHome");
             SceneLoader.LoadHome();
         }
 

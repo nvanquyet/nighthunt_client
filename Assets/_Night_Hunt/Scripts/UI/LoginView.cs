@@ -65,7 +65,9 @@ namespace NightHunt.UI
         // ─── Optional refs ───────────────────────────────────────────────────
         [Header("Service References (Optional — auto-find if null)")]
         [SerializeField] private AuthService authService;
-
+        [Header("Panel References")]
+        [Tooltip("HomeView on the same scene. Required for the post-login preload flow.")]
+        [SerializeField] private HomeView homeView;
         // ─── Internal ────────────────────────────────────────────────────────
         private AuthService AuthService
         {
@@ -177,6 +179,12 @@ namespace NightHunt.UI
             SetLoginLoading(true);
             SetButtonsInteractable(false);
 
+            // Suppress HomeView's OnUserLoggedIn fallback — LoginView owns the entire post-login
+            // flow (loading overlay → config fetch → home data preload → GoHome).
+            // SessionState.OnUserLoggedIn fires synchronously inside AuthService.Login(), so
+            // suppression must be set BEFORE the await to prevent a premature OnShow() burst.
+            homeView?.SuppressNextLoginFallback();
+
             var result = await AuthService.Login(identifier, password);
 
             SetLoginLoading(false);
@@ -187,13 +195,36 @@ namespace NightHunt.UI
                 HandleRememberMe(result.data.refreshToken);
                 // Always reset stale room/network state on fresh login (unconditional)
                 RoomState.Instance?.ClearRoom();
-                onLoginSuccess?.Invoke();   // Inspector: wire animation/sound ở đây
-                // Fetch game config now that we have a valid token
-                _ = GameManager.Instance?.GameConfigService?.FetchAsync();
+                onLoginSuccess?.Invoke();   // Inspector: wire animation/sound here
+
+                // Show loading overlay while pre-fetching home data before navigating.
+                var loading = PersistentUICanvas.Instance?.LoadingManager ?? LoadingManager.Instance;
+                loading?.Show("Loading...");
+
+                // Config must complete first — MatchFlowCoordinator.HandleMatchReady() uses
+                // MapConfig to resolve the correct game scene. FetchGameConfigFlow is skipped
+                // during fresh login (no refresh token yet), so this is the guaranteed load point.
+                // IMPORTANT: do NOT start PreloadDataAsync() before awaiting this; calling it
+                // first would burst 6+ requests simultaneously and hit the rate limit.
+                await (GameManager.Instance?.GameConfigService?.FetchAsync()
+                       ?? System.Threading.Tasks.Task.FromResult(false));
+
+                // Config is now populated. Pre-fetch home panel data (profile, friends, party)
+                // while the overlay is still visible. Sets HomeView._homeDataPreloaded so
+                // OnShow() skips the redundant refetch on the first show after login.
+                if (homeView != null)
+                    await homeView.PreloadDataAsync();
+
+                // Brief pause for a smooth UX transition before the panel swap.
+                await System.Threading.Tasks.Task.Delay(300);
+
+                loading?.Hide();
                 UINavigator.Instance?.GoHome();
             }
             else if (result.ErrorCode == ErrorCodes.AUTH_SESSION_CONFLICT)
             {
+                // Release suppression — login flow did not complete.
+                homeView?.ClearSuppressLoginFallback();
                 // Old session was terminated — user just needs to try again once.
                 Debug.Log("[LoginView] AUTH_SESSION_CONFLICT: previous session terminated, prompting retry");
                 ShowToast("Đăng xuất success", result.Message ?? "Phiên trước đã bị log out. Vui lòng log in lại.");
@@ -201,6 +232,8 @@ namespace NightHunt.UI
             }
             else
             {
+                // Release suppression — login flow did not complete.
+                homeView?.ClearSuppressLoginFallback();
                 Debug.LogWarning($"[LoginView] Login failed: {result.Message}");
                 ShowToast("Login Failed", result.Message ?? "Please try again.");
                 onLoginFailed?.Invoke();
