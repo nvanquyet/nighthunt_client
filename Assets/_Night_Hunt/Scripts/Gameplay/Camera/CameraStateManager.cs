@@ -60,6 +60,25 @@ namespace NightHunt.Gameplay.Camera
         /// <summary>Fired on every state transition. (from, to)</summary>
         public event Action<CameraState, CameraState> OnStateChanged;
 
+        /// <summary>
+        /// Called directly by NetworkPlayer.SetupOwnerSide() on the owning client to
+        /// activate or deactivate this player prefab's virtual camera.
+        /// This bypasses the NetworkPlayer.OnOwnerReady event subscription timing gap:
+        /// CameraStateManager.OnEnable() (where the subscription lives) is called by Unity
+        /// AFTER FishNet's OnStartClient, so the handler may not be registered yet when the
+        /// event fires on a freshly-spawned prefab.  Direct invocation has no timing issue.
+        /// </summary>
+        public void SetOwnerCamera(bool active)
+        {
+            if (_virtualCamera == null)
+            {
+                Debug.LogError("[CameraStateManager] SetOwnerCamera: _virtualCamera is not assigned! " +
+                               "Assign the CinemachineCamera in the Inspector on the player prefab.", this);
+                return;
+            }
+            _virtualCamera.gameObject.SetActive(active);
+        }
+
         // ─────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle
         // ─────────────────────────────────────────────────────────────────────
@@ -103,6 +122,17 @@ namespace NightHunt.Gameplay.Camera
         
         private void HandleOwnerReady(NetworkPlayer player)
         {
+            if (_virtualCamera == null)
+            {
+                // _virtualCamera is not assigned — this component is on the player prefab itself.
+                // CameraStateManager.OnEnable() subscribes AFTER OnOwnerReady fires because
+                // FishNet initialises NetworkBehaviours before Unity's OnEnable/Start sequence
+                // completes on the spawned prefab. By the time this handler fires the field
+                // must be wired in the Inspector; log an actionable error instead of crashing.
+                Debug.LogError("[CameraStateManager] HandleOwnerReady: _virtualCamera is not assigned! " +
+                               "Assign it in the Inspector on the player prefab.", this);
+                return;
+            }
             _virtualCamera.gameObject.SetActive(player != null && player.IsLocalPlayer);
         }
         

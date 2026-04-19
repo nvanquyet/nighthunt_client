@@ -163,23 +163,33 @@ namespace NightHunt.Networking.Player
         {
             base.OnStartClient();
 
-            // Register with the local registry using the SyncVar value.
-            // For the owning client this fires after the spawn packet is processed,
-            // so _playerData.Value already holds the server-assigned data.
-            // For late-joining clients all existing NetworkObjects are spawned with
-            // their current SyncVar snapshot, so this also sees the correct data.
-            Debug.Log($"[FLOW §10] NetworkPlayer.OnStartClient: ObjectId={ObjectId} IsOwner={IsOwner} Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId} IsAlive={IsAlive}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            PlayerPublicRegistry.Instance?.Register((int)this.ObjectId, PlayerData, this);
-
-            // Listen for future data changes (name / team updates mid-game).
+            // Listen for SyncVar changes — must be registered before any check below
+            // so we never miss the first change that carries the real player data.
             _playerData.OnChange += OnPlayerDataChanged;
             _isAlive.OnChange += OnAliveStateChanged;
 
-            // Owner-specific setup
+            Debug.Log($"[FLOW §10] NetworkPlayer.OnStartClient: ObjectId={ObjectId} IsOwner={IsOwner} Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId} IsAlive={IsAlive}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+
+            // ServerGameManager calls Spawn() first and SetPublicData() right after.
+            // FishNet processes these as two separate messages; on the owning client the
+            // spawn packet arrives with an empty SyncVar struct (Name='', TeamId=0) and
+            // the dirty-sync for SetPublicData arrives one tick later.
+            // We therefore defer owner-side setup until we have a non-empty DisplayName,
+            // either from the initial spawn packet (late-join snapshot) or from the
+            // first OnChange callback (fresh spawn path).
             if (IsOwner)
             {
-                SetupOwnerSide();
-                SpectateManager.Instance.SetLocalPlayer(this);
+                if (!string.IsNullOrEmpty(PlayerData.DisplayName))
+                {
+                    // Data already present in spawn packet (late-join / relay host case).
+                    FinishOwnerSetup();
+                }
+                // else: data is empty — wait for OnPlayerDataChanged to call FinishOwnerSetup().
+            }
+            else
+            {
+                // Non-owner: register with current snapshot (may be empty, will be updated via OnChange).
+                PlayerPublicRegistry.Instance?.Register((int)this.ObjectId, PlayerData, this);
             }
         }
 
@@ -187,10 +197,14 @@ namespace NightHunt.Networking.Player
         {
             base.OnOwnershipClient(prevOwner);
 
-            // Handle ownership transfer
+            // Ownership transferred at runtime (rare). Reset guard so FinishOwnerSetup()
+            // runs for the new owner with correct data.
             if (IsOwner)
             {
-                SetupOwnerSide();
+                _ownerSetupDone = false;
+                if (!string.IsNullOrEmpty(PlayerData.DisplayName))
+                    FinishOwnerSetup();
+                // else: wait for next OnPlayerDataChanged (data not yet synced)
             }
         }
 
@@ -209,10 +223,46 @@ namespace NightHunt.Networking.Player
         /// </summary>
         public event System.Action<PlayerPublicData, PlayerPublicData> OnPublicDataChanged;
 
+        // Guards FinishOwnerSetup() so it runs exactly once even if OnPlayerDataChanged
+        // fires multiple times before and after the first valid data arrives.
+        private bool _ownerSetupDone;
+
         private void OnPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next, bool asServer)
         {
+            // Always keep the cached PlayerPublicData in the registry in sync.
+            // • Non-owners: networkPlayers entry was created in OnStartClient; this updates the players dict.
+            // • Owner:      FinishOwnerSetup() will call Register() for both dicts; this pre-populates players dict only.
             PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
+
             OnPublicDataChanged?.Invoke(prev, next);
+
+            // Deferred owner setup: OnStartClient ran while the SyncVar was still empty
+            // (Spawn packet arrived before SetPublicData dirty-sync).  Now that we have
+            // a non-empty DisplayName the real player data is ready.
+            if (IsOwner && !_ownerSetupDone && !string.IsNullOrEmpty(next.DisplayName))
+            {
+                Debug.Log($"[FLOW §10b] NetworkPlayer: PlayerData arrived via OnChange — Name='{next.DisplayName}' TeamId={next.TeamId}. Completing owner setup.");
+                FinishOwnerSetup();
+            }
+        }
+
+        /// <summary>
+        /// Completes owner-side initialisation once valid player data (DisplayName) is available.
+        /// Called either directly from OnStartClient (late-join / data-in-spawn-packet path)
+        /// or deferred to the first OnPlayerDataChanged callback (fresh-spawn path where
+        /// SetPublicData arrives one FishNet tick after the spawn packet).
+        /// </summary>
+        private void FinishOwnerSetup()
+        {
+            if (_ownerSetupDone) return;
+            _ownerSetupDone = true;
+
+            // Register with up-to-date data now that DisplayName is populated.
+            PlayerPublicRegistry.Instance?.Register((int)this.ObjectId, PlayerData, this);
+
+            Debug.Log($"[FLOW §10c] NetworkPlayer.FinishOwnerSetup: Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            SetupOwnerSide();
+            SpectateManager.Instance?.SetLocalPlayer(this);
         }
 
         /// <summary>
@@ -258,10 +308,21 @@ namespace NightHunt.Networking.Player
 
         private void SetupOwnerSide()
         {
-            // Owner only: Enable camera and input
+            // Owner only: Enable camera and input.
             EnableInput();
 
-            // Notify listeners that this NetworkPlayer is fully ready on the owning client
+            // Directly activate the local player's virtual camera on the same prefab.
+            // CameraStateManager.HandleOwnerReady() cannot be used here because it subscribes
+            // in OnEnable() which Unity calls AFTER FishNet's OnStartClient — meaning the
+            // subscription may not yet exist when OnOwnerReady fires on a freshly spawned prefab.
+            // Calling SetOwnerCamera() directly from the prefab's own CameraStateManager bypasses
+            // the timing gap entirely.
+            var csmOnPrefab = GetComponentInChildren<NightHunt.Gameplay.Camera.CameraStateManager>(includeInactive: true);
+            csmOnPrefab?.SetOwnerCamera(true);
+
+            // Broadcast to scene-level listeners (GameHUD, RaycastDetector, PlayerInteractionSystem,
+            // LootContainerUI, etc.) that live OUTSIDE the player prefab and subscribe in OnEnable()
+            // during scene load — they are guaranteed to be subscribed before any player spawns.
             Debug.Log($"[FLOW §11] NetworkPlayer.SetupOwnerSide: firing OnOwnerReady ObjectId={ObjectId} Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             OnOwnerReady?.Invoke(this);
         }
