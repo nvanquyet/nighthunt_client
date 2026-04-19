@@ -114,6 +114,20 @@ namespace NightHunt.Gameplay.Character
         private NightHunt.Gameplay.Core.State.CharacterLifecycleController _lifecycle;
         private bool _lifecycleResolved;
 
+        // ===== SPAWN GRACE =====
+        // On a dedicated server, the client receives the spawn packet and starts prediction
+        // while the very first reconcile tick (which would correct any prediction error) is
+        // still in transit (~1-2 RTT ticks away).  If IsGrounded() returns false during
+        // that window (e.g. groundLayer mask mismatch, spawn point Y slightly above terrain),
+        // _verticalVelocity accumulates downward and the player visually sinks through the
+        // floor before the first reconcile can push them back up.
+        //
+        // Solution: for the first N ticks after spawn, clamp _verticalVelocity to ≥ 0
+        // so no downward displacement is applied.  This is transparent on host (0 RTT)
+        // and invisible on DS (< 0.5 s at 50 Hz tickRate before real grounded detection
+        // takes over).  Jump inputs in the grace window still work (positive vertVel).
+        private int _spawnGraceTicksRemaining;
+
         // ===== NON OWNER INTERPOLATION =====
         protected Vector3 _targetPosition;
         protected Quaternion _targetRotation;
@@ -222,6 +236,12 @@ namespace NightHunt.Gameplay.Character
             _cameraLocked        = startWithCameraLock;
             _staminaRecoveryTimer = 0f;
             _groundedGraceTimer  = 0f;
+
+            // Give the prediction system time to settle before allowing downward fall.
+            // 30 ticks ≈ 0.6 s at 50 Hz tickRate.  On host (0 RTT) this window is never
+            // needed but is harmless.  On DS it bridges the gap between spawn and the
+            // first authoritative reconcile from the server.
+            _spawnGraceTicksRemaining = 30;
 
             _cinemachineCamera ??= ComponentResolver.Find<CinemachineCamera>(this)
         .OnSelf()
@@ -571,6 +591,17 @@ namespace NightHunt.Gameplay.Character
                 float mult = _verticalVelocity < 0f ? Mathf.Max(1f, movementSettings.fallGravityMultiplier) : 1f;
                 _verticalVelocity -= movementSettings.gravity * mult * dt;
                 _verticalVelocity  = Mathf.Max(_verticalVelocity, -movementSettings.maxFallSpeed);
+            }
+
+            // Spawn grace: clamp downward velocity for the first N ticks after spawn.
+            // Prevents free-fall on DS clients where the physics grounded-check may not yet
+            // have a valid result while the first reconcile is still in transit.
+            // Positive velocity (jump) is NOT clamped — jump still works in grace window.
+            if (_spawnGraceTicksRemaining > 0)
+            {
+                _spawnGraceTicksRemaining--;
+                if (_verticalVelocity < 0f)
+                    _verticalVelocity = 0f;
             }
 
             if (data.Jump && grounded && movementSettings.enableJump)

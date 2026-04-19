@@ -26,6 +26,14 @@ namespace NightHunt.Gameplay.Spawn
         // Round-robin index per team — đảm bảo 2 player spawn liên tiếp không trùng vị trí.
         private Dictionary<int, int> _spawnPointIndices = new();
 
+        [Header("Ground Snap")]
+        [Tooltip("Raycast downward from this height above the spawn point to find the exact terrain surface. " +
+                 "Prevents spawning inside terrain on DS where timing between physics and spawn differs from host.")]
+        [SerializeField] private float _groundSnapRayHeight = 50f;
+
+        [Tooltip("Offset above the detected terrain surface so the player's feet are ON the ground, not inside it.")]
+        [SerializeField] private float _groundSnapSurfaceOffset = 0.05f;
+
         // ===== LIFECYCLE =====
 
         private void Awake()
@@ -110,10 +118,17 @@ namespace NightHunt.Gameplay.Spawn
 
             if (spawnPoint != null)
             {
-                playerObj.transform.position = spawnPoint.GetSpawnPosition();
+                Vector3 rawPos = spawnPoint.GetSpawnPosition();
+                // Snap Y to actual terrain surface: raycast downward from above the spawn point.
+                // Critical for DS builds: on a dedicated server the spawn packet is sent immediately
+                // after ServerManager.Spawn(), and any position error (spawn point Y slightly inside
+                // terrain) causes the client's prediction to think the player is airborne, leading to
+                // rapid free-fall before the first reconcile can correct it.
+                Vector3 snappedPos = SnapToGround(rawPos);
+                playerObj.transform.position = snappedPos;
                 playerObj.transform.rotation = spawnPoint.GetSpawnRotation();
 
-                Debug.Log($"[SpawnSystem] Positioned at {playerObj.transform.position}");
+                Debug.Log($"[SpawnSystem] Positioned at {playerObj.transform.position} (raw={rawPos} snapped={snappedPos})");
             }
             else
             {
@@ -134,6 +149,34 @@ namespace NightHunt.Gameplay.Spawn
         {
             Debug.Log($"[SpawnSystem] Cleanup for FishNet ClientId: {fishnetClientId}");
             _teamAssignmentSystem.RemovePlayer(fishnetClientId);
+        }
+
+        // ===== GROUND SNAP =====
+
+        /// <summary>
+        /// Raycasts straight down from (position + snapHeight * up) using ALL layers to find the
+        /// first non-trigger surface beneath the spawn point.  Returns a position on that surface
+        /// plus <see cref="_groundSnapSurfaceOffset"/> so the character's feet are ON the ground.
+        ///
+        /// Intentionally uses LayerMask ~0 (Everything) so the result is independent of the
+        /// groundLayer inspector field on the movement component — that field only controls the
+        /// grounded-detection CheckSphere, not actual physics collision.
+        ///
+        /// Falls back to the original position if no surface is found (open-air or sky spawn).
+        /// </summary>
+        private Vector3 SnapToGround(Vector3 position)
+        {
+            Vector3 rayOrigin = position + Vector3.up * _groundSnapRayHeight;
+            float   maxDist   = _groundSnapRayHeight + 20f; // cast well past the spawn point
+
+            if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, maxDist,
+                    ~0, QueryTriggerInteraction.Ignore))
+            {
+                return new Vector3(position.x, hit.point.y + _groundSnapSurfaceOffset, position.z);
+            }
+
+            Debug.LogWarning($"[SpawnSystem] SnapToGround: no surface found below {position} — using original Y.");
+            return position;
         }
 
         // ===== SPAWN POINT SELECTION =====
