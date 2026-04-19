@@ -117,6 +117,11 @@ namespace NightHunt.UI
         // OnShow() checks this flag to skip the redundant network calls on the first show.
         private bool _homeDataPreloaded;
 
+        // Static flag that survives Unity scene loads (unlike instance fields).
+        // Set by ResultsView.NavigatePostMatch() so the new HomeView instance spawned in
+        // the next scene knows profile data was just refreshed — skips the second profile fetch.
+        private static bool s_profileJustRefreshed;
+
         // ── Login-flow suppression helpers (called by LoginView) ────────────────
 
         /// <summary>
@@ -130,6 +135,32 @@ namespace NightHunt.UI
         public void ClearSuppressLoginFallback() => _suppressLoginFallback = false;
 
         /// <summary>
+        /// Called by ResultsView.NavigatePostMatch() after it has already awaited FetchProfile().
+        /// Survives the scene load so the new HomeView instance knows profile is fresh and can
+        /// skip the redundant RefreshProfileFromServer() call on the first OnShow() after a match.
+        /// </summary>
+        public static void MarkProfileJustRefreshed() => s_profileJustRefreshed = true;
+
+        /// <summary>
+        /// Core home-data fetch: profile from server + friends + party.
+        /// Called by both <see cref="PreloadDataAsync"/> and <see cref="OnShow"/> so the logic
+        /// lives in exactly one place.
+        /// </summary>
+        private async System.Threading.Tasks.Task FetchHomeDataAsync(bool skipProfile = false)
+        {
+            // Profile
+            System.Threading.Tasks.Task profileTask =
+                skipProfile ? System.Threading.Tasks.Task.CompletedTask : RefreshProfileFromServer();
+
+            // Friends + party can run concurrently with the profile fetch.
+            friendPanelView?.RefreshFriendListAndBadge();
+            if (partyController != null) await partyController.OnHomeShownAsync();
+
+            // Wait for profile to complete last (it was started first, already in-flight).
+            await profileTask;
+        }
+
+        /// <summary>
         /// Pre-fetches all home panel data (profile, friends, party) while the login loading
         /// overlay is still visible.  Call this from LoginView BEFORE UINavigator.GoHome() so
         /// the panel opens instantly with fresh data.  Sets <see cref="_homeDataPreloaded"/> so
@@ -139,12 +170,7 @@ namespace NightHunt.UI
         {
             Debug.Log("[HomeView] PreloadDataAsync — fetching profile / friends / party before Home transition.");
             RefreshProfile(); // populate UI from cached session data immediately
-
-            var profileTask = RefreshProfileFromServer();
-            friendPanelView?.RefreshFriendListAndBadge();
-            if (partyController != null) await partyController.OnHomeShownAsync();
-            await profileTask;
-
+            await FetchHomeDataAsync();
             _homeDataPreloaded = true;
             Debug.Log("[HomeView] PreloadDataAsync complete.");
         }
@@ -200,23 +226,24 @@ namespace NightHunt.UI
                 return;
             }
 
+            // Slow path: full network refetch (auto-login, return from Lobby, NGM retry, etc.).
             Debug.Log("[FLOW][HomeView] [1/5] RefreshProfile — local cache (username, thumbnail)");
             RefreshProfile();
 
-            Debug.Log("[FLOW][HomeView] [2/5] RefreshProfileFromServer → GET /api/profile");
-            var profileTask = RefreshProfileFromServer();
+            // Skip profile server fetch if ResultsView already refreshed it in the previous scene.
+            // s_profileJustRefreshed is a static flag that survives scene loads.
+            bool skipProfile = s_profileJustRefreshed;
+            s_profileJustRefreshed = false;
+            if (skipProfile)
+                Debug.Log("[FLOW][HomeView] profile skipped — just refreshed by post-match flow.");
 
+            Debug.Log("[FLOW][HomeView] [2/5] RefreshProfileFromServer → GET /api/profile");
             Debug.Log("[FLOW][HomeView] [3/5] CheckAndShowReconnectPopup");
             await CheckAndShowReconnectPopup();
 
             Debug.Log("[FLOW][HomeView] [4/5] FriendPanelView.RefreshFriendListAndBadge → GET /api/friends + requests");
-            friendPanelView?.RefreshFriendListAndBadge();
-
             Debug.Log("[FLOW][HomeView] [5/5] PartyController.OnHomeShown → GET /api/party/current");
-            if (partyController != null) await partyController.OnHomeShownAsync();
-
-            // Wait for profile fetch to complete (started in step 2) so data is fresh when home shows.
-            await profileTask;
+            await FetchHomeDataAsync(skipProfile: skipProfile);
 
             var loading = PersistentUICanvas.Instance?.LoadingManager;
             if (loading != null && loading.IsShowing()) loading.Hide();

@@ -288,19 +288,19 @@ namespace NightHunt.UI
             _ = PostMatchResultAsync();
 
             // Disconnect FishNet and clear session before loading home.
-            // Without this, on Custom_Relay the FishNet server/host keeps running inside 01_Home
-            // (NetworkManager is DontDestroyOnLoad). On Ranked_DS the DS is already shutting down
-            // but explicit client disconnect ensures a clean FishNet state.
             NightHunt.Networking.NetworkGameManager.Instance?.Disconnect();
             RoomState.Instance?.ClearRoom();
 
-            // Await profile refresh so Home panel shows the updated ELO/coins immediately.
-            // Done after Disconnect/ClearRoom so the fetch does not race with scene teardown.
+            // Refresh profile cache now so the new HomeView instance in 01_Home scene
+            // has up-to-date ELO/coins the moment it appears.
+            // Set the static flag so HomeView.OnShow() skips the redundant server fetch —
+            // the data was just retrieved here, a second call within the same second is wasted.
             if (GameManager.Instance?.ProfileManager != null)
+            {
                 await GameManager.Instance.ProfileManager.FetchProfile();
+                HomeView.MarkProfileJustRefreshed();
+            }
 
-            // Always return to 01_Home via SceneLoader — UINavigator will route to the correct panel.
-            // Custom_Relay also returns here first; HomeView.CheckAndShowReconnectPopup handles it.
             Debug.Log($"[ResultsView] Match ended (mode={mode}) \u2192 LoadHome");
             SceneLoader.LoadHome();
         }
