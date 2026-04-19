@@ -108,6 +108,11 @@ namespace NightHunt.UI
         private int _totalExpected;
         private int _spawnedCount;
 
+        // GameplayEventBus is scene-scoped (Singleton<T>) — it does not exist until the
+        // map scene activates. SubscribeEvents() is called in ShowInternal() before the
+        // scene loads, so we must retry in Update() until the bus is alive.
+        private bool _eventsSubscribed;
+
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
         private void Awake()
@@ -129,6 +134,22 @@ namespace NightHunt.UI
             _progressCurrent = Mathf.MoveTowards(_progressCurrent, _progressTarget, Time.deltaTime * 0.4f);
             if (overallProgressBar != null) overallProgressBar.value = _progressCurrent;
             if (overallPercentText != null) overallPercentText.text  = $"{Mathf.RoundToInt(_progressCurrent * 100f)}%";
+
+            // GameplayEventBus is scene-scoped — it does not exist until the map scene
+            // activates. Retry subscription every frame until it becomes available.
+            if (!_eventsSubscribed) TryLateSubscribe();
+        }
+
+        private void TryLateSubscribe()
+        {
+            var bus = NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance;
+            if (bus == null) return;
+
+            bus.Subscribe<SpawningStartedEvent>(OnSpawningStarted);
+            bus.Subscribe<PlayerSpawnedEvent>(OnPlayerSpawned);
+            bus.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
+            _eventsSubscribed = true;
+            Debug.Log($"[MatchLoadingOverlay] Late-subscribed to GameplayEventBus (stage={_stage})  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
         }
 
         // ── Public API ─────────────────────────────────────────────────────────
@@ -166,6 +187,7 @@ namespace NightHunt.UI
             _progressTarget  = 0f;
             _progressCurrent = 0f;
             _spawnedCount    = 0;
+            _eventsSubscribed = false;   // reset so TryLateSubscribe() re-runs for new match
 
             SetStage(MatchLoadStage.DsBooting);
             BuildPlayerCards();
@@ -448,16 +470,19 @@ namespace NightHunt.UI
 
         private void SubscribeEvents()
         {
-            GameplayEventBus.Instance?.Subscribe<SpawningStartedEvent>(OnSpawningStarted);
-            GameplayEventBus.Instance?.Subscribe<PlayerSpawnedEvent>(OnPlayerSpawned);
-            GameplayEventBus.Instance?.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
+            // Attempt immediate subscription. If GameplayEventBus.Instance is null
+            // (map scene not yet loaded), TryLateSubscribe() in Update() will retry.
+            if (!_eventsSubscribed)
+                TryLateSubscribe();
         }
 
         private void UnsubscribeEvents()
         {
+            if (!_eventsSubscribed) return;
             GameplayEventBus.Instance?.Unsubscribe<SpawningStartedEvent>(OnSpawningStarted);
             GameplayEventBus.Instance?.Unsubscribe<PlayerSpawnedEvent>(OnPlayerSpawned);
             GameplayEventBus.Instance?.Unsubscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
+            _eventsSubscribed = false;
         }
 
         // ── Fade ───────────────────────────────────────────────────────────────

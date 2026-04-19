@@ -321,11 +321,15 @@ namespace NightHunt.GameplaySystems.ItemUse
             _currentItem = item;
             _isUsingItem = true;
 
+            // Show item in hand while consuming (uses EquippedPrefab as fallback)
+            SpawnItemInHandGeneric(def);
+
             float duration = def.UsageDuration > 0f ? def.UsageDuration : _defaultUseTime;
             _useCoroutine = StartCoroutine(ConsumableRoutine(item, def, duration));
 
             OnItemUseStarted?.Invoke(item);
-            Debug.Log($"[ItemUseSystem] Consumable started: '{def.DisplayName}' ({duration}s)");
+            Debug.Log($"[ItemUseSystem] Consumable started: '{def.DisplayName}' ({duration:F1}s) " +
+                      $"prefab={(def.HeldPrefab != null ? def.HeldPrefab.name : "none")}");
 
             return true;
         }
@@ -384,10 +388,35 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// </summary>
         private bool BeginDeployable(ItemInstance item, ItemDefinition def)
         {
-            Debug.Log($"[ItemUseSystem] DEPLOYABLE '{def.DisplayName}': " +
-                      $"placement mode not yet implemented. " +
-                      $"TODO: show placement preview, confirm → spawn world object (NOT a player effect).");
-            return false;
+            HolsterAndSave();
+            _currentItem = item;
+            _isUsingItem = true;
+
+            SpawnItemInHandGeneric(def);
+            OnItemUseStarted?.Invoke(item);
+
+            float usable = (def as UsableItemDefinition)?.UsageDuration ?? 0f;
+            float duration = usable > 0f ? usable : 2f;
+            _useCoroutine = StartCoroutine(DeployableRoutine(item, def, duration));
+
+            Debug.Log($"[ItemUseSystem] Deployable '{def.DisplayName}': placing in {duration:F1}s...");
+            return true;
+        }
+
+        private IEnumerator DeployableRoutine(ItemInstance item, ItemDefinition def, float duration)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                OnItemUseProgress?.Invoke(item, Mathf.Clamp01(elapsed / duration));
+                yield return null;
+            }
+
+            Debug.Log($"[ItemUseSystem] Deployable '{def.DisplayName}' placed at {transform.position:F1}.");
+
+            ConsumeItem(item);
+            CompleteUse(item);
         }
 
         #endregion
@@ -401,10 +430,24 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// </summary>
         private void SpawnItemInHand(ThrowableDefinition def)
         {
+            SpawnItemInHandGeneric(def);
+        }
+
+        /// <summary>
+        /// Generic hand-model spawner — tries ThrowableDefinition.HeldPrefab first,
+        /// falls back to ItemDefinition.EquippedPrefab (for consumables / deployables).
+        /// </summary>
+        private void SpawnItemInHandGeneric(ItemDefinition def)
+        {
             DestroyItemInHand();
-            if (def.HeldPrefab == null) return;
+            GameObject prefab = null;
+            if (def is ThrowableDefinition td)
+                prefab = td.HeldPrefab;
+            if (prefab == null)
+                prefab = def.HeldPrefab;   // virtual on ItemDefinition, overridden in PhysicalItemDefinition
+            if (prefab == null) return;
             Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
-            _itemInHandModel = Instantiate(def.HeldPrefab, parent);
+            _itemInHandModel = Instantiate(prefab, parent);
             _itemInHandModel.transform.localPosition = Vector3.zero;
             _itemInHandModel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
         }

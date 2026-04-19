@@ -35,5 +35,24 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Header("Visual Debug")]
         [Tooltip("Show gizmos in Scene view.")]
         public bool ShowDebugGizmos = false;
+
+        [Header("Extended System Logging")]
+        [Tooltip("Enable debug logs for consumable use flow (BeginConsumable, progress, complete).")]
+        public bool EnableConsumableDebugLogs = false;
+
+        [Tooltip("Enable debug logs for throwable aim, spawn and fly path.")]
+        public bool EnableThrowableDebugLogs = false;
+
+        [Tooltip("Enable debug logs for drop dialog, cancel, and backend drop calls.")]
+        public bool EnableDropDebugLogs = false;
+
+        [Tooltip("Enable debug logs for sort: dump full inventory before and after.")]
+        public bool EnableSortDebugLogs = false;
+
+        [Tooltip("Enable debug logs for projectile spawn path (local + remote RPC).")]
+        public bool EnableProjectileDebugLogs = false;
+
+        [Tooltip("Enable debug logs for world health bar show/hide logic.")]
+        public bool EnableHealthBarDebugLogs = false;
     }
 }

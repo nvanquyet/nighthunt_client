@@ -284,7 +284,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void HandleInventoryCleared()
         {
-            // UI layer có thể tự clear tất cả cell khi nhận event này.
+            // Clear all currently-known inventory slots so UI doesn't show stale items
+            // after a sort or bulk-remove. The sort flow fires OnItemAdded immediately
+            // after for all items that moved, so this is a safe two-pass approach.
+            if (_bridge?.Inventory == null) return;
+
+            var items = _bridge.GetAllItems();
+            if (items == null) return;
+
+            var seenIndices = new System.Collections.Generic.HashSet<int>();
+            foreach (var item in items)
+            {
+                if (item == null || item.InventoryIndex < 0) continue;
+                if (!seenIndices.Add(item.InventoryIndex)) continue;
+
+                var id = UISlotId.Inventory(item.InventoryIndex);
+                OnInventorySlotChanged?.Invoke(id, new UISlotState());
+            }
         }
 
         /// <summary>

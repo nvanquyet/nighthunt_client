@@ -905,6 +905,18 @@ namespace NightHunt.GameplaySystems.Inventory
 
             if (allItems.Count == 0) return;
 
+            // Capture old indices BEFORE sort so we can detect which items actually moved.
+            var oldIndices = new Dictionary<string, int>(allItems.Count);
+            foreach (var item in allItems)
+                oldIndices[item.InstanceID] = item.InventoryIndex;
+
+            if (_debugLogs)
+            {
+                Debug.Log($"[INV.SORT] === BEFORE ({allItems.Count} items) ===");
+                foreach (var item in allItems)
+                    Debug.Log($"[INV.SORT]   slot[{item.InventoryIndex:D2}] {item.DefinitionID} x{item.Quantity}");
+            }
+
             // Sort by ItemType (enum ordinal) then DefinitionID for stable ordering.
             allItems.Sort((a, b) =>
             {
@@ -925,7 +937,30 @@ namespace NightHunt.GameplaySystems.Inventory
             BatchAssignIndicesServer(assignments);
 
             if (_debugLogs)
-                Debug.Log($"[InventorySystem] SortByType: sorted {allItems.Count} items");
+            {
+                Debug.Log($"[INV.SORT] === AFTER ({allItems.Count} items) ===");
+                foreach (var item in allItems)
+                    Debug.Log($"[INV.SORT]   slot[{item.InventoryIndex:D2}] {item.DefinitionID} x{item.Quantity}");
+            }
+
+            // ── Fire events so server-side UI (host) updates correctly ──────────────
+            // SyncList.Set callbacks are suppressed on host (IsServerInitialized = true).
+            // Two-pass: clear old slots first, then fill new slots — avoids UI showing
+            // both old and new items simultaneously.
+            foreach (var item in allItems)
+            {
+                int oldIdx = oldIndices[item.InstanceID];
+                if (oldIdx != item.InventoryIndex)
+                    OnInventorySlotCleared?.Invoke(oldIdx);
+            }
+            foreach (var item in allItems)
+            {
+                int oldIdx = oldIndices[item.InstanceID];
+                if (oldIdx != item.InventoryIndex)
+                    OnItemAdded?.Invoke(item);
+            }
+
+            Debug.Log($"[INV.SORT] SortByType complete: {allItems.Count} items sorted.");
         }
 
         #endregion

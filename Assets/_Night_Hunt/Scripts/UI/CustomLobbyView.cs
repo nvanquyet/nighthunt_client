@@ -259,7 +259,25 @@ namespace NightHunt.UI
 
         private void Start()
         {
+            // Re-acquire services in case GameManager was not ready during Awake.
+            if (_sessionState == null || _roomService == null)
+            {
+                if (GameManager.Instance != null)
+                {
+                    _roomService    = GameManager.Instance.RoomService;
+                    _partyService   = GameManager.Instance.PartyService;
+                    _sessionState   = GameManager.Instance.SessionState;
+                }
+            }
+            _roomState = RoomState.Instance;
+
             _hasAutoLeft = false;
+
+            // Safety net: subscribe here in case OnShow() is not wired in the Inspector
+            // or is called before GameEventBus finishes its DelayedSubscribe.
+            // UnsubscribeEvents first so we never double-subscribe.
+            SubscribeEvents();
+
             bool inRoom = _roomState != null && _roomState.IsInRoom;
             ShowState(inRoom ? UIState.InRoom : UIState.JoinCreate);
             if (inRoom) RefreshRoomDisplay();
@@ -288,11 +306,23 @@ namespace NightHunt.UI
 
         public void OnShow()
         {
+            // Re-acquire services here too — GameManager may not have been ready during Awake/Start.
+            if (_sessionState == null || _roomService == null)
+            {
+                if (GameManager.Instance != null)
+                {
+                    _roomService    = GameManager.Instance.RoomService;
+                    _partyService   = GameManager.Instance.PartyService;
+                    _sessionState   = GameManager.Instance.SessionState;
+                }
+            }
+            _roomState = RoomState.Instance;
+
             _hasAutoLeft = false;
             _lastStatus = null;
             _refreshPending = false;
             _settingsDirty = false;
-            SubscribeEvents();
+            SubscribeEvents(); // UnsubscribeEvents is called inside — safe to call multiple times.
 
             BuildModeList();
             _updatingDropdown = true;
@@ -774,7 +804,11 @@ namespace NightHunt.UI
             _pendingMode = _modeModeKeys.Length > idx ? _modeModeKeys[idx] : "2v2";
             NLog($"ModeChanged idx={idx} key={_pendingMode}");
             BuildMapList(_pendingMode, _pendingMapId);
+            // Guard _updatingDropdown so MUIP's internal SetDropdownIndex inside
+            // PopulateDropdown does not re-fire OnMapDropdownChanged as a spurious user event.
+            _updatingDropdown = true;
             SyncMapDropdown(isInteractable: true);
+            _updatingDropdown = false;
             SetSettingsDirty(true);
         }
 
@@ -1019,6 +1053,19 @@ namespace NightHunt.UI
             if (uid != 0L) OnTransferOwnerClicked(uid);
         }
 
+        private void OnKickWithConfirm(long targetUserId, string username)
+        {
+            if (targetUserId == 0L) return;
+            string name = string.IsNullOrEmpty(username) ? "this player" : $"<b>{username}</b>";
+            GameModalWindow.Instance?.ShowConfirm(
+                "Kick Player?",
+                $"Remove {name} from the room?",
+                onConfirm: () => OnKickClicked(targetUserId),
+                confirmText: "Kick",
+                cancelText: "Cancel"
+            );
+        }
+
         private async void OnKickClicked(long targetUserId)
         {
             if (_roomService == null || _roomState == null) return;
@@ -1174,8 +1221,10 @@ namespace NightHunt.UI
 
                     if (sv == null) continue;
 
+                    var capturedPlayer = player;
                     sv.SetSlot(team, slotIdx, player, isHost,
-                               onSlotClicked: OnSlotClicked);
+                               onSlotClicked: OnSlotClicked,
+                               onKickClicked: isHost ? uid => OnKickWithConfirm(uid, capturedPlayer?.username) : (System.Action<long>)null);
 
                     _slotViews[$"{team}_{slotIdx}"] = sv;
                 }
@@ -1188,7 +1237,17 @@ namespace NightHunt.UI
 
         private void SubscribeEvents()
         {
-            if (GameEventBus.Instance == null) return;
+            // Always unsubscribe first to guarantee exactly-once subscription,
+            // regardless of how many times OnShow() / Start() call this.
+            UnsubscribeEvents();
+
+            if (GameEventBus.Instance == null)
+            {
+                Debug.LogWarning("[CustomLobbyView] SubscribeEvents: GameEventBus.Instance is null — events will not fire. " +
+                                 "Ensure GameEventBus is present in the scene and initialized before CustomLobbyView.");
+                return;
+            }
+
             GameEventBus.Instance.OnRoomUpdated += HandleRoomUpdated;
             GameEventBus.Instance.OnPlayerJoined += HandlePlayerJoined;
             GameEventBus.Instance.OnPlayerLeft += HandlePlayerLeft;

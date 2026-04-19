@@ -352,13 +352,21 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnFirePerformed(InputAction.CallbackContext ctx)
         {
+            bool overUI = IsPointerOverAnyUI();
+            bool uiConsumed = _uiConsumedThisPress;
+
             // Skip if the pointer is currently over a UI element (e.g. FireButton, item selector).
             // Those buttons call SimulateFire() directly via EventSystem — the Input System
             // action must NOT also trigger BeginFire() for the same press.
-            if (IsPointerOverAnyUI()) return;
+            if (overUI)
+            {
+                Debug.Log($"[CombatInputHandler] Fire BLOCKED by UI overlay (IsPointerOverUI=true). " +
+                          $"If on desktop, verify MobileCameraDragArea.raycastTarget is false.");
+                return;
+            }
 
             // Skip if a UI button consumed this press via NotifyUIConsumedPress().
-            if (_uiConsumedThisPress) { _uiConsumedThisPress = false; return; }
+            if (uiConsumed) { _uiConsumedThisPress = false; return; }
             BeginFire(); // Mouse Down
         }
 

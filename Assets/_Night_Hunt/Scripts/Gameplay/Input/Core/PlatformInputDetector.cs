@@ -62,8 +62,10 @@ namespace NightHunt.Gameplay.Input.Core
             {
                 detected = InputPlatform.Touch;
             }
-            else if (Gamepad.current != null)
+            else if (Gamepad.current != null && Gamepad.current.native)
             {
+                // Only treat native (physical) gamepads as Gamepad platform.
+                // Virtual on-screen devices also appear as Gamepad.current but must be ignored.
                 detected = InputPlatform.Gamepad;
             }
             else
@@ -77,6 +79,11 @@ namespace NightHunt.Gameplay.Input.Core
 
         private void HandleDeviceChange(InputDevice device, InputDeviceChange change)
         {
+            // Ignore virtual / on-screen devices (native == false).
+            // OnScreenControl.OnEnable() registers a virtual Gamepad-like device which would
+            // otherwise incorrectly trigger a platform switch to Gamepad.
+            if (!device.native) return;
+
             if (change == InputDeviceChange.Added || change == InputDeviceChange.Removed)
                 DetectPlatform();
         }
@@ -88,7 +95,14 @@ namespace NightHunt.Gameplay.Input.Core
 
             Current = platform;
             Debug.Log($"[PlatformInputDetector] Input platform changed to: {platform}");
-            OnPlatformChanged?.Invoke(platform);
+            try
+            {
+                OnPlatformChanged?.Invoke(platform);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[PlatformInputDetector] Subscriber threw while handling platform change: {ex}");
+            }
         }
 
         // ── Public API ─────────────────────────────────────────────────────────

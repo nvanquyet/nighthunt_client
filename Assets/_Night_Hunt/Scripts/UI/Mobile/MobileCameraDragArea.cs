@@ -60,6 +60,9 @@ namespace NightHunt.UI.Mobile
             if (Mouse.current != null)
             {
                 // PC: real mouse present, drag area is a no-op (camera already driven by mouse move).
+                // Disable raycast target so IsPointerOverGameObject() returns false on PC —
+                // otherwise CombatInputHandler.OnFirePerformed bails out every click.
+                if (img != null) img.raycastTarget = false;
                 _mouse = null;
                 _addedVirtualMouse = false;
             }

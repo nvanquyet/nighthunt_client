@@ -153,6 +153,7 @@ namespace NightHunt.UI
         {
             Debug.Log($"[FLOW][PartyController] OnHomeShownAsync START  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             SetQueueState(RankedQueueState.Idle);
+            RefreshGameModeSelector(); // re-sync with latest server game modes (GameConfigService may have updated since Start())
             await RefreshParty();
             Debug.Log($"[FLOW][PartyController] OnHomeShownAsync DONE — party={(_currentParty != null ? $"id={_currentParty.partyId} members={_currentParty.members?.Count}" : "none")}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
         }

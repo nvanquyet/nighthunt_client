@@ -38,6 +38,9 @@ namespace NightHunt.UI
         [SerializeField] private TextMeshProUGUI slotText;
         [SerializeField] private Image           readyIndicator;
         [SerializeField] private Button          slotButton;
+        [Tooltip("Kick button — only visible to the host on other players' slots.\n"
+               + "Assign in prefab; controlled entirely by code.")]
+        [SerializeField] private Button          kickButton;
         [Tooltip("Container for occupied-state visuals (username, ready indicator).\n"
                + "Active when slot is occupied; hidden when empty.")]
         [SerializeField] private GameObject      dataContainer;
@@ -46,24 +49,32 @@ namespace NightHunt.UI
         private int                     _team;
         private int                     _slot;
         private System.Action<int, int> _onSlotClicked;
+        private System.Action<long>     _onKickClicked;
 
         private void Awake()
         {
             if (slotButton != null) slotButton.onClick.AddListener(OnSlotClicked);
+            if (kickButton != null) kickButton.onClick.AddListener(OnKickButtonClicked);
         }
 
         /// <summary>
         /// Bind slot data. Pass <c>null</c> for <paramref name="player"/> to render as empty.
         /// </summary>
+        /// <param name="isOwner">True when the LOCAL player is the room host.</param>
+        /// <param name="onKickClicked">Called with the target player's userId when the kick button is pressed.
+        /// Only wired when <paramref name="isOwner"/> is true and the slot belongs to another player.</param>
         public void SetSlot(int team, int slot, RoomPlayerResponse player, bool isOwner,
-                            System.Action<int, int> onSlotClicked)
+                            System.Action<int, int> onSlotClicked,
+                            System.Action<long>     onKickClicked = null)
         {
             _team          = team;
             _slot          = slot;
             _player        = player;
             _onSlotClicked = onSlotClicked;
+            _onKickClicked = onKickClicked;
 
             bool isEmpty = player == null;
+            bool isSelf  = !isEmpty && player.userId == GetCurrentUserId();
 
             // dataContainer visible only when occupied
             if (dataContainer != null) dataContainer.SetActive(!isEmpty);
@@ -72,15 +83,16 @@ namespace NightHunt.UI
 
             if (!isEmpty)
             {
-                if (usernameText   != null) usernameText.text        = player.username;
-                if (readyIndicator != null) readyIndicator.color     = player.isReady ? Color.green : Color.red;
+                if (usernameText   != null) usernameText.text    = player.username;
+                if (readyIndicator != null) readyIndicator.color = player.isReady ? Color.green : Color.red;
             }
 
+            // Kick button: visible only to the host, only on OTHER players' occupied slots.
+            if (kickButton != null)
+                kickButton.gameObject.SetActive(isOwner && !isEmpty && !isSelf);
+
             if (slotButton != null)
-            {
-                bool isSelf = !isEmpty && player.userId == GetCurrentUserId();
                 slotButton.interactable = isEmpty || !isSelf;
-            }
         }
 
         /// <summary>Refresh only the ready indicator without full rebind.</summary>
@@ -93,6 +105,11 @@ namespace NightHunt.UI
         }
 
         private void OnSlotClicked() => _onSlotClicked?.Invoke(_team, _slot);
+
+        private void OnKickButtonClicked()
+        {
+            if (_player != null) _onKickClicked?.Invoke(_player.userId);
+        }
 
         private long GetCurrentUserId()
             => SessionState.Instance != null ? SessionState.Instance.UserId : 0L;
@@ -109,8 +126,10 @@ namespace NightHunt.UI
                 slotButton = ComponentResolver.Find<Button>(this)
                     .OnSelf()
                     .InChildren()
-                    .OrLogWarning("[Auto] Button not found")
+                    .OrLogWarning("[Auto] SlotButton not found")
                     .Resolve();
+            // kickButton intentionally NOT auto-resolved — it is an optional child
+            // that must be explicitly added to the prefab and assigned here.
         }
 #endif
     }

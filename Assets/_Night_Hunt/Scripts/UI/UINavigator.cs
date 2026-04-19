@@ -5,7 +5,7 @@ using UnityEngine.Events;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Panel types được dùng trong toàn bộ codebase để identify screen hiện tại.
+    /// Panel types used across the codebase to identify the current screen.
     /// </summary>
     public enum PanelType
     {
@@ -18,69 +18,69 @@ namespace NightHunt.UI
     /// <summary>
     /// UINavigator — Event-driven navigation hub.
     ///
-    /// THIẾT KẾ:
-    ///   UINavigator KHÔNG tự manage panel nào cả.
-    ///   Nó chỉ fire UnityEvent tương ứng → bạn wire trong Inspector với
-    ///   bất kỳ hành động nào: Play animator, SetActive, gọi method, v.v.
+    /// DESIGN:
+    ///   UINavigator does NOT manage any panels directly.
+    ///   It only fires the corresponding UnityEvent → wire actions in the Inspector:
+    ///   any action: Play animator, SetActive, call method, etc.
     ///
-    /// SETUP TRONG INSPECTOR (ví dụ với Shift UI):
+    /// INSPECTOR SETUP (example with Shift UI):
     ///   OnGoLogin  → SplashScreenAnimator.Play("Login")
-    ///                hoặc LoginPanel.SetActive(true)
+    ///                or LoginPanel.SetActive(true)
     ///   OnGoHome   → MainPanelManager.OpenFirstTab()
     ///                + SplashScreen.SetActive(false)
     ///                + MainPanels.SetActive(true)
     ///                + MainPanelsAnimator.Play("Start")
-    ///   OnGoLobby  → tương tự OnGoHome nhưng navigate đến Lobby tab
-    ///   OnGoNone   → hide tất cả (optional)
+    ///   OnGoLobby  → same as OnGoHome but navigates to the Lobby tab
+    ///   OnGoNone   → hide all (optional)
     ///
-    /// TRONG CODE:
-    ///   UINavigator.Instance.GoLogin();   // fired từ LoadingManager
-    ///   UINavigator.Instance.GoHome();    // fired sau login success
-    ///   UINavigator.Instance.GoLobby();   // fired khi join room
+    /// IN CODE:
+    ///   UINavigator.Instance.GoLogin();   // fired from LoadingManager
+    ///   UINavigator.Instance.GoHome();    // fired after login success
+    ///   UINavigator.Instance.GoLobby();   // fired when joining a room
     ///
-    /// TRUY VẤN TRẠNG THÁI:
-    ///   UINavigator.Instance.CurrentPanel  → PanelType hiện tại
+    /// QUERY STATE:
+    ///   UINavigator.Instance.CurrentPanel  → current PanelType
     ///   UINavigator.Instance.OnPanelChanged += handler;
     /// </summary>
     public class UINavigator : Singleton<UINavigator>
     {
         // ─────────────────────────────────────────────
-        // Events — wire trong Inspector
+        // Events — wire in Inspector
         // ─────────────────────────────────────────────
 
         [Header("Navigation Events — Wire in Inspector")]
 
-        [Tooltip("Fired khi navigate tới Login screen.\n" +
-                 "Ví dụ: SplashScreenAnimator.Play(\"Login\") hoặc LoginPanel.SetActive(true)")]
+        [Tooltip("Fired when navigating to the Login screen.\n" +
+                 "Example: SplashScreenAnimator.Play(\"Login\") or LoginPanel.SetActive(true)")]
         public UnityEvent OnGoLogin = new();
 
-        [Tooltip("Fired khi navigate tới Home screen.\n" +
-                 "Ví dụ: MainPanels.SetActive(true) + MainPanelsAnimator.Play(\"Start\") + MainPanelManager.OpenFirstTab()")]
+        [Tooltip("Fired when navigating to the Home screen.\n" +
+                 "Example: MainPanels.SetActive(true) + MainPanelsAnimator.Play(\"Start\") + MainPanelManager.OpenFirstTab()")]
         public UnityEvent OnGoHome = new();
 
-        [Tooltip("Fired khi navigate tới Lobby screen.\n" +
-                 "Ví dụ: MainPanels.SetActive(true) + MainPanelManager.OpenPanel(\"Lobby\")")]
+        [Tooltip("Fired when navigating to the Lobby screen.\n" +
+                 "Example: MainPanels.SetActive(true) + MainPanelManager.OpenPanel(\"Lobby\")")]
         public UnityEvent OnGoLobby = new();
 
-        [Tooltip("Fired khi reset / hide tất cả (optional — dùng khi logout hoặc về trạng thái ban đầu).")]
+        [Tooltip("Fired when resetting / hiding all panels (optional — use on logout or returning to initial state).")]
         public UnityEvent OnGoNone = new();
 
         // ─────────────────────────────────────────────
-        // State (read-only từ bên ngoài)
+        // State (read-only from outside)
         // ─────────────────────────────────────────────
 
         private PanelType _currentPanel = PanelType.None;
 
-        /// <summary>Panel hiện tại đang display.</summary>
+        /// <summary>The panel currently displayed.</summary>
         public PanelType CurrentPanel => _currentPanel;
 
-        /// <summary>Fired mỗi khi panel thay đổi. Param = panel mới.</summary>
+        /// <summary>Fired every time the panel changes. Param = new panel.</summary>
         public event System.Action<PanelType> OnPanelChanged;
 
         /// <summary>
-        /// Fired bởi HomeView sau khi tất cả async data fetches hoàn tất
-        /// (profile, party, friends). Subscribe để biết khi nào safe để render
-        /// server-driven content (PLAY button, invite UI, ...).
+        /// Fired by HomeView after all async data fetches complete
+        /// (profile, party, friends). Subscribe to know when it is safe to render
+        /// server-driven content (PLAY button, invite UI, etc.).
         /// </summary>
         public event System.Action OnPlayerDataLoaded;
 
@@ -90,7 +90,7 @@ namespace NightHunt.UI
 
         protected override void OnSingletonAwake()
         {
-            // Không cần setup gì — toàn bộ UI được wire bởi Inspector
+            // No setup required — all UI is wired via Inspector.
         }
 
         // ─────────────────────────────────────────────
@@ -98,8 +98,8 @@ namespace NightHunt.UI
         // ─────────────────────────────────────────────
 
         /// <summary>
-        /// Navigate tới Login screen.
-        /// Fire OnGoLogin UnityEvent — bạn wire hành động trong Inspector.
+        /// Navigate to the Login screen.
+        /// Fires the OnGoLogin UnityEvent — wire actions in the Inspector.
         /// </summary>
         public void GoLogin()
         {
@@ -111,8 +111,8 @@ namespace NightHunt.UI
         }
 
         /// <summary>
-        /// Navigate tới Home screen.
-        /// Fire OnGoHome UnityEvent — bạn wire hành động trong Inspector.
+        /// Navigate to the Home screen.
+        /// Fires the OnGoHome UnityEvent — wire actions in the Inspector.
         /// </summary>
         public void GoHome()
         {
@@ -124,8 +124,8 @@ namespace NightHunt.UI
         }
 
         /// <summary>
-        /// Navigate tới Lobby screen.
-        /// Fire OnGoLobby UnityEvent — bạn wire hành động trong Inspector.
+        /// Navigate to the Lobby screen.
+        /// Fires the OnGoLobby UnityEvent — wire actions in the Inspector.
         /// </summary>
         public void GoLobby()
         {
@@ -148,8 +148,8 @@ namespace NightHunt.UI
         }
 
         /// <summary>
-        /// Force navigate dù đang ở cùng panel (bypass guard).
-        /// Uses when needed refresh / re-trigger event trên cùng panel.
+        /// Force-navigate even when already on the same panel (bypasses the guard).
+        /// Use when you need to refresh / re-trigger the event on the current panel.
         /// </summary>
         public void GoForce(PanelType target)
         {
@@ -168,12 +168,12 @@ namespace NightHunt.UI
         }
 
         /// <summary>
-        /// Navigate bằng PanelType enum.
-        /// Uses từ LoadingManager: ShowPanel(_targetPanel)
+        /// Navigate by PanelType enum.
+        /// Called from LoadingManager: ShowPanel(_targetPanel).
         /// </summary>
         public void ShowPanel(PanelType target, bool forceInstant = false)
         {
-            // forceInstant không dùng trong event-driven design — giữ để tương thích API cũ
+            // forceInstant is not used in event-driven design — kept for API compatibility.
             switch (target)
             {
                 case PanelType.Login: GoLogin();  break;

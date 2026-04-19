@@ -681,14 +681,22 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (dialog == null || item == null || onConfirmed == null)
                 return false;
 
+            // Capture source view + state NOW, before it may be cleared this/next frame.
+            // This lets HandleCanceled restore the slot even if _sourceView is already null.
+            var capturedSourceView  = _sourceView;
+            var capturedSourceState = _sourceStateSnapshot != null
+                ? CloneState(_sourceStateSnapshot)
+                : null;
+
             void HandleConfirmed(ItemInstance confirmedItem, int quantity)
             {
                 dialog.OnDropConfirmed -= HandleConfirmed;
                 dialog.OnCanceled -= HandleCanceled;
 
-                // Chỉ handle nếu đúng instance.
                 if (confirmedItem != null && confirmedItem.InstanceID == item.InstanceID)
                 {
+                    if (_debugConfig != null && _debugConfig.EnableDropDebugLogs)
+                        Debug.Log($"[DragDropController] Drop confirmed: {confirmedItem.DefinitionID} x{quantity}");
                     onConfirmed.Invoke(quantity);
                 }
             }
@@ -697,6 +705,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 dialog.OnDropConfirmed -= HandleConfirmed;
                 dialog.OnCanceled -= HandleCanceled;
+
+                // Restore the optimistically-cleared source slot so the item re-appears.
+                if (capturedSourceView != null && capturedSourceState != null)
+                {
+                    capturedSourceView.SetState(capturedSourceState);
+                    if (_debugConfig != null && _debugConfig.EnableDropDebugLogs)
+                        Debug.Log($"[DragDropController] Drop cancelled — restored slot for {item.DefinitionID}");
+                }
             }
 
             dialog.OnDropConfirmed += HandleConfirmed;
