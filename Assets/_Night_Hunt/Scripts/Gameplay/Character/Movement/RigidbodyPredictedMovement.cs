@@ -28,6 +28,15 @@ namespace NightHunt.Gameplay.Character
     {
         [Header("Rigidbody Settings")]
         [SerializeField] private float groundCheckDistance = 0.1f;
+
+        // groundDetectionLayer: used ONLY in IsGrounded() CheckSphere.
+        // MUST include the layer of every surface the player can stand on (terrain, floor, platforms).
+        // Defaults to Everything (~0) — do NOT restrict unless you have a deliberate reason.
+        // Wrong value = IsGrounded() always false → gravity accumulates on server → player falls through map.
+        [SerializeField] private LayerMask groundDetectionLayer = ~0;
+
+        // groundLayer: used for wall-blocking, step-climbing and slope detection.
+        // Can be restricted to specific obstacle layers if needed.
         [SerializeField] private LayerMask groundLayer = ~0;
         // maxFallSpeed moved to MovementSettings SO (field: maxFallSpeed).
 
@@ -179,7 +188,7 @@ namespace NightHunt.Gameplay.Character
             _isGroundedCached = Physics.CheckSphere(
                 bottomSphereCenter,
                 _capsule.radius + groundCheckDistance,
-                groundLayer,
+                groundDetectionLayer,   // uses dedicated layer mask — never blocks grounded detection
                 QueryTriggerInteraction.Ignore
             );
 
@@ -197,7 +206,7 @@ namespace NightHunt.Gameplay.Character
                         Vector3.down,
                         out RaycastHit normalHit,
                         _capsule.radius + groundCheckDistance + 0.1f,
-                        groundLayer,
+                        groundDetectionLayer,   // same dedicated mask as CheckSphere above
                         QueryTriggerInteraction.Ignore))
                 {
                     _groundNormal = normalHit.normal;
@@ -599,6 +608,45 @@ namespace NightHunt.Gameplay.Character
             }
 
             GUILayout.EndArea();
+        }
+
+        #endregion
+
+        #region PHYSICS DIAGNOSTICS
+
+        // ── Collision callbacks ───────────────────────────────────────────────
+        // These run on the PHYSICS thread and fire when PhysX actually detects contact.
+        // If OnCollisionEnter never fires when standing on terrain, the Physics Layer
+        // Collision Matrix is blocking Player ↔ Ground — fix in Edit > Project Settings > Physics.
+
+        private void OnCollisionEnter(Collision collision)
+        {
+            if (!enableDebugLogs) return;
+            int layer = collision.collider.gameObject.layer;
+            Debug.Log($"[RB][Collision ENTER] '{collision.collider.name}' " +
+                      $"layer={layer} ({LayerMask.LayerToName(layer)}) " +
+                      $"contacts={collision.contactCount} " +
+                      $"relVel={collision.relativeVelocity.magnitude:F2} " +
+                      $"pos={transform.position}");
+        }
+
+        private void OnCollisionStay(Collision collision)
+        {
+            // Log only occasionally to avoid log spam (once per ~3 s at 50Hz).
+            if (!enableDebugLogs || Time.frameCount % 150 != 0) return;
+            int layer = collision.collider.gameObject.layer;
+            Debug.Log($"[RB][Collision STAY] '{collision.collider.name}' " +
+                      $"layer={layer} ({LayerMask.LayerToName(layer)}) " +
+                      $"grounded={_isGroundedCached} vertVel={_verticalVelocity:F3} pos={transform.position}");
+        }
+
+        // ── OnValidate: warn about misconfigured layer masks ──────────────────
+        private void OnValidate()
+        {
+            if (groundDetectionLayer.value == 0)
+                Debug.LogWarning("[RigidbodyPredictedMovement] groundDetectionLayer is set to 'Nothing' — " +
+                                 "IsGrounded() will ALWAYS return false! Set it to 'Everything' or include " +
+                                 "the layer(s) your terrain/floor uses.", this);
         }
 
         #endregion

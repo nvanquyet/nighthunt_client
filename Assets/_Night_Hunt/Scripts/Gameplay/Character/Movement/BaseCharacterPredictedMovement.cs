@@ -432,7 +432,7 @@ namespace NightHunt.Gameplay.Character
             if (this == null || !IsSpawned) return;
             if (!IsOwner && !IsServerStarted) return;
 
-            SimulateMovement(data, TickDelta);
+            SimulateMovement(data, TickDelta, state);
         }
 
         #endregion
@@ -440,7 +440,7 @@ namespace NightHunt.Gameplay.Character
         #region MOVEMENT SIMULATION
 
         /// <summary>Core movement simulation — runs on owner and server each tick.</summary>
-        protected virtual void SimulateMovement(MovementReplicateData data, float dt)
+        protected virtual void SimulateMovement(MovementReplicateData data, float dt, ReplicateState state = ReplicateState.Invalid)
         {
             if (!IsSpawned || movementSettings == null) return;
 
@@ -454,6 +454,16 @@ namespace NightHunt.Gameplay.Character
                 _groundedGraceTimer = Mathf.Max(0f, _groundedGraceTimer - dt);
 
             bool grounded = _groundedGraceTimer > 0f;
+
+            // Server-side grounding diagnostic: log every 50 ticks to trace grounding state on DS.
+            // Enable with enableDebugLogs on the component in the Inspector.
+            if (enableDebugLogs && IsServerStarted && !IsReplaying(state)
+                && (TimeManager.Tick % 50 == 0))
+            {
+                Debug.Log($"[SERVER][Ground] raw={rawGrounded} grounded={grounded} " +
+                          $"vertVel={_verticalVelocity:F3} pos={transform.position} " +
+                          $"grace={_spawnGraceTicksRemaining}");
+            }
 
             // ── Speed modifier ────────────────────────────────────────────────────
             float speed = GetBaseSpeed();
@@ -597,7 +607,9 @@ namespace NightHunt.Gameplay.Character
             // Prevents free-fall on DS clients where the physics grounded-check may not yet
             // have a valid result while the first reconcile is still in transit.
             // Positive velocity (jump) is NOT clamped — jump still works in grace window.
-            if (_spawnGraceTicksRemaining > 0)
+            // IsReplaying guard: reconcile replay calls SimulateMovement multiple times in one
+            // frame; without the guard the counter drains N× faster than real time.
+            if (_spawnGraceTicksRemaining > 0 && !IsReplaying(state))
             {
                 _spawnGraceTicksRemaining--;
                 if (_verticalVelocity < 0f)
