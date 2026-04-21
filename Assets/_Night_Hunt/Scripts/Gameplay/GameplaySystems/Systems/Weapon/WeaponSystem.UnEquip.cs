@@ -3,13 +3,14 @@ using FishNet.Object;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.GameplaySystems.Loot;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
     public partial class WeaponSystem
     {
-        // -- IWeaponSystem � Public equip API -----------------------------------
+        // ── IWeaponSystem — Public Equip / Unequip / Drop API ─────────────────
 
         public void EquipWeapon(string instanceID)
         {
@@ -31,8 +32,23 @@ namespace NightHunt.GameplaySystems.Weapon
 
         public void SwapWeapons(WeaponSlotType s1, WeaponSlotType s2)
         {
-            if (!IsServerInitialized) return;
-            SwapWeaponsServer(s1, s2);
+            if (IsServerInitialized) { SwapWeaponsServer(s1, s2); return; }
+            if (IsOwner) SwapWeaponsServerRpc(s1, s2);
+        }
+
+        /// <summary>
+        /// Drop the weapon in <paramref name="slot"/> directly to the world:
+        ///   1. Holster if currently drawn.
+        ///   2. Detach all attachments (per InventoryConfig).
+        ///   3. Spawn the world item via WorldSpawnManager.
+        ///   4. Remove the weapon from its holster slot.
+        /// Owning client routes to the server automatically.
+        /// </summary>
+        public void DropWeapon(WeaponSlotType slot)
+        {
+            if (IsServerInitialized) { DropWeaponServer(slot); return; }
+            if (IsOwner) DropWeaponServerRpc(slot);
+            else Debug.LogWarning("[WeaponSystem] DropWeapon: caller does not own this object.");
         }
 
         public void SelectWeapon(WeaponSlotType slot)
@@ -47,7 +63,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (IsOwner) HolsterWeaponServerRpc();
         }
 
-        // -- Server implementations ---------------------------------------------
+        // ── Server Implementations ─────────────────────────────────────────────
 
         [Server]
         private void EquipWeaponServer(string instanceID)
@@ -60,7 +76,8 @@ namespace NightHunt.GameplaySystems.Weapon
             }
 
             WeaponSlotType slot = FindAvailableSlot();
-            if (_weapons.ContainsKey(slot)) UnequipWeaponServer(slot);
+            if (_weapons.ContainsKey(slot))
+                UnequipWeaponServer(slot);
 
             AssignToSlot(slot, instanceID, inst, def);
         }
@@ -75,65 +92,148 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
             }
 
-            if (_weapons.ContainsKey(targetSlot)) UnequipWeaponServer(targetSlot);
+            if (_weapons.ContainsKey(targetSlot))
+                UnequipWeaponServer(targetSlot);
+
             AssignToSlot(targetSlot, instanceID, inst, def);
         }
 
-        [ServerRpc(RequireOwnership = true)]
-        private void EquipWeaponServerRpc(string instanceID) => EquipWeaponServer(instanceID);
-
-        [ServerRpc(RequireOwnership = true)]
-        private void EquipWeaponToSlotServerRpc(string instanceID, WeaponSlotType targetSlot) => EquipWeaponToSlotServer(instanceID, targetSlot);
-
-        /// <summary>Common slot assignment � shared by both equip paths.</summary>
         [Server]
         private void AssignToSlot(WeaponSlotType slot, string instanceID, ItemInstance inst, WeaponDefinition def)
         {
-            _weapons[slot]      = instanceID;
-            _weaponCache[slot]  = inst;
+            _weapons[slot]     = instanceID;
+            _weaponCache[slot] = inst;
             inst.InventoryIndex = -1;
 
-            // Initialize reserve ammo on first equip.
+            // Initialize reserve ammo on first equip when stats have been computed.
             float curReserve = inst.GetCurrentValue(ItemStatType.MaxAmmo);
             float maxReserve = inst.GetComputedStat(ItemStatType.MaxAmmo);
             if (curReserve == 0f && maxReserve > 0f)
                 inst.SetCurrentValue(ItemStatType.MaxAmmo, maxReserve);
             else if (maxReserve == 0f)
-                Debug.LogError($"[WeaponSystem] MaxAmmo stat missing for '{def.DisplayName}'.");
+                Debug.LogWarning($"[WeaponSystem] MaxAmmo stat missing for '{def.DisplayName}'. Run ItemStatComputer.Compute first.");
 
             _inventorySystem.SyncItemState(instanceID);
-            // Stat modifier application is handled by StatApplyOrchestrator.
 
-            // Auto-select if nothing is active.
+            // Auto-select if no weapon is currently drawn.
             if (_activeSlot.Value == null)
                 _activeSlot.Value = slot;
 
-            if (DebugLogs) Debug.Log($"[WeaponSystem] Equipped '{def.DisplayName}' ? {slot}");
-        }
+            // Fire event on server so host-mode listeners (StatApplyOrchestrator, host UI) are notified.
+            // On pure clients this is fired by OnWeaponsChangedCallback (asServer=false path).
+            OnWeaponEquipped?.Invoke(slot, inst);
 
-        [ServerRpc(RequireOwnership = true)]
-        private void UnequipWeaponServerRpc(WeaponSlotType slot) => UnequipWeaponServer(slot);
+            if (DebugLogs)
+                Debug.Log($"[WeaponSystem] Equipped '{def.DisplayName}' → {slot}");
+        }
 
         [Server]
         private void UnequipWeaponServer(WeaponSlotType slot)
         {
-            if (!_weapons.TryGetValue(slot, out var id)) return;
+            if (!_weapons.TryGetValue(slot, out var id))
+                return;
+
             var inst = _inventorySystem.GetItemByInstanceID(id);
-            if (inst == null) { _weapons.Remove(slot); return; }
+            if (inst == null)
+            {
+                _weapons.Remove(slot);
+                _weaponCache.Remove(slot);
+                return;
+            }
 
-            if (_activeSlot.Value == slot) HolsterWeaponServer();
+            // Holster first so OnActiveWeaponChanged fires cleanly.
+            if (_activeSlot.Value == slot)
+                HolsterWeaponServer();
 
-            // Detach attachments if configured.
+            // Detach attachments according to config.
             if (InventoryConfig != null && InventoryConfig.DetachAttachmentsOnUnequip)
                 _attachmentSystem?.DetachAllFromItem(id);
-            // Stat modifier removal is handled by StatApplyOrchestrator.
 
             _weapons.Remove(slot);
             _weaponCache.Remove(slot);
+
+            // Fire event on server so host-mode listeners are notified BEFORE cache is cleared.
+            OnWeaponUnequipped?.Invoke(slot, inst);
+
+            // Return item to an open inventory slot.
             inst.InventoryIndex = FindNextAvailableInventoryIndex();
             _inventorySystem.SyncItemState(id);
 
-            if (DebugLogs) Debug.Log($"[WeaponSystem] Unequipped slot {slot}");
+            if (DebugLogs)
+                Debug.Log($"[WeaponSystem] Unequipped slot {slot}");
+        }
+
+        [Server]
+        private void DropWeaponServer(WeaponSlotType slot)
+        {
+            if (!_weapons.TryGetValue(slot, out var instanceID))
+            {
+                Debug.LogWarning($"[WeaponSystem] DropWeapon: slot {slot} is empty.");
+                return;
+            }
+
+            var inst = _inventorySystem.GetItemByInstanceID(instanceID);
+            if (inst == null)
+            {
+                Debug.LogWarning($"[WeaponSystem] DropWeapon: item '{instanceID}' not found in inventory.");
+                _weapons.Remove(slot);
+                _weaponCache.Remove(slot);
+                return;
+            }
+
+            // Step 1: Holster if this weapon is currently drawn.
+            if (_activeSlot.Value == slot)
+                HolsterWeaponServer();
+
+            // Step 2: Detach attachments — return them to inventory or keep on item (per config).
+            bool returnAttachments = InventoryConfig == null || InventoryConfig.ReturnAttachmentsToInventoryOnDrop;
+            if (inst.AttachedItems != null && inst.AttachedItems.Length > 0)
+            {
+                if (returnAttachments)
+                    _attachmentSystem?.DetachAllFromItem(instanceID);
+                // else: attachments remain in the AttachedItems array and drop with the weapon
+            }
+
+            // Step 3: Strip empty attachment slot arrays to avoid ghost allocation on pickup.
+            if (inst.AttachedItems != null)
+            {
+                bool hasAny = false;
+                for (int i = 0; i < inst.AttachedItems.Length; i++)
+                {
+                    if (!string.IsNullOrEmpty(inst.AttachedItems[i]))
+                    { hasAny = true; break; }
+                }
+                if (!hasAny)
+                    inst.AttachedItems = null;
+            }
+
+            // Step 4: Build the world-item snapshot.
+            // Use ToData() directly — preserves the original InstanceID and all current
+            // runtime state (ammo, resource, durability, attachments) at this exact moment.
+            // Weapons are always single-quantity items so no partial-drop logic is needed.
+            var dropData     = inst.ToData();
+            dropData.Quantity = inst.Quantity; // explicit, always 1 for weapons
+
+            // Step 5: Calculate drop position (slightly in front of the player).
+            Transform origin = transform;
+            Vector3 dropPos  = origin.position + origin.forward * (InventoryConfig?.DropDistance ?? 2f);
+            dropPos.y = origin.position.y;
+
+            // Step 6: Spawn the world item.
+            if (WorldSpawnManager.Instance != null)
+                WorldSpawnManager.Instance.SpawnWorldItem(dropData, dropPos, Quaternion.identity);
+            else
+                Debug.LogError("[WeaponSystem] DropWeapon: WorldSpawnManager.Instance is null — item not spawned.");
+
+            // Step 7: Remove from holster slot.
+            _weapons.Remove(slot);
+            _weaponCache.Remove(slot);
+            // Fire event so host-mode StatApplyOrchestrator clears the weapon's stat modifiers.
+            OnWeaponUnequipped?.Invoke(slot, inst);
+            _inventorySystem.RemoveItem(instanceID, inst.Quantity);
+
+            if (DebugLogs)
+                Debug.Log($"[WeaponSystem] Dropped weapon '{inst.DefinitionID}' from slot {slot}.");
         }
 
         [Server]
@@ -146,10 +246,11 @@ namespace NightHunt.GameplaySystems.Weapon
             if (has1 && has2) { _weapons[s1] = id2; _weapons[s2] = id1; }
             else if (has1)    { _weapons.Remove(s1); _weapons[s2] = id1; }
             else              { _weapons.Remove(s2); _weapons[s1] = id2; }
-        }
 
-        [ServerRpc(RequireOwnership = true)]
-        private void SelectWeaponServerRpc(WeaponSlotType slot) => SelectWeaponServer(slot);
+            // Rebuild server-side weapon cache after swap so cache stays consistent
+            // with _weapons (host-mode: OnWeaponsChangedCallback.asServer=true is skipped).
+            RebuildWeaponCache();
+        }
 
         [Server]
         private void SelectWeaponServer(WeaponSlotType slot)
@@ -159,9 +260,6 @@ namespace NightHunt.GameplaySystems.Weapon
             _activeSlot.Value = slot;
         }
 
-        [ServerRpc(RequireOwnership = true)]
-        private void HolsterWeaponServerRpc() => HolsterWeaponServer();
-
         [Server]
         private void HolsterWeaponServer()
         {
@@ -169,6 +267,34 @@ namespace NightHunt.GameplaySystems.Weapon
             _activeSlot.Value = null;
         }
 
+        // ── ServerRpc forwarding ───────────────────────────────────────────────
 
+        [ServerRpc(RequireOwnership = true)]
+        private void EquipWeaponServerRpc(string instanceID)
+            => EquipWeaponServer(instanceID);
+
+        [ServerRpc(RequireOwnership = true)]
+        private void EquipWeaponToSlotServerRpc(string instanceID, WeaponSlotType targetSlot)
+            => EquipWeaponToSlotServer(instanceID, targetSlot);
+
+        [ServerRpc(RequireOwnership = true)]
+        private void UnequipWeaponServerRpc(WeaponSlotType slot)
+            => UnequipWeaponServer(slot);
+
+        [ServerRpc(RequireOwnership = true)]
+        private void DropWeaponServerRpc(WeaponSlotType slot)
+            => DropWeaponServer(slot);
+
+        [ServerRpc(RequireOwnership = true)]
+        private void SwapWeaponsServerRpc(WeaponSlotType s1, WeaponSlotType s2)
+            => SwapWeaponsServer(s1, s2);
+
+        [ServerRpc(RequireOwnership = true)]
+        private void SelectWeaponServerRpc(WeaponSlotType slot)
+            => SelectWeaponServer(slot);
+
+        [ServerRpc(RequireOwnership = true)]
+        private void HolsterWeaponServerRpc()
+            => HolsterWeaponServer();
     }
 }

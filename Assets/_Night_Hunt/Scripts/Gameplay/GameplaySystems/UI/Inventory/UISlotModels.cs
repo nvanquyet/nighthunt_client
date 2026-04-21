@@ -8,9 +8,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         Inventory,
         Equipment,
         Weapon,
-        DropArea,
+        /// <summary>
+        /// Attachment sub-slot — always a child of a Weapon or Equipment ItemSlotView.
+        /// <see cref="UISlotId.ParentInstanceID"/> identifies the parent item.
+        /// </summary>
         Attachment,
-        Trash
     }
 
     /// <summary>
@@ -46,17 +48,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             WeaponSlot = slot
         };
 
-        public static UISlotId DropArea() => new UISlotId
-        {
-            Type = UISlotType.DropArea,
-            Index = -1
-        };
+        public static UISlotId DropArea() => throw new System.NotSupportedException(
+            "DropArea slots are removed. WorldDrop is triggered when EndDrag lands outside any registered slot.");
 
-        public static UISlotId Trash() => new UISlotId
-        {
-            Type = UISlotType.Trash,
-            Index = -1
-        };
+        public static UISlotId Trash() => throw new System.NotSupportedException(
+            "Trash slots are removed. Drop to world via drag-outside instead.");
 
         public static UISlotId Attachment(string parentInstanceID, int slotIndex) => new UISlotId
         {
@@ -96,10 +92,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 case UISlotType.Inventory:  return $"Inventory[{Index}]";
                 case UISlotType.Equipment:  return $"Equip[{EquipmentSlot}]";
                 case UISlotType.Weapon:     return $"Weapon[{WeaponSlot}]";
-                case UISlotType.DropArea:   return "DropArea";
-                case UISlotType.Trash:      return "Trash";
                 case UISlotType.Attachment: return $"Attachment[{ParentInstanceID}][{Index}]";
-                default:                    return Type.ToString();
+                default: return Type.ToString();
             }
         }
     }
@@ -125,17 +119,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     public enum DropActionType
     {
         None,
-        Move,
-        Swap,
-        Stack,
-        Equip,
-        EquipWeapon,
-        Unequip,
-        UnequipWeapon,
-        DropToWorld,
-        Attach,
-        Detach,
-        Trash
+        Move,        // Inventory → Inventory (empty slot)
+        Swap,        // Inventory ↔ Inventory, Equipment ↔ Equipment, Weapon ↔ Weapon, Attachment ↔ Attachment
+        Stack,       // Inventory → Inventory (same stackable item)
+        Equip,       // Inventory → Equipment slot
+        EquipWeapon, // Inventory → Weapon slot
+        Unequip,     // Equipment → Inventory
+        UnequipWeapon, // Weapon → Inventory
+        DropToWorld, // Any slot → outside panel (no target slot)
+        Attach,      // Inventory → Attachment sub-slot
+        Detach,      // Attachment sub-slot → Inventory
     }
 
     /// <summary>

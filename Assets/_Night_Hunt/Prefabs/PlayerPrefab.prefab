@@ -658,13 +658,13 @@ MonoBehaviour:
   _componentIndexCache: 6
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
-  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
-  _bulletTargetConfig: {fileID: 0}
   _statSystemSource: {fileID: 2125858533983064380}
   _inventorySystemSource: {fileID: 9196575011444076670}
   _slotPriority: 000000000100000002000000
+  _enableDebugLogs: 0
   _aimSyncInterval: 0.05
+  _bulletTargetConfig: {fileID: 0}
 --- !u!114 &5823837622919229875
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -846,6 +846,7 @@ GameObject:
   - component: {fileID: 5379918314552202696}
   - component: {fileID: 8370610283817252759}
   - component: {fileID: 5487189429591905697}
+  - component: {fileID: 8491396184485047296}
   m_Layer: 6
   m_Name: PlayerPrefab
   m_TagString: Untagged
@@ -1092,17 +1093,17 @@ MonoBehaviour:
   diagnoseMysteryMove: 0
   groundedHysteresisTime: 0.12
   groundCheckDistance: 0.15
-  maxGroundAngle: 60
+  groundDetectionLayer:
+    serializedVersion: 2
+    m_Bits: 4294967295
   groundLayer:
     serializedVersion: 2
     m_Bits: 26247169
-  maxFallSpeed: -20
   drag: 0
   angularDrag: 0.05
   wallCheckSkinWidth: 0.08
-  wallLayerMask:
-    serializedVersion: 2
-    m_Bits: 9732097
+  maxStepHeight: 0.35
+  maxSlopeAngle: 46
 --- !u!114 &3472814331583980281
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1115,6 +1116,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a63171f2a8e282844bc503669ffc4bba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 0}
+  _networkObjectCache: {fileID: 0}
 --- !u!114 &5379918314552202696
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1163,13 +1167,28 @@ MonoBehaviour:
   walkStepInterval: 0.45
   sprintStepInterval: 0.28
   minMoveSpeed: 0.5
-  sprintSpeedThreshold: 5.5
   footstepVolume: 0.75
   jumpVolume: 0.8
   landVolume: 0.9
   rollVolume: 0.7
   pitchVariance: 0.08
   _debugLog: 1
+--- !u!114 &8491396184485047296
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6186874985291187823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7a2ce4ba593df3b4e952c74006a8cf19, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 2932638389700231956}
+  _networkObjectCache: {fileID: 0}
+  DebugLogs: 0
 --- !u!1 &6529247948932358281
 GameObject:
   m_ObjectHideFlags: 0
@@ -1219,12 +1238,12 @@ MonoBehaviour:
   _componentIndexCache: 7
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
-  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
   _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _statSystemComponent: {fileID: 2125858533983064380}
   _batchWeightUpdates: 1
   _autoCleanupInvalidItems: 1
+  _debugLogs: 0
 --- !u!114 &4760286300081198091
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1240,9 +1259,9 @@ MonoBehaviour:
   _componentIndexCache: 8
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
-  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _inventorySystemComponent: {fileID: 9196575011444076670}
+  _enableDebugLogs: 0
 --- !u!114 &4470525218012556025
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1258,10 +1277,10 @@ MonoBehaviour:
   _componentIndexCache: 9
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
-  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
-  _inventorySystemSource: {fileID: 9196575011444076670}
+  _inventorySystemOverride: {fileID: 9196575011444076670}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _autoRecoverAttachments: 1
+  _enableDebugLogs: 0
 --- !u!1 &6927907726633053832
 GameObject:
   m_ObjectHideFlags: 0

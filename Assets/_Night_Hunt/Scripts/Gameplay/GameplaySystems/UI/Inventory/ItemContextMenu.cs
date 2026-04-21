@@ -8,195 +8,384 @@ using NightHunt.Utilities;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Floating context menu for inventory slots.
-    /// Positioned at the selected slot – lives outside slot prefabs, like a tooltip.
-    /// Shows contextual actions: Use / Equip / Unequip / Drop depending on slot type and item type.
+    /// Floating context menu for inventory, equipment, weapon, and attachment slots.
+    /// Shows contextual action buttons depending on the item type and the source slot.
+    ///
+    /// BUTTONS:
+    ///   Inventory — Weapon/Equipment : [Equip]   [Drop] [Cancel]
+    ///   Inventory — Consumable        : [Use]     [Drop] [Cancel]
+    ///   Inventory — Throwable         : [Use]     [Drop] [Cancel]
+    ///   Inventory — Deployable        : [Deploy]  [Drop] [Cancel]
+    ///   Equipment slot                : [Unequip] [Drop] [Cancel]
+    ///   Weapon slot                   : [Unequip] [Drop] [Cancel]
+    ///   Attachment slot               : [Detach]  [Drop] [Cancel]
+    ///
+    /// POSITION: right (or left) of the selected slot, auto-flipped to stay on screen.
+    ///           Vertically clamped so the menu never clips top/bottom edge.
+    ///
+    /// OWNER GUARD: buttons hidden (menu shows nothing) when the inventory is read-only
+    ///              (spectator mode). In read-only mode Show() returns immediately.
     /// </summary>
     public class ItemContextMenu : MonoBehaviour
     {
-        [Header("Panel Root")]
-        [SerializeField] private RectTransform _rootRect;
-        [SerializeField] private Canvas _canvas;
+        // ── Inspector ─────────────────────────────────────────────────────────
 
-        [Header("Action Buttons")]
+        [Header("Panel")]
+        [SerializeField] private RectTransform _rootRect;
+        [SerializeField] private Canvas        _canvas;
+
+        [Header("Buttons")]
         [SerializeField] private Button _useButton;
+        [SerializeField] private Button _deployButton;
         [SerializeField] private Button _equipButton;
         [SerializeField] private Button _unequipButton;
+        [SerializeField] private Button _detachButton;
         [SerializeField] private Button _dropButton;
+        [SerializeField] private Button _cancelButton;
 
-        [Header("Position Offset from slot top-right corner")]
-        [SerializeField] private Vector2 _offset = new Vector2(8f, 0f);
+        // ── Runtime ───────────────────────────────────────────────────────────
 
-        private ItemInstance _currentItem;
-        private UISlotId _currentSlotId;
-        private UIDomainBridge _domainBridge;
+        private ItemInstance    _currentItem;
+        private UISlotId        _currentSlotId;
+        private UIDomainBridge  _bridge;
         private DropQuantityDialog _dropDialog;
+        private UISlotLayoutConfig _uiConfig;
 
         public bool IsVisible => _rootRect != null && _rootRect.gameObject.activeSelf;
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Unity Lifecycle
 
         private void Awake()
         {
             Hide();
-            if (_useButton != null)     _useButton.onClick.AddListener(OnUseClicked);
-            if (_equipButton != null)   _equipButton.onClick.AddListener(OnEquipClicked);
-            if (_unequipButton != null) _unequipButton.onClick.AddListener(OnUnequipClicked);
-            if (_dropButton != null)    _dropButton.onClick.AddListener(OnDropClicked);
+
+            Register(_useButton,     OnUseClicked);
+            Register(_deployButton,  OnDeployClicked);
+            Register(_equipButton,   OnEquipClicked);
+            Register(_unequipButton, OnUnequipClicked);
+            Register(_detachButton,  OnDetachClicked);
+            Register(_dropButton,    OnDropClicked);
+            Register(_cancelButton,  OnCancelClicked);
         }
 
         private void OnDestroy()
         {
-            if (_useButton != null)     _useButton.onClick.RemoveListener(OnUseClicked);
-            if (_equipButton != null)   _equipButton.onClick.RemoveListener(OnEquipClicked);
-            if (_unequipButton != null) _unequipButton.onClick.RemoveListener(OnUnequipClicked);
-            if (_dropButton != null)    _dropButton.onClick.RemoveListener(OnDropClicked);
+            Unregister(_useButton,     OnUseClicked);
+            Unregister(_deployButton,  OnDeployClicked);
+            Unregister(_equipButton,   OnEquipClicked);
+            Unregister(_unequipButton, OnUnequipClicked);
+            Unregister(_detachButton,  OnDetachClicked);
+            Unregister(_dropButton,    OnDropClicked);
+            Unregister(_cancelButton,  OnCancelClicked);
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        //  Public API
-        // ─────────────────────────────────────────────────────────────────────
+        private static void Register(Button b, UnityEngine.Events.UnityAction a)
+        { if (b != null) b.onClick.AddListener(a); }
 
+        private static void Unregister(Button b, UnityEngine.Events.UnityAction a)
+        { if (b != null) b.onClick.RemoveListener(a); }
+
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Public API
+
+        /// <summary>
+        /// Show the context menu for the given item and slot.
+        /// Returns immediately without showing if the bridge owner guard fails (spectator mode).
+        /// </summary>
         public void Show(
-            ItemInstance item,
-            UISlotId slotId,
-            RectTransform slotRect,
-            UIDomainBridge bridge,
-            DropQuantityDialog dropDialog)
+            ItemInstance       item,
+            UISlotId           slotId,
+            RectTransform      slotRect,
+            UIDomainBridge     bridge,
+            DropQuantityDialog dropDialog,
+            UISlotLayoutConfig uiConfig = null)
         {
             if (item == null) { Hide(); return; }
 
+            // Spectator mode: no interactions allowed.
+            if (bridge != null && !bridge.IsCurrentPlayerOwner) return;
+
             _currentItem   = item;
             _currentSlotId = slotId;
-            _domainBridge  = bridge;
+            _bridge        = bridge;
             _dropDialog    = dropDialog;
+            _uiConfig      = uiConfig;
 
             RefreshButtons();
             PositionAt(slotRect);
 
-            if (_rootRect != null) _rootRect.gameObject.SetActive(true);
+            if (_rootRect != null)
+                _rootRect.gameObject.SetActive(true);
         }
 
         public void Hide()
         {
-            if (_rootRect != null) _rootRect.gameObject.SetActive(false);
-            _currentItem  = null;
-            _domainBridge = null;
+            if (_rootRect != null)
+                _rootRect.gameObject.SetActive(false);
+            _currentItem = null;
+            _bridge      = null;
         }
 
+        #endregion
+
         // ─────────────────────────────────────────────────────────────────────
-        //  Button Visibility
-        // ─────────────────────────────────────────────────────────────────────
+        #region Button Visibility
 
         private void RefreshButtons()
         {
             var def = ItemDatabase.GetDefinition(_currentItem.DefinitionID);
-            bool isEquipSlot  = _currentSlotId.Type == UISlotType.Equipment
-                              || _currentSlotId.Type == UISlotType.Weapon;
-            bool isWeapon     = def != null && def.Type == ItemType.Weapon;
-            bool isEquippable = def != null && (isWeapon || def.Type == ItemType.Equipment);
-            bool isUsable     = def != null && (def.Type == ItemType.Consumable
-                                             || def.Type == ItemType.Throwable
-                                             || def.Type == ItemType.Deployable);
 
-            if (_useButton != null)     _useButton.gameObject.SetActive(isUsable && !isEquipSlot);
-            if (_equipButton != null)   _equipButton.gameObject.SetActive(isEquippable && !isEquipSlot);
-            if (_unequipButton != null) _unequipButton.gameObject.SetActive(isEquipSlot);
-            if (_dropButton != null)    _dropButton.gameObject.SetActive(true);
+            bool isEquipSlot  = _currentSlotId.Type == UISlotType.Equipment
+                             || _currentSlotId.Type == UISlotType.Weapon;
+            bool isAttachSlot = _currentSlotId.Type == UISlotType.Attachment;
+
+            bool isWeapon      = def != null && def.Type == ItemType.Weapon;
+            bool isEquipment   = def != null && def.Type == ItemType.Equipment;
+            bool isConsumable  = def != null && def.Type == ItemType.Consumable;
+            bool isThrowable   = def != null && def.Type == ItemType.Throwable;
+            bool isDeployable  = def != null && def.Type == ItemType.Deployable;
+
+            // [Use]     — consumable, throwable (from inventory only)
+            SetVisible(_useButton,    (isConsumable || isThrowable) && !isEquipSlot && !isAttachSlot);
+
+            // [Deploy]  — deployable (from inventory only)
+            SetVisible(_deployButton, isDeployable && !isEquipSlot && !isAttachSlot);
+
+            // [Equip]   — weapon/equipment from inventory
+            SetVisible(_equipButton,  (isWeapon || isEquipment) && !isEquipSlot && !isAttachSlot);
+
+            // [Unequip] — weapon/equipment slots
+            SetVisible(_unequipButton, isEquipSlot);
+
+            // [Detach]  — attachment slots only
+            SetVisible(_detachButton,  isAttachSlot);
+
+            // [Drop]    — always visible; all slot types support drop-to-world
+            SetVisible(_dropButton, true);
+
+            // [Cancel]  — always
+            SetVisible(_cancelButton, true);
         }
 
+        private static void SetVisible(Button b, bool visible)
+        {
+            if (b != null) b.gameObject.SetActive(visible);
+        }
+
+        #endregion
+
         // ─────────────────────────────────────────────────────────────────────
-        //  Positioning (anchors to slot top-right, like tooltip)
-        // ─────────────────────────────────────────────────────────────────────
+        #region Positioning — auto-flip + screen-edge clamp
 
         private void PositionAt(RectTransform slotRect)
         {
             if (slotRect == null || _rootRect == null) return;
 
-            Canvas targetCanvas = _canvas;
-            if (targetCanvas == null)
-                targetCanvas = ComponentResolver.Find<Canvas>(_rootRect)
-                    .InParent()
-                    .InRootChildren()
-                    .OrLogWarning("[ItemContextMenu] Canvas not found")
-                    .Resolve();
-            if (targetCanvas == null) return;
+            Canvas canvas = ResolveCanvas();
+            if (canvas == null) return;
 
             Camera cam = null;
-            if (targetCanvas.renderMode == RenderMode.ScreenSpaceCamera ||
-                targetCanvas.renderMode == RenderMode.WorldSpace)
-                cam = targetCanvas.worldCamera ?? Camera.main;
+            if (canvas.renderMode == RenderMode.ScreenSpaceCamera ||
+                canvas.renderMode == RenderMode.WorldSpace)
+                cam = canvas.worldCamera ?? Camera.main;
 
-            var worldCorners = new Vector3[4];
-            slotRect.GetWorldCorners(worldCorners);
-            Vector2 screenPt = RectTransformUtility.WorldToScreenPoint(cam, worldCorners[2]); // top-right
+            var corners = new Vector3[4];
+            slotRect.GetWorldCorners(corners);
+            // corners[0]=BL, [1]=TL, [2]=TR, [3]=BR
+
+            ContextMenuSide side = _uiConfig?.ContextMenuPreferredSide ?? ContextMenuSide.Right;
+            float gap = _uiConfig?.ContextMenuGap ?? 8f;
+
+            // Preferred anchor: right = TR corner (corners[2]), left = TL (corners[1])
+            Vector3 preferredWorld = side == ContextMenuSide.Right ? corners[2] : corners[1];
 
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                targetCanvas.transform as RectTransform, screenPt, cam, out Vector2 local);
+                canvas.transform as RectTransform,
+                RectTransformUtility.WorldToScreenPoint(cam, preferredWorld),
+                cam, out Vector2 local);
 
-            _rootRect.anchoredPosition = local + _offset;
+            // Determine menu width to check screen-edge overflow
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_rootRect);
+            float menuW = _rootRect.rect.width;
+            float menuH = _rootRect.rect.height;
+            float canvasW = (canvas.transform as RectTransform)?.rect.width ?? Screen.width;
+            float canvasH = (canvas.transform as RectTransform)?.rect.height ?? Screen.height;
+            float halfW = canvasW * 0.5f;
+            float halfH = canvasH * 0.5f;
+
+            // Flip horizontal if preferred side overflows
+            float xPos;
+            if (side == ContextMenuSide.Right)
+            {
+                xPos = local.x + gap;
+                if (xPos + menuW > halfW) // clips right edge
+                    xPos = local.x - menuW - gap; // flip to left
+            }
+            else
+            {
+                xPos = local.x - menuW - gap;
+                if (xPos < -halfW) // clips left edge
+                    xPos = local.x + gap; // flip to right
+            }
+
+            // Vertical: align top of menu to top of slot, clamp so menu stays on screen
+            float yPos = local.y; // top-left start
+            if (yPos - menuH < -halfH)   // clips bottom
+                yPos = -halfH + menuH;
+            if (yPos > halfH)            // clips top
+                yPos = halfH;
+
+            _rootRect.pivot         = new Vector2(0f, 1f);
+            _rootRect.anchorMin     = new Vector2(0.5f, 0.5f);
+            _rootRect.anchorMax     = new Vector2(0.5f, 0.5f);
+            _rootRect.anchoredPosition = new Vector2(xPos, yPos);
         }
 
+        private Canvas ResolveCanvas()
+        {
+            if (_canvas != null) return _canvas;
+            return ComponentResolver.Find<Canvas>(_rootRect)
+                .InParent().InRootChildren()
+                .OrLogWarning("[ItemContextMenu] Canvas not found.")
+                .Resolve();
+        }
+
+        #endregion
+
         // ─────────────────────────────────────────────────────────────────────
-        //  Button Handlers
-        // ─────────────────────────────────────────────────────────────────────
+        #region Button Handlers
 
         private void OnUseClicked()
         {
-            if (_currentItem == null || _domainBridge?.Bridge == null) return;
-            _domainBridge.Bridge.SelectItem(_currentItem.InstanceID);
+            if (_currentItem == null || _bridge?.Bridge == null) return;
+
+            var def = ItemDatabase.GetDefinition(_currentItem.DefinitionID);
+            if (def != null && (def.Type == ItemType.Throwable || def.Type == ItemType.Deployable))
+            {
+                // Arm for aiming via selection system — transitions HUD to aim mode.
+                _bridge.Bridge.SelectItem(_currentItem.InstanceID);
+            }
+            else
+            {
+                // Consumable: use immediately via ItemUse system.
+                _bridge.Bridge.ItemUse.UseItem(_currentItem);
+            }
+            Hide();
+        }
+
+        private void OnDeployClicked()
+        {
+            if (_currentItem == null || _bridge?.Bridge == null) return;
+            _bridge.Bridge.SelectItem(_currentItem.InstanceID);
             Hide();
         }
 
         private void OnEquipClicked()
         {
-            if (_currentItem == null || _domainBridge?.Bridge == null) return;
+            if (_currentItem == null || _bridge?.Bridge == null) return;
             var def = ItemDatabase.GetDefinition(_currentItem.DefinitionID);
             if (def != null && def.Type == ItemType.Weapon)
-                _domainBridge.Bridge.EquipWeapon(_currentItem.InstanceID);
+                _bridge.Bridge.EquipWeapon(_currentItem.InstanceID);
             else
-                _domainBridge.Bridge.EquipItem(_currentItem.InstanceID);
+                _bridge.Bridge.EquipItem(_currentItem.InstanceID);
             Hide();
         }
 
         private void OnUnequipClicked()
         {
-            if (_currentItem == null || _domainBridge?.Bridge == null) return;
+            if (_currentItem == null || _bridge?.Bridge == null) return;
             if (_currentSlotId.Type == UISlotType.Weapon && _currentSlotId.WeaponSlot.HasValue)
-                _domainBridge.Bridge.UnequipWeapon(_currentSlotId.WeaponSlot.Value);
-            else if (_currentSlotId.Type == UISlotType.Equipment && _currentSlotId.EquipmentSlot.HasValue)
-                _domainBridge.Bridge.UnequipItem(_currentSlotId.EquipmentSlot.Value);
+                _bridge.Bridge.UnequipWeapon(_currentSlotId.WeaponSlot.Value);
+            else if (_currentSlotId.EquipmentSlot.HasValue)
+                _bridge.Bridge.UnequipItem(_currentSlotId.EquipmentSlot.Value);
+            Hide();
+        }
+
+        private void OnDetachClicked()
+        {
+            if (_currentItem == null || _bridge?.Bridge == null) return;
+
+            // Attachment slots carry parentInstanceID and slot index in their UISlotId.
+            if (_currentSlotId.Type == UISlotType.Attachment &&
+                !string.IsNullOrEmpty(_currentSlotId.ParentInstanceID) &&
+                _currentSlotId.Index >= 0)
+            {
+                _bridge.Bridge.Attachment.DetachItem(_currentSlotId.ParentInstanceID, _currentSlotId.Index);
+            }
+            else
+            {
+                Debug.LogWarning("[ItemContextMenu] Detach called but slot has no valid parentInstanceID.");
+            }
             Hide();
         }
 
         private void OnDropClicked()
         {
-            if (_currentItem == null || _domainBridge?.Bridge == null) return;
+            if (_currentItem == null || _bridge?.Bridge == null) return;
 
             var item   = _currentItem;
-            var bridge = _domainBridge;
-            Hide(); // hide before dialog in case it blocks input
+            var bridge = _bridge;
+            var slotId = _currentSlotId;
 
+            // Do NOT hide before dialog if qty > 1 — we must re-show menu on cancel.
             if (_dropDialog != null && item.Quantity > 1)
             {
-                void HandleConfirmed(ItemInstance confirmed, int qty)
-                {
-                    _dropDialog.OnDropConfirmed -= HandleConfirmed;
-                    _dropDialog.OnCanceled      -= HandleCanceled;
-                    if (confirmed?.InstanceID == item.InstanceID)
-                        bridge.Bridge.DropItem(item.InstanceID, qty);
-                }
-                void HandleCanceled()
-                {
-                    _dropDialog.OnDropConfirmed -= HandleConfirmed;
-                    _dropDialog.OnCanceled      -= HandleCanceled;
-                }
-                _dropDialog.OnDropConfirmed += HandleConfirmed;
-                _dropDialog.OnCanceled      += HandleCanceled;
-                _dropDialog.Show(item);
+                _dropDialog.Show(
+                    item,
+                    qty =>
+                    {
+                        // Confirmed: route to the correct drop API based on slot type.
+                        CommitDrop(bridge, slotId, item, qty);
+                        Hide();
+                    },
+                    () =>
+                    {
+                        // Cancelled: dialog closes but context menu remains visible.
+                        // Nothing to do — menu already shown.
+                    });
             }
             else
             {
-                bridge.Bridge.DropItem(item.InstanceID, 1);
+                CommitDrop(bridge, slotId, item, item.Quantity);
+                Hide();
             }
         }
+
+        private static void CommitDrop(UIDomainBridge bridge, UISlotId slotId, ItemInstance item, int qty)
+        {
+            switch (slotId.Type)
+            {
+                case UISlotType.Weapon when slotId.WeaponSlot.HasValue:
+                    // Unequip to inventory first, then drop from inventory.
+                    bridge.Bridge.UnequipWeapon(slotId.WeaponSlot.Value);
+                    bridge.Bridge.DropItem(item.InstanceID, qty);
+                    break;
+
+                case UISlotType.Equipment when slotId.EquipmentSlot.HasValue:
+                    // Unequip to inventory (detaches attachments if any), then drop.
+                    bridge.Bridge.UnequipItem(slotId.EquipmentSlot.Value);
+                    bridge.Bridge.DropItem(item.InstanceID, qty);
+                    break;
+
+                case UISlotType.Attachment:
+                    // Detach to inventory first, then drop.
+                    if (!string.IsNullOrEmpty(slotId.ParentInstanceID) && slotId.Index >= 0)
+                        bridge.Bridge.Attachment.DetachItem(slotId.ParentInstanceID, slotId.Index);
+                    bridge.Bridge.DropItem(item.InstanceID, qty);
+                    break;
+
+                default:
+                    // Inventory slot: drop directly.
+                    bridge.Bridge.DropItem(item.InstanceID, qty);
+                    break;
+            }
+        }
+
+        private void OnCancelClicked() => Hide();
+
+        #endregion
     }
 }

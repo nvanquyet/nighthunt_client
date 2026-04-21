@@ -32,6 +32,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public IGameplayBridge Bridge => _bridge;
         public NetworkPlayer CurrentPlayer => _currentPlayer;
 
+        /// <summary>
+        /// True when the currently viewed player is owned by the local machine.
+        /// Used by InventoryScreen to block all interactions in spectator mode.
+        /// </summary>
+        public bool IsCurrentPlayerOwner => _currentPlayer != null && _currentPlayer.IsOwner;
+
         #region UI Events
 
         public event Action<UISlotId, UISlotState> OnInventorySlotChanged;
@@ -42,6 +48,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         public event Action<PlayerStatType, float, float> OnStatChanged;
         public event Action<float, float> OnWeightChanged;
+
+        /// <summary>
+        /// Fires whenever the overweight state changes.
+        /// Parameters: (isOverweight, currentRatio)
+        /// Subscribe in PlayerStatPanel to update the weight bar color and tier label.
+        /// </summary>
+        public event Action<bool, float> OnOverweightChanged;
 
         #endregion
 
@@ -456,6 +469,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private void HandleWeightChanged(float current, float capacity)
         {
             OnWeightChanged?.Invoke(current, capacity);
+
+            // Fire overweight event so UI weight bar can react to threshold changes.
+            float ratio = capacity > 0f ? current / capacity : 0f;
+            bool isOverweight = ratio >= 1.0f;
+            OnOverweightChanged?.Invoke(isOverweight, ratio);
         }
 
         #endregion

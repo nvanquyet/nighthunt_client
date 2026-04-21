@@ -2,17 +2,43 @@ using UnityEngine;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 
+/// <summary>Controls how the item tooltip positions itself after appearing.</summary>
+public enum TooltipMode
+{
+    /// <summary>Tooltip tracks the mouse cursor every frame.</summary>
+    FollowMouse,
+    /// <summary>Tooltip appears at the slot's position and stays there.</summary>
+    SnapToSlot,
+    /// <summary>Tooltip always uses the fixed anchored position defined in UISlotLayoutConfig.</summary>
+    Fixed
+}
+
+/// <summary>Which side of the selected slot the context menu prefers to appear on.</summary>
+public enum ContextMenuSide
+{
+    Right,
+    Left
+}
+
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Unified UI layout config cho tất cả slot types.
-    /// Reference InventoryConfig cho gameplay data, chỉ chứa UI-specific settings (prefabs, backgrounds).
+    /// Unified UI layout config for all slot types.
+    /// References InventoryConfig for gameplay data; contains only UI-specific settings.
+    ///
+    /// A single shared asset is assigned to InventoryScreen and loaded automatically.
+    /// The static <see cref="Instance"/> accessor is populated when the asset is loaded (OnEnable).
     /// </summary>
     [CreateAssetMenu(
         fileName = "UISlotLayoutConfig",
         menuName = "NightHunt/UI/Slot Layout Config")]
     public class UISlotLayoutConfig : ScriptableObject
     {
+        // ── Singleton accessor ────────────────────────────────────────────────
+        private static UISlotLayoutConfig _instance;
+        /// <summary>Global accessor. Valid once the asset has been loaded by Unity.</summary>
+        public static UISlotLayoutConfig Instance => _instance;
+        private void OnEnable() => _instance = this;
         [Header("Core Config Reference")]
         [Tooltip("Reference to core InventoryConfig for all gameplay data")]
         public InventoryConfig InventoryConfig;
@@ -92,6 +118,75 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Header("Slot Dimensions")]
         [Tooltip("Default slot size in pixels used by inventory grids.")]
         public Vector2 DefaultSlotSize = new Vector2(100f, 100f);
+
+        // ── Tooltip ──────────────────────────────────────────────────────────
+
+        [Header("Tooltip")]
+        [Tooltip("How the tooltip positions itself after Show() is called. " +
+                 "FollowMouse = tracks cursor every frame; " +
+                 "SnapToSlot  = appears at the slot and stays there; " +
+                 "Fixed       = always at TooltipFixedPosition.")]
+        public TooltipMode TooltipMode = TooltipMode.FollowMouse;
+
+        [Tooltip("Pixel offset applied to the tooltip from the mouse or slot anchor.")]
+        public Vector2 TooltipOffset = new Vector2(16f, -16f);
+
+        [Tooltip("Used only when TooltipMode = Fixed. Anchored position within the parent canvas.")]
+        public Vector2 TooltipFixedPosition = new Vector2(200f, -200f);
+
+        [Tooltip("If true: tooltip remains visible while the player is dragging an item. " +
+                 "If false: tooltip is hidden as soon as a drag begins.")]
+        public bool ShowTooltipDuringDrag = false;
+
+        // ── Context Menu ─────────────────────────────────────────────────────
+
+        [Header("Context Menu")]
+        [Tooltip("Preferred side for the context menu relative to the selected slot. " +
+                 "Auto-flips to the opposite side if the preferred side would clip the screen edge.")]
+        public ContextMenuSide ContextMenuPreferredSide = ContextMenuSide.Right;
+
+        [Tooltip("Pixel gap between the slot edge and the context menu panel.")]
+        public float ContextMenuGap = 8f;
+
+        [Tooltip("If true: beginning a drag immediately hides the context menu.")]
+        public bool HideContextMenuOnDragStart = true;
+
+        // ── Drag & Drop ───────────────────────────────────────────────────────
+
+        [Header("Drag & Drop")]
+        [Tooltip("Duration (seconds) of the snap-back animation when a drag is cancelled " +
+                 "or dropped on an invalid slot.")]
+        [Range(0f, 0.5f)]
+        public float GhostSnapBackDuration = 0.18f;
+
+        // ── Attachment Slot Highlight ─────────────────────────────────────────
+
+        [Header("Attachment Slot Highlight")]
+        [Tooltip("Color overlay applied to compatible attachment slots when the player is dragging an attachment.")]
+        public Color AttachmentSlotHighlightColor = new Color(1f, 0.85f, 0.1f, 0.7f);
+
+        [Tooltip("Speed of the pulse animation on highlighted attachment slots (cycles per second).")]
+        [Range(0.5f, 8f)]
+        public float AttachmentHighlightPulseSpeed = 2.5f;
+
+        [Tooltip("Per-slot-type icon displayed when the attachment slot is empty. " +
+                 "If no entry matches the slot type, falls back to the generic Attachment icon from InventoryConfig.")]
+        public AttachmentSlotIconConfig[] AttachmentSlotIconConfigs;
+
+        /// <summary>
+        /// Returns the icon configured for <paramref name="slotType"/>, or null if not found.
+        /// Callers may fall back to <c>InventoryConfig.GetDefaultEmptyIcon(UISlotType.Attachment)</c>.
+        /// </summary>
+        public Sprite GetAttachmentSlotIcon(AttachmentSlotType slotType)
+        {
+            if (AttachmentSlotIconConfigs == null) return null;
+            foreach (var cfg in AttachmentSlotIconConfigs)
+            {
+                if (cfg.SlotType == slotType && cfg.Icon != null)
+                    return cfg.Icon;
+            }
+            return null;
+        }
     }
 
     /// <summary>

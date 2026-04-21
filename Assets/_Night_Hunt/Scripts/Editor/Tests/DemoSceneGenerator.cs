@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using TMPro;
 using UnityEditor;
@@ -1411,11 +1411,16 @@ namespace NightHunt.Editor.Tests
             var invComp = invPanel.AddComponent<GameplaySystems.UI.Inventory.InventoryScreen>();
             var invSO   = new SerializedObject(invComp);
             SetSOObj(invSO, "_inventoryGridRoot", gridRootRT);
-            SetSOObj(invSO, "_equipmentRoot",     eqRootRT);
-            SetSOObj(invSO, "_weaponRoot",        wpRootRT);
-            SetSOObj(invSO, "_trashSlotRoot",     trashRtRT);
             SetSOObj(invSO, "_sortButton",        sortBtn);
-            SetSOObj(invSO, "playerStatUIPanel",  statPanelComp);
+            SetSOObj(invSO, "_playerStatPanel",   statPanelComp);
+
+            // WeaponEquipmentPanel handles weapon/equipment cards
+            var wepComp = invPanel.AddComponent<GameplaySystems.UI.Inventory.WeaponEquipmentPanel>();
+            var wepSO   = new SerializedObject(wepComp);
+            SetSOObj(wepSO, "_weaponCardContainer",    wpRootRT);
+            SetSOObj(wepSO, "_equipmentCardContainer", eqRootRT);
+            wepSO.ApplyModifiedProperties();
+            SetSOObj(invSO, "_weaponEquipmentPanel", wepComp);
 
             // ItemContextMenu (floating popup, hidden, own Canvas overlay)
             var ctxGo = new GameObject("ItemContextMenu"); ctxGo.transform.SetParent(invPanel.transform, false); ctxGo.SetActive(false);
@@ -1441,22 +1446,7 @@ namespace NightHunt.Editor.Tests
             ctxSO.ApplyModifiedProperties();
             SetSOObj(invSO, "_itemContextMenu", ctxComp);
 
-            // AttachmentPanel (hidden side panel for weapon attachments)
-            var attGo = new GameObject("AttachmentPanel"); attGo.transform.SetParent(invPanel.transform, false); attGo.SetActive(false);
-            var attRT = attGo.AddComponent<RectTransform>(); attRT.anchorMin = new Vector2(1f,0f); attRT.anchorMax = new Vector2(1f,1f); attRT.pivot = new Vector2(1f,0.5f); attRT.offsetMin = new Vector2(-320f,0f); attRT.offsetMax = Vector2.zero;
-            attGo.AddComponent<Image>().color = new Color(0.07f,0.07f,0.1f,0.97f);
-            var attLblGo = new GameObject("AttachLabel"); attLblGo.transform.SetParent(attGo.transform, false);
-            var attLblRT = attLblGo.AddComponent<RectTransform>(); attLblRT.anchorMin = new Vector2(0f,1f); attLblRT.anchorMax = new Vector2(1f,1f); attLblRT.pivot = new Vector2(0.5f,1f); attLblRT.offsetMin = new Vector2(8f,-28f); attLblRT.offsetMax = new Vector2(-8f,0f);
-            var attLblTMP = attLblGo.AddComponent<TextMeshProUGUI>(); attLblTMP.text = "ATTACHMENTS"; attLblTMP.fontSize = 13f; attLblTMP.fontStyle = FontStyles.Bold; attLblTMP.color = new Color(0.6f,0.8f,1f); attLblTMP.alignment = TextAlignmentOptions.Center;
-            var attSlotsGo = new GameObject("SlotsRoot"); attSlotsGo.transform.SetParent(attGo.transform, false);
-            var attSlotsRT = attSlotsGo.AddComponent<RectTransform>(); attSlotsRT.anchorMin = Vector2.zero; attSlotsRT.anchorMax = Vector2.one; attSlotsRT.offsetMin = new Vector2(8f,8f); attSlotsRT.offsetMax = new Vector2(-8f,-32f);
-            attSlotsGo.AddComponent<VerticalLayoutGroup>().spacing = 4f;
-            var attComp = attGo.AddComponent<GameplaySystems.UI.Inventory.AttachmentPanel>();
-            var attSO   = new SerializedObject(attComp);
-            SetSOObj(attSO, "_slotsRoot", attSlotsRT);
-            SetSOObj(attSO, "_panelRoot", attGo);
-            attSO.ApplyModifiedProperties();
-            SetSOObj(invSO, "_attachmentPanel", attComp);
+            // AttachmentPanel (removed, functionality moved to WeaponEquipmentPanel)
 
             // ItemTooltip (floating tooltip, hidden)
             var tipGo = new GameObject("ItemTooltip"); tipGo.transform.SetParent(invPanel.transform, false); tipGo.SetActive(false);

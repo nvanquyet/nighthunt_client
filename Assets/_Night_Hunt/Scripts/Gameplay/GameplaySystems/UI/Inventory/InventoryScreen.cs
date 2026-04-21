@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Data;
@@ -10,402 +11,275 @@ using NightHunt.Utilities;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Màn hình Inventory chính: spawn các slot từ config
-    /// và bind với UIDomainBridge.
+    /// Thin mediator for the Inventory screen.
+    ///
+    /// RESPONSIBILITIES:
+    ///   - Build the slot grid once and keep it alive between player changes.
+    ///   - Route hover / press / drag events to the correct sub-panels.
+    ///   - Enforce OWNER-ONLY interaction: lock all slots in spectator mode.
+    ///   - Apply double-click shortcuts (equip / use-immediately for consumable/throwable/deployable).
+    ///
+    /// NO business logic here. All decisions are delegated to UIDomainBridge or child panels.
     /// </summary>
     public class InventoryScreen : MonoBehaviour
     {
-        [Header("Configs")] [SerializeField] private UISlotLayoutConfig _uiConfig;
+        // ── Inspector ─────────────────────────────────────────────────────────
 
-        [Header("Player Stats")] [SerializeField]
-        private PlayerStatUIPanel playerStatUIPanel;
+        [Header("Config")]
+        [SerializeField] private UISlotLayoutConfig _uiConfig;
 
-        [Header("Slot Settings")] [Tooltip("Kích thước mặc định cho các slot (Width x Height)")] [SerializeField]
-        private Vector2 _slotSize = new Vector2(100, 100);
+        [Header("Roots")]
+        [SerializeField] private RectTransform _inventoryGridRoot;
 
-        [Header("Roots")] [SerializeField] private RectTransform _inventoryGridRoot;
-        [SerializeField] private RectTransform _equipmentRoot;
-        [SerializeField] private RectTransform _weaponRoot;
-        [SerializeField] private RectTransform _trashSlotRoot;
+        [Header("Prefabs — Inventory")]
+        // No trash slot. No DropArea. World-drop = drag outside panel.
 
-        [Header("Trash Slot")] [Tooltip("Prefab cho trash slot (setup thủ công trong Inspector)")] [SerializeField]
-        private GameObject _trashSlotPrefab;
+        [Header("Buttons")]
+        [SerializeField] private Button _sortButton;
 
-        private readonly Dictionary<UISlotId, ItemSlotView> _slotViews = new Dictionary<UISlotId, ItemSlotView>();
-        private UIDomainBridge _domainBridge;
-        private bool _isLayoutBuilt = false; // Flag để track đã build layout chưa
-
-        [Header("Buttons")] [SerializeField] private UnityEngine.UI.Button _sortButton;
-
-        [Header("Item Context Menu")]
-        [Tooltip("Floating context menu shown when an item slot is selected. Lives outside slot prefabs.")]
+        [Header("Sub-panels")]
+        [Tooltip("Manages weapon + equipment cards with their inline attachment slots.")]
+        [SerializeField] private WeaponEquipmentPanel _weaponEquipmentPanel;
+        [Tooltip("Floating context menu — lives outside slot prefabs.")]
         [SerializeField] private ItemContextMenu _itemContextMenu;
+        [SerializeField] private ItemTooltip     _itemTooltip;
+        [SerializeField] private DropQuantityDialog _dropQuantityDialog;
+        [SerializeField] private PlayerStatUIPanel  _playerStatPanel;
 
-        [Header("Attachment Panel")] [SerializeField]
-        private AttachmentPanel _attachmentPanel;
+        [Header("Spectator")]
+        [Tooltip("Label displayed when viewing another player's inventory.")]
+        [SerializeField] private GameObject _spectatorBanner;
+        [SerializeField] private TMPro.TextMeshProUGUI _spectatorLabel;
 
-        [Header("Tooltip")] [SerializeField] private ItemTooltip _itemTooltip;
+        // ── Runtime ───────────────────────────────────────────────────────────
 
-        [Header("Drop Quantity Dialog")] [SerializeField]
-        private DropQuantityDialog _dropQuantityDialog;
+        private readonly Dictionary<UISlotId, ItemSlotView> _slotViews = new();
+        private UIDomainBridge _domainBridge;
+        private bool _layoutBuilt;
 
+        // Interaction state
         private ItemSlotView _hoveredSlot;
         private ItemSlotView _selectedSlot;
 
+        /// <summary>
+        /// True when the inventory is displaying the LOCAL player's inventory
+        /// and the player may interact with it.
+        /// False in spectator mode — all slots are locked.
+        /// </summary>
+        private bool CanInteract => _domainBridge != null && _domainBridge.IsCurrentPlayerOwner;
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Unity Lifecycle
+
         private void Awake()
         {
-            if (_uiConfig != null && _slotSize == new Vector2(100f, 100f))
-                _slotSize = _uiConfig.DefaultSlotSize;
+            if (_uiConfig != null && _uiConfig.DefaultSlotSize != default)
+                return; // config driven — slot size comes from config
         }
 
-        private PlayerStatUIPanel StatPanel
+        private void OnDestroy()
         {
-            get
-            {
-                if (playerStatUIPanel == null)
-                {
-                    playerStatUIPanel = ComponentResolver.Find<PlayerStatUIPanel>(this)
-                        .OnSelf()
-                        .InChildren()
-                        .InParent()
-                        .OrLogWarning("[Auto] PlayerStatUIPanel not found")
-                        .Resolve();
-                    if (playerStatUIPanel == null)
-                    {
-                        Debug.LogWarning("[InventoryScreen] PlayerStatUIPanel not found in children!");
-                    }
-                }
+            HookBridgeEvents(false);
+            HookSlotEvents(false);
 
-                return playerStatUIPanel;
-            }
+            if (_sortButton != null)
+                _sortButton.onClick.RemoveListener(OnSortClicked);
         }
 
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Public API
+
+        /// <summary>
+        /// Called once by UIRootController when the inventory screen is first opened.
+        /// </summary>
         public void Initialize(UIDomainBridge domainBridge)
         {
             _domainBridge = domainBridge;
 
-            // Initialize AttachmentPanel nếu có
-            if (_attachmentPanel != null && _uiConfig != null)
-            {
-                var attachmentSystem = GetAttachmentSystem();
-                var gameplayBridge = GetGameplayBridge();
+            InitSubPanels();
+            _weaponEquipmentPanel?.Initialize(domainBridge, _uiConfig);
 
-                if (attachmentSystem != null && gameplayBridge != null)
-                {
-                    _attachmentPanel.Initialize(_uiConfig, attachmentSystem, gameplayBridge);
-                }
-                else
-                {
-                    Debug.LogWarning(
-                        "[InventoryScreen] AttachmentSystem or GameplayBridge not found - AttachmentPanel not initialized");
-                }
-            }
-
-            StatPanel?.Initialize(domainBridge);
-            // Initialize ItemTooltip nếu có
-            if (_itemTooltip != null)
-            {
-                _itemTooltip.Initialize(_domainBridge);
-            }
-
-            // Chỉ build layout lần đầu tiên
-            if (!_isLayoutBuilt)
+            if (!_layoutBuilt)
             {
                 BuildLayout();
-                _isLayoutBuilt = true;
+                _layoutBuilt = true;
             }
             else
             {
-                // Đã có layout rồi → chỉ refresh state từ bridge
                 RefreshAllSlots();
             }
 
             HookBridgeEvents(true);
+            ApplyOwnerLock();
 
             if (_sortButton != null)
                 _sortButton.onClick.AddListener(OnSortClicked);
         }
 
         /// <summary>
-        /// Refresh tất cả slots với state mới từ bridge (khi đổi player)
+        /// Called by UIRootController when the spectated player changes.
         /// </summary>
         public void RefreshForNewPlayer(UIDomainBridge domainBridge)
         {
-            // FIX: Unsubscribe from the OLD bridge BEFORE replacing the reference.
-            // Previously _domainBridge was replaced first, so HookBridgeEvents(false) silently
-            // unsubscribed from the NEW bridge (a no-op) while old subscriptions were leaked.
             HookBridgeEvents(false);
-
             _domainBridge = domainBridge;
-
-            // Update AttachmentPanel và Tooltip với bridge mới
-            if (_attachmentPanel != null && _uiConfig != null)
-            {
-                var attachmentSystem = GetAttachmentSystem();
-                var gameplayBridge = GetGameplayBridge();
-
-                if (attachmentSystem != null && gameplayBridge != null)
-                {
-                    _attachmentPanel.Initialize(_uiConfig, attachmentSystem, gameplayBridge);
-                }
-            }
-
-            StatPanel?.RefreshForNewPlayer(domainBridge);
-            if (_itemTooltip != null)
-            {
-                _itemTooltip.Initialize(_domainBridge);
-            }
-
-            // Subscribe to new bridge events
+            InitSubPanels();
+            _weaponEquipmentPanel?.Initialize(domainBridge, _uiConfig);
             HookBridgeEvents(true);
-
-            // Refresh tất cả slots với state mới
             RefreshAllSlots();
+            ApplyOwnerLock();
         }
 
-        private void OnDestroy()
-        {
-            HookBridgeEvents(false);
-            HookSlotHoverEvents(false);
+        #endregion
 
-            if (_sortButton != null)
-                _sortButton.onClick.RemoveListener(OnSortClicked);
-        }
+        // ─────────────────────────────────────────────────────────────────────
+        #region Layout
 
-        /// <summary>
-        /// Build layout - chỉ spawn slots lần đầu tiên
-        /// </summary>
         private void BuildLayout()
         {
-            // Đảm bảo không spawn lại nếu đã có slots
             if (_slotViews.Count > 0)
             {
                 Debug.LogWarning("[InventoryScreen] BuildLayout called but slots already exist. Skipping.");
                 return;
             }
 
-            _slotViews.Clear();
+            // Inventory grid slots
+            SpawnSlotGroup(_inventoryGridRoot, UISlotType.Inventory, _uiConfig?.InventoryTotalSlots ?? 0,
+                i => UISlotId.Inventory(i));
 
-            if (_uiConfig == null || _uiConfig.InventoryConfig == null) return;
+            // Weapon + equipment cards (with inline attachment slots) are managed by WeaponEquipmentPanel.
+            // No weapon/equipment/attachment slots are spawned here.
 
-            // Inventory slots
-            if (_inventoryGridRoot != null)
+            ForceRebuildLayouts();
+            HookSlotEvents(true);
+        }
+
+        private void SpawnSlotGroup(
+            RectTransform root, UISlotType slotType, int count,
+            System.Func<int, UISlotId> idFactory)
+        {
+            if (root == null || count <= 0) return;
+            var prefab = _uiConfig?.GetSlotPrefab(slotType);
+            if (prefab == null) return;
+
+            for (int i = 0; i < count; i++)
             {
-                var prefab = _uiConfig.GetSlotPrefab(UISlotType.Inventory);
-                if (prefab != null)
-                {
-                    for (int i = 0; i < _uiConfig.InventoryTotalSlots; i++)
-                    {
-                        var go = Instantiate(prefab, _inventoryGridRoot, false);
-                        SetupSlotRectTransform(go);
-                        var view = ComponentResolver.Find<ItemSlotView>(go)
-                            .OnSelf()
-                            .InChildren()
-                            .OrLogWarning("[Auto] ItemSlotView not found")
-                            .Resolve();
-                        if (view != null)
-                        {
-                            var id = UISlotId.Inventory(i);
-                            view.Initialize(_uiConfig, id);
-                            // Force reset về empty state để đảm bảo icon set đúng
-                            view.SetEmptyState();
-                            _slotViews[id] = view;
-                            DragDropController.Instance?.RegisterSlotView(view);
-                        }
-                    }
-                }
-            }
+                var go = Instantiate(prefab, root, false);
+                SetupSlotRect(go);
+                var view = ResolveSlotView(go);
+                if (view == null) continue;
 
-            // Equipment slots - spawn vào _equipmentRoot (anchor được handle ở phần khác)
-            if (_equipmentRoot != null && _uiConfig.InventoryConfig.EquipmentConfig != null)
+                var id = idFactory(i);
+                view.Initialize(_uiConfig, id);
+                view.SetEmptyState();
+                _slotViews[id] = view;
+                DragDropController.Instance?.RegisterSlotView(view);
+            }
+        }
+
+        private void SpawnSingleSlot(GameObject prefab, RectTransform root, UISlotId id)
+        {
+            if (root == null || prefab == null) return;
+            var go = Instantiate(prefab, root, false);
+            SetupSlotRect(go);
+            var view = ResolveSlotView(go);
+            if (view == null) return;
+            view.Initialize(_uiConfig, id);
+            view.SetEmptyState();
+            _slotViews[id] = view;
+            DragDropController.Instance?.RegisterSlotView(view);
+        }
+
+        private static ItemSlotView ResolveSlotView(GameObject go)
+            => ComponentResolver.Find<ItemSlotView>(go)
+                .OnSelf().InChildren()
+                .OrLogWarning("[InventoryScreen] ItemSlotView not found on slot prefab.")
+                .Resolve();
+
+        private void SetupSlotRect(GameObject slotGO)
+        {
+            var rt = slotGO.GetComponent<RectTransform>();
+            if (rt == null) return;
+            if (!slotGO.activeSelf) slotGO.SetActive(true);
+
+            rt.localScale    = Vector3.one;
+            rt.localRotation = Quaternion.identity;
+            rt.localPosition = Vector3.zero;
+            rt.anchorMin     = new Vector2(0.5f, 0.5f);
+            rt.anchorMax     = new Vector2(0.5f, 0.5f);
+            rt.pivot         = new Vector2(0.5f, 0.5f);
+
+            var slotSize = _uiConfig != null ? _uiConfig.DefaultSlotSize : new Vector2(100f, 100f);
+            rt.sizeDelta  = slotSize;
+
+            var parentLayout = rt.parent?.GetComponent<UnityEngine.UI.LayoutGroup>();
+            if (parentLayout != null)
             {
-                var prefab = _uiConfig.GetSlotPrefab(UISlotType.Equipment);
-                if (prefab != null)
-                {
-                    foreach (var equipmentSlot in _uiConfig.InventoryConfig.EquipmentConfig)
-                    {
-                        var go = Instantiate(prefab, _equipmentRoot, false);
-                        SetupSlotRectTransform(go);
-                        var view = ComponentResolver.Find<ItemSlotView>(go)
-                            .OnSelf()
-                            .InChildren()
-                            .OrLogWarning("[Auto] ItemSlotView not found")
-                            .Resolve();
-                        if (view != null)
-                        {
-                            var id = UISlotId.Equipment(equipmentSlot.Type);
-                            view.Initialize(_uiConfig, id);
-                            // Force reset về empty state để đảm bảo icon set đúng
-                            view.SetEmptyState();
-                            _slotViews[id] = view;
-                            DragDropController.Instance?.RegisterSlotView(view);
-                        }
-                    }
-                }
+                var le = slotGO.GetComponent<UnityEngine.UI.LayoutElement>()
+                      ?? slotGO.AddComponent<UnityEngine.UI.LayoutElement>();
+                le.preferredWidth  = slotSize.x;
+                le.preferredHeight = slotSize.y;
+                le.minWidth        = slotSize.x * 0.5f;
+                le.minHeight       = slotSize.y * 0.5f;
+                le.flexibleWidth   = 0f;
+                le.flexibleHeight  = 0f;
             }
+        }
 
-            // Weapon slots
-            if (_weaponRoot != null && _uiConfig.InventoryConfig.WeaponConfig != null)
-            {
-                var prefab = _uiConfig.GetSlotPrefab(UISlotType.Weapon);
-                if (prefab != null)
-                {
-                    foreach (var weaponSlot in _uiConfig.InventoryConfig.WeaponConfig)
-                    {
-                        var go = Instantiate(prefab, _weaponRoot, false);
-                        SetupSlotRectTransform(go);
-                        var view = ComponentResolver.Find<ItemSlotView>(go)
-                            .OnSelf()
-                            .InChildren()
-                            .OrLogWarning("[Auto] ItemSlotView not found")
-                            .Resolve();
-                        if (view != null)
-                        {
-                            var id = UISlotId.Weapon(weaponSlot.Type);
-                            view.Initialize(_uiConfig, id);
-                            // Force reset về empty state để đảm bảo icon set đúng
-                            view.SetEmptyState();
-                            _slotViews[id] = view;
-                            DragDropController.Instance?.RegisterSlotView(view);
-                        }
-                    }
-                }
-            }
-
-            // Trash Slot
-            if (_trashSlotRoot != null && _trashSlotPrefab != null)
-            {
-                var go = Instantiate(_trashSlotPrefab, _trashSlotRoot, false);
-                // Không gọi SetupSlotRectTransform() - giữ nguyên anchor/position từ prefab
-
-                var view = ComponentResolver.Find<ItemSlotView>(go)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] ItemSlotView not found")
-                    .Resolve();
-                if (view != null)
-                {
-                    var id = UISlotId.DropArea();
-                    view.Initialize(_uiConfig, id);
-                    view.SetEmptyState();
-                    _slotViews[id] = view;
-                    DragDropController.Instance?.RegisterSlotView(view);
-                }
-
-                go.gameObject.SetActive(true); // Activate after initialization to avoid showing uninitialized values
-            }
-
-            // Force rebuild layout sau on spawn tất cả slots
+        private void ForceRebuildLayouts()
+        {
             if (_inventoryGridRoot != null)
                 UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_inventoryGridRoot);
-            if (_equipmentRoot != null)
-                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_equipmentRoot);
-            if (_weaponRoot != null)
-                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_weaponRoot);
-            if (_trashSlotRoot != null)
-                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_trashSlotRoot);
-
-            // Hook hover events sau on spawn tất cả slots
-            HookSlotHoverEvents(true);
         }
 
-        /// <summary>
-        /// Setup RectTransform cho slot để tránh bị collapse trong Layout Group
-        /// </summary>
-        private void SetupSlotRectTransform(GameObject slotGO)
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Sub-panel Init
+
+        private void InitSubPanels()
         {
-            var rectTransform = ComponentResolver.Find<RectTransform>(slotGO)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] RectTransform not found")
-                .Resolve();
-            if (rectTransform == null) return;
-
-            // Đảm bảo GameObject active để RectTransform có thể setup
-            if (!slotGO.activeSelf)
-            {
-                slotGO.SetActive(true);
-            }
-
-            // Reset về identity transform
-            rectTransform.localScale = Vector3.one;
-            rectTransform.localRotation = Quaternion.identity;
-            rectTransform.localPosition = Vector3.zero;
-
-            // Set anchor và pivot về center để dễ layout
-            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            rectTransform.pivot = new Vector2(0.5f, 0.5f);
-
-            // LUÔN set sizeDelta trước (ngay cả khi có Layout Group)
-            // Vì một số Layout Group dùng sizeDelta làm base size
-            // Force set size ngay lập tức, không check điều kiện
-            rectTransform.sizeDelta = _slotSize;
-
-            // Nếu parent có Layout Group, cần thêm LayoutElement
-            var parentLayoutGroup = ComponentResolver.Find<UnityEngine.UI.LayoutGroup>(rectTransform.parent)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] UnityEngine.UI.LayoutGroup not found")
-                .Resolve();
-            if (parentLayoutGroup != null)
-            {
-                // Add LayoutElement với preferred size nếu not yet available
-                var layoutElement = ComponentResolver.Find<UnityEngine.UI.LayoutElement>(slotGO)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] UnityEngine.UI.LayoutElement not found")
-                    .Resolve();
-                if (layoutElement == null)
-                {
-                    layoutElement = slotGO.AddComponent<UnityEngine.UI.LayoutElement>();
-                }
-
-                // LUÔN set preferred size (override để đảm bảo không bị 0)
-                // Layout Group sẽ dùng value này để layout
-                layoutElement.preferredWidth = _slotSize.x;
-                layoutElement.preferredHeight = _slotSize.y;
-
-                // Set min size để đảm bảo không collapse (50% của preferred size)
-                layoutElement.minWidth = _slotSize.x * 0.5f;
-                layoutElement.minHeight = _slotSize.y * 0.5f;
-
-                // Nếu Layout Group có Child Force Expand, cũng set flexible
-                var horizontalLayout = parentLayoutGroup as UnityEngine.UI.HorizontalLayoutGroup;
-                var verticalLayout = parentLayoutGroup as UnityEngine.UI.VerticalLayoutGroup;
-                var gridLayout = parentLayoutGroup as UnityEngine.UI.GridLayoutGroup;
-
-                if (horizontalLayout != null || verticalLayout != null)
-                {
-                    // Horizontal/Vertical Layout Group có thể dùng flexible size
-                    layoutElement.flexibleWidth = 0f; // Không expand
-                    layoutElement.flexibleHeight = 0f; // Không expand
-                }
-                else if (gridLayout != null)
-                {
-                    // Grid Layout Group dùng cell size, không cần flexible
-                    // Nhưng vẫn cần preferred size để tránh collapse
-                }
-            }
+            _playerStatPanel?.Initialize(_domainBridge);
+            _itemTooltip?.Initialize(_domainBridge);
         }
 
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Owner / Spectator Lock
+
         /// <summary>
-        /// Refresh tất cả slots với state mới từ bridge
-        /// Bridge sẽ tự động push snapshot qua events, nhưng ta cũng có thể force refresh ở đây
+        /// Applies or removes the spectator read-only lock on every slot
+        /// and shows/hides the spectator banner.
         /// </summary>
-        private void RefreshAllSlots()
+        private void ApplyOwnerLock()
         {
-            // Clear all slot visuals first
+            bool locked = !CanInteract;
+
             foreach (var kvp in _slotViews)
-            {
-                if (kvp.Value != null)
-                    kvp.Value.SetEmptyState();
-            }
+                kvp.Value?.SetLockedVisual(locked);
 
-            // ROOT CAUSE D FIX: Re-push current backend state to all slots.
-            // Events only fire on changes; a manual clear requires an explicit re-push.
-            _domainBridge?.Refresh();
+            // Lock weapon + equipment cards (and their attachment sub-slots) too.
+            _weaponEquipmentPanel?.SetLockedVisual(locked);
+
+            if (_spectatorBanner != null)
+                _spectatorBanner.SetActive(locked);
+
+            if (locked && _spectatorLabel != null)
+            {
+                var player = _domainBridge?.CurrentPlayer;
+                _spectatorLabel.text = player != null
+                    ? $"Viewing {player.name}'s Inventory"
+                    : "Viewing Inventory (Read-Only)";
+            }
         }
+
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Bridge Events
 
         private void HookBridgeEvents(bool subscribe)
         {
@@ -413,47 +287,186 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (subscribe)
             {
-                _domainBridge.OnInventorySlotChanged += HandleInventorySlotChanged;
-                _domainBridge.OnEquipmentSlotChanged += HandleEquipmentSlotChanged;
-                _domainBridge.OnWeaponSlotChanged += HandleWeaponSlotChanged;
+                _domainBridge.OnInventorySlotChanged += HandleSlotChanged;
+                _domainBridge.OnEquipmentSlotChanged += HandleSlotChanged;
+                _domainBridge.OnWeaponSlotChanged    += HandleSlotChanged;
             }
             else
             {
-                _domainBridge.OnInventorySlotChanged -= HandleInventorySlotChanged;
-                _domainBridge.OnEquipmentSlotChanged -= HandleEquipmentSlotChanged;
-                _domainBridge.OnWeaponSlotChanged -= HandleWeaponSlotChanged;
+                _domainBridge.OnInventorySlotChanged -= HandleSlotChanged;
+                _domainBridge.OnEquipmentSlotChanged -= HandleSlotChanged;
+                _domainBridge.OnWeaponSlotChanged    -= HandleSlotChanged;
             }
         }
 
-        private void HandleInventorySlotChanged(UISlotId id, UISlotState state)
-        {
-            UpdateSlot(id, state);
-        }
-
-        private void HandleEquipmentSlotChanged(UISlotId id, UISlotState state)
-        {
-            UpdateSlot(id, state);
-        }
-
-        private void HandleWeaponSlotChanged(UISlotId id, UISlotState state)
-        {
-            UpdateSlot(id, state);
-        }
-
-        private void UpdateSlot(UISlotId id, UISlotState state)
+        private void HandleSlotChanged(UISlotId id, UISlotState state)
         {
             if (_slotViews.TryGetValue(id, out var view))
                 view.SetState(state);
 
-            // If the updated slot is currently selected and item is gone, dismiss context menu.
-            if (_selectedSlot != null && _selectedSlot.SlotId.Equals(id) && state?.Item == null)
+            // If the affected slot is currently selected and is now empty → dismiss.
+            if (_selectedSlot != null &&
+                _selectedSlot.SlotId.Equals(id) &&
+                state?.Item == null)
+            {
                 ClearSelection();
+            }
         }
 
-        private void OnSortClicked()
+        private void RefreshAllSlots()
         {
-            _domainBridge?.RequestSortInventory(InventorySortMode.Default);
+            foreach (var kvp in _slotViews)
+                kvp.Value?.SetEmptyState();
+
+            _domainBridge?.Refresh();
         }
+
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Slot Hover / Press Events
+
+        private void HookSlotEvents(bool subscribe)
+        {
+            foreach (var kvp in _slotViews)
+            {
+                var input = ComponentResolver.Find<ItemSlotInput>(kvp.Value)
+                    .OnSelf().InChildren()
+                    .OrLogWarning("[InventoryScreen] ItemSlotInput not found.")
+                    .Resolve();
+                if (input == null) continue;
+
+                if (subscribe)
+                {
+                    input.OnSlotHoverEnter    += OnSlotHoverEnter;
+                    input.OnSlotHoverExit     += OnSlotHoverExit;
+                    input.OnSlotPressed       += OnSlotPressed;
+                    input.OnSlotDoubleClicked += OnSlotDoubleClicked;
+                }
+                else
+                {
+                    input.OnSlotHoverEnter    -= OnSlotHoverEnter;
+                    input.OnSlotHoverExit     -= OnSlotHoverExit;
+                    input.OnSlotPressed       -= OnSlotPressed;
+                    input.OnSlotDoubleClicked -= OnSlotDoubleClicked;
+                }
+            }
+        }
+
+        private void OnSlotHoverEnter(ItemSlotView slot)
+        {
+            _hoveredSlot = slot;
+
+            var item = slot.State?.Item;
+            if (item == null)
+            {
+                _itemTooltip?.Hide();
+                return;
+            }
+
+            // Tooltip
+            if (_itemTooltip != null)
+            {
+                var slotRect = slot.transform as RectTransform;
+                string label = BuildSlotLabel(slot.SlotId);
+                _itemTooltip.Show(item, Input.mousePosition, slotRect, label);
+            }
+        }
+
+        private void OnSlotHoverExit(ItemSlotView slot)
+        {
+            if (_hoveredSlot != slot) return;
+            _hoveredSlot = null;
+            _itemTooltip?.Hide();
+        }
+
+        private void OnSlotPressed(ItemSlotView slot)
+        {
+            // In spectator mode: do nothing.
+            if (!CanInteract) return;
+
+            // Toggle off: pressing the same selected slot again collapses the menu.
+            if (_selectedSlot == slot && _itemContextMenu != null && _itemContextMenu.IsVisible)
+            {
+                ClearSelection();
+                return;
+            }
+
+            ClearSelection();
+
+            if (slot?.State?.Item == null) return;
+
+            _selectedSlot = slot;
+            slot.SetSelectedVisual(true);
+            _itemTooltip?.Hide(); // context menu takes over information display
+
+            if (_itemContextMenu != null)
+            {
+                var slotRect = slot.transform as RectTransform;
+                _itemContextMenu.Show(
+                    slot.State.Item,
+                    slot.SlotId,
+                    slotRect,
+                    _domainBridge,
+                    _dropQuantityDialog,
+                    _uiConfig);
+            }
+        }
+
+        private void OnSlotDoubleClicked(ItemSlotView slot)
+        {
+            if (!CanInteract) return;
+
+            var item = slot?.State?.Item;
+            if (item == null || _domainBridge?.Bridge == null) return;
+
+            var def = ItemDatabase.GetDefinition(item.DefinitionID);
+
+            bool isEquipSlot = slot.SlotId.Type == UISlotType.Equipment
+                            || slot.SlotId.Type == UISlotType.Weapon;
+
+            if (isEquipSlot)
+            {
+                // Double-click on equipped slot → unequip.
+                if (slot.SlotId.Type == UISlotType.Weapon && slot.SlotId.WeaponSlot.HasValue)
+                    _domainBridge.Bridge.UnequipWeapon(slot.SlotId.WeaponSlot.Value);
+                else if (slot.SlotId.EquipmentSlot.HasValue)
+                    _domainBridge.Bridge.UnequipItem(slot.SlotId.EquipmentSlot.Value);
+            }
+            else if (def != null)
+            {
+                switch (def.Type)
+                {
+                    // Equippables → equip.
+                    case ItemType.Weapon:
+                        _domainBridge.Bridge.EquipWeapon(item.InstanceID);
+                        break;
+                    case ItemType.Equipment:
+                        _domainBridge.Bridge.EquipItem(item.InstanceID);
+                        break;
+
+                    // Consumable: use immediately via ItemUse subsystem.
+                    case ItemType.Consumable:
+                        _domainBridge.Bridge.ItemUse.UseItem(item);
+                        break;
+
+                    // Throwable / Deployable → select to hand → exits inventory HUD.
+                    case ItemType.Throwable:
+                    case ItemType.Deployable:
+                        _domainBridge.Bridge.SelectItem(item.InstanceID);
+                        // Auto-close inventory so the aim HUD is visible.
+                        gameObject.SetActive(false);
+                        break;
+                }
+            }
+
+            ClearSelection();
+        }
+
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Helpers
 
         private void ClearSelection()
         {
@@ -462,212 +475,20 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _itemContextMenu?.Hide();
         }
 
-        #region Attachment Panel Hover Logic
+        private void OnSortClicked()
+            => _domainBridge?.Bridge?.Inventory?.RequestSortByType();
 
-        private void HookSlotHoverEvents(bool subscribe)
+        private static string BuildSlotLabel(UISlotId slotId)
         {
-            foreach (var kvp in _slotViews)
+            return slotId.Type switch
             {
-                var input = ComponentResolver.Find<ItemSlotInput>(kvp.Value)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[Auto] ItemSlotInput not found")
-                    .Resolve();
-                if (input != null)
-                {
-                    if (subscribe)
-                    {
-                        input.OnSlotHoverEnter    += OnSlotHoverEnter;
-                        input.OnSlotHoverExit     += OnSlotHoverExit;
-                        input.OnSlotPressed       += OnSlotPressed;
-                        input.OnSlotDoubleClicked += OnSlotDoubleClicked;
-                    }
-                    else
-                    {
-                        input.OnSlotHoverEnter    -= OnSlotHoverEnter;
-                        input.OnSlotHoverExit     -= OnSlotHoverExit;
-                        input.OnSlotPressed       -= OnSlotPressed;
-                        input.OnSlotDoubleClicked -= OnSlotDoubleClicked;
-                    }
-                }
-            }
-        }
-
-        private void OnSlotPressed(ItemSlotView slotView)
-        {
-            // Toggle off if same slot is pressed again.
-            if (_selectedSlot == slotView && _itemContextMenu != null && _itemContextMenu.IsVisible)
-            {
-                ClearSelection();
-                return;
-            }
-
-            ClearSelection();
-
-            // Empty slot → only hide, no context menu.
-            if (slotView?.State?.Item == null)
-                return;
-
-            _selectedSlot = slotView;
-            slotView.SetSelectedVisual(true);
-
-            if (_itemContextMenu != null)
-            {
-                var slotRect = slotView.transform as RectTransform;
-                _itemContextMenu.Show(slotView.State.Item, slotView.SlotId, slotRect, _domainBridge, _dropQuantityDialog);
-            }
-        }
-
-        private void OnSlotDoubleClicked(ItemSlotView slotView)
-        {
-            var item = slotView?.State?.Item;
-            if (item == null || _domainBridge?.Bridge == null) return;
-
-            bool isEquipSlot = slotView.SlotId.Type == UISlotType.Equipment
-                            || slotView.SlotId.Type == UISlotType.Weapon;
-            if (isEquipSlot)
-            {
-                // Double-click on equipped slot → unequip.
-                if (slotView.SlotId.Type == UISlotType.Weapon && slotView.SlotId.WeaponSlot.HasValue)
-                    _domainBridge.Bridge.UnequipWeapon(slotView.SlotId.WeaponSlot.Value);
-                else if (slotView.SlotId.EquipmentSlot.HasValue)
-                    _domainBridge.Bridge.UnequipItem(slotView.SlotId.EquipmentSlot.Value);
-            }
-            else
-            {
-                // Double-click on inventory slot → equip immediately.
-                var def = ItemDatabase.GetDefinition(item.DefinitionID);
-                if (def == null) return;
-
-                if (def.Type == ItemType.Weapon)
-                    _domainBridge.Bridge.EquipWeapon(item.InstanceID);
-                else if (def.Type == ItemType.Equipment)
-                    _domainBridge.Bridge.EquipItem(item.InstanceID);
-            }
-
-            ClearSelection();
-        }
-
-        private void OnSlotHoverEnter(ItemSlotView slotView)
-        {
-            _hoveredSlot = slotView;
-
-            // Show tooltip và attachment panel nếu slot có item
-            if (slotView.State?.Item != null)
-            {
-                var def = ItemDatabase.GetDefinition(slotView.State.Item.DefinitionID);
-
-                if (_itemTooltip != null)
-                {
-                    Vector3 mousePos = Input.mousePosition;
-                    string slotLabel = GetSlotLabel(slotView.SlotId);
-                    _itemTooltip.Show(slotView.State.Item, mousePos, slotLabel);
-                }
-
-                // Show attachment panel nếu item có attachment slots và config cho phép hover
-                bool allowHoverPanel =
-                    _uiConfig != null &&
-                    _uiConfig.InventoryConfig != null &&
-                    _uiConfig.InventoryConfig.AttachmentUI.ShowAttachmentPanelOnHover;
-
-                if (allowHoverPanel && def != null && def.AttachmentSlots != null && def.AttachmentSlots.Length > 0)
-                {
-                    if (_attachmentPanel != null)
-                    {
-                        _attachmentPanel.Show(slotView.State.Item);
-                    }
-                }
-                else
-                {
-                    // Item not available attachment slots hoặc hover bị tắt → hide panel
-                    if (_attachmentPanel != null)
-                        _attachmentPanel.Hide();
-                }
-            }
-            else
-            {
-                // Slot empty → hide tooltip và panel
-                if (_itemTooltip != null)
-                    _itemTooltip.Hide();
-
-                if (_attachmentPanel != null)
-                    _attachmentPanel.Hide();
-            }
-        }
-
-        private void OnSlotHoverExit(ItemSlotView slotView)
-        {
-            if (_hoveredSlot == slotView)
-            {
-                _hoveredSlot = null;
-
-                // Hide tooltip khi hover ra
-                if (_itemTooltip != null)
-                    _itemTooltip.Hide();
-
-                // FIX: Chỉ hide attachment panel nếu không pinned
-                if (_attachmentPanel != null && !_attachmentPanel.IsPinned)
-                    _attachmentPanel.Hide();
-            }
-        }
-
-        private static string GetSlotLabel(UISlotId slotId)
-        {
-            switch (slotId.Type)
-            {
-                case UISlotType.Equipment:
-                    return slotId.EquipmentSlot.HasValue
-                        ? $"{slotId.EquipmentSlot.Value} Slot"
-                        : "Equipment Slot";
-                case UISlotType.Weapon:
-                    return slotId.WeaponSlot.HasValue
-                        ? $"{slotId.WeaponSlot.Value} Weapon Slot"
-                        : "Weapon Slot";
-                case UISlotType.Attachment:
-                    return $"Attachment [{slotId.Index}]";
-                default:
-                    return null;
-            }
-        }
-
-        private IAttachmentSystem GetAttachmentSystem()
-        {
-            var spectate = SpectateManager.Instance;
-            if (spectate == null)
-            {
-                Debug.LogWarning("[InventoryScreen][Attachment] SpectateManager.Instance is NULL");
-                return null;
-            }
-
-            var currentPlayer = spectate.GetCurrentPlayer();
-            if (currentPlayer == null)
-            {
-                Debug.LogWarning("[InventoryScreen][Attachment] SpectateManager.GetCurrentPlayer() is NULL");
-                return null;
-            }
-
-            var sys = ComponentResolver.Find<IAttachmentSystem>(currentPlayer)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IAttachmentSystem not found")
-                .Resolve();
-            Debug.Log(
-                $"[InventoryScreen][Attachment] GetAttachmentSystem on '{currentPlayer.name}': {(sys != null ? sys.GetType().Name : "NULL — component missing on prefab!")}");
-            return sys;
-        }
-
-        private IGameplayBridge GetGameplayBridge()
-        {
-            var spectate = SpectateManager.Instance;
-            if (spectate == null) return null;
-
-            var currentPlayer = spectate.GetCurrentPlayer();
-            if (currentPlayer == null) return null;
-
-            var bridge = currentPlayer.GamePlaySystemBridge;
-            Debug.Log(
-                $"[InventoryScreen][Attachment] GetGameplayBridge: {(bridge != null ? $"IsReady={bridge.IsReady}" : "NULL")}");
-            return bridge;
+                UISlotType.Equipment => slotId.EquipmentSlot.HasValue
+                    ? $"{slotId.EquipmentSlot.Value} Slot" : "Equipment Slot",
+                UISlotType.Weapon => slotId.WeaponSlot.HasValue
+                    ? $"{slotId.WeaponSlot.Value} Weapon Slot" : "Weapon Slot",
+                UISlotType.Attachment => $"Attachment [{slotId.Index}]",
+                _ => null
+            };
         }
 
         #endregion

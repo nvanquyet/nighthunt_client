@@ -576,19 +576,15 @@ namespace NightHunt.GameplaySystems.Inventory
 
         public void DropItem(string instanceID, int quantity)
         {
-            if (!IsServerInitialized)
-            {
-                // Client-side: gửi lên server qua ServerRpc instead of silently fail.
-                RequestDropRpc(instanceID, quantity);
-                return;
-            }
-
-            DropItemServer(instanceID, quantity);
+            if (IsServerInitialized) { DropItemServer(instanceID, quantity); return; }
+            // Only the owning client may request a drop (RequireOwnership = true by default).
+            if (IsOwner) RequestDropRpc(instanceID, quantity);
+            else Debug.LogWarning("[InventorySystem] DropItem: caller does not own this object.");
         }
 
         /// <summary>
-        /// Client gọi để yêu cầu drop item. InventorySystem thuộc sở hữu client này nên
-        /// RequireOwnership = true (default) — chỉ chính chủ sở hữu mới gửi được.
+        /// Client-to-server RPC for dropping an item. RequireOwnership = true (default)
+        /// ensures only the owning client can request a drop of their own inventory.
         /// </summary>
         [ServerRpc]
         private void RequestDropRpc(string instanceID, int quantity)
@@ -602,80 +598,95 @@ namespace NightHunt.GameplaySystems.Inventory
             var item = GetItemByInstanceID(instanceID);
             if (item == null)
             {
-                Debug.LogWarning($"[InventorySystem] DropItem: Item not found {instanceID}");
+                Debug.LogWarning($"[InventorySystem] DropItem: item not found '{instanceID}'");
                 return;
             }
 
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
             if (def == null)
             {
-                Debug.LogWarning($"[InventorySystem] DropItem: Item definition not found {item.DefinitionID}");
+                Debug.LogWarning($"[InventorySystem] DropItem: definition not found for '{item.DefinitionID}'");
                 return;
             }
 
-            // Gỡ attachments before drop nếu có config
+            // Detach attachments before drop when config requires returning them to inventory.
             if (_inventoryConfig != null && _inventoryConfig.ReturnAttachmentsToInventoryOnDrop)
             {
                 if (item.AttachedItems != null && item.AttachedItems.Length > 0)
                 {
                     var attachmentSystem = ComponentResolver
                         .Find<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>(this)
-                        .OnSelf()
-                        .InChildren()
-                        .OrLogWarning("[Auto] NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem not found")
+                        .OnSelf().InChildren().InParent().InRootChildren()
+                        .OrLogWarning("[InventorySystem] IAttachmentSystem not found — attachments will drop with the item.")
                         .Resolve();
-                    if (attachmentSystem == null)
-                    {
-                        attachmentSystem = ComponentResolver
-                            .Find<NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem>(this)
-                            .InParent()
-                            .InRootChildren()
-                            .OrLogWarning(
-                                "[Auto] NightHunt.GameplaySystems.Core.Interfaces.IAttachmentSystem not found")
-                            .Resolve();
-                    }
 
                     if (attachmentSystem != null)
                     {
-                        // Gỡ attachments và return vào inventory
                         attachmentSystem.DetachAllFromItem(instanceID);
 
-                        // Refresh item reference after detach
+                        // Refresh the item reference because detaching may have updated its state.
                         item = GetItemByInstanceID(instanceID);
                         if (item == null)
                         {
-                            Debug.LogWarning("[InventorySystem] DropItem: Item removed after detach");
+                            Debug.LogWarning("[InventorySystem] DropItem: item reference lost after detach.");
                             return;
                         }
                     }
                 }
             }
 
-            // Calculate drop quantity
             int dropQty = Mathf.Min(quantity, item.Quantity);
 
-            // Create ItemInstanceData for dropped item (clone với quantity mới)
-            var dropInstance = item.Clone();
-            dropInstance.Quantity = dropQty;
-            var dropData = dropInstance.ToData();
+            // ── Build an exact state snapshot for the world item ─────────────────
+            // ToData() copies ALL current runtime state (ammo, resource, durability,
+            // attachments, quantity) exactly as it is at the moment of the drop.
+            //
+            // FULL drop  (dropping the entire stack / single item):
+            //   → Preserve the original InstanceID so save-game systems can track item
+            //     continuity. The world item IS the same logical item, just on the ground.
+            //
+            // PARTIAL drop  (dropping fewer than the full stack quantity):
+            //   → World item receives a NEW InstanceID because the original stack remains
+            //     in the inventory with its own ID. Two distinct instances must not share an ID.
+            //   → Stackable items (the only items that can be partially dropped) cannot have
+            //     attachment sockets by design, so AttachedItems is always null here.
+            // ─────────────────────────────────────────────────────────────────────────
+            ItemInstanceData dropData = item.ToData(); // exact current state snapshot
 
-            // Calculate drop position (trước mặt player)
-            Transform ownerTransform = transform; // InventorySystem thường gắn trên player
-            Vector3 dropPos = ownerTransform.position + ownerTransform.forward * (_inventoryConfig?.DropDistance ?? 2f);
-            dropPos.y = ownerTransform.position.y; // Keep same Y level
-            Quaternion dropRot = Quaternion.identity;
+            bool isFullDrop = dropQty >= item.Quantity;
+            if (!isFullDrop)
+            {
+                // Partial drop: world item is a new logical instance.
+                dropData.InstanceID    = Guid.NewGuid().ToString();
+                dropData.AttachedItems = null; // stackable items cannot have attachment sockets
+            }
 
-            // Spawn WorldItem (server-only)
+            dropData.Quantity = dropQty; // explicit — captures exactly what was dropped
+
+            // Strip all-empty attachment arrays to prevent ghost slot allocation on pickup.
+            if (dropData.AttachedItems != null)
+            {
+                bool hasAny = false;
+                for (int i = 0; i < dropData.AttachedItems.Length; i++)
+                {
+                    if (!string.IsNullOrEmpty(dropData.AttachedItems[i]))
+                    { hasAny = true; break; }
+                }
+                if (!hasAny)
+                    dropData.AttachedItems = null;
+            }
+
+            // Drop position: slightly in front of the owning player.
+            Transform origin = transform;
+            Vector3 dropPos  = origin.position + origin.forward * (_inventoryConfig?.DropDistance ?? 2f);
+            dropPos.y = origin.position.y;
+
             if (WorldSpawnManager.Instance != null)
-            {
-                WorldSpawnManager.Instance.SpawnWorldItem(dropData, dropPos, dropRot);
-            }
+                WorldSpawnManager.Instance.SpawnWorldItem(dropData, dropPos, Quaternion.identity);
             else
-            {
-                Debug.LogError("[InventorySystem] DropItem: WorldSpawnManager.Instance is null!");
-            }
+                Debug.LogError("[InventorySystem] DropItem: WorldSpawnManager.Instance is null — world item not spawned!");
 
-            // Remove from inventory (after đã spawn world item)
+            // Remove quantity from inventory after the world item is spawned.
             RemoveItemServer(instanceID, dropQty);
         }
 
@@ -715,14 +726,15 @@ namespace NightHunt.GameplaySystems.Inventory
 
         public void MoveItem(string instanceID, int targetIndex)
         {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[InventorySystem] MoveItem: server-only!");
-                return;
-            }
-
-            MoveItemServer(instanceID, targetIndex);
+            if (IsServerInitialized) { MoveItemServer(instanceID, targetIndex); return; }
+            // P1-01: Allow the owning client to request inventory rearranges (drag-and-drop UI).
+            if (IsOwner) MoveItemServerRpc(instanceID, targetIndex);
+            else Debug.LogWarning("[InventorySystem] MoveItem: caller does not own this object.");
         }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void MoveItemServerRpc(string instanceID, int targetIndex)
+            => MoveItemServer(instanceID, targetIndex);
 
         [Server]
         private void MoveItemServer(string instanceID, int targetIndex)
@@ -775,14 +787,15 @@ namespace NightHunt.GameplaySystems.Inventory
 
         public void SwapItems(string instanceID1, string instanceID2)
         {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[InventorySystem] SwapItems: server-only!");
-                return;
-            }
-
-            SwapItemsServer(instanceID1, instanceID2);
+            if (IsServerInitialized) { SwapItemsServer(instanceID1, instanceID2); return; }
+            // P1-02: Allow the owning client to request inventory swaps (drag-and-drop UI).
+            if (IsOwner) SwapItemsServerRpc(instanceID1, instanceID2);
+            else Debug.LogWarning("[InventorySystem] SwapItems: caller does not own this object.");
         }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void SwapItemsServerRpc(string instanceID1, string instanceID2)
+            => SwapItemsServer(instanceID1, instanceID2);
 
         [Server]
         private void SwapItemsServer(string instanceID1, string instanceID2)
@@ -816,14 +829,17 @@ namespace NightHunt.GameplaySystems.Inventory
         /// <inheritdoc/>
         public void BatchAssignIndices(Dictionary<string, int> assignments)
         {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[InventorySystem] BatchAssignIndices: server-only!");
-                return;
-            }
-
-            BatchAssignIndicesServer(assignments);
+            if (IsServerInitialized) { BatchAssignIndicesServer(assignments); return; }
+            // Note: Dictionary cannot be sent over RPC — callers from the owning client
+            // should use RequestSortByType() or RequestCompact() instead. If batch assignment
+            // is required from client code, serialise the dictionary before calling.
+            if (IsOwner) BatchAssignIndicesServerRpc(assignments);
+            else Debug.LogWarning("[InventorySystem] BatchAssignIndices: caller does not own this object.");
         }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void BatchAssignIndicesServerRpc(Dictionary<string, int> assignments)
+            => BatchAssignIndicesServer(assignments);
 
         /// <summary>
         /// Atomically reassign inventory indices for a set of items without any
@@ -873,23 +889,88 @@ namespace NightHunt.GameplaySystems.Inventory
         /// <inheritdoc/>
         public void RequestSortByType()
         {
-            if (!IsServerInitialized)
-            {
-                RequestSortByTypeRpc();
-                return;
-            }
-
-            SortByTypeServer();
+            if (IsServerInitialized) { SortByTypeServer(); return; }
+            if (IsOwner) RequestSortByTypeRpc();
         }
 
-        /// <summary>
-        /// Client RPC to trigger a sort on the server. RequireOwnership = true (default)
-        /// so only the owning client can request a sort of their own inventory.
-        /// </summary>
-        [ServerRpc]
-        private void RequestSortByTypeRpc()
+        [ServerRpc(RequireOwnership = true)]
+        private void RequestSortByTypeRpc() => SortByTypeServer();
+
+        /// <inheritdoc/>
+        public void RequestCompact()
         {
-            SortByTypeServer();
+            if (IsServerInitialized) { CompactServer(); return; }
+            if (IsOwner) RequestCompactRpc();
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void RequestCompactRpc() => CompactServer();
+
+        /// <summary>
+        /// Fills all index gaps in the inventory while preserving the relative order
+        /// of items. Items are sorted by their current InventoryIndex, then reassigned
+        /// contiguous indices starting at 0 via BatchAssignIndicesServer.
+        ///
+        /// Example before: [0]=ScopeA, [3]=Rifle, [5]=Helmet
+        /// Example after:  [0]=ScopeA, [1]=Rifle, [2]=Helmet
+        ///
+        /// Unlike SortByType this does NOT change item order; it only eliminates gaps
+        /// created by equipping, dropping, or splitting stacks.
+        /// </summary>
+        [Server]
+        private void CompactServer()
+        {
+            // Collect ALL items that are in the inventory grid (InventoryIndex >= 0).
+            var gridItems = new List<ItemInstance>();
+            foreach (var item in _itemCache.Values)
+            {
+                if (item != null && item.InventoryIndex >= 0)
+                    gridItems.Add(item);
+            }
+
+            if (gridItems.Count == 0) return;
+
+            // Sort by current index to preserve display order.
+            gridItems.Sort((a, b) => a.InventoryIndex.CompareTo(b.InventoryIndex));
+
+            // Check if already compact — no work needed.
+            bool alreadyCompact = true;
+            for (int i = 0; i < gridItems.Count; i++)
+            {
+                if (gridItems[i].InventoryIndex != i)
+                { alreadyCompact = false; break; }
+            }
+            if (alreadyCompact) return;
+
+            // Capture old indices for host-side UI events.
+            var oldIndices = new Dictionary<string, int>(gridItems.Count);
+            foreach (var item in gridItems)
+                oldIndices[item.InstanceID] = item.InventoryIndex;
+
+            // Build contiguous assignment map.
+            var assignments = new Dictionary<string, int>(gridItems.Count);
+            for (int i = 0; i < gridItems.Count; i++)
+                assignments[gridItems[i].InstanceID] = i;
+
+            // Atomic reassignment — no cascade swaps.
+            BatchAssignIndicesServer(assignments);
+
+            // Fire host-side UI events (SyncList.Set callbacks are suppressed on host).
+            foreach (var item in gridItems)
+            {
+                int oldIdx = oldIndices[item.InstanceID];
+                if (oldIdx != item.InventoryIndex)
+                    OnInventorySlotCleared?.Invoke(oldIdx);
+            }
+            foreach (var item in gridItems)
+            {
+                int oldIdx = oldIndices[item.InstanceID];
+                if (oldIdx != item.InventoryIndex)
+                    OnItemAdded?.Invoke(item);
+            }
+
+            if (_debugLogs)
+                Debug.Log($"[InventorySystem] Compact: {gridItems.Count} items → contiguous indices 0…{gridItems.Count - 1}");
         }
 
         [Server]
@@ -990,14 +1071,14 @@ namespace NightHunt.GameplaySystems.Inventory
 
         public void StackItems(string targetInstanceID, string sourceInstanceID)
         {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[InventorySystem] StackItems: server-only!");
-                return;
-            }
-
-            StackItemsServer(targetInstanceID, sourceInstanceID);
+            if (IsServerInitialized) { StackItemsServer(targetInstanceID, sourceInstanceID); return; }
+            if (IsOwner) StackItemsServerRpc(targetInstanceID, sourceInstanceID);
+            else Debug.LogWarning("[InventorySystem] StackItems: caller does not own this object.");
         }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void StackItemsServerRpc(string targetInstanceID, string sourceInstanceID)
+            => StackItemsServer(targetInstanceID, sourceInstanceID);
 
         [Server]
         private void StackItemsServer(string targetInstanceID, string sourceInstanceID)
@@ -1039,14 +1120,14 @@ namespace NightHunt.GameplaySystems.Inventory
 
         public void SplitStack(string instanceID, int splitQuantity)
         {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[InventorySystem] SplitStack: server-only!");
-                return;
-            }
-
-            SplitStackServer(instanceID, splitQuantity);
+            if (IsServerInitialized) { SplitStackServer(instanceID, splitQuantity); return; }
+            if (IsOwner) SplitStackServerRpc(instanceID, splitQuantity);
+            else Debug.LogWarning("[InventorySystem] SplitStack: caller does not own this object.");
         }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void SplitStackServerRpc(string instanceID, int splitQuantity)
+            => SplitStackServer(instanceID, splitQuantity);
 
         [Server]
         private void SplitStackServer(string instanceID, int splitQuantity)
@@ -1275,18 +1356,21 @@ namespace NightHunt.GameplaySystems.Inventory
 
             float totalWeight = CalculateTotalWeight();
 
+            // Remove the previous weight modifier before adding the new value to avoid
+            // accumulating duplicate flat modifiers from the same source.
+            _statSystem.RemoveAllModifiersFromSource("Inventory");
+
             var weightMod = StatModifier.CreateFlat(
                 "Inventory",
                 totalWeight,
                 0,
-                "Total inventory weight"
+                "Total inventory carry weight"
             );
 
             _statSystem.AddModifier(PlayerStatType.CurrentWeight, weightMod);
 
             if (_debugLogs)
-                Debug.Log(
-                    $"[InventorySystem] Updated total weight: {totalWeight:F2}kg → PlayerStatSystem.CurrentWeight");
+                Debug.Log($"[InventorySystem] Updated carry weight: {totalWeight:F2} kg → PlayerStatSystem.CurrentWeight");
         }
 
         #endregion

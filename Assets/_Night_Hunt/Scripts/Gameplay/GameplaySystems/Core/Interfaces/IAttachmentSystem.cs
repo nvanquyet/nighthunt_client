@@ -6,97 +6,100 @@ using NightHunt.GameplaySystems.Inventory;
 namespace NightHunt.GameplaySystems.Core.Interfaces
 {
     /// <summary>
-    /// Interface for attachment management system
-    /// 
+    /// Contract for the server-authoritative attachment management system.
+    ///
     /// RESPONSIBILITIES:
-    /// - Manages attachments on items (scopes, grips, lights, pouches)
-    /// - Validates attachment compatibility
-    /// - Handles attachment stat modifiers
-    /// - Implemented by AttachmentSystem (NetworkBehaviour)
-    /// 
+    ///   - Manages attachment sockets on items (scopes, grips, lights, pouches, plates, etc.).
+    ///   - Validates attachment compatibility between item and socket type.
+    ///   - Drives stat recalculation after every attach / detach operation.
+    ///
     /// NETWORK ARCHITECTURE:
-    /// - Server-authoritative: All operations on server
-    /// - Attachment data stored in ItemInstance.AttachedItems array
+    ///   - Server-authoritative — all mutations happen on the server.
+    ///   - Attachment state is stored inside <see cref="ItemInstance.AttachedItems"/> and
+    ///     replicated automatically via the parent item entry in InventorySystem's SyncList.
+    ///   - The owning client can send requests via [ServerRpc(RequireOwnership = true)].
+    ///     All public API methods route to the server automatically when called from the owner.
     /// </summary>
     public interface IAttachmentSystem
     {
         #region Getters
-        
+
         /// <summary>
-        /// Get attachment in specific slot on item
-        /// Returns null if slot empty
+        /// Returns the attachment instance in <paramref name="slotIndex"/> on
+        /// <paramref name="parentInstanceID"/>, or null when the slot is empty.
         /// </summary>
         ItemInstance GetAttachment(string parentInstanceID, int slotIndex);
-        
+
         /// <summary>
-        /// Get all attachments on item
-        /// Array length = AttachmentSlots.Length from item definition
-        /// null = empty slot
+        /// Returns an array of all attachments on the given item.
+        /// Array length equals <c>AttachmentSlots.Length</c> from the item definition;
+        /// entries are null when a slot is empty.
         /// </summary>
         ItemInstance[] GetAllAttachments(string parentInstanceID);
-        
-        /// <summary>
-        /// Check if attachment slot is occupied
-        /// </summary>
+
+        /// <summary>Returns true when the given attachment slot contains an item.</summary>
         bool IsSlotOccupied(string parentInstanceID, int slotIndex);
-        
+
         /// <summary>
-        /// Check if attachment can be attached to item
-        /// Validates slot types compatibility
+        /// Returns true when the attachment in <paramref name="attachmentInstanceID"/>
+        /// can be placed into <paramref name="slotIndex"/> on <paramref name="parentInstanceID"/>.
+        /// Validates slot index bounds and slot-type compatibility.
         /// </summary>
         bool CanAttach(string attachmentInstanceID, string parentInstanceID, int slotIndex);
-        
-        /// <summary>
-        /// Get attachment slot type at index
-        /// </summary>
+
+        /// <summary>Returns the <see cref="AttachmentSlotType"/> at the given slot index on the parent item.</summary>
         AttachmentSlotType GetSlotType(string parentInstanceID, int slotIndex);
-        
+
         #endregion
-        
-        #region Attach/Detach
-        
+
+        #region Attach / Detach
+
         /// <summary>
-        /// Attach item to parent item's slot
-        /// Removes attachment from inventory
-        /// Auto-swaps if slot occupied
-        /// Server-side only
+        /// Attach the item in <paramref name="attachmentInstanceID"/> to
+        /// <paramref name="slotIndex"/> on <paramref name="parentInstanceID"/>.
+        /// Removes the attachment from the inventory grid (keeps it in ItemDatabase for stat lookup).
+        /// If the target slot is already occupied the existing attachment is detached first.
+        /// Owning client routes to the server automatically.
         /// </summary>
         void AttachItem(string attachmentInstanceID, string parentInstanceID, int slotIndex);
-        
+
         /// <summary>
-        /// Detach attachment back to inventory
-        /// Server-side only
+        /// Detach the attachment at <paramref name="slotIndex"/> on
+        /// <paramref name="parentInstanceID"/> and return it to the inventory grid.
+        /// Owning client routes to the server automatically.
         /// </summary>
         void DetachItem(string parentInstanceID, int slotIndex);
-        
+
         /// <summary>
-        /// Swap attachments between two items
-        /// Both items must have compatible slots
+        /// Swap the attachments between two item slots.
+        /// Both slot types must be cross-compatible before the swap is performed.
+        /// Owning client routes to the server automatically.
         /// </summary>
         void SwapAttachments(string parentID1, int slotIndex1, string parentID2, int slotIndex2);
-        
+
         /// <summary>
-        /// Detach all attachments from item
-        /// Useful when unequipping item
+        /// Detach all attachments from <paramref name="parentInstanceID"/> and return them
+        /// to the inventory grid (follows InventoryConfig.ReturnAttachmentsToInventoryOnDrop).
+        /// Owning client routes to the server automatically.
         /// </summary>
         void DetachAllFromItem(string parentInstanceID);
-        
+
         #endregion
-        
+
         #region Events
-        
+
         /// <summary>
-        /// Event fired when attachment attached
-        /// Parameters: (parentInstanceID, slotIndex, attachment)
+        /// Fired after an attachment is successfully placed onto a parent item.
+        /// Parameters: (parentInstanceID, slotIndex, attachmentInstance).
         /// </summary>
         event Action<string, int, ItemInstance> OnAttachmentAttached;
-        
+
         /// <summary>
-        /// Event fired when attachment detached
-        /// Parameters: (parentInstanceID, slotIndex, attachment)
+        /// Fired after an attachment is removed from a parent item.
+        /// Parameters: (parentInstanceID, slotIndex, attachmentInstance).
         /// </summary>
         event Action<string, int, ItemInstance> OnAttachmentDetached;
-        
+
         #endregion
     }
 }

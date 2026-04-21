@@ -136,57 +136,71 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         
         #endregion
         
-        #region Move/Swap
-        
+        #region Move / Swap
+
         /// <summary>
-        /// Move item to new inventory index
-        /// Handles swapping if target occupied
-        /// Auto-stacks if same item (based on config)
+        /// Move an item to a new grid index.
+        /// If the target slot is occupied, the two items swap positions.
+        /// If both items share the same definition and are stackable, they merge.
+        /// Owning client routes to the server automatically.
         /// </summary>
         void MoveItem(string instanceID, int targetIndex);
-        
+
         /// <summary>
-        /// Swap two items' positions
+        /// Swap the grid positions of two items by instance ID.
+        /// Owning client routes to the server automatically.
         /// </summary>
         void SwapItems(string instanceID1, string instanceID2);
 
         /// <summary>
         /// Batch-reassign inventory indices for multiple items atomically.
         /// The dictionary maps instanceID → desired new inventory index.
-        /// All assignments happen server-side in one pass with no cascading swaps.
-        /// Used by the sort feature to avoid the collision/cascade problem that occurs
-        /// when sequential MoveItem calls trigger accidental swaps.
-        /// Server-side only.
+        /// All assignments happen in one pass with no cascading swaps.
+        /// Used by the sort feature to avoid the collision/cascade problem
+        /// that occurs when sequential MoveItem calls trigger accidental swaps.
+        /// Server-side / owning-client only.
         /// </summary>
         void BatchAssignIndices(Dictionary<string, int> assignments);
 
         /// <summary>
-        /// Request a server-side sort of the inventory by item type then definition ID.
+        /// Server-authoritative sort: reorders all inventory items by ItemType then DefinitionID,
+        /// assigning contiguous grid indices 0, 1, 2 …
         /// Safe to call from the owning client — routes to the server via ServerRpc.
         /// </summary>
         void RequestSortByType();
-        
+
+        /// <summary>
+        /// Server-authoritative compact: eliminates index gaps by packing all inventory items
+        /// into contiguous indices starting at 0, preserving their current relative order.
+        ///
+        /// Gaps appear when items are equipped, dropped, or when stacks are merged.
+        /// Example: [0]=Scope, [3]=Rifle, [5]=Helmet → [0]=Scope, [1]=Rifle, [2]=Helmet.
+        ///
+        /// Safe to call from the owning client — routes to the server via ServerRpc.
+        /// </summary>
+        void RequestCompact();
+
         #endregion
         
         #region Stack Operations
-        
-        /// <summary>
-        /// Check if two items can stack together
-        /// </summary>
+
+        /// <summary>Returns true when <paramref name="item1"/> and <paramref name="item2"/> can be merged into the same stack.</summary>
         bool CanStackWith(ItemInstance item1, ItemInstance item2);
-        
+
         /// <summary>
-        /// Stack source item into target item
-        /// Removes source if fully stacked
+        /// Merge all or part of <paramref name="sourceInstanceID"/> into <paramref name="targetInstanceID"/>.
+        /// The source is removed when fully consumed.
+        /// Owning client routes to the server automatically.
         /// </summary>
         void StackItems(string targetInstanceID, string sourceInstanceID);
-        
+
         /// <summary>
-        /// Split stack into two stacks
-        /// Creates new item instance
+        /// Split <paramref name="splitQuantity"/> units off <paramref name="instanceID"/> into a new stack
+        /// placed at the first available grid index.
+        /// Owning client routes to the server automatically.
         /// </summary>
         void SplitStack(string instanceID, int splitQuantity);
-        
+
         #endregion
         
         #region Weight

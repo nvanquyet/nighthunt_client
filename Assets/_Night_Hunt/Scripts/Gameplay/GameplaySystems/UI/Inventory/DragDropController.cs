@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using NightHunt.Core;
 using NightHunt.Gameplay.Spectator;
@@ -28,10 +28,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         private DragDropGhost _activeGhost;
-        private ItemSlotView _sourceView;
-        private UISlotId _sourceId;
-        private UISlotState _sourceStateSnapshot;
-        private UISlotState _targetStateSnapshot;
+        private ItemSlotView  _sourceView;
+        private UISlotId      _sourceId;
+        private UISlotState   _sourceStateSnapshot;
+        private UISlotState   _targetStateSnapshot;
 
         private readonly DragDropValidator _validator = new DragDropValidator();
         private readonly Dictionary<UISlotId, ItemSlotView> _allSlots = new Dictionary<UISlotId, ItemSlotView>();
@@ -60,6 +60,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             if (view == null) return;
             _allSlots[view.SlotId] = view;
+        }
+
+        /// <summary>
+        /// Remove a slot from the drag-drop registry.
+        /// Call when a card is hidden or destroyed (e.g. weapon unequipped).
+        /// A drag in progress targeting this slot is safely ignored on EndDrag.
+        /// </summary>
+        public void UnregisterSlotView(ItemSlotView view)
+        {
+            if (view == null) return;
+            _allSlots.Remove(view.SlotId);
         }
 
         /// <summary>
@@ -113,12 +124,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (sourceView.State == null || sourceView.State.Item == null)
                 return;
 
-            _sourceView = sourceView;
-            _sourceId = sourceView.SlotId;
+            _sourceView          = sourceView;
+            _sourceId            = sourceView.SlotId;
             _sourceStateSnapshot = CloneState(sourceView.State);
 
             SpawnGhost(sourceView, eventData);
-            sourceView.SetEmptyState(); // Clear v�? empty state (có thể restore nếu cancel)
+            sourceView.SetEmptyState();
+
+            // Hide tooltip and context menu at drag start (per UISlotLayoutConfig config).
+            var uiConfig = UISlotLayoutConfig.Instance;
+            if (uiConfig == null || uiConfig.HideContextMenuOnDragStart)
+                FindFirstObjectByType<ItemContextMenu>(FindObjectsInactive.Include)?.Hide();
+
+            FindFirstObjectByType<ItemTooltip>(FindObjectsInactive.Include)?.HideIfNotDragVisible();
+
+            // Inline attachment sub-slots are registered like any other slot.
+            // The standard hover highlight (_currentHoverView) handles compatible-slot
+            // visual feedback when dragging over them — no separate panel needed.
         }
 
         public void UpdateDrag(PointerEventData eventData)
@@ -275,38 +297,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private IEnumerator AnimateCancelAndRestore()
         {
+            // Use the new SnapBackToOrigin coroutine on the ghost (reads duration from config).
             if (_activeGhost != null && _sourceView != null)
             {
-                var rt = _activeGhost.RectTransform;
-                if (rt != null && _sourceView.transform != null)
-                {
-                    rt.position = _sourceView.transform.position;
-                }
-
-                var cg = ComponentResolver.Find<CanvasGroup>(_activeGhost)
-                    .OnSelf()
-                    .InChildren()
-                    .OrLogWarning("[DragDropController] CanvasGroup not found on ghost")
-                    .Resolve();
-                if (cg != null)
-                {
-                    UITweenUtil.FadeCanvasGroupInstant(cg, 0f);
-                }
-
-                yield return null;
-
-                // Check lại sau yield vì có thể bị destroy từ nơi khác
-                if (_activeGhost != null)
-                {
-                    Destroy(_activeGhost.gameObject);
-                }
+                float snapDuration = UISlotLayoutConfig.Instance?.GhostSnapBackDuration ?? 0.18f;
+                // Wait for the snap-back to finish (SnapBackToOrigin auto-destroys the ghost).
+                yield return _activeGhost.SnapBackToOrigin(
+                    _sourceView.transform as RectTransform, snapDuration);
             }
 
-            // Restore source view state nếu còn tồn tại
+            // Restore source slot state.
             if (_sourceView != null && _sourceStateSnapshot != null)
-            {
                 _sourceView.SetState(_sourceStateSnapshot);
-            }
 
             ClearState();
         }
@@ -350,11 +352,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _currentHoverView = null;
             }
 
-            _activeGhost = null;
-            _sourceView = null;
-            _sourceStateSnapshot = null;
-            _targetStateSnapshot = null;
-            _dropHandled = false; // FIX Bug 5: always reset for next drag cycle
+            _activeGhost          = null;
+            _sourceView           = null;
+            _sourceStateSnapshot  = null;
+            _targetStateSnapshot  = null;
+            _dropHandled          = false;
         }
 
         #endregion
@@ -432,7 +434,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
                 case DropActionType.Attach:
                 case DropActionType.DropToWorld:
-                case DropActionType.Trash:
                     // Backend events fully drive these states (world spawn, item deletion).
                     // Only clear source so the item feels like it has left.
                     if (sourceView != null) sourceView.SetEmptyState();
@@ -657,23 +658,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     }
 
                     break;
-
-                case DropActionType.Trash:
-                    // Khi trash stack lớn (>=3), cho phép ngư�?i chơi ch�?n số lượng xoá.
-                    if (item.Quantity > 2 && TryShowDropQuantityDialog(item, qty =>
-                            ExecuteTrash(bridge, action.Source, item, qty)))
-                    {
-                        return;
-                    }
-
-                    ExecuteTrash(bridge, action.Source, item, item.Quantity);
-                    break;
             }
         }
 
         /// <summary>
-        /// Hiển thị DropQuantityDialog (nếu có) và thực thi callback khi ngư�?i chơi confirm.
-        /// Trả v�? true nếu dialog has been display, false nếu not available dialog.
+        /// Hiển thị DropQuantityDialog (nếu có) và thực thi callback khi người chơi confirm.
+        /// Trả về true nếu dialog has been display, false nếu not available dialog.
         /// </summary>
         private bool TryShowDropQuantityDialog(ItemInstance item, System.Action<int> onConfirmed)
         {
@@ -681,43 +671,29 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (dialog == null || item == null || onConfirmed == null)
                 return false;
 
-            // Capture source view + state NOW, before it may be cleared this/next frame.
-            // This lets HandleCanceled restore the slot even if _sourceView is already null.
+            // Capture source view + state NOW before they are cleared this/next frame.
             var capturedSourceView  = _sourceView;
             var capturedSourceState = _sourceStateSnapshot != null
                 ? CloneState(_sourceStateSnapshot)
                 : null;
 
-            void HandleConfirmed(ItemInstance confirmedItem, int quantity)
-            {
-                dialog.OnDropConfirmed -= HandleConfirmed;
-                dialog.OnCanceled -= HandleCanceled;
-
-                if (confirmedItem != null && confirmedItem.InstanceID == item.InstanceID)
+            dialog.Show(
+                item,
+                qty =>
                 {
-                    if (_debugConfig != null && _debugConfig.EnableDropDebugLogs)
-                        Debug.Log($"[DragDropController] Drop confirmed: {confirmedItem.DefinitionID} x{quantity}");
-                    onConfirmed.Invoke(quantity);
-                }
-            }
-
-            void HandleCanceled()
-            {
-                dialog.OnDropConfirmed -= HandleConfirmed;
-                dialog.OnCanceled -= HandleCanceled;
-
-                // Restore the optimistically-cleared source slot so the item re-appears.
-                if (capturedSourceView != null && capturedSourceState != null)
+                    // Confirmed: execute the drop action.
+                    Log($"Drop confirmed: {item.DefinitionID} x{qty}");
+                    onConfirmed.Invoke(qty);
+                },
+                () =>
                 {
-                    capturedSourceView.SetState(capturedSourceState);
-                    if (_debugConfig != null && _debugConfig.EnableDropDebugLogs)
-                        Debug.Log($"[DragDropController] Drop cancelled — restored slot for {item.DefinitionID}");
-                }
-            }
-
-            dialog.OnDropConfirmed += HandleConfirmed;
-            dialog.OnCanceled += HandleCanceled;
-            dialog.Show(item);
+                    // Cancelled: restore the optimistically-cleared source slot.
+                    if (capturedSourceView != null && capturedSourceState != null)
+                    {
+                        capturedSourceView.SetState(capturedSourceState);
+                        Log($"Drop cancelled — restored slot for {item.DefinitionID}");
+                    }
+                });
 
             return true;
         }

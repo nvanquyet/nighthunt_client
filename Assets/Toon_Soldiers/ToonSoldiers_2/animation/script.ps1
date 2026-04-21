@@ -1,0 +1,1 @@
+$content = Get-Content "w:\Unity\Shotter\NightHuntClient\Assets\Toon_Soldiers\ToonSoldiers_2\animation\SoldierAnimatorController.controller" -Raw; if ($content -match "(?s)m_AnimatorParameters:(.*?)m_AnimatorLayers:") { $matches[0] }

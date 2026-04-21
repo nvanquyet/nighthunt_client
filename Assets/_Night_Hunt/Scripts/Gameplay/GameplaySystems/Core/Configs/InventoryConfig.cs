@@ -6,149 +6,163 @@ using NightHunt.GameplaySystems.UI.Inventory;
 namespace NightHunt.GameplaySystems.Core.Configs
 {
     /// <summary>
-    /// Unified configuration for inventory system
-    /// Contains all settings for inventory, equipment, weapons, item selection, UI, and behavior
+    /// Unified ScriptableObject configuration for the inventory, equipment, weapon,
+    /// attachment, and item-drop systems.
+    ///
+    /// A single shared asset is assigned to InventorySystem, EquipmentSystem, WeaponSystem,
+    /// and AttachmentSystem on each player prefab. The static <see cref="Instance"/> accessor
+    /// is populated automatically when the asset is loaded by Unity (<c>OnEnable</c>).
     /// </summary>
     [CreateAssetMenu(fileName = "InventoryConfig",
         menuName = "NightHunt/Gameplay/Inventory Config")]
     public class InventoryConfig : ScriptableObject
     {
-        // ── Singleton accessor — automatically populated when the asset is loaded/enabled ──
+        // ── Singleton accessor — populated automatically when the asset is loaded ─────
         private static InventoryConfig _instance;
-        /// <summary>Global accessor. Valid whenever the asset has been loaded by Unity.</summary>
+        /// <summary>Global accessor. Valid once the asset has been loaded by Unity.</summary>
         public static InventoryConfig Instance => _instance;
         private void OnEnable() => _instance = this;
 
         #region ========== INVENTORY CONFIG ==========
-        
+
         [Header("Inventory")]
         public InventorySlotConfig Inventory;
-        
+
         #endregion
-        
+
         #region ========== EQUIPMENT CONFIG ==========
-        
+
         [Header("Equipment")]
-        [Tooltip("Định nghĩa các equipment slots với type và default icon")]
+        [Tooltip("Equipment slot definitions — one entry per body slot with its default empty icon.")]
         public EquipmentSlotConfigStruct[] EquipmentConfig;
-        
-        /// <summary>
-        /// Get count of equipment slots
-        /// </summary>
+
+        /// <summary>Returns the number of defined equipment slots.</summary>
         public int EquipmentCount => EquipmentConfig != null ? EquipmentConfig.Length : 0;
-        
+
         #endregion
-        
+
         #region ========== WEAPON CONFIG ==========
-        
+
         [Header("Weapon")]
-        [Tooltip("Định nghĩa các weapon slots với type và default icon")]
+        [Tooltip("Weapon holster slot definitions — one entry per slot with its default empty icon.")]
         public WeaponSlotConfigStruct[] WeaponConfig;
-        
-        /// <summary>
-        /// Get count of weapon slots
-        /// </summary>
+
+        /// <summary>Returns the number of defined weapon holster slots.</summary>
         public int WeaponCount => WeaponConfig != null ? WeaponConfig.Length : 0;
-        
+
         #endregion
-        
+
         #region ========== ATTACHMENT UI ==========
-        
+
         [Header("Attachment UI")]
-        [Tooltip("UI config cho attachment slots (icon mặc định, behaviour panel).")]
+        [Tooltip("UI settings for the attachment panel (default icon, show-on-hover / show-on-select behaviour).")]
         public AttachmentUIConfigStruct AttachmentUI;
-        
+
         #endregion
-        
+
         #region ========== BEHAVIOR SETTINGS ==========
-        
+
         [Header("Behavior Settings")]
-        [Tooltip("Tự động stack items khi add vào inventory")]
+        [Tooltip("Automatically merge incoming items into existing stacks of the same type.")]
         public bool AutoStackOnAdd = true;
-        
-        [Tooltip("Tự động merge stacks khi move/drag")]
+
+        [Tooltip("Automatically merge stacks when moving or dragging items within the inventory.")]
         public bool AutoMergeOnMove = true;
-        
+
         #endregion
-        
+
         #region ========== DROP SETTINGS ==========
-        
+
         [Header("Drop Settings")]
-        [Tooltip("Khoảng cách drop từ player (meters)")]
+        [Tooltip("Distance (in metres) in front of the player where dropped items spawn.")]
         [Min(0.5f)]
         public float DropDistance = 2f;
-        
-        [Tooltip("Drop force")]
+
+        [Tooltip("Initial physics impulse force applied to dropped items.")]
         [Min(0f)]
         public float DropForce = 5f;
-        
+
         #endregion
-        
+
+        #region ========== WEIGHT PENALTY ==========
+
+        [Header("Weight — Carry Limit")]
+        [Tooltip("When true, players CANNOT pick up items that would exceed MaxWeight (hard cap). " +
+                 "When false, weight can exceed the cap — penalties from WeightPenalties still apply.")]
+        public bool AllowExceedMaxWeight = true;
+
+        [Tooltip("Penalty tiers applied based on currentWeight / maxWeight ratio. " +
+                 "Assign a WeightPenaltyConfig asset to enable weight-based stat penalties. " +
+                 "Leave null to disable penalties entirely.")]
+        public WeightPenaltyConfig WeightPenalties;
+
+        #endregion
+
         #region ========== PERFORMANCE SETTINGS ==========
-        
+
         [Header("Memory Management")]
-        [Tooltip("Max cached item instances (0 = unlimited). Recommended: 100 for mobile")]
+        [Tooltip("Maximum number of item instances to keep in the runtime cache (0 = unlimited). Recommended: 100 for mobile.")]
         [Range(0, 500)]
         public int MaxCachedInstances = 100;
 
-        [Tooltip("Max cached item definitions by type (0 = unlimited)")]
+        [Tooltip("Maximum number of cached item definitions per type (0 = unlimited).")]
         [Range(0, 100)]
         public int MaxCachedDefinitionsByType = 50;
 
         [Header("Performance")]
-        [Tooltip("Batch weight updates to reduce stat recalculations")]
+        [Tooltip("Batch carry-weight recalculations to reduce per-frame stat updates.")]
         public bool BatchWeightUpdates = true;
 
-        [Tooltip("Pre-warm type lookup cache on init")]
+        [Tooltip("Pre-warm the type-lookup cache on system initialisation.")]
         public bool PrewarmTypeLookup = true;
 
-        [Tooltip("Auto-cleanup invalid items on sync")]
+        [Tooltip("Automatically remove invalid / orphaned items when syncing state.")]
         public bool AutoCleanupInvalidItems = true;
 
         [Header("Network Optimization")]
-        [Tooltip("Min interval between weight updates (seconds)")]
+        [Tooltip("Minimum interval (seconds) between carry-weight pushes to PlayerStatSystem.")]
         [Range(0f, 1f)]
         public float WeightUpdateInterval = 0.1f;
 
-        [Tooltip("Compress item data for network sync")]
+        [Tooltip("Enable delta-compression of item data sent over the network.")]
         public bool CompressNetworkData = true;
-        
+
         #endregion
-        
+
         #region ========== ATTACHMENT SETTINGS ==========
-        
+
         [Header("Attachment Behavior")]
-        [Tooltip("Khi unequip equipment: gỡ attachments và return vào inventory")]
+        [Tooltip("When an equipped item is unequipped: detach its attachments and return them to inventory.")]
         public bool DetachAttachmentsOnUnequip = true;
-        
-        [Tooltip("Khi drop item: gỡ attachments và return vào inventory (true) hoặc drop cùng item (false)")]
+
+        [Tooltip("When an item is dropped: return attachments to inventory (true) or drop them with the item (false).")]
         public bool ReturnAttachmentsToInventoryOnDrop = true;
-        
+
         #endregion
-        
+
         #region ========== DEBUG ==========
 
         [Header("Debug")]
-        [Tooltip("Enable performance logging")]
+        [Tooltip("Enable per-frame performance logging for the inventory system.")]
         public bool EnablePerformanceLogging = false;
 
-        [Tooltip("Log cache hits/misses")]
+        [Tooltip("Log cache hit / miss statistics for profiling.")]
         public bool LogCacheStatistics = false;
-        
+
         #endregion
-        
+
         #region ========== HELPER METHODS ==========
-        
-        /// <summary>
-        /// Get default empty icon for a specific slot type
-        /// </summary>
-        public Sprite GetDefaultEmptyIcon(UISlotType slotType, EquipmentSlotType? equipmentSlot = null, WeaponSlotType? weaponSlot = null)
+
+        /// <summary>Returns the default empty icon for the given slot type and optional sub-type.</summary>
+        public Sprite GetDefaultEmptyIcon(UISlotType slotType,
+            EquipmentSlotType? equipmentSlot = null,
+            WeaponSlotType?    weaponSlot    = null)
         {
             switch (slotType)
             {
                 case UISlotType.Inventory:
                     return Inventory.DefaultEmptyIcon;
-                    
+
                 case UISlotType.Equipment:
                     if (equipmentSlot.HasValue && EquipmentConfig != null)
                     {
@@ -159,7 +173,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
                         }
                     }
                     break;
-                    
+
                 case UISlotType.Weapon:
                     if (weaponSlot.HasValue && WeaponConfig != null)
                     {
@@ -170,50 +184,46 @@ namespace NightHunt.GameplaySystems.Core.Configs
                         }
                     }
                     break;
-                    
+
                 case UISlotType.Attachment:
                     return AttachmentUI.DefaultEmptyIcon;
             }
-            
+
             return null;
         }
-        
-        /// <summary>
-        /// Get equipment slot config by type
-        /// </summary>
+
+        /// <summary>Returns the config struct for the given equipment slot type, or null if not configured.</summary>
         public EquipmentSlotConfigStruct? GetEquipmentSlot(EquipmentSlotType type)
         {
             if (EquipmentConfig == null) return null;
-            
+
             foreach (var config in EquipmentConfig)
             {
                 if (config.Type == type)
                     return config;
             }
-            
+
             return null;
         }
-        
-        /// <summary>
-        /// Get weapon slot config by type
-        /// </summary>
+
+        /// <summary>Returns the config struct for the given weapon slot type, or null if not configured.</summary>
         public WeaponSlotConfigStruct? GetWeaponSlot(WeaponSlotType type)
         {
             if (WeaponConfig == null) return null;
-            
+
             foreach (var config in WeaponConfig)
             {
                 if (config.Type == type)
                     return config;
             }
-            
+
             return null;
         }
-        
+
         #endregion
-        
+
         #region ========== EDITOR SETUP ==========
-        
+
 #if UNITY_EDITOR
         [ContextMenu("Setup Default Equipment Slots")]
         private void SetupDefaultEquipmentSlots()
@@ -229,11 +239,11 @@ namespace NightHunt.GameplaySystems.Core.Configs
                 new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Feet,   DefaultIcon = null },
                 new EquipmentSlotConfigStruct { Type = EquipmentSlotType.Hands,  DefaultIcon = null }
             };
-            
+
             UnityEditor.EditorUtility.SetDirty(this);
-            Debug.Log("[InventoryConfig] Setup default equipment slots complete! Assign default icons in Inspector.");
+            Debug.Log("[InventoryConfig] Default equipment slots created — assign icons in the Inspector.");
         }
-        
+
         [ContextMenu("Setup Default Weapon Slots")]
         private void SetupDefaultWeaponSlots()
         {
@@ -243,116 +253,108 @@ namespace NightHunt.GameplaySystems.Core.Configs
                 new WeaponSlotConfigStruct { Type = WeaponSlotType.Secondary, DefaultIcon = null },
                 new WeaponSlotConfigStruct { Type = WeaponSlotType.Melee,     DefaultIcon = null }
             };
-            
+
             UnityEditor.EditorUtility.SetDirty(this);
-            Debug.Log("[InventoryConfig] Setup default weapon slots complete! Assign default icons in Inspector.");
+            Debug.Log("[InventoryConfig] Default weapon slots created — assign icons in the Inspector.");
         }
-        
+
         [ContextMenu("Validate Config")]
         private void ValidateConfig()
         {
             bool hasErrors = false;
-            
-            // Validate inventory
+
             if (Inventory.GridWidth < 1 || Inventory.GridWidth > 20)
             {
-                Debug.LogError($"[InventoryConfig] Inventory.GridWidth must be 1-20, current: {Inventory.GridWidth}");
+                Debug.LogError($"[InventoryConfig] Inventory.GridWidth must be 1–20, current: {Inventory.GridWidth}");
                 hasErrors = true;
             }
-            
+
             if (Inventory.GridHeight < 1 || Inventory.GridHeight > 20)
             {
-                Debug.LogError($"[InventoryConfig] Inventory.GridHeight must be 1-20, current: {Inventory.GridHeight}");
+                Debug.LogError($"[InventoryConfig] Inventory.GridHeight must be 1–20, current: {Inventory.GridHeight}");
                 hasErrors = true;
             }
-            
-            // Validate equipment
+
             if (EquipmentConfig == null || EquipmentConfig.Length == 0)
-            {
-                Debug.LogWarning("[InventoryConfig] EquipmentConfig is empty. Use 'Setup Default Equipment Slots' context menu.");
-            }
-            
-            // Validate weapon
+                Debug.LogWarning("[InventoryConfig] EquipmentConfig is empty — use 'Setup Default Equipment Slots'.");
+
             if (WeaponConfig == null || WeaponConfig.Length == 0)
-            {
-                Debug.LogWarning("[InventoryConfig] WeaponConfig is empty. Use 'Setup Default Weapon Slots' context menu.");
-            }
-            
+                Debug.LogWarning("[InventoryConfig] WeaponConfig is empty — use 'Setup Default Weapon Slots'.");
+
             if (!hasErrors)
-            {
-                Debug.Log("[InventoryConfig] Validation passed!");
-            }
+                Debug.Log("[InventoryConfig] Validation passed.");
         }
 #endif
-        
+
         #endregion
     }
-    
-    #region ========== INVENTORY CONFIG STRUCT ==========
-    
+
+    #region ========== INVENTORY SLOT CONFIG ==========
+
     [System.Serializable]
     public struct InventorySlotConfig
     {
         [Header("Grid Size")]
-        [Tooltip("Number of columns in the inventory grid")]
+        [Tooltip("Number of columns in the inventory grid.")]
         [Range(1, 20)]
         public int GridWidth;
-        
-        [Tooltip("Number of rows in the inventory grid")]
+
+        [Tooltip("Number of rows in the inventory grid.")]
         [Range(1, 20)]
         public int GridHeight;
-        
+
         [Header("UI")]
-        [Tooltip("Icon mặc định cho inventory slot trống (khi not yet available item)")]
+        [Tooltip("Default icon shown in an empty inventory slot.")]
         public Sprite DefaultEmptyIcon;
-        
+
+        /// <summary>Total number of inventory slots (GridWidth × GridHeight).</summary>
         public int TotalSlots => GridWidth * GridHeight;
     }
-    
+
     #endregion
-    
-    #region ========== EQUIPMENT CONFIG STRUCT ==========
-    
+
+    #region ========== EQUIPMENT SLOT CONFIG ==========
+
     [System.Serializable]
     public struct EquipmentSlotConfigStruct
     {
-        [Tooltip("Equipment slot type")]
+        [Tooltip("The body slot type this entry configures.")]
         public EquipmentSlotType Type;
-        
-        [Tooltip("Icon mặc định cho slot này khi trống")]
+
+        [Tooltip("Default icon shown when this equipment slot is empty.")]
         public Sprite DefaultIcon;
     }
-    
+
     #endregion
-    
-    #region ========== WEAPON CONFIG STRUCT ==========
-    
+
+    #region ========== WEAPON SLOT CONFIG ==========
+
     [System.Serializable]
     public struct WeaponSlotConfigStruct
     {
-        [Tooltip("Weapon slot type")]
+        [Tooltip("The holster slot type this entry configures.")]
         public WeaponSlotType Type;
-        
-        [Tooltip("Icon mặc định cho slot này khi trống")]
+
+        [Tooltip("Default icon shown when this weapon slot is empty.")]
         public Sprite DefaultIcon;
     }
-    
+
     #endregion
-    
-    #region ========== ATTACHMENT UI CONFIG STRUCT ==========
+
+    #region ========== ATTACHMENT UI CONFIG ==========
 
     [System.Serializable]
     public struct AttachmentUIConfigStruct
     {
         [Header("UI")]
-        [Tooltip("Icon mặc định cho attachment slot trống")]
+        [Tooltip("Default icon shown in an empty attachment slot.")]
         public Sprite DefaultEmptyIcon;
 
         [Header("Behaviour")]
-        [Tooltip("Show attachment panel khi hover equipment item")]
+        [Tooltip("Show the attachment panel when hovering over an equippable item.")]
         public bool ShowAttachmentPanelOnHover;
 
-        [Tooltip("Show attachment panel khi select/click equipment item")]
+        [Tooltip("Show the attachment panel when selecting / clicking an equippable item.")]
         public bool ShowAttachmentPanelOnSelect;
     }
 

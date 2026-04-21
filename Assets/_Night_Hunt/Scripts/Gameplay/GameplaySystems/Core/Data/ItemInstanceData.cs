@@ -1,17 +1,17 @@
 namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>
-    /// Network-syncable item instance data (VALUE TYPE / struct).
+    /// Network-syncable snapshot of a runtime item instance (VALUE TYPE / struct).
     ///
     /// RESPONSIBILITIES:
-    /// - Lightweight struct for network synchronization
-    /// - Used in SyncList / SyncVar for automatic synchronization
-    /// - Can be converted to/from ItemInstance
+    ///   - Lightweight struct used in SyncList / SyncVar for automatic replication.
+    ///   - Converted to/from <see cref="ItemInstance"/> on each sync boundary.
     ///
     /// DESIGN:
-    /// - VALUE TYPE (struct) — FishNet SyncVar / SyncList yêu cầu.
-    /// - Equals() so sánh toàn bộ runtime-relevant fields để FishNet SyncList
-    ///   dirty-detection hoạt động đúng (ammo, resource, index, attachments).
+    ///   - Must be a VALUE TYPE (struct) — required by FishNet SyncList.
+    ///   - <see cref="Equals"/> compares all runtime-relevant fields so that FishNet's
+    ///     SyncList dirty-detection fires correctly for every meaningful state change
+    ///     (ammo, resource, inventory index, attachments).
     /// </summary>
     [System.Serializable]
     public struct ItemInstanceData
@@ -19,35 +19,35 @@ namespace NightHunt.GameplaySystems.Core.Data
         /// <summary>Unique identifier for this item instance.</summary>
         public string InstanceID;
 
-        /// <summary>Reference to ItemDefinition ID.</summary>
+        /// <summary>Reference to the ItemDefinition asset ID.</summary>
         public string DefinitionID;
 
-        /// <summary>Stack quantity.</summary>
+        /// <summary>Stack quantity (1 for non-stackable items).</summary>
         public int Quantity;
 
-        /// <summary>Position in inventory grid (-1 if equipped).</summary>
+        /// <summary>Position in the inventory grid (-1 when equipped or attached).</summary>
         public int InventoryIndex;
 
-        /// <summary>Current resource (ammo reserve, durability, energy).</summary>
+        /// <summary>Current resource level — ammo reserve, durability, or battery energy.</summary>
         public float CurrentResource;
 
-        /// <summary>Current magazine ammo (weapons only).</summary>
+        /// <summary>Rounds currently in the magazine (weapons only).</summary>
         public int CurrentMagazine;
 
-        /// <summary>Attached item instance IDs.</summary>
+        /// <summary>Instance IDs of items attached to this item's attachment sockets.</summary>
         public string[] AttachedItems;
 
-        /// <summary>Custom data string (JSON, quest data, etc.).</summary>
+        /// <summary>Arbitrary JSON / string payload for quest data, crafting results, etc.</summary>
         public string CustomData;
 
-        /// <summary>Unix timestamp khi item is created.</summary>
+        /// <summary>Unix timestamp (seconds UTC) of when this instance was first created.</summary>
         public long CreatedTimestamp;
 
         #region Conversion
 
         /// <summary>
-        /// Convert to runtime ItemInstance.
-        /// Call trên client khi nhận sync data.
+        /// Convert this network snapshot to a full runtime <see cref="ItemInstance"/>.
+        /// Call on the client when sync data is received.
         /// </summary>
         public ItemInstance ToInstance()
         {
@@ -67,11 +67,11 @@ namespace NightHunt.GameplaySystems.Core.Data
         #region Equality
 
         /// <summary>
-        /// So sánh toàn bộ runtime-relevant fields để FishNet SyncList dirty-detection hoạt động đúng.
+        /// Deep equality across all runtime-relevant fields.
         ///
-        /// FishNet gọi Equals() before mark SyncList element dirty.
-        /// Nếu thiếu field (CurrentMagazine, CurrentResource, InventoryIndex, AttachedItems),
-        /// các thay đổi đó sẽ not allowed broadcast tới clients.
+        /// FishNet calls <c>Equals</c> before marking a SyncList element dirty.
+        /// Omitting any changed field (CurrentMagazine, CurrentResource, InventoryIndex,
+        /// AttachedItems) means that change is silently dropped and never broadcast to clients.
         /// </summary>
         public override bool Equals(object obj)
         {
@@ -89,7 +89,7 @@ namespace NightHunt.GameplaySystems.Core.Data
         private static bool AttachedItemsEqual(string[] a, string[] b)
         {
             if (ReferenceEquals(a, b)) return true;
-            if (a == null || b == null) return false;
+            if (a == null || b == null) return a == null && b == null;
             if (a.Length != b.Length) return false;
             for (int i = 0; i < a.Length; i++)
                 if (a[i] != b[i]) return false;
@@ -119,7 +119,7 @@ namespace NightHunt.GameplaySystems.Core.Data
         public override string ToString()
         {
             string id = InstanceID != null && InstanceID.Length > 8
-                ? InstanceID.Substring(0, 8) + "..."
+                ? InstanceID[..8] + "..."
                 : InstanceID ?? "null";
             return $"Data[{id}] {DefinitionID} x{Quantity} @{InventoryIndex}";
         }

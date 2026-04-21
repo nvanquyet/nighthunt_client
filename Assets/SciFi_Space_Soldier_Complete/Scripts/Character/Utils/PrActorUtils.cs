@@ -2,12 +2,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-[RequireComponent(typeof(Collider))]
-[RequireComponent(typeof(AudioSource))]
-
 public class PrActorUtils : MonoBehaviour
 {
-    
+
     public enum AT
     {
         player, enemy, friendlyAI, neutralAI, vehicle, destroyable
@@ -36,6 +33,7 @@ public class PrActorUtils : MonoBehaviour
     [HideInInspector]
     public AudioSource Audio;
 
+
     void Awake()
     {
         MeshRenderers = GetComponentsInChildren<SkinnedMeshRenderer>();
@@ -44,12 +42,15 @@ public class PrActorUtils : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        
+
         if (GetComponent<AudioSource>())
             Audio = GetComponent<AudioSource>();
         if (GetComponent<Animator>())
+        {
             charAnimator = GetComponent<Animator>();
-
+            if (charAnimator != null)
+                charAnimator.applyRootMotion = useRootMotion;
+        }
     }
 
     public void SetTagAndLayer()
@@ -104,16 +105,10 @@ public class PrActorUtils : MonoBehaviour
         }
     }
 
-    // Update is called once per frame
-    void Update()
-    {
-        if (charAnimator)
-            charAnimator.applyRootMotion = useRootMotion;
-    }
 
     public void SetPlayerColors(int mode, int incomingTeam, PrPlayerSettings playerSettings)
     {
-        
+
         if (mode == 0)
         {
             //Singleplayer Colors
@@ -176,7 +171,7 @@ public class PrActorUtils : MonoBehaviour
 
     public void RollSound(AudioClip SFX)
     {
-        if (SFX != null)
+        if (SFX != null && Audio != null)
             Audio.PlayOneShot(SFX);
     }
 
@@ -210,7 +205,7 @@ public class PrActorUtils : MonoBehaviour
     void ThrowG()
     {
         character.characterInventory.ThrowG();
-        
+
     }
 
     void EndThrow()
@@ -280,7 +275,7 @@ public class PrActorUtils : MonoBehaviour
                     character.characterController.CamScript.TargetHeight = other.GetComponent<PrEnvironmentZone>().CameraHeight;
             }
         }
-        else if (Type == AT.enemy )
+        else if (Type == AT.enemy)
         {
             if (other.tag == "Noise")
             {

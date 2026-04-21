@@ -1,3 +1,4 @@
+using FishNet.Object;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -18,19 +19,32 @@ namespace NightHunt.GameplaySystems.Stat
     ///   Equipment (+ its attachments) : applied immediately on equip, cleared on unequip.
     ///   Weapon    (+ its attachments) : applied ONLY when weapon is SELECTED (drawn), cleared on deselect.
     ///
+    /// NETWORK RULE:
+    ///   Only runs on the SERVER (applies authoritative stats) and the OWNING CLIENT
+    ///   (applies local prediction / HUD stats). Non-owning observers skip all stat
+    ///   application to prevent ghost modifiers accumulating on spectated players.
+    ///
     /// HOW IT WORKS:
     ///   Any equip / unequip / select / deselect / attach / detach event
-    ///   → Recalculate()
-    ///   → [Clear] remove all previously applied source IDs from PlayerStatSystem
-    ///   → [Rebuild] re-apply current active contributors
-    ///   → [ComputeStats] refresh ComputedItemStats for active items
+    ///   → ScheduleRecalc() (dirty flag)
+    ///   → LateUpdate: Recalculate()
+    ///     → [Clear] remove all previously applied source IDs from PlayerStatSystem
+    ///     → [Rebuild] re-apply current active contributors
+    ///     → [ComputeStats] refresh ComputedItemStats for active items
     ///
     /// PLACEMENT: Add to the Player prefab alongside PlayerStatSystem.
     /// </summary>
-    public class StatApplyOrchestrator : MonoBehaviour, IStatApplyOrchestrator
+    public class StatApplyOrchestrator : NetworkBehaviour, IStatApplyOrchestrator
     {
         // ── Source-ID prefix so we can identify and clean up our modifiers ────
         private const string SOURCE_PREFIX = "sao:";
+
+        /// <summary>
+        /// Guard: stat application is only meaningful on the server (authoritative source)
+        /// and on the owning client (local HUD / prediction). Non-owning clients skip
+        /// <see cref="Recalculate"/> entirely to prevent ghost modifiers on spectated players.
+        /// </summary>
+        private bool ShouldRunLocally => IsServerInitialized || IsOwner;
 
         // ── Runtime interfaces ────────────────────────────────────────────────
         private IPlayerStatSystem  _playerStats;
@@ -95,7 +109,8 @@ namespace NightHunt.GameplaySystems.Stat
         private void LateUpdate()
         {
             // Batch: execute deferred recalculation at end of frame.
-            if (_pendingRecalc)
+            // Skip on non-owning clients — they have no authority over stat modifiers.
+            if (_pendingRecalc && ShouldRunLocally)
             {
                 _pendingRecalc = false;
                 Recalculate();
@@ -125,6 +140,10 @@ namespace NightHunt.GameplaySystems.Stat
         /// </summary>
         public void Recalculate()
         {
+            // Non-owning observers must not apply stat modifiers.
+            // Their player's stats are handled by the server / owning client.
+            if (!ShouldRunLocally) return;
+
             if (_playerStats == null) return;
 
             // ── 1. Clear all modifiers we applied last time ───────────────────
