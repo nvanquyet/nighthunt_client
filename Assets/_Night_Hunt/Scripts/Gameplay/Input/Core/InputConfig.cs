@@ -14,7 +14,7 @@ namespace NightHunt.Gameplay.Input.Core
         [Tooltip("The main InputActionAsset for the entire game")]
         [SerializeField] private InputActionAsset inputActionAsset;
 
-        [Header("Action Map Names – phải khớp với tên trong InputSystem_Actions.inputactions")]
+        [Header("Action Map Names – must match names in InputSystem_Actions.inputactions")]
         [SerializeField] private string playerMapName     = "Player";
         [SerializeField] private string combatMapName     = "Combat";
         [SerializeField] private string inventoryMapName  = "Inventory";

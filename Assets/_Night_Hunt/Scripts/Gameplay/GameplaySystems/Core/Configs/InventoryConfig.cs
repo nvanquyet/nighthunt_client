@@ -220,6 +220,24 @@ namespace NightHunt.GameplaySystems.Core.Configs
             return null;
         }
 
+        /// <summary>
+        /// Returns all configured weapon slot types ordered by their Priority (ascending).
+        /// This is the canonical iteration order used by WeaponSystem and all UI.
+        /// </summary>
+        public WeaponSlotType[] GetWeaponSlotOrder()
+        {
+            if (WeaponConfig == null || WeaponConfig.Length == 0)
+                return new[] { WeaponSlotType.Primary, WeaponSlotType.Secondary, WeaponSlotType.Melee };
+
+            var result = new WeaponSlotType[WeaponConfig.Length];
+            // Simple insertion sort (array is tiny, max 5 elements)
+            var sorted = new System.Collections.Generic.List<WeaponSlotConfigStruct>(WeaponConfig);
+            sorted.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+            for (int i = 0; i < sorted.Count; i++)
+                result[i] = sorted[i].Type;
+            return result;
+        }
+
         #endregion
 
         #region ========== EDITOR SETUP ==========
@@ -249,9 +267,34 @@ namespace NightHunt.GameplaySystems.Core.Configs
         {
             WeaponConfig = new WeaponSlotConfigStruct[]
             {
-                new WeaponSlotConfigStruct { Type = WeaponSlotType.Primary,   DefaultIcon = null },
-                new WeaponSlotConfigStruct { Type = WeaponSlotType.Secondary, DefaultIcon = null },
-                new WeaponSlotConfigStruct { Type = WeaponSlotType.Melee,     DefaultIcon = null }
+                new WeaponSlotConfigStruct
+                {
+                    Type             = WeaponSlotType.Primary,
+                    DisplayName      = "Primary",
+                    Priority         = 0,
+                    AllowedClasses   = new[] { WeaponClass.Rifle, WeaponClass.SMG, WeaponClass.Shotgun,
+                                               WeaponClass.Sniper, WeaponClass.Launcher, WeaponClass.Pistol },
+                    DefaultIcon      = null,
+                    WeaponCardPrefab = null,
+                },
+                new WeaponSlotConfigStruct
+                {
+                    Type             = WeaponSlotType.Secondary,
+                    DisplayName      = "Secondary",
+                    Priority         = 1,
+                    AllowedClasses   = new[] { WeaponClass.Pistol, WeaponClass.SMG },
+                    DefaultIcon      = null,
+                    WeaponCardPrefab = null,
+                },
+                new WeaponSlotConfigStruct
+                {
+                    Type             = WeaponSlotType.Melee,
+                    DisplayName      = "Melee",
+                    Priority         = 2,
+                    AllowedClasses   = new[] { WeaponClass.Melee },
+                    DefaultIcon      = null,
+                    WeaponCardPrefab = null,
+                },
             };
 
             UnityEditor.EditorUtility.SetDirty(this);
@@ -279,7 +322,21 @@ namespace NightHunt.GameplaySystems.Core.Configs
                 Debug.LogWarning("[InventoryConfig] EquipmentConfig is empty — use 'Setup Default Equipment Slots'.");
 
             if (WeaponConfig == null || WeaponConfig.Length == 0)
+            {
                 Debug.LogWarning("[InventoryConfig] WeaponConfig is empty — use 'Setup Default Weapon Slots'.");
+            }
+            else
+            {
+                var seenSlots = new System.Collections.Generic.HashSet<WeaponSlotType>();
+                foreach (var cfg in WeaponConfig)
+                {
+                    if (!seenSlots.Add(cfg.Type))
+                    {
+                        Debug.LogError($"[InventoryConfig] Duplicate WeaponSlotType '{cfg.Type}' found in WeaponConfig!");
+                        hasErrors = true;
+                    }
+                }
+            }
 
             if (!hasErrors)
                 Debug.Log("[InventoryConfig] Validation passed.");
@@ -335,8 +392,36 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Tooltip("The holster slot type this entry configures.")]
         public WeaponSlotType Type;
 
+        [Tooltip("Human-readable label shown in UI (e.g. 'Rifle', 'Pistol', 'Knife')." +
+                 " If empty, falls back to Type.ToString().")]
+        public string DisplayName;
+
         [Tooltip("Default icon shown when this weapon slot is empty.")]
         public Sprite DefaultIcon;
+
+        [Tooltip("Optional per-slot WeaponCardView prefab (overrides the panel default). Leave null to use panel default.")]
+        public GameObject WeaponCardPrefab;
+
+        [Tooltip("Which weapon classes are allowed in this slot. Leave empty = accept ALL weapons.")]
+        public WeaponClass[] AllowedClasses;
+
+        [Tooltip("Auto-equip priority (0 = highest priority / fill first). Used to build _slotPriority in WeaponSystem.")]
+        public int Priority;
+
+        /// <summary>Resolved display name: uses DisplayName if set, otherwise slot Type name.</summary>
+        public string ResolvedDisplayName => string.IsNullOrEmpty(DisplayName) ? Type.ToString() : DisplayName;
+
+        /// <summary>
+        /// Returns true when a weapon with the given WeaponClass is allowed in this slot.
+        /// An empty AllowedClasses array means all weapon classes are accepted.
+        /// </summary>
+        public bool AcceptsWeaponClass(WeaponClass weaponClass)
+        {
+            if (AllowedClasses == null || AllowedClasses.Length == 0) return true;
+            foreach (var c in AllowedClasses)
+                if (c == weaponClass) return true;
+            return false;
+        }
     }
 
     #endregion

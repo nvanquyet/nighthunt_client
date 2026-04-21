@@ -170,11 +170,24 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private void RefreshAllWeaponCards()
         {
             if (_bridge?.Bridge?.Weapon == null) return;
-            // IWeaponSystem.GetWeapon(slot) is the correct API (not GetEquippedWeapon).
-            foreach (WeaponSlotType slot in System.Enum.GetValues(typeof(WeaponSlotType)))
+            // Iterate only the slots defined in InventoryConfig — never raw enum values.
+            // This ensures Slot3/Slot4/None are not accidentally spawned when unused.
+            var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+            var slots   = config?.WeaponConfig;
+            if (slots != null && slots.Length > 0)
             {
-                var weapon = _bridge.Bridge.Weapon.GetWeapon(slot);
-                RefreshWeaponCard(slot, weapon);
+                foreach (var cfg in slots)
+                {
+                    var weapon = _bridge.Bridge.Weapon.GetWeapon(cfg.Type);
+                    RefreshWeaponCard(cfg.Type, weapon);
+                }
+            }
+            else
+            {
+                // Fallback: iterate active weapon cache only (no config = no phantom cards).
+                var allWeapons = _bridge.Bridge.Weapon.GetAllWeapons();
+                foreach (var kvp in allWeapons)
+                    RefreshWeaponCard(kvp.Key, kvp.Value);
             }
         }
 
@@ -230,8 +243,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return existing;
             }
 
-            // Resolve which prefab to use.
-            var prefab = ResolveWeaponPrefab(weapon);
+            // Resolve which prefab to use (item mapping → slot config → panel default).
+            var prefab = ResolveWeaponPrefab(weapon, slot);
             if (prefab == null)
             {
                 Debug.LogWarning($"[WeaponEquipmentPanel] No weapon card prefab for slot {slot} weapon={weapon?.DefinitionID}");
@@ -273,8 +286,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             return card;
         }
 
-        private GameObject ResolveWeaponPrefab(ItemInstance weapon)
+        private GameObject ResolveWeaponPrefab(ItemInstance weapon, WeaponSlotType slot = WeaponSlotType.None)
         {
+            // Priority 1: per-item mapping (most specific)
             if (weapon != null && _weaponCardMappings != null)
             {
                 foreach (var mapping in _weaponCardMappings)
@@ -283,6 +297,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         return mapping.CardPrefab;
                 }
             }
+
+            // Priority 2: per-slot prefab from InventoryConfig
+            if (slot != WeaponSlotType.None)
+            {
+                var slotCfg = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance?.GetWeaponSlot(slot);
+                if (slotCfg.HasValue && slotCfg.Value.WeaponCardPrefab != null)
+                    return slotCfg.Value.WeaponCardPrefab;
+            }
+
+            // Priority 3: panel-level default
             return _defaultWeaponCardPrefab;
         }
 

@@ -10,27 +10,27 @@ using NightHunt.Utilities;
 namespace NightHunt.GameplaySystems.World
 {
     /// <summary>
-    /// Static world switch / button — đặt sẵn trên Scene, không spawn dynamic.
+    /// Static world switch / button placed in the scene — not spawned dynamically.
     ///
     /// DESIGN:
-    ///   - Toggle switch: mỗi lần Interact() đổi state On↔Off → trigger OnActivated / OnDeactivated.
-    ///   - Button (OneTimeUse): chỉ trigger 1 lần → OnActivated, sau đó CanInteract = false.
+    ///   - Toggle switch: each Interact() flips state On↔Off → fires OnActivated / OnDeactivated.
+    ///   - Button (OneTimeUse): triggers once → OnActivated; CanInteract becomes false afterwards.
     ///   - State sync qua SyncVar.
-    ///   - Uses UnityEvent để connect với bất kỳ logic nào mà không cần code thêm.
+    ///   - Uses UnityEvent so any logic can be connected without additional code.
     ///
     /// SETUP:
-    ///   1. Add WorldSwitch vào GameObject trên Scene.
-    ///   2. Gán InteractableConfig (Type = Switch hoặc Button).
+    ///   1. Add WorldSwitch to a GameObject in the scene.
+    ///   2. Assign an InteractableConfig (Type = Switch or Button).
     ///   3. Wire UnityEvents OnActivated / OnDeactivated trong Inspector.
     /// </summary>
     public class WorldSwitch : NetworkBehaviour, IHoldInteractable
     {
         [Header("Config")] [SerializeField] private InteractableConfig _config;
 
-        [Header("Events")] [Tooltip("Fired (server + clients) khi switch được bật ON hoặc button được nhấn.")]
+        [Header("Events")] [Tooltip("Fired (server + all clients) when the switch is turned ON or the button is pressed.")]
         public UnityEvent OnActivated;
 
-        [Tooltip("Fired (server + clients) khi switch được tắt OFF (không fire với Button type).")]
+        [Tooltip("Fired (server + all clients) when the switch is turned OFF (not fired for Button type).")]
         public UnityEvent OnDeactivated;
 
         [Header("State")] [SerializeField] private bool startActive = false;
@@ -151,7 +151,7 @@ namespace NightHunt.GameplaySystems.World
                     float maxDist = _config?.MaxInteractDistance ?? 3f;
                     if (dist > maxDist)
                     {
-                        Debug.LogWarning($"[WorldSwitch] Toggle: Quá xa ({dist:F2}m > {maxDist}m).");
+                        Debug.LogWarning($"[WorldSwitch] Toggle: too far ({dist:F2}m > {maxDist}m).");
                         return;
                     }
                 }

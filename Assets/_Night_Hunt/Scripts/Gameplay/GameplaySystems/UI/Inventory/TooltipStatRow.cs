@@ -8,7 +8,7 @@ using NightHunt.Gameplay.StatSystem.Core.Data;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Component cho mỗi stat row trong tooltip.
+    /// Component for each stat row in the item tooltip.
     /// </summary>
     public class TooltipStatRow : MonoBehaviour
     {
@@ -19,7 +19,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         
         public void SetItemStat(ItemStatDefinition statDef, float value)
         {
-            // TextColor fallback về DisplayColor nếu chưa set (alpha = 0)
+            // TextColor falls back to DisplayColor if not explicitly set (alpha = 0).
             Color textColor = statDef.TextColor.a > 0.01f
                 ? statDef.TextColor
                 : statDef.DisplayColor;
@@ -39,7 +39,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_iconImage != null && statDef.Icon != null)
             {
                 _iconImage.sprite = statDef.Icon;
-                _iconImage.color = statDef.DisplayColor; // Icon dùng accent color
+                _iconImage.color = statDef.DisplayColor; // Icon uses accent color.
                 _iconImage.gameObject.SetActive(true);
             }
             else if (_iconImage != null)

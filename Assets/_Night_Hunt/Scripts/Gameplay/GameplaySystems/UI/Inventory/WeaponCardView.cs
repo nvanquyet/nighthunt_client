@@ -50,6 +50,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                  "Used to show the correct type icon when a slot is empty.")]
         [SerializeField] private AttachmentSlotType[] _attachmentSlotTypes;
 
+        [Header("Slot Name (Optional)")]
+        [Tooltip("Text element to display the name of the slot (e.g. 'Primary'). " +
+                 "Uses the DisplayName from InventoryConfig's WeaponConfig.")]
+        [SerializeField] private TMPro.TextMeshProUGUI _slotNameText;
+
         [Header("Config")]
         [SerializeField] private UISlotLayoutConfig _uiConfig;
 
@@ -81,6 +86,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (uiConfig != null) _uiConfig = uiConfig;
 
             UnregisterAllSlots();
+
+            if (_slotNameText != null)
+            {
+                var cfg = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance?.GetWeaponSlot(weaponSlot);
+                _slotNameText.text = cfg.HasValue ? cfg.Value.ResolvedDisplayName : weaponSlot.ToString();
+            }
 
             // ── Main weapon slot ─────────────────────────────────────────────
             if (_mainSlot != null)

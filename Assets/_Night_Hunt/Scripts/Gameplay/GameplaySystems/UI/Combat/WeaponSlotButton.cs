@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -208,14 +208,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         /// <summary>
         /// Slot is empty: clear icon sprite and all text fields.
-        /// No overlay ?�� simply nothing is shown.
+        /// No overlay ? simply nothing is shown.
         /// </summary>
         private void RefreshEmpty()
         {
             SetIcon(null);
             SetSelectedBorder(false);
 
-            if (_weaponNameText != null) _weaponNameText.text = string.Empty;
+            if (_weaponNameText != null)
+            {
+                var cfg = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance?.GetWeaponSlot(_slotType);
+                _weaponNameText.text = cfg.HasValue ? cfg.Value.ResolvedDisplayName : _slotType.ToString();
+            }
             if (_magAmmoText != null) _magAmmoText.text = string.Empty;
             if (_reserveAmmoText != null) _reserveAmmoText.text = string.Empty;
             if (_ammoSlider != null) _ammoSlider.value = 0f;

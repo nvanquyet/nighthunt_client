@@ -185,16 +185,16 @@ namespace NightHunt.GameplaySystems.Equipment
         [ServerRpc(RequireOwnership = true)]
         private void UnequipItemServerRpc(EquipmentSlotType slotType) => UnequipItemServer(slotType);
 
-        /// <summary>Swap two equipment slots. Server-only in the current design.</summary>
+        /// <summary>Swap two equipment slots. Owning client routes to the server automatically.</summary>
         public void SwapEquipment(EquipmentSlotType slot1, EquipmentSlotType slot2)
         {
-            if (!IsServerInitialized)
-            {
-                Debug.LogWarning("[EquipmentSystem] SwapEquipment: server-only.");
-                return;
-            }
-            SwapEquipmentServer(slot1, slot2);
+            if (IsServerInitialized) { SwapEquipmentServer(slot1, slot2); return; }
+            if (IsOwner) SwapEquipmentServerRpc(slot1, slot2);
+            else Debug.LogWarning("[EquipmentSystem] SwapEquipment: caller does not own this object.");
         }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void SwapEquipmentServerRpc(EquipmentSlotType slot1, EquipmentSlotType slot2) => SwapEquipmentServer(slot1, slot2);
 
         /// <summary>
         /// Drop an equipped item directly to the world without returning it to inventory.
@@ -314,16 +314,30 @@ namespace NightHunt.GameplaySystems.Equipment
             {
                 _equippedItems[slot1] = instanceID2;
                 _equippedItems[slot2] = instanceID1;
+
+                // Sync server-side cache — SyncDictionary callback skips asServer=true.
+                var item1 = _inventorySystem?.GetItemByInstanceID(instanceID1);
+                var item2 = _inventorySystem?.GetItemByInstanceID(instanceID2);
+                if (item1 != null) _equipmentCache[slot2] = item1;
+                if (item2 != null) _equipmentCache[slot1] = item2;
             }
             else if (hasItem1)
             {
                 _equippedItems.Remove(slot1);
                 _equippedItems[slot2] = instanceID1;
+
+                var item1 = _inventorySystem?.GetItemByInstanceID(instanceID1);
+                _equipmentCache.Remove(slot1);
+                if (item1 != null) _equipmentCache[slot2] = item1;
             }
             else
             {
                 _equippedItems.Remove(slot2);
                 _equippedItems[slot1] = instanceID2;
+
+                var item2 = _inventorySystem?.GetItemByInstanceID(instanceID2);
+                _equipmentCache.Remove(slot2);
+                if (item2 != null) _equipmentCache[slot1] = item2;
             }
 
             if (_enableDebugLogs)
@@ -383,8 +397,14 @@ namespace NightHunt.GameplaySystems.Equipment
             else
                 Debug.LogError("[EquipmentSystem] DropEquippedItem: WorldSpawnManager.Instance is null — item not spawned.");
 
-            // Step 6: Remove from equipment slot and from inventory entirely.
+            // Step 6: Remove from equipment slot and clear server-side cache.
             _equippedItems.Remove(slotType);
+            _equipmentCache.Remove(slotType);
+
+            // Notify listeners (e.g. StatApplyOrchestrator) that the slot is now empty.
+            OnItemUnequipped?.Invoke(slotType, item);
+
+            // Step 7: Remove from inventory entirely (item now lives in the world).
             _inventorySystem.RemoveItem(instanceID, item.Quantity);
 
             if (_enableDebugLogs)

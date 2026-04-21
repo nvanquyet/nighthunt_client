@@ -155,14 +155,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _combatInputHandler?.SetFireMobileJoystick(joystickDir, active: true);
         }
 
-        // IEndDragHandler ΓÇö OnPointerUp fires TR╞»ß╗ÜC EndDrag (Unity EventSystem dispatch order).
-        // Mß╗ìi cleanup ─æ├ú ─æ╞░ß╗úc xß╗¡ l├╜ trong OnPointerUp (joystick hide + SimulateFire(false)).
-        // OnEndDrag chß╗ë l├á safety net cho edge case drag kß║┐t th├║c m├á kh├┤ng c├│ PointerUp
-        // (v├¡ dß╗Ñ: pointer rß╗¥i khß╗Åi m├án h├¼nh trong khi drag).
+        // IEndDragHandler — OnPointerUp fires BEFORE OnEndDrag (Unity EventSystem dispatch order).
+        // All cleanup is already handled in OnPointerUp (joystick hide + SimulateFire(false)).
+        // OnEndDrag is only a safety net for the edge case where drag ends without a PointerUp
+        // (e.g., pointer left the screen while dragging).
         public void OnEndDrag(PointerEventData eventData)
         {
-            // _joystickStarted ─æ├ú bß╗ï set = false trong OnPointerUp n├¬n block n├áy
-            // chß╗ë chß║íy ß╗ƒ edge case pointer-left-screen.
+            // _joystickStarted was already set to false in OnPointerUp, so this block
+            // only runs in the pointer-left-screen edge case.
             if (_joystickStarted && _joystick != null)
             {
                 _joystick.OnPointerUp(eventData);
@@ -170,7 +170,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
             _joystickStarted = false;
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
-            // Gß╗ìi SimulateFire(false) nß║┐u vß║½n c├▓n ─æang fire (edge case kh├┤ng c├│ PointerUp).
+            // Call SimulateFire(false) if still firing (edge case without PointerUp).
             _combatInputHandler?.SimulateFire(false);
         }
 

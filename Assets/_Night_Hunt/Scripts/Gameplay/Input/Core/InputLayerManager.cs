@@ -9,15 +9,15 @@ namespace NightHunt.Gameplay.Input.Core
 {
     // ──────────────────────────────────────────────────────────────────────────────
     /// <summary>
-    /// SINGLE SOURCE OF TRUTH cho toàn bộ Input.
+    /// Single source of truth for all input layer management.
     ///
-    /// Nguyên tắc:
-    ///   • Chỉ class này được Enable/Disable ActionMap.
-    ///   • Các handler KHÔNG tự gọi map.Enable() / map.Disable().
-    ///   • Uses <see cref="PushContext"/> / <see cref="PopContext"/> để chuyển state,
-    ///     instead of gọi <see cref="TransitionToState"/> trực tiếp từ nhiều nơi.
+    /// Rules:
+    ///   • Only this class may Enable/Disable ActionMaps.
+    ///   • Handlers must NOT call map.Enable() / map.Disable() directly.
+    ///   • Use <see cref="PushContext"/> / <see cref="PopContext"/> to switch state
+    ///     instead of calling <see cref="TransitionToState"/> from multiple places.
     ///
-    /// Bảng preset Context → Layer:
+    /// Context → Layer preset table:
     /// <code>
     ///  Context        | Player | Combat | Camera | Inventory | Team | UI | Spectator | Objectives | Devices
     ///  ───────────────┼────────┼────────┼────────┼───────────┼──────┼────┼───────────┼────────────┼────────
@@ -85,7 +85,7 @@ namespace NightHunt.Gameplay.Input.Core
             },
             {
                 InputState.ScoutMode,
-                // Di chuyển + Camera, KHÔNG combat
+                // Move + Camera, NO combat
                 InputLayer.Player | InputLayer.Camera | InputLayer.Team
             },
             {
@@ -126,26 +126,26 @@ namespace NightHunt.Gameplay.Input.Core
         };
 
         // ── Runtime state ─────────────────────────────────────────────────────────
-        /// <summary>Layer đang active hiện tại (bitwise OR).</summary>
+        /// <summary>Currently active layers (bitwise OR).</summary>
         public InputLayer ActiveLayers { get; private set; } = InputLayer.None;
 
-        /// <summary>Context hiện tại.</summary>
+        /// <summary>Current input context.</summary>
         public InputState CurrentState { get; private set; } = InputState.None;
 
-        /// <summary>Stack để hỗ trợ Push/Pop (ví dụ: mở map trong inventory → pop về inventory).</summary>
+        /// <summary>Stack for Push/Pop support (e.g., opening the map while in inventory → pop back to inventory).</summary>
         private readonly Stack<InputState> _contextStack = new Stack<InputState>();
 
         // Events
-        /// <summary>Fired khi context thay đổi. (oldState, newState)</summary>
+        /// <summary>Fired when the context changes. (oldState, newState)</summary>
         public event Action<InputState, InputState> OnContextChanged;
-        /// <summary>Fired khi các layer active thay đổi.</summary>
+        /// <summary>Fired when the active layers change.</summary>
         public event Action<InputLayer>             OnLayersChanged;
 
         // Cache: Layer → ActionMap
         private readonly Dictionary<InputLayer, InputActionMap> _layerToMap
             = new Dictionary<InputLayer, InputActionMap>();
 
-        // ── Legacy cached refs (public accessors cho code cũ) ────────────────────
+        // ── Legacy cached refs (public accessors for older code) ───────────────
         public InputActionMap PlayerMap     => GetMap(InputLayer.Player);
         public InputActionMap CombatMap     => GetMap(InputLayer.Combat);
         public InputActionMap InventoryMap  => GetMap(InputLayer.Inventory);
@@ -188,7 +188,7 @@ namespace NightHunt.Gameplay.Input.Core
             var asset = inputConfig.InputActionAsset;
             if (asset == null)
             {
-                Debug.LogError("[InputLayerManager] InputActionAsset là null trong InputConfig!");
+                Debug.LogError("[InputLayerManager] InputActionAsset is null in InputConfig!");
                 return;
             }
 
@@ -199,13 +199,13 @@ namespace NightHunt.Gameplay.Input.Core
                 if (MapNameToLayer.TryGetValue(map.name, out var layer))
                     _layerToMap[layer] = map;
                 else
-                    Debug.LogWarning($"[InputLayerManager] ActionMap '{map.name}' not available mapping → bỏ qua.");
+                    Debug.LogWarning($"[InputLayerManager] ActionMap '{map.name}' has no layer mapping — skipping.");
             }
 
             // Validate critical maps
             foreach (var pair in MapNameToLayer)
                 if (!_layerToMap.ContainsKey(pair.Value))
-                    Debug.LogWarning($"[InputLayerManager] Không tìm thấy ActionMap '{pair.Key}' trong asset.");
+                    Debug.LogWarning($"[InputLayerManager] ActionMap '{pair.Key}' not found in asset.");
 
             Debug.Log("[InputLayerManager] Initialized success.");
         }
@@ -217,7 +217,7 @@ namespace NightHunt.Gameplay.Input.Core
         // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Chuyển context, xóa toàn bộ stack history.
+        /// Transition to a new context, clearing the entire stack history.
         /// </summary>
         public void TransitionToState(InputState newState)
         {
@@ -226,8 +226,8 @@ namespace NightHunt.Gameplay.Input.Core
         }
 
         /// <summary>
-        /// Push context mới, lưu context cũ vào stack để <see cref="PopContext"/> khôi phục.
-        /// <para>Ví dụ: Gameplay → PushContext(InventoryOpen) → PopContext() → Gameplay.</para>
+        /// Push a new context, saving the current one on the stack for <see cref="PopContext"/> to restore.
+        /// <para>Example: Gameplay → PushContext(InventoryOpen) → PopContext() → Gameplay.</para>
         /// </summary>
         public void PushContext(InputState newState)
         {
@@ -236,7 +236,7 @@ namespace NightHunt.Gameplay.Input.Core
         }
 
         /// <summary>
-        /// Pop về context trước đó. Nếu stack empty → fallback <see cref="InputState.PlayerAlive"/>.
+        /// Pop to the previous context. If the stack is empty, falls back to <see cref="InputState.PlayerAlive"/>.
         /// </summary>
         public void PopContext()
         {
@@ -251,23 +251,23 @@ namespace NightHunt.Gameplay.Input.Core
 
         #endregion
 
-        // ─────────────────────────────────────────────────────────────────────────
-        #region Layer API – thủ công fine-tune
+        // ────────────────────────────────────────────────────────────────────────────
+        #region Layer API – manual fine-tuning
         // ─────────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Bật/tắt thủ công một layer ngoài preset context.
-        /// Uses when needed tweak (VD: tạm tắt Camera nhưng giữ nguyên context Gameplay).
+        /// Enable or disable a layer outside the preset context.
+        /// Use when a tweak is needed (e.g., temporarily disable Camera while keeping the Gameplay context).
         /// </summary>
         public void SetLayerEnabled(InputLayer layer, bool enabled)
         {
             ApplyLayers(enabled ? (ActiveLayers | layer) : (ActiveLayers & ~layer));
         }
 
-        /// <summary>Kiểm tra layer có đang active không.</summary>
+        /// <summary>Check whether a layer is currently active.</summary>
         public bool IsLayerActive(InputLayer layer) => (ActiveLayers & layer) != 0;
 
-        /// <summary>Disable tất cả input (dùng cho Cinematic / Loading screen).</summary>
+        /// <summary>Disable all input (use for Cinematic / Loading screens).</summary>
         public void DisableAll()
         {
             _contextStack.Clear();
@@ -298,18 +298,18 @@ namespace NightHunt.Gameplay.Input.Core
         #region Legacy API
         // ─────────────────────────────────────────────────────────────────────────
 
-        /// <summary>Legacy: trả về state hiện tại.</summary>
+        /// <summary>Legacy: returns the current state.</summary>
         public InputState GetCurrentState() => CurrentState;
 
-        /// <summary>Legacy: lấy ActionMap theo tên.</summary>
+        /// <summary>Legacy: get ActionMap by name.</summary>
         public InputActionMap GetActionMap(string mapName)
             => inputConfig?.InputActionAsset?.FindActionMap(mapName);
 
-        /// <summary>Legacy: lấy Action theo tên map và tên action.</summary>
+        /// <summary>Legacy: get Action by map name and action name.</summary>
         public InputAction GetAction(string mapName, string actionName)
             => GetActionMap(mapName)?.FindAction(actionName);
 
-        /// <summary>Legacy: check map có enabled không.</summary>
+        /// <summary>Legacy: check whether a map is enabled.</summary>
         public bool IsActionMapEnabled(string mapName)
         {
             var map = GetActionMap(mapName);
@@ -329,12 +329,12 @@ namespace NightHunt.Gameplay.Input.Core
 
             if (!ContextPresets.TryGetValue(state, out var layers))
             {
-                Debug.LogWarning($"[InputLayerManager] Không có preset cho state '{state}' → disable all");
+                Debug.LogWarning($"[InputLayerManager] No preset for state '{state}' — disabling all input");
                 layers = InputLayer.None;
             }
 
 #if UNITY_EDITOR
-            // Luôn giữ Debug layer bật trong Editor
+            // Always keep the Debug layer enabled in Editor.
             layers |= InputLayer.Debug;
 #endif
 
@@ -356,7 +356,7 @@ namespace NightHunt.Gameplay.Input.Core
                 else              kvp.Value.Disable();
             }
 
-            // 2️⃣ Sync registered handlers – gọi EnableInput/DisableInput khớp với ActionMap
+            // 2️⃣ Sync registered handlers — call EnableInput/DisableInput to match ActionMap state.
             foreach (var handler in _registeredHandlers)
             {
                 if (handler == null) continue;

@@ -9,40 +9,40 @@ using NightHunt.Utilities;
 namespace NightHunt.GameplaySystems.World
 {
     /// <summary>
-    /// Static world door — đặt sẵn trên Scene, không spawn dynamic.
+    /// Static world door placed in the scene — not spawned dynamically.
     ///
     /// DESIGN:
-    ///   - Implements IHoldInteractable: HoldDuration > 0 nếu config = Hold, else 0 (Instant).
-    ///   - PlayerInteractionSystem handle cả hai mode tự động qua interface.
-    ///   - State (IsOpen) sync qua SyncVar cho tất cả client.
+    ///   - Implements IHoldInteractable: HoldDuration > 0 when config = Hold, 0 for Instant.
+    ///   - PlayerInteractionSystem handles both modes automatically via the interface.
+    ///   - State (IsOpen) is synced via SyncVar to all clients.
     ///
     /// SETUP:
-    ///   1. Add WorldDoor component vào door GameObject trên Scene.
-    ///   2. Gán InteractableConfig asset (Create → GameplaySystems → Config → Interactable Config).
-    ///   3. Gán Animator (nếu có) → WorldDoor tự gọi SetBool("IsOpen", ...) khi toggle.
+    ///   1. Add the WorldDoor component to the door GameObject in the scene.
+    ///   2. Assign an InteractableConfig asset (Create → GameplaySystems → Config → Interactable Config).
+    ///   3. Assign an Animator (optional) — WorldDoor calls SetBool("IsOpen", ...) on toggle.
     /// </summary>
     public class WorldDoor : NetworkBehaviour, IHoldInteractable
     {
         [Header("Config")]
-        [Tooltip("InteractableConfig xác định type, interaction mode, hold duration, prompt...")]
+        [Tooltip("InteractableConfig defining type, interaction mode, hold duration, and prompt text.")]
         [SerializeField]
         private InteractableConfig _config;
 
-        [Header("References")] [Tooltip("Animator để play open/close animation (optional).")] [SerializeField]
+        [Header("References")] [Tooltip("Animator for open/close animation (optional).")] [SerializeField]
         private Animator _animator;
 
-        [Tooltip("Tên bool parameter trong Animator điều khiển trạng thái cửa.")] [SerializeField]
+        [Tooltip("Name of the bool parameter in the Animator that controls the door state.")] [SerializeField]
         private string _animatorBoolName = "IsOpen";
 
-        [Header("Fallback Visual (khi not available Animator)")]
-        [Tooltip("Renderer dùng để đổi màu khi mở/đóng cửa. Tự động tìm trên GameObject nếu để trống.")]
+        [Header("Fallback Visual (when no Animator is assigned)")]
+        [Tooltip("Renderer used to tint the door on open/close. Auto-discovered from the GameObject if left empty.")]
         [SerializeField] private Renderer _fallbackRenderer;
-        [Tooltip("Màu fallback khi cửa đóng (chỉ dùng khi not available Animator).")]
+        [Tooltip("Fallback color when the door is closed (only used when no Animator is assigned).")]
         [SerializeField] private Color _closedColor = Color.white;
-        [Tooltip("Màu fallback khi cửa mở (chỉ dùng khi not available Animator).")]
+        [Tooltip("Fallback color when the door is open (only used when no Animator is assigned).")]
         [SerializeField] private Color _openColor   = new Color(0.35f, 0.85f, 0.35f);
 
-        [Header("State")] [Tooltip("Trạng thái ban đầu khi scene load.")] [SerializeField]
+        [Header("State")] [Tooltip("Initial door state when the scene loads.")] [SerializeField]
         private bool startOpen = false;
 
         // SYNC: all clients see the same door state
@@ -60,8 +60,8 @@ namespace NightHunt.GameplaySystems.World
         // ── IHoldInteractable ────────────────────────────────────────────────────
 
         /// <summary>
-        /// 0 = Instant (InteractionMode != Hold hoặc not available config).
-        /// > 0 = giây player phải giữ nút before Interact() fire.
+        /// 0 = Instant (InteractionMode != Hold or no config).
+        /// > 0 = seconds the player must hold the button before Interact() fires.
         /// </summary>
         public float HoldDuration
             => _config?.InteractionMode == LootInteractionMode.Hold ? _config.HoldDuration : 0f;
@@ -172,7 +172,7 @@ namespace NightHunt.GameplaySystems.World
                     float maxDist = _config?.MaxInteractDistance ?? 3f;
                     if (dist > maxDist)
                     {
-                        Debug.LogWarning($"[WorldDoor] ToggleDoor: Quá xa ({dist:F2}m > {maxDist}m).");
+                        Debug.LogWarning($"[WorldDoor] ToggleDoor: too far ({dist:F2}m > {maxDist}m).");
                         return;
                     }
                 }
@@ -193,7 +193,7 @@ namespace NightHunt.GameplaySystems.World
             syncIsOpen.Value = !syncIsOpen.Value;
             Debug.Log($"[WorldDoor] Toggled → IsOpen={syncIsOpen.Value}");
 
-            // Auto-close: nếu vừa mở và config có AutoReset
+            // Auto-close: if just opened and config has AutoReset enabled.
             if (syncIsOpen.Value && _config?.AutoReset == true)
             {
                 if (_autoCloseCoroutine != null) StopCoroutine(_autoCloseCoroutine);
@@ -210,16 +210,16 @@ namespace NightHunt.GameplaySystems.World
 
         // ── Auto Close ────────────────────────────────────────────────────
 
-        /// <summary>Cửa tự đóng lại sau AutoResetDelay giây.</summary>
+        /// <summary>Automatically closes the door after AutoResetDelay seconds.</summary>
         private IEnumerator AutoCloseCoroutine()
         {
             float delay = _config?.AutoResetDelay ?? 10f;
-            Debug.Log($"[WorldDoor] Tự đóng sau {delay}s...");
+            Debug.Log($"[WorldDoor] Auto-closing in {delay}s...");
             yield return new WaitForSeconds(delay);
-            if (syncIsOpen.Value) // vẫn đang mở thì mới đóng
+            if (syncIsOpen.Value) // only close if still open
             {
                 syncIsOpen.Value = false;
-                Debug.Log("[WorldDoor] đã tự đóng.");
+                Debug.Log("[WorldDoor] auto-closed.");
             }
 
             _autoCloseCoroutine = null;

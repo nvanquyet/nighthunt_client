@@ -22,6 +22,16 @@ namespace NightHunt.UI.Mobile
     /// </summary>
     public class MobileInventoryButton : MonoBehaviour, IPointerDownHandler
     {
+        [Tooltip("Force this button visible even on desktop (for UI testing in the Editor).")]
+        [SerializeField] private bool _forceMobile;
+
+        private void Awake()
+        {
+            // This button is only needed on mobile; hide it on desktop platforms.
+            if (!Application.isMobilePlatform && !PlatformManager.IsMobile && !_forceMobile)
+                gameObject.SetActive(false);
+        }
+
         public void OnPointerDown(PointerEventData eventData)
         {
             InputManager.Instance?.InventoryHandler?.SimulateToggle();

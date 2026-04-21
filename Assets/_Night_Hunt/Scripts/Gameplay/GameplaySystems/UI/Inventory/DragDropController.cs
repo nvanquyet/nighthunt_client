@@ -15,7 +15,7 @@ using NightHunt.GameplaySystems.Core.Configs;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Trung tâm handle drag & drop, ghost, optimistic update.
+    /// Central controller for drag-and-drop, ghost preview, and optimistic UI updates.
     /// </summary>
     public class DragDropController : Singleton<DragDropController>
     {
@@ -35,6 +35,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private readonly DragDropValidator _validator = new DragDropValidator();
         private readonly Dictionary<UISlotId, ItemSlotView> _allSlots = new Dictionary<UISlotId, ItemSlotView>();
+
+        /// <summary>
+        /// Quick accessor for the local player's IWeaponSystem.
+        /// Used by DragDropValidator to call CanEquipInSlot during drag-over validation.
+        /// </summary>
+        public IWeaponSystem WeaponSystem
+        {
+            get
+            {
+                var player = SpectateManager.Instance?.GetCurrentPlayer();
+                return player?.GamePlaySystemBridge?.Weapon;
+            }
+        }
 
         [Header("Raycast")] [SerializeField] private GraphicRaycaster _raycaster;
 
@@ -74,7 +87,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
 
         /// <summary>
-        /// Reset toàn bộ state drag-drop (dùng khi đổi current player, reload UI,...).
+        /// Reset all drag-drop state (call when switching players, reloading UI, etc.).
         /// </summary>
         public void ResetAll()
         {
@@ -156,7 +169,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             _activeGhost.RectTransform.localPosition = localPoint;
 
-            // Preview highlight target hợp lệ
+            // Preview-highlight the valid drop target.
             if (_raycaster != null)
             {
                 var results = new List<RaycastResult>();
@@ -176,7 +189,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
                 if (hoverView != _currentHoverView)
                 {
-                    // Clear highlight cũ
+                    // Clear the previous highlight.
                     if (_currentHoverView != null)
                     {
                         var oldState = CloneState(_currentHoverView.State);
@@ -466,7 +479,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     break;
 
                 case DropActionType.Stack:
-                    // Stack items vào target
+                    // Stack items onto the target slot.
                     if (action.Source.Type == UISlotType.Inventory &&
                         action.Target.Type == UISlotType.Inventory &&
                         targetState != null && targetState.Item != null)
@@ -534,7 +547,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                              !string.IsNullOrEmpty(action.Target.ParentInstanceID) &&
                              targetState != null && targetState.Item != null)
                     {
-                        // Swap attachments giữa 2 slots
+                        // Swap attachments between the two slots.
                         var attachmentSystem = GetAttachmentSystem();
                         if (attachmentSystem != null)
                         {
@@ -618,7 +631,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 
 
                 case DropActionType.DropToWorld:
-                    // Nếu stack đủ lớn (>=3), mở dialog ch�?n số lượng drop instead of luôn drop full stack.
+                    // If stack is large enough (>=3), open the quantity dialog instead of always dropping the full stack.
                     if (item.Quantity > 2 && TryShowDropQuantityDialog(item, qty =>
                             ExecuteDropToWorld(bridge, action.Source, item, qty)))
                     {
@@ -629,7 +642,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     break;
 
                 case DropActionType.Attach:
-                    // Attach item vào attachment slot
+                    // Attach item to the attachment slot.
                     if (action.Target.Type == UISlotType.Attachment)
                     {
                         var attachmentSystem = GetAttachmentSystem();
@@ -662,8 +675,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
 
         /// <summary>
-        /// Hiển thị DropQuantityDialog (nếu có) và thực thi callback khi người chơi confirm.
-        /// Trả về true nếu dialog has been display, false nếu not available dialog.
+        /// Show the DropQuantityDialog (if assigned) and invoke the callback when the player confirms.
+        /// Returns true if the dialog was shown, false if no dialog is assigned.
         /// </summary>
         private bool TryShowDropQuantityDialog(ItemInstance item, System.Action<int> onConfirmed)
         {
@@ -699,7 +712,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
 
         /// <summary>
-        /// Thực thi logic DropToWorld cho một lượng cụ thể.
+        /// Execute the drop-to-world logic for a specific quantity.
         /// </summary>
         private void ExecuteDropToWorld(IGameplayBridge bridge, UISlotId source, ItemInstance item, int quantity)
         {
@@ -748,17 +761,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
 
         /// <summary>
-        /// Thực thi logic Trash cho một lượng cụ thể.
+        /// Execute the trash logic for a specific quantity.
         /// </summary>
         private void ExecuteTrash(IGameplayBridge bridge, UISlotId source, ItemInstance item, int quantity)
         {
             if (bridge == null || item == null || quantity <= 0)
                 return;
 
-            // Trash cần handle khác nhau tuỳ nguồn:
-            // - Inventory: xoá trực tiếp kh�?i inventory.
-            // - Equipment / Weapon: unequip trước rồi xoá kh�?i inventory.
-            // - Attachment: detach v�? inventory (nếu có system) – user có thể trash tiếp từ inventory.
+            // Trash path differs by source slot type:
+            // - Inventory: remove directly from inventory.
+            // - Equipment / Weapon: unequip first, then remove from inventory.
+            // - Attachment: detach to inventory (if system present) — user can then trash from inventory.
             switch (source.Type)
             {
                 case UISlotType.Inventory:
@@ -785,9 +798,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"from={source} qty={quantity}");
                         }
 
-                        // 1) Unequip để trả item v�? inventory.
+                        // 1) Unequip to return item to inventory.
                         bridge.UnequipItem(slot);
-                        // 2) Xoá instance kh�?i inventory.
+                        // 2) Remove instance from inventory.
                         bridge.RemoveItem(item.InstanceID, quantity);
                     }
 
@@ -805,17 +818,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                       $"from={source} qty={quantity}");
                         }
 
-                        // 1) Unequip weapon để trả v�? inventory.
+                        // 1) Unequip weapon to return it to inventory.
                         bridge.UnequipWeapon(slot);
-                        // 2) Xoá instance kh�?i inventory.
+                        // 2) Remove instance from inventory.
                         bridge.RemoveItem(item.InstanceID, quantity);
                     }
 
                     break;
 
                 case UISlotType.Attachment:
-                    // �?ơn giản hoá: detach attachment v�? inventory,
-                    // sau đó player có thể trash tiếp từ inventory nếu muốn.
+                    // Simplified: detach attachment to inventory,
+                    // then the player can trash it from inventory if desired.
                     var attachmentSystem = GetAttachmentSystem();
                     if (attachmentSystem != null &&
                         !string.IsNullOrEmpty(source.ParentInstanceID))

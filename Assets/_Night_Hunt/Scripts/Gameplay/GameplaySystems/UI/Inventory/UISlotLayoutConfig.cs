@@ -66,7 +66,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public GameObject AttachmentSlotPrefab;
 
         /// <summary>
-        /// Get prefab cho slot type cụ thể
+        /// Get the prefab for a specific slot type.
         /// </summary>
         public GameObject GetSlotPrefab(UISlotType slotType)
         {
@@ -84,7 +84,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         }
 
         /// <summary>
-        /// Get background sprite cho rarity cụ thể
+        /// Get the background sprite for a specific rarity.
         /// </summary>
         public Sprite GetRarityBackground(ItemRarity rarity)
         {
@@ -99,7 +99,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             return DefaultBackground;
         }
 
-        // Properties từ InventoryConfig
+        // Properties forwarded from InventoryConfig.
         public int InventoryGridWidth => InventoryConfig != null ? InventoryConfig.Inventory.GridWidth : 5;
         public int InventoryGridHeight => InventoryConfig != null ? InventoryConfig.Inventory.GridHeight : 4;
         public int InventoryTotalSlots => InventoryConfig != null ? InventoryConfig.Inventory.TotalSlots : 20;
@@ -158,6 +158,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                  "or dropped on an invalid slot.")]
         [Range(0f, 0.5f)]
         public float GhostSnapBackDuration = 0.18f;
+
+        [Tooltip("Maximum interval (seconds) between two clicks that counts as a double-click on an inventory slot.")]
+        [Range(0.1f, 1f)]
+        public float DoubleClickThreshold = 0.3f;
 
         // ── Attachment Slot Highlight ─────────────────────────────────────────
 

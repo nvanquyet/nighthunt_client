@@ -18,7 +18,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
     ///   world-space cursor at the current mouse ground position.
     ///   Left-click → confirm throw.  Right-click or Escape → cancel.</para>
     ///
-    /// <para><b>Mobile Mode (Liên Quân / LoL Wild Rift style):</b>
+    /// <para><b>Mobile Mode (joystick drag style, similar to LoL Wild Rift):</b>
     ///   Drag begins at the quick-slot button's screen centre.  Dragging in any direction
     ///   computes a world-space aim direction.  Releasing beyond the threshold confirms the
     ///   throw; releasing inside the threshold cancels it.</para>
@@ -103,8 +103,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private bool IsMobile => _forceMobileMode || Application.isMobilePlatform;
 
         /// <summary>
-        /// True khi controller đang trong aim mode (chờ confirm/cancel).
-        /// Uses bởi item selection button để quyết định có start hold-timer/joystick không.
+        /// True while the controller is in aim mode (waiting for confirm/cancel).
+        /// Used by item-selection buttons to decide whether to start a hold-timer or joystick.
         /// </summary>
         public bool IsInAimMode => _inAimMode;
 
@@ -292,14 +292,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
         }
 
         /// <summary>
-        /// Phiên bản phòng thủ của <see cref="OnMobileDragEnd"/> — chỉ thực thi nếu aim mode
-        /// vẫn còn active. Được called from OnEndDrag để tránh
-        /// double-resolve khi OnPointerUp đã handle trước.
+        /// Defensive version of <see cref="OnMobileDragEnd"/> — only executes if aim mode
+        /// is still active. Called from OnEndDrag to prevent double-resolve when
+        /// OnPointerUp has already handled the event first.
         /// </summary>
         public void OnMobileDragEndIfStillActive(float joystickMagnitude)
         {
-            // _inAimMode has been reset về false nếu OnPointerUp đã gọi OnMobileDragEnd trước.
-            // Guard này đảm bảo not available double Confirm/Cancel.
+            // _inAimMode is reset to false if OnPointerUp already called OnMobileDragEnd first.
+            // This guard prevents a double Confirm/Cancel.
             if (!_inAimMode) return;
             OnMobileDragEnd(joystickMagnitude);
         }        // ─────────────────────────────────────────────────────────────────────

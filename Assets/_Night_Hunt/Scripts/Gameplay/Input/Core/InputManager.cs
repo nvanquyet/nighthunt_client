@@ -11,10 +11,10 @@ using NightHunt.Gameplay.Input.Handlers.Interaction;
 namespace NightHunt.Gameplay.Input.Core
 {
     /// <summary>
-    /// Facade cung cấp tham chiếu nhanh tới các handler cụ thể.
-    /// <para><b>Manages state / enable-disable ActionMap:</b>
-    /// Uses <see cref="InputLayerManager"/> – đây là Single Source of Truth.</para>
-    /// <para><b>Không bao giờ</b> gọi <c>map.Enable()</c> / <c>map.Disable()</c> từ đây.</para>
+    /// Facade providing quick references to concrete input handlers.
+    /// <para><b>State / ActionMap enable-disable is managed by:</b>
+    /// <see cref="InputLayerManager"/> — this is the single source of truth.</para>
+    /// <para><b>Never</b> call <c>map.Enable()</c> / <c>map.Disable()</c> from here.</para>
     /// </summary>
     public class InputManager : Singleton<InputManager>
     {
@@ -38,7 +38,7 @@ namespace NightHunt.Gameplay.Input.Core
 
         private void Start()
         {
-            // Bắt đầu ở PlayerAlive context khi scene load xong
+            // Start in PlayerAlive context when the scene finishes loading.
             InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
         }
 
@@ -72,10 +72,10 @@ namespace NightHunt.Gameplay.Input.Core
 
         #endregion
 
-        #region Convenience Methods (delegate tới InputLayerManager)
+        #region Convenience Methods (delegates to InputLayerManager)
 
         /// <summary>
-        /// Bật toàn bộ gameplay input (PlayerAlive context).
+        /// Enable all gameplay input (PlayerAlive context).
         /// </summary>
         public void EnableAllInput()
         {
@@ -89,7 +89,7 @@ namespace NightHunt.Gameplay.Input.Core
         }
 
         /// <summary>
-        /// Tắt toàn bộ input (Cinematic context).
+        /// Disable all input (Cinematic context).
         /// </summary>
         public void DisableAllInput()
         {

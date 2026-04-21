@@ -142,6 +142,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// Called when the local player spawns (or switches).
         /// Slots must already exist (Awake spawned them); this method only
         /// assigns live system references — it never destroys / recreates GOs.
+        ///
+        /// Delegates to <see cref="BindWeapon"/>, <see cref="BindItemSelection"/>,
+        /// and <see cref="BindPlayerContext"/>.
         /// </summary>
         public void Initialize(
             IWeaponSystem        weaponSystem,
@@ -154,8 +157,27 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IInventorySystem     inventorySystem      = null)
         {
             Debug.Log($"[CombatHUDPanel] Initialize: itemSelectionSystem={(itemSelectionSystem != null ? itemSelectionSystem.ToString() : "null")} ({itemSelectionSystem?.GetHashCode() ?? 0})");
-            // If slots were never spawned (edge-case: Initialize called before Awake),
-            // run the spawn pass now as a safety net.
+            UnwireSystemEvents();
+            UnwireShortcutKeys();
+
+            BindWeapon(weaponSystem, inventorySystem);
+            BindItemSelection(itemSelectionSystem, itemUseSystem, combatInputHandler);
+            BindPlayerContext(statSystem, playerTransform, aimSystem);
+
+            WireSystemEvents();
+            WireShortcutKeys();
+            HideStatusMessages();
+            _isInitialized = true;
+        }
+
+        /// <summary>
+        /// Bind weapon and inventory systems, then rebind weapon slot buttons.
+        /// Safe to call independently when only the weapon or inventory system changes.
+        /// Call <see cref="WireSystemEvents"/> afterwards when used outside <see cref="Initialize"/>.
+        /// </summary>
+        public void BindWeapon(IWeaponSystem weaponSystem, IInventorySystem inventorySystem = null)
+        {
+            // Safety: ensure slots exist (edge-case when called before Awake).
             if (!_slotsSpawned)
             {
                 SpawnWeaponSlots();
@@ -163,32 +185,45 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _slotsSpawned = true;
             }
 
-            // Detach events from previous system before swapping references.
-            UnwireSystemEvents();
-            UnwireShortcutKeys();
+            _weaponSystem    = weaponSystem;
+            _inventorySystem = inventorySystem;
+            RebindWeaponSlots();
+        }
 
-            _weaponSystem        = weaponSystem;
+        /// <summary>
+        /// Bind item-selection, item-use, and the combat input handler.
+        /// Also re-initialises all item filter panels and rewires the cancel button.
+        /// </summary>
+        public void BindItemSelection(
+            IItemSelectionSystem itemSelectionSystem,
+            IItemUseSystem       itemUseSystem      = null,
+            CombatInputHandler   combatInputHandler = null)
+        {
             _itemSelectionSystem = itemSelectionSystem;
-            _inventorySystem     = inventorySystem;
             _combatInputHandler  = combatInputHandler;
 
-            // Let CombatInputHandler also call UseSelectedItem on fire when throwable is armed.
+            // Let CombatInputHandler call UseSelectedItem on fire when a throwable is armed.
             combatInputHandler?.BindItemSelectionSystem(itemSelectionSystem);
 
-            // Rebind existing slot buttons with the new system references.
-            RebindWeaponSlots();
             RefreshItemPanels();
 
-            // Wire the optional aim controller with player systems so it can read VisionRange + aim.
-            if (_aimController != null)
-                _aimController.Initialize(statSystem, itemSelectionSystem, playerTransform, aimSystem, itemUseSystem, combatInputHandler);
-
-            // Store itemUseSystem reference for cancel-button subscription.
             UnwireCancelButton();
             _itemUseSystem = itemUseSystem;
             WireCancelButton();
+        }
 
-            // Bind fire-button to the local player's combat handler and range indicator.
+        /// <summary>
+        /// Bind player-context references (stat system, transform, aim system) to the
+        /// aim controller and fire button.
+        /// </summary>
+        public void BindPlayerContext(
+            IPlayerStatSystem statSystem      = null,
+            Transform         playerTransform = null,
+            IAimSystem        aimSystem       = null)
+        {
+            if (_aimController != null)
+                _aimController.Initialize(statSystem, _itemSelectionSystem, playerTransform, aimSystem, _itemUseSystem, _combatInputHandler);
+
             ApplyFireButtonVisibility();
             if (_showFireButton && _fireButton != null)
             {
@@ -200,11 +235,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
                     _fireButton.BindPlayerContext(playerTransform, vr);
                 }
             }
-
-            WireSystemEvents();
-            WireShortcutKeys();
-            HideStatusMessages();
-            _isInitialized = true;
         }
 
         /// <summary>

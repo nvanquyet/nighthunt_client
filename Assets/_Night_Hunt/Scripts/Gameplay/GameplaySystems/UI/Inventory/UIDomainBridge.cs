@@ -13,8 +13,8 @@ using NightHunt.Networking.Player;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Bridge giữa gameplay backend (GameplaySystemsBridge) và UI Inventory/HUD.
-    /// Listens for event từ bridge và bắn event UI thân thiện với slot.
+    /// Bridge between the gameplay backend (GameplaySystemsBridge) and the Inventory/HUD UI.
+    /// Listens for backend events and re-publishes UI-friendly slot events.
     /// </summary>
     public enum InventorySortMode
     {
@@ -347,7 +347,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var id = UISlotId.Equipment(slot);
             OnEquipmentSlotChanged?.Invoke(id, new UISlotState());
 
-            // FIX: Update inventory slot nếu item được add vào inventory
+            // Update the inventory slot when an item is added.
             if (item != null && item.InventoryIndex >= 0)
             {
                 HandleItemChangedInventory(item);
@@ -383,7 +383,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var id = UISlotId.Weapon(slot);
             OnWeaponSlotChanged?.Invoke(id, new UISlotState());
 
-            // FIX: Update inventory slot nếu item được add vào inventory
+            // Update the inventory slot when an item is added.
             if (item != null && item.InventoryIndex >= 0)
             {
                 HandleItemChangedInventory(item);
@@ -438,18 +438,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private void HandleItemDeselected() => OnItemDeselected?.Invoke();
 
         /// <summary>
-        /// Handle item moved event - update cả old và new slot
+        /// Handle item-moved event — update both the old and the new slot.
         /// </summary>
         private void HandleItemMoved(ItemInstance item, int oldIndex, int newIndex)
         {
-            // Update old slot về empty
+            // Clear the old slot.
             if (oldIndex >= 0)
             {
                 var oldId = UISlotId.Inventory(oldIndex);
                 OnInventorySlotChanged?.Invoke(oldId, new UISlotState());
             }
 
-            // Update new slot với item data
+            // Populate the new slot with item data.
             if (newIndex >= 0 && item != null)
             {
                 HandleItemChangedInventory(item);
@@ -481,8 +481,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         #region Inventory Sorting
 
         /// <summary>
-        /// Yêu cầu sắp xếp inventory theo ItemType rồi DefinitionID trên server.
-        /// Routes qua ServerRpc để hoạt động từ cả client lẫn host.
+        /// Request server-side inventory sort by ItemType then DefinitionID.
+        /// Routes via ServerRpc so it works from both client and host.
         /// </summary>
         public void RequestSortInventory(InventorySortMode mode = InventorySortMode.Default)
         {

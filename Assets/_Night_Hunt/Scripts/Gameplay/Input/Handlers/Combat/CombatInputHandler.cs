@@ -13,19 +13,19 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
     /// <summary>
     /// Handles ONLY combat input (Fire, Aim, Reload, WeaponSlots, Grenade).
     ///
-    /// FIRE FLOW (PC + Mobile đều dùng chung BeginFire/EndFire):
+    /// FIRE FLOW (PC + Mobile both use BeginFire/EndFire):
     ///
     ///   PC:
     ///     Mouse Down (LMB performed) → BeginFire()
     ///       → Freeze camera (CameraStateManager.ForceState Locked)
     ///       → Force STRAFE (MovementInputHandler.SetCameraLockOverride true)
-    ///     Mouse Move (while held)    → UpdateAimDirection() update _aimDirection
-    ///       → GetAimDirection() trả về _aimDirection (≠ zero vì _isFiring = true)
-    ///       → GatherInput() dùng làm _aimYaw → character xoay nhìn theo cursor
+    ///     Mouse Move (while held)    → UpdateAimDirection() updates _aimDirection
+    ///       → GetAimDirection() returns _aimDirection (≠ zero because _isFiring = true)
+    ///       → GatherInput() uses it as _aimYaw → character rotates to face cursor
     ///     Mouse Up (LMB canceled)    → EndFire()
     ///       → Restore camera state
     ///       → Restore movement lock state
-    ///       → GetAimDirection() trả zero → _aimYaw fallback về camera yaw
+    ///       → GetAimDirection() returns zero → _aimYaw falls back to camera yaw
     ///
     ///   Mobile (FireButton):
     ///     PointerDown  → SimulateFire(true)  → BeginFire() — same flow
@@ -33,8 +33,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
     ///     PointerUp    → SimulateFire(false) → EndFire()  — same flow
     ///
     /// KEY RULE:
-    ///   GetAimDirection() trả về Vector3.zero khi KHÔNG fire.
-    ///   Điều này đảm bảo GatherInput() không dùng cursor direction khi chưa bắn.
+    ///   GetAimDirection() returns Vector3.zero when NOT firing.
+    ///   This ensures GatherInput() does not use the cursor direction when not shooting.
     /// </summary>
     public class CombatInputHandler : MonoBehaviour, IInputHandler
     {
@@ -51,7 +51,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private InputAction _switchWeaponAction;
         private InputAction _mousePositionAction; // Track mouse position via Input System
 
-        // ── Delegate fields (để unsubscribe đúng, tránh lambda leak) ─────────────
+        // ── Delegate fields (stored to allow correct unsubscription, avoids lambda leak) ─────
         private System.Action<InputAction.CallbackContext> _onSlot1;
         private System.Action<InputAction.CallbackContext> _onSlot2;
         private System.Action<InputAction.CallbackContext> _onSlot3;
@@ -61,7 +61,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private bool    _isAiming;
         private bool    _isReloading;
         private int     _currentWeaponSlot = 0;
-        private Vector3 _aimDirection;          // internal — luôn track cursor
+        private Vector3 _aimDirection;          // internal — always tracks cursor
         private Vector3 _lastGroundHitPoint;    // last cursor-to-ground hit (PC) — passed to RequestExecuteThrow
         private bool    _inputEnabled = false;
         private bool    _uiConsumedThisPress;   // set by WeaponSlotButton etc. to block the concurrent LMB fire event
@@ -78,22 +78,22 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private IItemUseSystem _itemUseSystem;
         private NightHunt.GameplaySystems.Core.Interfaces.IItemSelectionSystem _itemSelectionSystem;        /// <summary>Local player transform — origin cho ground-plane aim raycast.</summary>
         private Transform _playerTransform;
-        /// <summary>Camera lock state before fire — restored khi EndFire.</summary>
+        /// <summary>Camera lock state before firing — restored when EndFire is called.</summary>
         private bool _prevCameraLockBeforeFire;
 
         // ── Camera freeze refs ────────────────────────────────────────────────────
         private NightHunt.Gameplay.Camera.CameraStateManager _cameraStateManager;
-        /// <summary>Camera state before fire — restored khi EndFire.</summary>
+        /// <summary>Camera state before firing — restored when EndFire is called.</summary>
         private NightHunt.Gameplay.Camera.CameraState _prevCameraStateBeforeFire;
 
         // ── Mobile aim override ───────────────────────────────────────────────────
         /// <summary>
-        /// True khi mobile FireButton đang drag.
-        /// Khi true, _aimDirection set bởi FireButton.OnDrag instead of mouse raycast.
+        /// True when the mobile FireButton is being dragged.
+        /// When true, _aimDirection is set by FireButton.OnDrag instead of mouse raycast.
         /// </summary>
         private bool    _mobileAimActive;
-        private Vector3 _mobileAimDirection;   // normalised — dùng cho character rotation
-        private Vector2 _mobileJoystick01;     // raw [0,1] với magnitude — dùng cho cursor placement
+        private Vector3 _mobileAimDirection;   // normalised — used for character rotation
+        private Vector2 _mobileJoystick01;     // raw [0,1] with magnitude — used for cursor placement
 
         // ── Events ────────────────────────────────────────────────────────────────
         public event System.Action       OnFire;
@@ -120,8 +120,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void Awake()
         {
-            // Camera.main có thể null ở đây (player chưa spawn).
-            // UpdateAimDirection() refresh mỗi frame — không rely vào cache này.
+            // Camera.main may be null here (player not yet spawned).
+            // UpdateAimDirection() refreshes every frame — do not rely on this cache.
             _playerCamera = UnityEngine.Camera.main;
 
             _onSlot1 = _ => SwitchToWeaponSlot(0);
@@ -160,10 +160,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void Update()
         {
-            // UpdateAimDirection luôn chạy để _aimDirection luôn = vị trí cursor hiện tại.
-            // NHƯNG GetAimDirection() chỉ expose value này khi _isFiring = true.
-            // → Khi không bắn: GatherInput() không nhận aim direction → _aimYaw fallback về camera yaw.
-            // → Khi bắn: GatherInput() nhận aim direction → character xoay nhìn theo cursor.
+            // UpdateAimDirection always runs so _aimDirection always equals the current cursor position.
+            // BUT GetAimDirection() only exposes this value when _isFiring = true.
+            // → Not firing: GatherInput() receives no aim direction → _aimYaw falls back to camera yaw.
+            // → Firing:     GatherInput() receives aim direction → character rotates to face cursor.
             UpdateAimDirection();
         }
 
@@ -173,7 +173,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         {
             if (InputLayerManager.Instance == null)
             {
-                Debug.LogError("[CombatInputHandler] InputLayerManager.Instance là null!");
+                Debug.LogError("[CombatInputHandler] InputLayerManager.Instance is null!");
                 return;
             }
 
@@ -190,7 +190,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 _throwGrenadeAction  = _combatActionMap.FindAction("ThrowGrenade");
                 _consumablePanelAction = _combatActionMap.FindAction("ConsumablePanel");
                 _switchWeaponAction  = _combatActionMap.FindAction("SwitchWeapon");
-                // MousePosition action mới thêm vào .inputactions
+                // MousePosition action added to .inputactions
                 _mousePositionAction = _combatActionMap.FindAction("MousePosition");
             }
             else
@@ -214,7 +214,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             _inputEnabled = true;
 
             // Fire: performed = mouse down, canceled = mouse up
-            // Press(behavior=2) trong .inputactions đảm bảo cả 2 event đều fire đúng.
+            // Press(behavior=2) in .inputactions ensures both events fire correctly.
             if (_fireAction != null)
             {
                 _fireAction.performed += OnFirePerformed; // Mouse Down → BeginFire
@@ -232,8 +232,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_throwGrenadeAction != null) _throwGrenadeAction.performed += OnThrowGrenadePerformed;
             if (_consumablePanelAction != null) _consumablePanelAction.performed += OnConsumablePanelPerformed;
             if (_switchWeaponAction != null) _switchWeaponAction.performed += OnSwitchWeaponPerformed;
-            // MousePosition: không cần subscribe event — polling trong UpdateAimDirection() đủ.
-            // Action chỉ cần được enable (handled by InputLayerManager).
+            // MousePosition: no event subscription needed — polling in UpdateAimDirection() is sufficient.
+            // The action only needs to be enabled (handled by InputLayerManager).
 
             Debug.Log("[CombatInputHandler] Input enabled");
         }
@@ -261,7 +261,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_consumablePanelAction != null) _consumablePanelAction.performed -= OnConsumablePanelPerformed;
             if (_switchWeaponAction != null) _switchWeaponAction.performed -= OnSwitchWeaponPerformed;
 
-            // Nếu đang fire khi bị disable (ví dụ mở inventory), force EndFire để restore state.
+            // If firing when disabled (e.g., opening inventory), force EndFire to restore state.
             if (_isFiring) EndFire();
 
             _isFiring    = false;
@@ -274,24 +274,24 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         // ── Aim Direction (Internal Tracking) ─────────────────────────────────────
 
         /// <summary>
-        /// Luôn update _aimDirection nội bộ mỗi frame.
+        /// Always updates _aimDirection internally each frame.
         ///
-        /// PC:     Ground-plane raycast từ mouse position.
-        /// Mobile: Direction set bởi FireButton.OnDrag via SetMobileAimDirection().
+        /// PC:     Ground-plane raycast from mouse position.
+        /// Mobile: Direction set by FireButton.OnDrag via SetMobileAimDirection().
         ///
-        /// QUAN TRỌNG: Hàm này chỉ update internal state.
-        /// GetAimDirection() mới là public API — nó chỉ expose direction khi đang fire.
+        /// IMPORTANT: This method only updates internal state.
+        /// GetAimDirection() is the public API — it only exposes the direction while firing.
         /// </summary>
         private void UpdateAimDirection()
         {
             if (_mobileAimActive)
             {
-                // Mobile: direction set bởi FireButton.OnDrag
+                // Mobile: direction set by FireButton.OnDrag
                 _aimDirection = _mobileAimDirection;
             }
             else
             {
-                // PC: luôn refresh Camera.main để tránh stale reference (HOST spawn issue)
+                // PC: always refresh Camera.main to avoid stale reference (HOST spawn issue)
                 var freshCam = UnityEngine.Camera.main;
                 if (freshCam != null) _playerCamera = freshCam;
                 if (_playerCamera == null) return;
@@ -300,7 +300,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                     ? _playerTransform.position
                     : transform.position;
 
-                // Read vị trí chuột từ MousePosition action nếu có, fallback về legacy Input
+                // Read mouse position from MousePosition action if available, fallback to legacy Input
                 Vector2 mouseScreenPos;
                 if (_mousePositionAction != null && _mousePositionAction.enabled)
                     mouseScreenPos = _mousePositionAction.ReadValue<Vector2>();
@@ -336,14 +336,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 }
             }
 
-            // Luôn push aim direction vào WeaponSystem để đạn bay đúng hướng.
-            // WeaponSystem cần direction ngay cả khi chưa bắn (preview trajectory, v.v.)
+            // Always push aim direction to WeaponSystem so projectiles fly in the right direction.
+            // WeaponSystem needs the direction even before firing (preview trajectory, etc.).
             _weaponSystem?.SetAimDirection(_aimDirection);
 
             // Mobile MOBA cursor sync:
-            // Uses _mobileJoystick01 (giữ nguyên magnitude [0,1]) instead of _aimDirection (normalized).
-            // -> Cursor đặt tại player + joystickDir * joystickMagnitude * visionRange.
-            // -> joystick 50% ra đưa cursor đến 50% range — giống Mobile Legends.
+            // Uses _mobileJoystick01 (retains magnitude [0,1]) instead of _aimDirection (normalized).
+            // -> Cursor placed at player + joystickDir * joystickMagnitude * visionRange.
+            // -> Joystick at 50% places cursor at 50% of range — like Mobile Legends.
             if (_mobileAimActive && _mobileJoystick01.sqrMagnitude > 0.001f)
                 _aimSystem?.SetThrowableAim(_mobileJoystick01);
         }
@@ -379,12 +379,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         // ── Core Fire Logic ───────────────────────────────────────────────────────
 
         /// <summary>
-        /// Bắt đầu bắn — called from Mouse Down (PC) hoặc PointerDown (Mobile/Button).
+        /// Begin firing — called from Mouse Down (PC) or PointerDown (Mobile/Button).
         ///
         /// FLOW:
         ///   1. Freeze camera → disable CinemachineInputAxisController
-        ///   2. Force STRAFE → character face cursor khi WASD
-        ///   3. Từ thời điểm này: GetAimDirection() ≠ zero → GatherInput() dùng cursor aim
+        ///   2. Force STRAFE → character faces cursor while pressing WASD
+        ///   3. From this point: GetAimDirection() ≠ zero → GatherInput() uses cursor aim
         /// </summary>
         private void BeginFire()
         {
@@ -475,12 +475,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         }
 
         /// <summary>
-        /// Stop bắn — called from Mouse Up (PC) hoặc PointerUp (Mobile/Button).
+        /// Stop firing — called from Mouse Up (PC) or PointerUp (Mobile/Button).
         ///
         /// FLOW:
-        ///   1. GetAimDirection() trả zero → GatherInput() fallback về camera yaw
+        ///   1. GetAimDirection() returns zero → GatherInput() falls back to camera yaw
         ///   2. Restore movement lock state
-        ///   3. Restore camera state (re-enable CinemachineInputAxisController nếu trước đó Free)
+        ///   3. Restore camera state (re-enable CinemachineInputAxisController if previously Free)
         /// </summary>
         private void EndFire()
         {
@@ -493,20 +493,20 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (!_isFiring) return;
             _isFiring = false;
 
-            // ── Bước 1: _isFiring = false → GetAimDirection() trả zero ───────────
-            // GatherInput() Priority 1 fail → fallback về camera yaw
-            // → character no longer bị kéo nhìn theo cursor
+            // ── Step 1: _isFiring = false → GetAimDirection() returns zero ───────
+            // GatherInput() Priority 1 fails → falls back to camera yaw
+            // → Character no longer forced to look toward cursor
 
             _rangeIndicator?.Hide();
 
-            // ── Bước 2: Restore movement lock state ───────────────────────────────
+            // ── Step 2: Restore movement lock state ─────────────────────────────────
             _movementInputHandler?.SetCameraLockOverride(
                 active: false,
                 forcedValue: _prevCameraLockBeforeFire);
 
-            // ── Bước 3: Restore camera state ──────────────────────────────────────
-            // Nếu trước đó Free → re-enable CinemachineInputAxisController → camera xoay tự do lại
-            // Nếu trước đó Locked → giữ nguyên Locked
+            // ── Step 3: Restore camera state ─────────────────────────────────
+            // Previously Free → re-enable CinemachineInputAxisController → camera rotates freely again
+            // Previously Locked → keep Locked
             if (_cameraStateManager != null)
                 _cameraStateManager.ForceState(_prevCameraStateBeforeFire);
 
@@ -567,17 +567,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         public void SetReloading(bool v)  => _isReloading = v;
 
         /// <summary>
-        /// Trả về aim direction CHỈ KHI đang fire (LMB held hoặc mobile button held).
+        /// Returns the aim direction ONLY while firing (LMB held or mobile button held).
         ///
-        /// Trả về Vector3.zero khi không fire.
-        /// → GatherInput() Priority 1 sẽ fail → _aimYaw fallback về camera yaw
-        /// → Character không bị kéo nhìn theo cursor khi chưa bắn.
+        /// Returns Vector3.zero when not firing.
+        /// → GatherInput() Priority 1 fails → _aimYaw falls back to camera yaw
+        /// → Character is not forced to look toward cursor when not shooting.
         ///
-        /// Đây là KEY RULE của toàn bộ aim system.
+        /// This is the KEY RULE of the entire aim system.
         /// </summary>
         public Vector3 GetAimDirection()
         {
-            // Chỉ expose direction khi đang fire hoặc mobile aim active
+            // Only expose direction when firing or when mobile aim is active
             if (!_isFiring && !_mobileAimActive)
                 return Vector3.zero;
 
@@ -596,7 +596,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         }
 
         /// <summary>
-        /// Simulate fire từ on-screen button (mobile).
+        /// Simulate fire from an on-screen button (mobile).
         /// Call SimulateFire(true) = PointerDown → BeginFire()
         /// Call SimulateFire(false) = PointerUp  → EndFire()
         /// </summary>
@@ -629,13 +629,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         }
 
         /// <summary>
-        /// Override aim direction từ mobile drag (FireButton.OnDrag).
+        /// Override aim direction from mobile drag (FireButton.OnDrag).
         ///
-        /// Call với active=true + dir = drag world direction khi đang drag.
-        /// Call với active=false khi finger lift để revert về mouse raycast.
+        /// Call with active=true + dir = drag world direction while dragging.
+        /// Call with active=false on finger lift to revert to mouse raycast.
         ///
-        /// NOTE: _mobileAimActive = true cũng khiến GetAimDirection() expose direction
-        /// ngay cả khi _isFiring = false — điều này cho phép preview aim before bắn.
+        /// NOTE: _mobileAimActive = true also makes GetAimDirection() expose the direction
+        /// even when _isFiring = false — this allows aim preview before shooting.
         /// </summary>
         public void SetMobileAimDirection(Vector3 dir, bool active = true)
         {
@@ -695,14 +695,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         }
 
         /// <summary>
-        /// Bind tất cả refs cần thiết cho fire flow.
-        /// Call một lần after local player spawn (trong NetworkPlayer.EnableInput).
+        /// Bind all refs required for the fire flow.
+        /// Call once after local player spawns (inside NetworkPlayer.EnableInput).
         ///
         /// Params:
-        ///   movementInputHandler  — để force STRAFE khi bắn
-        ///   weaponSystem          — để push aim direction vào weapon
-        ///   playerTransform       — origin cho ground-plane aim raycast
-        ///   cameraStateManager    — để freeze/unfreeze camera khi bắn
+        ///   movementInputHandler  — to force STRAFE while firing
+        ///   weaponSystem          — to push aim direction into the weapon
+        ///   playerTransform       — origin for ground-plane aim raycast
+        ///   cameraStateManager    — to freeze/unfreeze the camera while firing
         /// </summary>
         public void BindCombatSystems(
             MovementInputHandler movementInputHandler,

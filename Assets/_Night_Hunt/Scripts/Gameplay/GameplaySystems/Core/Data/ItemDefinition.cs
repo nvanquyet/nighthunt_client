@@ -165,13 +165,21 @@ namespace NightHunt.GameplaySystems.Core.Data
         Hands = 7,
     }
 
-    /// <summary>Weapon holster slot. None means unholstered / in inventory.</summary>
+    /// <summary>
+    /// Weapon holster slot index.
+    /// Values 0–4 are slot indices used as SyncDictionary keys — never reorder.
+    /// None = 99 is intentionally outside the index range so iteration over
+    /// InventoryConfig.WeaponConfig never accidentally includes it.
+    /// To add a new game-mode slot, add a new value before None (e.g. Slot3 = 3).
+    /// </summary>
     public enum WeaponSlotType
     {
         Primary   = 0,  // Main long-arm (rifle, shotgun, SMG)
         Secondary = 1,  // Sidearm (pistol)
-        Melee     = 2,  // Knife, axe
-        None      = 3,
+        Melee     = 2,  // Knife, axe, close-combat
+        Slot3     = 3,  // Reserved — 4-slot configs (e.g. dual setup)
+        Slot4     = 4,  // Reserved — 5-slot configs
+        None      = 99, // Unholstered / not in any slot (moved out of index range)
     }
 
     /// <summary>

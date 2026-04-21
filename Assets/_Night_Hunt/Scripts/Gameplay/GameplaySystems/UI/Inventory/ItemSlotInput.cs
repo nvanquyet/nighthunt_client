@@ -21,7 +21,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     {
         private ItemSlotView _view;
         private float _lastClickTime = -1f;
-        private const float DoubleClickThreshold = 0.3f;
+        private float DoubleClickThreshold => UISlotLayoutConfig.Instance != null
+            ? UISlotLayoutConfig.Instance.DoubleClickThreshold
+            : 0.3f;
 
         public event System.Action<ItemSlotView> OnSlotHoverEnter;
         public event System.Action<ItemSlotView> OnSlotHoverExit;

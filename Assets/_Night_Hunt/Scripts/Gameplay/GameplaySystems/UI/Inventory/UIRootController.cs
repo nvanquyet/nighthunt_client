@@ -10,9 +10,10 @@ using UnityEngine;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Điểm vào chính cho HUD + Inventory.
-    /// Giữ UIDomainBridge và truyền cho InventoryScreen / PlayerHUDPanel.
-    /// Đồng thời re-init UI khi SpectateManager đổi current player.
+    /// Main entry point for HUD + Inventory UI.
+    /// Owns the <see cref="UIDomainBridge"/> and distributes it to child panels
+    /// (InventoryScreen, PlayerHUDPanel, CombatHUDPanel).
+    /// Re-initialises all UI when SpectateManager switches the observed player.
     /// </summary>
     public class UIRootController : MonoBehaviour
     {
@@ -125,18 +126,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _hasReceivedPlayerEvent = true;
             Debug.Log($"[UIRootController] OnCurrentPlayerChanged: player={player?.name ?? "null"}");
 
-            // Đổi player display UI → reset mọi drag-drop đang diễn ra
+            // Player switched — reset any in-progress drag-drop state.
             DragDropController.Instance?.ResetAll();
 
             _domainBridge?.Dispose();
             
-            // Create bridge mới
+            // Create a fresh bridge for the new player.
             _domainBridge = new UIDomainBridge();
             _domainBridge.InitializeForCurrentPlayer();
 
             Debug.Log($"[UIRootController] bridge.IsReady={_domainBridge.IsReady}");
 
-            // Chỉ refresh UI, không rebuild layout
+            // Refresh UI bindings only — do not rebuild slot layout.
             if (_inventoryScreen != null)
             {
                 _inventoryScreen.RefreshForNewPlayer(_domainBridge);

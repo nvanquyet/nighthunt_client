@@ -1,228 +1,161 @@
 """
-Add transitions from UB_Empty -> action states in all 6 weapon UpperBody sub-machines.
-This is the correct architectural approach: UB_Empty is idle, triggers fire actions,
-actions exit back to parent -> Entry re-routes to weapon sub-machine -> UB_Empty.
+Add explicit transitions FROM UB_Empty TO each action state in every UB sub-machine.
+Derives trigger + conditions from state names automatically.
+New transition FIDs start at 9203000.
 """
-
 import re
 
 F = r'w:\Unity\Shotter\NightHuntClient\Assets\Toon_Soldiers\ToonSoldiers_2\animation\SoldierAnimatorController.controller'
 with open(F, 'r', encoding='utf-8') as f:
-    lines = f.readlines()
+    content = f.read()
 
-print(f"Lines: {len(lines)}")
+# ── UB sub-machine FIDs and their UB_Empty state FID ──────────────────────────
+UB_MACHINES = [
+    (9200048, 9200049, 'Handgun'),
+    (9200174, 9200175, 'Infantry'),
+    (9200306, 9200307, 'Heavy'),
+    (9200441, 9200442, 'Knife'),
+    (9200573, 9200574, 'Machinegun'),
+    (9200708, 9200709, 'RocketLauncher'),
+    (9202210, 9202211, 'Unarmed'),
+]
 
-# Find max fid
-max_fid = 0
-for l in lines:
-    m = re.match(r'^--- !u!\d+ &(\d+)', l)
-    if m:
-        max_fid = max(max_fid, int(m.group(1)))
-print(f"Max fid: {max_fid}")
-next_fid = [max_fid + 1]  # Use list for mutability in nested function
-
-# Weapon sub-machine fids
-MACHINE_FIDS = ['9200048', '9200173', '9200304', '9200438', '9200569', '9200703']
-
-# Cache state names
-_name_cache = {}
-def get_name(fid):
-    if fid in _name_cache:
-        return _name_cache[fid]
-    for i, l in enumerate(lines):
-        if re.match(r'^--- !u!1102 &' + fid + r'\b', l):
-            for j in range(i+1, min(i+15, len(lines))):
-                if re.match(r'^--- !u!', lines[j]): break
-                if re.match(r'\s+m_Name:', lines[j]):
-                    name = lines[j].split('m_Name:', 1)[1].strip()
-                    _name_cache[fid] = name
-                    return name
-    return ''
-
-def get_machine_info(machine_fid):
-    """Returns (default_state_fid, [child_state_fids])"""
-    for i, l in enumerate(lines):
-        if re.match(r'^--- !u!1107 &' + machine_fid + r'\b', l):
-            child_states = []
-            default_state = None
-            in_child = False
-            j = i + 1
-            while j < len(lines) and not re.match(r'^--- !u!', lines[j]):
-                if 'm_ChildStates:' in lines[j]:
-                    in_child = True
-                elif in_child and 'm_ChildStateMachines:' in lines[j]:
-                    in_child = False
-                if in_child and 'm_State:' in lines[j]:
-                    m = re.search(r'fileID: (\d+)', lines[j])
-                    if m: child_states.append(m.group(1))
-                if 'm_DefaultState:' in lines[j]:
-                    m = re.search(r'fileID: (\d+)', lines[j])
-                    if m: default_state = m.group(1)
-                j += 1
-            return default_state, child_states
-    return None, []
-
+# ── Derive trigger + extra conditions from state name ─────────────────────────
 def get_conditions(state_name):
-    """
-    Returns list of (conditionMode, conditionEvent, threshold) based on state name.
-    conditionMode: 1=If/True, 2=IfNot/False, 6=Equals(int)
-    Returns None if state should be skipped.
-    """
     n = state_name.lower()
-    conds = []
-
-    # Detect action trigger from name
-    if 'shootburst' in n:
-        conds.append((1, 'ShootBurst', 0))
-    elif 'shootloop' in n:
-        conds.append((1, 'ShootLoop', 0))   # bool
-    elif 'shootbolt' in n:
-        conds.append((1, 'ShootBolt', 0))   # bool
-    elif 'shootshotgun' in n:
-        conds.append((1, 'ShootShotgun', 0)) # bool
-    elif 'shoot' in n:
-        conds.append((1, 'Shoot', 0))
-    elif 'reload' in n:
-        conds.append((1, 'Reload', 0))
-    elif 'draw' in n:
-        conds.append((1, 'Draw', 0))
-    elif 'grenade' in n:
-        conds.append((1, 'ThrowGrenade', 0))
-    elif re.search(r'interact.*_a\b|interact_a', n):
-        conds.append((1, 'Interact', 0))
-        conds.append((6, 'InteractIndex', 0))   # InteractIndex == 0
-    elif re.search(r'interact.*_b\b|interact_b', n):
-        conds.append((1, 'Interact', 0))
-        conds.append((6, 'InteractIndex', 1))   # InteractIndex == 1
-    elif 'interact' in n:
-        conds.append((1, 'Interact', 0))
-    elif 'damage' in n or 'takedamage' in n:
-        conds.append((1, 'TakeDamage', 0))
-    elif re.search(r'attack.*_a\b|attack_a', n):
-        conds.append((1, 'Attack', 0))
-        conds.append((6, 'AttackIndex', 0))
-    elif re.search(r'attack.*_b\b|attack_b', n):
-        conds.append((1, 'Attack', 0))
-        conds.append((6, 'AttackIndex', 1))
-    elif 'attack' in n:
-        conds.append((1, 'Attack', 0))
-    else:
-        return None  # Unknown state — skip
-
-    # Stance modifier
-    if n.endswith('_crouch'):
-        conds.append((1, 'IsCrouching', 0))
+    if n.endswith('_stand'):
+        stance_conds = [('IsCrouching','2','0'), ('IsProne','2','0')]
+    elif n.endswith('_crouch'):
+        stance_conds = [('IsCrouching','1','0')]
     elif n.endswith('_prone'):
-        conds.append((1, 'IsProne', 0))
-    # Stand variants: no extra stance condition (rely on transition priority ordering)
+        stance_conds = [('IsProne','1','0')]
+    else:
+        stance_conds = []
 
-    return conds
+    if n.startswith('draw'):
+        return [('Draw','1','0')] + stance_conds
+    elif n.startswith('shootburst'):
+        return [('ShootBurst','1','0')] + stance_conds
+    elif n.startswith('shootloop'):
+        return [('ShootLoop','1','0')] + stance_conds
+    elif n.startswith('shootbolt'):
+        return [('Shoot','1','0'), ('ShootBolt','1','0')] + stance_conds
+    elif n.startswith('shootshotgun'):
+        return [('Shoot','1','0'), ('ShootShotgun','1','0')] + stance_conds
+    elif n.startswith('shoot'):
+        return [('Shoot','1','0')] + stance_conds
+    elif n.startswith('reload'):
+        return [('Reload','1','0')] + stance_conds
+    elif n.startswith('grenade') or n.startswith('throwgrenade'):
+        return [('ThrowGrenade','1','0')] + stance_conds
+    elif 'interact_a' in n:
+        return [('Interact','1','0'), ('InteractIndex','5','0')]
+    elif 'interact_b' in n:
+        return [('Interact','1','0'), ('InteractIndex','5','1')]
+    elif n.startswith('damage'):
+        return [('TakeDamage','1','0')] + stance_conds
+    elif 'attack_a' in n:
+        return [('Attack','1','0'), ('AttackIndex','5','0')] + stance_conds
+    elif 'attack_b' in n:
+        return [('Attack','1','0'), ('AttackIndex','5','1')] + stance_conds
+    else:
+        return None
 
-def make_block(fid, dst_fid, conds):
-    cond_yaml = ''
-    for mode, event, thresh in conds:
-        cond_yaml += f'  - m_ConditionMode: {mode}\n'
-        cond_yaml += f'    m_ConditionEvent: {event}\n'
-        cond_yaml += f'    m_EventTreshold: {thresh}\n'
-    return (
-        f'--- !u!1101 &{fid}\n'
-        f'AnimatorStateTransition:\n'
-        f'  m_ObjectHideFlags: 1\n'
-        f'  m_CorrespondingSourceObject: {{fileID: 0}}\n'
-        f'  m_PrefabInstance: {{fileID: 0}}\n'
-        f'  m_PrefabAsset: {{fileID: 0}}\n'
-        f'  m_Name:\n'
-        f'  m_Conditions:\n'
-        f'{cond_yaml}'
-        f'  m_DstStateMachine: {{fileID: 0}}\n'
-        f'  m_DstState: {{fileID: {dst_fid}}}\n'
-        f'  m_Solo: 0\n'
-        f'  m_Mute: 0\n'
-        f'  m_IsExit: 0\n'
-        f'  serializedVersion: 3\n'
-        f'  m_TransitionDuration: 0.05\n'
-        f'  m_TransitionOffset: 0\n'
-        f'  m_ExitTime: 0.75\n'
-        f'  m_HasExitTime: 0\n'
-        f'  m_HasFixedDuration: 1\n'
-        f'  m_InterruptionSource: 0\n'
-        f'  m_OrderedInterruption: 1\n'
-        f'  m_CanTransitionToSelf: 0\n'
-    )
+def get_state_name(fid):
+    sb = re.search(rf'--- !u!1102 &{fid}\b(.*?)--- !u!', content, re.DOTALL)
+    if not sb: return None
+    nm = re.search(r'm_Name: (.+)', sb.group(1))
+    return nm.group(1).strip() if nm else None
 
-# Collect all new blocks and UB_Empty transition updates
+def get_sm_states(sm_fid):
+    sm_block = re.search(rf'--- !u!\d+ &{sm_fid}\b(.*?)--- !u!', content, re.DOTALL)
+    if not sm_block: return []
+    # Format: m_ChildStates: ... m_State: {fileID: XXXX}
+    states_section = re.search(r'm_ChildStates:(.*?)m_ChildStateMachines:', sm_block.group(1), re.DOTALL)
+    if not states_section: return []
+    fids = re.findall(r'm_State: \{fileID: (\d+)\}', states_section.group(1))
+    result = []
+    for fid in fids:
+        nm = get_state_name(int(fid))
+        if nm:
+            result.append((int(fid), nm))
+    return result
+
+def make_transition_block(trans_fid, dst_state_fid, conditions):
+    cond_lines = ''
+    for event, mode, thresh in conditions:
+        cond_lines += f'  - m_ConditionMode: {mode}\n    m_ConditionEvent: {event}\n    m_EventTreshold: {thresh}\n'
+    return f"""--- !u!1101 &{trans_fid}
+AnimatorStateTransition:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {{fileID: 0}}
+  m_PrefabInstance: {{fileID: 0}}
+  m_PrefabAsset: {{fileID: 0}}
+  m_Name: 
+  m_Conditions:
+{cond_lines}  m_DstStateMachine: {{fileID: 0}}
+  m_DstState: {{fileID: {dst_state_fid}}}
+  m_Solo: 0
+  m_Mute: 0
+  m_IsExit: 0
+  serializedVersion: 3
+  m_TransitionDuration: 0.05
+  m_TransitionOffset: 0
+  m_ExitTime: 0.9
+  m_HasExitTime: 0
+  m_HasFixedDuration: 0
+  m_InterruptionSource: 0
+  m_OrderedInterruption: 1
+  m_CanTransitionToSelf: 0
+"""
+
+next_fid = 9203000
 new_blocks = []
-# {ub_empty_fid: [new_trans_fids...]}
-ub_updates = {}
+ub_trans_map = {}
 
-for machine_fid in MACHINE_FIDS:
-    default_fid, child_fids = get_machine_info(machine_fid)
-    print(f"\nMachine &{machine_fid}, default=&{default_fid} '{get_name(default_fid)}'")
+for sm_fid, ub_empty_fid, weapon_name in UB_MACHINES:
+    states = get_sm_states(sm_fid)
+    trans_fids = []
+    print(f'\n{weapon_name} (SM:{sm_fid}, UB_Empty:{ub_empty_fid}):')
 
-    if not default_fid:
-        print("  ERROR: no default state")
-        continue
-
-    ub_name = get_name(default_fid)
-    if 'ub_empty' not in ub_name.lower():
-        print(f"  WARNING: default '{ub_name}' is not UB_Empty")
-
-    # Sort: crouch/prone first (more specific), stand last (fallback)
-    stand_list, crouch_list, prone_list, other_list = [], [], [], []
-    for fid in child_fids:
-        if fid == default_fid:
+    for state_fid, state_name in states:
+        if state_fid == ub_empty_fid or state_name == 'UB_Empty':
             continue
-        name = get_name(fid)
-        nl = name.lower()
-        if nl.endswith('_crouch'):
-            crouch_list.append((fid, name))
-        elif nl.endswith('_prone'):
-            prone_list.append((fid, name))
-        else:
-            stand_list.append((fid, name))
-
-    ordered = crouch_list + prone_list + stand_list
-
-    new_trans_fids = []
-    for state_fid, state_name in ordered:
         conds = get_conditions(state_name)
         if conds is None:
-            print(f"  SKIP: &{state_fid} '{state_name}'")
+            print(f'  SKIP: {state_name} ({state_fid})')
             continue
-        fid = str(next_fid[0])
-        next_fid[0] += 1
-        new_blocks.append(make_block(fid, state_fid, conds))
-        new_trans_fids.append(fid)
-        cond_str = [(e, t) for _, e, t in conds]
-        print(f"  + &{fid} UB_Empty -> '{state_name}' conds={cond_str}")
+        block = make_transition_block(next_fid, state_fid, conds)
+        cond_str = ', '.join([f'{e}' for e,m,t in conds])
+        print(f'  &{next_fid}: -> {state_name} | {cond_str}')
+        new_blocks.append(block)
+        trans_fids.append(next_fid)
+        next_fid += 1
 
-    ub_updates[default_fid] = new_trans_fids
+    ub_trans_map[ub_empty_fid] = trans_fids
 
-print(f"\nTotal new transitions: {len(new_blocks)}")
+print(f'\nTotal new transitions: {len(new_blocks)}')
 
-# Update UB_Empty m_Transitions in the lines
-modified = list(lines)
-for ub_fid, trans_fids in ub_updates.items():
+new_content = content
+patched_states = 0
+for ub_empty_fid, trans_fids in ub_trans_map.items():
     if not trans_fids:
         continue
-    for i, l in enumerate(modified):
-        if re.match(r'^--- !u!1102 &' + ub_fid + r'\b', l):
-            j = i + 1
-            while j < len(modified) and not re.match(r'^--- !u!', modified[j]):
-                if re.match(r'\s+m_Transitions: \[\]', modified[j]):
-                    refs = ''.join(f'  - {{fileID: {fid}}}\n' for fid in trans_fids)
-                    modified[j] = f'  m_Transitions:\n{refs}'
-                    print(f"  Updated UB_Empty &{ub_fid}: added {len(trans_fids)} transition refs")
-                    break
-                j += 1
-            break
+    trans_list = ''.join([f'  - {{fileID: {t}}}\n' for t in trans_fids])
+    pattern = rf'(--- !u!1102 &{ub_empty_fid}\b.*?m_Transitions:) \[\](.*?m_StateMachineBehaviours:)'
+    replacement = rf'\g<1>\n{trans_list}\g<2>'
+    new_content2, n = re.subn(pattern, replacement, new_content, count=1, flags=re.DOTALL)
+    if n:
+        new_content = new_content2
+        print(f'Patched UB_Empty {ub_empty_fid}: {len(trans_fids)} transitions')
+        patched_states += 1
+    else:
+        print(f'WARNING: Could not patch UB_Empty {ub_empty_fid}')
 
-# Append new blocks
-modified.append('\n')
-for block in new_blocks:
-    modified.append(block)
+insertion_point = new_content.rfind('--- !u!')
+new_content = new_content[:insertion_point] + ''.join(new_blocks) + new_content[insertion_point:]
+print(f'Inserted {len(new_blocks)} transition blocks')
 
-print(f"\nFinal lines: {len(modified)}")
 with open(F, 'w', encoding='utf-8') as f:
-    f.writelines(modified)
-print("Done! Reimport SoldierAnimatorController in Unity.")
+    f.write(new_content)
+print('File saved.')

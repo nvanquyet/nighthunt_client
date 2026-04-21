@@ -33,9 +33,6 @@ namespace NightHunt.GameplaySystems.Attachment
         [Header("Configuration")]
         [SerializeField] private InventoryConfig _inventoryConfig;
 
-        [Tooltip("Automatically recover attachments to inventory when the parent item is removed.")]
-        [SerializeField] private bool _autoRecoverAttachments = true;
-
         [Header("Debug")]
         [SerializeField] private bool _enableDebugLogs = false;
 
@@ -81,7 +78,8 @@ namespace NightHunt.GameplaySystems.Attachment
             base.OnStartNetwork();
 
             // Subscribe to inventory events for auto-recovery of attachments on parent removal.
-            if (_autoRecoverAttachments && _inventorySystem != null)
+            // Always subscribe — actual recovery decision deferred to InventoryConfig.ReturnAttachmentsToInventoryOnDrop.
+            if (_inventorySystem != null)
                 _inventorySystem.OnItemRemoved += OnParentItemRemoved;
         }
 
@@ -417,9 +415,6 @@ namespace NightHunt.GameplaySystems.Attachment
         [Server]
         private void OnParentItemRemoved(ItemInstance parentItem, int quantity)
         {
-            if (!_autoRecoverAttachments)
-                return;
-
             if (parentItem == null || parentItem.AttachedItems == null)
                 return;
 

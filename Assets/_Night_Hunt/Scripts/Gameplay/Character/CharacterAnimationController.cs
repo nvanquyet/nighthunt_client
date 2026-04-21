@@ -271,49 +271,32 @@ namespace NightHunt.Gameplay.Character
 
             if (!newSlot.HasValue) return;
 
-            // Resolve weapon class for accurate layer selection:
-            //   Pistol/SMG            → PistolLyr
-            //   Launcher              → LauncherActions (fallback to RifleActions if layer absent)
-            //   Melee                 → MeleeActions
-            //   Rifle/Shotgun/Sniper  → RifleActions
+            // Resolve weapon class for accurate layer selection.
             var inst = _weaponSystem?.GetWeapon(newSlot.Value);
             var def  = inst != null ? ItemDatabase.GetDefinition(inst.DefinitionID) as WeaponDefinition : null;
             _activeWeaponClass = def?.WeaponClass ?? WeaponClass.Rifle;
 
-            switch (newSlot.Value)
+            // Use weapon class to pick the right layer regardless of which slot is active.
+            switch (_activeWeaponClass)
             {
-                case WeaponSlotType.Melee:
+                case WeaponClass.Melee:
                     _targetMeleeWeight = 1f;
                     break;
-
-                case WeaponSlotType.Secondary:
-                    // Secondary is usually a pistol/SMG — always use PistolLyr.
+                case WeaponClass.Pistol:
+                case WeaponClass.SMG:
                     _targetPistolWeight = 1f;
                     break;
-
-                case WeaponSlotType.Primary:
+                case WeaponClass.Launcher:
+                    if (_launcherLayer >= 0)
+                        _targetLauncherWeight = 1f;
+                    else
+                        _targetRifleWeight = 1f;
+                    break;
+                case WeaponClass.Rifle:
+                case WeaponClass.Shotgun:
+                case WeaponClass.Sniper:
                 default:
-                    // Use weapon class to pick the right layer for Primary slot.
-                    switch (_activeWeaponClass)
-                    {
-                        case WeaponClass.Pistol:
-                        case WeaponClass.SMG:
-                            _targetPistolWeight = 1f;
-                            break;
-                        case WeaponClass.Launcher:
-                            // Prefer dedicated launcher layer; fall back to RifleActions.
-                            if (_launcherLayer >= 0)
-                                _targetLauncherWeight = 1f;
-                            else
-                                _targetRifleWeight = 1f;
-                            break;
-                        case WeaponClass.Rifle:
-                        case WeaponClass.Shotgun:
-                        case WeaponClass.Sniper:
-                        default:
-                            _targetRifleWeight = 1f;
-                            break;
-                    }
+                    _targetRifleWeight = 1f;
                     break;
             }
         }

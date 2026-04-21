@@ -52,6 +52,9 @@ namespace NightHunt.GameplaySystems.ItemUse
         private WeaponSlotType? _previousWeaponSlot;
         private Coroutine _useCoroutine;
         private GameObject _itemInHandModel;   // throwable model instantiated on WeaponR bone
+        // Last confirmed throw target — set in ExecuteThrow so DetachItemFromHand
+        // can toss the hand model in the right direction without touching any client-only statics.
+        private Vector3 _pendingThrowTarget;
 
         #endregion
 
@@ -166,14 +169,56 @@ namespace NightHunt.GameplaySystems.ItemUse
         #region Public API
 
         /// <summary>
-        /// Main entry point - route to appropriate handler
+        /// Main entry point for item use. Routes to the server automatically when called
+        /// from the owning client (dedicated server or host mode).
+        /// For the return value on client→server calls the result is always true
+        /// (fire-and-forget via ServerRpc); the authoritative outcome fires via events.
         /// </summary>
-        [Server]
         public bool UseItem(ItemInstance item)
         {
             if (item == null)
             {
                 Debug.LogWarning("[ItemUseSystem] UseItem: item is null");
+                return false;
+            }
+
+            // Client in dedicated-server mode: route to server via RPC.
+            if (!IsServerInitialized)
+            {
+                if (IsOwner)
+                {
+                    RequestUseItemServerRpc(item.InstanceID);
+                    return true; // Optimistic — outcome fires via events.
+                }
+                Debug.LogWarning("[ItemUseSystem] UseItem: caller does not own this object.");
+                return false;
+            }
+
+            return UseItemServer(item);
+        }
+
+        /// <summary>
+        /// ServerRpc sent by the owning client to initiate item use on the server.
+        /// Uses the InstanceID so FishNet does not need to serialise the full ItemInstance.
+        /// </summary>
+        [ServerRpc(RequireOwnership = true)]
+        private void RequestUseItemServerRpc(string instanceID)
+        {
+            var item = _inventorySystem?.GetItemByInstanceID(instanceID);
+            if (item == null)
+            {
+                Debug.LogWarning($"[ItemUseSystem] RequestUseItemServerRpc: item '{instanceID}' not found on server.");
+                return;
+            }
+            UseItemServer(item);
+        }
+
+        [Server]
+        private bool UseItemServer(ItemInstance item)
+        {
+            if (item == null)
+            {
+                Debug.LogWarning("[ItemUseSystem] UseItemServer: item is null");
                 return false;
             }
 
@@ -227,6 +272,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             }
 
             // Reuse the shared _useCoroutine slot so CancelUse() can interrupt mid-prepare.
+            _pendingThrowTarget = aimTarget;
             _useCoroutine = StartCoroutine(PrepareAndThrow(def, aimTarget));
         }
 
@@ -475,11 +521,13 @@ namespace NightHunt.GameplaySystems.ItemUse
             // Detach from WeaponR bone so it is no longer parented to the hand.
             _itemInHandModel.transform.SetParent(null, worldPositionStays: true);
 
-            // If a Rigidbody exists on the prefab, launch it toward the aim target.
+            // Launch the hand model toward the confirmed throw target.
+            // Use the instance field _pendingThrowTarget (set in ExecuteThrow) instead of
+            // reading ItemAimController.AimWorldTarget which is a client-only static and
+            // would be Vector3.zero on a dedicated server.
             if (_itemInHandModel.TryGetComponent<Rigidbody>(out var rb))
             {
-                Vector3 toTarget = NightHunt.GameplaySystems.UI.Combat.ItemAimController.AimWorldTarget
-                                   - _itemInHandModel.transform.position;
+                Vector3 toTarget = _pendingThrowTarget - _itemInHandModel.transform.position;
                 rb.linearVelocity = toTarget.normalized * 8f;
                 rb.useGravity     = true;
             }

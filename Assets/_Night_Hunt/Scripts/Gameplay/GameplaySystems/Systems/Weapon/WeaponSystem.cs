@@ -42,13 +42,9 @@ namespace NightHunt.GameplaySystems.Weapon
         [SerializeField] private PlayerStatSystem _statSystemSource;
         [SerializeField] private InventorySystem _inventorySystemSource;
 
-        [Header("Slot Priority")]
-        [SerializeField] private WeaponSlotType[] _slotPriority =
-        {
-            WeaponSlotType.Primary,
-            WeaponSlotType.Secondary,
-            WeaponSlotType.Melee
-        };
+        [Header("Slot Priority (auto-built from InventoryConfig — only used as fallback)")]
+        [Tooltip("Override slot auto-equip priority. Usually leave empty and let InventoryConfig.WeaponConfig.Priority drive it.")]
+        [SerializeField] private WeaponSlotType[] _slotPriorityOverride;
 
         [Header("Debug")]
         [SerializeField] private bool _enableDebugLogs = false;
@@ -78,6 +74,10 @@ namespace NightHunt.GameplaySystems.Weapon
         // ── Local cache ────────────────────────────────────────────────────────
         internal Dictionary<WeaponSlotType, ItemInstance> _weaponCache =
             new Dictionary<WeaponSlotType, ItemInstance>();
+
+        // Built at runtime from InventoryConfig (or _slotPriorityOverride inspector field).
+        // Defines auto-equip order and which slots are available for this game-mode.
+        internal WeaponSlotType[] _slotPriority;
 
         // ── Local fire state ───────────────────────────────────────────────────
         internal readonly Dictionary<WeaponSlotType, FireMode> _fireModes =
@@ -159,8 +159,19 @@ namespace NightHunt.GameplaySystems.Weapon
 
         public bool CanEquipInSlot(string defID, WeaponSlotType slot)
         {
-            var def = ItemDatabase.GetDefinition(defID);
-            return def is WeaponDefinition;
+            var def = ItemDatabase.GetDefinition(defID) as WeaponDefinition;
+            if (def == null) return false;
+
+            // Slot must be configured in InventoryConfig to be usable.
+            var slotCfg = _inventoryConfig?.GetWeaponSlot(slot);
+            if (slotCfg == null)
+            {
+                // No config = allow all (backward-compat when no config is assigned)
+                return true;
+            }
+
+            // AllowedClasses empty = accept all weapon classes.
+            return slotCfg.Value.AcceptsWeaponClass(def.WeaponClass);
         }
 
         // ── Internal helpers ───────────────────────────────────────────────────
@@ -216,8 +227,21 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_statSystem == null)
                 Debug.LogWarning("[WeaponSystem] IPlayerStatSystem not found — stat modifiers disabled.");
 
-            if (_slotPriority == null || _slotPriority.Length == 0)
+            // ── Build slot priority from config (single source of truth) ──────────
+            // Inspector override takes precedence only when explicitly set.
+            if (_slotPriorityOverride != null && _slotPriorityOverride.Length > 0)
+            {
+                _slotPriority = _slotPriorityOverride;
+            }
+            else if (_inventoryConfig?.WeaponConfig != null && _inventoryConfig.WeaponConfig.Length > 0)
+            {
+                _slotPriority = _inventoryConfig.GetWeaponSlotOrder();
+            }
+            else
+            {
+                // Hard fallback: classic 3-slot layout.
                 _slotPriority = new[] { WeaponSlotType.Primary, WeaponSlotType.Secondary, WeaponSlotType.Melee };
+            }
 
             // Optional: WeaponModelController used to apply pitch/elevation on local model
             _weaponModelController ??= ComponentResolver.Find<WeaponModelController>(this)

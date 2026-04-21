@@ -3,8 +3,8 @@ using UnityEngine;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Wrapper tween an toàn.
-    /// Hiện tại chỉ set value tức thời, sau này có DOTween có thể mở rộng tại đây.
+    /// Safe tween wrapper.
+    /// Currently sets values instantly; can be expanded to use DOTween animations later.
     /// </summary>
     public static class UITweenUtil
     {

@@ -3,13 +3,13 @@ using UnityEngine;
 namespace NightHunt.GameplaySystems.World
 {
     /// <summary>
-    /// Scene component đánh dấu một vị trí spawn World object (item/container/chest).
+    /// Scene component marking a world-object spawn location (item / container / chest).
     ///
     /// DESIGN:
-    ///   - Chỉ chứa data vị trí + WorldSpawnConfig.
-    ///   - WorldSpawnManager đọc tất cả WorldItemSpawnPoint trong scene khi server start
-    ///     và manage toàn bộ lifecycle (spawn → loot → respawn).
-    ///   - Không chứa logic spawn — đúng SRP.
+    ///   - Stores only position data and a WorldSpawnConfig reference.
+    ///   - WorldSpawnManager reads all WorldItemSpawnPoint instances in the scene on server start
+    ///     and manages the full lifecycle (spawn → loot → respawn).
+    ///   - Contains no spawn logic — correct SRP.
     ///
     /// Gizmos:
     ///   - Sphere = radius spawn (scatter cho Item mode).
@@ -18,7 +18,7 @@ namespace NightHunt.GameplaySystems.World
     public class WorldItemSpawnPoint : MonoBehaviour
     {
         [Header("Config")]
-        [Tooltip("WorldSpawnConfig xác định loại object, SpawnTable, respawn time, v.v.")]
+        [Tooltip("WorldSpawnConfig defining the object type, SpawnTable, respawn time, etc.")]
         [SerializeField] private WorldSpawnConfig spawnConfig;
 
         [Header("Visualization")]
@@ -27,40 +27,40 @@ namespace NightHunt.GameplaySystems.World
 
         // ── Properties ───────────────────────────────────────────────────────────
 
-        /// <summary>Config gắn vào điểm spawn này.</summary>
+        /// <summary>SpawnConfig assigned to this spawn point.</summary>
         public WorldSpawnConfig SpawnConfig => spawnConfig;
 
         /// <summary>
-        /// Loại object sẽ spawn tại đây.
-        /// Shortcut để WorldSpawnManager không cần null-check SpawnConfig mỗi lần.
+        /// The type of object to spawn here.
+        /// Shortcut so WorldSpawnManager avoids null-checking SpawnConfig every frame.
         /// </summary>
         public WorldSpawnType SpawnType => spawnConfig != null ? spawnConfig.SpawnType : WorldSpawnType.Item;
 
-        // ── Reset state (dùng bởi WorldSpawnManager khi respawn) ─────────────────
+        // ── Reset state (called by WorldSpawnManager on respawn) ──────────────────
 
         private int _activeCount;
-        private int _spawnCount; // tổng số lần đã spawn
+        private int _spawnCount; // total spawn count over the lifetime of this point
 
-        /// <summary>Số object hiện đang active từ điểm spawn này.</summary>
+        /// <summary>Number of currently active objects spawned from this point.</summary>
         public int ActiveCount => _activeCount;
 
-        /// <summary>Tổng số lần đã spawn (cả cuộc đời của spawn-point).</summary>
+        /// <summary>Total number of spawns over the lifetime of this spawn point.</summary>
         public int SpawnCount => _spawnCount;
 
-        /// <summary>True nếu đã đạt MaxRespawnCount và không spawn nữa.</summary>
+        /// <summary>True when MaxRespawnCount has been reached and no further spawns will occur.</summary>
         public bool IsExhausted
         {
             get
             {
                 if (spawnConfig == null) return true;
-                if (!spawnConfig.CanRespawn && _spawnCount > 0) return true; // one-shot: đã spawn rồi
+                if (!spawnConfig.CanRespawn && _spawnCount > 0) return true; // one-shot: already spawned
                 if (spawnConfig.CanRespawn && spawnConfig.MaxRespawnCount > 0
                     && _spawnCount >= spawnConfig.MaxRespawnCount) return true;
                 return false;
             }
         }
 
-        /// <summary>True nếu đã đạt MaxActive và cannot spawn thêm.</summary>
+        /// <summary>True when MaxActive has been reached and no further spawns can occur.</summary>
         public bool IsFull => spawnConfig != null && _activeCount >= spawnConfig.MaxActive;
 
         internal void RegisterActive()   { _activeCount++; _spawnCount++; }
@@ -69,9 +69,9 @@ namespace NightHunt.GameplaySystems.World
         // ── Position helpers ─────────────────────────────────────────────────────
 
         /// <summary>
-        /// Trả về vị trí spawn.
-        /// Với Item mode: random trong ScatterRadius.
-        /// Với Container / Chest: chính xác vị trí của transform.
+        /// Returns the spawn position.
+        /// In Item mode: random point within ScatterRadius.
+        /// In Container / Chest mode: exact transform position.
         /// </summary>
         public Vector3 GetSpawnPosition()
         {
@@ -95,7 +95,7 @@ namespace NightHunt.GameplaySystems.World
             // Center sphere
             Gizmos.DrawSphere(transform.position, 0.2f);
 
-            // Scatter radius (chỉ cho Item mode)
+            // Scatter radius (Item mode only).
             if (spawnConfig != null && spawnConfig.SpawnType == WorldSpawnType.Item && spawnConfig.ScatterRadius > 0f)
             {
                 Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 0.25f);

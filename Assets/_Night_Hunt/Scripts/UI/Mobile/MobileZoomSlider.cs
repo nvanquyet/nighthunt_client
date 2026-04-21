@@ -52,6 +52,10 @@ namespace NightHunt.UI.Mobile
                  "Increase for stronger zoom effect. Negative to invert direction.")]
         [SerializeField] private float _zoomMultiplier = 10f;
 
+        [Header("Platform Override")]
+        [Tooltip("Force this control visible even on desktop (for UI testing in the Editor).")]
+        [SerializeField] private bool _forceMobile;
+
         private CameraInputHandler _handler;
         private float _previousValue;
         private bool _expanded;
@@ -62,7 +66,14 @@ namespace NightHunt.UI.Mobile
 
         private void Awake()
         {
-            // Start collapsed
+            // This slider is only needed on mobile; hide the entire control on desktop.
+            if (!Application.isMobilePlatform && !PlatformManager.IsMobile && !_forceMobile)
+            {
+                gameObject.SetActive(false);
+                return;
+            }
+
+            // Start collapsed.
             if (_sliderPanel != null) _sliderPanel.SetActive(false);
             _expanded = false;
             RefreshIcons();

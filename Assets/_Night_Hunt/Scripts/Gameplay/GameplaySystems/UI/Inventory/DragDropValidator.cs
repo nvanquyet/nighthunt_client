@@ -85,8 +85,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
                 case UISlotType.Weapon:
                     var weaponDef = ItemDatabase.GetDefinition(sourceState.Item.DefinitionID);
-                    if (weaponDef != null && weaponDef.Type == ItemType.Weapon)
+                    if (weaponDef != null && weaponDef.Type == ItemType.Weapon
+                        && target.WeaponSlot.HasValue)
                     {
+                        // Validate WeaponClass is allowed in this slot (e.g. no rifle in Melee slot).
+                        // CanEquipInSlot falls back gracefully when no config is present.
+                        var weaponSystem = DragDropController.Instance?.WeaponSystem;
+                        if (weaponSystem != null &&
+                            !weaponSystem.CanEquipInSlot(sourceState.Item.DefinitionID, target.WeaponSlot.Value))
+                            return false;
+
                         action.Type = DropActionType.EquipWeapon;
                         return true;
                     }

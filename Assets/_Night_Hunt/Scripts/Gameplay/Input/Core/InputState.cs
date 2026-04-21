@@ -1,12 +1,12 @@
 namespace NightHunt.Gameplay.Input
 {
     // ──────────────────────────────────────────────────────────────────────────────
-    //  InputLayer – Flags enum, mỗi bit = 1 ActionMap
-    //  Uses để OR các map lại thành context preset
+    //  InputLayer – Flags enum; each bit represents one ActionMap.
+    //  Combine with bitwise OR to form context presets.
     // ──────────────────────────────────────────────────────────────────────────────
     /// <summary>
-    /// Các tầng input tương ứng với từng ActionMap trong InputSystem_Actions.
-    /// Có thể combine bằng bitwise OR.
+    /// Input layers corresponding to each ActionMap in InputSystem_Actions.
+    /// Combine with bitwise OR.
     /// </summary>
     [System.Flags]
     public enum InputLayer
@@ -25,24 +25,24 @@ namespace NightHunt.Gameplay.Input
     }
 
     // ──────────────────────────────────────────────────────────────────────────────
-    //  InputState – Context của game, ánh xạ tới tổ hợp InputLayer
+    //  InputState – Current game context, mapped to a combination of InputLayer flags.
     // ──────────────────────────────────────────────────────────────────────────────
     /// <summary>
-    /// Trạng thái gameplay tổng thể, mỗi state có một preset InputLayer.
-    /// <para>Uses <see cref="Core.InputLayerManager.PushContext"/> /
-    /// <see cref="Core.InputLayerManager.PopContext"/> để chuyển đổi.</para>
+    /// Overall gameplay state; each state maps to a preset InputLayer combination.
+    /// <para>Use <see cref="Core.InputLayerManager.PushContext"/> /
+    /// <see cref="Core.InputLayerManager.PopContext"/> to switch states.</para>
     /// </summary>
     public enum InputState
     {
         None,
 
-        /// <summary>Toàn bộ gameplay bình thường (Player + Combat + Camera + ...)</summary>
+        /// <summary>Normal gameplay (Player + Combat + Camera + ...).</summary>
         PlayerAlive,
 
-        /// <summary>Đang mở Inventory / Equipment – tắt Combat + Player movement</summary>
+        /// <summary>Inventory / Equipment open — Combat and Player movement disabled.</summary>
         InventoryOpen,
 
-        /// <summary>Đang xem bản đồ – chỉ Camera + UI</summary>
+        /// <summary>Map view — Camera + UI only.</summary>
         MapOpen,
 
         /// <summary>Pause menu — UI only</summary>
@@ -64,17 +64,17 @@ namespace NightHunt.Gameplay.Input
         /// <summary>Cutscene / loading — no input accepted</summary>
         Cinematic = 12,
 
-        /// <summary>Scout mode (move + camera, không combat)</summary>
+        /// <summary>Scout mode (move + camera, no combat).</summary>
         ScoutMode = 13,
 
-        /// <summary>Chỉ camera controls</summary>
+        /// <summary>Camera controls only.</summary>
         Camera = 14,
 
-        /// <summary>Dialogue – chỉ UI</summary>
+        /// <summary>Dialogue — UI only.</summary>
         InDialogue = 15,
 
-        // ── Legacy aliases (giữ lại để tránh break code cũ) ──────────────────
-        // ⚠️ PHẢI đặt CUỐI, SAU tất cả value thực, để tránh C# auto-increment collision
+        // ── Legacy aliases (kept to avoid breaking existing code) ───────────────
+    // ⚠️ MUST be placed LAST, after all real values, to avoid C# auto-increment collisions.
         /// <inheritdoc cref="Paused"/>
         MenuOpen = Paused,
     }
