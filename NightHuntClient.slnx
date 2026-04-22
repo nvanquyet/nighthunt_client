@@ -32,9 +32,9 @@
   <Project Path="Unity.Services.Core.Environments.Editor.csproj" />
   <Project Path="Unity.RenderPipelines.HighDefinition.Runtime.csproj" />
   <Project Path="Unity.VisualScripting.Flow.Editor.csproj" />
-  <Project Path="glTFast.csproj" />
   <Project Path="FishNet.Runtime.csproj" />
   <Project Path="Unity.Services.Analytics.csproj" />
+  <Project Path="glTFast.csproj" />
   <Project Path="Unity.VisualStudio.Editor.csproj" />
   <Project Path="Unity.InputSystem.csproj" />
   <Project Path="PPv2URPConverters.csproj" />

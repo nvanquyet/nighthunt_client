@@ -55,9 +55,6 @@ namespace NightHunt.UI
         // Last match end result (cached for post-match backend call)
         private MatchEndedEvent? _lastMatchResult;
 
-        // Guard: prevent double-fire on Custom_Relay host (server-direct publish + ObserversRpc callback both fire).
-        private bool _matchEndProcessed;
-
         // ──────────────────────────────────────────────────────────────────────
 
         #region Lifecycle
@@ -71,13 +68,11 @@ namespace NightHunt.UI
                 _continueButton.onClick.AddListener(OnContinueClicked);
 
             GameplayEventBus.Instance?.Subscribe<MatchEndedEvent>(OnMatchEnded);
-            GameplayEventBus.Instance?.Subscribe<MatchEndedWsResultsEvent>(OnMatchEndedWsResults);
         }
 
         private void OnDestroy()
         {
             GameplayEventBus.Instance?.Unsubscribe<MatchEndedEvent>(OnMatchEnded);
-            GameplayEventBus.Instance?.Unsubscribe<MatchEndedWsResultsEvent>(OnMatchEndedWsResults);
         }
 
         #endregion
@@ -88,55 +83,10 @@ namespace NightHunt.UI
 
         private void OnMatchEnded(MatchEndedEvent evt)
         {
-            // Guard: on Custom_Relay host, MatchEndedEvent fires twice:
-            //   1. Direct publish in MatchEndManager.TriggerElimination (full PlayerResults)
-            //   2. Via ObserversRpc — host-client also receives it (empty PlayerResults)
-            // The first event always carries the full data; ignore the second.
-            if (_matchEndProcessed) return;
-            _matchEndProcessed = true;
-
             _lastMatchResult = evt;
             ShowResults(evt);
             ShowMatchResultToast(evt);
             StartCoroutine(CountdownCoroutine());
-        }
-
-        /// <summary>
-        /// Fired by MatchFlowCoordinator when the backend's match_ended WS event arrives.
-        /// Contains real ELO delta + coin reward (calculated server-side) for Ranked_DS.
-        /// Updates the already-visible results panel with accurate values.
-        /// </summary>
-        private void OnMatchEndedWsResults(MatchEndedWsResultsEvent evt)
-        {
-            if (evt.PlayerResults == null || evt.PlayerResults.Length == 0) return;
-
-            var session = SessionState.Instance;
-            if (session == null) return;
-            string localId = session.UserId.ToString();
-
-            foreach (var r in evt.PlayerResults)
-            {
-                if (r.BackendPlayerId != localId) continue;
-
-                // Update ELO change text with real server value
-                if (_eloChangeText != null)
-                {
-                    bool isRanked = NightHunt.State.RoomState.Instance?.CurrentGameMode
-                        == NightHunt.Networking.GameMode.Ranked_DS;
-                    if (isRanked)
-                    {
-                        if (_eloPanel != null) _eloPanel.SetActive(true);
-                        _eloChangeText.text = r.EloChange >= 0
-                            ? $"ELO <color=#00FF88>+{r.EloChange}</color>"
-                            : $"ELO <color=#FF4444>{r.EloChange}</color>";
-                        Debug.Log($"[ResultsView] ELO updated from WS: {r.EloChange:+#;-#;0}");
-                    }
-                }
-                break;
-            }
-
-            // Also rebuild scoreboard rows with real ELO/coin data
-            BuildScoreboard(evt.PlayerResults);
         }
 
         private void ShowMatchResultToast(MatchEndedEvent evt)
@@ -248,7 +198,7 @@ namespace NightHunt.UI
                 var row = ComponentResolver.Find<ResultRowView>(go)
                     .OnSelf()
                     .InChildren()
-                    .OrLogWarning("[ResultsView] ResultRowView not found")
+                    .OrLogWarning("[Auto] ResultRowView not found")
                     .Resolve();
                 row?.SetData(r);
             }
@@ -280,28 +230,20 @@ namespace NightHunt.UI
             NavigatePostMatch();
         }
 
-        private async void NavigatePostMatch()
+        private void NavigatePostMatch()
         {
             var mode = RoomState.Instance?.CurrentGameMode ?? NightHunt.Networking.GameMode.None;
 
-            // Report match result to backend — fire-and-forget, do not block navigation.
+            // Report match result to backend before clearing session.
+            // Fire-and-forget: don't block navigation on network latency.
             _ = PostMatchResultAsync();
 
-            // Disconnect FishNet and clear session before loading home.
-            NightHunt.Networking.NetworkGameManager.Instance?.Disconnect();
             RoomState.Instance?.ClearRoom();
 
-            // Refresh profile cache now so the new HomeView instance in 01_Home scene
-            // has up-to-date ELO/coins the moment it appears.
-            // Set the static flag so HomeView.OnShow() skips the redundant server fetch —
-            // the data was just retrieved here, a second call within the same second is wasted.
-            if (GameManager.Instance?.ProfileManager != null)
-            {
-                await GameManager.Instance.ProfileManager.FetchProfile();
-                HomeView.MarkProfileJustRefreshed();
-            }
-
-            Debug.Log($"[ResultsView] Match ended (mode={mode}) \u2192 LoadHome");
+            // Đang ở gameplay scene → luôn dùng SceneLoader.LoadHome() để về 01_Home.
+            // UINavigator trong 01_Home sẽ tự điều hướng đến đúng panel.
+            // (Custom_Relay cũng về Home trước, Home panel có reconnect check)
+            Debug.Log($"[ResultsView] Match ended (mode={mode}) → LoadHome");
             SceneLoader.LoadHome();
         }
 
@@ -330,6 +272,7 @@ namespace NightHunt.UI
             string matchId = roomState.CurrentMatchId;
             if (string.IsNullOrEmpty(matchId))
                 matchId = roomState.CurrentRoom?.matchId ?? string.Empty;
+            }
 
             if (string.IsNullOrEmpty(matchId))
             {

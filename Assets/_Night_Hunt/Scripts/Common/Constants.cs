@@ -16,7 +16,6 @@ namespace NightHunt.Common
 
         // Profile endpoints — ProfileController @RequestMapping("/profile") + context-path /api → /api/profile/...
         public const string API_PROFILE_GET           = "/api/profile";
-        public const string API_PROFILE_PUBLIC        = "/api/profile/{0}";   // GET /profile/{userId} — public card
         public const string API_PROFILE_SET_CHARACTER = "/api/profile/character";
         
         // Room endpoints — RoomController @RequestMapping("/rooms") + context-path /api → /api/rooms/...
@@ -42,6 +41,8 @@ namespace NightHunt.Common
         // Matchmaking — MatchmakingQueueController @RequestMapping("/matchmaking/queue")
         // + context-path /api → /api/matchmaking/queue/...
         public const string API_MATCHMAKING_QUEUE   = "/api/matchmaking/queue";
+        public const string API_MATCHMAKING_ACCEPT  = "/api/matchmaking/queue/accept";
+        public const string API_MATCHMAKING_DECLINE = "/api/matchmaking/queue/decline";
 
         // Friend System
         // Server: FriendController @RequestMapping("/friends") + context-path /api
@@ -71,7 +72,6 @@ namespace NightHunt.Common
         public const string API_PARTY_DECLINE_INVITATION   = "/api/party/invitations/{0}/decline";
         public const string API_PARTY_CANCEL_INVITE        = "/api/party/invitations/{0}/cancel"; // DELETE cancel sent invite
         public const string API_PARTY_KICK                 = "/api/party/kick/{0}";             // POST path param
-        public const string API_PARTY_TRANSFER_LEADER      = "/api/party/transfer-leader";       // POST body: { newLeaderId }
         public const string API_PARTY_QUEUE                = "/api/party/queue";
         public const string API_PARTY_CANCEL_QUEUE         = "/api/party/cancel-queue";
         public const string API_PARTY_JOIN_ROOM            = "/api/party/join-room";

@@ -21,9 +21,9 @@ using UnityEngine;
 /// Space         : Jump (toggle IsGrounded)
 /// L (toggle)    : Ladder
 /// Q             : Roll (trigger)
-/// F / LMB       : Shoot  — interrupts Interact/Reload nếu AnyState cho phép
-/// B / MMB       : ShootBurst
-/// R (hold)      : ShootLoop (bool) — Heavy / Machinegun
+/// F / LMB       : Shoot  — nếu weapon=Knife (WeaponType=4): gọi Attack trigger + random AttackIndex thay vì Shoot
+/// B / MMB       : ShootBurst (bị bỏ qua khi Knife)
+/// R (hold)      : ShootLoop (bool) — Heavy / Machinegun; bị bỏ qua khi Knife
 /// T             : Reload (trigger)
 /// E             : Draw (trigger — cũng auto-fire khi Equip)
 /// N             : ThrowGrenade (trigger)
@@ -312,6 +312,9 @@ public class SoldierAnimatorTester : MonoBehaviour
         }
     }
 
+    // WeaponType==4 is Knife (melee) — uses Attack trigger instead of Shoot.
+    bool IsMeleeEquipped => weaponType == 4;
+
     // ──────────────────────────────────────────────────────────────────────────
     // COMBAT TRIGGERS
     // ──────────────────────────────────────────────────────────────────────────
@@ -321,13 +324,30 @@ public class SoldierAnimatorTester : MonoBehaviour
         { Debug.Log("[Trigger] Roll"); _anim.SetTrigger(H_Roll); }
 
         if (Input.GetKeyDown(KeyCode.F) || Input.GetMouseButtonDown(0))
-        { Debug.Log($"[Trigger] Shoot (weapon={weaponType})"); _anim.SetTrigger(H_Shoot); }
+        {
+            if (IsMeleeEquipped)
+            {
+                // Knife: random A/B combo, no Shoot trigger
+                _attackIndex = Random.Range(0, 2);
+                _anim.SetInteger(H_AttackIndex, _attackIndex);
+                Debug.Log($"[Trigger] Knife Attack  AttackIndex={_attackIndex}");
+                _anim.SetTrigger(H_Attack);
+            }
+            else
+            {
+                Debug.Log($"[Trigger] Shoot (weapon={weaponType})");
+                _anim.SetTrigger(H_Shoot);
+            }
+        }
 
         if (Input.GetKeyDown(KeyCode.B) || Input.GetMouseButtonDown(2))
-        { Debug.Log($"[Trigger] ShootBurst (weapon={weaponType})"); _anim.SetTrigger(H_ShootBurst); }
+        {
+            if (!IsMeleeEquipped)   // Knife has no burst fire
+            { Debug.Log($"[Trigger] ShootBurst (weapon={weaponType})"); _anim.SetTrigger(H_ShootBurst); }
+        }
 
         bool prevShootLoop = shootLoop;
-        shootLoop = Input.GetKey(KeyCode.R) || Input.GetMouseButton(1);
+        shootLoop = !IsMeleeEquipped && (Input.GetKey(KeyCode.R) || Input.GetMouseButton(1));
         if (shootLoop != prevShootLoop)
             Debug.Log($"[Bool] ShootLoop={shootLoop}");
 
@@ -487,9 +507,9 @@ public class SoldierAnimatorTester : MonoBehaviour
         y += 4;
         style.fontSize = 12;
         style.normal.textColor = Color.yellow;
-        GUI.Label(new Rect(x, y, w, lh), "1-6=Equip  0/7=Holster  F=Shoot  T=Reload  E=Draw  N=Grenade", style); y += lh;
-        GUI.Label(new Rect(x, y, w, lh), "I=Interact  H=TakeDmg  X=Die  Y=Respawn  Q=Roll  K=Knife  B=Burst", style); y += lh;
-        GUI.Label(new Rect(x, y, w, lh), "C=Crouch  Z=Prone  G=Guard  Space=Jump  L=Ladder  R(hold)=ShootLoop", style);
+        GUI.Label(new Rect(x, y, w, lh), "1-6=Equip  0/7=Holster  F=Shoot(Knife:Attack)  T=Reload  E=Draw  N=Grenade", style); y += lh;
+        GUI.Label(new Rect(x, y, w, lh), "I=Interact  H=TakeDmg  X=Die  Y=Respawn  Q=Roll  K=KnifeExplicit  B=Burst(no Knife)", style); y += lh;
+        GUI.Label(new Rect(x, y, w, lh), "C=Crouch  Z=Prone  G=Guard  Space=Jump  L=Ladder  R(hold)=ShootLoop(no Knife)", style);
     }
 
     // ──────────────────────────────────────────────────────────────────────────

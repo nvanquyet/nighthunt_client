@@ -12,6 +12,18 @@ namespace NightHunt.Data.DTOs
         public string platform;    // "MOBILE" | "PC" — auto-detected by client
     }
 
+    [Serializable]
+    public class MatchmakingAcceptRequest
+    {
+        public string lobbyToken;
+    }
+
+    [Serializable]
+    public class MatchmakingDeclineRequest
+    {
+        public string lobbyToken;
+    }
+
     /// <summary>
     /// Sent by the Custom relay host to POST /api/match/end/custom after match ends.
     /// Must match backend MatchEndRequest.
