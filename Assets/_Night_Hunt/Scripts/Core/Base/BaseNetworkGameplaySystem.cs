@@ -30,11 +30,6 @@ namespace NightHunt.Core.Base
     /// </summary>
     public abstract class BaseNetworkGameplaySystem : NetworkBehaviour
     {
-        [Header("Debug")]
-        [SerializeField] protected NightHuntDebugConfig _debugConfig;
-
-        // ── Unity lifecycle ───────────────────────────────────────────────────
-
         protected virtual void Awake()
         {
             OnResolveReferences();

@@ -169,7 +169,8 @@ namespace NightHunt.Gameplay.Character.Combat
 
                 // ── Distance check (3-D) ──────────────────────────────────────
 
-                Vector3 toTarget = t.AcquirePoint - muzzleOrigin;
+                Vector3 acquirePoint = ResolveAcquirePoint(t, config);
+                Vector3 toTarget = acquirePoint - muzzleOrigin;
                 float   dist     = toTarget.magnitude;
                 if (dist < 0.01f || dist > maxRange) continue;
 
@@ -180,10 +181,10 @@ namespace NightHunt.Gameplay.Character.Combat
 
                 // ── Line-of-sight check ───────────────────────────────────────
 
-                if (config.RequireLineOfSight && IsLoSBlocked(muzzleOrigin, t.AcquirePoint, dist, config))
+                if (config.RequireLineOfSight && IsLoSBlocked(muzzleOrigin, acquirePoint, dist, config))
                     continue;
 
-                _candidates.Add(new AcquisitionResult(t, t.AcquirePoint, angle, dist));
+                _candidates.Add(new AcquisitionResult(t, acquirePoint, angle, dist));
             }
 
             if (_candidates.Count == 0) return AcquisitionResult.None;
@@ -241,6 +242,15 @@ namespace NightHunt.Gameplay.Character.Combat
 
             return Physics.Raycast(from, dir, dist - 0.05f,
                 config.LoSBlockLayers, QueryTriggerInteraction.Ignore);
+        }
+
+        private static Vector3 ResolveAcquirePoint(IBulletTarget target, BulletTargetConfig config)
+        {
+            Vector3 point = target.AcquirePoint;
+            if (config == null || Mathf.Approximately(config.TargetCentreYOffset, 0f))
+                return point;
+
+            return point + Vector3.up * config.TargetCentreYOffset;
         }
 
         // ── Debug Gizmos ──────────────────────────────────────────────────────

@@ -6,8 +6,8 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// One stat row in the PlayerHUDPanel.
-    /// Spawned at runtime by PlayerHUDPanel for every stat that has ShowInUI = true
+    /// One stat row in a stat-detail panel.
+    /// Spawned at runtime by the owning stat-detail UI for every stat that has ShowInUI = true
     /// in <see cref="NightHunt.Gameplay.StatSystem.Configs.PlayerStatUIConfig"/>.
     ///
     /// Prefab layout (suggested):
@@ -16,8 +16,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     ///     ├─ Slider     (Slider)           ← current / max ratio
     ///     └─ ValueText  (TextMeshProUGUI)  ← "100 / 100" or formatted value
     ///
-    /// The asset is drag-and-dropped into PlayerHUDPanel._statRowPrefab in the Inspector.
-    /// PlayerHUDPanel sets <see cref="StatType"/> after instantiation.
+    /// The asset is drag-and-dropped into the owning panel's stat-row prefab field.
+    /// The panel sets <see cref="StatType"/> after instantiation.
     /// </summary>
     public class StatRowEntry : MonoBehaviour
     {

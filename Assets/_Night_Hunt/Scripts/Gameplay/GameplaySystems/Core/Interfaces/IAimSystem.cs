@@ -18,6 +18,9 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// <summary>World-space point the player is aiming at (Y = player ground Y).</summary>
         Vector3 FinalAimPos { get; }
 
+        /// <summary>World-space aim point projected onto the gameplay ground plane.</summary>
+        Vector3 FinalAimGroundPos { get; }
+
         /// <summary>Raw mouse-world intersection (before clamping). Same as FinalAimPos for guns.</summary>
         Vector3 AimWorldPoint { get; }
 

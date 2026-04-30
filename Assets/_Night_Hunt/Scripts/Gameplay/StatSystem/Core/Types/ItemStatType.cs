@@ -50,6 +50,18 @@ namespace NightHunt.Gameplay.StatSystem.Core.Types
         /// </summary>
         SpreadMax       = 16,
 
+        /// <summary>
+        /// Horizontal recoil half-angle in degrees. Applied around the vertical axis.
+        /// Lower is easier to control. Attachments such as grips can reduce this.
+        /// </summary>
+        RecoilHorizontal = 17,
+
+        /// <summary>
+        /// Vertical recoil kick in degrees. Positive values push shots upward.
+        /// Lower is easier to control. Attachments such as grips can reduce this.
+        /// </summary>
+        RecoilVertical   = 18,
+
         // ── Weapon: Handling ────────────────────────────────────────────────────
 
         /// <summary>Magazine capacity. Buffable by Magazine-type attachments.</summary>

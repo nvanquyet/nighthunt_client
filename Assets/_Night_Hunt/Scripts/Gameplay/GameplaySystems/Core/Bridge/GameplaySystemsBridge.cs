@@ -507,18 +507,18 @@ namespace NightHunt.GameplaySystems.Core.Bridge
         public void SelectItem(string instanceID)
         {
             if (!ValidateSystem(_itemSelection, "ItemSelection")) return;
-            _itemSelection.SelectItem(instanceID);
+            _itemSelection.RequestSelectItem(instanceID);
         }
 
         public void DeselectItem()
         {
-            _itemSelection?.DeselectItem();
+            _itemSelection?.RequestDeselectItem();
         }
 
         public void CancelItemUse()
         {
             if (_itemUse != null)
-                _itemUse.CancelUse();
+                _itemUse.RequestCancelUse();
         }
 
         public void ExecuteThrow(Vector3 aimTarget)

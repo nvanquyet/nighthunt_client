@@ -123,7 +123,9 @@ namespace NightHunt.GameplaySystems.Loot
 
                 if (!config.CanRespawn) yield break;
 
-                while (point.IsFull) yield return null;
+                // A spawn point owns a whole batch. Do not keep spawning every frame just
+                // because MaxActive is larger than the batch size.
+                while (point.ActiveCount > 0) yield return null;
 
                 if (point.IsExhausted) yield break;
 
@@ -261,15 +263,22 @@ namespace NightHunt.GameplaySystems.Loot
             Vector3 position,
             WorldItemSpawnPoint sourcePoint = null)
         {
+            LogLootFlow($"[00][SpawnContainer.Request] config={(config != null ? config.name : "null")} pos={position:F2} source={(sourcePoint != null ? sourcePoint.name : "null")}");
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[WorldSpawnManager] SpawnWorldContainer: server-only!");
+                Debug.LogWarning("[LOOT_FLOW] SpawnManager [00][SpawnContainer.Blocked] reason=ServerOnly");
+                return null;
+            }
+
+            if (config == null)
+            {
+                Debug.LogError("[LOOT_FLOW] SpawnManager [00][SpawnContainer.Blocked] reason=WorldSpawnConfigNull");
                 return null;
             }
 
             if (worldContainerPrefab == null)
             {
-                Debug.LogError("[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab is not assigned!");
+                Debug.LogError("[LOOT_FLOW] SpawnManager [00][SpawnContainer.Blocked] reason=WorldContainerPrefabNull");
                 return null;
             }
 
@@ -288,7 +297,7 @@ namespace NightHunt.GameplaySystems.Loot
             if (netObj == null || container == null)
             {
                 Debug.LogError(
-                    "[WorldSpawnManager] SpawnWorldContainer: worldContainerPrefab is missing NetworkObject or WorldContainer component!");
+                    "[LOOT_FLOW] SpawnManager [00][SpawnContainer.Blocked] reason=PrefabMissingNetworkObjectOrWorldContainer");
                 Destroy(go);
                 return null;
             }
@@ -301,6 +310,7 @@ namespace NightHunt.GameplaySystems.Loot
 
             ServerManager.Spawn(netObj);
 
+            LogLootFlow($"[00][SpawnContainer.Done] obj={netObj.ObjectId} table={(config?.SpawnTable != null ? config.SpawnTable.name : "null")} locked={config?.SpawnLocked} storage={container.GetStorage()?.Count ?? 0}");
             Debug.Log($"[WorldSpawnManager] SpawnWorldContainer: Spawned. " +
                       $"NetId={netObj.ObjectId} Observers={netObj.Observers.Count}");
 
@@ -324,26 +334,30 @@ namespace NightHunt.GameplaySystems.Loot
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[WorldSpawnManager] SpawnWorldItemsFromTable: server-only!");
+                Debug.LogWarning("[LOOT_FLOW] SpawnManager [00][SpawnItemsFromTable.Blocked] reason=ServerOnly");
                 return;
             }
 
             if (table == null)
             {
-                Debug.LogWarning("[WorldSpawnManager] SpawnWorldItemsFromTable: SpawnTable is null!");
+                Debug.LogWarning("[LOOT_FLOW] SpawnManager [00][SpawnItemsFromTable.Blocked] reason=SpawnTableNull");
                 return;
             }
 
             var results = table.Roll();
+            LogLootFlow($"[00][SpawnItemsFromTable.Roll] table='{table.name}' rolled={results.Count} center={centerPosition:F2} spread={spreadRadius:F1}");
             Debug.Log(
                 $"[WorldSpawnManager] SpawnWorldItemsFromTable: rolled {results.Count} item(s) from '{table.name}'");
 
             foreach (var result in results)
             {
-                if (result.ItemDef == null) continue;
+                if (result.ItemDef == null)
+                {
+                    Debug.LogWarning("[LOOT_FLOW] SpawnManager [00][SpawnItemsFromTable.Skip] reason=ItemDefNull");
+                    continue;
+                }
 
-                var instance = new ItemInstance(result.ItemDef.ItemID, result.Quantity, -1);
-                var data = instance.ToData();
+                var data = ItemInstanceFactory.CreateData(result.ItemDef, result.Quantity, -1);
 
                 Vector2 rand = Random.insideUnitCircle * spreadRadius;
                 Vector3 spawnPos = centerPosition + new Vector3(rand.x, 0f, rand.y);
@@ -363,18 +377,28 @@ namespace NightHunt.GameplaySystems.Loot
         {
             if (!IsServerInitialized)
             {
-                Debug.LogWarning("[WorldSpawnManager] SpawnWorldItemsFromResults: server-only!");
+                Debug.LogWarning("[LOOT_FLOW] SpawnManager [00][SpawnItemsFromResults.Blocked] reason=ServerOnly");
                 return;
             }
 
+            if (results == null)
+            {
+                Debug.LogWarning("[LOOT_FLOW] SpawnManager [00][SpawnItemsFromResults.Blocked] reason=ResultsNull");
+                return;
+            }
+
+            LogLootFlow($"[00][SpawnItemsFromResults.Start] count={results.Count} center={centerPosition:F2} spread={spreadRadius:F1}");
             foreach (var result in results)
             {
-                if (result.ItemDef == null) continue;
+                if (result.ItemDef == null)
+                {
+                    Debug.LogWarning("[LOOT_FLOW] SpawnManager [00][SpawnItemsFromResults.Skip] reason=ItemDefNull");
+                    continue;
+                }
 
-                var instance = new ItemInstance(result.ItemDef.ItemID, result.Quantity, -1);
                 Vector2 rand = Random.insideUnitCircle * spreadRadius;
                 Vector3 pos = centerPosition + new Vector3(rand.x, 0f, rand.y);
-                SpawnWorldItem(instance.ToData(), pos, Quaternion.identity, sourcePoint, lootableConfig);
+                SpawnWorldItem(ItemInstanceFactory.CreateData(result.ItemDef, result.Quantity, -1), pos, Quaternion.identity, sourcePoint, lootableConfig);
             }
         }
 
@@ -387,6 +411,13 @@ namespace NightHunt.GameplaySystems.Loot
         [Server]
         void IDropHandler.SpawnPickupsFromTable(SpawnTable table, Vector3 centerPosition, float spreadRadius)
             => SpawnWorldItemsFromTable(table, centerPosition, spreadRadius);
+
+        private static void LogLootFlow(string message)
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            if (cfg == null || cfg.EnableInventoryDebugLogs)
+                Debug.Log($"[LOOT_FLOW] SpawnManager {message}");
+        }
 
 #if UNITY_EDITOR
         // ── Editor — Context Menu: Auto-assign / Create Prefab References ────

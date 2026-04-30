@@ -370,18 +370,7 @@ namespace NightHunt.GameplaySystems.Equipment
                 // else: attachments remain on the item and drop with it
             }
 
-            // Step 2: Strip empty attachment slot arrays to avoid ghost allocation on pickup.
-            bool hasAnyAttachment = false;
-            if (item.AttachedItems != null)
-            {
-                for (int i = 0; i < item.AttachedItems.Length; i++)
-                {
-                    if (!string.IsNullOrEmpty(item.AttachedItems[i]))
-                    { hasAnyAttachment = true; break; }
-                }
-                if (!hasAnyAttachment)
-                    item.AttachedItems = null;
-            }
+            ItemInstanceFactory.StripEmptyAttachmentSlots(item);
 
             // Step 3: Build world-item data snapshot.
             var dropData = item.ToData();

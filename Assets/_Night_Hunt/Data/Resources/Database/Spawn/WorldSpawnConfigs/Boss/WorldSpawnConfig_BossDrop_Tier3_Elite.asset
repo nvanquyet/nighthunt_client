@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1bf0bbdc6f8ad46439896af8058fe9ff, type: 3}
   m_Name: WorldSpawnConfig_BossDrop_Tier3_Elite
   m_EditorClassIdentifier: 
-  SpawnType: 1
+  SpawnType: 0
   SpawnTable: {fileID: 11400000, guid: 7789e0d010431044b83efbed7b3f6274, type: 2}
   CanRespawn: 0
-  RespawnTime: 120
+  RespawnTime: 90
   MaxRespawnCount: 1
-  MaxActive: 1
-  ScatterRadius: 0
+  MaxActive: 6
+  ScatterRadius: 3
   SpawnLocked: 0
   ContainerAutoReset: 0
   ContainerResetDelay: 60

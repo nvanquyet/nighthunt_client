@@ -15,9 +15,9 @@ MonoBehaviour:
   SpawnType: 1
   SpawnTable: {fileID: 11400000, guid: 084a8a10f4a38474a82652eaa23f5a7a, type: 2}
   CanRespawn: 1
-  RespawnTime: 60
+  RespawnTime: 120
   MaxRespawnCount: 0
-  MaxActive: 2
+  MaxActive: 1
   ScatterRadius: 0
   SpawnLocked: 0
   ContainerAutoReset: 0

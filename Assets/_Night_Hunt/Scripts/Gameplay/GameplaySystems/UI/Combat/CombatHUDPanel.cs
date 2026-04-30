@@ -1,13 +1,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using Michsky.MUIP;
 using NightHunt.Audio;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.GameplaySystems.UI;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 
@@ -35,11 +35,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         //  Inspector — Config + Prefabs
         // ─────────────────────────────────────────────────────────────────────
 
-        [Header("Config (drives slot count)")]
-        [Tooltip("Same InventoryConfig SO used by gameplay systems.")]
-        [SerializeField] private InventoryConfig _inventoryConfig;
-
-        [Header("Weapon Slots (spawned from InventoryConfig.WeaponConfig)")]
+        [Header("Weapon Slots")]
         [Tooltip("Prefab with WeaponSlotButton component.")]
         [SerializeField] private WeaponSlotButton _weaponSlotPrefab;
 
@@ -63,16 +59,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
         //  Inspector — Shared HUD Labels (fixed — not config-driven)
         // ─────────────────────────────────────────────────────────────────────
 
-        [Header("Reload Progress (center-screen)")]
-        [Tooltip("MUIP ProgressBar shown while reloading. Assign the ProgressBar component placed at screen centre.")]
-        [SerializeField] private ProgressBar _reloadProgressBar;
+        [Header("Reload Progress")]
+        [SerializeField] private ActionProgressPresenter _actionProgressPresenter;
 
-        [Header("Mobile Fire Button")]
-        [Tooltip("Show or hide the on-screen fire button. Set false for PC-only builds or game modes that hide the button.")]
-        [SerializeField] private bool _showFireButton = true;
 
-        [Tooltip("On-screen fire button for mobile / controller. Auto-finds CombatInputHandler if not pre-assigned.")]
-        [SerializeField] private FireButton _fireButton;
 
         [Header("Item Aim Controller (optional)")]
         [Tooltip("Assign the scene ItemAimController so throwable slots show range/aim UI.")]
@@ -94,10 +84,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IItemUseSystem       _itemUseSystem;
         private IInventorySystem     _inventorySystem;
         private CombatInputHandler   _combatInputHandler;
-        private bool             _slotsSpawned;     // true after Awake spawn pass
-#pragma warning disable CS0414
-        private bool             _isInitialized;    // true after first data bind
-#pragma warning restore CS0414
+        private bool             _slotsSpawned;
         private Coroutine        _reloadProgressCoroutine;
 
         private readonly List<WeaponSlotButton> _spawnedWeaponButtons = new List<WeaponSlotButton>();
@@ -121,7 +108,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (_slotsSpawned) return;
             SpawnWeaponSlots();
-            ApplyFireButtonVisibility();
             SetItemPanelsVisible(_showItemPanelsUI);
             _slotsSpawned = true;
         }
@@ -156,7 +142,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
             CombatInputHandler   combatInputHandler   = null,
             IInventorySystem     inventorySystem      = null)
         {
-            Debug.Log($"[CombatHUDPanel] Initialize: itemSelectionSystem={(itemSelectionSystem != null ? itemSelectionSystem.ToString() : "null")} ({itemSelectionSystem?.GetHashCode() ?? 0})");
             UnwireSystemEvents();
             UnwireShortcutKeys();
 
@@ -167,7 +152,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
             WireSystemEvents();
             WireShortcutKeys();
             HideStatusMessages();
-            _isInitialized = true;
         }
 
         /// <summary>
@@ -223,18 +207,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (_aimController != null)
                 _aimController.Initialize(statSystem, _itemSelectionSystem, playerTransform, aimSystem, _itemUseSystem, _combatInputHandler);
-
-            ApplyFireButtonVisibility();
-            if (_showFireButton && _fireButton != null)
-            {
-                _fireButton.Initialize(InputManager.Instance?.CombatHandler);
-                if (playerTransform != null)
-                {
-                    float vr = statSystem != null ? statSystem.GetStat(PlayerStatType.VisionRange) : 0f;
-                    if (vr <= 0f) vr = 15f;
-                    _fireButton.BindPlayerContext(playerTransform, vr);
-                }
-            }
         }
 
         /// <summary>
@@ -272,19 +244,16 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 Debug.LogWarning("[CombatHUDPanel] _weaponSlotPrefab or _weaponSlotsContainer is null — weapon slots not spawned.");
                 return;
             }
-            if (_inventoryConfig == null || _inventoryConfig.WeaponConfig == null)
-            {
-                Debug.LogWarning("[CombatHUDPanel] _inventoryConfig.WeaponConfig is null — weapon slots not spawned.");
-                return;
-            }
 
-            foreach (var cfg in _inventoryConfig.WeaponConfig)
+            var fixedSlots = new[] { WeaponSlotType.Primary, WeaponSlotType.Secondary, WeaponSlotType.Melee };
+
+            foreach (var type in fixedSlots)
             {
                 var btn = Instantiate(_weaponSlotPrefab, _weaponSlotsContainer);
-                btn.name = $"WeaponSlot_{cfg.Type}";
-                btn.Bind(cfg.Type, null);   // null system → renders as placeholder
+                btn.name = $"WeaponSlot_{type}";
+                btn.Bind(type, null);   // null system → renders as placeholder
                 _spawnedWeaponButtons.Add(btn);
-                _spawnedWeaponTypes.Add(cfg.Type);  // keep type so RebindWeaponSlots doesn't need config
+                _spawnedWeaponTypes.Add(type);  // keep type so RebindWeaponSlots doesn't need config
                 btn.gameObject.SetActive(true);
             }
         }
@@ -301,24 +270,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (entry.Panel != null) entry.Panel.gameObject.SetActive(visible);
         }
 
-        /// <summary>
-        /// Show or hide the on-screen fire button at runtime.
-        /// When hiding, also stops any in-progress fire via <see cref="FireButton.Bind"/>(null).
-        /// </summary>
-        public void SetFireButtonVisible(bool visible)
-        {
-            _showFireButton = visible;
-            ApplyFireButtonVisibility();
-        }
 
-        private void ApplyFireButtonVisibility()
-        {
-            if (_fireButton == null) return;
-            _fireButton.gameObject.SetActive(_showFireButton);
-            // If hiding while fire is in progress, safely stop the fire state.
-            if (!_showFireButton)
-                _fireButton.Bind(null);
-        }
 
         // ─────────────────────────────────────────────────────────────────────
         //  Phase 2 — Rebind (per player, no GO creation)
@@ -339,12 +291,35 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void RefreshItemPanels()
         {
             if (_filterPanels == null) return;
+            var initializedPanels = new List<ItemFilterPanel>();
             foreach (var entry in _filterPanels)
-                if (entry.Panel != null) entry.Panel.Initialize(entry.FilterType, _itemSelectionSystem, _inventorySystem, _itemUseSystem, _combatInputHandler);
+            {
+                if (entry.Panel == null) continue;
+                if (initializedPanels.Contains(entry.Panel)) continue;
+
+                var filterTypes = CollectFilterTypesForPanel(entry.Panel);
+                entry.Panel.Initialize(filterTypes, _itemSelectionSystem, _inventorySystem, _itemUseSystem, _combatInputHandler);
+                initializedPanels.Add(entry.Panel);
+            }
+        }
+
+        private IReadOnlyList<ItemType> CollectFilterTypesForPanel(ItemFilterPanel panel)
+        {
+            var types = new List<ItemType>();
+            if (_filterPanels == null || panel == null) return types;
+
+            foreach (var entry in _filterPanels)
+            {
+                if (entry.Panel != panel) continue;
+                if (!types.Contains(entry.FilterType))
+                    types.Add(entry.FilterType);
+            }
+
+            return types;
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Shortcut Key Wiring (ThrowGrenade key → toggle throwable panel)
+        //  Shortcut key wiring for item panel activation.
         // ─────────────────────────────────────────────────────────────────────
 
         private void WireShortcutKeys()
@@ -361,8 +336,22 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _combatInputHandler.OnConsumablePanel -= HandleConsumablePanelShortcut;
         }
 
-        private void HandleThrowGrenadeShortcut()    => TogglePanel(ItemType.Throwable);
-        private void HandleConsumablePanelShortcut() => TogglePanel(ItemType.Consumable);
+        private void HandleThrowGrenadeShortcut()    => ActivatePanelShortcut(ItemType.Throwable);
+        private void HandleConsumablePanelShortcut() => ActivatePanelShortcut(ItemType.Consumable);
+
+        private void ActivatePanelShortcut(ItemType filterType)
+        {
+            if (_filterPanels == null) return;
+            foreach (var entry in _filterPanels)
+            {
+                if (entry.Panel == null || entry.FilterType != filterType) continue;
+                Debug.Log($"[CombatHUDPanel] Shortcut {filterType} -> ItemFilterPanel.ActivateShortcut");
+                entry.Panel.ActivateShortcut();
+                return;
+            }
+
+            Debug.LogWarning($"[CombatHUDPanel] Shortcut {filterType} ignored: panel not found.");
+        }
 
         // ─────────────────────────────────────────────────────────────────────
         //  System Event Wiring
@@ -399,10 +388,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void StartReloadProgress()
         {
             StopReloadProgress();
+            if (_actionProgressPresenter == null) return;
 
-            if (_reloadProgressBar == null) return;
-
-            // Read reload duration from the active weapon's computed stat.
             float duration = 2.5f;
             var activeWeapon = _weaponSystem?.GetActiveWeapon();
             if (activeWeapon != null)
@@ -411,19 +398,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (d > 0f) duration = d;
             }
 
-            // Configure and start MUIP ProgressBar:
-            //   - currentPercent starts at 0, counts up to 100 over `duration` seconds.
-            //   - speed = 100 / duration → bar reaches 100 % in exactly `duration` seconds.
-            //   - invert = false  → 0 % → 100 %
-            //   - restart = false → stays at 100 % when done (StopReloadProgress hides it).
-            _reloadProgressBar.currentPercent = 0f;
-            _reloadProgressBar.speed          = Mathf.Max(1, Mathf.RoundToInt(100f / duration));
-            _reloadProgressBar.invert         = false;
-            _reloadProgressBar.restart        = false;
-            _reloadProgressBar.isOn           = true;
-            _reloadProgressBar.gameObject.SetActive(true);
-
-            _reloadProgressCoroutine = StartCoroutine(WaitForReload(duration));
+            _actionProgressPresenter.Show(ActionProgressKind.Reload, "Reloading", false);
+            _reloadProgressCoroutine = StartCoroutine(ReloadProgressRoutine(duration));
         }
 
         private void StopReloadProgress()
@@ -433,16 +409,19 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 StopCoroutine(_reloadProgressCoroutine);
                 _reloadProgressCoroutine = null;
             }
-            if (_reloadProgressBar != null)
-            {
-                _reloadProgressBar.isOn = false;
-                _reloadProgressBar.gameObject.SetActive(false);
-            }
+            _actionProgressPresenter?.Hide(ActionProgressKind.Reload);
         }
 
-        private IEnumerator WaitForReload(float duration)
+        private IEnumerator ReloadProgressRoutine(float duration)
         {
-            yield return new UnityEngine.WaitForSeconds(duration);
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                _actionProgressPresenter?.SetProgress(ActionProgressKind.Reload, elapsed / duration);
+                yield return null;
+            }
+
             StopReloadProgress();
         }
 

@@ -15,13 +15,13 @@ MonoBehaviour:
   ItemID: KEY_CORE
   DisplayName: Energy Core Key
   Description: 
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: 445fb0f64d12e7041998b9f9265be179, type: 3}
   Rarity: 4
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.1
-  _heldPrefab: {fileID: 0}
-  _groundPrefab: {fileID: 0}
+  _visualPrefab: {fileID: 7342610198373781452, guid: f1b2b5ae5d7448efbb1037e665fce3d0,
+    type: 3}
   ValidSlots: 00000000
   UsageDuration: 0
   _canCancelUsage: 1

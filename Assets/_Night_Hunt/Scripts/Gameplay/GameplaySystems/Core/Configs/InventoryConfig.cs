@@ -5,6 +5,23 @@ using NightHunt.GameplaySystems.UI.Inventory;
 
 namespace NightHunt.GameplaySystems.Core.Configs
 {
+    public enum TooltipMode { FollowMouse, SnapToSlot, Fixed }
+    public enum ContextMenuSide { Right, Left }
+
+    [System.Serializable]
+    public struct RarityBackgroundConfig
+    {
+        public ItemRarity Rarity;
+        public Sprite BackgroundIcon;
+    }
+
+    [System.Serializable]
+    public struct AttachmentSlotIconConfig
+    {
+        public AttachmentSlotType SlotType;
+        public Sprite Icon;
+    }
+
     /// <summary>
     /// Unified ScriptableObject configuration for the inventory, equipment, weapon,
     /// attachment, and item-drop systems.
@@ -26,7 +43,8 @@ namespace NightHunt.GameplaySystems.Core.Configs
         #region ========== INVENTORY CONFIG ==========
 
         [Header("Inventory")]
-        public InventorySlotConfig Inventory;
+        [Tooltip("Default icon shown in an empty inventory slot.")]
+        public Sprite InventoryEmptyIcon;
 
         #endregion
 
@@ -41,22 +59,32 @@ namespace NightHunt.GameplaySystems.Core.Configs
 
         #endregion
 
-        #region ========== WEAPON CONFIG ==========
+        #region ========== UI SETTINGS ==========
 
-        [Header("Weapon")]
-        [Tooltip("Weapon holster slot definitions — one entry per slot with its default empty icon.")]
-        public WeaponSlotConfigStruct[] WeaponConfig;
+        [Header("UI — Slot")]
+        public Vector2 DefaultSlotSize = new Vector2(100f, 100f);
+        public RarityBackgroundConfig[] RarityBackgrounds;
+        public Sprite DefaultSlotBackground;
 
-        /// <summary>Returns the number of defined weapon holster slots.</summary>
-        public int WeaponCount => WeaponConfig != null ? WeaponConfig.Length : 0;
+        [Header("UI — Tooltip")]
+        public TooltipMode TooltipMode = TooltipMode.FollowMouse;
+        public Vector2 TooltipOffset = new Vector2(16f, -16f);
+        public Vector2 TooltipFixedPosition = new Vector2(200f, -200f);
+        public bool ShowTooltipDuringDrag = false;
 
-        #endregion
+        [Header("UI — Context Menu")]
+        public ContextMenuSide ContextMenuPreferredSide = ContextMenuSide.Right;
+        public float ContextMenuGap = 8f;
+        public bool HideContextMenuOnDragStart = true;
 
-        #region ========== ATTACHMENT UI ==========
+        [Header("UI — Drag & Drop")]
+        [Range(0f, 0.5f)] public float GhostSnapBackDuration = 0.18f;
+        [Range(0.1f, 1f)] public float DoubleClickThreshold = 0.3f;
 
-        [Header("Attachment UI")]
-        [Tooltip("UI settings for the attachment panel (default icon, show-on-hover / show-on-select behaviour).")]
-        public AttachmentUIConfigStruct AttachmentUI;
+        [Header("UI — Attachment Highlight")]
+        public Color AttachmentSlotHighlightColor = new Color(1f, 0.85f, 0.1f, 0.7f);
+        [Range(0.5f, 8f)] public float AttachmentHighlightPulseSpeed = 2.5f;
+        public AttachmentSlotIconConfig[] AttachmentSlotIconConfigs;
 
         #endregion
 
@@ -161,7 +189,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
             switch (slotType)
             {
                 case UISlotType.Inventory:
-                    return Inventory.DefaultEmptyIcon;
+                    return InventoryEmptyIcon;
 
                 case UISlotType.Equipment:
                     if (equipmentSlot.HasValue && EquipmentConfig != null)
@@ -175,21 +203,35 @@ namespace NightHunt.GameplaySystems.Core.Configs
                     break;
 
                 case UISlotType.Weapon:
-                    if (weaponSlot.HasValue && WeaponConfig != null)
-                    {
-                        foreach (var config in WeaponConfig)
-                        {
-                            if (config.Type == weaponSlot.Value)
-                                return config.DefaultIcon;
-                        }
-                    }
-                    break;
+                    return InventoryEmptyIcon;
 
                 case UISlotType.Attachment:
-                    return AttachmentUI.DefaultEmptyIcon;
+                    return null;
             }
 
             return null;
+        }
+
+        public Sprite GetAttachmentSlotIcon(AttachmentSlotType slotType)
+        {
+            if (AttachmentSlotIconConfigs == null) return null;
+            foreach (var cfg in AttachmentSlotIconConfigs)
+            {
+                if (cfg.SlotType == slotType && cfg.Icon != null)
+                    return cfg.Icon;
+            }
+            return null;
+        }
+
+        public Sprite GetRarityBackground(ItemRarity rarity)
+        {
+            if (RarityBackgrounds == null) return DefaultSlotBackground;
+            foreach (var config in RarityBackgrounds)
+            {
+                if (config.Rarity == rarity)
+                    return config.BackgroundIcon;
+            }
+            return DefaultSlotBackground;
         }
 
         /// <summary>Returns the config struct for the given equipment slot type, or null if not configured.</summary>
@@ -206,37 +248,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
             return null;
         }
 
-        /// <summary>Returns the config struct for the given weapon slot type, or null if not configured.</summary>
-        public WeaponSlotConfigStruct? GetWeaponSlot(WeaponSlotType type)
-        {
-            if (WeaponConfig == null) return null;
 
-            foreach (var config in WeaponConfig)
-            {
-                if (config.Type == type)
-                    return config;
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// Returns all configured weapon slot types ordered by their Priority (ascending).
-        /// This is the canonical iteration order used by WeaponSystem and all UI.
-        /// </summary>
-        public WeaponSlotType[] GetWeaponSlotOrder()
-        {
-            if (WeaponConfig == null || WeaponConfig.Length == 0)
-                return new[] { WeaponSlotType.Primary, WeaponSlotType.Secondary, WeaponSlotType.Melee };
-
-            var result = new WeaponSlotType[WeaponConfig.Length];
-            // Simple insertion sort (array is tiny, max 5 elements)
-            var sorted = new System.Collections.Generic.List<WeaponSlotConfigStruct>(WeaponConfig);
-            sorted.Sort((a, b) => a.Priority.CompareTo(b.Priority));
-            for (int i = 0; i < sorted.Count; i++)
-                result[i] = sorted[i].Type;
-            return result;
-        }
 
         #endregion
 
@@ -262,81 +274,17 @@ namespace NightHunt.GameplaySystems.Core.Configs
             Debug.Log("[InventoryConfig] Default equipment slots created — assign icons in the Inspector.");
         }
 
-        [ContextMenu("Setup Default Weapon Slots")]
-        private void SetupDefaultWeaponSlots()
-        {
-            WeaponConfig = new WeaponSlotConfigStruct[]
-            {
-                new WeaponSlotConfigStruct
-                {
-                    Type             = WeaponSlotType.Primary,
-                    DisplayName      = "Primary",
-                    Priority         = 0,
-                    AllowedClasses   = new[] { WeaponClass.Rifle, WeaponClass.SMG, WeaponClass.Shotgun,
-                                               WeaponClass.Sniper, WeaponClass.Launcher, WeaponClass.Pistol },
-                    DefaultIcon      = null,
-                    WeaponCardPrefab = null,
-                },
-                new WeaponSlotConfigStruct
-                {
-                    Type             = WeaponSlotType.Secondary,
-                    DisplayName      = "Secondary",
-                    Priority         = 1,
-                    AllowedClasses   = new[] { WeaponClass.Pistol, WeaponClass.SMG },
-                    DefaultIcon      = null,
-                    WeaponCardPrefab = null,
-                },
-                new WeaponSlotConfigStruct
-                {
-                    Type             = WeaponSlotType.Melee,
-                    DisplayName      = "Melee",
-                    Priority         = 2,
-                    AllowedClasses   = new[] { WeaponClass.Melee },
-                    DefaultIcon      = null,
-                    WeaponCardPrefab = null,
-                },
-            };
 
-            UnityEditor.EditorUtility.SetDirty(this);
-            Debug.Log("[InventoryConfig] Default weapon slots created — assign icons in the Inspector.");
-        }
 
         [ContextMenu("Validate Config")]
         private void ValidateConfig()
         {
             bool hasErrors = false;
 
-            if (Inventory.GridWidth < 1 || Inventory.GridWidth > 20)
-            {
-                Debug.LogError($"[InventoryConfig] Inventory.GridWidth must be 1–20, current: {Inventory.GridWidth}");
-                hasErrors = true;
-            }
-
-            if (Inventory.GridHeight < 1 || Inventory.GridHeight > 20)
-            {
-                Debug.LogError($"[InventoryConfig] Inventory.GridHeight must be 1–20, current: {Inventory.GridHeight}");
-                hasErrors = true;
-            }
-
             if (EquipmentConfig == null || EquipmentConfig.Length == 0)
                 Debug.LogWarning("[InventoryConfig] EquipmentConfig is empty — use 'Setup Default Equipment Slots'.");
 
-            if (WeaponConfig == null || WeaponConfig.Length == 0)
-            {
-                Debug.LogWarning("[InventoryConfig] WeaponConfig is empty — use 'Setup Default Weapon Slots'.");
-            }
-            else
-            {
-                var seenSlots = new System.Collections.Generic.HashSet<WeaponSlotType>();
-                foreach (var cfg in WeaponConfig)
-                {
-                    if (!seenSlots.Add(cfg.Type))
-                    {
-                        Debug.LogError($"[InventoryConfig] Duplicate WeaponSlotType '{cfg.Type}' found in WeaponConfig!");
-                        hasErrors = true;
-                    }
-                }
-            }
+
 
             if (!hasErrors)
                 Debug.Log("[InventoryConfig] Validation passed.");
@@ -345,30 +293,6 @@ namespace NightHunt.GameplaySystems.Core.Configs
 
         #endregion
     }
-
-    #region ========== INVENTORY SLOT CONFIG ==========
-
-    [System.Serializable]
-    public struct InventorySlotConfig
-    {
-        [Header("Grid Size")]
-        [Tooltip("Number of columns in the inventory grid.")]
-        [Range(1, 20)]
-        public int GridWidth;
-
-        [Tooltip("Number of rows in the inventory grid.")]
-        [Range(1, 20)]
-        public int GridHeight;
-
-        [Header("UI")]
-        [Tooltip("Default icon shown in an empty inventory slot.")]
-        public Sprite DefaultEmptyIcon;
-
-        /// <summary>Total number of inventory slots (GridWidth × GridHeight).</summary>
-        public int TotalSlots => GridWidth * GridHeight;
-    }
-
-    #endregion
 
     #region ========== EQUIPMENT SLOT CONFIG ==========
 
@@ -384,64 +308,4 @@ namespace NightHunt.GameplaySystems.Core.Configs
 
     #endregion
 
-    #region ========== WEAPON SLOT CONFIG ==========
-
-    [System.Serializable]
-    public struct WeaponSlotConfigStruct
-    {
-        [Tooltip("The holster slot type this entry configures.")]
-        public WeaponSlotType Type;
-
-        [Tooltip("Human-readable label shown in UI (e.g. 'Rifle', 'Pistol', 'Knife')." +
-                 " If empty, falls back to Type.ToString().")]
-        public string DisplayName;
-
-        [Tooltip("Default icon shown when this weapon slot is empty.")]
-        public Sprite DefaultIcon;
-
-        [Tooltip("Optional per-slot WeaponCardView prefab (overrides the panel default). Leave null to use panel default.")]
-        public GameObject WeaponCardPrefab;
-
-        [Tooltip("Which weapon classes are allowed in this slot. Leave empty = accept ALL weapons.")]
-        public WeaponClass[] AllowedClasses;
-
-        [Tooltip("Auto-equip priority (0 = highest priority / fill first). Used to build _slotPriority in WeaponSystem.")]
-        public int Priority;
-
-        /// <summary>Resolved display name: uses DisplayName if set, otherwise slot Type name.</summary>
-        public string ResolvedDisplayName => string.IsNullOrEmpty(DisplayName) ? Type.ToString() : DisplayName;
-
-        /// <summary>
-        /// Returns true when a weapon with the given WeaponClass is allowed in this slot.
-        /// An empty AllowedClasses array means all weapon classes are accepted.
-        /// </summary>
-        public bool AcceptsWeaponClass(WeaponClass weaponClass)
-        {
-            if (AllowedClasses == null || AllowedClasses.Length == 0) return true;
-            foreach (var c in AllowedClasses)
-                if (c == weaponClass) return true;
-            return false;
-        }
-    }
-
-    #endregion
-
-    #region ========== ATTACHMENT UI CONFIG ==========
-
-    [System.Serializable]
-    public struct AttachmentUIConfigStruct
-    {
-        [Header("UI")]
-        [Tooltip("Default icon shown in an empty attachment slot.")]
-        public Sprite DefaultEmptyIcon;
-
-        [Header("Behaviour")]
-        [Tooltip("Show the attachment panel when hovering over an equippable item.")]
-        public bool ShowAttachmentPanelOnHover;
-
-        [Tooltip("Show the attachment panel when selecting / clicking an equippable item.")]
-        public bool ShowAttachmentPanelOnSelect;
-    }
-
-    #endregion
 }

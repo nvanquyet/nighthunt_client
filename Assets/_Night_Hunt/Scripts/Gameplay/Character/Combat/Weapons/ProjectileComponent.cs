@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using NightHunt.Core;
 using NightHunt.Data;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Utilities;
 
@@ -9,33 +10,42 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
     /// <summary>
     /// Component for moving projectiles (bullets, grenades, smoke…).
-    /// Inherits ProjectileBase — all VFX config is set on the prefab.
+    /// Inherits ProjectileBase; all VFX config is set on the prefab.
     ///
     /// Lifecycle:
-    ///   OnEnable    → reset state (pool-friendly)
-    ///   Initialize  → set direction/speed, play muzzle flash, start fuse if needed
-    ///   Update      → move, check range
-    ///   OnTrigger   → detonate if isImpact = true
-    ///   Detonate    → hide MainVisual, activate DetonationVFX, wait lifetimeAfterImpact, deactivate
+    ///   OnEnable: reset state for pool reuse.
+    ///   Initialize: set direction/speed, play muzzle flash, start fuse if needed.
+    ///   Update: move and check range.
+    ///   OnTrigger: detonate if isImpact is true.
+    ///   Detonate: hide MainVisual, activate DetonationVFX, wait lifetimeAfterImpact, deactivate.
     ///
     /// For hitscan visual mode (useHitscan = true):
-    ///   The projectile teleports to hitscanEndpoint immediately — damage was already applied
-    ///   by the raycast; this is a purely visual trail.
+    ///   Damage was already applied by raycast, but the visual still starts at the
+    ///   muzzle/fire point and travels toward hitscanEndpoint before playing impact VFX.
     /// </summary>
     public class ProjectileComponent : ProjectileBase
     {
-        // Runtime state — not serialized.
+        // Runtime state.
         private WeaponConfigData _config;
         private Vector3          _direction;
+        private Vector3          _velocity;       // accumulated velocity for ballistic arc
         private float            _speed;
         private float            _maxRange;
         private bool             _useHitscan;
+        private Vector3          _hitscanTargetPos;       // world position to detonate at for hitscan visuals
+        private float            _hitscanTargetDistance;  // distance from spawn to _hitscanTargetPos
         private float            _distanceTraveled;
         private bool             _hasDetonated;
         private Coroutine        _fuseRoutine;
         private Coroutine        _despawnRoutine;
 
-        // Damage identity — set via SetOwnerData() by the spawner on the owner machine.
+        [Tooltip("Seconds to keep the bullet trail visible after a hitscan visual reaches the endpoint before hiding it.")]
+        [SerializeField] private float _hitscanTrailLingerDuration = 0.12f;
+
+        [Tooltip("Minimum travel speed for visual-only hitscan bullets. Keeps rifle/SMG trails responsive even when the weapon projectile speed is tuned for physical projectiles.")]
+        [SerializeField] private float _minHitscanVisualSpeed = 180f;
+
+        // Damage identity set via SetOwnerData() by the spawner on the owner machine.
         private float  _damage;
         private bool   _isOwnerShot;   // Only owner may send damage RPCs to server.
         private int    _shooterNetObjId = -1;
@@ -48,29 +58,33 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             // Self-heal layer: always ensure bullets land on the correct physics layer
             // regardless of the serialised prefab value (layer table renames break prefabs).
             gameObject.layer = LayerMask.NameToLayer(NightHuntLayers.Projectile);
-            _hasDetonated     = false;
-            _distanceTraveled = 0f;
-            _fuseRoutine      = null;
-            _despawnRoutine   = null;
-            _isOwnerShot      = false;
-            _shooterNetObjId  = -1;
+            _hasDetonated          = false;
+            _distanceTraveled      = 0f;
+            _velocity              = Vector3.zero;
+            _hitscanTargetPos      = Vector3.zero;
+            _hitscanTargetDistance = 0f;
+            _fuseRoutine           = null;
+            _despawnRoutine        = null;
+            _isOwnerShot           = false;
+            _shooterNetObjId       = -1;
         }
 
-        // Init — called on every spawn/reuse from pool.
-        // hitscanEndpoint: if not null, the projectile jumps to this point immediately
-        //                  (visual trail only — damage was already applied via raycast).
+        // Called on every spawn or reuse from pool.
+        // hitscanEndpoint: if not null, the projectile flies from the current spawn point
+        //                  to this world point (visual only; damage was already raycast).
         public void Initialize(WeaponConfigData config, Vector3 dir, bool useHitscan,
                                Vector3? hitscanEndpoint = null)
         {
             _config     = config;
             _direction  = dir.normalized;
-            _speed      = config.ProjectileSpeed;
+            _speed      = useHitscan ? Mathf.Max(config.ProjectileSpeed, _minHitscanVisualSpeed) : config.ProjectileSpeed;
             _maxRange   = config.MaxRange;
             _useHitscan = useHitscan;
             _damage     = config.DamageBody;
             _weaponId   = config.WeaponId;
+            _velocity   = _direction * _speed;
 
-            Debug.Log($"[PROJ.INIT] Initialize — go='{gameObject.name}'  pos={transform.position:F1}  " +
+            LogProjectile($"[PROJ.INIT] Initialize - go='{gameObject.name}'  pos={transform.position:F1}  " +
                       $"dir={_direction:F2}  speed={_speed}  maxRange={_maxRange}  " +
                       $"useHitscan={useHitscan}  isOwnerShot={_isOwnerShot}  dmg={_damage}  " +
                       $"endpoint={hitscanEndpoint?.ToString("F1") ?? "null"}");
@@ -82,11 +96,10 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             if (useHitscan && hitscanEndpoint.HasValue)
             {
-                // Teleport visual trail to the impact point and detonate immediately.
-                transform.position = hitscanEndpoint.Value;
-                Debug.Log($"[PROJ.INIT] Hitscan teleport — go='{gameObject.name}'  endpoint={hitscanEndpoint.Value:F1}");
-                Detonate();
-                return;
+                Vector3 origin = transform.position;
+                _hitscanTargetPos      = SanitizeHitscanEndpoint(origin, _direction, hitscanEndpoint.Value, _maxRange);
+                _hitscanTargetDistance = Vector3.Distance(origin, _hitscanTargetPos);
+                LogProjectile($"[PROJ_VFX] Hitscan visual flight go='{gameObject.name}' origin={origin:F2} endpoint={_hitscanTargetPos:F2} dist={_hitscanTargetDistance:F2} speed={_speed:F1}");
             }
 
             if (!isImpact && fuseTime > 0f)
@@ -104,7 +117,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             if (!string.IsNullOrEmpty(weaponId))
                 _weaponId = weaponId;
 
-            Debug.Log($"[PROJ.INIT] SetOwnerData — go='{gameObject.name}'  shooterNetObjId={shooterNetworkObjectId}  " +
+            LogProjectile($"[PROJ.INIT] SetOwnerData - go='{gameObject.name}'  shooterNetObjId={shooterNetworkObjectId}  " +
                       $"weaponId='{_weaponId}'");
         }
 
@@ -115,11 +128,14 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         {
             if (_hasDetonated || _config == null) return;
 
-            Vector3 move = _direction * _speed * Time.deltaTime;
+            float dt = Time.deltaTime;
 
-            // Apply gravity for ballistic projectiles (GravityScale > 0).
+            // Accumulate gravity into velocity (matches server ServerProjectileFlight).
+            // GravityScale > 0 creates a downward-curving ballistic arc.
             if (_config.GravityScale > 0f)
-                move.y -= _config.GravityScale * 9.81f * Time.deltaTime;
+                _velocity += Vector3.down * (_config.GravityScale * 9.81f * dt);
+
+            Vector3 move = _velocity * dt;
 
             transform.position    += move;
             _distanceTraveled     += move.magnitude;
@@ -130,7 +146,15 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 transform.rotation  = Quaternion.LookRotation(_direction);
             }
 
-            // Exceeded max range — despawn.
+            // Hitscan: reached target endpoint, snap to exact impact position and detonate.
+            if (_useHitscan && _hitscanTargetDistance > 0f && _distanceTraveled >= _hitscanTargetDistance)
+            {
+                transform.position = _hitscanTargetPos;
+                Detonate();
+                return;
+            }
+
+            // Exceeded max range; despawn.
             if (_distanceTraveled >= _maxRange)
                 Despawn();
         }
@@ -141,7 +165,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             if (_hasDetonated) return;
 
             var otherRoot = other.transform.root;
-            Debug.Log($"[PROJ.HIT] OnTriggerEnter — proj='{gameObject.name}'  pos={transform.position:F1}  " +
+            LogProjectile($"[PROJ.HIT] OnTriggerEnter - proj='{gameObject.name}'  pos={transform.position:F1}  " +
                       $"collider='{other.name}'  root='{otherRoot.name}'  " +
                       $"isOwnerShot={_isOwnerShot}  useHitscan={_useHitscan}  dmg={_damage}");
 
@@ -149,14 +173,14 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             // Only run detonation VFX.
             if (_useHitscan)
             {
-                Debug.Log($"[PROJ.HIT] Hitscan visual — detonating at {transform.position:F1}, no damage applied.");
+                LogProjectile($"[PROJ.HIT] Hitscan visual - detonating at {transform.position:F1}, no damage applied.");
                 Detonate();
                 return;
             }
 
             // For true ballistic projectiles: ONLY the instance that called SetOwnerData()
             // (i.e. the weapon-owner's local copy) may send damage RPCs.
-            // DO NOT use FishNet.InstanceFinder.IsServerStarted here — on a host machine
+            // Do not use FishNet.InstanceFinder.IsServerStarted here; on a host machine
             // IsServerStarted is always true, so every remote-visual projectile spawned by
             // ShowProjectileOnClientsRpc would incorrectly deal damage to whoever it hits.
             bool isAuthoritativeInstance = _isOwnerShot;
@@ -183,7 +207,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                         WeaponId               = _weaponId ?? string.Empty,
                     };
 
-                    Debug.Log($"[PROJ.HIT] Player hitbox hit — collider='{other.name}'  " +
+                    LogProjectile($"[PROJ.HIT] Player hitbox hit - collider='{other.name}'  " +
                               $"dmg={finalDamage:F1}  headshot={hitbox.IsHeadshot}  " +
                               $"weaponId='{_weaponId}'  shooterNetObjId={_shooterNetObjId}");
 
@@ -195,7 +219,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                     var hittable = other.GetComponentInParent<IHittable>();
                     if (hittable != null)
                     {
-                        Debug.Log($"[PROJ.HIT] IHittable hit — collider='{other.name}'  hittable='{hittable.GetType().Name}'  " +
+                        LogProjectile($"[PROJ.HIT] IHittable hit - collider='{other.name}'  hittable='{hittable.GetType().Name}'  " +
                                   $"dmg={_damage:F1}  weaponId='{_weaponId}'");
                         hittable.RequestDamage(new DamageInfo
                         {
@@ -209,15 +233,15 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                     }
                     else
                     {
-                        Debug.Log($"[PROJ.HIT] No damageable target on '{other.name}' (root='{otherRoot.name}') — " +
+                        LogProjectile($"[PROJ.HIT] No damageable target on '{other.name}' (root='{otherRoot.name}') - " +
                                   $"no PlayerHitboxMarker, no IHittable. Detonating only.");
                     }
                 }
             }
             else
             {
-                // Visual-only projectile (remote client copy) — no damage applied.
-                Debug.Log($"[PROJ.HIT] Visual-only projectile hit '{other.name}' — isOwnerShot=false, detonating only.");
+                // Visual-only projectile on a remote client copy; no damage applied.
+                LogProjectile($"[PROJ.HIT] Visual-only projectile hit '{other.name}' - isOwnerShot=false, detonating only.");
             }
 
             Detonate();
@@ -244,10 +268,25 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 _fuseRoutine = null;
             }
 
-            // Activate DetonationVFX child, hide trail/mesh.
-            TriggerDetonation(transform.position, Quaternion.LookRotation(_direction));
+            if (_useHitscan && hideTrailOnImpact && mainVisualChild != null && _hitscanTrailLingerDuration > 0f)
+            {
+                // For hitscan: keep the bullet trail visible for a short time so the player can see it,
+                // then run the normal detonation (hide trail, show impact VFX, start despawn timer).
+                _despawnRoutine = StartCoroutine(HitscanLingerThenDetonate());
+            }
+            else
+            {
+                // Instant detonation for ballistic projectiles and fuse grenades.
+                TriggerDetonation(transform.position, Quaternion.LookRotation(_direction));
+                _despawnRoutine = StartCoroutine(DespawnAfter(lifetimeAfterImpact));
+            }
+        }
 
-            _despawnRoutine = StartCoroutine(DespawnAfter(lifetimeAfterImpact));
+        private IEnumerator HitscanLingerThenDetonate()
+        {
+            yield return new WaitForSeconds(_hitscanTrailLingerDuration);
+            TriggerDetonation(transform.position, Quaternion.LookRotation(_direction));
+            yield return StartCoroutine(DespawnAfter(lifetimeAfterImpact));
         }
 
         // -----------------------------------------------------------------
@@ -257,6 +296,41 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         {
             if (_despawnRoutine != null) return;
             _despawnRoutine = StartCoroutine(DespawnAfter(0f));
+        }
+
+        private static bool ProjectileDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableProjectileDebugLogs;
+        }
+
+        private static void LogProjectile(string message)
+        {
+            if (ProjectileDebugEnabled())
+                Debug.Log(message);
+        }
+
+        private static Vector3 SanitizeHitscanEndpoint(Vector3 origin, Vector3 direction, Vector3 endpoint, float maxRange)
+        {
+            bool finite = IsFinite(endpoint);
+            float range = maxRange > 0f ? maxRange : 150f;
+            float sqrDist = (endpoint - origin).sqrMagnitude;
+            float maxAllowed = Mathf.Max(range * 2f, 250f);
+            bool plausible = sqrDist <= maxAllowed * maxAllowed;
+
+            if (finite && plausible)
+                return endpoint;
+
+            Vector3 fallback = origin + direction.normalized * range;
+            Debug.LogWarning($"[PROJ.INIT] Invalid hitscan endpoint rejected. origin={origin:F1} endpoint={endpoint:F1} finite={finite} sqrDist={sqrDist:F1} maxRange={range:F1} fallback={fallback:F1}");
+            return fallback;
+        }
+
+        private static bool IsFinite(Vector3 v)
+        {
+            return !float.IsNaN(v.x) && !float.IsInfinity(v.x) &&
+                   !float.IsNaN(v.y) && !float.IsInfinity(v.y) &&
+                   !float.IsNaN(v.z) && !float.IsInfinity(v.z);
         }
 
         private IEnumerator DespawnAfter(float delay)

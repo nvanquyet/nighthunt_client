@@ -48,7 +48,7 @@ namespace NightHunt.Editor.Tools
     ///   1. Gán các ScriptableObject configs (InventoryConfig, PlayerStatUIConfig)
     ///   2. Gán MinimapUI._minimapCamera + _minimapTexture qua Inspector
     ///   3. Gán KillFeedUI.killFeedItemPrefab
-    ///   4. Kéo GameHUD.cs script vào GameHUD_Canvas root
+    ///   4. Kéo GameHUDController.cs script vào GameHUD_Canvas root
     ///   5. Kéo các sub-panel refs vào GameHUD Inspector slots
     /// </summary>
     public static class NightHuntUISetupTool
@@ -97,8 +97,8 @@ namespace NightHunt.Editor.Tools
                 "UI Setup Complete",
                 "Full UI hierarchy created.\n\n" +
                 "NEXT STEPS:\n" +
-                "1. Drag GameHUD.cs onto GameHUD_Canvas root\n" +
-                "2. Wire sub-panel references in GameHUD Inspector\n" +
+                "1. Add GameHUDController.cs to GameHUD_Canvas root\n" +
+                "2. Wire sub-panel references in GameHUDController Inspector\n" +
                 "3. Assign MinimapCamera + MinimapTexture on MinimapUI\n" +
                 "4. Assign KillFeedItemPrefab on KillFeedUI\n" +
                 "5. Assign InventoryConfig, PlayerStatUIConfig SOs\n",
@@ -301,17 +301,17 @@ namespace NightHunt.Editor.Tools
             SetAnchors(jHandle, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
             SetRectSize(jHandle, new Vector2(70, 70));
             AddImage(jHandle, new Color(1, 1, 1, 0.5f));
-            // FixedJoystick + MobileMovementBridge (both on root [MoveJoystick] GO)
+            // FixedJoystick on root [MoveJoystick] GO.
+            // MobileMovementBridge handles handler lifecycle (BindHandler/UnbindHandler).
+            // Wire FixedJoystick → MobileHUDPanel._joystick in the Inspector.
             var fixedJoy = EnsureComp<FixedJoystick>(joyLeft);
             var joySO    = new SerializedObject(fixedJoy);
             joySO.FindProperty("background").objectReferenceValue = joyBgGo.GetComponent<RectTransform>();
             joySO.FindProperty("handle").objectReferenceValue     = jHandle.GetComponent<RectTransform>();
             joySO.ApplyModifiedProperties();
-            var bridge   = EnsureComp<MobileMovementBridge>(joyLeft);
-            var bridgeSO = new SerializedObject(bridge);
-            bridgeSO.FindProperty("_joystick").objectReferenceValue = fixedJoy;
-            bridgeSO.ApplyModifiedProperties();
+            EnsureComp<MobileMovementBridge>(joyLeft);
             log.Add("  ✅ [CombatHUD] — FireButton(+script+joystick) + WeaponSlots + QuickSlots + MoveJoystick(FixedJoystick+Bridge)");
+            log.Add("  ⚠️  MANUAL: Wire [MoveJoystick].FixedJoystick → MobileHUDPanel._joystick in Inspector");
 
             // ── Damage Feedback (empty root — DamageFeedbackSystem places text) ──
             var dmgFB = GetOrCreate("[DamageFeedback]", go.transform);

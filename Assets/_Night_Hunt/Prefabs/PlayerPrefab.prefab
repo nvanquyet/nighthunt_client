@@ -45,8 +45,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0da04b92ed19424aacecdade27d99665, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   _componentIndexCache: 10
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
@@ -98,6 +98,25 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 2932638389700231956}
   _inventorySystemComponent: {fileID: 9196575011444076670}
   _itemUseSystemComponent: {fileID: 664824046625769896}
+--- !u!114 &7302019368834571142
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6186874985291187823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3330a4d55d738d54695e37272cd7e44a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _componentIndexCache: 12
+  _addedNetworkObject: {fileID: 2932638389700231956}
+  _networkObjectCache: {fileID: 2932638389700231956}
+  _cameraTransform: {fileID: 0}
+  _networkPlayer: {fileID: 2698279300146127577}
+  _placementDistance: 3
+  _placementCheckRadius: 0.5
 --- !u!1 &2685421604083444283
 GameObject:
   m_ObjectHideFlags: 0
@@ -440,6 +459,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _markerRenderer: {fileID: 6624490440725025811}
   _markerScale: 1
+  _visibilityRefreshInterval: 0.1
 --- !u!1 &4613311200469979034
 GameObject:
   m_ObjectHideFlags: 0
@@ -486,7 +506,6 @@ GameObject:
   - component: {fileID: 8384977444285074145}
   - component: {fileID: 2662351169934697946}
   - component: {fileID: 7099914410178724403}
-  - component: {fileID: 2050335677923203845}
   m_Layer: 6
   m_Name: Vision
   m_TagString: Untagged
@@ -590,24 +609,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _logDecisions: 0
---- !u!114 &2050335677923203845
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5037113679866570578}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 06c78af948052824d93c22c84c08dd65, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  SamplePoints: []
-  PermanentlyReveal: 0
-  MaxDistBetweenSamplePoints: 0
-  NumObservers: 0
-  Observers: []
-  CachedTransform: {fileID: 0}
 --- !u!1 &5340184794103508442
 GameObject:
   m_ObjectHideFlags: 0
@@ -621,6 +622,7 @@ GameObject:
   - component: {fileID: 5823837622919229875}
   - component: {fileID: 3611179595310372940}
   - component: {fileID: 7413638047957630419}
+  - component: {fileID: 6713559003114389687}
   m_Layer: 6
   m_Name: WeaponSystem
   m_TagString: Untagged
@@ -661,10 +663,11 @@ MonoBehaviour:
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
   _statSystemSource: {fileID: 2125858533983064380}
   _inventorySystemSource: {fileID: 9196575011444076670}
-  _slotPriority: 000000000100000002000000
+  _slotPriorityOverride:
   _enableDebugLogs: 0
   _aimSyncInterval: 0.05
-  _bulletTargetConfig: {fileID: 0}
+  _bulletTargetConfig: {fileID: 11400000, guid: d58dff5b6f5548f7a592fb5976a1a472, type: 2}
+  _maxFireElevationAngle: 35
 --- !u!114 &5823837622919229875
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -733,6 +736,30 @@ MonoBehaviour:
   defaultProfile: {fileID: 11400000, guid: 84a7d24248921b64eb5e14b274b07da0, type: 2}
   muzzlePoint: {fileID: 0}
   _debugLog: 0
+--- !u!114 &6713559003114389687
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5340184794103508442}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f5672efd0aa6644b9a5e15a5af1d5e0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 2932638389700231956}
+  _networkObjectCache: {fileID: 0}
+  _range: 1.8
+  _radius: 0.55
+  _originOffset: {x: 0, y: 1.1, z: 0.35}
+  _hitLayers:
+    serializedVersion: 2
+    m_Bits: 129
+  _minSecondsBetweenHits: 0.18
+  _fallbackDamage: 25
+  _fallbackWeaponId: melee
 --- !u!1 &6060453494014280762
 GameObject:
   m_ObjectHideFlags: 0
@@ -782,7 +809,6 @@ MonoBehaviour:
   raycastDetector: {fileID: 1375689637451955110}
   proximityScanner: {fileID: 3590875328794933448}
   pickupAllMode: 0
-  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
 --- !u!114 &3590875328794933448
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -800,7 +826,11 @@ MonoBehaviour:
   interactableLayerMask:
     serializedVersion: 2
     m_Bits: 9280
-  _maxResults: 16
+  includeWorldItems: 1
+  worldItemLayerMask:
+    serializedVersion: 2
+    m_Bits: 0
+  _maxResults: 32
   logOnChange: 0
   drawGizmos: 0
   showDebugUI: 0
@@ -847,6 +877,8 @@ GameObject:
   - component: {fileID: 8370610283817252759}
   - component: {fileID: 5487189429591905697}
   - component: {fileID: 8491396184485047296}
+  - component: {fileID: 7302019368834571142}
+  - component: {fileID: 4503128307412239911}
   m_Layer: 6
   m_Name: PlayerPrefab
   m_TagString: Untagged
@@ -903,6 +935,7 @@ MonoBehaviour:
   - {fileID: 4470525218012556025}
   - {fileID: 664824046625769896}
   - {fileID: 6893537453317171255}
+  - {fileID: 7302019368834571142}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -1048,7 +1081,6 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 2932638389700231956}
   _statConfig: {fileID: 11400000, guid: e362e068a90ca7745936d961e2c722cd, type: 2}
   _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
-  _debugConfig: {fileID: 11400000, guid: 13c1fc2c9327f72469dff3a9c85f23fe, type: 2}
   _showDebugUI: 1
 --- !u!114 &2698279300146127577
 MonoBehaviour:
@@ -1095,7 +1127,7 @@ MonoBehaviour:
   groundCheckDistance: 0.15
   groundDetectionLayer:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 26247169
   groundLayer:
     serializedVersion: 2
     m_Bits: 26247169
@@ -1104,6 +1136,11 @@ MonoBehaviour:
   wallCheckSkinWidth: 0.08
   maxStepHeight: 0.35
   maxSlopeAngle: 46
+  standHeight: 2
+  crouchHeight: 1.1
+  standCenterY: 1
+  crouchCenterY: 0.55
+  standCheckRadius: 0.24
 --- !u!114 &3472814331583980281
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1139,6 +1176,22 @@ MonoBehaviour:
   _matchEndManager: {fileID: 0}
   _applyArmorReduction: 1
   _maxHitDistance: 500
+--- !u!114 &4503128307412239911
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6186874985291187823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b2c5d8e1f4a7b0c3d9e5f1a6b2c7d3e8, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _targetType: 0
+  _acquireRadius: 0.75
+  _hitTargetRef: {fileID: 5379918314552202696}
+  _acquirePointLocalOffset: {x: 0, y: 0, z: 0}
 --- !u!114 &8370610283817252759
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1279,7 +1332,6 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 2932638389700231956}
   _inventorySystemOverride: {fileID: 9196575011444076670}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
-  _autoRecoverAttachments: 1
   _enableDebugLogs: 0
 --- !u!1 &6927907726633053832
 GameObject:
@@ -1335,6 +1387,9 @@ MonoBehaviour:
   _speedSmoothing: 12
   _layerWeightBlendSpeed: 8
   _aimingResetDelay: 0.2
+  _deathLayerIndex: 2
+  _enableMeleeHitFallback: 1
+  _meleeHitFallbackDelay: 0.28
 --- !u!114 &9001051205302328292
 MonoBehaviour:
   m_ObjectHideFlags: 0

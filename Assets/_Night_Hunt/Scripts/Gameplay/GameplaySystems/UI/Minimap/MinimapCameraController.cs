@@ -1,4 +1,5 @@
 using UnityEngine;
+using NightHunt.Core;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Spectator;
@@ -40,11 +41,15 @@ namespace NightHunt.GameplaySystems.UI.Minimap
         [SerializeField] private float _orthoSize = 80f;
 
         private Transform _target;
+        private NetworkPlayer _localPlayer;
+        private bool _spectateHooked;
 
         // ── Unity lifecycle ───────────────────────────────────────────────────
 
         private void Awake()
         {
+            _localPlayer = GetComponentInParent<NetworkPlayer>(true);
+
             if (_minimapCamera == null)
                 _minimapCamera = GetComponentInChildren<Camera>();
 
@@ -52,6 +57,7 @@ namespace NightHunt.GameplaySystems.UI.Minimap
             {
                 _minimapCamera.orthographic     = true;
                 _minimapCamera.orthographicSize = _orthoSize;
+                _minimapCamera.cullingMask      = NightHuntLayers.MaskMinimapCamera;
 
                 if (_renderTexture != null)
                     _minimapCamera.targetTexture = _renderTexture;
@@ -60,20 +66,34 @@ namespace NightHunt.GameplaySystems.UI.Minimap
 
         private void OnEnable()
         {
-            if (SpectateManager.Instance == null) return;
+            NetworkPlayer.OnOwnerReady += HandleOwnerReady;
+            HookSpectateManager();
+            RefreshTargetFromSpectate();
+        }
+
+        private void Start()
+        {
+            HookSpectateManager();
+            RefreshTargetFromSpectate();
+        }
+
+        private void HookSpectateManager()
+        {
+            if (_spectateHooked || SpectateManager.Instance == null)
+                return;
 
             SpectateManager.Instance.OnCurrentPlayerChanged += SetTarget;
-
-            // Catch-up: player may already be set before this component enabled.
-            var current = SpectateManager.Instance.GetCurrentPlayer();
-            if (current != null)
-                SetTarget(current);
+            _spectateHooked = true;
+            Debug.Log("[MINIMAP_FLOW] Hooked SpectateManager.OnCurrentPlayerChanged.");
         }
 
         private void OnDisable()
         {
-            if (SpectateManager.Instance != null)
+            NetworkPlayer.OnOwnerReady -= HandleOwnerReady;
+
+            if (_spectateHooked && SpectateManager.Instance != null)
                 SpectateManager.Instance.OnCurrentPlayerChanged -= SetTarget;
+            _spectateHooked = false;
         }
 
         private void LateUpdate()
@@ -92,7 +112,36 @@ namespace NightHunt.GameplaySystems.UI.Minimap
         /// </summary>
         public void SetTarget(NetworkPlayer player)
         {
-            _target = player != null ? player.transform : null;
+            var resolved = player;
+            if (resolved == null && SpectateManager.Instance != null && !SpectateManager.Instance.IsSpectating())
+                resolved = _localPlayer;
+            if (resolved == null)
+                resolved = _localPlayer;
+
+            _target = resolved != null ? resolved.transform : null;
+            Debug.Log($"[MINIMAP_FLOW] SetTarget requested='{player?.name ?? "null"}' resolved='{resolved?.name ?? "null"}' local='{_localPlayer?.name ?? "null"}'.");
+        }
+
+        public void SetLocalPlayer(NetworkPlayer player)
+        {
+            if (player == null)
+                return;
+
+            _localPlayer = player;
+            Debug.Log($"[MINIMAP_FLOW] SetLocalPlayer '{player.name}' netId={player.ObjectId}.");
+            RefreshTargetFromSpectate();
+        }
+
+        private void RefreshTargetFromSpectate()
+        {
+            var current = SpectateManager.Instance != null ? SpectateManager.Instance.GetCurrentPlayer() : null;
+            SetTarget(current != null ? current : _localPlayer);
+        }
+
+        private void HandleOwnerReady(NetworkPlayer player)
+        {
+            if (_localPlayer == null || player == _localPlayer)
+                SetLocalPlayer(player);
         }
     }
 }

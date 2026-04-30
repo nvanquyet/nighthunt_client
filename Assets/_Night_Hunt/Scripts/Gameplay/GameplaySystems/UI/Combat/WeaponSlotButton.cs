@@ -1,77 +1,70 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using NightHunt.GameplaySystems.Core.Interfaces;
-using NightHunt.GameplaySystems.Core.Data;
-using NightHunt.GameplaySystems.Inventory;
-using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.Input.Handlers.Combat;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Inventory;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
     /// <summary>
-    /// HUD button representing a single weapon slot (Primary, Secondary, or Melee).
+    /// HUD button representing a single weapon slot.
     ///
-    /// Displays:
-    ///   ?�� Weapon name (DisplayName from ItemDefinition).
-    ///   ?�� Weapon icon (from ItemDefinition.Icon).
-    ///   ?�� Magazine ammo count (Field 1 ?�� current rounds in mag).
-    ///   ?�� Reserve ammo count (Field 2 ?�� total remaining reserve).
-    ///   ?�� Magazine fill slider (currentMag / magCapacity).
-    ///   ?�� Selected-border highlight when this slot is the active weapon.
-    ///
-    /// Click / Double-click behaviour:
-    ///   ?�� Single click, slot IS active  ?�� RequestReload().
-    ///   ?�� Single click, slot NOT active ?�� SelectWeapon (switch).
-    ///   ?�� Double click (?��DoubleClickThreshold) ?�� HolsterWeapon (put away).
-    ///
-    /// Usage:
-    ///   Call Bind(slotType, weaponSystem) once after the local player's
-    ///   WeaponSystem subscribes to events; call Unbind() on destroy.
-    /// </summary>
-    /// <summary>
-    /// <para>Inherits double-click detection, <see cref="CombatInputHandler"/> fire-blocking,
-    /// and DOTween press animation from <see cref="SlotHUDButton"/>.</para>
+    /// Single click selects the slot, or reloads when the slot is already active.
+    /// Double click holsters the current weapon. Slot presses also cancel any armed
+    /// consumable, throwable, or deployable before switching weapons.
     /// </summary>
     public class WeaponSlotButton : SlotHUDButton
     {
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Inspector
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
+        private const string LogPrefix = "[WeaponSlotButton]";
 
         [Header("Weapon Slot UI")]
+        [SerializeField] private GameObject _visualRoot;
         [SerializeField] private Image _selectedBorder;
-        [SerializeField] private TextMeshProUGUI _weaponNameText;     // weapon display name
-        [SerializeField] private TextMeshProUGUI _magAmmoText;        // Field 1: rounds in mag
-        [SerializeField] private TextMeshProUGUI _reserveAmmoText;    // Field 2: reserve ammo remaining
-        [SerializeField] private Slider _ammoSlider;         // fill = currentMag / magCapacity
+        [SerializeField] private TextMeshProUGUI _weaponNameText;
+        [SerializeField] private TextMeshProUGUI _magAmmoText;
+        [SerializeField] private TextMeshProUGUI _reserveAmmoText;
+        [SerializeField] private Slider _ammoSlider;
 
         [Header("Slot Config")]
         [SerializeField] private WeaponSlotType _slotType;
 
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Runtime
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-
         private IWeaponSystem _weaponSystem;
+        private IItemSelectionSystem _itemSelectionSystem;
+        private IItemUseSystem _itemUseSystem;
         private bool _isBound;
 
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Binding
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
+        protected override void Awake()
+        {
+            base.Awake();
 
-        /// <summary>
-        /// Bind this button to a live IWeaponSystem.
-        /// Can be called more than once; old bindings are released first.
-        /// </summary>
+            if (_iconImage == null)
+            {
+                var iconTransform = transform.Find("WeaponIcon") ?? transform.Find("Icon");
+                if (iconTransform != null)
+                    _iconImage = iconTransform.GetComponent<Image>();
+
+                if (_iconImage == null)
+                    Debug.LogWarning($"{LogPrefix} Icon image is not wired on '{name}'. HUD icon cannot update.");
+            }
+        }
+
+        public void BindItemSystems(IItemSelectionSystem itemSelectionSystem, IItemUseSystem itemUseSystem)
+        {
+            _itemSelectionSystem = itemSelectionSystem;
+            _itemUseSystem = itemUseSystem;
+        }
+
         public void Bind(WeaponSlotType slotType, IWeaponSystem weaponSystem)
         {
-            if (_isBound) Unbind();
+            if (_isBound)
+                Unbind();
 
             _slotType = slotType;
             _weaponSystem = weaponSystem;
 
-            // Always show placeholder even with no system so the button count matches config.
             if (_weaponSystem == null)
             {
                 _isBound = true;
@@ -91,7 +84,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public void Unbind()
         {
-            if (!_isBound) return;
+            if (!_isBound)
+                return;
 
             if (_weaponSystem != null)
             {
@@ -106,10 +100,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _isBound = false;
         }
 
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Unity Lifecycle
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-
         protected override void OnDestroy()
         {
             Unbind();
@@ -118,87 +108,92 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public override void OnPointerDown(UnityEngine.EventSystems.PointerEventData eventData)
         {
-            // base calls DOTween animation AND NotifyUIConsumedPress (via SlotHUDButton).
+            if (!IsInteractable)
+                return;
+
             base.OnPointerDown(eventData);
 
-            if (_weaponSystem == null) return;
+            if (_weaponSystem == null)
+                return;
 
-            bool isDoubleClick = ConsumeDoubleClick();
-
-            if (isDoubleClick)
+            if (ConsumeDoubleClick())
             {
-                // Double-click ?�� holster (put weapon away regardless of which slot)
                 _weaponSystem.HolsterWeapon();
                 return;
             }
 
-            // Single click
+            if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
+                _itemSelectionSystem?.RequestCancelSelection();
+
             var activeSlot = _weaponSystem.GetActiveWeaponSlot();
             if (activeSlot.HasValue && activeSlot.Value == _slotType)
-            {
-                // Already holding this weapon ?�� reload
                 _weaponSystem.RequestReload();
-            }
             else
-            {
-                // Switch to this weapon slot
                 _weaponSystem.SelectWeapon(_slotType);
-            }
         }
-
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Event Handlers
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
 
         private void HandleWeaponEquipped(WeaponSlotType slot, ItemInstance weapon)
         {
-            if (slot != _slotType) return;
+            if (slot != _slotType)
+                return;
+
             RefreshAll();
         }
 
         private void HandleWeaponUnequipped(WeaponSlotType slot, ItemInstance weapon)
         {
-            if (slot != _slotType) return;
+            if (slot != _slotType)
+                return;
+
             RefreshEmpty();
         }
 
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
         {
-            bool isSelected = newSlot.HasValue && newSlot.Value == _slotType;
-            SetSelectedBorder(isSelected);
+            RefreshAll();
+            SetSelectedBorder(newSlot.HasValue && newSlot.Value == _slotType);
         }
 
         private void HandleAmmoChanged(int currentMag, int totalLeft, int capacity)
         {
-            if (_weaponSystem == null) return;
+            if (_weaponSystem == null)
+                return;
+
             var activeSlot = _weaponSystem.GetActiveWeaponSlot();
-            if (!activeSlot.HasValue || activeSlot.Value != _slotType) return;
+            if (!activeSlot.HasValue || activeSlot.Value != _slotType)
+                return;
 
             RefreshAmmoDisplay(currentMag, totalLeft, capacity);
         }
 
         private void HandleReloadStateChanged(bool isReloading)
         {
-            // No cooldown ring ?�� intentionally left empty.
-            // Reload state is reflected through ammo count updates only.
+            // Reload state is reflected through ammo count updates.
         }
-
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Display Helpers
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
 
         private void RefreshAll()
         {
-            if (_weaponSystem == null) { RefreshEmpty(); return; }
+            if (_weaponSystem == null)
+            {
+                RefreshEmpty();
+                return;
+            }
 
             var weapon = _weaponSystem.GetWeapon(_slotType);
-            if (weapon == null) { RefreshEmpty(); return; }
+            if (weapon == null)
+            {
+                RefreshEmpty();
+                return;
+            }
+
+            SetSlotVisible(true);
+            if (_visualRoot != null)
+                _visualRoot.SetActive(true);
 
             RefreshIcon(weapon);
 
             var activeSlot = _weaponSystem.GetActiveWeaponSlot();
-            bool isSelected = activeSlot.HasValue && activeSlot.Value == _slotType;
-            SetSelectedBorder(isSelected);
+            SetSelectedBorder(activeSlot.HasValue && activeSlot.Value == _slotType);
 
             int mag = _weaponSystem.GetCurrentMagazine(_slotType);
             int total = Mathf.RoundToInt(_weaponSystem.GetTotalAmmo(_slotType));
@@ -206,28 +201,37 @@ namespace NightHunt.GameplaySystems.UI.Combat
             RefreshAmmoDisplay(mag, total, cap);
         }
 
-        /// <summary>
-        /// Slot is empty: clear icon sprite and all text fields.
-        /// No overlay ? simply nothing is shown.
-        /// </summary>
         private void RefreshEmpty()
         {
+            bool keepVisible = _slotType != WeaponSlotType.Melee;
+            SetSlotVisible(keepVisible);
+
+            if (_visualRoot != null)
+                _visualRoot.SetActive(false);
+
             SetIcon(null);
             SetSelectedBorder(false);
 
             if (_weaponNameText != null)
-            {
-                var cfg = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance?.GetWeaponSlot(_slotType);
-                _weaponNameText.text = cfg.HasValue ? cfg.Value.ResolvedDisplayName : _slotType.ToString();
-            }
-            if (_magAmmoText != null) _magAmmoText.text = string.Empty;
-            if (_reserveAmmoText != null) _reserveAmmoText.text = string.Empty;
-            if (_ammoSlider != null) _ammoSlider.value = 0f;
+                _weaponNameText.text = keepVisible ? $"{_slotType} (Empty)" : string.Empty;
+
+            if (_magAmmoText != null)
+                _magAmmoText.text = string.Empty;
+
+            if (_reserveAmmoText != null)
+                _reserveAmmoText.text = string.Empty;
+
+            if (_ammoSlider != null)
+                _ammoSlider.value = 0f;
         }
 
         private void RefreshIcon(ItemInstance weapon)
         {
-            if (weapon == null) { RefreshEmpty(); return; }
+            if (weapon == null)
+            {
+                RefreshEmpty();
+                return;
+            }
 
             var def = ItemDatabase.GetDefinition(weapon.DefinitionID);
             SetIcon(def?.Icon);
@@ -236,31 +240,25 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _weaponNameText.text = def?.DisplayName ?? string.Empty;
         }
 
-        /// <summary>
-        /// Update the two ammo display elements.
-        ///   _magAmmoText    ?�� "<b><color=yellow><size=150%>currentMag</size></color></b> / magCapacity"
-        ///   _reserveAmmoText ?�� reserveAmmo (total rounds left outside mag)
-        /// </summary>
-        /// <param name="currentMag">Rounds currently loaded in the magazine.</param>
-        /// <param name="reserveAmmo">Reserve ammo remaining (NOT including what is in mag).</param>
-        /// <param name="magCapacity">Maximum magazine capacity.</param>
         private void RefreshAmmoDisplay(int currentMag, int reserveAmmo, int magCapacity)
         {
-            // Melee weapons have no magazine ?�� hide ammo elements
             if (magCapacity <= 0)
             {
-                if (_magAmmoText != null) _magAmmoText.text = string.Empty;
-                if (_reserveAmmoText != null) _reserveAmmoText.text = string.Empty;
-                if (_ammoSlider != null) _ammoSlider.value = 0f;
+                if (_magAmmoText != null)
+                    _magAmmoText.text = string.Empty;
+
+                if (_reserveAmmoText != null)
+                    _reserveAmmoText.text = string.Empty;
+
+                if (_ammoSlider != null)
+                    _ammoSlider.value = 0f;
+
                 return;
             }
 
-            // Field 1: "currentMag / magCapacity"
-            // currentMag ?�� yellow, 150% size; "/" and magCapacity ?�� default styleP
             if (_magAmmoText != null)
                 _magAmmoText.text = $"<color=#FFD700><size=150%>{currentMag}</size></color> / {magCapacity}";
 
-            // Field 2: reserve ammo remaining
             if (_reserveAmmoText != null)
                 _reserveAmmoText.text = reserveAmmo.ToString();
 
@@ -274,10 +272,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _selectedBorder.enabled = selected;
         }
 
+        private void SetSlotVisible(bool visible)
+        {
+            if (gameObject.activeSelf != visible)
+                gameObject.SetActive(visible);
+        }
+
         private static int GetMagazineCapacity(ItemInstance inst)
         {
-            if (inst == null) return 0;
-            return Mathf.RoundToInt(inst.GetComputedStat(ItemStatType.MagazineSize, 0f));
+            return inst != null
+                ? Mathf.RoundToInt(inst.GetComputedStat(ItemStatType.MagazineSize, 0f))
+                : 0;
         }
     }
 }

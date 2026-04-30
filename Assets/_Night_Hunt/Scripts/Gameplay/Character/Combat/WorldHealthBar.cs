@@ -50,9 +50,6 @@ namespace NightHunt.Gameplay.Character.Combat
         [Tooltip("World-space height offset above the character pivot.")]
         [SerializeField] private Vector3 _offset = new Vector3(0f, 2.5f, 0f);
 
-        [Header("Debug")]
-        [SerializeField] private NightHuntDebugConfig _debugConfig;
-
         // ── Runtime ────────────────────────────────────────────────────────────
 
         private PlayerHealthSystem  _healthSystem;
@@ -83,6 +80,7 @@ namespace NightHunt.Gameplay.Character.Combat
                 .OrLogWarning("[WorldHealthBar] IPlayerStatSystem not found")
                 .Resolve();
 
+            EnsureView();
             SetVisible(false);
         }
 
@@ -132,7 +130,7 @@ namespace NightHunt.Gameplay.Character.Combat
             if (_hideCoroutine != null) StopCoroutine(_hideCoroutine);
             _hideCoroutine = StartCoroutine(HideAfterDelay());
 
-            if (_debugConfig != null && _debugConfig.EnableHealthBarDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableHealthBarDebugLogs)
                 Debug.Log($"[WorldHealthBar] Showing for '{_networkPlayer?.DisplayName}' " +
                           $"— shooterNetObjId={info.ShooterNetworkObjectId} dmg={info.Damage:F0}");
         }
@@ -150,14 +148,20 @@ namespace NightHunt.Gameplay.Character.Combat
         /// </summary>
         private bool ShouldShowForShooter(int shooterNetObjId)
         {
-            // -1 / 0 = world / environment damage — don't show.
-            if (shooterNetObjId <= 0) return false;
-
             // Don't show on the local player's own character (self-damage / self-heal).
             if (_networkPlayer != null && _networkPlayer.IsOwner) return false;
 
             var localPlayer = SpectateManager.Instance?.GetLocalPlayer();
             if (localPlayer == null) return false;
+
+            var currentObserved = SpectateManager.Instance?.GetCurrentPlayer();
+            if (currentObserved != null && _networkPlayer == currentObserved)
+                return true;
+
+            // -1 / 0 = world / boss / anti-camp damage. Show it for teammates so
+            // the local/spectate camera still gets a world-space health reference.
+            if (shooterNetObjId <= 0)
+                return _networkPlayer != null && _networkPlayer.TeamId == localPlayer.TeamId;
 
             // Local player is the shooter → always show.
             if ((int)localPlayer.ObjectId == shooterNetObjId) return true;
@@ -204,6 +208,67 @@ namespace NightHunt.Gameplay.Character.Combat
         {
             if (_barRoot != null && _barRoot.activeSelf != visible)
                 _barRoot.SetActive(visible);
+        }
+
+        private void EnsureView()
+        {
+            if (_barRoot != null && _healthSlider != null)
+                return;
+
+            var root = new GameObject("WorldHealthBarRoot", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+            root.transform.SetParent(transform, false);
+            root.transform.localPosition = _offset;
+            root.transform.localScale = Vector3.one * 0.01f;
+
+            var canvas = root.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.sortingOrder = 50;
+
+            var scaler = root.GetComponent<CanvasScaler>();
+            scaler.dynamicPixelsPerUnit = 10f;
+
+            var rootRect = (RectTransform)root.transform;
+            rootRect.sizeDelta = new Vector2(120f, 20f);
+
+            var sliderGo = new GameObject("HealthBar", typeof(RectTransform), typeof(Slider));
+            sliderGo.transform.SetParent(root.transform, false);
+
+            var sliderRect = (RectTransform)sliderGo.transform;
+            sliderRect.anchorMin = new Vector2(0.5f, 0.5f);
+            sliderRect.anchorMax = new Vector2(0.5f, 0.5f);
+            sliderRect.pivot = new Vector2(0.5f, 0.5f);
+            sliderRect.sizeDelta = new Vector2(110f, 10f);
+
+            var background = new GameObject("Background", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            background.transform.SetParent(sliderGo.transform, false);
+            Stretch((RectTransform)background.transform);
+            background.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.65f);
+
+            var fillArea = new GameObject("Fill Area", typeof(RectTransform));
+            fillArea.transform.SetParent(sliderGo.transform, false);
+            Stretch((RectTransform)fillArea.transform);
+
+            var fill = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            fill.transform.SetParent(fillArea.transform, false);
+            Stretch((RectTransform)fill.transform);
+            fill.GetComponent<Image>().color = new Color(0.18f, 0.9f, 0.36f, 1f);
+
+            _barRoot = root;
+            _healthSlider = sliderGo.GetComponent<Slider>();
+            _healthSlider.minValue = 0f;
+            _healthSlider.maxValue = 1f;
+            _healthSlider.value = 1f;
+            _healthSlider.interactable = false;
+            _healthSlider.targetGraphic = fill.GetComponent<Image>();
+            _healthSlider.fillRect = (RectTransform)fill.transform;
+        }
+
+        private static void Stretch(RectTransform rect)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
         }
     }
 }

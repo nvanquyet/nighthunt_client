@@ -1,7 +1,9 @@
 using UnityEngine;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
+using NightHunt.Gameplay.Spectator;
 using NightHunt.Gameplay.Team;
+using FOW;
 
 namespace NightHunt.GameplaySystems.UI.Minimap
 {
@@ -27,8 +29,12 @@ namespace NightHunt.GameplaySystems.UI.Minimap
     {
         [SerializeField] private SpriteRenderer _markerRenderer;
         [SerializeField] private float          _markerScale = 1f;
+        [SerializeField] private float          _visibilityRefreshInterval = 0.1f;
 
         private NetworkPlayer _owner;
+        private FogOfWarHider _hider;
+        private bool _externallyVisible = true;
+        private float _nextVisibilityRefreshTime;
 
         // ── Unity lifecycle ───────────────────────────────────────────────────
 
@@ -45,6 +51,16 @@ namespace NightHunt.GameplaySystems.UI.Minimap
         private void Start()
         {
             RefreshColor();
+            RefreshVisibility();
+        }
+
+        private void Update()
+        {
+            if (Time.unscaledTime < _nextVisibilityRefreshTime)
+                return;
+
+            _nextVisibilityRefreshTime = Time.unscaledTime + _visibilityRefreshInterval;
+            RefreshVisibility();
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
@@ -58,13 +74,45 @@ namespace NightHunt.GameplaySystems.UI.Minimap
                 _markerRenderer.color = color;
         }
 
+        private void RefreshVisibility()
+        {
+            if (_markerRenderer == null)
+                return;
+
+            _markerRenderer.enabled = _externallyVisible && IsVisibleOnLocalMinimap();
+        }
+
+        private bool IsVisibleOnLocalMinimap()
+        {
+            if (_owner == null)
+                return true;
+
+            var local = SpectateManager.Instance != null
+                ? SpectateManager.Instance.GetLocalPlayer()
+                : null;
+
+            if (local == null)
+                return true;
+
+            if (_owner.TeamId == local.TeamId)
+                return true;
+
+            if (_hider == null)
+                _hider = GetComponentInParent<FogOfWarHider>();
+
+            return _hider != null && _hider.NumObservers > 0;
+        }
+
         // ── Public API ────────────────────────────────────────────────────────
 
         /// <summary>
         /// Show or hide this marker (player death, despawn, out-of-vision, etc.).
         /// </summary>
-        public void SetVisible(bool visible) =>
-            gameObject.SetActive(visible);
+        public void SetVisible(bool visible)
+        {
+            _externallyVisible = visible;
+            RefreshVisibility();
+        }
 
         /// <summary>
         /// Override the marker color — e.g. to tint the local player's own dot

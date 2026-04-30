@@ -80,6 +80,7 @@ namespace NightHunt.GameplaySystems.Loot
 
         public void Interact(GameObject interactor)
         {
+            LogLootFlow($"[01][Interact] obj={ObjectId} open={IsOpen} pending={_isOpenPending} storage={storage.Count}");
             var playerNob = ComponentResolver.Find<FishNet.Object.NetworkObject>(interactor)
                 .OnSelf()
                 .InChildren()
@@ -90,13 +91,14 @@ namespace NightHunt.GameplaySystems.Loot
             if (IsOpen)
             {
                 // Corpse đã mở — re-show loot UI locally.
-                Debug.Log($"[WorldCorpse] Interact: already open, re-showing loot UI. Items={storage.Count}");
+                LogLootFlow($"[02][AlreadyOpen] obj={ObjectId} owner={playerNob.Owner?.ClientId} storage={storage.Count}");
                 OnCorpseOpened?.Invoke(this, playerNob.Owner);
                 return;
             }
 
             if (_isOpenPending) return;
             _isOpenPending = true;
+            LogLootFlow($"[02][RequestOpen.Client] obj={ObjectId} owner={playerNob.Owner?.ClientId}");
             RequestOpen(playerNob);
         }
 
@@ -209,8 +211,9 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
+            LogLootFlow($"[03][RequestOpen.Server] obj={ObjectId} storage={storage.Count} targetClient={conn?.ClientId}");
             syncIsOpen.Value = true;
-            RpcOnCorpseOpened(conn);
+            TargetOnCorpseOpened(conn);
         }
 
         [ServerRpc(RequireOwnership = false)]
@@ -252,6 +255,11 @@ namespace NightHunt.GameplaySystems.Loot
 
             var itemData = storage[storageIndex];
             int takeQty = Mathf.Min(quantity, itemData.Quantity);
+            if (takeQty <= 0)
+            {
+                Debug.LogWarning($"[WorldCorpse] RequestTakeItem: Invalid quantity {quantity}");
+                return;
+            }
 
             var inventory = ComponentResolver.Find<IInventorySystem>(playerNob)
                 .OnSelf()
@@ -264,12 +272,7 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            // Preserve full runtime state (ammo, durability, attachments) when looting.
-            // Build a copy of the data with the quantity actually taken, then restore it.
-            var takenData = itemData;
-            takenData.Quantity = takeQty;
-            // Use a fresh InstanceID so the looted item is independent of any remaining stack.
-            takenData.InstanceID = System.Guid.NewGuid().ToString();
+            var takenData = ItemInstanceFactory.CopyDataForQuantity(itemData, takeQty, newInstanceId: true);
             inventory.AddItemFromData(takenData);
 
             if (takeQty >= itemData.Quantity)
@@ -323,8 +326,20 @@ namespace NightHunt.GameplaySystems.Loot
             OnClientStorageChanged?.Invoke();
         }
 
-        [ObserversRpc]
-        private void RpcOnCorpseOpened(NetworkConnection viewer) => OnCorpseOpened?.Invoke(this, viewer);
+        [TargetRpc]
+        private void TargetOnCorpseOpened(NetworkConnection viewer)
+        {
+            _isOpenPending = false;
+            LogLootFlow($"[04][TargetOpen.Client] obj={ObjectId} viewer={viewer?.ClientId} storage={storage.Count}");
+            OnCorpseOpened?.Invoke(this, viewer);
+        }
+
+        private static void LogLootFlow(string message)
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            if (cfg == null || cfg.EnableInventoryDebugLogs)
+                Debug.Log($"[LOOT_FLOW] Corpse {message}");
+        }
 
         public IReadOnlyList<ItemInstanceData> GetStorage() => storage;
     }

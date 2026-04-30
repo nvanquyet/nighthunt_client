@@ -137,7 +137,9 @@ namespace NightHunt.Gameplay.Match
                 string pid = data?.BackendPlayerId ?? string.Empty;
                 _playerKillCount.TryGetValue(pid, out int kills);
                 _playerDeathCount.TryGetValue(pid, out int deaths);
-                float score = GetTotalScore(np.TeamId);
+                int score = _scoringSystem != null
+                    ? _scoringSystem.GetPlayerScore((uint)np.ObjectId)
+                    : Mathf.RoundToInt(GetTotalScore(np.TeamId));
 
                 results.Add(new MatchResult
                 {
@@ -146,7 +148,7 @@ namespace NightHunt.Gameplay.Match
                     TeamId          = np.TeamId,
                     Kills           = kills,
                     Deaths          = deaths,
-                    Score           = Mathf.RoundToInt(score),
+                    Score           = score,
                 });
             }
 

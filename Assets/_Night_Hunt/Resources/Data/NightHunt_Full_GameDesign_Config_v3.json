@@ -1,8 +1,8 @@
 {
 "WeaponConfig":[
  {
-  "WeaponId": "PISTOL_9MM",
-  "DisplayName": "9mm Pistol",
+  "WeaponId": "WEAPON_PISTOL",
+  "DisplayName": "Pistol",
   "Category": "Pistol",
   "BallisticType": "Hitscan",
   "DamageBody": 18,
@@ -18,6 +18,8 @@
   "GravityScale": 0,
   "SpreadBase": 0.1,
   "SpreadMoveMul": 1.2,
+  "RecoilHorizontal": 0.8,
+  "RecoilVertical": 1.8,
   "MoveSpeedMul": 1,
   "Weight": 1.2,
   "Rarity": "Common",
@@ -25,8 +27,8 @@
   "Tags": "light,starter"
  },
  {
-  "WeaponId": "SMG_MP5",
-  "DisplayName": "MP5",
+  "WeaponId": "SMG_SMG",
+  "DisplayName": "SMG",
   "Category": "SMG",
   "BallisticType": "Hitscan",
   "DamageBody": 15,
@@ -42,6 +44,8 @@
   "GravityScale": 0,
   "SpreadBase": 0.2,
   "SpreadMoveMul": 1.3,
+  "RecoilHorizontal": 0.9,
+  "RecoilVertical": 1.5,
   "MoveSpeedMul": 0.92,
   "Weight": 2.8,
   "Rarity": "Common",
@@ -49,8 +53,8 @@
   "Tags": "close,burst"
  },
  {
-  "WeaponId": "RIFLE_AK",
-  "DisplayName": "AK Rifle",
+  "WeaponId": "WEAPON_AR",
+  "DisplayName": "AR",
   "Category": "Rifle",
   "BallisticType": "Hitscan",
   "DamageBody": 25,
@@ -66,6 +70,8 @@
   "GravityScale": 0,
   "SpreadBase": 0.25,
   "SpreadMoveMul": 1.4,
+  "RecoilHorizontal": 1.2,
+  "RecoilVertical": 2.5,
   "MoveSpeedMul": 0.87,
   "Weight": 4,
   "Rarity": "Rare",
@@ -73,8 +79,8 @@
   "Tags": "midrange,highdamage"
  },
  {
-  "WeaponId": "SHOT_PUMP",
-  "DisplayName": "Pump Shotgun",
+  "WeaponId": "WEAPON_SHOTGUN",
+  "DisplayName": "Shotgun",
   "Category": "Shotgun",
   "BallisticType": "Projectile",
   "DamageBody": 10,
@@ -90,6 +96,8 @@
   "GravityScale": 1,
   "SpreadBase": 0.3,
   "SpreadMoveMul": 1.5,
+  "RecoilHorizontal": 1.6,
+  "RecoilVertical": 3.5,
   "MoveSpeedMul": 0.75,
   "Weight": 4.5,
   "Rarity": "Rare",
@@ -97,8 +105,8 @@
   "Tags": "burst,close"
  },
  {
-  "WeaponId": "SNIPER_M24",
-  "DisplayName": "M24 Sniper",
+  "WeaponId": "WEAPON_SNIPER",
+  "DisplayName": "Sniper",
   "Category": "Sniper",
   "BallisticType": "Projectile",
   "DamageBody": 80,
@@ -114,6 +122,8 @@
   "GravityScale": 1,
   "SpreadBase": 0.18,
   "SpreadMoveMul": 1.6,
+  "RecoilHorizontal": 0.5,
+  "RecoilVertical": 3.2,
   "MoveSpeedMul": 0.7,
   "Weight": 5.2,
   "Rarity": "Epic",
@@ -121,8 +131,8 @@
   "Tags": "longrange,oneshot"
  },
  {
-  "WeaponId": "HEAVY_RPG",
-  "DisplayName": "RPG Launcher",
+  "WeaponId": "WEAPON_ROCKET_LAUNCHER",
+  "DisplayName": "Rocket Launcher",
   "Category": "Heavy",
   "BallisticType": "Projectile",
   "DamageBody": 140,
@@ -138,6 +148,8 @@
   "GravityScale": 2,
   "SpreadBase": 0.15,
   "SpreadMoveMul": 1.8,
+  "RecoilHorizontal": 2,
+  "RecoilVertical": 5,
   "MoveSpeedMul": 0.6,
   "Weight": 8,
   "Rarity": "Legendary",

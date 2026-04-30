@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e51fac3969a4ffda71bcf342aeebc97, type: 3}
+  m_Name: Weapon_Sniper
+  m_EditorClassIdentifier: 
+  ItemID: WEAPON_SNIPER
+  DisplayName: Sniper
+  Description: 
+  Icon: {fileID: 21300000, guid: 1dfdafae308681a408dd22bb59dcf5e9, type: 3}
+  Rarity: 3
+  IsStackable: 0
+  MaxStackSize: 1
+  Weight: 5.2
+  _visualPrefab: {fileID: 9026586541510597423, guid: 59e88afc034473748832e6a1a6657316,
+    type: 3}
+  ValidSlots: 0000000002000000
+  _attachmentSlots: 
+  StatConfig: {fileID: 11400000, guid: b8bb1282ee28f744e986e8af7e575ec8, type: 2}
+  WeaponClass: 4

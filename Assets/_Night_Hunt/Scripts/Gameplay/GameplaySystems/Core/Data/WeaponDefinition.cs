@@ -31,6 +31,10 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Tooltip("Weapon class for UI slot grouping and attachment compatibility.")]
         public WeaponClass WeaponClass = WeaponClass.Rifle;
 
+        [Tooltip("Optional Animator WeaponType override. 0 = use WeaponClass mapping. Animator contract: 1=Rifle, 2=Pistol/SMG, 3=Launcher, 4=Melee, 5=Shotgun, 6=Sniper.")]
+        [Range(0, 6)]
+        public int AnimatorWeaponTypeOverride = 0;
+
         // ── EquippableItemDefinition overrides ───────────────────────────────
         protected override ItemStatConfig StatConfigBase => StatConfig;
 

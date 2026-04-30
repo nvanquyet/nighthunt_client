@@ -160,13 +160,13 @@ public class PrActorUtils : MonoBehaviour
 
     public void SetNewSpeed(float speedFactor)
     {
-        if (Type == AT.player)
+        if (Type == AT.player && character != null)
             character.characterController.m_MoveSpeedSpecialModifier = speedFactor;
     }
 
     public void FootStep(string stepType)
     {
-        character.FootStep(stepType);
+        character?.FootStep(stepType);
     }
 
     public void RollSound(AudioClip SFX)
@@ -177,56 +177,56 @@ public class PrActorUtils : MonoBehaviour
 
     public void CantRotate()
     {
-        character.characterController.b_CanRotate = false;
+        if(character != null) character.characterController.b_CanRotate = false;
     }
 
     public void CanJump(int Value)
     {
         if (Value == 1)
         {
-            character.characterController.b_canJump = true;
+            if(character != null)character.characterController.b_canJump = true;
         }
         else
         {
-            character.characterController.b_canJump = false;
+            if(character != null) character.characterController.b_canJump = false;
         }
     }
 
     public void CanAttack()
     {
-        character.AIController.CanAttack();
+        if(character != null)character.AIController.CanAttack();
     }
 
     public void EndRoll()
     {
-        character.characterController.EndRoll();
+        if(character != null)character.characterController.EndRoll();
     }
 
     void ThrowG()
     {
-        character.characterInventory.ThrowG();
+        if(character != null)character.characterInventory.ThrowG();
 
     }
 
     void EndThrow()
     {
-        character.characterInventory.EndThrow();
+        if(character != null)character.characterInventory.EndThrow();
     }
 
     void EndMelee()
     {
         if (Type == AT.player)
-            character.characterController.EndMelee();
+            if(character != null)character.characterController.EndMelee();
         else if (Type == AT.enemy)
-            character.AIController.EndMelee();
+            if(character != null)character.AIController.EndMelee();
     }
 
     void MeleeEvent()
     {
         if (Type == AT.player)
-            character.characterController.MeleeEvent();
+            if(character != null)character.characterController.MeleeEvent();
         else if (Type == AT.enemy)
-            character.AIController.MeleeEvent();
+            if(character != null)character.AIController.MeleeEvent();
 
     }
 
@@ -234,39 +234,40 @@ public class PrActorUtils : MonoBehaviour
     {
         if (Type == AT.enemy || Type == AT.friendlyAI || Type == AT.neutralAI)
         {
-            character.AIController.FreezeMove(active);
+            if(character != null)character.AIController.FreezeMove(active);
         }
     }
 
 
     public void EndPickup()
     {
-        character.characterInventory.EndPickup();
+        if(character != null)character.characterInventory.EndPickup();
 
     }
 
     public void PlayerTeam(int enTeam)
     {
-        character.PlayerTeam(enTeam);
+        if(character != null)character.PlayerTeam(enTeam);
     }
 
     public void BulletPos(Vector3 BulletPosition)
     {
-        character.BulletPos(BulletPosition);
+        if(character != null)character.BulletPos(BulletPosition);
     }
 
     void ApplyTempMod(float temperatureMod)
     {
-        character.ApplyTempMod(temperatureMod);
+        if(character != null)character.ApplyTempMod(temperatureMod);
     }
 
     void ApplyDamage(int damage)
     {
-        character.ApplyDamagePassive(damage);
+        if(character != null)character.ApplyDamagePassive(damage);
     }
 
     void OnTriggerEnter(Collider other)
     {
+        if(character == null) return;
         if (Type == AT.player)
         {
             if (other.CompareTag("EnvZone"))
@@ -287,6 +288,7 @@ public class PrActorUtils : MonoBehaviour
 
     void OnTriggerStay(Collider other)
     {
+        if(character == null) return;
         if (Type == AT.player)
         {
             if (other.CompareTag("Usable") && character.characterController.UsableObject == null)
@@ -311,6 +313,7 @@ public class PrActorUtils : MonoBehaviour
 
     void OnTriggerExit(Collider other)
     {
+        if(character == null) return;
         if (Type == AT.player)
         {
             if (other.CompareTag("Usable") && character.characterController.UsableObject != null)

@@ -15,18 +15,18 @@ MonoBehaviour:
   ItemID: UTIL_EMP
   DisplayName: EMP Grenade
   Description: 
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: 96054f8292ee63a40802d557b4378443, type: 3}
   Rarity: 3
-  IsStackable: 0
-  MaxStackSize: 1
+  IsStackable: 1
+  MaxStackSize: 3
   Weight: 0.9
-  _heldPrefab: {fileID: 0}
-  _groundPrefab: {fileID: 0}
+  _visualPrefab: {fileID: 0}
   ValidSlots: 00000000
   UsageDuration: 0.5
   _canCancelUsage: 1
   StatConfig: {fileID: 11400000, guid: 0adce067f08a0eb48b170dae15b35c1f, type: 2}
-  ProjectilePrefab: {fileID: 0}
+  ProjectilePrefab: {fileID: 7342610198373781452, guid: e00f019115681e64b9995585ae6e55b4,
+    type: 3}
   ThrowForce: 10
   LaunchAngleDeg: 45
   ThrowableType: 6

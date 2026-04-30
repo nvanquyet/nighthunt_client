@@ -7,6 +7,9 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Utilities;
+using NightHunt.UI;
+using NightHunt.GameplaySystems.UI.Combat;
+using System.Linq;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -25,8 +28,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     {
         // ── Inspector ─────────────────────────────────────────────────────────
 
-        [Header("Config")]
-        [SerializeField] private UISlotLayoutConfig _uiConfig;
+        [Header("Prefabs")]
+        [SerializeField] private GameObject _inventorySlotPrefab;
 
         [Header("Roots")]
         [SerializeField] private RectTransform _inventoryGridRoot;
@@ -40,8 +43,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Header("Sub-panels")]
         [Tooltip("Manages weapon + equipment cards with their inline attachment slots.")]
         [SerializeField] private WeaponEquipmentPanel _weaponEquipmentPanel;
-        [Tooltip("Floating context menu — lives outside slot prefabs.")]
-        [SerializeField] private ItemContextMenu _itemContextMenu;
+
         [SerializeField] private ItemTooltip     _itemTooltip;
         [SerializeField] private DropQuantityDialog _dropQuantityDialog;
         [SerializeField] private PlayerStatUIPanel  _playerStatPanel;
@@ -54,31 +56,36 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         // ── Runtime ───────────────────────────────────────────────────────────
 
         private readonly Dictionary<UISlotId, ItemSlotView> _slotViews = new();
-        private UIDomainBridge _domainBridge;
+        private UIPlayerContext _domainBridge;
         private bool _layoutBuilt;
 
         // Interaction state
         private ItemSlotView _hoveredSlot;
         private ItemSlotView _selectedSlot;
+        private readonly HashSet<ItemSlotInput> _hookedSlotInputs = new();
 
         /// <summary>
         /// True when the inventory is displaying the LOCAL player's inventory
         /// and the player may interact with it.
         /// False in spectator mode — all slots are locked.
         /// </summary>
-        private bool CanInteract => _domainBridge != null && _domainBridge.IsCurrentPlayerOwner;
+        private bool CanInteract => _domainBridge != null && _domainBridge.IsOwner;
 
         // ─────────────────────────────────────────────────────────────────────
         #region Unity Lifecycle
 
         private void Awake()
         {
-            if (_uiConfig != null && _uiConfig.DefaultSlotSize != default)
-                return; // config driven — slot size comes from config
+        }
+
+        private void OnDisable()
+        {
+            ClearTransientUI();
         }
 
         private void OnDestroy()
         {
+            ClearTransientUI();
             HookBridgeEvents(false);
             HookSlotEvents(false);
 
@@ -94,12 +101,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         /// <summary>
         /// Called once by UIRootController when the inventory screen is first opened.
         /// </summary>
-        public void Initialize(UIDomainBridge domainBridge)
+        public void Initialize(UIPlayerContext domainBridge)
         {
             _domainBridge = domainBridge;
 
+            Debug.Log($"[INV] InventoryScreen.Initialize — domainBridge={(_domainBridge != null ? "ok" : "NULL")} " +
+                      $"IsReady={_domainBridge?.IsReady} layoutBuilt={_layoutBuilt} " +
+                      $"gridRoot={(_inventoryGridRoot != null ? _inventoryGridRoot.name : "NULL")} " +
+                      $"slotPrefab={(_inventorySlotPrefab != null ? _inventorySlotPrefab.name : "NULL")}");
+
             InitSubPanels();
-            _weaponEquipmentPanel?.Initialize(domainBridge, _uiConfig);
+            _weaponEquipmentPanel?.Initialize(domainBridge);
 
             if (!_layoutBuilt)
             {
@@ -113,6 +125,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             HookBridgeEvents(true);
             ApplyOwnerLock();
+            RefreshSlotInputHooks();
 
             if (_sortButton != null)
                 _sortButton.onClick.AddListener(OnSortClicked);
@@ -121,15 +134,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         /// <summary>
         /// Called by UIRootController when the spectated player changes.
         /// </summary>
-        public void RefreshForNewPlayer(UIDomainBridge domainBridge)
+        public void RefreshForNewPlayer(UIPlayerContext domainBridge)
         {
+            ClearTransientUI();
             HookBridgeEvents(false);
             _domainBridge = domainBridge;
-            InitSubPanels();
-            _weaponEquipmentPanel?.Initialize(domainBridge, _uiConfig);
+            _playerStatPanel?.RefreshForNewPlayer(_domainBridge);
+            _itemTooltip?.Initialize(_domainBridge);
+            _weaponEquipmentPanel?.Initialize(domainBridge);
             HookBridgeEvents(true);
             RefreshAllSlots();
             ApplyOwnerLock();
+            RefreshSlotInputHooks();
         }
 
         #endregion
@@ -145,15 +161,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return;
             }
 
+            // Ensure we have enough slots for current items
+            int maxIndex = _domainBridge?.Player?.GamePlaySystemBridge.Inventory?.GetMaxIndex() ?? -1;
+            int initialSlots = Mathf.Max(20, maxIndex + 1); // Ensure at least 20 slots
+
             // Inventory grid slots
-            SpawnSlotGroup(_inventoryGridRoot, UISlotType.Inventory, _uiConfig?.InventoryTotalSlots ?? 0,
-                i => UISlotId.Inventory(i));
+            SpawnSlotGroup(_inventoryGridRoot, UISlotType.Inventory, initialSlots, i => UISlotId.Inventory(i));
 
             // Weapon + equipment cards (with inline attachment slots) are managed by WeaponEquipmentPanel.
             // No weapon/equipment/attachment slots are spawned here.
 
             ForceRebuildLayouts();
             HookSlotEvents(true);
+            RefreshSlotInputHooks();
         }
 
         private void SpawnSlotGroup(
@@ -161,7 +181,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             System.Func<int, UISlotId> idFactory)
         {
             if (root == null || count <= 0) return;
-            var prefab = _uiConfig?.GetSlotPrefab(slotType);
+            var prefab = _inventorySlotPrefab;
             if (prefab == null) return;
 
             for (int i = 0; i < count; i++)
@@ -172,7 +192,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (view == null) continue;
 
                 var id = idFactory(i);
-                view.Initialize(_uiConfig, id);
+                view.Initialize(id);
                 view.SetEmptyState();
                 _slotViews[id] = view;
                 DragDropController.Instance?.RegisterSlotView(view);
@@ -186,7 +206,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             SetupSlotRect(go);
             var view = ResolveSlotView(go);
             if (view == null) return;
-            view.Initialize(_uiConfig, id);
+            view.Initialize(id);
             view.SetEmptyState();
             _slotViews[id] = view;
             DragDropController.Instance?.RegisterSlotView(view);
@@ -211,7 +231,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             rt.anchorMax     = new Vector2(0.5f, 0.5f);
             rt.pivot         = new Vector2(0.5f, 0.5f);
 
-            var slotSize = _uiConfig != null ? _uiConfig.DefaultSlotSize : new Vector2(100f, 100f);
+            var slotSize = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance != null 
+                ? NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance.DefaultSlotSize 
+                : new Vector2(100f, 100f);
             rt.sizeDelta  = slotSize;
 
             var parentLayout = rt.parent?.GetComponent<UnityEngine.UI.LayoutGroup>();
@@ -269,7 +291,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (locked && _spectatorLabel != null)
             {
-                var player = _domainBridge?.CurrentPlayer;
+                var player = _domainBridge?.Player;
                 _spectatorLabel.text = player != null
                     ? $"Viewing {player.name}'s Inventory"
                     : "Viewing Inventory (Read-Only)";
@@ -301,8 +323,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void HandleSlotChanged(UISlotId id, UISlotState state)
         {
-            if (_slotViews.TryGetValue(id, out var view))
+            if (!_slotViews.TryGetValue(id, out var view))
+            {
+                if (id.Type == UISlotType.Inventory)
+                {
+                    EnsureSlotsUpTo(id.Index);
+                    _slotViews.TryGetValue(id, out view);
+                }
+            }
+
+            if (view != null)
                 view.SetState(state);
+
+            RefreshSlotInputHooks();
 
             // If the affected slot is currently selected and is now empty → dismiss.
             if (_selectedSlot != null &&
@@ -318,7 +351,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             foreach (var kvp in _slotViews)
                 kvp.Value?.SetEmptyState();
 
-            _domainBridge?.Refresh();
+            _domainBridge?.PushInventorySnapshot();
+        }
+
+        private void EnsureSlotsUpTo(int index)
+        {
+            int currentCount = 0;
+            foreach (var kvp in _slotViews)
+            {
+                if (kvp.Key.Type == UISlotType.Inventory) currentCount++;
+            }
+
+            if (index >= currentCount)
+            {
+                int needed = index - currentCount + 1;
+                int startIdx = currentCount;
+                SpawnSlotGroup(_inventoryGridRoot, UISlotType.Inventory, needed, i => UISlotId.Inventory(startIdx + i));
+            }
         }
 
         #endregion
@@ -328,28 +377,35 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void HookSlotEvents(bool subscribe)
         {
-            foreach (var kvp in _slotViews)
+            foreach (var input in _hookedSlotInputs.ToArray())
             {
-                var input = ComponentResolver.Find<ItemSlotInput>(kvp.Value)
-                    .OnSelf().InChildren()
-                    .OrLogWarning("[InventoryScreen] ItemSlotInput not found.")
-                    .Resolve();
-                if (input == null) continue;
+                input.OnSlotHoverEnter -= OnSlotHoverEnter;
+                input.OnSlotHoverExit -= OnSlotHoverExit;
+                input.OnSlotPressed -= OnSlotPressed;
+                input.OnSlotDoubleClicked -= OnSlotDoubleClicked;
+            }
 
-                if (subscribe)
-                {
-                    input.OnSlotHoverEnter    += OnSlotHoverEnter;
-                    input.OnSlotHoverExit     += OnSlotHoverExit;
-                    input.OnSlotPressed       += OnSlotPressed;
-                    input.OnSlotDoubleClicked += OnSlotDoubleClicked;
-                }
-                else
-                {
-                    input.OnSlotHoverEnter    -= OnSlotHoverEnter;
-                    input.OnSlotHoverExit     -= OnSlotHoverExit;
-                    input.OnSlotPressed       -= OnSlotPressed;
-                    input.OnSlotDoubleClicked -= OnSlotDoubleClicked;
-                }
+            if (!subscribe)
+            {
+                _hookedSlotInputs.Clear();
+                return;
+            }
+
+            RefreshSlotInputHooks();
+        }
+
+        private void RefreshSlotInputHooks()
+        {
+            foreach (var input in GetComponentsInChildren<ItemSlotInput>(true))
+            {
+                if (input == null || _hookedSlotInputs.Contains(input))
+                    continue;
+
+                input.OnSlotHoverEnter += OnSlotHoverEnter;
+                input.OnSlotHoverExit += OnSlotHoverExit;
+                input.OnSlotPressed += OnSlotPressed;
+                input.OnSlotDoubleClicked += OnSlotDoubleClicked;
+                _hookedSlotInputs.Add(input);
             }
         }
 
@@ -360,17 +416,28 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var item = slot.State?.Item;
             if (item == null)
             {
-                _itemTooltip?.Hide();
+                ShowEmptySlotTooltip(slot);
                 return;
             }
 
-            // Tooltip
             if (_itemTooltip != null)
             {
                 var slotRect = slot.transform as RectTransform;
                 string label = BuildSlotLabel(slot.SlotId);
                 _itemTooltip.Show(item, Input.mousePosition, slotRect, label);
             }
+        }
+
+        private void ShowEmptySlotTooltip(ItemSlotView slot)
+        {
+            if (_itemTooltip == null || slot == null || slot.SlotId.Type == UISlotType.Inventory)
+            {
+                _itemTooltip?.Hide();
+                return;
+            }
+
+            var label = BuildSlotLabel(slot.SlotId);
+            _itemTooltip.ShowSlot(label, Input.mousePosition, slot.transform as RectTransform, BuildSlotDescription(slot.SlotId));
         }
 
         private void OnSlotHoverExit(ItemSlotView slot)
@@ -382,45 +449,40 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void OnSlotPressed(ItemSlotView slot)
         {
-            // In spectator mode: do nothing.
             if (!CanInteract) return;
 
-            // Toggle off: pressing the same selected slot again collapses the menu.
-            if (_selectedSlot == slot && _itemContextMenu != null && _itemContextMenu.IsVisible)
+            // Toggle selection: pressing the same slot again deselects it.
+            if (_selectedSlot == slot)
             {
                 ClearSelection();
                 return;
             }
 
             ClearSelection();
-
             if (slot?.State?.Item == null) return;
 
             _selectedSlot = slot;
             slot.SetSelectedVisual(true);
-            _itemTooltip?.Hide(); // context menu takes over information display
-
-            if (_itemContextMenu != null)
-            {
-                var slotRect = slot.transform as RectTransform;
-                _itemContextMenu.Show(
-                    slot.State.Item,
-                    slot.SlotId,
-                    slotRect,
-                    _domainBridge,
-                    _dropQuantityDialog,
-                    _uiConfig);
-            }
+            _itemTooltip?.Hide(); // tooltip is redundant while a slot is selected
         }
 
         private void OnSlotDoubleClicked(ItemSlotView slot)
         {
-            if (!CanInteract) return;
+            if (!CanInteract)
+            {
+                Debug.Log("[ITEM_SELECT_FLOW] Inventory double-click ignored: inventory is not owner-interactable.");
+                return;
+            }
 
             var item = slot?.State?.Item;
-            if (item == null || _domainBridge?.Bridge == null) return;
+            if (item == null || _domainBridge?.Bridge == null)
+            {
+                Debug.Log($"[ITEM_SELECT_FLOW] Inventory double-click ignored: item={(item == null ? "null" : item.InstanceID)} bridge={(_domainBridge?.Bridge == null ? "null" : "ok")}.");
+                return;
+            }
 
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
+            Debug.Log($"[ITEM_SELECT_FLOW] Inventory double-click slot={slot.SlotId.Type} item={item.InstanceID} def={item.DefinitionID} type={(def != null ? def.Type.ToString() : "null")} qty={item.Quantity}");
 
             bool isEquipSlot = slot.SlotId.Type == UISlotType.Equipment
                             || slot.SlotId.Type == UISlotType.Weapon;
@@ -444,18 +506,32 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     case ItemType.Equipment:
                         _domainBridge.Bridge.EquipItem(item.InstanceID);
                         break;
+                    case ItemType.Attachment:
+                        TryAttachToFirstCompatibleHost(item);
+                        break;
 
                     // Consumable: use immediately via ItemUse subsystem.
                     case ItemType.Consumable:
+                        Debug.Log($"[ITEM_SELECT_FLOW] Consumable double-click -> UseItem + CloseInventory item={item.InstanceID}.");
                         _domainBridge.Bridge.ItemUse.UseItem(item);
+                        ClearTransientUI();
+                        var consumableHud = GetComponentInParent<GameHUDController>(true);
+                        consumableHud?.LootContainerUI?.Hide();
+                        consumableHud?.CloseInventory();
                         break;
 
-                    // Throwable / Deployable → select to hand → exits inventory HUD.
+                    // Throwable / Deployable → select/arm then exit inventory HUD.
+                    // Actual throw/deploy confirmation must happen in combat/placement flow,
+                    // never from the inventory double-click itself.
                     case ItemType.Throwable:
                     case ItemType.Deployable:
-                        _domainBridge.Bridge.SelectItem(item.InstanceID);
-                        // Auto-close inventory so the aim HUD is visible.
-                        gameObject.SetActive(false);
+                        Debug.Log($"[ITEM_SELECT_FLOW] {def.Type} double-click -> RequestSelectItem + RequestUseSelectedItem + CloseInventory item={item.InstanceID}.");
+                        _domainBridge.Bridge.ItemSelection?.RequestSelectItem(item.InstanceID);
+                        _domainBridge.Bridge.ItemSelection?.RequestUseSelectedItem();
+                        ClearTransientUI();
+                        var itemHud = GetComponentInParent<GameHUDController>(true);
+                        itemHud?.LootContainerUI?.Hide();
+                        itemHud?.CloseInventory();
                         break;
                 }
             }
@@ -472,13 +548,69 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             _selectedSlot?.SetSelectedVisual(false);
             _selectedSlot = null;
-            _itemContextMenu?.Hide();
+        }
+
+        private void ClearTransientUI()
+        {
+            _hoveredSlot = null;
+            ClearSelection();
+            _itemTooltip?.Hide();
+            DragDropController.Instance?.ResetAll();
         }
 
         private void OnSortClicked()
             => _domainBridge?.Bridge?.Inventory?.RequestSortByType();
 
-        private static string BuildSlotLabel(UISlotId slotId)
+        private bool TryAttachToFirstCompatibleHost(ItemInstance attachment)
+        {
+            var bridge = _domainBridge?.Bridge;
+            if (attachment == null || bridge?.Attachment == null)
+            {
+                Debug.LogWarning("[ITEM_SELECT_FLOW] Attachment double-click failed: missing attachment item or AttachmentSystem.");
+                return false;
+            }
+
+            if (TryAttachToFirstCompatibleHostInItems(attachment, bridge.GetAllWeapons()))
+                return true;
+
+            if (TryAttachToFirstCompatibleHostInItems(attachment, bridge.GetAllEquipped()))
+                return true;
+
+            Debug.LogWarning($"[ITEM_SELECT_FLOW] Attachment double-click found no compatible empty slot for item={attachment.InstanceID} def={attachment.DefinitionID}.");
+            return false;
+        }
+
+        private bool TryAttachToFirstCompatibleHostInItems<TKey>(
+            ItemInstance attachment,
+            IReadOnlyDictionary<TKey, ItemInstance> hosts)
+        {
+            if (hosts == null)
+                return false;
+
+            foreach (var kvp in hosts)
+            {
+                var host = kvp.Value;
+                if (host == null || host.AttachedItems == null)
+                    continue;
+
+                for (int slotIndex = 0; slotIndex < host.AttachedItems.Length; slotIndex++)
+                {
+                    if (!string.IsNullOrEmpty(host.GetAttachment(slotIndex)))
+                        continue;
+
+                    if (_domainBridge.Bridge.Attachment.CanAttach(attachment.InstanceID, host.InstanceID, slotIndex))
+                    {
+                        Debug.Log($"[ITEM_SELECT_FLOW] Attachment double-click -> AttachItem attachment={attachment.InstanceID} host={host.InstanceID} slot={slotIndex}.");
+                        _domainBridge.Bridge.Attachment.AttachItem(attachment.InstanceID, host.InstanceID, slotIndex);
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private string BuildSlotLabel(UISlotId slotId)
         {
             return slotId.Type switch
             {
@@ -486,9 +618,63 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     ? $"{slotId.EquipmentSlot.Value} Slot" : "Equipment Slot",
                 UISlotType.Weapon => slotId.WeaponSlot.HasValue
                     ? $"{slotId.WeaponSlot.Value} Weapon Slot" : "Weapon Slot",
-                UISlotType.Attachment => $"Attachment [{slotId.Index}]",
+                UISlotType.Attachment => BuildAttachmentSlotLabel(slotId),
                 _ => null
             };
+        }
+
+        private string BuildSlotDescription(UISlotId slotId)
+        {
+            return slotId.Type switch
+            {
+                UISlotType.Equipment => slotId.EquipmentSlot.HasValue
+                    ? $"Accepts {slotId.EquipmentSlot.Value} equipment."
+                    : "Accepts compatible equipment.",
+                UISlotType.Weapon => slotId.WeaponSlot.HasValue
+                    ? $"Accepts compatible {slotId.WeaponSlot.Value} weapon."
+                    : "Accepts compatible weapon.",
+                UISlotType.Attachment => $"Accepts a compatible {BuildAttachmentSlotLabel(slotId).ToLowerInvariant()} attachment.",
+                _ => "Empty slot."
+            };
+        }
+
+        private string BuildAttachmentSlotLabel(UISlotId slotId)
+        {
+            if (!string.IsNullOrEmpty(slotId.ParentInstanceID) && _domainBridge?.Bridge != null)
+            {
+                var parent = _domainBridge.Bridge.GetItemByInstanceID(slotId.ParentInstanceID);
+                var def = parent != null ? ItemDatabase.GetDefinition(parent.DefinitionID) : null;
+                var slots = def?.AttachmentSlots;
+                if (slots != null && slotId.Index >= 0 && slotId.Index < slots.Length)
+                    return slots[slotId.Index].ToString();
+            }
+
+            return slotId.Index >= 0 ? $"Attachment Slot {slotId.Index + 1}" : "Attachment Slot";
+        }
+
+        private Vector3 ResolveCursorGroundTarget()
+        {
+            var player = _domainBridge?.Player;
+            Vector3 origin = player != null ? player.transform.position : Vector3.zero;
+
+            Vector3 aimTarget = ItemAimController.AimWorldTarget;
+            if (aimTarget != Vector3.zero)
+            {
+                Debug.Log($"[ITEM_SELECT_FLOW] Inventory throwable/deployable target uses ItemAimController cursor: {aimTarget}.");
+                return aimTarget;
+            }
+
+            var cam = Camera.main;
+            if (cam == null)
+                return origin + Vector3.forward * 5f;
+
+            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+            Plane ground = new Plane(Vector3.up, origin);
+            if (ground.Raycast(ray, out float distance))
+                return ray.GetPoint(distance);
+
+            Vector3 fallbackDir = player != null ? player.transform.forward : Vector3.forward;
+            return origin + fallbackDir * 5f;
         }
 
         #endregion

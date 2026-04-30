@@ -1,33 +1,27 @@
 using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Bridge;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.UI;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
     /// Manages the weapon card pool and equipment card list for the inventory screen.
     ///
-    /// WEAPON CARDS — prefab per weapon type:
-    ///   Designer registers one WeaponCardView prefab per ItemDefinition.ItemID in
-    ///   _weaponCardMappings. When a weapon is equipped, the matching prefab is instantiated
-    ///   inside _weaponCardContainer. When unequipped, it is hidden (pooled).
-    ///
-    ///   If no specific mapping is found, _defaultWeaponCardPrefab is used as fallback.
-    ///
-    /// EQUIPMENT CARDS — single generic prefab:
-    ///   Uses _equipmentCardPrefab (EquipmentCardView). One instance per equipment slot type.
-    ///   The card itself spawns attachment slots dynamically from ItemDefinition.AttachmentSlots.
-    ///   Items with zero attachment slots still show the main icon but hide the attachment area.
-    ///
-    /// EVENTS:
-    ///   Subscribe to IGameplayBridge events to refresh cards on equip/unequip/attach/detach.
-    ///   Call Initialize(bridge, uiConfig) once when the inventory screen opens.
+    /// FIXES applied:
+    ///   - GetOrCreateWeaponCard now detects weapon type (DefinitionID) changes and
+    ///     destroys/recreates the card when the prefab mapping differs, preventing the AR
+    ///     card from being reused to display an SMG with a different prefab layout.
+    ///   - WeaponCardView.Show(slot, null) keeps the empty weapon slot visible as a drop target.
     /// </summary>
     public class WeaponEquipmentPanel : MonoBehaviour
     {
+        private const string LogPrefix = "[INV_FIX][WeaponEquipmentPanel]";
+
         // ── Inspector ──────────────────────────────────────────────────────────
 
         [Header("Weapon Cards")]
@@ -47,16 +41,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Tooltip("Generic EquipmentCardView prefab — reused for all equipment slot types.")]
         [SerializeField] private GameObject _equipmentCardPrefab;
 
-        [Header("Config")]
-        [SerializeField] private UISlotLayoutConfig _uiConfig;
-
         // ── Runtime ───────────────────────────────────────────────────────────
 
-        private UIDomainBridge _bridge;
+        private UIPlayerContext _bridge;
 
         // weapon slot → active WeaponCardView
         private readonly Dictionary<WeaponSlotType, WeaponCardView> _weaponCards =
             new Dictionary<WeaponSlotType, WeaponCardView>();
+
+        // FIX: Track which prefab was used to spawn each weapon card so we can detect
+        // when the weapon type changes and requires a different prefab layout.
+        private readonly Dictionary<WeaponSlotType, GameObject> _weaponCardPrefabs =
+            new Dictionary<WeaponSlotType, GameObject>();
 
         // equipment slot → active EquipmentCardView
         private readonly Dictionary<EquipmentSlotType, EquipmentCardView> _equipCards =
@@ -69,34 +65,28 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         /// Called by InventoryScreen / UIRootController when the player changes or the
         /// inventory is opened for the first time.
         /// </summary>
-        public void Initialize(UIDomainBridge bridge, UISlotLayoutConfig uiConfig)
+        public void Initialize(UIPlayerContext bridge)
         {
             Teardown();
 
-            _bridge  = bridge;
-            if (uiConfig != null) _uiConfig = uiConfig;
+            _bridge = bridge;
 
             if (_bridge?.IsReady != true) return;
 
             SubscribeBridgeEvents(true);
 
-            // Build initial state from current equip/weapon system snapshots.
             RefreshAllWeaponCards();
             RefreshAllEquipmentCards();
         }
 
-        /// <summary>
-        /// Lock all slot visuals in spectator mode.
-        /// </summary>
+        /// <summary>Lock all slot visuals in spectator mode.</summary>
         public void SetLockedVisual(bool locked)
         {
             foreach (var card in _weaponCards.Values)  card?.SetLockedVisual(locked);
             foreach (var card in _equipCards.Values)   card?.SetLockedVisual(locked);
         }
 
-        /// <summary>
-        /// Destroy all spawned cards and unsubscribe events.
-        /// </summary>
+        /// <summary>Destroy all spawned cards and unsubscribe events.</summary>
         public void Teardown()
         {
             SubscribeBridgeEvents(false);
@@ -114,7 +104,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             var w = _bridge.Bridge.Weapon;
             var e = _bridge.Bridge.Equipment;
-            var a = _bridge.Bridge.Attachment;
 
             if (w != null)
             {
@@ -126,11 +115,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (sub) { e.OnItemEquipped  += HandleEquipmentEquipped;  e.OnItemUnequipped  += HandleEquipmentUnequipped; }
                 else     { e.OnItemEquipped  -= HandleEquipmentEquipped;  e.OnItemUnequipped  -= HandleEquipmentUnequipped; }
             }
-            // IAttachmentSystem events not on the interface yet; refresh handled via equip events.
-            // Uncomment when OnAttachmentAttached/Detached are added to IAttachmentSystem:
-            // if (a != null)
-            // {
-            //     if (sub) { a.OnAttachmentAttached += HandleAttachmentChanged; ... }
         }
 
         private void OnDestroy() => Teardown();
@@ -140,22 +124,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         // ─────────────────────────────────────────────────────────────────────
         #region Event Handlers
 
-        // Signature MUST match Action<WeaponSlotType, ItemInstance>
         private void HandleWeaponEquipped(WeaponSlotType slot, ItemInstance weapon)
             => RefreshWeaponCard(slot, weapon);
 
         private void HandleWeaponUnequipped(WeaponSlotType slot, ItemInstance weapon)
             => RefreshWeaponCard(slot, null);
 
-        // Signature MUST match Action<EquipmentSlotType, ItemInstance>
         private void HandleEquipmentEquipped(EquipmentSlotType slot, ItemInstance item)
             => RefreshEquipmentCard(slot, item);
 
         private void HandleEquipmentUnequipped(EquipmentSlotType slot, ItemInstance item)
             => RefreshEquipmentCard(slot, null);
 
-        // Called when attachment changes — refresh all cards.
-        // Slot index is matched visually; accuracy relies on parentInstanceID matching.
         private void HandleAttachmentChanged(string parentInstanceID, int slotIndex, ItemInstance _)
         {
             foreach (var card in _weaponCards.Values)  card?.RefreshAttachmentSlot(slotIndex);
@@ -169,36 +149,40 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void RefreshAllWeaponCards()
         {
-            if (_bridge?.Bridge?.Weapon == null) return;
-            // Iterate only the slots defined in InventoryConfig — never raw enum values.
-            // This ensures Slot3/Slot4/None are not accidentally spawned when unused.
-            var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
-            var slots   = config?.WeaponConfig;
-            if (slots != null && slots.Length > 0)
+            var slots = new[] { WeaponSlotType.Primary, WeaponSlotType.Secondary, WeaponSlotType.Melee };
+            foreach (var slot in slots)
             {
-                foreach (var cfg in slots)
-                {
-                    var weapon = _bridge.Bridge.Weapon.GetWeapon(cfg.Type);
-                    RefreshWeaponCard(cfg.Type, weapon);
-                }
-            }
-            else
-            {
-                // Fallback: iterate active weapon cache only (no config = no phantom cards).
-                var allWeapons = _bridge.Bridge.Weapon.GetAllWeapons();
-                foreach (var kvp in allWeapons)
-                    RefreshWeaponCard(kvp.Key, kvp.Value);
+                var weapon = _bridge.Bridge.Weapon.GetWeapon(slot);
+                RefreshWeaponCard(slot, weapon);
             }
         }
 
         private void RefreshAllEquipmentCards()
         {
             if (_bridge?.Bridge?.Equipment == null) return;
-            foreach (EquipmentSlotType slot in System.Enum.GetValues(typeof(EquipmentSlotType)))
+            foreach (EquipmentSlotType slot in GetConfiguredEquipmentSlots())
             {
                 var item = _bridge.Bridge.Equipment.GetEquippedItem(slot);
                 RefreshEquipmentCard(slot, item);
             }
+        }
+
+        private static IEnumerable<EquipmentSlotType> GetConfiguredEquipmentSlots()
+        {
+            var config = InventoryConfig.Instance;
+            if (config?.EquipmentConfig != null && config.EquipmentConfig.Length > 0)
+            {
+                var seen = new HashSet<EquipmentSlotType>();
+                foreach (var slotConfig in config.EquipmentConfig)
+                {
+                    if (seen.Add(slotConfig.Type))
+                        yield return slotConfig.Type;
+                }
+                yield break;
+            }
+
+            foreach (EquipmentSlotType slot in System.Enum.GetValues(typeof(EquipmentSlotType)))
+                yield return slot;
         }
 
         private void RefreshWeaponCard(WeaponSlotType slot, ItemInstance weapon)
@@ -207,9 +191,15 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (card == null) return;
 
             if (weapon != null)
-                card.Show(slot, weapon, _bridge?.Bridge?.Attachment, _uiConfig);
+            {
+                card.Show(slot, weapon, _bridge?.Bridge?.Attachment);
+                Debug.Log($"{LogPrefix} Weapon card show slot={slot} weapon={weapon.DefinitionID}");
+            }
             else
-                card.Hide();
+            {
+                card.Show(slot, null, _bridge?.Bridge?.Attachment);
+                Debug.Log($"{LogPrefix} Weapon card placeholder slot={slot}");
+            }
         }
 
         private void RefreshEquipmentCard(EquipmentSlotType slot, ItemInstance item)
@@ -222,9 +212,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             if (item != null)
-                card.Show(slot, item, _bridge?.Bridge?.Attachment, _uiConfig);
+            {
+                card.Show(slot, item, _bridge?.Bridge?.Attachment);
+                Debug.Log($"{LogPrefix} Equipment card show slot={slot} item={item.DefinitionID}");
+            }
             else
-                card.Hide();
+            {
+                card.Show(slot, null, _bridge?.Bridge?.Attachment);
+                card.SetExpanded(false);
+                Debug.Log($"{LogPrefix} Equipment card placeholder slot={slot}");
+            }
         }
 
         #endregion
@@ -234,34 +231,49 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private WeaponCardView GetOrCreateWeaponCard(WeaponSlotType slot, ItemInstance weapon)
         {
-            // If we already have a card for this slot, reuse it (may be a different weapon type).
-            if (_weaponCards.TryGetValue(slot, out var existing) && existing != null)
-            {
-                // If weapon changed type, we might need a different prefab.
-                // Simple strategy: always destroy and recreate when the itemID changes.
-                // For most games the same slot always receives the same category of weapon.
-                return existing;
-            }
-
-            // Resolve which prefab to use (item mapping → slot config → panel default).
-            var prefab = ResolveWeaponPrefab(weapon, slot);
-            if (prefab == null)
+            // Resolve the prefab we SHOULD use for this weapon.
+            var neededPrefab = ResolveWeaponPrefab(weapon, slot);
+            if (neededPrefab == null)
             {
                 Debug.LogWarning($"[WeaponEquipmentPanel] No weapon card prefab for slot {slot} weapon={weapon?.DefinitionID}");
                 return null;
             }
 
-            var go   = Instantiate(prefab, _weaponCardContainer, false);
+            // FIX: If there is already a card in this slot, check whether it was spawned
+            // from the SAME prefab. If the weapon type changed (e.g. pistol → rifle with a
+            // different prefab), we must destroy the old card and spawn a fresh one so the
+            // pre-placed attachment slot layout matches the new weapon.
+            if (_weaponCards.TryGetValue(slot, out var existing) && existing != null)
+            {
+                bool prefabChanged = !_weaponCardPrefabs.TryGetValue(slot, out var usedPrefab) ||
+                                     usedPrefab != neededPrefab;
+
+                if (!prefabChanged)
+                {
+                    // Same prefab — reuse the existing card.
+                    return existing;
+                }
+
+                // Different prefab — destroy old card and fall through to spawn a new one.
+                Debug.Log($"{LogPrefix} Weapon prefab changed for slot={slot}, rebuilding card.");
+                existing.OnCardDoubleClicked -= HandleWeaponCardDoubleClicked;
+                Destroy(existing.gameObject);
+                _weaponCards.Remove(slot);
+                _weaponCardPrefabs.Remove(slot);
+            }
+
+            var go   = Instantiate(neededPrefab, _weaponCardContainer, false);
             var card = go.GetComponent<WeaponCardView>();
             if (card == null)
             {
-                Debug.LogError($"[WeaponEquipmentPanel] Prefab {prefab.name} has no WeaponCardView component!");
+                Debug.LogError($"[WeaponEquipmentPanel] Prefab {neededPrefab.name} has no WeaponCardView component!");
                 Destroy(go);
                 return null;
             }
 
-            go.SetActive(false);
-            _weaponCards[slot] = card;
+            card.OnCardDoubleClicked += HandleWeaponCardDoubleClicked;
+            _weaponCards[slot]       = card;
+            _weaponCardPrefabs[slot] = neededPrefab;
             return card;
         }
 
@@ -277,10 +289,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var card = go.GetComponent<EquipmentCardView>();
             if (card == null)
             {
-                Debug.LogError("[WeaponEquipmentPanel] _equipmentCardPrefab has no EquipmentCardView!");
+                Debug.LogError($"[WeaponEquipmentPanel] Prefab {_equipmentCardPrefab.name} has no EquipmentCardView component!");
                 Destroy(go);
                 return null;
             }
+
+            card.OnCardClicked       += HandleEquipmentCardClicked;
+            card.OnCardDoubleClicked += HandleEquipmentCardDoubleClicked;
 
             go.SetActive(false);
             return card;
@@ -298,27 +313,64 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 }
             }
 
-            // Priority 2: per-slot prefab from InventoryConfig
-            if (slot != WeaponSlotType.None)
-            {
-                var slotCfg = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance?.GetWeaponSlot(slot);
-                if (slotCfg.HasValue && slotCfg.Value.WeaponCardPrefab != null)
-                    return slotCfg.Value.WeaponCardPrefab;
-            }
-
-            // Priority 3: panel-level default
+            // Fallback: panel-level default
             return _defaultWeaponCardPrefab;
         }
 
         private void DestroyAllCards()
         {
             foreach (var card in _weaponCards.Values)
-                if (card != null) Destroy(card.gameObject);
+            {
+                if (card != null)
+                {
+                    card.OnCardDoubleClicked -= HandleWeaponCardDoubleClicked;
+                    Destroy(card.gameObject);
+                }
+            }
             _weaponCards.Clear();
+            _weaponCardPrefabs.Clear();
 
             foreach (var card in _equipCards.Values)
-                if (card != null) Destroy(card.gameObject);
+            {
+                if (card != null)
+                {
+                    card.OnCardClicked       -= HandleEquipmentCardClicked;
+                    card.OnCardDoubleClicked -= HandleEquipmentCardDoubleClicked;
+                    Destroy(card.gameObject);
+                }
+            }
             _equipCards.Clear();
+        }
+
+        #endregion
+
+        // ─────────────────────────────────────────────────────────────────────
+        #region Input Logic (Accordion & Unequip)
+
+        private void HandleEquipmentCardClicked(EquipmentCardView clickedCard)
+        {
+            if (clickedCard == null) return;
+
+            // Accordion logic: Toggle the clicked card, collapse all others.
+            foreach (var card in _equipCards.Values)
+            {
+                if (card == null) continue;
+
+                if (card == clickedCard)
+                    card.ToggleExpanded();
+                else
+                    card.SetExpanded(false);
+            }
+        }
+
+        private void HandleEquipmentCardDoubleClicked(EquipmentSlotType slot)
+        {
+            _bridge?.Bridge?.Equipment?.UnequipItem(slot);
+        }
+
+        private void HandleWeaponCardDoubleClicked(WeaponSlotType slot)
+        {
+            _bridge?.Bridge?.Weapon?.UnequipWeapon(slot);
         }
 
         #endregion
@@ -328,7 +380,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
     /// <summary>
     /// Maps an item definition ID to a specific WeaponCardView prefab.
-    /// Configured in the WeaponEquipmentPanel Inspector.
     /// </summary>
     [System.Serializable]
     public struct WeaponCardMapping

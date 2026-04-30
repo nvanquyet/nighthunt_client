@@ -1,96 +1,147 @@
-using UnityEngine;
 using FishNet.Object;
-using NightHunt.Gameplay.Deployables;
 using FOW;
 using NightHunt.Gameplay.FogOfWar;
+using NightHunt.Gameplay.Spectator;
+using NightHunt.Networking.Player;
+using UnityEngine;
 
 namespace NightHunt.Gameplay.Deployables
 {
     /// <summary>
-    /// Mắt Soi Sáng (Vision Ward) - Provides tầm nhìn (Ánh sáng FOW) cho cục bộ teammate,
-    /// Tàng hình nếu enemy đi ngan qua. Bị tiêu diệt nếu bắn 3 hit (máu = 30).
-    /// Kế thừa toàn bộ Máu, Destroy, Trạng Thái Cắm từ BaseDeployable.
+    /// Team-owned deployable revealer. Allied clients enable the FOW revealer, enemy
+    /// clients keep it disabled. Health, placement state, and despawn come from BaseDeployable.
     /// </summary>
     [RequireComponent(typeof(FogOfWarRevealer3D))]
     public class VisionWard : BaseDeployable
     {
         [Header("Vision Config")]
-        [Tooltip("Bán kính phát sáng của con mắt")]
-        [SerializeField] private float visionRadius = 15f;
-        [Tooltip("Thời gian sống tối đa (0 = tồn tại mãi tới khi bị phá)")]
-        [SerializeField] private float lifetimeSeconds = 120f;
+        [SerializeField, Min(0f)] private float visionRadius = 15f;
+        [SerializeField, Min(0f)] private float lifetimeSeconds = 120f;
 
         private FogOfWarRevealer3D _revealer;
         private FogTeamVisibilityBinder _visibilityBinder;
-        
+        private NetworkPlayer _subscribedLocalPlayer;
+
         private void Awake()
         {
             _revealer = GetComponent<FogOfWarRevealer3D>();
-            
-            // Nếu muốn con mắt VÔ HÌNH TRONG MẮT ĐỊCH, bạn hãy ném FogTeamVisibilityBinder 
-            // vào Prefab của VisionWard. Script sẽ tự động lấy thông tin từ BaseDeployable.
+            if (_revealer == null)
+                _revealer = gameObject.AddComponent<FogOfWarRevealer3D>();
+
             _visibilityBinder = GetComponent<FogTeamVisibilityBinder>();
+            if (_visibilityBinder == null)
+                _visibilityBinder = gameObject.AddComponent<FogTeamVisibilityBinder>();
         }
 
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-            _revealer.ViewRadius = visionRadius;
-            
-            // Xử lý logic display ngay on spawn (Bật đèn nếu phe ta)
+            _ownerTeamId.OnChange += OnOwnerTeamChanged;
+            _isActive.OnChange += OnIsActiveChanged;
+
+            if (SpectateManager.Instance != null)
+                SpectateManager.Instance.OnLocalPlayerSet += OnLocalPlayerAvailable;
+
+            SubscribeLocalPlayerTeamChange(SpectateManager.Instance?.GetLocalPlayer());
+            ApplyRevealerRadius();
             UpdateVisionState();
+        }
+
+        public override void OnStopNetwork()
+        {
+            base.OnStopNetwork();
+            _ownerTeamId.OnChange -= OnOwnerTeamChanged;
+            _isActive.OnChange -= OnIsActiveChanged;
+
+            if (SpectateManager.Instance != null)
+                SpectateManager.Instance.OnLocalPlayerSet -= OnLocalPlayerAvailable;
+
+            if (_subscribedLocalPlayer != null)
+            {
+                _subscribedLocalPlayer.OnPublicDataChanged -= OnLocalTeamChanged;
+                _subscribedLocalPlayer = null;
+            }
         }
 
         [Server]
         protected override void OnDeployablePlaced()
         {
             base.OnDeployablePlaced();
-            
-            Debug.Log($"[VisionWard] Team {_ownerTeamId.Value} đặt mắt success! Máu: {_currentHP.Value}");
-            
-            // Nếu có lifetime hẹn giờ chết
-            if (lifetimeSeconds > 0)
-            {
+
+            Debug.Log($"[VisionWard] Team {_ownerTeamId.Value} placed vision ward. hp={_currentHP.Value} radius={visionRadius}");
+
+            if (lifetimeSeconds > 0f)
                 Invoke(nameof(ExpireWard), lifetimeSeconds);
-            }
         }
 
         [Server]
         private void ExpireWard()
         {
             if (_isActive.Value)
-            {
-                OnDeployableDestroyed(); 
-            }
+                OnDeployableDestroyed();
         }
 
-        // --- Client Audio / Visual ---
-        
         protected override void OnIsPlacedChanged(bool oldVal, bool newVal, bool asServer)
         {
             base.OnIsPlacedChanged(oldVal, newVal, asServer);
             UpdateVisionState();
         }
 
+        private void OnOwnerTeamChanged(int oldVal, int newVal, bool asServer) => UpdateVisionState();
+
+        private void OnIsActiveChanged(bool oldVal, bool newVal, bool asServer) => UpdateVisionState();
+
+        private void OnLocalPlayerAvailable(NetworkPlayer localPlayer)
+        {
+            SubscribeLocalPlayerTeamChange(localPlayer);
+            UpdateVisionState();
+        }
+
+        private void SubscribeLocalPlayerTeamChange(NetworkPlayer localPlayer)
+        {
+            if (localPlayer == null || localPlayer == _subscribedLocalPlayer)
+                return;
+
+            if (_subscribedLocalPlayer != null)
+                _subscribedLocalPlayer.OnPublicDataChanged -= OnLocalTeamChanged;
+
+            _subscribedLocalPlayer = localPlayer;
+            _subscribedLocalPlayer.OnPublicDataChanged += OnLocalTeamChanged;
+        }
+
+        private void OnLocalTeamChanged(PlayerPublicData prev, PlayerPublicData next)
+        {
+            if (prev.TeamId != next.TeamId)
+                UpdateVisionState();
+        }
+
         private void UpdateVisionState()
         {
-            // Mắt chưa cắm success => tắt đèn
-            if (!_isPlaced.Value || !_isActive.Value) 
+            if (_revealer == null)
+                return;
+
+            ApplyRevealerRadius();
+
+            if (!_isPlaced.Value || !_isActive.Value)
             {
                 _revealer.enabled = false;
                 return;
             }
 
-            // Nếu cắm success: Ai là Địch => Đèn Tắt (screen tối thui) | Ai là Phải Ta => Đèn Bật (sáng nguyên vùng)
-            bool isEnemy = CheckIfEnemyForLocalClient();
-            _revealer.enabled = !isEnemy;
+            _revealer.enabled = !IsEnemyForLocalClient();
         }
 
-        private bool CheckIfEnemyForLocalClient()
+        private void ApplyRevealerRadius()
         {
-            // Tương tự logic check của Player (SpectatorManager / FogTeamVisibilityBinder)
-            var localPlayer = NightHunt.Gameplay.Spectator.SpectateManager.Instance?.GetLocalPlayer();
-            if (localPlayer == null) return false; // Nếu chưa load xong thì cứ soi sáng đi
+            if (_revealer != null)
+                _revealer.ViewRadius = visionRadius;
+        }
+
+        private bool IsEnemyForLocalClient()
+        {
+            var localPlayer = SpectateManager.Instance?.GetLocalPlayer();
+            if (localPlayer == null)
+                return false;
 
             return localPlayer.TeamId != _ownerTeamId.Value;
         }

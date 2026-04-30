@@ -36,7 +36,7 @@ namespace NightHunt.Gameplay.FogOfWar
             _hider = ComponentResolver.Find<FogOfWarHider>(this)
         .OnSelf()
         .InChildren()
-        .OrLogWarning("[Auto] FogOfWarHider not found")
+        .InParent()
         .Resolve();
 
             // BUG 3 FIX: Add InParent() so this component is found even when placed on a child
@@ -273,14 +273,18 @@ namespace NightHunt.Gameplay.FogOfWar
 
         private void EnsureHiderExists()
         {
+            var host = GetHiderHost();
+            if (_hider != null && _hider.transform != host)
+                RemoveHiderIfExists();
+
             if (_hider != null) return;
 
-            _hider = gameObject.AddComponent<FogOfWarHider>();
+            _hider = host.gameObject.AddComponent<FogOfWarHider>();
 
             // Add renderer-toggling behavior so renderers are actually hidden/shown
             // when the FOW system marks this object as revealed or concealed.
             // Without this companion, FogOfWarHider fires OnActiveChanged but nothing acts on it.
-            _hiderBehavior = gameObject.AddComponent<HiderDisableRenderers>();
+            _hiderBehavior = host.gameObject.AddComponent<HiderDisableRenderers>();
             RefreshHiderRenderers();
         }
 
@@ -316,7 +320,19 @@ namespace NightHunt.Gameplay.FogOfWar
         private void RefreshHiderRenderers()
         {
             if (_hiderBehavior == null) return;
-            _hiderBehavior.ModifyHiddenRenderers(GetComponentsInChildren<Renderer>(includeInactive: true));
+            var host = GetHiderHost();
+            _hiderBehavior.ModifyHiddenRenderers(host.GetComponentsInChildren<Renderer>(includeInactive: true));
+        }
+
+        private Transform GetHiderHost()
+        {
+            if (_networkPlayer != null)
+                return _networkPlayer.transform;
+
+            if (_deployable != null)
+                return _deployable.transform;
+
+            return transform;
         }
 
         private void Log(string msg)

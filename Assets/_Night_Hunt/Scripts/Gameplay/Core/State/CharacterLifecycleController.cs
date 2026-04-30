@@ -100,7 +100,10 @@ namespace NightHunt.Gameplay.Core.State
             // Bug #22 fix: push local lifecycle to GameCameraController so it doesn't
             // use FindFirstObjectByType (which finds the wrong player in multiplayer).
             if (base.Owner.IsLocalClient)
+            {
                 GameCameraController.RegisterLocalLifecycle(this);
+                NightHunt.Graphics.PostProcessStateManager.RegisterLocalPlayer(this, _statSystem);
+            }
         }
 
         public override void OnStopNetwork()

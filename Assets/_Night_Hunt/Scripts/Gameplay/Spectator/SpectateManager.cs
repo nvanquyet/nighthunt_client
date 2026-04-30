@@ -91,6 +91,12 @@ namespace NightHunt.Gameplay.Spectator
                 return;
             }
 
+            if (!CanSpectate(player))
+            {
+                LogWarning($"Rejected spectate target '{player.DisplayName}'");
+                return;
+            }
+
             currentSpectatedPlayer = player;
             isSpectating = true;
             OnCurrentPlayerChanged?.Invoke(player);
@@ -127,10 +133,9 @@ namespace NightHunt.Gameplay.Spectator
                 return;
             }
 
-            // Get all players except local player
+            // Get all same-team alive players except local player.
             var allPlayers = PlayerPublicRegistry.Instance.GetAllPlayers();
-            // Filter out local player
-            allPlayers = System.Array.FindAll(allPlayers, p => p != localPlayer);
+            allPlayers = System.Array.FindAll(allPlayers, CanSpectate);
             if (allPlayers.Length == 0)
             {
                 StopSpectating();
@@ -155,6 +160,14 @@ namespace NightHunt.Gameplay.Spectator
             int newIndex = (currentIndex + direction + allPlayers.Length) % allPlayers.Length;
 
             StartSpectating(allPlayers[newIndex]);
+        }
+
+        public bool CanSpectate(NetworkPlayer player)
+        {
+            if (player == null || localPlayer == null) return false;
+            if (player == localPlayer || player.IsLocalPlayer) return false;
+            if (!player.IsAlive) return false;
+            return player.TeamId == localPlayer.TeamId;
         }
         
         private void Log(string message)

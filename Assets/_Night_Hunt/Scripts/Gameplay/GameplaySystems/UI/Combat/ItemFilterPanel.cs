@@ -1,9 +1,8 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
-using NightHunt.Gameplay.Spectator;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.ItemUse;
 using NightHunt.Gameplay.Input.Handlers.Combat;
@@ -12,37 +11,11 @@ namespace NightHunt.GameplaySystems.UI.Combat
 {
     /// <summary>
     /// Container managing the expand/collapse flow for a single item-type filter slot.
-    ///
-    /// ── Roles after refactor ─────────────────────────────────────────────────────
-    ///
-    /// <see cref="SelectableItemButton"/> (_slotButton)
-    ///   — The permanent collapsed icon button the player sees in the HUD.
-    ///   — Manages its own icon / quantity display and auto-fill from inventory.
-    ///   — Click state machine: select → arm → cancel (double-click = cancel).
-    ///   — Fires <see cref="SelectableItemButton.OnExpandRequested"/> when clicked
-    ///     while empty so this panel can open the list.
-    ///
-    /// <see cref="ItemFilterButton"/> (_filterButtonPrefab)
-    ///   — One row per inventory item in the expanded list.
-    ///   — Single press → RequestSelectItem + collapse panel.
-    ///   — Selection marker shows the currently active item.
-    ///
-    /// This panel (ItemFilterPanel):
-    ///   — Manages the expand / collapse transition.
-    ///   — Rebuilds the ItemFilterButton list on inventory changes.
-    ///   — Updates selection markers on ItemFilterButtons on selection changes.
-    ///
-    /// ── Inspector ────────────────────────────────────────────────────────────────
-    ///   _slotButton          – The SelectableItemButton that acts as the HUD icon.
-    ///   _listRoot            – Root GameObject toggled on/off for the expanded list.
-    ///   _contentRoot         – Parent transform for spawned ItemFilterButton instances.
-    ///   _expandButton        – Arrow / chevron button to manually expand / collapse.
-    ///   _filterButtonPrefab  – Prefab with an ItemFilterButton component.
+    /// The collapsed slot owns the select/arm/cancel state machine; this panel owns
+    /// list visibility and row creation.
     /// </summary>
     public class ItemFilterPanel : MonoBehaviour
     {
-        // ── Inspector ─────────────────────────────────────────────────────────────
-
         [Header("Collapsed Slot Button")]
         [Tooltip("The SelectableItemButton displayed as the collapsed HUD icon for this filter type.")]
         [SerializeField] private SelectableItemButton _slotButton;
@@ -53,19 +26,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] private Button           _expandButton;
         [SerializeField] private ItemFilterButton _filterButtonPrefab;
 
-        // ── Runtime ───────────────────────────────────────────────────────────────
-
         private readonly List<ItemFilterButton> _spawnedButtons = new();
 
         private ItemType             _filterType;
+        private readonly List<ItemType> _filterTypes = new();
         private IItemSelectionSystem _selectionSystem;
         private IInventorySystem     _inventorySystem;
+        private CombatInputHandler   _combatInputHandler;
+        private Coroutine            _pendingCollapseRoutine;
 
         public bool IsExpanded { get; private set; }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Public API
-        // ─────────────────────────────────────────────────────────────────────────
+        private const float FilterSingleClickCollapseDelay = 0.3f;
 
         /// <summary>
         /// Bind this panel to a filter type and the current player's systems.
@@ -79,21 +50,43 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IItemUseSystem       itemUseSystem      = null,
             CombatInputHandler   combatInputHandler = null)
         {
-            Debug.Log($"[ItemFilterPanel:{filterType}] Initialize");
+            Initialize(new[] { filterType }, selectionSystem, inventorySystem, itemUseSystem, combatInputHandler);
+        }
+
+        public void Initialize(
+            IReadOnlyList<ItemType> filterTypes,
+            IItemSelectionSystem selectionSystem,
+            IInventorySystem     inventorySystem    = null,
+            IItemUseSystem       itemUseSystem      = null,
+            CombatInputHandler   combatInputHandler = null)
+        {
+
             Unsubscribe();
 
-            _filterType      = filterType;
+            _filterTypes.Clear();
+            if (filterTypes != null)
+            {
+                for (int i = 0; i < filterTypes.Count; i++)
+                {
+                    if (!_filterTypes.Contains(filterTypes[i]))
+                        _filterTypes.Add(filterTypes[i]);
+                }
+            }
+
+            if (_filterTypes.Count == 0)
+                _filterTypes.Add(ItemType.Consumable);
+
+            _filterType      = _filterTypes[0];
             _selectionSystem = selectionSystem;
             _inventorySystem = inventorySystem;
+            _combatInputHandler = combatInputHandler;
 
-            // ── Expand button ──────────────────────────────────────────────────
             if (_expandButton != null)
             {
                 _expandButton.onClick.RemoveListener(ToggleList);
                 _expandButton.onClick.AddListener(ToggleList);
             }
 
-            // ── Slot button (SelectableItemButton) ────────────────────────────
             if (_slotButton != null)
             {
                 // Wire expand request so clicking an empty slot opens the list.
@@ -101,7 +94,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _slotButton.OnExpandRequested += ExpandList;
 
                 _slotButton.BindCombatHandler(combatInputHandler);
-                _slotButton.Initialize(filterType, selectionSystem, itemUseSystem, inventorySystem);
+                _slotButton.Initialize(_filterTypes, selectionSystem, itemUseSystem, inventorySystem);
             }
 
             Subscribe();
@@ -113,7 +106,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IsExpanded = true;
             RebuildList();
             if (_listRoot != null) _listRoot.SetActive(true);
-            Debug.Log($"[ItemFilterPanel:{_filterType}] ExpandList — {_spawnedButtons.Count} buttons");
+
         }
 
         public void CollapseList()
@@ -122,13 +115,63 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_listRoot != null) _listRoot.SetActive(false);
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Unity Lifecycle
-        // ─────────────────────────────────────────────────────────────────────────
+        public void ActivateShortcut()
+        {
+            Debug.Log($"[ItemFilterPanel:{FormatFilterTypes(_filterTypes)}] shortcut activate expanded={IsExpanded} tracked='{_slotButton?.GetTrackedInstanceId() ?? "null"}'");
+            _slotButton?.ActivateFromShortcut();
+        }
+
+        public void ActivateShortcut(ItemType preferredType)
+        {
+            Debug.Log($"[ItemFilterPanel:{FormatFilterTypes(_filterTypes)}] shortcut activate preferred={preferredType} expanded={IsExpanded} tracked='{_slotButton?.GetTrackedInstanceId() ?? "null"}'");
+            _slotButton?.ActivateFromShortcut(preferredType);
+        }
+
+        public void SelectFromFilter(string instanceId, bool useImmediately)
+        {
+            if (string.IsNullOrEmpty(instanceId) || _selectionSystem == null)
+            {
+                Debug.LogWarning($"[ItemFilterPanel:{FormatFilterTypes(_filterTypes)}] SelectFromFilter ignored instance='{instanceId}' selection={(_selectionSystem != null ? "ok" : "null")}");
+                return;
+            }
+
+            _slotButton?.SetTrackedItem(instanceId);
+            Debug.Log($"[ITEM_FLOW] [02][FilterPanel.Select] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' useImmediately={useImmediately}");
+            _selectionSystem.RequestSelectItem(instanceId);
+
+            if (_pendingCollapseRoutine != null)
+            {
+                StopCoroutine(_pendingCollapseRoutine);
+                _pendingCollapseRoutine = null;
+            }
+
+            if (useImmediately)
+            {
+                Debug.Log($"[ITEM_FLOW] [03][FilterPanel.Use] instance='{instanceId}' action=RequestUseSelectedItem");
+                _selectionSystem.RequestUseSelectedItem();
+                CollapseList();
+            }
+            else
+            {
+                _pendingCollapseRoutine = StartCoroutine(CollapseAfterSingleClickWindow());
+            }
+        }
+
+        private System.Collections.IEnumerator CollapseAfterSingleClickWindow()
+        {
+            yield return new WaitForSecondsRealtime(FilterSingleClickCollapseDelay);
+            _pendingCollapseRoutine = null;
+            CollapseList();
+        }
 
         private void OnDestroy()
         {
             Unsubscribe();
+            if (_pendingCollapseRoutine != null)
+            {
+                StopCoroutine(_pendingCollapseRoutine);
+                _pendingCollapseRoutine = null;
+            }
 
             if (_expandButton != null)
                 _expandButton.onClick.RemoveListener(ToggleList);
@@ -136,10 +179,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_slotButton != null)
                 _slotButton.OnExpandRequested -= ExpandList;
         }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Event Subscriptions
-        // ─────────────────────────────────────────────────────────────────────────
 
         private void Subscribe()
         {
@@ -171,37 +210,28 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Selection Events
-        // ─────────────────────────────────────────────────────────────────────────
-
         private void HandleItemSelected(ItemInstance item)
         {
             var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
-            if (def == null || def.Type != _filterType) return;
+            if (!MatchesFilter(def))
+                return;
 
-            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleItemSelected '{item.InstanceID}' → collapse + refresh markers");
             RefreshSelectionMarkersOnButtons();
             CollapseList();
         }
 
         private void HandleItemDeselected()
         {
-            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleItemDeselected → refresh markers");
             RefreshSelectionMarkersOnButtons();
         }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Inventory Events (list rebuild only — auto-fill is in SelectableItemButton)
-        // ─────────────────────────────────────────────────────────────────────────
 
         private void HandleInventoryItemAdded(ItemInstance item)
         {
             if (item == null) return;
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
-            if (def == null || def.Type != _filterType) return;
+            if (!MatchesFilter(def))
+                return;
 
-            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleInventoryItemAdded '{item.InstanceID}'");
             if (IsExpanded) RebuildList();
         }
 
@@ -209,25 +239,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (item == null) return;
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
-            if (def == null || def.Type != _filterType) return;
+            if (!MatchesFilter(def))
+                return;
 
-            Debug.Log($"[ItemFilterPanel:{_filterType}] HandleInventoryItemRemoved '{item.InstanceID}'");
             if (IsExpanded) RebuildList();
         }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Expand / Collapse Toggle
-        // ─────────────────────────────────────────────────────────────────────────
 
         private void ToggleList()
         {
             if (IsExpanded) CollapseList();
             else            ExpandList();
         }
-
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Expanded List Builder
-        // ─────────────────────────────────────────────────────────────────────────
 
         private void RebuildList()
         {
@@ -242,10 +264,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
             {
                 if (item == null || item.InventoryIndex < 0 || item.Quantity <= 0) continue;
                 var def = ItemDatabase.GetDefinition(item.DefinitionID);
-                if (def == null || def.Type != _filterType) continue;
+                if (!MatchesFilter(def)) continue;
 
                 var btn = Instantiate(_filterButtonPrefab, _contentRoot);
-                btn.Bind(item, _selectionSystem, this);
+                btn.Bind(item, _selectionSystem, this, _combatInputHandler);
                 _spawnedButtons.Add(btn);
             }
         }
@@ -263,16 +285,31 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 btn?.RefreshSelectedMarker();
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        //  Helpers
-        // ─────────────────────────────────────────────────────────────────────────
-
         private IReadOnlyList<ItemInstance> GetCurrentPlayerItems()
         {
-            return SpectateManager.Instance
-                ?.GetCurrentPlayer()
-                ?.GamePlaySystemBridge
-                ?.GetAllItems();
+            return _inventorySystem?.GetAllItems();
+        }
+
+        private bool MatchesFilter(ItemDefinition def)
+        {
+            if (def == null) return false;
+            for (int i = 0; i < _filterTypes.Count; i++)
+            {
+                if (def.Type == _filterTypes[i]) return true;
+                if (_filterTypes[i] == ItemType.Throwable && def.Type == ItemType.Deployable) return true;
+            }
+            return false;
+        }
+
+        private static string FormatFilterTypes(IReadOnlyList<ItemType> filterTypes)
+        {
+            if (filterTypes == null || filterTypes.Count == 0) return "None";
+            if (filterTypes.Count == 1) return filterTypes[0].ToString();
+
+            var text = filterTypes[0].ToString();
+            for (int i = 1; i < filterTypes.Count; i++)
+                text += "+" + filterTypes[i];
+            return text;
         }
     }
 }

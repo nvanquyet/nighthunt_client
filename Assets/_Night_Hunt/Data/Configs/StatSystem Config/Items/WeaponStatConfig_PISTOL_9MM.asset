@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c352bde8d500b15478b1415863abf707, type: 3}
-  m_Name: WeaponStatConfig_PISTOL_9MM
+  m_Name: WeaponStatConfig_WEAPON_PISTOL
   m_EditorClassIdentifier: 
   Stats:
   - Type: 10
@@ -41,5 +41,13 @@ MonoBehaviour:
     DefaultValue: 1.2
     MinValue: 0
     MaxValue: 10
+  - Type: 17
+    DefaultValue: 0.8
+    MinValue: 0
+    MaxValue: 30
+  - Type: 18
+    DefaultValue: 1.8
+    MinValue: 0
+    MaxValue: 30
   PlayerModifiers: []
   ItemModifiers: []

@@ -15,13 +15,13 @@ MonoBehaviour:
   ItemID: HEAL_MEDKIT
   DisplayName: Medkit
   Description: 
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: 13f0549848f10c745bff224c5f09a6dd, type: 3}
   Rarity: 2
   IsStackable: 1
   MaxStackSize: 2
   Weight: 0.8
-  _heldPrefab: {fileID: 0}
-  _groundPrefab: {fileID: 0}
+  _visualPrefab: {fileID: 7342610198373781452, guid: a57384c1924e463d8a37c102a7db9d4c,
+    type: 3}
   ValidSlots: 00000000
   UsageDuration: 4
   _canCancelUsage: 1

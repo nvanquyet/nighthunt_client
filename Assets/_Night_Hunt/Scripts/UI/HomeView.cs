@@ -154,7 +154,7 @@ namespace NightHunt.UI
 
             // Friends + party can run concurrently with the profile fetch.
             friendPanelView?.RefreshFriendListAndBadge();
-            if (partyController != null) await partyController.OnHomeShownAsync();
+            if (partyController != null) partyController.OnHomeShown();
 
             // Wait for profile to complete last (it was started first, already in-flight).
             await profileTask;

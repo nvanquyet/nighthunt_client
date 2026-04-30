@@ -6,6 +6,7 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Configs;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Utilities;
+using NightHunt.UI;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -47,7 +48,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         // ── Runtime ───────────────────────────────────────────────────────────
 
-        private UIDomainBridge _bridge;
+        private UIPlayerContext _bridge;
         private WeightPenaltyConfig _weightPenaltyConfig;
         private bool _isInitialized;
 
@@ -66,7 +67,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         // ─────────────────────────────────────────────────────────────────────
         #region Public API
 
-        public void Initialize(UIDomainBridge bridge)
+        public void Initialize(UIPlayerContext bridge)
         {
             _bridge = bridge;
 
@@ -85,7 +86,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _isInitialized = true;
         }
 
-        public void RefreshForNewPlayer(UIDomainBridge bridge)
+        public void RefreshForNewPlayer(UIPlayerContext bridge)
         {
             HookBridgeEvents(false);
             _bridge = bridge;

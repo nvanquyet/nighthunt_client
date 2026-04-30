@@ -51,6 +51,10 @@ namespace NightHunt.Gameplay.Objective
         public string ObjectiveName => objectiveName;
         public bool  IsCompleted   => _syncIsCompleted.Value;
         public float Progress      => _syncProgress.Value; // Clients read this for UI
+        public int ControllingTeamId => _syncControllingTeam.Value;
+        public bool IsContested => _syncControllingTeam.Value == -2;
+        public float CaptureRadius => captureRadius;
+        public MatchPhaseState ActivePhase => _activePhase;
 
         // ── Server Runtime ──
         private float _scoreAccumulator = 0f;

@@ -75,7 +75,14 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
             }
 
-            WeaponSlotType slot = FindAvailableSlot();
+            if (TryGetSlotForInstance(instanceID, out var existingSlot))
+            {
+                if (_activeSlot.Value != existingSlot)
+                    _activeSlot.Value = existingSlot;
+                return;
+            }
+
+            WeaponSlotType slot = FindAvailableSlot(def);
             if (_weapons.ContainsKey(slot))
                 UnequipWeaponServer(slot);
 
@@ -92,10 +99,45 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
             }
 
+            if (!CanEquipDefinitionInSlot(def, targetSlot))
+            {
+                Debug.LogWarning($"[WeaponSystem] EquipWeaponToSlot: '{def.DisplayName}' cannot equip to {targetSlot}");
+                return;
+            }
+
+            if (TryGetSlotForInstance(instanceID, out var existingSlot))
+            {
+                if (existingSlot == targetSlot)
+                {
+                    if (_activeSlot.Value != targetSlot)
+                        _activeSlot.Value = targetSlot;
+                    return;
+                }
+
+                _weapons.Remove(existingSlot);
+                _weaponCache.Remove(existingSlot);
+                OnWeaponUnequipped?.Invoke(existingSlot, inst);
+            }
+
             if (_weapons.ContainsKey(targetSlot))
                 UnequipWeaponServer(targetSlot);
 
             AssignToSlot(targetSlot, instanceID, inst, def);
+        }
+
+        private bool TryGetSlotForInstance(string instanceID, out WeaponSlotType slot)
+        {
+            foreach (var kvp in _weapons)
+            {
+                if (kvp.Value == instanceID)
+                {
+                    slot = kvp.Key;
+                    return true;
+                }
+            }
+
+            slot = WeaponSlotType.None;
+            return false;
         }
 
         [Server]
@@ -194,18 +236,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 // else: attachments remain in the AttachedItems array and drop with the weapon
             }
 
-            // Step 3: Strip empty attachment slot arrays to avoid ghost allocation on pickup.
-            if (inst.AttachedItems != null)
-            {
-                bool hasAny = false;
-                for (int i = 0; i < inst.AttachedItems.Length; i++)
-                {
-                    if (!string.IsNullOrEmpty(inst.AttachedItems[i]))
-                    { hasAny = true; break; }
-                }
-                if (!hasAny)
-                    inst.AttachedItems = null;
-            }
+            ItemInstanceFactory.StripEmptyAttachmentSlots(inst);
 
             // Step 4: Build the world-item snapshot.
             // Use ToData() directly — preserves the original InstanceID and all current

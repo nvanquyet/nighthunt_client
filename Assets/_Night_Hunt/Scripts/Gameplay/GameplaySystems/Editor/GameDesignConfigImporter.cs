@@ -184,6 +184,8 @@ namespace NightHunt.GameplaySystems.Editor
                 new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.Accuracy,      DefaultValue = accuracy,              MinValue = 0,   MaxValue = 100  },
                 new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.SpreadBase,    DefaultValue = w.SpreadBase,          MinValue = 0,   MaxValue = 10   },
                 new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.SpreadPenalty, DefaultValue = w.SpreadMoveMul * 10f, MinValue = 0,   MaxValue = 100  },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.RecoilHorizontal, DefaultValue = w.RecoilHorizontal, MinValue = 0,   MaxValue = 30   },
+                new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.RecoilVertical,   DefaultValue = w.RecoilVertical,   MinValue = 0,   MaxValue = 30   },
                 new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.ReloadSpeed,   DefaultValue = w.ReloadTime,          MinValue = 0,   MaxValue = 20   },
                 new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.MagazineSize,  DefaultValue = w.MagazineSize,        MinValue = 1,   MaxValue = 300  },
                 new ItemStatConfig.ItemStatDefinition { Type = ItemStatType.MaxAmmo,       DefaultValue = w.ReserveAmmo,         MinValue = 0,   MaxValue = 2000 },

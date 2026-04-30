@@ -104,6 +104,13 @@ namespace NightHunt.Gameplay.Character
 
         // ===== STATS =====
         protected IPlayerStatSystem _playerStatSystem;
+
+        // ===== RUNTIME MODIFIERS =====
+        // Applied on top of the stat-system value every tick.
+        // Call SetSpeedMultiplier() from zones, buffs, item effects, weight events, etc.
+        // Multiple sources: chain-multiply before calling, or keep per-source and rebuild.
+        private float _runtimeSpeedMultiplier       = 1f;
+        private float _runtimeStaminaDrainMultiplier = 1f;
         
         // ===== ANIMATION EVENTS =====
         public event System.Action OnJumpTriggered;
@@ -127,6 +134,7 @@ namespace NightHunt.Gameplay.Character
         // and invisible on DS (< 0.5 s at 50 Hz tickRate before real grounded detection
         // takes over).  Jump inputs in the grace window still work (positive vertVel).
         private int _spawnGraceTicksRemaining;
+        private bool _spawnGraceIgnoreDownwardClampUntilGrounded;
 
         // ===== NON OWNER INTERPOLATION =====
         protected Vector3 _targetPosition;
@@ -189,6 +197,12 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         protected virtual bool IsRollBlocked(Vector3 direction, float stepDistance) => false;
 
+        /// <summary>
+        /// Called every simulation tick when the crouch state changes.
+        /// Override in derived physics implementations to resize the collider.
+        /// </summary>
+        protected virtual void UpdateCrouchPhysics(bool isCrouching) { }
+
         #endregion
 
         #region UNITY LIFECYCLE
@@ -242,6 +256,7 @@ namespace NightHunt.Gameplay.Character
             // needed but is harmless.  On DS it bridges the gap between spawn and the
             // first authoritative reconcile from the server.
             _spawnGraceTicksRemaining = 30;
+            _spawnGraceIgnoreDownwardClampUntilGrounded = false;
 
             _cinemachineCamera ??= ComponentResolver.Find<CinemachineCamera>(this)
         .OnSelf()
@@ -467,14 +482,27 @@ namespace NightHunt.Gameplay.Character
 
             // ── Speed modifier ────────────────────────────────────────────────────
             float speed = GetBaseSpeed();
+
+            // Apply weight-based movement penalty from the stat system.
+            // IPlayerStatSystem.GetMovementSpeedMultiplier() returns a 0-1 multiplier
+            // that factors in carry weight vs. capacity (0.1 minimum at extreme overweight).
+            if (_playerStatSystem != null)
+                speed *= _playerStatSystem.GetMovementSpeedMultiplier();
+
+            // Apply runtime multipliers from zones, buffs, consumables, penalties, etc.
+            speed *= _runtimeSpeedMultiplier;
+
             bool canSprint = data.Sprint && _stamina > GetMinStaminaToSprint();
             if      (canSprint)    speed *= GetSprintSpeedMultiplier();
             else if (data.Crouch)  speed *= movementSettings.crouchMultiplier;
 
+            // Notify physics implementation when crouch state changes (e.g. capsule resize).
+            UpdateCrouchPhysics(data.Crouch);
+
             // ── Stamina ───────────────────────────────────────────────────────────
             if (canSprint)
             {
-                _stamina = Mathf.Max(0f, _stamina - GetStaminaDrainRate() * dt);
+                _stamina = Mathf.Max(0f, _stamina - GetStaminaDrainRate() * _runtimeStaminaDrainMultiplier * dt);
                 _staminaRecoveryTimer = 0f;
             }
             else if (!_isRolling)
@@ -552,7 +580,7 @@ namespace NightHunt.Gameplay.Character
             if (_isRolling)
             {
                 bool done = (movementSettings.rollMode == RollMode.Leap
-                    ? grounded && _verticalVelocity <= 0f     // Leap ends on landing
+                    ? rawGrounded && _verticalVelocity <= 0f  // Leap ends on actual landing
                     : ((_rollTimer -= dt) <= 0f));             // Dash ends on timer
 
                 if (done) { _isRolling = false; _rollTimer = 0f; _rollDir = Vector3.zero; }
@@ -568,7 +596,11 @@ namespace NightHunt.Gameplay.Character
                 _rollDir   = inputDir.sqrMagnitude > 0.01f ? (camRot * inputDir).normalized : transform.forward;
 
                 if (movementSettings.rollMode == RollMode.Leap && movementSettings.rollLeapHeight > 0f)
+                {
                     _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.rollLeapHeight);
+                    _spawnGraceIgnoreDownwardClampUntilGrounded = true;
+                    Debug.Log($"[ROLL_FIX] Leap roll start -> allow falling during spawn grace. vertVel={_verticalVelocity:F3}");
+                }
                 
                 OnRollTriggered?.Invoke(); // Fire animation event
             }
@@ -592,7 +624,7 @@ namespace NightHunt.Gameplay.Character
 
             // Gravity first; jump overrides after — ensures jump launch velocity is unmodified this tick.
             float vertVelBefore = _verticalVelocity;
-            if (grounded && _verticalVelocity <= 0f)
+            if (rawGrounded && _verticalVelocity <= 0f)
             {
                 _verticalVelocity = -movementSettings.groundedStickDownVelocity;
             }
@@ -609,7 +641,7 @@ namespace NightHunt.Gameplay.Character
             // Positive velocity (jump) is NOT clamped — jump still works in grace window.
             // IsReplaying guard: reconcile replay calls SimulateMovement multiple times in one
             // frame; without the guard the counter drains N× faster than real time.
-            if (_spawnGraceTicksRemaining > 0 && !IsReplaying(state))
+            if (_spawnGraceTicksRemaining > 0 && !IsReplaying(state) && !_spawnGraceIgnoreDownwardClampUntilGrounded)
             {
                 _spawnGraceTicksRemaining--;
                 if (_verticalVelocity < 0f)
@@ -619,7 +651,15 @@ namespace NightHunt.Gameplay.Character
             if (data.Jump && grounded && movementSettings.enableJump)
             {
                 _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.jumpHeight);
+                _spawnGraceIgnoreDownwardClampUntilGrounded = true;
+                Debug.Log($"[ROLL_FIX] Jump start -> allow falling during spawn grace. vertVel={_verticalVelocity:F3}");
                 OnJumpTriggered?.Invoke(); // Fire animation event
+            }
+
+            if (rawGrounded && _verticalVelocity <= 0f && _spawnGraceIgnoreDownwardClampUntilGrounded)
+            {
+                _spawnGraceIgnoreDownwardClampUntilGrounded = false;
+                Debug.Log("[ROLL_FIX] Landed on raw ground -> restore spawn grace downward clamp.");
             }
 
             // ── [DIAG] FINAL MOVEMENT ─────────────────────────────────────────────
@@ -834,10 +874,22 @@ namespace NightHunt.Gameplay.Character
         public float GetCameraYaw() => _yaw;
 
         // SetWeightPenalty / SetStaminaDrainMultiplier are interface stubs.
-        // Weight penalty logic lives in MovementUtils but is currently not wired here.
-        // Implement these when the weight system drives movement speed.
-        public virtual void SetWeightPenalty(float penalty) { }
-        public virtual void SetStaminaDrainMultiplier(float multiplier) { }
+        // Weight penalty logic now read directly from IPlayerStatSystem.GetMovementSpeedMultiplier().
+        public virtual void SetWeightPenalty(float penalty) { /* handled via stat system */ }
+        public virtual void SetStaminaDrainMultiplier(float multiplier)
+        {
+            _runtimeStaminaDrainMultiplier = Mathf.Max(0f, multiplier);
+        }
+
+        /// <summary>
+        /// Set a flat speed multiplier applied every tick on top of the stat-system value.
+        /// Use for zones (slow zone = 0.5), buffs (speed boost = 1.3), carry-weight penalties, etc.
+        /// Caller is responsible for resetting to 1f when the effect ends.
+        /// </summary>
+        public void SetSpeedMultiplier(float multiplier)
+        {
+            _runtimeSpeedMultiplier = Mathf.Max(0f, multiplier);
+        }
 
         public MovementState GetCurrentState()
         {

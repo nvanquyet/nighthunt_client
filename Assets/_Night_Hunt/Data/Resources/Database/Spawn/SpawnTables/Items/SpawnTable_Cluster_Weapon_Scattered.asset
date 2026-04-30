@@ -14,10 +14,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Mode: 0
   FixedEntries: []
-  RandomEntries: []
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: b14037a3120cbbc4882f1aa8db781dca, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 214de9bd2ed6e8a49a96592e7b13ec1f, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 930f5770eab2bb94cb97e6cab81297b3, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 70235c38294d7ec47a68c9568a71e5c2, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
   MinRandomCount: 1
-  MaxRandomCount: 1
+  MaxRandomCount: 2
   RollOnOpen: 1
   DropToWorldOnOpen: 0
   MinTotalItems: 1
-  MaxTotalItems: 1
+  MaxTotalItems: 3

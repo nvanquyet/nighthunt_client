@@ -13,11 +13,27 @@ MonoBehaviour:
   m_Name: SpawnTable_Zone_Clear_Beacon
   m_EditorClassIdentifier: 
   Mode: 2
-  FixedEntries: []
-  RandomEntries: []
-  MinRandomCount: 0
-  MaxRandomCount: 1
+  FixedEntries:
+  - Item: {fileID: 11400000, guid: 657c24753fae3bc46b95280a23452530, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: 4abd8a463f09bfb44963e31e87943822, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 7c5d8284d2763614e9bd83f6cbe75714, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: d00bb1a76c06474438b0ae0d9d400ba1, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  MinRandomCount: 1
+  MaxRandomCount: 3
   RollOnOpen: 1
   DropToWorldOnOpen: 0
-  MinTotalItems: 2
-  MaxTotalItems: 3
+  MinTotalItems: 1
+  MaxTotalItems: 4

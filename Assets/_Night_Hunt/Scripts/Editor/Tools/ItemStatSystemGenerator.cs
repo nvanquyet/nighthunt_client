@@ -96,7 +96,7 @@ namespace NightHunt.Editor.Tools
                 armor: 0f, weight: 0.8f,
                 playerMods: new[]{ Mod(PlayerStatType.MovementSpeed, ModifierType.Percentage, -0.02f, "Pistol draw") });
 
-            count += MakeWeapon("weapon_smg_mp5",       "MP5 SMG",
+            count += MakeWeapon("weapon_smg_mp5",       "SMG",
                 WeaponClass.SMG,
                 damage: 22f, fireRate: 700f, accuracy: 0.62f, spreadBase: 4f, spreadPenalty: 1.2f, spreadRecovery: 10f,
                 mag: 30, maxAmmo: 300, drawSpeed: 0.5f, reloadSpeed: 2.2f,
@@ -124,7 +124,7 @@ namespace NightHunt.Editor.Tools
                 armor: 0f, weight: 4.5f,
                 playerMods: new[]{ Mod(PlayerStatType.MovementSpeed, ModifierType.Percentage, -0.12f, "Sniper carry") });
 
-            count += MakeWeapon("weapon_melee_knife",   "Combat Knife",
+            count += MakeWeapon("weapon_melee_knife",   "Melee",
                 WeaponClass.Melee,
                 damage: 60f, fireRate: 120f, accuracy: 1.0f, spreadBase: 0f, spreadPenalty: 0f, spreadRecovery: 0f,
                 mag: 0, maxAmmo: 0, drawSpeed: 0.25f, reloadSpeed: 0f,
@@ -145,6 +145,8 @@ namespace NightHunt.Editor.Tools
         {
             string configAssetPath = $"{ConfigPath}/Weapons/Stat_{id}.asset";
             string defAssetPath    = $"{BasePath}/Weapons/Def_{id}.asset";
+            float recoilHorizontal = Mathf.Max(0f, spreadBase * 0.35f);
+            float recoilVertical   = Mathf.Max(0f, spreadBase * 0.2f);
 
             // WeaponStatConfig
             var cfg = CreateOrLoad<WeaponStatConfig>(configAssetPath);
@@ -156,6 +158,8 @@ namespace NightHunt.Editor.Tools
                 Stat(ItemStatType.SpreadBase,      spreadBase,     0, 90),
                 Stat(ItemStatType.SpreadPenalty,   spreadPenalty,  0, 30),
                 Stat(ItemStatType.SpreadRecovery,  spreadRecovery, 0, 50),
+                Stat(ItemStatType.RecoilHorizontal, recoilHorizontal, 0, 30),
+                Stat(ItemStatType.RecoilVertical,   recoilVertical,   0, 30),
                 Stat(ItemStatType.MagazineSize,    mag,            0, 200),
                 Stat(ItemStatType.MaxAmmo,         maxAmmo,        0, 9999),
                 Stat(ItemStatType.DrawSpeed,       drawSpeed,      0.1f, 5),
@@ -171,7 +175,7 @@ namespace NightHunt.Editor.Tools
             def.StatConfig  = cfg;
             def.WeaponClass = weapClass;
             // Note: BallisticType and FireMode now live on WeaponBase (the prefab component),
-            // not on WeaponDefinition. Assign them on the HeldPrefab WeaponBase component.
+            // not on WeaponDefinition. Assign them on the VisualPrefab WeaponBase component.
             EditorUtility.SetDirty(def);
 
             Debug.Log($"[ItemGen] Weapon: {displayName} ({id})");
@@ -380,8 +384,10 @@ namespace NightHunt.Editor.Tools
             count += MakeAttachment("att_grip_vertical",  "Vertical Grip",     AttachmentSlotType.Grip,
                 itemMods: new[]
                 {
-                    ItemMod(ItemStatType.SpreadPenalty, ModifierType.Percentage,-0.10f,"Grip spread pen"),
-                    ItemMod(ItemStatType.Accuracy,      ModifierType.Percentage, 0.05f,"Grip accuracy"),
+                    ItemMod(ItemStatType.SpreadPenalty,    ModifierType.Percentage, -0.10f, "Grip spread pen"),
+                    ItemMod(ItemStatType.RecoilHorizontal, ModifierType.Percentage, -0.15f, "Grip horizontal recoil"),
+                    ItemMod(ItemStatType.RecoilVertical,   ModifierType.Percentage, -0.20f, "Grip vertical recoil"),
+                    ItemMod(ItemStatType.Accuracy,         ModifierType.Percentage,  0.05f, "Grip accuracy"),
                 },
                 weight: 0.15f);
 

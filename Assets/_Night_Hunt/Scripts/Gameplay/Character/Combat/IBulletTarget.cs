@@ -10,7 +10,7 @@ namespace NightHunt.Gameplay.Character.Combat
     /// before falling back to a physics raycast.
     ///
     /// Typical implementors: <c>BulletTargetMarker</c> (generic MonoBehaviour),
-    /// or directly on domain types (BeaconPlaceable, WorldContainer, …).
+    /// or directly on domain types (DeployablePlacementHandler, WorldContainer, ...).
     ///
     /// IMPORTANT — registration lifecycle:
     ///   Call <c>BulletTargetRegistry.Register(this)</c>   on OnEnable  / OnStartServer.

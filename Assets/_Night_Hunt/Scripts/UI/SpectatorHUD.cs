@@ -50,7 +50,15 @@ namespace NightHunt.UI
         [Tooltip("Shows the spectated player's currently active weapon name.")]
         [SerializeField] private TextMeshProUGUI _weaponNameText;
 
-        [Header("Navigation Hint")]
+        [Header("Navigation — Mobile")]
+        [Tooltip("Root object shown only on mobile platforms; contains Prev/Next buttons.")]
+        [SerializeField] private GameObject _mobileNavRoot;
+        [SerializeField] private Button     _prevButton;
+        [SerializeField] private Button     _nextButton;
+
+        [Header("Navigation — Desktop")]
+        [Tooltip("Root object shown only on desktop platforms; contains the keyboard hint label.")]
+        [SerializeField] private GameObject     _desktopNavRoot;
         [Tooltip("Static label shown while spectating. Set text in Inspector or leave blank to use default.")]
         [SerializeField] private TextMeshProUGUI _navigationHintText;
 
@@ -68,6 +76,16 @@ namespace NightHunt.UI
 
             if (_navigationHintText != null && string.IsNullOrEmpty(_navigationHintText.text))
                 _navigationHintText.text = DefaultNavigationHint;
+
+            // Show mobile or desktop navigation controls based on current platform.
+            bool isMobile = Application.isMobilePlatform;
+            if (_mobileNavRoot  != null) _mobileNavRoot.SetActive(isMobile);
+            if (_desktopNavRoot != null) _desktopNavRoot.SetActive(!isMobile);
+
+            if (_prevButton != null)
+                _prevButton.onClick.AddListener(() => SpectateManager.Instance?.SwitchSpectatedPlayer(false));
+            if (_nextButton != null)
+                _nextButton.onClick.AddListener(() => SpectateManager.Instance?.SwitchSpectatedPlayer(true));
         }
 
         private void OnEnable()

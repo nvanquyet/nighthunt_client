@@ -11,21 +11,27 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.UI;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
     /// Central controller for drag-and-drop, ghost preview, and optimistic UI updates.
+    ///
+    /// FIXES applied:
+    ///   - Ghost pointer offset now correctly computed so item doesn't jump on drag start.
+    ///   - _allSlots cleaned up properly when views are unregistered.
+    ///   - ClearState() no longer leaves stale slot references.
     /// </summary>
     public class DragDropController : Singleton<DragDropController>
     {
+        private const string DragLogPrefix = "[DRAG_FIX]";
 
         [Header("Ghost")] [SerializeField] private DragDropGhost _ghostPrefab;
         [SerializeField] private Canvas _dragCanvas;
 
         [Header("Dialogs")] [SerializeField] private DropQuantityDialog _dropQuantityDialog;
 
-        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         private DragDropGhost _activeGhost;
         private ItemSlotView  _sourceView;
@@ -53,6 +59,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private ItemSlotView _currentHoverView;
 
+        // FIX: Ghost pointer offset — stores the delta between the slot centre and the actual
+        // pointer position in canvas-local space so the ghost doesn't jump on drag start.
+        private Vector2 _ghostPointerOffset;
+
         // FIX Bug 5: Guard flag – OnDrop fires before OnEndDrag in Unity EventSystem.
         // When NotifyDropTarget succeeds, we set this to prevent EndDrag from starting
         // AnimateCancelAndRestore which would restore the source slot visual incorrectly.
@@ -62,7 +72,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             if (_dropQuantityDialog == null)
             {
-                // Scene-level UI singleton � acceptable lazy fallback for a missing Inspector assignment.
+                // Scene-level UI singleton — acceptable lazy fallback for a missing Inspector assignment.
                 _dropQuantityDialog = FindFirstObjectByType<DropQuantityDialog>(FindObjectsInactive.Include);
             }
 
@@ -83,7 +93,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public void UnregisterSlotView(ItemSlotView view)
         {
             if (view == null) return;
-            _allSlots.Remove(view.SlotId);
+
+            // FIX: Only remove the entry if it still points to THIS view instance.
+            // Without this guard, re-registering a new view for the same SlotId
+            // (e.g. after teardown/rebuild) and then unregistering the old view
+            // would accidentally remove the freshly registered entry.
+            if (_allSlots.TryGetValue(view.SlotId, out var registered) && registered == view)
+                _allSlots.Remove(view.SlotId);
         }
 
         /// <summary>
@@ -118,6 +134,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _targetStateSnapshot = null;
             _dropHandled = false;
             _currentHoverView = null;
+            _sourceId = default;
         }
 
         #region Drag Flow
@@ -142,18 +159,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _sourceStateSnapshot = CloneState(sourceView.State);
 
             SpawnGhost(sourceView, eventData);
+            if (_activeGhost == null)
+            {
+                Log($"{DragLogPrefix} BeginDrag blocked - no drag canvas/ghost available.");
+                ClearState();
+                return;
+            }
+
             sourceView.SetEmptyState();
+            Log($"{DragLogPrefix} BeginDrag source={_sourceId} pointer={eventData.position}");
 
-            // Hide tooltip and context menu at drag start (per UISlotLayoutConfig config).
-            var uiConfig = UISlotLayoutConfig.Instance;
-            if (uiConfig == null || uiConfig.HideContextMenuOnDragStart)
-                FindFirstObjectByType<ItemContextMenu>(FindObjectsInactive.Include)?.Hide();
-
+            // Hide tooltip at drag start.
             FindFirstObjectByType<ItemTooltip>(FindObjectsInactive.Include)?.HideIfNotDragVisible();
-
-            // Inline attachment sub-slots are registered like any other slot.
-            // The standard hover highlight (_currentHoverView) handles compatible-slot
-            // visual feedback when dragging over them — no separate panel needed.
         }
 
         public void UpdateDrag(PointerEventData eventData)
@@ -161,13 +178,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_activeGhost == null || _dragCanvas == null)
                 return;
 
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                (RectTransform)_dragCanvas.transform,
-                eventData.position,
-                _dragCanvas.worldCamera,
-                out var localPoint);
-
-            _activeGhost.RectTransform.localPosition = localPoint;
+            MoveGhostToPointer(eventData);
 
             // Preview-highlight the valid drop target.
             if (_raycaster != null)
@@ -227,16 +238,46 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 // Ghost was never spawned or already destroyed – restore source visual
                 _sourceView?.SetState(_sourceStateSnapshot);
+                Log($"{DragLogPrefix} EndDrag without ghost -> restore source={_sourceId}");
                 ClearState();
                 return;
             }
 
             // FIX Bug 5: NotifyDropTarget already handled this drop (OnDrop fires BEFORE OnEndDrag).
-            // Do not start a second coroutine – AnimateSuccessAndDestroy is already running.
             if (_dropHandled)
                 return;
 
-            // No valid drop target was notified – cancel drag and restore source
+            // --- WORLD DROP LOGIC ---
+            bool droppedOutsideUI = true;
+            if (_raycaster != null)
+            {
+                var results = new List<RaycastResult>();
+                _raycaster.Raycast(eventData, results);
+                foreach (var r in results)
+                {
+                    if (r.gameObject.GetComponentInParent<InventoryScreen>() != null ||
+                        r.gameObject.GetComponentInParent<WeaponEquipmentPanel>() != null)
+                    {
+                        droppedOutsideUI = false;
+                        break;
+                    }
+                }
+            }
+
+            if (droppedOutsideUI && _sourceView != null && _sourceStateSnapshot?.Item != null)
+            {
+                var action = new DropAction { Source = _sourceId, Target = _sourceId, Type = DropActionType.DropToWorld };
+                _dropHandled = true;
+                Log($"{DragLogPrefix} EndDrag -> world drop source={_sourceId} pointer={eventData.position}");
+
+                ApplyLocalAction(action, _sourceStateSnapshot, null);
+                StartCoroutine(AnimateSuccessAndDestroy(_activeGhost.transform.position));
+                ApplyBackendAction(action, _sourceStateSnapshot, null);
+                return;
+            }
+            // ------------------------
+
+            Log($"{DragLogPrefix} EndDrag -> cancel source={_sourceId} pointer={eventData.position}");
             StartCoroutine(AnimateCancelAndRestore());
         }
 
@@ -253,21 +294,17 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (!_validator.CanDrop(_sourceId, targetId, sourceState, targetState, out var action))
             {
+                Log($"{DragLogPrefix} Invalid drop source={_sourceId} target={targetId}");
+                ShowInvalidDropToast(sourceState?.Item, targetId);
                 StartCoroutine(AnimateCancelAndRestore());
                 return;
             }
 
-            // Mark drop as handled BEFORE coroutine – EndDrag checks this flag
-            // (OnDrop fires before OnEndDrag per Unity EventSystem spec)
             _dropHandled = true;
+            Log($"{DragLogPrefix} NotifyDropTarget source={_sourceId} target={targetId} action={action.Type}");
 
-            // Optimistic local apply
             ApplyLocalAction(action, sourceState, targetState);
-
-            // Animate ghost to target then destroy
             StartCoroutine(AnimateSuccessAndDestroy(targetView.transform.position));
-
-            // Send to backend
             ApplyBackendAction(action, sourceState, targetState);
         }
 
@@ -277,26 +314,53 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void SpawnGhost(ItemSlotView sourceView, PointerEventData eventData)
         {
-            if (_ghostPrefab == null || _dragCanvas == null)
+            if (_dragCanvas == null)
+                _dragCanvas = ResolveDragCanvas(sourceView);
+
+            if (_dragCanvas == null)
                 return;
 
-            _activeGhost = Instantiate(_ghostPrefab, _dragCanvas.transform);
+            _activeGhost = _ghostPrefab != null
+                ? Instantiate(_ghostPrefab, _dragCanvas.transform)
+                : CreateRuntimeGhost(_dragCanvas.transform);
             if (_activeGhost == null)
                 return;
             _activeGhost.gameObject.SetActive(true);
             _activeGhost.SetupFromSlot(sourceView);
 
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                (RectTransform)_dragCanvas.transform,
-                eventData.position,
-                _dragCanvas.worldCamera,
-                out var localPoint);
-
+            var canvasRect = (RectTransform)_dragCanvas.transform;
             var rt = _activeGhost.RectTransform;
-            rt.localPosition = localPoint;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = sourceView.RectTransform.rect.size;
+
+            // FIX: Compute the canvas-local position of both the pointer and the slot centre.
+            // The difference is stored as _ghostPointerOffset so the ghost appears to stay
+            // "attached" to the exact pixel the user clicked rather than snapping to slot centre.
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect,
+                eventData.position,
+                eventData.pressEventCamera,
+                out var pointerLocalPoint);
+
+            var slotCentre = Vector2.zero;
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    canvasRect,
+                    RectTransformUtility.WorldToScreenPoint(eventData.pressEventCamera, sourceView.RectTransform.position),
+                    eventData.pressEventCamera,
+                    out var slotLocalPoint))
+            {
+                slotCentre = slotLocalPoint;
+            }
+
+            // offset = slotCentre - pointerPosition (in canvas-local space)
+            // Applied in MoveGhostToPointer: ghostPos = pointerLocal + offset = slotCentre
+            // This keeps the grab point stable under the finger/cursor.
+            _ghostPointerOffset = slotCentre - pointerLocalPoint;
+            rt.anchoredPosition = pointerLocalPoint + _ghostPointerOffset;
+
             UITweenUtil.ScaleInstant(rt, 1f);
 
-            // SetupFromSlot đã set alpha = 1f, không cần SetAlpha(0f) nữa
             var cg = ComponentResolver.Find<CanvasGroup>(_activeGhost)
                 .OnSelf()
                 .InChildren()
@@ -308,18 +372,50 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
         }
 
+        private static Canvas ResolveDragCanvas(ItemSlotView sourceView)
+        {
+            if (sourceView == null)
+                return null;
+
+            var canvas = sourceView.GetComponentInParent<Canvas>();
+            if (canvas != null)
+                return canvas.rootCanvas != null ? canvas.rootCanvas : canvas;
+
+            return FindFirstObjectByType<Canvas>(FindObjectsInactive.Include);
+        }
+
+        private static DragDropGhost CreateRuntimeGhost(Transform parent)
+        {
+            var go = new GameObject("Runtime Drag Ghost", typeof(RectTransform), typeof(CanvasGroup), typeof(Image), typeof(DragDropGhost));
+            go.transform.SetParent(parent, false);
+            return go.GetComponent<DragDropGhost>();
+        }
+
+        private void MoveGhostToPointer(PointerEventData eventData)
+        {
+            if (_activeGhost == null || _dragCanvas == null)
+                return;
+
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    (RectTransform)_dragCanvas.transform,
+                    eventData.position,
+                    eventData.pressEventCamera,
+                    out var localPoint))
+            {
+                _activeGhost.RectTransform.anchoredPosition = localPoint + _ghostPointerOffset;
+            }
+        }
+
         private IEnumerator AnimateCancelAndRestore()
         {
-            // Use the new SnapBackToOrigin coroutine on the ghost (reads duration from config).
             if (_activeGhost != null && _sourceView != null)
             {
-                float snapDuration = UISlotLayoutConfig.Instance?.GhostSnapBackDuration ?? 0.18f;
-                // Wait for the snap-back to finish (SnapBackToOrigin auto-destroys the ghost).
+                var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+                float snapDuration = config?.GhostSnapBackDuration ?? 0.18f;
                 yield return _activeGhost.SnapBackToOrigin(
                     _sourceView.transform as RectTransform, snapDuration);
             }
 
-            // Restore source slot state.
             if (_sourceView != null && _sourceStateSnapshot != null)
                 _sourceView.SetState(_sourceStateSnapshot);
 
@@ -352,7 +448,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private void ClearState()
         {
             // Clear IsValidDropTarget highlight on the last hovered slot BEFORE nulling the reference.
-            // Without this the slot keeps its green highlight after drag ends (cancel or success).
             if (_currentHoverView != null)
             {
                 var clearState = CloneState(_currentHoverView.State);
@@ -367,6 +462,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             _activeGhost          = null;
             _sourceView           = null;
+            _sourceId             = default;
             _sourceStateSnapshot  = null;
             _targetStateSnapshot  = null;
             _dropHandled          = false;
@@ -396,7 +492,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     break;
 
                 case DropActionType.Stack:
-                    // Optimistic: Clear source, update target quantity
                     if (sourceView != null) sourceView.SetEmptyState();
                     if (targetView != null && targetState != null && sourceState != null)
                     {
@@ -410,49 +505,38 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                             targetView.SetState(newState);
                         }
                     }
-
                     break;
 
                 case DropActionType.Equip:
-                    // Optimistic: clear inventory source, immediately preview item in equipment slot.
-                    // Server OnItemEquipped confirms and may override if validation fails.
                     if (sourceView != null) sourceView.SetEmptyState();
                     if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
                     break;
 
                 case DropActionType.EquipWeapon:
-                    // Optimistic: clear inventory source, immediately preview weapon in weapon slot.
-                    // If slot was already occupied, OnWeaponUnequipped(old) will fire and restore displaced weapon.
                     if (sourceView != null) sourceView.SetEmptyState();
                     if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
                     break;
 
                 case DropActionType.Unequip:
-                    // Optimistic: clear equipment source, show item in target inventory slot.
                     if (sourceView != null) sourceView.SetEmptyState();
                     if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
                     break;
 
                 case DropActionType.UnequipWeapon:
-                    // Optimistic: clear weapon slot source, show weapon in target inventory slot.
                     if (sourceView != null) sourceView.SetEmptyState();
                     if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
                     break;
 
                 case DropActionType.Detach:
-                    // Optimistic: clear attachment slot source, preview item in target inventory slot.
                     if (sourceView != null) sourceView.SetEmptyState();
                     if (targetView != null && sourceState != null) targetView.SetState(CloneState(sourceState));
                     break;
 
                 case DropActionType.Attach:
+                case DropActionType.LootToInventory:
                 case DropActionType.DropToWorld:
-                    // Backend events fully drive these states (world spawn, item deletion).
-                    // Only clear source so the item feels like it has left.
                     if (sourceView != null) sourceView.SetEmptyState();
                     break;
-
-                
             }
         }
 
@@ -479,14 +563,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     break;
 
                 case DropActionType.Stack:
-                    // Stack items onto the target slot.
                     if (action.Source.Type == UISlotType.Inventory &&
                         action.Target.Type == UISlotType.Inventory &&
                         targetState != null && targetState.Item != null)
                     {
                         bridge.Inventory.StackItems(targetState.Item.InstanceID, item.InstanceID);
                     }
-
                     break;
 
                 case DropActionType.Swap:
@@ -494,15 +576,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         action.Target.Type == UISlotType.Inventory &&
                         targetState != null && targetState.Item != null)
                     {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][SwapItems] " +
-                                      $"item1={item.DefinitionID} ({item.InstanceID}) " +
-                                      $"item2={targetState.Item.DefinitionID} ({targetState.Item.InstanceID}) " +
-                                      $"from={action.Source} to={action.Target}");
-                        }
-
+                        LogDebug($"[UI→Server][SwapItems] item1={item.DefinitionID} ({item.InstanceID}) " +
+                                 $"item2={targetState.Item.DefinitionID} ({targetState.Item.InstanceID}) " +
+                                 $"from={action.Source} to={action.Target}");
                         bridge.SwapItems(item.InstanceID, targetState.Item.InstanceID);
                     }
                     else if (action.Source.Type == UISlotType.Equipment &&
@@ -510,15 +586,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                              action.Source.EquipmentSlot.HasValue &&
                              action.Target.EquipmentSlot.HasValue)
                     {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][SwapEquipment] " +
-                                      $"slot1={action.Source.EquipmentSlot.Value} " +
-                                      $"slot2={action.Target.EquipmentSlot.Value} " +
-                                      $"from={action.Source} to={action.Target}");
-                        }
-
+                        LogDebug($"[UI→Server][SwapEquipment] slot1={action.Source.EquipmentSlot.Value} " +
+                                 $"slot2={action.Target.EquipmentSlot.Value}");
                         bridge.Equipment.SwapEquipment(
                             action.Source.EquipmentSlot.Value,
                             action.Target.EquipmentSlot.Value);
@@ -528,15 +597,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                              action.Source.WeaponSlot.HasValue &&
                              action.Target.WeaponSlot.HasValue)
                     {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][SwapWeapons] " +
-                                      $"slot1={action.Source.WeaponSlot.Value} " +
-                                      $"slot2={action.Target.WeaponSlot.Value} " +
-                                      $"from={action.Source} to={action.Target}");
-                        }
-
+                        LogDebug($"[UI→Server][SwapWeapons] slot1={action.Source.WeaponSlot.Value} " +
+                                 $"slot2={action.Target.WeaponSlot.Value}");
                         bridge.Weapon.SwapWeapons(
                             action.Source.WeaponSlot.Value,
                             action.Target.WeaponSlot.Value);
@@ -547,7 +609,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                              !string.IsNullOrEmpty(action.Target.ParentInstanceID) &&
                              targetState != null && targetState.Item != null)
                     {
-                        // Swap attachments between the two slots.
                         var attachmentSystem = GetAttachmentSystem();
                         if (attachmentSystem != null)
                         {
@@ -558,91 +619,51 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                 action.Target.Index);
                         }
                     }
-
                     break;
 
                 case DropActionType.Equip:
-                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                    {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                            Debug.Log($"[DragDropController] [UI→Server][Equip] " +
-                                  $"item={item.DefinitionID} ({item.InstanceID}) " +
-                                  $"from={action.Source} to={action.Target}");
-                    }
-
+                    LogDebug($"[UI→Server][Equip] item={item.DefinitionID} ({item.InstanceID}) from={action.Source} to={action.Target}");
                     bridge.EquipItem(item.InstanceID);
                     break;
 
                 case DropActionType.EquipWeapon:
-                    // FIX Bug 2a: use EquipWeaponToSlot so the weapon lands in the exact
-                    // slot the player dragged to, not the first available slot.
                     if (action.Target.WeaponSlot.HasValue)
                     {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][EquipWeapon] "
-                                      + $"item={item.DefinitionID} ({item.InstanceID}) "
-                                      + $"from={action.Source} to={action.Target} slot={action.Target.WeaponSlot.Value}");
-                        }
-
+                        LogDebug($"[UI→Server][EquipWeapon] item={item.DefinitionID} ({item.InstanceID}) slot={action.Target.WeaponSlot.Value}");
                         bridge.EquipWeaponToSlot(item.InstanceID, action.Target.WeaponSlot.Value);
                     }
                     else
                     {
-                        // Fallback: auto-select slot (no specific target slot info)
                         bridge.EquipWeapon(item.InstanceID);
                     }
-
                     break;
 
                 case DropActionType.Unequip:
                     if (action.Source.EquipmentSlot.HasValue)
                     {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][Unequip] " +
-                                      $"slot={action.Source.EquipmentSlot.Value} " +
-                                      $"source={action.Source} target={action.Target}");
-                        }
-
+                        LogDebug($"[UI→Server][Unequip] slot={action.Source.EquipmentSlot.Value}");
                         bridge.UnequipItem(action.Source.EquipmentSlot.Value);
                     }
-
                     break;
 
                 case DropActionType.UnequipWeapon:
                     if (action.Source.WeaponSlot.HasValue)
                     {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][UnequipWeapon] " +
-                                      $"slot={action.Source.WeaponSlot.Value} " +
-                                      $"source={action.Source} target={action.Target}");
-                        }
-
+                        LogDebug($"[UI→Server][UnequipWeapon] slot={action.Source.WeaponSlot.Value}");
                         bridge.UnequipWeapon(action.Source.WeaponSlot.Value);
                     }
-
                     break;
 
-                
-
                 case DropActionType.DropToWorld:
-                    // If stack is large enough (>=3), open the quantity dialog instead of always dropping the full stack.
                     if (item.Quantity > 2 && TryShowDropQuantityDialog(item, qty =>
                             ExecuteDropToWorld(bridge, action.Source, item, qty)))
                     {
                         return;
                     }
-
                     ExecuteDropToWorld(bridge, action.Source, item, item.Quantity);
                     break;
 
                 case DropActionType.Attach:
-                    // Attach item to the attachment slot.
                     if (action.Target.Type == UISlotType.Attachment)
                     {
                         var attachmentSystem = GetAttachmentSystem();
@@ -654,11 +675,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                 action.Target.Index);
                         }
                     }
-
                     break;
 
                 case DropActionType.Detach:
-                    // Detach attachment v�? inventory
                     if (action.Source.Type == UISlotType.Attachment)
                     {
                         var attachmentSystem = GetAttachmentSystem();
@@ -669,22 +688,23 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                                 action.Source.Index);
                         }
                     }
+                    break;
 
+                case DropActionType.LootToInventory:
+                    if (action.Source.Type == UISlotType.Loot)
+                    {
+                        LootContainerUI.Instance?.TakeItem(action.Source.Index, item.Quantity);
+                    }
                     break;
             }
         }
 
-        /// <summary>
-        /// Show the DropQuantityDialog (if assigned) and invoke the callback when the player confirms.
-        /// Returns true if the dialog was shown, false if no dialog is assigned.
-        /// </summary>
         private bool TryShowDropQuantityDialog(ItemInstance item, System.Action<int> onConfirmed)
         {
             var dialog = GetDropQuantityDialog();
             if (dialog == null || item == null || onConfirmed == null)
                 return false;
 
-            // Capture source view + state NOW before they are cleared this/next frame.
             var capturedSourceView  = _sourceView;
             var capturedSourceState = _sourceStateSnapshot != null
                 ? CloneState(_sourceStateSnapshot)
@@ -694,13 +714,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 item,
                 qty =>
                 {
-                    // Confirmed: execute the drop action.
                     Log($"Drop confirmed: {item.DefinitionID} x{qty}");
                     onConfirmed.Invoke(qty);
                 },
                 () =>
                 {
-                    // Cancelled: restore the optimistically-cleared source slot.
                     if (capturedSourceView != null && capturedSourceState != null)
                     {
                         capturedSourceView.SetState(capturedSourceState);
@@ -711,16 +729,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             return true;
         }
 
-        /// <summary>
-        /// Execute the drop-to-world logic for a specific quantity.
-        /// </summary>
         private void ExecuteDropToWorld(IGameplayBridge bridge, UISlotId source, ItemInstance item, int quantity)
         {
             if (bridge == null || item == null || quantity <= 0)
                 return;
 
-            // BUG 4 FIX: support drop-to-world from any source slot.
-            // For non-inventory sources, unequip/detach first then drop.
             switch (source.Type)
             {
                 case UISlotType.Inventory:
@@ -730,11 +743,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 case UISlotType.Equipment:
                     if (source.EquipmentSlot.HasValue)
                     {
-                        // Unequip (detaches attachments) then drop from inventory
                         bridge.UnequipItem(source.EquipmentSlot.Value);
                         bridge.DropItem(item.InstanceID, quantity);
                     }
-
                     break;
 
                 case UISlotType.Weapon:
@@ -743,11 +754,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                         bridge.UnequipWeapon(source.WeaponSlot.Value);
                         bridge.DropItem(item.InstanceID, quantity);
                     }
-
                     break;
 
                 case UISlotType.Attachment:
-                    // Detach to inventory first, then drop
                     var attachSys = GetAttachmentSystem();
                     if (attachSys != null && !string.IsNullOrEmpty(source.ParentInstanceID))
                         attachSys.DetachItem(source.ParentInstanceID, source.Index);
@@ -760,29 +769,15 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
         }
 
-        /// <summary>
-        /// Execute the trash logic for a specific quantity.
-        /// </summary>
         private void ExecuteTrash(IGameplayBridge bridge, UISlotId source, ItemInstance item, int quantity)
         {
             if (bridge == null || item == null || quantity <= 0)
                 return;
 
-            // Trash path differs by source slot type:
-            // - Inventory: remove directly from inventory.
-            // - Equipment / Weapon: unequip first, then remove from inventory.
-            // - Attachment: detach to inventory (if system present) — user can then trash from inventory.
             switch (source.Type)
             {
                 case UISlotType.Inventory:
-                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                    {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                            Debug.Log($"[DragDropController] [UI→Server][Trash Inventory] " +
-                                  $"item={item.DefinitionID} ({item.InstanceID}) " +
-                                  $"from={source} qty={quantity}");
-                    }
-
+                    LogDebug($"[UI→Server][Trash Inventory] item={item.DefinitionID} ({item.InstanceID}) qty={quantity}");
                     bridge.RemoveItem(item.InstanceID, quantity);
                     break;
 
@@ -790,72 +785,33 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     if (source.EquipmentSlot.HasValue)
                     {
                         var slot = source.EquipmentSlot.Value;
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][Trash Equipment] " +
-                                      $"slot={slot}, item={item.DefinitionID} ({item.InstanceID}) " +
-                                      $"from={source} qty={quantity}");
-                        }
-
-                        // 1) Unequip to return item to inventory.
+                        LogDebug($"[UI→Server][Trash Equipment] slot={slot}, item={item.DefinitionID} ({item.InstanceID}) qty={quantity}");
                         bridge.UnequipItem(slot);
-                        // 2) Remove instance from inventory.
                         bridge.RemoveItem(item.InstanceID, quantity);
                     }
-
                     break;
 
                 case UISlotType.Weapon:
                     if (source.WeaponSlot.HasValue)
                     {
                         var slot = source.WeaponSlot.Value;
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][Trash Weapon] " +
-                                      $"slot={slot}, item={item.DefinitionID} ({item.InstanceID}) " +
-                                      $"from={source} qty={quantity}");
-                        }
-
-                        // 1) Unequip weapon to return it to inventory.
+                        LogDebug($"[UI→Server][Trash Weapon] slot={slot}, item={item.DefinitionID} ({item.InstanceID}) qty={quantity}");
                         bridge.UnequipWeapon(slot);
-                        // 2) Remove instance from inventory.
                         bridge.RemoveItem(item.InstanceID, quantity);
                     }
-
                     break;
 
                 case UISlotType.Attachment:
-                    // Simplified: detach attachment to inventory,
-                    // then the player can trash it from inventory if desired.
                     var attachmentSystem = GetAttachmentSystem();
-                    if (attachmentSystem != null &&
-                        !string.IsNullOrEmpty(source.ParentInstanceID))
+                    if (attachmentSystem != null && !string.IsNullOrEmpty(source.ParentInstanceID))
                     {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                        {
-                            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                                Debug.Log($"[DragDropController] [UI→Server][Trash Attachment → Detach] " +
-                                      $"parent={source.ParentInstanceID}, slotIndex={source.Index}, " +
-                                      $"attachmentItem={item.DefinitionID} ({item.InstanceID})");
-                        }
-
-                        attachmentSystem.DetachItem(
-                            source.ParentInstanceID,
-                            source.Index);
+                        LogDebug($"[UI→Server][Trash Attachment→Detach] parent={source.ParentInstanceID}, idx={source.Index}");
+                        attachmentSystem.DetachItem(source.ParentInstanceID, source.Index);
                     }
-
                     break;
 
                 default:
-                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                    {
-                        if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                            Debug.Log($"[DragDropController] [UI→Server][Trash] Unsupported source type={source.Type} " +
-                                  $"item={item.DefinitionID} ({item.InstanceID}) from={source} qty={quantity}");
-                    }
-
+                    LogDebug($"[UI→Server][Trash] Unsupported source type={source.Type} item={item.DefinitionID} ({item.InstanceID}) qty={quantity}");
                     break;
             }
         }
@@ -875,6 +831,25 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 .Resolve();
         }
 
+        private static void ShowInvalidDropToast(ItemInstance item, UISlotId target)
+        {
+            var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            string itemName = !string.IsNullOrEmpty(def?.DisplayName) ? def.DisplayName : item?.DefinitionID ?? "Item";
+            string targetName = target.Type switch
+            {
+                UISlotType.Equipment => target.EquipmentSlot.HasValue ? $"{target.EquipmentSlot.Value} slot" : "equipment slot",
+                UISlotType.Weapon => target.WeaponSlot.HasValue ? $"{target.WeaponSlot.Value} weapon slot" : "weapon slot",
+                UISlotType.Attachment => "attachment slot",
+                UISlotType.Inventory => "inventory slot",
+                _ => "target slot"
+            };
+
+            var toast = PersistentUICanvas.Instance != null
+                ? PersistentUICanvas.Instance.ToastService
+                : ToastService.Instance;
+            toast?.Show("Invalid Drop", $"{itemName} cannot be placed in this {targetName}.");
+        }
+
         #endregion
 
         private static UISlotState CloneState(UISlotState state)
@@ -887,16 +862,21 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 IsHighlight = state.IsHighlight,
                 IsValidDropTarget = state.IsValidDropTarget,
                 Icon = state.Icon,
-                BackgroundColor = state.BackgroundColor,
+                Background = state.Background,
                 StackCount = state.StackCount
             };
         }
 
         private void Log(string msg)
         {
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
+                Debug.Log("[DragDropController] " + msg);
+        }
+
+        private void LogDebug(string msg)
+        {
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log("[DragDropController] " + msg);
         }
     }
 }
-

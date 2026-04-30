@@ -7,23 +7,14 @@ using NightHunt.GameplaySystems.Inventory;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Displays an EQUIPMENT item (vest, helmet, plate carrier, backpack…) with its
-    /// attachment sub-slots spawned GENERICALLY at runtime from the item's
-    /// <see cref="ItemDefinition.AttachmentSlots"/> array.
+    /// Displays an EQUIPMENT item with its attachment sub-slots spawned generically at runtime.
     ///
-    /// DESIGN:
-    ///   Unlike weapons (which have type-specific prefabs with pre-placed slot positions),
-    ///   equipment items use a single generic prefab. Attachment slots are spawned into
-    ///   _attachmentContainer at runtime using _attachmentSlotPrefab.
-    ///   The number and types of slots come from the equipped item's ItemDefinition.
-    ///
-    ///   Example — a plate carrier might have:
-    ///     AttachmentSlots = [Pouch, Pouch, Plate, Light]
-    ///   → 4 generic attachment slots spawned from left to right.
-    ///
-    /// USAGE:
-    ///   InventoryScreen calls Show() when the item is equipped, Hide() when unequipped.
-    ///   Registers all slots with DragDropController automatically.
+    /// FIXES applied:
+    ///   - Duplicate registration guard: UnregisterAllSlots() now clears the list before
+    ///     re-registering the pre-placed _mainSlot so it is never registered twice.
+    ///   - Attachment container visibility is now explicit: hidden when no item OR no
+    ///     attachment slots; shown (if expanded) only when item has valid slots.
+    ///   - Show(slot, null) hides the entire card when no item is equipped.
     /// </summary>
     public class EquipmentCardView : MonoBehaviour
     {
@@ -39,51 +30,62 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Tooltip("Generic attachment slot prefab. Must have an ItemSlotView component.")]
         [SerializeField] private GameObject _attachmentSlotPrefab;
 
-        [Header("Config")]
-        [SerializeField] private UISlotLayoutConfig _uiConfig;
-
         // ── Runtime ───────────────────────────────────────────────────────────
 
         private ItemInstance      _equipInstance;
         private EquipmentSlotType _equipSlot;
         private IAttachmentSystem _attachmentSystem;
 
-        private readonly List<ItemSlotView> _spawnedAttachmentViews = new List<ItemSlotView>();
-        private readonly List<ItemSlotView> _registeredSlots        = new List<ItemSlotView>();
+        private readonly List<ItemSlotView>          _spawnedAttachmentViews = new List<ItemSlotView>();
+        private readonly List<AttachmentSlotType>    _spawnedAttachmentTypes = new List<AttachmentSlotType>();
+        private readonly List<ItemSlotView>          _registeredSlots        = new List<ItemSlotView>();
+
+        private ItemSlotInput _mainSlotInput;
+        private bool          _isExpanded = false;
+
+        /// <summary>True when the equipped item has at least one attachment slot defined.</summary>
+        private bool _hasAttachmentSlots = false;
+
+        public event System.Action<EquipmentCardView> OnCardClicked;
+        public event System.Action<EquipmentSlotType> OnCardDoubleClicked;
 
         // ─────────────────────────────────────────────────────────────────────
         #region Public API
 
         /// <summary>
         /// Bind this card to an equipment instance, spawn attachment slots, and populate all.
+        /// Pass equipment = null to show the card as an empty placeholder (or hide it entirely).
         /// </summary>
         public void Show(
             EquipmentSlotType  equipSlot,
             ItemInstance       equipment,
-            IAttachmentSystem  attachmentSystem,
-            UISlotLayoutConfig uiConfig)
+            IAttachmentSystem  attachmentSystem)
         {
             _equipSlot        = equipSlot;
             _equipInstance    = equipment;
             _attachmentSystem = attachmentSystem;
-            if (uiConfig != null) _uiConfig = uiConfig;
+            _hasAttachmentSlots = false;
 
+            // FIX: Always unregister + destroy before re-populating to avoid duplicate entries
+            // when Show() is called multiple times on the same card instance (e.g. player
+            // unequips then re-equips an item into the same slot).
             UnregisterAllSlots();
             DestroySpawnedSlots();
 
             // ── Main equipment slot ──────────────────────────────────────────
             if (_mainSlot != null)
             {
-                _mainSlot.Initialize(_uiConfig, UISlotId.Equipment(equipSlot));
+                _mainSlot.Initialize(UISlotId.Equipment(equipSlot));
 
                 if (equipment != null)
                 {
                     var def = ItemDatabase.GetDefinition(equipment.DefinitionID);
                     _mainSlot.SetState(new UISlotState
                     {
-                        Item            = equipment,
-                        Icon            = def?.Icon,
-                        BackgroundColor = Color.white,
+                        Item       = equipment,
+                        Icon       = def?.Icon,
+                        Background = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance
+                                         .GetRarityBackground(def?.Rarity ?? ItemRarity.Common),
                     });
                 }
                 else
@@ -91,20 +93,31 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     _mainSlot.SetEmptyState();
                 }
 
+                // FIX: Register AFTER UnregisterAllSlots() so there is no window where the
+                // same view appears twice in DragDropController._allSlots.
                 RegisterSlot(_mainSlot);
+                HookMainSlotInput(true);
             }
 
-            // ── Dynamic attachment slots ─────────────────────────────────────
+            // ── No item: hide attachment container, show card as empty placeholder ──
             if (equipment == null)
             {
+                if (_attachmentContainer != null)
+                    _attachmentContainer.gameObject.SetActive(false);
+
+                // Keep card visible so the slot still occupies space in the layout.
                 gameObject.SetActive(true);
                 return;
             }
 
+            // ── Dynamic attachment slots ─────────────────────────────────────
             var itemDef = ItemDatabase.GetDefinition(equipment.DefinitionID);
-            if (itemDef?.AttachmentSlots == null || itemDef.AttachmentSlots.Length == 0)
+            bool hasSlots = itemDef?.AttachmentSlots != null && itemDef.AttachmentSlots.Length > 0;
+            _hasAttachmentSlots = hasSlots;
+
+            if (!hasSlots)
             {
-                // Item has no attachment slots — hide the container.
+                // Item exists but has no attachment configuration → hide container.
                 if (_attachmentContainer != null)
                     _attachmentContainer.gameObject.SetActive(false);
 
@@ -112,8 +125,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return;
             }
 
+            // Attachment container visibility respects current expand state.
             if (_attachmentContainer != null)
-                _attachmentContainer.gameObject.SetActive(true);
+                _attachmentContainer.gameObject.SetActive(_isExpanded);
 
             for (int i = 0; i < itemDef.AttachmentSlots.Length; i++)
             {
@@ -122,6 +136,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (view == null) continue;
 
                 _spawnedAttachmentViews.Add(view);
+                _spawnedAttachmentTypes.Add(slotType);
                 RegisterSlot(view);
             }
 
@@ -130,13 +145,61 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         /// <summary>
         /// Hide card and destroy spawned attachment slots.
-        /// Called when the item is unequipped.
         /// </summary>
         public void Hide()
         {
+            HookMainSlotInput(false);
             UnregisterAllSlots();
             DestroySpawnedSlots();
             gameObject.SetActive(false);
+        }
+
+        public void SetExpanded(bool expanded)
+        {
+            _isExpanded = expanded;
+            if (_attachmentContainer != null)
+            {
+                // Only show if we actually have attachment slots to display.
+                _attachmentContainer.gameObject.SetActive(expanded && _hasAttachmentSlots);
+            }
+        }
+
+        public void ToggleExpanded()
+        {
+            SetExpanded(!_isExpanded);
+        }
+
+        private void HookMainSlotInput(bool subscribe)
+        {
+            if (_mainSlot == null) return;
+
+            if (_mainSlotInput == null)
+                _mainSlotInput = _mainSlot.GetComponent<ItemSlotInput>();
+
+            if (_mainSlotInput == null) return;
+
+            if (subscribe)
+            {
+                _mainSlotInput.OnSlotPressed       -= HandleMainSlotPressed;
+                _mainSlotInput.OnSlotDoubleClicked -= HandleMainSlotDoubleClicked;
+                _mainSlotInput.OnSlotPressed       += HandleMainSlotPressed;
+                _mainSlotInput.OnSlotDoubleClicked += HandleMainSlotDoubleClicked;
+            }
+            else
+            {
+                _mainSlotInput.OnSlotPressed       -= HandleMainSlotPressed;
+                _mainSlotInput.OnSlotDoubleClicked -= HandleMainSlotDoubleClicked;
+            }
+        }
+
+        private void HandleMainSlotPressed(ItemSlotView slot)
+        {
+            OnCardClicked?.Invoke(this);
+        }
+
+        private void HandleMainSlotDoubleClicked(ItemSlotView slot)
+        {
+            OnCardDoubleClicked?.Invoke(_equipSlot);
         }
 
         /// <summary>
@@ -154,11 +217,25 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (attached != null)
             {
                 var def = ItemDatabase.GetDefinition(attached.DefinitionID);
-                view.SetState(new UISlotState { Item = attached, Icon = def?.Icon, BackgroundColor = Color.white });
+                view.SetState(new UISlotState
+                {
+                    Item       = attached,
+                    Icon       = def?.Icon,
+                    Background = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance
+                                     .GetRarityBackground(def?.Rarity ?? ItemRarity.Common),
+                });
             }
             else
             {
-                view.SetEmptyState();
+                var config   = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+                var typeIcon = (slotIndex >= 0 && slotIndex < _spawnedAttachmentTypes.Count)
+                    ? config?.GetAttachmentSlotIcon(_spawnedAttachmentTypes[slotIndex])
+                    : null;
+                view.SetState(new UISlotState
+                {
+                    Icon       = typeIcon,
+                    Background = config != null ? config.DefaultSlotBackground : null,
+                });
             }
         }
 
@@ -193,14 +270,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             var slotId = UISlotId.Attachment(parentId, index);
-            view.Initialize(_uiConfig, slotId);
+            view.Initialize(slotId);
 
-            // Show slot-type icon when empty.
-            Sprite typeIcon = _uiConfig?.GetAttachmentSlotIcon(slotType);
+            var config   = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+            Sprite typeIcon = config?.GetAttachmentSlotIcon(slotType);
             view.SetState(new UISlotState
             {
-                Icon            = typeIcon,
-                BackgroundColor = new Color(1f, 1f, 1f, 0.25f),
+                Icon       = typeIcon,
+                Background = config != null ? config.DefaultSlotBackground : null,
             });
 
             // Populate if attachment already in slot.
@@ -210,9 +287,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 var def = ItemDatabase.GetDefinition(attached.DefinitionID);
                 view.SetState(new UISlotState
                 {
-                    Item            = attached,
-                    Icon            = def?.Icon,
-                    BackgroundColor = Color.white,
+                    Item       = attached,
+                    Icon       = def?.Icon,
+                    Background = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance
+                                     .GetRarityBackground(def?.Rarity ?? ItemRarity.Common),
                 });
             }
 
@@ -224,6 +302,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             foreach (var v in _spawnedAttachmentViews)
                 if (v != null) Destroy(v.gameObject);
             _spawnedAttachmentViews.Clear();
+            _spawnedAttachmentTypes.Clear();
         }
 
         #endregion
@@ -246,6 +325,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void OnDestroy()
         {
+            HookMainSlotInput(false);
             UnregisterAllSlots();
             DestroySpawnedSlots();
         }

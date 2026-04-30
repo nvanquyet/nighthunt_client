@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -11,77 +11,51 @@ using NightHunt.Utilities;
 namespace NightHunt.GameplaySystems.UI.Combat
 {
     /// <summary>
-    /// Base interactive button for the in-game Combat HUD.
+    /// Base interactive button for the in-game combat HUD.
     ///
-    /// Features:
-    ///   ?�� Press-down scale squeeze via DOTween.
-    ///   ?�� Radial cooldown ring driven by a UI Image (fillAmount / Radial360).
-    ///   ?�� Interactable / greyed-out state (CanvasGroup alpha + raycast toggle).
-    ///   ?�� Icon sprite assignment.
-    ///
-    /// Usage:
-    ///   Attach to a UI GameObject.
-    ///   Wire fields in the Inspector:
-    ///     _rootTransform   ?�� the Transform to scale on press (usually this.transform).
-    ///     _iconImage       ?�� the main icon Image.
-    ///     _cooldownRing    ?�� an Image set to Image.Type.Filled / FillMethod.Radial360.
-    ///     _canvasGroup     ?�� CanvasGroup for interactable alpha.
-    ///   Sub-classes subscribe to OnPointerDown/Up via the provided events.
+    /// Provides press animation, cooldown ring support, icon assignment, and
+    /// CanvasGroup-based interactable state for derived HUD buttons.
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
     public class ActionButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
     {
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Inspector
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-
         [Header("Visual References")]
-        [SerializeField] protected Image            _iconImage;
-        [SerializeField] protected Image            _cooldownRing;   // Image.Type = Filled, Radial360
+        [SerializeField] protected Image _iconImage;
+        [SerializeField] protected Image _cooldownRing;
 
         [Header("Animation")]
-        [SerializeField] private float _pressScaleDown  = 0.88f;
-        [SerializeField] private float _pressScaleDur   = 0.07f;
+        [SerializeField] private float _pressScaleDown = 0.88f;
+        [SerializeField] private float _pressScaleDur = 0.07f;
         [SerializeField] private float _releaseScaleDur = 0.12f;
 
         [Header("Interactable")]
-        [SerializeField] private float _disabledAlpha   = 0.4f;
-
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Runtime
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
+        [SerializeField] private float _disabledAlpha = 0.4f;
 
         private CanvasGroup _canvasGroup;
-        private Coroutine   _cooldownCoroutine;
-        private bool        _interactable = true;
+        private Coroutine _cooldownCoroutine;
+        private bool _interactable = true;
 
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Events (for sub-classes)
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
+        protected bool IsInteractable => _interactable;
 
         public event Action OnPressed;
         public event Action OnReleased;
-
 
         public CanvasGroup Canvas
         {
             get
             {
                 if (_canvasGroup == null)
+                {
                     _canvasGroup = ComponentResolver.Find<CanvasGroup>(this)
-        .OnSelf()
-        .InChildren()
-        .OrLogWarning("[Auto] CanvasGroup not found")
-        .Resolve();
+                        .OnSelf()
+                        .InChildren()
+                        .OrLogWarning("[Auto] CanvasGroup not found")
+                        .Resolve();
+                }
 
                 return _canvasGroup;
             }
         }
-
-
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Unity Lifecycle
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
 
         protected virtual void Awake()
         {
@@ -95,13 +69,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
 #endif
         }
 
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  IPointerDownHandler / IPointerUpHandler
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-
         public virtual void OnPointerDown(PointerEventData eventData)
         {
-            if (!_interactable) return;
+            if (!_interactable)
+                return;
 
 #if !UNITY_SERVER
             DOTween.Kill(transform);
@@ -119,37 +90,28 @@ namespace NightHunt.GameplaySystems.UI.Combat
             OnReleased?.Invoke();
         }
 
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Public API
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-
-        /// <summary>Sets the button's icon sprite.</summary>
         public void SetIcon(Sprite sprite)
         {
-            if (_iconImage == null) return;
-            _iconImage.sprite  = sprite;
+            if (_iconImage == null)
+                return;
+
+            _iconImage.sprite = sprite;
             _iconImage.enabled = sprite != null;
         }
 
-        /// <summary>
-        /// Enables or disables user interaction and adjusts visual alpha.
-        /// </summary>
         public void SetInteractable(bool value)
         {
-            _interactable                  = value;
-            Canvas.interactable      = value;
-            Canvas.blocksRaycasts    = value;
-            Canvas.alpha             = value ? 1f : _disabledAlpha;
+            _interactable = value;
+
+            Canvas.interactable = value;
+            Canvas.blocksRaycasts = value;
+            Canvas.alpha = value ? 1f : _disabledAlpha;
         }
 
-        /// <summary>
-        /// Starts a cooldown ring animation that fills from 1 ?�� 0 over
-        /// <paramref name="duration"/> seconds.
-        /// Calling this while a cooldown is running restarts it.
-        /// </summary>
         public void StartCooldown(float duration)
         {
-            if (_cooldownRing == null) return;
+            if (_cooldownRing == null)
+                return;
 
             if (_cooldownCoroutine != null)
                 StopCoroutine(_cooldownCoroutine);
@@ -157,7 +119,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _cooldownCoroutine = StartCoroutine(CooldownRoutine(duration));
         }
 
-        /// <summary>Cancels any running cooldown and resets the ring.</summary>
         public void CancelCooldown()
         {
             if (_cooldownCoroutine != null)
@@ -169,13 +130,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
             ResetCooldownRing();
         }
 
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-        //  Internals
-        // ?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��?��
-
         private IEnumerator CooldownRoutine(float duration)
         {
-            if (_cooldownRing == null) yield break;
+            if (_cooldownRing == null)
+                yield break;
 
             _cooldownRing.fillAmount = 1f;
             float elapsed = 0f;

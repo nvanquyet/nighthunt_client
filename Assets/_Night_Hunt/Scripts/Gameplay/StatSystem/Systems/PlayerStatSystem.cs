@@ -38,7 +38,6 @@ namespace NightHunt.Gameplay.StatSystem.Systems
         [Header("Configuration")]
         [SerializeField] private PlayerStatConfig _statConfig;
         [SerializeField] private GameplayConfig _gameplayConfig;
-        [SerializeField] private NightHuntDebugConfig _debugConfig;
         
         [Header("Debug")]
         [SerializeField] private bool _showDebugUI = false;
@@ -185,9 +184,9 @@ namespace NightHunt.Gameplay.StatSystem.Systems
             
             _isCacheReady = true;
 
-            if (_debugConfig != null && _debugConfig.EnableStatDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableStatDebugLogs)
             {
-                Debug.Log($"[PlayerStatSystem] Initialized {_syncedStats.Count} stats for player");
+                Debug.Log($"[STAT_FLOW][PlayerStatSystem] Initialized {_syncedStats.Count} stats for player netObj={ObjectId}");
             }
         }
         
@@ -287,8 +286,8 @@ namespace NightHunt.Gameplay.StatSystem.Systems
                 CheckOverweightStatus();
             }
 
-            if (_debugConfig != null && _debugConfig.EnableStatDebugLogs)
-                Debug.Log($"[PlayerStatSystem] SetCurrentStat {type}: {oldValue:F2} → {clamped:F2}");
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableStatDebugLogs)
+                Debug.Log($"[STAT_FLOW][PlayerStatSystem] SetCurrentStat netObj={ObjectId} stat={type} old={oldValue:F2} new={clamped:F2} requested={value:F2} clampMax={clampMax:F2}");
         }
         
         #endregion
@@ -369,7 +368,7 @@ namespace NightHunt.Gameplay.StatSystem.Systems
             // Mark stat as dirty for recalculation
             _dirtyStats.Add(type);
             
-            if (_debugConfig != null && _debugConfig.EnableStatDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableStatDebugLogs)
             {
                 Debug.Log($"[PlayerStatSystem] Added modifier: {type} {modifier.Type} {modifier.Value:F1} from {modifier.SourceID}");
             }
@@ -398,7 +397,7 @@ namespace NightHunt.Gameplay.StatSystem.Systems
             {
                 _dirtyStats.Add(type);
                 
-                if (_debugConfig != null && _debugConfig.EnableStatDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableStatDebugLogs)
                 {
                     Debug.Log($"[PlayerStatSystem] Removed {removed} modifier(s) for {type} from {sourceID}");
                 }
@@ -433,7 +432,7 @@ namespace NightHunt.Gameplay.StatSystem.Systems
                 }
             }
             
-            if (_debugConfig != null && _debugConfig.EnableStatDebugLogs && totalRemoved > 0)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableStatDebugLogs && totalRemoved > 0)
             {
                 Debug.Log($"[PlayerStatSystem] Removed total {totalRemoved} modifier(s) from source: {sourceID}");
             }
@@ -512,9 +511,9 @@ namespace NightHunt.Gameplay.StatSystem.Systems
                     CheckOverweightStatus();
                 }
                 
-                if (_debugConfig != null && _debugConfig.EnableStatDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableStatDebugLogs)
                 {
-                    Debug.Log($"[PlayerStatSystem] {type}: {oldValue:F2} → {newValue:F2}");
+                    Debug.Log($"[STAT_FLOW][PlayerStatSystem] RecalculateStat netObj={ObjectId} stat={type} old={oldValue:F2} new={newValue:F2} base={stat.BaseValue:F2} modifiers={(_modifiers.TryGetValue(type, out var debugMods) ? debugMods.Count : 0)}");
                 }
             }
         }

@@ -5,6 +5,7 @@ using UnityEditor;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.Gameplay.StatSystem.Configs;
+using NightHunt.Gameplay.Beacon;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 
@@ -31,16 +32,26 @@ namespace NightHunt.Editor.Tools
         static readonly string[] StaleAssets = new[]
         {
             // Weapons not matching JSON IDs
-            $"{BASE}/Weapons/Weapon_AK47.asset",
-            $"{BASE}/Weapons/Weapon_M4.asset",
+            $"{BASE}/Weapons/Weapon_AR.asset",
+            $"{BASE}/Weapons/Weapon_AR.asset",
             $"{BASE}/Weapons/Weapon_Pistol.asset",
             // Consumables wrong ID / wrong type
             $"{BASE}/Consumables/BeaconDefinition.asset",
+            $"{BASE}/Consumables/Deployable_DEPLOY_BEACON.asset",
+            $"{BASE}/Consumables/Deployable_TRAP_MINE.asset",
+            $"{BASE}/Consumables/Deployable_TRAP_SHOCK.asset",
+            $"{BASE}/Consumables/Deployable_VISION_NODE.asset",
+            $"{BASE}/Consumables/Deployable_VISION_LIGHTPOINT.asset",
             $"{BASE}/Consumables/Consumable_EnergyDrink.asset",
             $"{BASE}/Consumables/Consumable_Medkit.asset",
             // Old StatConfigs that accompanied the stale items (flat Items/ level)
             $"{CONFIGS}/ConsumableStatConfig_EnergyDrink.asset",
             $"{CONFIGS}/ConsumableStatConfig_Medkit.asset",
+            $"{CONFIGS}/ConsumableStatConfig_DEPLOY_BEACON.asset",
+            $"{CONFIGS}/ConsumableStatConfig_TRAP_MINE.asset",
+            $"{CONFIGS}/ConsumableStatConfig_TRAP_SHOCK.asset",
+            $"{CONFIGS}/ConsumableStatConfig_VISION_NODE.asset",
+            $"{CONFIGS}/ConsumableStatConfig_VISION_LIGHTPOINT.asset",
             // Throwables whose ItemID doesn't match JSON UTIL_SMOKE / UTIL_EMP
             $"{BASE}/Throwable/Throwable_SmokeGrenade.asset",
         };
@@ -127,39 +138,39 @@ namespace NightHunt.Editor.Tools
         {
             int n = 0;
 
-            // PISTOL_9MM — DamageBody:18, FireRate:4/s(240RPM), Mag:15, Reserve:45, Reload:1.8s
+            // WEAPON_PISTOL — DamageBody:18, FireRate:4/s(240RPM), Mag:15, Reserve:45, Reload:1.8s
             //              SpreadBase:0.1→3°, SpreadMoveMul:1.2, MoveSpeedMul:1.0, Weight:1.2, Common
-            n += MakeWeapon("PISTOL_9MM", "9mm Pistol", WeaponClass.Pistol, ItemRarity.Common,
+            n += MakeWeapon("WEAPON_PISTOL", "Pistol", WeaponClass.Pistol, ItemRarity.Common,
                 damage:18f, fireRPM:240f, mag:15, reserve:45, reload:1.8f,
                 spread:3f, spreadPenalty:1.2f, weight:1.2f, moveSpeedPct:0f);
 
-            // SMG_MP5 — DamageBody:15, FireRate:10/s(600RPM), Mag:30, Reserve:90, Reload:2.2s
+            // SMG_SMG — DamageBody:15, FireRate:10/s(600RPM), Mag:30, Reserve:90, Reload:2.2s
             //           SpreadBase:0.2→6°, SpreadMoveMul:1.3, MoveSpeedMul:0.92(-8%), Weight:2.8, Common
-            n += MakeWeapon("SMG_MP5", "MP5", WeaponClass.SMG, ItemRarity.Common,
+            n += MakeWeapon("SMG_SMG", "SMG", WeaponClass.SMG, ItemRarity.Common,
                 damage:15f, fireRPM:600f, mag:30, reserve:90, reload:2.2f,
                 spread:6f, spreadPenalty:1.3f, weight:2.8f, moveSpeedPct:-0.08f);
 
-            // RIFLE_AK — DamageBody:25, FireRate:8/s(480RPM), Mag:30, Reserve:120, Reload:2.4s
+            // WEAPON_AR — DamageBody:25, FireRate:8/s(480RPM), Mag:30, Reserve:120, Reload:2.4s
             //            SpreadBase:0.25→7.5°, SpreadMoveMul:1.4, MoveSpeedMul:0.87(-13%), Weight:4, Rare
-            n += MakeWeapon("RIFLE_AK", "AK Rifle", WeaponClass.Rifle, ItemRarity.Rare,
+            n += MakeWeapon("WEAPON_AR", "AR", WeaponClass.Rifle, ItemRarity.Rare,
                 damage:25f, fireRPM:480f, mag:30, reserve:120, reload:2.4f,
                 spread:7.5f, spreadPenalty:1.4f, weight:4.0f, moveSpeedPct:-0.13f);
 
-            // SHOT_PUMP — DamageBody:10(×pellets), FireRate:1.2/s(72RPM), Mag:6, Reserve:24, Reload:2.8s
+            // WEAPON_SHOTGUN — DamageBody:10(×pellets), FireRate:1.2/s(72RPM), Mag:6, Reserve:24, Reload:2.8s
             //             SpreadBase:0.3→9°, SpreadMoveMul:1.5, MoveSpeedMul:0.75(-25%), Weight:4.5, Rare
-            n += MakeWeapon("SHOT_PUMP", "Pump Shotgun", WeaponClass.Shotgun, ItemRarity.Rare,
+            n += MakeWeapon("WEAPON_SHOTGUN", "Shotgun", WeaponClass.Shotgun, ItemRarity.Rare,
                 damage:10f, fireRPM:72f, mag:6, reserve:24, reload:2.8f,
                 spread:9f, spreadPenalty:1.5f, weight:4.5f, moveSpeedPct:-0.25f);
 
-            // SNIPER_M24 — DamageBody:80, FireRate:0.8/s(48RPM), Mag:5, Reserve:15, Reload:3.0s
+            // WEAPON_SNIPER — DamageBody:80, FireRate:0.8/s(48RPM), Mag:5, Reserve:15, Reload:3.0s
             //              SpreadBase:0.18→0.5°, SpreadMoveMul:1.6, MoveSpeedMul:0.7(-30%), Weight:5.2, Epic
-            n += MakeWeapon("SNIPER_M24", "M24 Sniper", WeaponClass.Sniper, ItemRarity.Epic,
+            n += MakeWeapon("WEAPON_SNIPER", "Sniper", WeaponClass.Sniper, ItemRarity.Epic,
                 damage:80f, fireRPM:48f, mag:5, reserve:15, reload:3.0f,
                 spread:0.5f, spreadPenalty:1.6f, weight:5.2f, moveSpeedPct:-0.30f);
 
-            // HEAVY_RPG — DamageBody:140, FireRate:0.5/s(30RPM), Mag:1, Reserve:1, Reload:4.5s
+            // WEAPON_ROCKET_LAUNCHER — DamageBody:140, FireRate:0.5/s(30RPM), Mag:1, Reserve:1, Reload:4.5s
             //             SpreadBase:0.15→4.5°, SpreadMoveMul:1.8, MoveSpeedMul:0.6(-40%), Weight:8, Legendary
-            n += MakeWeapon("HEAVY_RPG", "RPG Launcher", WeaponClass.Launcher, ItemRarity.Legendary,
+            n += MakeWeapon("WEAPON_ROCKET_LAUNCHER", "Rocket Launcher", WeaponClass.Launcher, ItemRarity.Legendary,
                 damage:140f, fireRPM:30f, mag:1, reserve:1, reload:4.5f,
                 spread:4.5f, spreadPenalty:1.8f, weight:8.0f, moveSpeedPct:-0.40f);
 
@@ -229,51 +240,32 @@ namespace NightHunt.Editor.Tools
         {
             int n = 0;
 
-            // DEPLOY_BEACON — PlaceOnGround, CastTime 5s, Stack 1, Weight 2.5, Uncommon
-            n += MakeConsumable("DEPLOY_BEACON", "Respawn Beacon", ItemRarity.Uncommon,
-                weight:2.5f, castTime:5f, maxStack:1,
-                effects: new[] { Eff(ConsumableEffectType.DeployBeacon, PlayerStatType.Health,
-                    1f, 0f, true, "Place respawn beacon") },
-                prefix: "Deployable");
+            n += MakeBeacon("DEPLOY_BEACON", "Respawn Beacon", ItemRarity.Uncommon,
+                weight: 2.5f, maxStack: 1);
 
-            // VISION_LIGHTPOINT — PlaceOnGround, LightArea 12/25s, CastTime 1s, Stack 2, Weight 0.6, Rare
-            n += MakeConsumable("VISION_LIGHTPOINT", "Light Point", ItemRarity.Rare,
-                weight:0.6f, castTime:1f, maxStack:2,
-                effects: new[] { Eff(ConsumableEffectType.PlaceVisionNode, PlayerStatType.VisionRange,
-                    12f, 25f, false, "Place light beacon for 25s") },
-                prefix: "Deployable");
+            n += MakeDeployable("VISION_LIGHTPOINT", "Light Point", ItemRarity.Rare,
+                weight: 0.6f, maxStack: 2, DeployableKind.LightPoint,
+                "NetworkDeployable_LightPoint");
 
-            // VISION_NODE — PlaceOnGround, PlaceVisionNode 15/30s, CastTime 2s, Stack 2, Weight 0.7, Epic
-            n += MakeConsumable("VISION_NODE", "Vision Scanner Node", ItemRarity.Epic,
-                weight:0.7f, castTime:2f, maxStack:2,
-                effects: new[] { Eff(ConsumableEffectType.PlaceVisionNode, PlayerStatType.VisionRange,
-                    15f, 30f, false, "Place vision scanner for 30s") },
-                prefix: "Deployable");
+            n += MakeDeployable("VISION_NODE", "Vision Scanner Node", ItemRarity.Epic,
+                weight: 0.7f, maxStack: 2, DeployableKind.VisionNode,
+                "NetworkDeployable_VisionNode");
 
-            // TRAP_MINE — PlaceOnGround, ExplosiveTrap damage 60, CastTime 2.5s, Stack 3, Weight 1.0, Rare
-            n += MakeConsumable("TRAP_MINE", "Explosive Mine", ItemRarity.Rare,
-                weight:1.0f, castTime:2.5f, maxStack:3,
-                effects: new[] { Eff(ConsumableEffectType.PlaceExplosiveTrap, PlayerStatType.Health,
-                    60f, 0f, true, "Place proximity explosive mine") },
-                prefix: "Deployable");
+            n += MakeDeployable("TRAP_MINE", "Explosive Mine", ItemRarity.Rare,
+                weight: 1.0f, maxStack: 3, DeployableKind.ExplosiveMine,
+                "NetworkDeployable_TrapMine");
 
-            // TRAP_SHOCK — PlaceOnGround, SlowField 40%/12s, CastTime 2s, Stack 2, Weight 0.7, Rare
-            n += MakeConsumable("TRAP_SHOCK", "Shock Field", ItemRarity.Rare,
-                weight:0.7f, castTime:2f, maxStack:2,
-                effects: new[] { Eff(ConsumableEffectType.PlaceSlowField, PlayerStatType.MovementSpeed,
-                    0.4f, 12f, false, "Place 40% slow field for 12s") },
-                prefix: "Deployable");
+            n += MakeDeployable("TRAP_SHOCK", "Shock Field", ItemRarity.Rare,
+                weight: 0.7f, maxStack: 2, DeployableKind.ShockField,
+                "NetworkDeployable_ShockField");
 
             return n;
         }
-
-        // ── Throwables ── (Throw UseType from JSON ItemConfig) ────────────────
-
         static int BuildThrowables()
         {
             int n = 0;
 
-            // UTIL_SMOKE — SmokeScreen, Throw, Stack 3, Weight 0.6, Common
+            // UTIL_SMOKE - SmokeScreen, Throw, Stack 3, Weight 0.6, Common
             //              BlastRadius 8, FuseTime 2s, Duration 6s
             n += MakeThrowable("UTIL_SMOKE", "Smoke Grenade", ItemRarity.Common,
                 weight:0.6f, throwForce:12f, fuseTime:2f, blastRadius:8f, damage:0f,
@@ -343,6 +335,8 @@ namespace NightHunt.Editor.Tools
         {
             string cfgPath = $"{CONFIGS}/WeaponStatConfig_{id}.asset";
             string defPath = $"{BASE}/Weapons/Weapon_{id}.asset";
+            float recoilHorizontal = Mathf.Max(0f, spread * 0.35f);
+            float recoilVertical   = Mathf.Max(0f, spread * 0.2f);
 
             // WeaponStatConfig
             var cfg = CreateOrLoad<WeaponStatConfig>(cfgPath);
@@ -355,6 +349,8 @@ namespace NightHunt.Editor.Tools
                 Stat(ItemStatType.ReloadSpeed,    reload,       0.1f,  15f),
                 Stat(ItemStatType.SpreadBase,     spread,       0f,    90f),
                 Stat(ItemStatType.SpreadPenalty,  spreadPenalty,0f,    10f),
+                Stat(ItemStatType.RecoilHorizontal, recoilHorizontal, 0f, 30f),
+                Stat(ItemStatType.RecoilVertical,   recoilVertical,   0f, 30f),
             };
             cfg.PlayerModifiers = moveSpeedPct != 0f
                 ? new[] { Mod(PlayerStatType.MovementSpeed, ModifierType.Percentage, moveSpeedPct, $"{id} move penalty") }
@@ -378,6 +374,74 @@ namespace NightHunt.Editor.Tools
 
             Debug.Log($"[JsonRebuild] Weapon  {id} ({displayName})");
             return 2;
+        }
+
+        /// <summary>
+        /// Creates BeaconDefinition. Beacon has its own network prefab field and is
+        /// not a ConsumableDefinition.
+        /// </summary>
+        static int MakeBeacon(
+            string id, string displayName, ItemRarity rarity,
+            float weight, int maxStack)
+        {
+            string defPath = $"{BASE}/Deployables/Deployable_{id}.asset";
+
+            var def = CreateOrLoad<BeaconDefinition>(defPath);
+            def.ItemID = id;
+            def.DisplayName = displayName;
+            def.Description = string.Empty;
+            def.Rarity = rarity;
+            def.IsStackable = maxStack > 1;
+            def.MaxStackSize = Mathf.Max(1, maxStack);
+            def.Weight = weight;
+            def.VisualPrefab = LoadPrefab("Assets/_Night_Hunt/Prefabs/Items/Visuals/Visual_RespawnBeacon.prefab");
+            def.NetworkBeaconPrefab = LoadPrefab("Assets/_Night_Hunt/Prefabs/Items/Runtime/Deployables/NetworkBeacon_RespawnBeacon.prefab");
+            def.PlacementPreviewPrefab = def.VisualPrefab;
+            def.BeaconHP = 100;
+            def.ValidSlots = new[] { SlotLocationType.Inventory };
+            EditorUtility.SetDirty(def);
+
+            Debug.Log($"[JsonRebuild] Beacon {id} ({displayName})");
+            return 1;
+        }
+
+        /// <summary>
+        /// Creates a DeployableDefinition. No ConsumableStatConfig is created because
+        /// placement is handled by IDeployableHandler and server-spawned prefab logic.
+        /// </summary>
+        static int MakeDeployable(
+            string id, string displayName, ItemRarity rarity,
+            float weight, int maxStack, DeployableKind kind, string networkPrefabName)
+        {
+            string defPath = $"{BASE}/Deployables/Deployable_{id}.asset";
+
+            var def = CreateOrLoad<DeployableDefinition>(defPath);
+            def.ItemID = id;
+            def.DisplayName = displayName;
+            def.Description = string.Empty;
+            def.Rarity = rarity;
+            def.IsStackable = maxStack > 1;
+            def.MaxStackSize = Mathf.Max(1, maxStack);
+            def.Weight = weight;
+            def.DeployableKind = kind;
+            def.VisualPrefab = LoadPrefab("Assets/_Night_Hunt/Prefabs/Items/Visuals/Visual_GenericDeployable.prefab");
+            def.NetworkDeployablePrefab = LoadPrefab($"Assets/_Night_Hunt/Prefabs/Items/Runtime/Deployables/{networkPrefabName}.prefab");
+            def.PlacementPreviewPrefab = def.VisualPrefab;
+            def.MaxHP = 100;
+            def.PlacementDistance = 3f;
+            def.PlacementCheckRadius = 0.5f;
+            def.PlacementLayerMask = ~0;
+            def.MaxPlacementSlope = 30f;
+            def.ValidSlots = new[] { SlotLocationType.Inventory };
+            EditorUtility.SetDirty(def);
+
+            Debug.Log($"[JsonRebuild] Deployable {id} ({displayName})");
+            return 1;
+        }
+
+        private static GameObject LoadPrefab(string path)
+        {
+            return AssetDatabase.LoadAssetAtPath<GameObject>(path);
         }
 
         /// <summary>

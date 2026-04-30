@@ -18,7 +18,7 @@ namespace NightHunt.Gameplay.Beacon
     /// Responsibilities:
     ///   • Enforce max-active-beacon-per-team limit (from <see cref="maxActivePerTeam"/>).
     ///   • Spawn beacon NetworkObjects when players request placement; resolves
-    ///     the prefab from <see cref="BeaconDefinition.BeaconPrefab"/> (via
+    ///     the prefab from <see cref="BeaconDefinition.NetworkBeaconPrefab"/> (via
     ///     ItemDatabase) if a definitionId is supplied, otherwise falls back to
     ///     the inspector-assigned <see cref="_beaconPrefabFallback"/>.
     ///   • Call <see cref="RespawnBeacon.Initialize"/> then
@@ -97,11 +97,11 @@ namespace NightHunt.Gameplay.Beacon
 
         /// <summary>
         /// Validate and spawn a beacon for <paramref name="teamId"/> at the given pose.
-        /// Called by <see cref="BeaconPlaceable"/> ServerRpc.
+        /// Called by <see cref="DeployablePlacementHandler"/> ServerRpc.
         /// </summary>
         /// <param name="definitionId">
         /// ItemID of the <see cref="BeaconDefinition"/> ScriptableObject.
-        /// Used to look up <see cref="BeaconDefinition.BeaconPrefab"/> from
+        /// Used to look up <see cref="BeaconDefinition.NetworkBeaconPrefab"/> from
         /// <see cref="ItemDatabase"/>.  Null/empty falls back to
         /// <see cref="_beaconPrefabFallback"/>.
         /// </param>
@@ -134,7 +134,7 @@ namespace NightHunt.Gameplay.Beacon
                 }
             }
 
-            // Resolve prefab from ItemDatabase (prefers definition's BeaconPrefab)
+            // Resolve prefab from ItemDatabase (definition's NetworkBeaconPrefab)
             GameObject prefab = ResolvePrefab(definitionId);
             if (prefab == null)
             {
@@ -189,13 +189,13 @@ namespace NightHunt.Gameplay.Beacon
             }
 
             var def = ItemDatabase.GetDefinition(definitionId) as BeaconDefinition;
-            if (def?.BeaconPrefab == null)
+            if (def?.NetworkBeaconPrefab == null)
             {
-                Debug.LogError($"[BeaconManager] Could not resolve BeaconPrefab for definitionId: {definitionId}");
+                Debug.LogError($"[BeaconManager] Could not resolve NetworkBeaconPrefab for definitionId: {definitionId}");
                 return null;
             }
 
-            return def.BeaconPrefab;
+            return def.NetworkBeaconPrefab;
         }
 
         #endregion

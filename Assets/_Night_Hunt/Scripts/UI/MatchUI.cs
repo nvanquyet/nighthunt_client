@@ -28,18 +28,11 @@ namespace NightHunt.UI
         [Header("Timer")]
         [SerializeField] private TextMeshProUGUI timerText;
 
-        // ── Score ─────────────────────────────────────────────────────────────
-        [Header("Score Display")]
-        [SerializeField] private TextMeshProUGUI teamScoreText;
-        [SerializeField] private TextMeshProUGUI personalScoreText;
-
-        // ── Team Display ──────────────────────────────────────────────────────
-        [Header("Team Display")]
-        [SerializeField] private Transform       teamAListParent;
-        [SerializeField] private Transform       teamBListParent;
-        [SerializeField] private TextMeshProUGUI teamAHeaderText;
-        [SerializeField] private TextMeshProUGUI teamBHeaderText;
-        [SerializeField] private GameObject      teamMemberPrefab;
+        [Header("Team Score Display")]
+        [SerializeField] private TextMeshProUGUI _teamAScoreText;
+        [SerializeField] private TextMeshProUGUI _teamBScoreText;
+        [SerializeField] private GameObject      _teamAArrow;
+        [SerializeField] private GameObject      _teamBArrow;
 
         // ── Phase Warning Banner ──────────────────────────────────────────────
         [Header("Phase Warning Banner")]
@@ -57,39 +50,40 @@ namespace NightHunt.UI
         private const float       PhaseManagerRetryInterval = 1f;
         private Coroutine         _warningCoroutine;
         private NetworkPlayer     _localPlayer;
-        private int               _cachedTeamScore;
-        private int               _cachedPersonalScore;
+        private int               _cachedTeamAScore;
+        private int               _cachedTeamBScore;
 
-        // Rows — allocated once per round; cleared before each populate
-        private readonly List<TeamMemberRow> _teamARows = new();
-        private readonly List<TeamMemberRow> _teamBRows = new();
-        private bool _teamsPopulated = false;
+
 
         // ── Unity Lifecycle ───────────────────────────────────────────────────
 
         private void Awake()
         {
-            if (warningPanel    != null) warningPanel.SetActive(false);
-            if (teamAHeaderText != null) teamAHeaderText.text = "TEAM A";
-            if (teamBHeaderText != null) teamBHeaderText.text = "TEAM B";
+            if (warningPanel != null) warningPanel.SetActive(false);
+            // Arrows start hidden until Initialize() is called with the local player.
+            if (_teamAArrow != null) _teamAArrow.SetActive(false);
+            if (_teamBArrow != null) _teamBArrow.SetActive(false);
         }
 
         /// <summary>Call once when local NetworkPlayer is known (from GameHUD or spawner).</summary>
         public void Initialize(NetworkPlayer localPlayer)
         {
             _localPlayer = localPlayer;
+
+            // Show the arrow on the correct team column.
+            bool onTeamA = localPlayer != null && localPlayer.TeamId == 0;
+            if (_teamAArrow != null) _teamAArrow.SetActive(onTeamA);
+            if (_teamBArrow != null) _teamBArrow.SetActive(!onTeamA);
         }
 
         private void OnEnable()
         {
-            GameplayEventBus.Instance?.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
             GameplayEventBus.Instance?.Subscribe<PhaseWarningEvent>(OnPhaseWarning);
             GameplayEventBus.Instance?.Subscribe<ScoreDataSyncedEvent>(OnScoreDataSynced);
         }
 
         private void OnDisable()
         {
-            GameplayEventBus.Instance?.Unsubscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
             GameplayEventBus.Instance?.Unsubscribe<PhaseWarningEvent>(OnPhaseWarning);
             GameplayEventBus.Instance?.Unsubscribe<ScoreDataSyncedEvent>(OnScoreDataSynced);
         }
@@ -104,78 +98,6 @@ namespace NightHunt.UI
             if (Time.time - _lastUpdateTime < UpdateInterval) return;
             _lastUpdateTime = Time.time;
             UpdateDisplay();
-        }
-
-        // ── Team Populate — chỉ chạy 1 lần ──────────────────────────────────
-
-        private void OnAllPlayersReady(AllPlayersReadyEvent _)
-        {
-            // Guard: even if the event somehow fires twice (or the subscription
-            // was added twice), only populate once per session.
-            if (_teamsPopulated) return;
-            _teamsPopulated = true;
-
-            Debug.Log($"[FLOW §12] MatchUI.OnAllPlayersReady: Registry has {PlayerPublicRegistry.Instance?.GetAllPlayers()?.Length ?? 0} players  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-
-            // Defer to end-of-frame so all _playerData SyncVars (team IDs) have
-            // settled before we read TeamId from each NetworkPlayer.
-            StartCoroutine(PopulateTeamsNextFrame());
-        }
-
-        private System.Collections.IEnumerator PopulateTeamsNextFrame()
-        {
-            yield return new WaitForSeconds(0.3f); // wait 3-5 frames for all SyncVar deltas to settle
-
-            var registry = PlayerPublicRegistry.Instance;
-            if (registry == null)
-            {
-                Debug.LogWarning("[MatchUI] PlayerPublicRegistry not found.");
-                _teamsPopulated = false; // allow retry
-                yield break;
-            }
-
-            var team0 = registry.GetPlayersByTeam(0);
-            var team1 = registry.GetPlayersByTeam(1);
-            Debug.Log($"[FLOW §12] MatchUI.PopulateTeamsNextFrame: team0={team0.Count} players, team1={team1.Count} players (all={registry.GetAllPlayers().Length})  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            foreach (var p in registry.GetAllPlayers())
-                Debug.Log($"[FLOW §12]   Player ObjectId={p?.ObjectId} Name='{p?.DisplayName}' TeamId={p?.TeamId}");
-
-            ClearTeamRows(_teamARows, teamAListParent);
-            ClearTeamRows(_teamBRows, teamBListParent);
-            PopulateTeam(team0, teamAListParent, _teamARows);
-            PopulateTeam(team1, teamBListParent, _teamBRows);
-        }
-
-        private static void ClearTeamRows(List<TeamMemberRow> rows, Transform parent)
-        {
-            foreach (var row in rows)
-                if (row != null) Destroy(row.gameObject);
-            rows.Clear();
-        }
-
-        private void PopulateTeam(List<NetworkPlayer> players,
-                                   Transform           parent,
-                                   List<TeamMemberRow> rows)
-        {
-            if (parent == null || teamMemberPrefab == null) return;
-
-            foreach (var player in players)
-            {
-                if (player == null) continue;
-
-                var go  = Instantiate(teamMemberPrefab, parent);
-                var row = go.GetComponent<TeamMemberRow>();
-
-                if (row == null)
-                {
-                    Debug.LogWarning("[MatchUI] teamMemberPrefab missing TeamMemberRow component.");
-                    Destroy(go);
-                    continue;
-                }
-
-                row.Bind(player);
-                rows.Add(row);
-            }
         }
 
         // ── Display ───────────────────────────────────────────────────────────
@@ -214,8 +136,8 @@ namespace NightHunt.UI
 
         private void UpdateScore()
         {
-            if (teamScoreText     != null) teamScoreText.text     = $"Team Score: {_cachedTeamScore}";
-            if (personalScoreText != null) personalScoreText.text = $"Your Score: {_cachedPersonalScore}";
+            if (_teamAScoreText != null) _teamAScoreText.text = _cachedTeamAScore.ToString();
+            if (_teamBScoreText != null) _teamBScoreText.text = _cachedTeamBScore.ToString();
         }
 
         private void OnScoreDataSynced(ScoreDataSyncedEvent evt)
@@ -223,31 +145,12 @@ namespace NightHunt.UI
             if (string.IsNullOrEmpty(evt.ScoreDataJson)) return;
 
             var snapshot = JsonUtility.FromJson<ScoreSnapshot>(evt.ScoreDataJson);
-            if (snapshot == null) return;
+            if (snapshot?.Teams == null) return;
 
-            if (_localPlayer != null && snapshot.Teams != null)
+            foreach (var team in snapshot.Teams)
             {
-                foreach (var team in snapshot.Teams)
-                {
-                    if (team.TeamId == _localPlayer.TeamId)
-                    {
-                        _cachedTeamScore = team.TotalScore;
-                        break;
-                    }
-                }
-            }
-
-            if (_localPlayer != null && snapshot.Players != null)
-            {
-                uint myId = (uint)_localPlayer.ObjectId;
-                foreach (var player in snapshot.Players)
-                {
-                    if (player.PlayerId == myId)
-                    {
-                        _cachedPersonalScore = player.TotalScore;
-                        break;
-                    }
-                }
+                if (team.TeamId == 0) _cachedTeamAScore = team.TotalScore;
+                else if (team.TeamId == 1) _cachedTeamBScore = team.TotalScore;
             }
         }
 
@@ -305,65 +208,6 @@ namespace NightHunt.UI
             _                       => phase
         };
 
-#if UNITY_EDITOR
-        // ── Editor — Context Menu: Create TeamMemberRow Template Prefab ───────
 
-        [ContextMenu("NightHunt/Create TeamMemberRow Template Prefab")]
-        private void Editor_CreateTeamMemberRowPrefab()
-        {
-            const string parent = "Assets/_Night_Hunt/Prefabs";
-            const string dir    = parent + "/UI";
-            if (!UnityEditor.AssetDatabase.IsValidFolder(dir))
-                UnityEditor.AssetDatabase.CreateFolder(parent, "UI");
-
-            const string path = dir + "/TeamMemberRow_Template.prefab";
-            if (UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path) != null)
-            {
-                Debug.Log($"[MatchUI] TeamMemberRow_Template already exists at {path}");
-                return;
-            }
-
-            var go  = new GameObject("TeamMemberRow_Template");
-            go.AddComponent<RectTransform>().sizeDelta = new Vector2(200f, 36f);
-            go.AddComponent<UnityEngine.UI.Image>().color = new Color(0.1f, 0.15f, 0.1f, 0.7f);
-            var hlg = go.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-            hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 4f;
-            hlg.padding = new RectOffset(4, 4, 2, 2);
-
-            // Avatar
-            var avatarGo = new GameObject("Avatar", typeof(RectTransform), typeof(UnityEngine.UI.Image));
-            avatarGo.transform.SetParent(go.transform, false);
-            avatarGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 32f;
-
-            // Name
-            var nameGo  = new GameObject("NameText", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
-            nameGo.transform.SetParent(go.transform, false);
-            nameGo.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
-            nameGo.GetComponent<TMPro.TextMeshProUGUI>().text = "PlayerName";
-
-            // Alive/Dead indicator
-            var aliveGo = new GameObject("AliveIndicator", typeof(RectTransform), typeof(UnityEngine.UI.Image));
-            aliveGo.transform.SetParent(go.transform, false);
-            aliveGo.GetComponent<UnityEngine.UI.Image>().color = Color.green;
-            aliveGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 14f;
-
-            var deadGo  = new GameObject("DeadIndicator", typeof(RectTransform), typeof(UnityEngine.UI.Image));
-            deadGo.transform.SetParent(go.transform, false);
-            deadGo.GetComponent<UnityEngine.UI.Image>().color = Color.red;
-            deadGo.AddComponent<UnityEngine.UI.LayoutElement>().preferredWidth = 14f;
-            deadGo.SetActive(false);
-
-            var saved = UnityEditor.PrefabUtility.SaveAsPrefabAsset(go, path);
-            Object.DestroyImmediate(go);
-
-            if (teamMemberPrefab == null)
-            {
-                teamMemberPrefab = saved;
-                UnityEditor.EditorUtility.SetDirty(this);
-            }
-            Debug.Log($"[MatchUI] Created TeamMemberRow_Template at {path}. " +
-                      "Add TeamMemberRow component and wire name/alive/dead fields.");
-        }
-#endif
     }
 }

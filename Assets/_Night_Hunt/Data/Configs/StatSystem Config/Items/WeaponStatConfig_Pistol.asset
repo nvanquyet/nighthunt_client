@@ -37,14 +37,18 @@ MonoBehaviour:
     DefaultValue: 1.8
     MinValue: 0
     MaxValue: 10
-  - Type: 16
+  - Type: 20
     DefaultValue: 12
     MinValue: 1
     MaxValue: 100
-  - Type: 20
+  - Type: 23
     DefaultValue: 120
     MinValue: 0
     MaxValue: 600
+  - Type: 22
+    DefaultValue: 1.8
+    MinValue: 0.1
+    MaxValue: 15
   PlayerModifiers:
   - StatType: 4
     Value: -2

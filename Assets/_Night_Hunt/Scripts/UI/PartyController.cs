@@ -424,7 +424,6 @@ namespace NightHunt.UI
             if (_ws == null) _ws = GameWebSocketService.Instance;
             if (_ws == null) return;
 
-            _ws.OnMatchFound              += HandleMatchFound;
             _ws.OnMatchReady              += HandleMatchReady;
             _ws.OnMatchCancelled          += HandleMatchCancelled;
             _ws.OnDsReady                 += HandleDsReady;
@@ -444,7 +443,6 @@ namespace NightHunt.UI
         private void UnsubscribeWSEvents()
         {
             if (_ws == null) return;
-            _ws.OnMatchFound              -= HandleMatchFound;
             _ws.OnMatchReady              -= HandleMatchReady;
             _ws.OnMatchCancelled          -= HandleMatchCancelled;
             _ws.OnDsReady                 -= HandleDsReady;
@@ -461,28 +459,6 @@ namespace NightHunt.UI
         }
 
         // ── Matchmaking ───────────────────────────────────────────────────────
-
-        private void HandleMatchFound(GameWebSocketService.MatchFoundEvent e)
-        {
-            _pendingLobbyToken = e.lobbyToken;
-            SetQueueState(RankedQueueState.Idle);   // dừng timer "đang tìm trận"
-
-            // Auto-accept: navigate directly into match — no manual user confirmation.
-            MatchFoundOverlay.Instance?.Show(
-                gameMode:    e.gameMode,
-                playerIds:   e.playerIds,
-                localUserId: _sessionState?.UserId ?? 0L);
-
-            _ = SendAcceptAsync(e.lobbyToken);
-        }
-
-        private async System.Threading.Tasks.Task SendAcceptAsync(string lobbyToken)
-        {
-            if (string.IsNullOrEmpty(lobbyToken)) return;
-            await GameManager.Instance.BackendClient.PostAsync<object>(
-                Constants.API_MATCHMAKING_ACCEPT,
-                new MatchmakingAcceptRequest { lobbyToken = lobbyToken });
-        }
 
         private void HandleDsReady(GameWebSocketService.DsReadyEvent e)
         {

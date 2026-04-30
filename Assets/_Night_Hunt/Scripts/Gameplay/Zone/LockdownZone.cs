@@ -2,9 +2,11 @@ using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
+using NightHunt.Utilities;
 using System.Collections.Generic;
 
 namespace NightHunt.Gameplay.Zone
@@ -38,6 +40,8 @@ namespace NightHunt.Gameplay.Zone
         [SerializeField] private float _closeTime        = 120f;   // seconds
         [SerializeField] private float _damagePerSecond  = 10f;
         [SerializeField] private float _damageTickInterval = 1f;   // how often to apply damage
+        [SerializeField] private bool _teleportPlayersToCenterOnStart = true;
+        [SerializeField] private float _teleportSpreadRadius = 4f;
 
         [Header("Zone Center")]
         [Tooltip("World-space center of the lockdown zone. Defaults to this object's position.")]
@@ -52,6 +56,7 @@ namespace NightHunt.Gameplay.Zone
 
         // ── Server runtime ───────────────────────────────────────────────────────
         private float _damageTickTimer;
+        private bool _lockdownStarted;
 
         // ── Public ───────────────────────────────────────────────────────────────
         public float CurrentRadius => _syncRadius.Value;
@@ -93,6 +98,19 @@ namespace NightHunt.Gameplay.Zone
 
             UpdateZoneClosing();
             TickDamage();
+        }
+
+        [Server]
+        public void ActivateForLockdown()
+        {
+            if (_lockdownStarted) return;
+            _lockdownStarted = true;
+            _damageTickTimer = 0f;
+            _syncRadius.Value = _initialRadius;
+            _syncProgress.Value = 0f;
+
+            if (_teleportPlayersToCenterOnStart)
+                TeleportAlivePlayersToCenter();
         }
 
         // ── Server logic ─────────────────────────────────────────────────────────
@@ -146,6 +164,35 @@ namespace NightHunt.Gameplay.Zone
 
                 Debug.Log($"[LockdownZone] Zone damage {damage:F0} → {np.DisplayName} " +
                           $"(dist {dist:F1} > radius {radius:F1})");
+            }
+        }
+
+        [Server]
+        private void TeleportAlivePlayersToCenter()
+        {
+            var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
+            if (players == null) return;
+
+            int index = 0;
+            foreach (var np in players)
+            {
+                if (np == null || !np.IsAlive) continue;
+
+                Vector2 offset2 = index == 0
+                    ? Vector2.zero
+                    : UnityEngine.Random.insideUnitCircle.normalized * Mathf.Min(_teleportSpreadRadius, _finalRadius * 0.5f);
+                Vector3 target = Center + new Vector3(offset2.x, 0f, offset2.y);
+
+                var movement = ComponentResolver.Find<IMovementController>(np)
+                    .OnSelf()
+                    .InChildren()
+                    .Resolve();
+                if (movement != null)
+                    movement.Teleport(target, np.transform.rotation);
+                else
+                    np.transform.position = target;
+
+                index++;
             }
         }
 

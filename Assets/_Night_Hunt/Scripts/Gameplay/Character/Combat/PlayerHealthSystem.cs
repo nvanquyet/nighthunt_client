@@ -8,6 +8,7 @@ using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Scoring;
 using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat
@@ -16,7 +17,7 @@ namespace NightHunt.Gameplay.Character.Combat
     /// Server-authoritative damage receiver for player characters.
     ///
     /// Flow (hitscan):
-    ///   Owner client raycast → RequestDamageServerRpc → ApplyDamageServer
+    ///   WeaponSystem server resolver → ApplyDamageServer
     ///   → PlayerStatSystem.SetCurrentStat(Health) → CharacterLifecycleController.OnDied
     ///   → NotifyHitObserversRpc (all clients: VFX) → NotifyKillObserversRpc (kill feed)
     ///
@@ -40,6 +41,7 @@ namespace NightHunt.Gameplay.Character.Combat
 
         [Tooltip("MatchEndManager to track kills for win condition. Auto-resolved if null.")]
         [SerializeField] private NightHunt.Gameplay.Match.MatchEndManager _matchEndManager;
+        [SerializeField] private ScoringSystem _scoringSystem;
 
         [Header("Settings")]
         [Tooltip("Armor damage reduction formula: final = damage * (100 / (100 + armor)).")]
@@ -87,6 +89,9 @@ namespace NightHunt.Gameplay.Character.Combat
 
             if (_matchEndManager == null)
                 _matchEndManager = FindFirstObjectByType<NightHunt.Gameplay.Match.MatchEndManager>();
+
+            if (_scoringSystem == null)
+                _scoringSystem = FindFirstObjectByType<ScoringSystem>();
         }
 
 #if UNITY_EDITOR
@@ -112,6 +117,15 @@ namespace NightHunt.Gameplay.Character.Combat
                 _statSystemSource = statConcrete;
         }
 
+        private void EnsureClientWorldHealthBar()
+        {
+            if (Application.isBatchMode)
+                return;
+
+            if (GetComponentInChildren<WorldHealthBar>(true) == null)
+                gameObject.AddComponent<WorldHealthBar>();
+        }
+
         public override void OnStartServer()
         {
             base.OnStartServer();
@@ -121,6 +135,11 @@ namespace NightHunt.Gameplay.Character.Combat
 
             if (_lifecycle == null)
                 Debug.LogError("[PlayerHealthSystem] CharacterLifecycleController not found.");
+
+            if (_scoringSystem == null)
+                _scoringSystem = FindFirstObjectByType<ScoringSystem>();
+
+            EnsureClientWorldHealthBar();
         }
 
         // ── IHittable (owner-client call gateway) ─────────────────────────────
@@ -264,10 +283,14 @@ namespace NightHunt.Gameplay.Character.Combat
             uint killerObjId = info.ShooterNetworkObjectId > 0 ? (uint)info.ShooterNetworkObjectId : 0u;
             uint victimObjId = _networkPlayer != null ? (uint)_networkPlayer.ObjectId : 0u;
             int  killerTeamId = ResolveKillerTeamId(info.ShooterNetworkObjectId);
+            string killerBackendPlayerId = ResolveBackendPlayerId(info.ShooterNetworkObjectId);
 
             // Track kill for match-end win condition
             if (killerTeamId >= 0)
-                _matchEndManager?.AddKill(killerTeamId);
+                _matchEndManager?.AddKill(killerTeamId, killerBackendPlayerId);
+
+            if (killerObjId != 0u)
+                _scoringSystem?.AwardKill(killerObjId, victimObjId);
 
             // Broadcast death event with killer name to all clients (kill feed, death screen).
             NotifyKillObserversRpc(killerName, info.WeaponId, killerObjId, victimObjId, killerTeamId);
@@ -307,6 +330,28 @@ namespace NightHunt.Gameplay.Character.Combat
             }
 
             return -1;
+        }
+
+        [Server]
+        private string ResolveBackendPlayerId(int shooterNetObjId)
+        {
+            if (shooterNetObjId < 0)
+                return string.Empty;
+
+            var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
+            if (players == null)
+                return string.Empty;
+
+            foreach (var player in players)
+            {
+                if (player != null && (int)player.ObjectId == shooterNetObjId)
+                {
+                    var data = RegistryService.Instance?.GetPrivateDataByFishNetId(player.OwnerId);
+                    return data?.BackendPlayerId ?? string.Empty;
+                }
+            }
+
+            return string.Empty;
         }
 
         // ── Observer RPCs (server → all clients) ──────────────────────────────

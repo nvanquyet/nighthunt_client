@@ -12,10 +12,62 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d43377b348fd2374d9366239afbb39b6, type: 3}
   m_Name: SpawnTable_ItemScatter
   m_EditorClassIdentifier: 
-  Mode: 2
+  Mode: 0
   FixedEntries: []
-  RandomEntries: []
-  MinRandomCount: 0
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: b14037a3120cbbc4882f1aa8db781dca, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 214de9bd2ed6e8a49a96592e7b13ec1f, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 930f5770eab2bb94cb97e6cab81297b3, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: f95b1f7b6c29c4947a363156bff76e73, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 4abd8a463f09bfb44963e31e87943822, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: d00bb1a76c06474438b0ae0d9d400ba1, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 7edd8e440c99dd84e87e197bedd546b2, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 0f851431afcd2b44995f3025196e9d90, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 27e18dbf58e0ada42a3b57ab4cfa0254, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 3abbdc9e317083d4495c61feda9a98ed, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 39f669e571f8ffe40bfc9463db4d6020, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: d00a50bc8623ccf48a0bb2387d60de90, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: ad73a92b20f42c447a98965c6e99b60d, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  MinRandomCount: 1
   MaxRandomCount: 2
   RollOnOpen: 1
   DropToWorldOnOpen: 0

@@ -18,13 +18,17 @@ MonoBehaviour:
     MinQuantity: 1
     MaxQuantity: 2
     Chance: 1
+  - Item: {fileID: 11400000, guid: 657c24753fae3bc46b95280a23452530, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
   RandomEntries:
   - Item: {fileID: 11400000, guid: 27e18dbf58e0ada42a3b57ab4cfa0254, type: 2}
     MinQuantity: 1
     MaxQuantity: 2
     Chance: 0.6
-  MinRandomCount: 0
-  MaxRandomCount: 2
+  MinRandomCount: 4
+  MaxRandomCount: 7
   RollOnOpen: 1
   DropToWorldOnOpen: 0
   MinTotalItems: 2

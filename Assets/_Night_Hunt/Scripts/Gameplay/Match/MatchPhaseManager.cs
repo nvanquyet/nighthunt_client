@@ -30,8 +30,6 @@ namespace NightHunt.Gameplay.Match
         [Header("Phase Config Data")]
         [Tooltip("Config data cho từng phase (Preparation, Hunt, Lockdown). Assign trong Inspector.")]
         [SerializeField] private List<MatchPhaseConfigData> phaseConfigs = new List<MatchPhaseConfigData>();
-        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
-
         // ✅ Event system - decoupled communication
         public event Action<MatchPhaseState, string> OnPhaseStarted; // (newPhase, phaseName)
         public event Action<MatchPhaseState, MatchPhaseState> OnPhaseTransitioned; // (oldPhase, newPhase)        /// <summary>Fired on server when the Lockdown (Phase 3) timer runs out. Used by MatchEndManager for score-based win resolution.</summary>
@@ -76,7 +74,7 @@ namespace NightHunt.Gameplay.Match
         public override void OnStartServer()
         {
             base.OnStartServer();
-            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                 Debug.Log("[MatchPhaseManager] Server started");
         }
 
@@ -104,7 +102,7 @@ namespace NightHunt.Gameplay.Match
         {
             int remaining = Mathf.CeilToInt(_delayBeforeFirstPhase);
 
-            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                 Debug.Log($"[MatchPhaseManager] Match countdown: {remaining}s before {initialState}");
 
             while (remaining > 0)
@@ -163,7 +161,7 @@ namespace NightHunt.Gameplay.Match
         /// </summary>
         private void OnPhaseStateChanged(MatchPhaseState previousState, MatchPhaseState newState)
         {
-            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                 Debug.Log($"[MatchPhaseManager] Phase state changed: {previousState} -> {newState}");
 
             // ✅ Trigger event cho subscribers (ServerGameManager, Bootstrap, etc.)
@@ -222,7 +220,7 @@ namespace NightHunt.Gameplay.Match
                 ? config.DisplayName
                 : phase.ToString();
 
-            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                 Debug.Log($"[MatchPhaseManager] Starting phase: {phase} ('{displayName}')");
 
             // Store old phase for event
@@ -237,7 +235,7 @@ namespace NightHunt.Gameplay.Match
             networkPhaseStartTime.Value = Time.time;
             networkPhaseDuration.Value  = UnityEngine.Random.Range(config.DurationMin, config.DurationMax) * 60f;
 
-            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                 Debug.Log($"[MatchPhaseManager] Started phase: {phase} (Duration: {networkPhaseDuration.Value}s)");
 
             hasStartedFirstPhase = true;
@@ -284,7 +282,7 @@ namespace NightHunt.Gameplay.Match
                 if (remaining <= warningTime)
                 {
                     _warningSent = true;
-                    if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                         Debug.Log($"[MatchPhaseManager] ?? Phase warning: {CurrentPhase} ends in {remaining:F0}s");
                     RpcPhaseWarning(CurrentPhase, remaining);
                 }
@@ -320,7 +318,7 @@ namespace NightHunt.Gameplay.Match
                 return;
             }
 
-            if (_debugConfig != null && _debugConfig.EnableMatchDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                 Debug.Log($"[MatchPhaseManager] Auto-transitioning from {CurrentPhase} to {nextPhase}");
             StartPhase(nextPhase);
         }

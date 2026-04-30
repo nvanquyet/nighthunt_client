@@ -46,6 +46,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 70235c38294d7ec47a68c9568a71e5c2, type: 2}
   - {fileID: 11400000, guid: 214de9bd2ed6e8a49a96592e7b13ec1f, type: 2}
   - {fileID: 11400000, guid: c958c98e11c7b5c40adc0f5edd061724, type: 2}
+  - {fileID: 11400000, guid: 9d3e334d665542c88e69d7e8e66de0af, type: 2}
   _autoLoadFromResources: 1
   _itemDefinitionsPath: Database/Items
   _prewarmTypeLookup: 1

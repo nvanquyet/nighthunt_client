@@ -293,7 +293,7 @@ namespace NightHunt.GameplaySystems.Inventory
                     ? Mathf.Min(quantity, itemDef.MaxStackSize)
                     : 1;
 
-                var newItem = CreateItemInstance(itemDef, stackSize);
+                var newItem = ItemInstanceFactory.Create(itemDef, stackSize, GetNextAvailableIndex());
 
                 // PERFORMANCE: Update all caches atomically
                 AddToAllCaches(newItem);
@@ -334,8 +334,15 @@ namespace NightHunt.GameplaySystems.Inventory
                 return;
             }
 
-            // Convert to runtime instance
             var item = data.ToInstance();
+            var itemDef = ItemDatabase.GetDefinition(item.DefinitionID);
+            if (itemDef == null)
+            {
+                Debug.LogWarning($"[InventorySystem] AddItemFromData: definition not found '{item.DefinitionID}'");
+                return;
+            }
+
+            ItemInstanceFactory.EnsureAttachmentSlots(item, itemDef);
 
             // Ensure unique InstanceID
             if (string.IsNullOrEmpty(item.InstanceID))
@@ -514,6 +521,9 @@ namespace NightHunt.GameplaySystems.Inventory
                 _itemsByIndex[item.InventoryIndex] = item;
 
             UpdateItemDataOptimized(item);
+
+            if (staleKey != item.InventoryIndex)
+                OnItemMoved?.Invoke(item, staleKey, item.InventoryIndex);
         }
 
         /// <inheritdoc/>
@@ -663,18 +673,7 @@ namespace NightHunt.GameplaySystems.Inventory
 
             dropData.Quantity = dropQty; // explicit — captures exactly what was dropped
 
-            // Strip all-empty attachment arrays to prevent ghost slot allocation on pickup.
-            if (dropData.AttachedItems != null)
-            {
-                bool hasAny = false;
-                for (int i = 0; i < dropData.AttachedItems.Length; i++)
-                {
-                    if (!string.IsNullOrEmpty(dropData.AttachedItems[i]))
-                    { hasAny = true; break; }
-                }
-                if (!hasAny)
-                    dropData.AttachedItems = null;
-            }
+            ItemInstanceFactory.StripEmptyAttachmentSlots(ref dropData);
 
             // Drop position: slightly in front of the owning player.
             Transform origin = transform;
@@ -1151,12 +1150,7 @@ namespace NightHunt.GameplaySystems.Inventory
                 return;
             }
 
-            var newItem = new ItemInstance(item.DefinitionID, splitQuantity, GetNextAvailableIndex())
-            {
-                CurrentResource = item.CurrentResource,
-                CurrentMagazine = item.CurrentMagazine,
-                CustomData = item.CustomData
-            };
+            var newItem = ItemInstanceFactory.CloneStackPortion(item, splitQuantity, GetNextAvailableIndex());
 
             item.Quantity -= splitQuantity;
 
@@ -1192,23 +1186,6 @@ namespace NightHunt.GameplaySystems.Inventory
         #endregion
 
         #region Helper Methods - OPTIMIZED
-
-        [Server]
-        private ItemInstance CreateItemInstance(ItemDefinition itemDef, int quantity)
-        {
-            var newItem = new ItemInstance(itemDef.ItemID, quantity, GetNextAvailableIndex());
-
-            newItem.CurrentResource = itemDef.GetDefaultCurrentValue();
-
-            if (itemDef is WeaponDefinition weaponDef)
-                newItem.CurrentMagazine =
-                    Mathf.RoundToInt(weaponDef.GetStatValue(NightHunt.Gameplay.StatSystem.Core.Types.ItemStatType.MagazineSize));
-
-            if (itemDef.AttachmentSlots != null && itemDef.AttachmentSlots.Length > 0)
-                newItem.AttachedItems = new string[itemDef.AttachmentSlots.Length];
-
-            return newItem;
-        }
 
         /// <summary>
         /// OPTIMIZED: Uses cached list instead of LINQ Where()

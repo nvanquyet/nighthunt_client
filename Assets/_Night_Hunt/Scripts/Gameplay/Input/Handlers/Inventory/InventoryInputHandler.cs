@@ -6,7 +6,7 @@ using NightHunt.Gameplay.Input.Core;
 namespace NightHunt.Gameplay.Input.Handlers.Inventory
 {
     /// <summary>
-    /// Handles ONLY Inventory action-map input (OpenInventory, DropItem, UseConsumable).
+    /// Handles ONLY Inventory action-map input (OpenInventory, DropItem, UseConsumable, QuickSlot1-4).
     ///
     /// DESIGN (SRP):
     ///   - Owns ONLY InputSystem wiring (InputActionMap, callbacks).
@@ -19,12 +19,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
         public event Action OpenInventoryPerformed;
         public event Action DropItemPerformed;
         public event Action UseConsumablePerformed;
+        public event Action<int> QuickSlotPerformed;
 
         // ── Cached map/actions ───────────────────────────────────────────────────
         private InputActionMap _inventoryMap;
         private InputAction _openInventoryAction;
         private InputAction _dropItemAction;
         private InputAction _useConsumableAction;
+        private InputAction _quickSlot1Action;
+        private InputAction _quickSlot2Action;
+        private InputAction _quickSlot3Action;
+        private InputAction _quickSlot4Action;
 
         private bool _inputEnabled;
 
@@ -69,12 +74,20 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
             _openInventoryAction = _inventoryMap.FindAction("OpenInventory");
             _dropItemAction      = _inventoryMap.FindAction("DropItem");
             _useConsumableAction = _inventoryMap.FindAction("UseConsumable");
+            _quickSlot1Action    = _inventoryMap.FindAction("QuickSlot1");
+            _quickSlot2Action    = _inventoryMap.FindAction("QuickSlot2");
+            _quickSlot3Action    = _inventoryMap.FindAction("QuickSlot3");
+            _quickSlot4Action    = _inventoryMap.FindAction("QuickSlot4");
 
             _inputEnabled = true;
 
             if (_openInventoryAction != null) _openInventoryAction.performed += OnOpenInventory;
             if (_dropItemAction      != null) _dropItemAction.performed      += OnDropItem;
             if (_useConsumableAction != null) _useConsumableAction.performed += OnUseConsumable;
+            if (_quickSlot1Action    != null) _quickSlot1Action.performed    += OnQuickSlot1;
+            if (_quickSlot2Action    != null) _quickSlot2Action.performed    += OnQuickSlot2;
+            if (_quickSlot3Action    != null) _quickSlot3Action.performed    += OnQuickSlot3;
+            if (_quickSlot4Action    != null) _quickSlot4Action.performed    += OnQuickSlot4;
         }
 
         public void DisableInput()
@@ -85,6 +98,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
             if (_openInventoryAction != null) _openInventoryAction.performed -= OnOpenInventory;
             if (_dropItemAction      != null) _dropItemAction.performed      -= OnDropItem;
             if (_useConsumableAction != null) _useConsumableAction.performed -= OnUseConsumable;
+            if (_quickSlot1Action    != null) _quickSlot1Action.performed    -= OnQuickSlot1;
+            if (_quickSlot2Action    != null) _quickSlot2Action.performed    -= OnQuickSlot2;
+            if (_quickSlot3Action    != null) _quickSlot3Action.performed    -= OnQuickSlot3;
+            if (_quickSlot4Action    != null) _quickSlot4Action.performed    -= OnQuickSlot4;
         }
 
         // ── Callbacks ─────────────────────────────────────────────────────────────
@@ -106,6 +123,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
             UseConsumablePerformed?.Invoke();
         }
 
+        private void OnQuickSlot1(InputAction.CallbackContext ctx) => RaiseQuickSlot(ctx, 1);
+        private void OnQuickSlot2(InputAction.CallbackContext ctx) => RaiseQuickSlot(ctx, 2);
+        private void OnQuickSlot3(InputAction.CallbackContext ctx) => RaiseQuickSlot(ctx, 3);
+        private void OnQuickSlot4(InputAction.CallbackContext ctx) => RaiseQuickSlot(ctx, 4);
+
+        private void RaiseQuickSlot(InputAction.CallbackContext ctx, int oneBasedSlot)
+        {
+            if (!ctx.performed) return;
+            QuickSlotPerformed?.Invoke(oneBasedSlot);
+        }
+
         // ── Mobile API ────────────────────────────────────────────────────────
         /// <summary>
         /// Simulate pressing the OpenInventory button. Called by MobileInventoryButton
@@ -114,4 +142,3 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
         public void SimulateToggle() => OpenInventoryPerformed?.Invoke();
     }
 }
-

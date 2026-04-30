@@ -50,8 +50,6 @@ namespace NightHunt.Editor.Tests
     ///         CombatHUDPanel + WeaponSlotsContainer + FireButton(script)+AimJoystick
     ///         MatchUI       (all text + list + warning wired)
     ///         KillFeedUI    (killFeedParent wired â€” assign killFeedItemPrefab manually)
-    ///         BossHUDPanel  (hidden â€” panel/slider/texts wired)
-    ///         CrosshairUI   (4 lines + center dot)
     ///         InteractionPromptUI (hidden â€” key/action/holdSlider wired)
     ///         MinimapUI     (rawImage/playerIndicator/zoneCircle/dotParent wired)
     ///         DeathScreen   (hidden â€” deathPanel/killedBy/timer/buttons wired)
@@ -74,7 +72,7 @@ namespace NightHunt.Editor.Tests
     ///   5. Attach PersistentUICanvas.cs + DontDestroyOnLoad on PersistentUICanvas GO
     ///   6. Assign MovementSettings SO on player prefab
     ///   7. Assign ItemDatabase SO on WorldSpawnManager
-    ///   8. Call MobileMovementBridge.BindHandler(handler) after local player spawns
+    ///   8. Wire [MoveJoystick].FixedJoystick → MobileHUDPanel._joystick in Inspector
     /// </summary>
     public static class DemoSceneGenerator
     {
@@ -172,7 +170,8 @@ namespace NightHunt.Editor.Tests
                 "3. Wire MinimapUI._minimapCamera + _minimapTexture\n" +
                 "4. Assign killFeedItemPrefab on KillFeedUI\n" +
                 "5. Attach PersistentUICanvas.cs + DDOL on PersistentUICanvas GO\n" +
-                "6. Call MobileMovementBridge.BindHandler(handler) on player spawn",
+                "6. Call MobileHUDPanel.Bind(inputManager) on player spawn",
+                "7. Wire [MoveJoystick].FixedJoystick → MobileHUDPanel._joystick in Inspector",
                 "OK");
         }
 
@@ -584,7 +583,7 @@ namespace NightHunt.Editor.Tests
             // â”€â”€ Other gameplay systems â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             AddMgr<Gameplay.AntiCamping.AntiCampingSystem>(parent,   "AntiCampingSystem",   log);
             AddMgr<Gameplay.Spectator.SpectateManager>(parent,       "SpectateManager",     log);
-            AddMgr<Gameplay.ClientEffects.ClientEffectManager>(parent,"ClientEffectManager", log);
+            AddMgr<Gameplay.ClientEffects.SimpleEffectPool>(parent,         "SimpleEffectPool",    log);
 
             // â”€â”€ Player registry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             AddMgr<Networking.Player.PlayerPublicRegistry>(parent, "PlayerPublicRegistry", log);
@@ -802,9 +801,9 @@ namespace NightHunt.Editor.Tests
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.matchWidthOrHeight  = 0.5f;
             cGo.AddComponent<GraphicRaycaster>();
-            var gameHUD = cGo.AddComponent<NightHunt.UI.GameHUD>();
-            var hudSO   = new SerializedObject(gameHUD);
-            log.Add("  GameHUD_Canvas (scale 1920x1080) — GameHUD.cs");
+            var gameHUDCtrl = cGo.AddComponent<NightHunt.UI.GameHUDController>();
+            var hudSO       = new SerializedObject(gameHUDCtrl);
+            log.Add("  GameHUD_Canvas (scale 1920x1080) — GameHUDController.cs");
 
             // ═══════════════════════════════════════════════════════════════
             // 1 PlayerHUDPanel — bottom-left 280x220, dark BG, RowContainer
@@ -813,7 +812,7 @@ namespace NightHunt.Editor.Tests
                 Vector2.zero, Vector2.zero, Vector2.zero,
                 new Vector2(10f, 10f), new Vector2(280f, 220f),
                 new Color(0f, 0f, 0f, 0.55f));
-            var phComp = phGo.AddComponent<GameplaySystems.UI.Inventory.PlayerHUDPanel>();
+            var phComp = phGo.AddComponent<CanvasGroup>();
             // Header label
             var phHeader   = new GameObject("PlayerLabel"); phHeader.transform.SetParent(phGo.transform, false);
             var phHeaderRT = phHeader.AddComponent<RectTransform>();
@@ -998,53 +997,7 @@ namespace NightHunt.Editor.Tests
             log.Add("    KillFeedUI — KillFeedContainer(VLG top-right) | assign killFeedItemPrefab");
 
             // ═══════════════════════════════════════════════════════════════
-            // 5 BossHUDPanel — top-center, hidden, 520x84
-            // ═══════════════════════════════════════════════════════════════
-            var bhGo = new GameObject("BossHUDPanel"); bhGo.transform.SetParent(cGo.transform, false); bhGo.SetActive(false);
-            var bhRT = bhGo.AddComponent<RectTransform>();
-            bhRT.anchorMin = new Vector2(0.5f,1f); bhRT.anchorMax = new Vector2(0.5f,1f); bhRT.pivot = new Vector2(0.5f,1f);
-            bhRT.anchoredPosition = new Vector2(0f,-6f); bhRT.sizeDelta = new Vector2(520f,84f);
-            bhGo.AddComponent<Image>().color = new Color(0.08f,0.04f,0.04f,0.92f);
-            var bhComp = bhGo.AddComponent<NightHunt.UI.BossHUDPanel>(); var bhSO = new SerializedObject(bhComp);
-            // BossNameText
-            var bnGo = new GameObject("BossNameText"); bnGo.transform.SetParent(bhGo.transform, false);
-            var bnRT = bnGo.AddComponent<RectTransform>(); bnRT.anchorMin = new Vector2(0f,0.55f); bnRT.anchorMax = new Vector2(1f,1f); bnRT.offsetMin = new Vector2(12f,0f); bnRT.offsetMax = new Vector2(-12f,-4f);
-            var bnTMP = bnGo.AddComponent<TextMeshProUGUI>(); bnTMP.text = "BOSS"; bnTMP.fontSize = 16f; bnTMP.fontStyle = FontStyles.Bold; bnTMP.color = new Color(1f,0.4f,0.2f); bnTMP.alignment = TextAlignmentOptions.Center;
-            SetSOObj(bhSO, "_bossNameText", bnTMP);
-            // HPSlider (bottom 55%, background + fill area + fill image)
-            var slGo = new GameObject("BossHPSlider"); slGo.transform.SetParent(bhGo.transform, false);
-            var slRT = slGo.AddComponent<RectTransform>(); slRT.anchorMin = new Vector2(0f,0f); slRT.anchorMax = new Vector2(1f,0.58f); slRT.offsetMin = new Vector2(12f,8f); slRT.offsetMax = new Vector2(-80f,0f);
-            slGo.AddComponent<Image>().color = new Color(0.18f,0.04f,0.04f,1f);
-            var fillArea = new GameObject("FillArea"); fillArea.transform.SetParent(slGo.transform, false);
-            var fillAreaRT = fillArea.AddComponent<RectTransform>(); fillAreaRT.anchorMin = Vector2.zero; fillAreaRT.anchorMax = Vector2.one; fillAreaRT.offsetMin = new Vector2(2f,2f); fillAreaRT.offsetMax = new Vector2(-2f,-2f);
-            var fillGo = new GameObject("Fill"); fillGo.transform.SetParent(fillArea.transform, false);
-            var fillRT = fillGo.AddComponent<RectTransform>(); fillRT.anchorMin = Vector2.zero; fillRT.anchorMax = Vector2.one; fillRT.offsetMin = fillRT.offsetMax = Vector2.zero;
-            fillGo.AddComponent<Image>().color = new Color(0.85f,0.15f,0.15f,1f);
-            var hpSlider = slGo.AddComponent<Slider>(); hpSlider.fillRect = fillRT; hpSlider.value = 1f; hpSlider.minValue = 0f; hpSlider.maxValue = 1f;
-            SetSOObj(bhSO, "_hpSlider", hpSlider);
-            // HPText (right of slider)
-            var hpTxtGo = new GameObject("BossHPText"); hpTxtGo.transform.SetParent(bhGo.transform, false);
-            var hpTxtRT = hpTxtGo.AddComponent<RectTransform>(); hpTxtRT.anchorMin = new Vector2(1f,0f); hpTxtRT.anchorMax = new Vector2(1f,0.58f); hpTxtRT.pivot = new Vector2(1f,0.5f); hpTxtRT.offsetMin = new Vector2(-76f,8f); hpTxtRT.offsetMax = new Vector2(-4f,0f);
-            var hpTMP = hpTxtGo.AddComponent<TextMeshProUGUI>(); hpTMP.text = "1000/1000"; hpTMP.fontSize = 11f; hpTMP.color = Color.white; hpTMP.alignment = TextAlignmentOptions.Right;
-            SetSOObj(bhSO, "_hpText", hpTMP);
-            SetSOObj(bhSO, "_panel", bhGo); bhSO.ApplyModifiedProperties(); SetSOObj(hudSO, "bossHUDPanel", bhComp);
-            log.Add("    BossHUDPanel — hidden | BossBG + BossNameText + HPSlider(FillArea/Fill) + HPText");
-
-            // ═══════════════════════════════════════════════════════════════
-            // 6 CrosshairUI — screen center 80x80
-            // ═══════════════════════════════════════════════════════════════
-            var xhGo = new GameObject("CrosshairUI"); xhGo.transform.SetParent(cGo.transform, false);
-            var xhRT = xhGo.AddComponent<RectTransform>(); xhRT.anchorMin = xhRT.anchorMax = new Vector2(0.5f,0.5f); xhRT.pivot = new Vector2(0.5f,0.5f); xhRT.anchoredPosition = Vector2.zero; xhRT.sizeDelta = new Vector2(80f,80f);
-            var xhComp = xhGo.AddComponent<GameplaySystems.UI.Combat.CrosshairUI>(); var xhSO = new SerializedObject(xhComp);
-            SetSOObj(xhSO, "_topLine",    AddLine(xhGo, "TopLine",    new Vector2(0f, 14f),  new Vector2(2f,10f)));
-            SetSOObj(xhSO, "_bottomLine", AddLine(xhGo, "BottomLine", new Vector2(0f,-14f),  new Vector2(2f,10f)));
-            SetSOObj(xhSO, "_leftLine",   AddLine(xhGo, "LeftLine",   new Vector2(-14f,0f),  new Vector2(10f,2f)));
-            SetSOObj(xhSO, "_rightLine",  AddLine(xhGo, "RightLine",  new Vector2( 14f,0f),  new Vector2(10f,2f)));
-            var dotGo = new GameObject("CenterDot"); dotGo.transform.SetParent(xhGo.transform, false);
-            var dotRT = dotGo.AddComponent<RectTransform>(); dotRT.anchorMin = dotRT.anchorMax = new Vector2(0.5f,0.5f); dotRT.pivot = new Vector2(0.5f,0.5f); dotRT.sizeDelta = new Vector2(3f,3f);
-            dotGo.AddComponent<Image>().color = Color.white;
-            SetSOObj(xhSO, "_centerDot", dotGo); xhSO.ApplyModifiedProperties(); SetSOObj(hudSO, "crosshairUI", xhComp);
-            log.Add("    CrosshairUI — 4 lines (TopLine/BottomLine/LeftLine/RightLine) + CenterDot");
+            // BossHUDPanel removed.
 
             // ═══════════════════════════════════════════════════════════════
             // 7 InteractionPromptUI — bottom-center 360x108, hidden
@@ -1211,9 +1164,8 @@ namespace NightHunt.Editor.Tests
             mjHand.AddComponent<Image>().color = new Color(1f,1f,1f,0.5f);
             var mjComp = mjGo.AddComponent<FixedJoystick>(); var mjSO = new SerializedObject(mjComp);
             mjSO.FindProperty("background").objectReferenceValue = mjBgRT; mjSO.FindProperty("handle").objectReferenceValue = mjHandRT; mjSO.ApplyModifiedProperties();
-            var bridgeComp = mjGo.AddComponent<Gameplay.Input.Handlers.Movement.MobileMovementBridge>(); var bridgeSO = new SerializedObject(bridgeComp);
-            SetSOObj(bridgeSO, "_joystick", mjComp); bridgeSO.ApplyModifiedProperties();
-            log.Add("    [MoveJoystick] FixedJoystick + MobileMovementBridge | call BindHandler on player spawn");
+            mjGo.AddComponent<Gameplay.Input.Handlers.Movement.MobileMovementBridge>();
+            log.Add("    [MoveJoystick] FixedJoystick + MobileMovementBridge | MANUAL: wire FixedJoystick → MobileHUDPanel._joystick in Inspector");
             // ── ItemAimController (fullscreen canvas overlay – throwable aim) ─
             var iacGo = new GameObject("ItemAimController"); iacGo.transform.SetParent(cGo.transform, false);
             var iacRT = iacGo.AddComponent<RectTransform>(); iacRT.anchorMin = Vector2.zero; iacRT.anchorMax = Vector2.one; iacRT.offsetMin = iacRT.offsetMax = Vector2.zero;
@@ -1306,19 +1258,14 @@ namespace NightHunt.Editor.Tests
             var invBtnLblGo = new GameObject("Label"); invBtnLblGo.transform.SetParent(invBtnGo.transform, false);
             var invBtnLblRT = invBtnLblGo.AddComponent<RectTransform>(); invBtnLblRT.anchorMin = Vector2.zero; invBtnLblRT.anchorMax = Vector2.one; invBtnLblRT.offsetMin = invBtnLblRT.offsetMax = Vector2.zero;
             var invBtnTMP = invBtnLblGo.AddComponent<TextMeshProUGUI>(); invBtnTMP.text = "INV"; invBtnTMP.fontSize = 14f; invBtnTMP.fontStyle = FontStyles.Bold; invBtnTMP.color = Color.white; invBtnTMP.alignment = TextAlignmentOptions.Center;
-            log.Add("    OpenInventoryButton 68x68 bottom-left -- wire onClick to UIRootController.ToggleInventory()");
+            log.Add("    OpenInventoryButton 68x68 bottom-left -- wire onClick to GameHUDController.ToggleInventory()");
 
-            // ── UIRootController (on canvas root, wired to both HUD panels) ─
-            var uiRC   = cGo.AddComponent<GameplaySystems.UI.Inventory.UIRootController>();
-            var uiRCSO = new SerializedObject(uiRC);
-            SetSOObj(uiRCSO, "_playerHudPanel", phComp);
-            SetSOObj(uiRCSO, "_combatHudPanel", chComp);
-            // _inventoryScreen + _inventoryRootObject wired in BuildInventoryCanvas
-            uiRCSO.ApplyModifiedProperties(); SetSOObj(hudSO, "uiRootController", uiRC);
+            // ── Wire GameHUDController sub-panels ────────────────────────────────────
+            SetSOObj(hudSO, "_playerHUDPanel", phComp);
             hudSO.ApplyModifiedProperties();
-            log.Add("  GameHUD_Canvas — ZERO null refs on all wired panels");
+            log.Add("  GameHUD_Canvas — GameHUDController wired (run wizard ④ to auto-wire all refs)");
         }
-        private static GameObject s_InvCanvas;           // kept to wire back into UIRootController
+            private static GameObject s_InvCanvas;           // kept to wire back into GameHUDController
 
         private static void BuildInventoryCanvas(GameObject parent, List<string> log)
         {
@@ -1422,29 +1369,7 @@ namespace NightHunt.Editor.Tests
             wepSO.ApplyModifiedProperties();
             SetSOObj(invSO, "_weaponEquipmentPanel", wepComp);
 
-            // ItemContextMenu (floating popup, hidden, own Canvas overlay)
-            var ctxGo = new GameObject("ItemContextMenu"); ctxGo.transform.SetParent(invPanel.transform, false); ctxGo.SetActive(false);
-            var ctxRT = ctxGo.AddComponent<RectTransform>(); ctxRT.anchorMin = ctxRT.anchorMax = Vector2.zero; ctxRT.pivot = new Vector2(0f,1f); ctxRT.sizeDelta = new Vector2(152f,144f);
-            var ctxCanvas = ctxGo.AddComponent<Canvas>(); ctxCanvas.overrideSorting = true; ctxCanvas.sortingOrder = 200;
-            ctxGo.AddComponent<GraphicRaycaster>();
-            ctxGo.AddComponent<Image>().color = new Color(0.1f,0.1f,0.13f,0.97f);
-            var ctxVLG = ctxGo.AddComponent<VerticalLayoutGroup>(); ctxVLG.childControlWidth = true; ctxVLG.childControlHeight = false; ctxVLG.childForceExpandWidth = true; ctxVLG.padding = new RectOffset(4,4,4,4); ctxVLG.spacing = 2f;
-            var ctxUseBtn     = MakeTextBtn(ctxGo, "UseButton",    "Use",     new Color(0.2f,0.45f,0.2f,0.9f));
-            var ctxEquipBtn   = MakeTextBtn(ctxGo, "EquipButton",  "Equip",   new Color(0.2f,0.3f,0.45f,0.9f));
-            var ctxUnequipBtn = MakeTextBtn(ctxGo, "UnequipButton","Unequip", new Color(0.3f,0.2f,0.2f,0.9f));
-            var ctxDropBtn    = MakeTextBtn(ctxGo, "DropButton",   "Drop",    new Color(0.5f,0.15f,0.15f,0.9f));
-            foreach (var b in new Button[] { ctxUseBtn, ctxEquipBtn, ctxUnequipBtn, ctxDropBtn })
-            { var le = b.gameObject.AddComponent<LayoutElement>(); le.preferredHeight = 32f; le.minHeight = 32f; }
-            var ctxComp = ctxGo.AddComponent<GameplaySystems.UI.Inventory.ItemContextMenu>();
-            var ctxSO   = new SerializedObject(ctxComp);
-            SetSOObj(ctxSO, "_rootRect",     ctxRT);
-            SetSOObj(ctxSO, "_canvas",       ctxCanvas);
-            SetSOObj(ctxSO, "_useButton",    ctxUseBtn);
-            SetSOObj(ctxSO, "_equipButton",  ctxEquipBtn);
-            SetSOObj(ctxSO, "_unequipButton",ctxUnequipBtn);
-            SetSOObj(ctxSO, "_dropButton",   ctxDropBtn);
-            ctxSO.ApplyModifiedProperties();
-            SetSOObj(invSO, "_itemContextMenu", ctxComp);
+
 
             // AttachmentPanel (removed, functionality moved to WeaponEquipmentPanel)
 
@@ -1542,17 +1467,17 @@ namespace NightHunt.Editor.Tests
             invSO.ApplyModifiedProperties();
             log.Add("  InventoryScreen_Canvas -- 3-col layout | Equipment + Grid + WeaponSlots + PlayerStatPanel + ContextMenu + AttachmentPanel + Tooltip + DropDialog all wired");
 
-            // Wire UIRootController._inventoryScreen + _inventoryRootObject
-            var uiRC = parent.GetComponentInChildren<GameplaySystems.UI.Inventory.UIRootController>(true);
-            if (uiRC != null)
+            // Wire GameHUDController._inventoryScreen + _inventoryRoot
+            var ctrl = parent.GetComponentInChildren<NightHunt.UI.GameHUDController>(true);
+            if (ctrl != null)
             {
-                var rcSO = new SerializedObject(uiRC);
-                SetSOObj(rcSO, "_inventoryScreen",    invComp);
-                SetSOObj(rcSO, "_inventoryRootObject",cGo);
-                rcSO.ApplyModifiedProperties();
-                log.Add("    UIRootController._inventoryScreen + _inventoryRootObject wired");
+                var ctrlSO = new SerializedObject(ctrl);
+                SetSOObj(ctrlSO, "_inventoryScreen", invComp);
+                SetSOObj(ctrlSO, "_inventoryRoot",   cGo);
+                ctrlSO.ApplyModifiedProperties();
+                log.Add("    GameHUDController._inventoryScreen + _inventoryRoot wired");
             }
-            else log.Add("    UIRootController not found -- wire _inventoryScreen + _inventoryRootObject manually");
+            else log.Add("    GameHUDController not found -- wire _inventoryScreen + _inventoryRoot manually");
 
             s_InvCanvas = cGo;
         }

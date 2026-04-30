@@ -136,7 +136,7 @@ namespace NightHunt.Gameplay.Boss
 
             Debug.Log($"[BossSpawnManager] Spawned boss '{boss.BossId}' at {pos}.");
 
-            // Notify all clients so UI (BossHUDPanel) can show the HP bar.
+            // Notify all clients about the boss spawn
             RpcNotifyBossSpawned(boss.BossId, pos);
         }
 

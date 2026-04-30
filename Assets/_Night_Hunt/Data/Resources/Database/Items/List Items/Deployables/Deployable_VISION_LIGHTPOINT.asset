@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d831ef8e9b184e14f98aaf4d5d2849d9, type: 3}
+  m_Name: Deployable_VISION_LIGHTPOINT
+  m_EditorClassIdentifier: 
+  ItemID: VISION_LIGHTPOINT
+  DisplayName: Light Point
+  Description: 
+  Icon: {fileID: 21300000, guid: 9622251f5f393934b916ce52ceb8f76b, type: 3}
+  Rarity: 1
+  IsStackable: 1
+  MaxStackSize: 2
+  Weight: 1
+  _visualPrefab: {fileID: 7342610198373781452, guid: 307509faf96941b8a50957426c16adf4,
+    type: 3}
+  ValidSlots: 00000000
+  DeployableKind: 2
+  NetworkDeployablePrefab: {fileID: 7277718707913719503, guid: cf6ed3b079414dd1885f2f79dccf57d0,
+    type: 3}
+  PlacementPreviewPrefab: {fileID: 7342610198373781452, guid: 307509faf96941b8a50957426c16adf4,
+    type: 3}
+  MaxHP: 100
+  PlacementDistance: 3
+  PlacementCheckRadius: 0.5
+  PlacementLayerMask:
+    serializedVersion: 2
+    m_Bits: 22052865
+  MaxPlacementSlope: 60

@@ -31,12 +31,21 @@ namespace NightHunt.Gameplay.Character.Combat
         {
             if (weapon == null) return Vector2.zero;
 
-            // 2D directional recoil pattern using spread values
-            // Use SpreadBase as base recoil value
-            float recoilX = Random.Range(-weapon.SpreadBase, weapon.SpreadBase);
-            float recoilY = Random.Range(0f, weapon.SpreadBase * 0.5f); // Vertical recoil is typically less
+            float horizontal = weapon.RecoilHorizontal > 0f
+                ? weapon.RecoilHorizontal
+                : Mathf.Max(0f, weapon.SpreadBase * 0.35f);
+            float vertical = weapon.RecoilVertical > 0f
+                ? weapon.RecoilVertical
+                : Mathf.Max(0f, weapon.SpreadBase * 0.2f);
 
-            return new Vector2(recoilX, recoilY) * currentSpread;
+            float spreadFloor = Mathf.Max(0.001f, weapon.SpreadBase);
+            float heat = Mathf.Clamp01((currentSpread - spreadFloor) / Mathf.Max(1f, spreadFloor * 3f));
+            float multiplier = Mathf.Lerp(0.65f, 1.15f, heat);
+
+            float recoilX = Random.Range(-horizontal, horizontal);
+            float recoilY = Random.Range(0f, vertical);
+
+            return new Vector2(recoilX, recoilY) * multiplier;
         }
 
         /// <summary>

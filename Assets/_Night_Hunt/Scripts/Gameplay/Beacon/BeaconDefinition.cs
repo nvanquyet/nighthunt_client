@@ -10,13 +10,13 @@ namespace NightHunt.Gameplay.Beacon
     [CreateAssetMenu(
         menuName = "NightHunt/Items/Beacon Definition",
         fileName = "BeaconDefinition")]
-    public sealed class BeaconDefinition : ItemDefinition
+    public sealed class BeaconDefinition : PhysicalItemDefinition
     {
         public override ItemType Type => ItemType.Deployable;
 
         [Header("Beacon Specifics")]
-        [Tooltip("Prefab spawned on the server when the player confirms placement.")]
-        public GameObject BeaconPrefab;
+        [Tooltip("NetworkObject prefab spawned on the server when the player confirms placement.")]
+        public GameObject NetworkBeaconPrefab;
 
         [Tooltip("Max health for the spawned beacon.")]
         public int BeaconHP = 100;

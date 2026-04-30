@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Configs;
+using NightHunt.UI;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -21,13 +22,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private PlayerStatType          _statType;
         private PlayerStatUIDefinition  _uiDef;
-        private UIDomainBridge          _domainBridge;
+        private UIPlayerContext         _domainBridge;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Init
         // ─────────────────────────────────────────────────────────────────────
 
-        public void Initialize(PlayerStatType statType, PlayerStatUIDefinition uiDef, UIDomainBridge bridge)
+        public void Initialize(PlayerStatType statType, PlayerStatUIDefinition uiDef, UIPlayerContext bridge)
         {
             _statType     = statType;
             _uiDef        = uiDef;

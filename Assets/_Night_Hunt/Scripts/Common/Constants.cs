@@ -17,6 +17,7 @@ namespace NightHunt.Common
         // Profile endpoints — ProfileController @RequestMapping("/profile") + context-path /api → /api/profile/...
         public const string API_PROFILE_GET           = "/api/profile";
         public const string API_PROFILE_SET_CHARACTER = "/api/profile/character";
+        public const string API_PROFILE_PUBLIC        = "/api/profile/{0}";  // GET public profile by userId
         
         // Room endpoints — RoomController @RequestMapping("/rooms") + context-path /api → /api/rooms/...
         public const string API_ROOMS_CREATE          = "/api/rooms/create";
@@ -75,6 +76,7 @@ namespace NightHunt.Common
         public const string API_PARTY_QUEUE                = "/api/party/queue";
         public const string API_PARTY_CANCEL_QUEUE         = "/api/party/cancel-queue";
         public const string API_PARTY_JOIN_ROOM            = "/api/party/join-room";
+        public const string API_PARTY_TRANSFER_LEADER      = "/api/party/transfer-leader";
 
         // Game Config endpoints — populated at startup by GameConfigService
         public const string API_GAME_MODES = "/api/game-modes";

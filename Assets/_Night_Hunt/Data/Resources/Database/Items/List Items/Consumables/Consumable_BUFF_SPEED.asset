@@ -15,13 +15,13 @@ MonoBehaviour:
   ItemID: BUFF_SPEED
   DisplayName: Speed Boost
   Description: 
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: aa686cce20559cc4da6a0bbd4bbdd1d2, type: 3}
   Rarity: 2
   IsStackable: 1
   MaxStackSize: 3
   Weight: 0.4
-  _heldPrefab: {fileID: 0}
-  _groundPrefab: {fileID: 0}
+  _visualPrefab: {fileID: 7342610198373781452, guid: 6ecca55aefdb4186a6f749b6cf67e4c3,
+    type: 3}
   ValidSlots: 00000000
   UsageDuration: 1
   _canCancelUsage: 1

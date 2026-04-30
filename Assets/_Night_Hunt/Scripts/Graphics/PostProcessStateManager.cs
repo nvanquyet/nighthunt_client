@@ -1,10 +1,12 @@
 using UnityEngine;
 using UnityEngine.Rendering;
-using System.Collections;
 using NightHunt.Core;
-using NightHunt.Gameplay.Character.Combat;
+using NightHunt.UI;
+using NightHunt.Audio;
+using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Systems;
 
 namespace NightHunt.Graphics
 {
@@ -32,7 +34,7 @@ namespace NightHunt.Graphics
     ///   Falls back to linear oscillation if no curve set.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class PostProcessStateManager : MonoBehaviour
+    public sealed class PostProcessStateManager : Singleton<PostProcessStateManager>
     {
         [Header("Scene Volumes — assign Global Volume GameObjects")]
         [Tooltip("Standard in-match profile. Weight stays at 1 always.")]
@@ -76,15 +78,47 @@ namespace NightHunt.Graphics
         private float _targetDeath;
         private float _targetSpectator;
 
+        // ── Local player references (registered from CharacterLifecycleController) ─
+        private CharacterLifecycleController _localLifecycle;
+        private IPlayerStatSystem            _localStatSystem;
+
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
-        private void Awake()
+        protected override void OnSingletonAwake()
         {
             // Set initial weights — all off except base
             SetWeight(homeVolume,      0f);
             SetWeight(lowHealthVolume, 0f);
             SetWeight(deathVolume,     0f);
             SetWeight(spectatorVolume, 0f);
+        }
+
+        private void Start()
+        {
+            // Subscribe to UINavigator for menu-driven state transitions.
+            // UINavigator lives in the UI/menu scene; in a pure match scene
+            // it may not exist — in that case default to Match.
+            if (UINavigator.HasInstance)
+            {
+                UINavigator.Instance.OnPanelChanged += OnUIPanelChanged;
+                OnUIPanelChanged(UINavigator.Instance.CurrentPanel);
+            }
+            else
+            {
+                SetState(PostProcessState.Match);
+            }
+        }
+
+        protected override void OnDestroy()
+        {
+            // Unsubscribe UINavigator
+            if (UINavigator.HasInstance)
+                UINavigator.Instance.OnPanelChanged -= OnUIPanelChanged;
+
+            // Unsubscribe local player
+            UnregisterLocalPlayerInternal();
+
+            base.OnDestroy(); // clears singleton static ref
         }
 
         private void Update()
@@ -141,7 +175,146 @@ namespace NightHunt.Graphics
             if (dead)
             {
                 SetLowHealth(false);      // turn off heartbeat pulse on death
+                StopHeartbeat();
             }
+        }
+
+        /// <summary>Manually force spectator overlay. Useful for direct SpectateManager calls.</summary>
+        public void SetSpectator(bool active)
+        {
+            _targetSpectator = active ? 1f : 0f;
+        }
+
+        // ── Local player registration ──────────────────────────────────────────
+
+        /// <summary>
+        /// Called by CharacterLifecycleController.OnStartNetwork() on the local owner.
+        /// Wires health → low-health overlay and death → death overlay automatically.
+        /// </summary>
+        public static void RegisterLocalPlayer(
+            CharacterLifecycleController lifecycle,
+            IPlayerStatSystem statSystem)
+        {
+            if (!HasInstance) return;
+            Instance.RegisterLocalPlayerInternal(lifecycle, statSystem);
+        }
+
+        private void RegisterLocalPlayerInternal(
+            CharacterLifecycleController lifecycle,
+            IPlayerStatSystem statSystem)
+        {
+            // Ensure clean state before wiring new player (e.g. reconnect / respawn scene)
+            UnregisterLocalPlayerInternal();
+
+            _localLifecycle  = lifecycle;
+            _localStatSystem = statSystem;
+
+            if (_localLifecycle != null)
+            {
+                _localLifecycle.OnDied      += HandleLocalDied;
+                _localLifecycle.OnRespawned += HandleLocalRespawned;
+            }
+
+            if (_localStatSystem is PlayerStatSystem psys)
+                psys.OnStatChanged += HandleStatChanged;
+
+            // Sync current health state immediately so the overlay is correct on spawn
+            if (_localStatSystem != null)
+                EvaluateLowHealth(
+                    _localStatSystem.GetStat(PlayerStatType.Health),
+                    _localStatSystem.GetStat(PlayerStatType.MaxHealth));
+        }
+
+        private void UnregisterLocalPlayerInternal()
+        {
+            if (_localLifecycle != null)
+            {
+                _localLifecycle.OnDied      -= HandleLocalDied;
+                _localLifecycle.OnRespawned -= HandleLocalRespawned;
+                _localLifecycle = null;
+            }
+
+            if (_localStatSystem is PlayerStatSystem psys)
+                psys.OnStatChanged -= HandleStatChanged;
+            _localStatSystem = null;
+        }
+
+        // ── Local player event handlers ────────────────────────────────────────
+
+        private void HandleLocalDied()
+        {
+            SetDead(true);
+            // Play death stinger via AudioManager
+            if (AudioManager.HasInstance && AudioManager.Instance.Library != null)
+                AudioManager.Instance.PlayAnnouncer(AudioManager.Instance.Library.playerDeathStinger);
+        }
+
+        private void HandleLocalRespawned()
+        {
+            SetDead(false);
+        }
+
+        private void HandleStatChanged(PlayerStatType type, float oldValue, float newValue)
+        {
+            if (type != PlayerStatType.Health) return;
+            float maxHealth = _localStatSystem?.GetStat(PlayerStatType.MaxHealth) ?? 100f;
+            EvaluateLowHealth(newValue, maxHealth);
+        }
+
+        private void EvaluateLowHealth(float health, float maxHealth)
+        {
+            if (maxHealth <= 0f) return;
+            float threshold = (AudioManager.HasInstance && AudioManager.Instance.Library != null)
+                ? AudioManager.Instance.Library.lowHealthThreshold
+                : 0.3f;
+
+            bool isLow = (health / maxHealth) < threshold;
+            SetLowHealth(isLow);
+
+            if (isLow)
+                StartHeartbeat();
+            else
+                StopHeartbeat();
+        }
+
+        // ── UINavigator handler ────────────────────────────────────────────────
+
+        private void OnUIPanelChanged(PanelType panel)
+        {
+            switch (panel)
+            {
+                case PanelType.Home:
+                case PanelType.Login:
+                case PanelType.Lobby:
+                    SetState(PostProcessState.Home);
+                    PlayBGM(AudioManager.HasInstance ? AudioManager.Instance.Library?.bgmHome : null);
+                    break;
+
+                default: // PanelType.None = in-match
+                    SetState(PostProcessState.Match);
+                    PlayBGM(AudioManager.HasInstance ? AudioManager.Instance.Library?.bgmMatch : null);
+                    break;
+            }
+        }
+
+        // ── Audio helpers ──────────────────────────────────────────────────────
+
+        private static void StartHeartbeat()
+        {
+            if (AudioManager.HasInstance)
+                AudioManager.Instance.StartHeartbeat();
+        }
+
+        private static void StopHeartbeat()
+        {
+            if (AudioManager.HasInstance)
+                AudioManager.Instance.StopHeartbeat();
+        }
+
+        private static void PlayBGM(AudioClip clip)
+        {
+            if (AudioManager.HasInstance)
+                AudioManager.Instance.PlayMusic(clip);
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────

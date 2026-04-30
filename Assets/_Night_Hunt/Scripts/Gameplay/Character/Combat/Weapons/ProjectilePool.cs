@@ -10,8 +10,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
     /// Setup: Add this component to a persistent scene GameObject (e.g. "Systems").
     ///
     /// Usage:
-    ///   ProjectilePool.Instance.Get(prefab, pos, rot) → activated instance
-    ///   ProjectilePool.Instance.Return(proj)           → deactivated, re-queued
+    ///   ProjectilePool.Instance.Get(prefab, pos, rot): activated instance
+    ///   ProjectilePool.Instance.Return(proj): deactivated, re-queued
     ///
     /// ProjectileComponent.Despawn() calls Return() automatically; callers do NOT
     /// need to return instances manually.
@@ -20,12 +20,12 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
     /// </summary>
     public class ProjectilePool : MonoBehaviour
     {
-        // ── Singleton (lazy auto-create) ──────────────────────────────────────
+        // Singleton.
         private static ProjectilePool _instance;
 
         /// <summary>
         /// Scene-level singleton. If no ProjectilePool exists in the scene it is
-        /// auto-created at runtime and kept alive across scene loads.
+        /// auto-created at runtime for the current scene only.
         /// Best practice: add ProjectilePool to your "Systems" persistent GameObject
         /// so it initialises at scene load rather than on the first shot.
         /// </summary>
@@ -43,27 +43,26 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                     if (_instance == null)
                     {
                         var go = new GameObject("[ProjectilePool – Auto]");
-                        DontDestroyOnLoad(go);
                         _instance = go.AddComponent<ProjectilePool>();
                         Debug.LogWarning(
-                            "[ProjectilePool] No ProjectilePool found in scene — " +
-                            "auto-created one. Add ProjectilePool to your 'Systems' " +
-                            "persistent GameObject to avoid this message.");
+                            "[ProjectilePool] No ProjectilePool found in scene - " +
+                            "auto-created a scene-local one. Add ProjectilePool to your scene Systems object " +
+                            "to avoid this message.");
                     }
                 }
                 return _instance;
             }
         }
 
-        // prefab → inactive instances
+        // Prefab to inactive instances.
         private readonly Dictionary<GameObject, Queue<ProjectileComponent>> _pools
             = new Dictionary<GameObject, Queue<ProjectileComponent>>();
 
-        // instance → source prefab (to return to the correct queue)
+        // Instance to source prefab, used to return to the correct queue.
         private readonly Dictionary<ProjectileComponent, GameObject> _prefabMap
             = new Dictionary<ProjectileComponent, GameObject>();
 
-        // ── Lifecycle ─────────────────────────────────────────────────────────
+        // Lifecycle.
 
         private void Awake()
         {
@@ -81,7 +80,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 _instance = null;
         }
 
-        // ── Public API ────────────────────────────────────────────────────────
+        // Public API.
 
         /// <summary>
         /// Retrieve an instance from the pool (or instantiate a new one).
@@ -125,9 +124,15 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             }
             else
             {
+                proj.transform.SetParent(null, true);
                 proj.transform.SetPositionAndRotation(position, rotation);
+                ResetPhysics(proj);
                 proj.gameObject.SetActive(true);
             }
+
+            proj.transform.SetParent(null, true);
+            proj.transform.SetPositionAndRotation(position, rotation);
+            Debug.Log($"[PROJ_VFX] Pool.Get prefab='{prefab.name}' instance='{proj.name}' parent={(proj.transform.parent != null ? proj.transform.parent.name : "null")} pos={position:F2} rot={rotation.eulerAngles:F1}");
 
             return proj;
         }
@@ -141,7 +146,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             if (!_prefabMap.TryGetValue(proj, out var prefab))
             {
-                // Not tracked — was created outside the pool; just deactivate.
+                // Not tracked; created outside the pool, so just deactivate.
                 proj.gameObject.SetActive(false);
                 return;
             }
@@ -149,8 +154,24 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             if (!_pools.ContainsKey(prefab))
                 _pools[prefab] = new Queue<ProjectileComponent>();
 
+            proj.ResetVisualStateForPool();
+            ResetPhysics(proj);
+            proj.transform.SetParent(transform, true);
             proj.gameObject.SetActive(false);
+            Debug.Log($"[PROJ_VFX] Pool.Return instance='{proj.name}' parent='{transform.name}' pos={proj.transform.position:F2}");
             _pools[prefab].Enqueue(proj);
+        }
+
+        private static void ResetPhysics(ProjectileComponent proj)
+        {
+            if (proj == null)
+                return;
+
+            foreach (var rb in proj.GetComponentsInChildren<Rigidbody>(true))
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
         }
     }
 }

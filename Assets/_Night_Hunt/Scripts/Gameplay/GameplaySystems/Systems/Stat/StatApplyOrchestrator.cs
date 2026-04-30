@@ -2,6 +2,7 @@ using FishNet.Object;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
@@ -146,9 +147,14 @@ namespace NightHunt.GameplaySystems.Stat
 
             if (_playerStats == null) return;
 
+            DebugStat($"Recalculate begin role={GetDebugRole()} previousSources={_appliedSources.Count} externalContributors={_externalContributors.Count}");
+
             // ── 1. Clear all modifiers we applied last time ───────────────────
             foreach (var src in _appliedSources)
+            {
+                DebugStat($"Clear source={src}");
                 _playerStats.RemoveAllModifiersFromSource(src);
+            }
             _appliedSources.Clear();
 
             // ── 2. Equipment slots (always active while equipped) ─────────────
@@ -162,6 +168,7 @@ namespace NightHunt.GameplaySystems.Stat
                         var item = kv.Value;
                         if (item == null) continue;
 
+                        DebugStat($"Equipment slot={kv.Key} item={DescribeItem(item)}");
                         ApplyItemPlayerModifiers(item, ItemType.Equipment, isHostSelected: true);
                         ApplyAttachmentPlayerModifiers(item, ItemType.Equipment, isHostSelected: true);
                         ItemStatComputer.Compute(item);
@@ -175,6 +182,7 @@ namespace NightHunt.GameplaySystems.Stat
                 var activeWeapon = _weapons.GetActiveWeapon();
                 if (activeWeapon != null)
                 {
+                    DebugStat($"Active weapon item={DescribeItem(activeWeapon)}");
                     ApplyItemPlayerModifiers(activeWeapon, ItemType.Weapon, isHostSelected: true);
                     ApplyAttachmentPlayerModifiers(activeWeapon, ItemType.Weapon, isHostSelected: true);
                     ItemStatComputer.Compute(activeWeapon);
@@ -194,11 +202,19 @@ namespace NightHunt.GameplaySystems.Stat
                 var mods = contributor.GetPlayerStatContributions(ctx);
                 if (mods == null) continue;
 
+                int count = 0;
                 foreach (var mod in mods)
+                {
+                    count++;
+                    DebugStatModifier("External", src, contributor.GetType().Name, mod);
                     AddToPlayerStat(mod, src);
+                }
 
-                _appliedSources.Add(src);
+                if (count > 0)
+                    _appliedSources.Add(src);
             }
+
+            DebugStat($"Recalculate end appliedSources={_appliedSources.Count}");
         }
 
         [ContextMenu("Force Recalculate")]
@@ -225,6 +241,7 @@ namespace NightHunt.GameplaySystems.Stat
             string src = SOURCE_PREFIX + "ext:" + Guid.NewGuid().ToString("N");
             _externalContributorSourceIds[contributor] = src;
             _externalContributors.Add(contributor);
+            DebugStat($"Register external contributor={contributor.GetType().Name} source={src}");
             ScheduleRecalc();
         }
 
@@ -239,6 +256,7 @@ namespace NightHunt.GameplaySystems.Stat
 
             _externalContributorSourceIds.Remove(contributor);
             _externalContributors.Remove(contributor);
+            DebugStat($"Unregister external contributor={contributor.GetType().Name} source={src}");
             ScheduleRecalc();
         }
 
@@ -260,8 +278,12 @@ namespace NightHunt.GameplaySystems.Stat
             if (mods == null || mods.Length == 0) return;
 
             string src = SOURCE_PREFIX + item.InstanceID;
+            DebugStat($"Apply {hostType} source={src} item={DescribeItem(item, def)} selected={isHostSelected} modifiers={mods.Length}");
             foreach (var mod in mods)
+            {
+                DebugStatModifier(hostType.ToString(), src, def.DisplayName, mod);
                 AddToPlayerStat(mod, src);
+            }
 
             _appliedSources.Add(src);
         }
@@ -289,8 +311,12 @@ namespace NightHunt.GameplaySystems.Stat
                 if (mods == null || mods.Length == 0) continue;
 
                 string src = SOURCE_PREFIX + attInst.InstanceID;
+                DebugStat($"Apply attachment host={DescribeItem(host)} slotIndex={i} source={src} attachment={DescribeItem(attInst, attDef)} hostType={hostType} modifiers={mods.Length}");
                 foreach (var mod in mods)
+                {
+                    DebugStatModifier("Attachment", src, attDef.DisplayName, mod);
                     AddToPlayerStat(mod, src);
+                }
 
                 _appliedSources.Add(src);
             }
@@ -319,6 +345,45 @@ namespace NightHunt.GameplaySystems.Stat
                 AttachmentDefinition ad => ad.GetPlayerModifiers(),
                 _ => null
             };
+        }
+
+        private static bool IsStatDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableStatDebugLogs;
+        }
+
+        private static void DebugStat(string message)
+        {
+            if (IsStatDebugEnabled())
+                Debug.Log($"[STAT_FLOW][StatApplyOrchestrator] {message}");
+        }
+
+        private static void DebugStatModifier(string category, string source, string owner, PlayerStatModifier mod)
+        {
+            if (!IsStatDebugEnabled()) return;
+            Debug.Log($"[STAT_FLOW][StatApplyOrchestrator]   {category} owner='{owner}' source={source} -> {mod.StatType} {mod.ModifierType} {mod.Value:F2} ({mod.Description})");
+        }
+
+        private static string DescribeItem(ItemInstance item)
+        {
+            if (item == null) return "null";
+            return DescribeItem(item, ItemDatabase.GetDefinition(item.DefinitionID));
+        }
+
+        private static string DescribeItem(ItemInstance item, ItemDefinition def)
+        {
+            if (item == null) return "null";
+            string name = def != null && !string.IsNullOrEmpty(def.DisplayName) ? def.DisplayName : item.DefinitionID;
+            return $"{name} def={item.DefinitionID} inst={item.InstanceID}";
+        }
+
+        private string GetDebugRole()
+        {
+            if (IsServerInitialized && IsOwner) return "ServerOwner";
+            if (IsServerInitialized) return "Server";
+            if (IsOwner) return "OwnerClient";
+            return "Observer";
         }
 
         #endregion

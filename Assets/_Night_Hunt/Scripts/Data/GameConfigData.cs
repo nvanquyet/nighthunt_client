@@ -45,8 +45,11 @@ namespace NightHunt.Data
         public float MaxRange;
         public float ProjectileSpeed;
         public float GravityScale;
+        public bool ApplyDamage = true;
         public float SpreadBase;
         public float SpreadMoveMul;
+        public float RecoilHorizontal;
+        public float RecoilVertical;
         public float MoveSpeedMul;
         public float Weight;
         public string Rarity;

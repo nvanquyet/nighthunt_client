@@ -335,13 +335,25 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void ConfirmAim()
         {
             if (!_inAimMode) return;
-            Vector3 throwTarget = AimWorldTarget;  // capture before ResetAimState clears _inAimMode
+            Vector3 throwTarget = ResolveConfirmedThrowTarget();
             ResetAimState();
 
             // Selection was already started in TryBeginAim (server started BeginThrowable).
             // We only need to request the actual throw execution now.
             if (_itemUseSystem != null)
                 _itemUseSystem.RequestExecuteThrow(throwTarget);
+        }
+
+        private Vector3 ResolveConfirmedThrowTarget()
+        {
+            if (_aimSystem != null)
+            {
+                Vector3 aimGround = _aimSystem.FinalAimGroundPos;
+                if (aimGround.sqrMagnitude > 0.0001f)
+                    return aimGround;
+            }
+
+            return AimWorldTarget;
         }
 
         /// <summary>

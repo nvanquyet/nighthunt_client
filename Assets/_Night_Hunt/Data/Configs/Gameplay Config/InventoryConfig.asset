@@ -12,30 +12,58 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 65354101ab80484bb9e8c7c07585dc03, type: 3}
   m_Name: InventoryConfig
   m_EditorClassIdentifier: 
-  Inventory:
-    GridWidth: 5
-    GridHeight: 5
-    DefaultEmptyIcon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
+  InventoryEmptyIcon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
   EquipmentConfig:
   - Type: 0
-    DefaultIcon: {fileID: 21300000, guid: ad69a0597e9b00542a17ceafe615e09f, type: 3}
+    DefaultIcon: {fileID: 21300000, guid: a503b8435f00c6b4ba57af95f059893e, type: 3}
   - Type: 3
-    DefaultIcon: {fileID: 21300000, guid: 57fddd8b9308e014ca623b7e8a612e1f, type: 3}
+    DefaultIcon: {fileID: 21300000, guid: 494bfa845ece9d8489c88fea25002e95, type: 3}
   - Type: 2
-    DefaultIcon: {fileID: 21300000, guid: c0e79d2a577ef2a48a3c44716d4f3bf0, type: 3}
-  WeaponConfig:
-  - Type: 0
-    DefaultIcon: {fileID: 21300000, guid: 89c94b010a5928f4a9b03d41d3a4d4c1, type: 3}
-  - Type: 1
-    DefaultIcon: {fileID: 21300000, guid: 89c94b010a5928f4a9b03d41d3a4d4c1, type: 3}
-  AttachmentUI:
-    DefaultEmptyIcon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
-    ShowAttachmentPanelOnHover: 0
-    ShowAttachmentPanelOnSelect: 0
+    DefaultIcon: {fileID: 21300000, guid: f277cc8cfb236f545adca43d6f85ee1d, type: 3}
+  DefaultSlotSize: {x: 128, y: 128}
+  RarityBackgrounds:
+  - Rarity: 0
+    BackgroundIcon: {fileID: 21300000, guid: cebd119eb823d414f89df552285ad41c, type: 3}
+  - Rarity: 1
+    BackgroundIcon: {fileID: 21300000, guid: 342cf3c2c63f74e419f055b0c74262b8, type: 3}
+  - Rarity: 2
+    BackgroundIcon: {fileID: 21300000, guid: 227f3e422a1c34145b1a7fcb498d939b, type: 3}
+  - Rarity: 3
+    BackgroundIcon: {fileID: 21300000, guid: d655d53eb38cdd447892cc04c728ac59, type: 3}
+  - Rarity: 4
+    BackgroundIcon: {fileID: 21300000, guid: f856981824319fc49b162744906cdbb9, type: 3}
+  - Rarity: 5
+    BackgroundIcon: {fileID: 21300000, guid: 939ac73987fcb5341b48ccb3b8073d58, type: 3}
+  DefaultSlotBackground: {fileID: 21300000, guid: cebd119eb823d414f89df552285ad41c,
+    type: 3}
+  TooltipMode: 0
+  TooltipOffset: {x: 16, y: -16}
+  TooltipFixedPosition: {x: 200, y: -200}
+  ShowTooltipDuringDrag: 0
+  ContextMenuPreferredSide: 0
+  ContextMenuGap: 8
+  HideContextMenuOnDragStart: 1
+  GhostSnapBackDuration: 0.18
+  DoubleClickThreshold: 0.3
+  AttachmentSlotHighlightColor: {r: 1, g: 0.85, b: 0.1, a: 0.7}
+  AttachmentHighlightPulseSpeed: 2.5
+  AttachmentSlotIconConfigs:
+  - SlotType: 1
+    Icon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
+  - SlotType: 3
+    Icon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
+  - SlotType: 5
+    Icon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
+  - SlotType: 2
+    Icon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
+  - SlotType: 7
+    Icon: {fileID: 21300000, guid: 7724d2fa1a180bc43968a0a414b55e79, type: 3}
   AutoStackOnAdd: 1
   AutoMergeOnMove: 1
   DropDistance: 2
   DropForce: 5
+  AllowExceedMaxWeight: 1
+  WeightPenalties: {fileID: 11400000, guid: 3b2b6552f7436524da7c7c20a77c9fdc, type: 2}
   MaxCachedInstances: 100
   MaxCachedDefinitionsByType: 50
   BatchWeightUpdates: 1

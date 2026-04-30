@@ -1,6 +1,8 @@
 using FishNet.Connection;
 using FishNet.Managing;
 using FishNet.Object;
+using System.Collections.Generic;
+using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Interaction;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -10,6 +12,7 @@ using NightHunt.Networking.Player;
 using UnityEngine;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.GameplaySystems.UI;
 
 namespace NightHunt.GameplaySystems.Interaction
 {
@@ -36,8 +39,6 @@ namespace NightHunt.GameplaySystems.Interaction
                  "Toggle at runtime with TogglePickupAllMode().")]
         [SerializeField] private bool pickupAllMode = false;
 
-        [Header("Debug")]
-        [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         // ── Hold state ─────────────────────────────────────────────────────────────
 
@@ -115,7 +116,7 @@ namespace NightHunt.GameplaySystems.Interaction
 
         public void HandleInteractPerformed()
         {
-            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] InteractPerformed received.");
 
             // Primary path: use IInteractable from RaycastDetector
@@ -133,7 +134,7 @@ namespace NightHunt.GameplaySystems.Interaction
                 return;
             }
 
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log($"[Interact] {target.InteractLabel}");
                 target.Interact(gameObject);
                 return;
@@ -142,7 +143,7 @@ namespace NightHunt.GameplaySystems.Interaction
             // No valid interact (for debugging: distinguish between no target vs blocked)
             if (target == null)
             {
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log("[Interact] InteractPerformed received but no interactable under crosshair.");
             }
             else
@@ -170,12 +171,12 @@ namespace NightHunt.GameplaySystems.Interaction
                     if (!float.IsNaN(maxDist))
                         Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m, max={maxDist:F2}m)");
                     else
-                        if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                        if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                             Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m)");
                 }
                 else
                 {
-                    if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                         Debug.Log($"[Interact] InteractPerformed, target found but CanInteract == false: {target.InteractLabel}");
                 }
             }
@@ -189,14 +190,14 @@ namespace NightHunt.GameplaySystems.Interaction
                 _isHolding = false;
                 _holdTimer = 0f;
                 _holdingInteractable = null;
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log("[Interact] Hold canceled.");
             }
         }
 
         public void HandlePickupPerformed()
         {
-            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] PickupPerformed received.");
 
             if (pickupAllMode && proximityScanner != null)
@@ -207,24 +208,228 @@ namespace NightHunt.GameplaySystems.Interaction
 
         public void HandleLogNearbyPerformed()
         {
-            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] LogNearbyPerformed received.");
 
             if (proximityScanner != null)
                 proximityScanner.LogNearby();
             else
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log("[Interact] ProximityScanner not assigned.");
         }
 
         public void TogglePickupAllMode()
         {
             pickupAllMode = !pickupAllMode;
-            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log($"[Interact] Pickup mode: {(pickupAllMode ? "ALL nearby" : "Single (aimed)")}");
         }
 
         public bool IsPickupAllMode => pickupAllMode;
+
+        /// <summary>
+        /// Inventory-open flow: refresh proximity and open/show the closest lootable.
+        /// This keeps Tab consistent with the normal interact path while avoiding a raycast requirement.
+        /// </summary>
+        public bool TryOpenNearestLootFromInventory()
+        {
+            return HandleInventoryOpened();
+        }
+
+        public bool HandleInventoryOpened()
+        {
+            if (!IsLocalPlayer)
+            {
+                Debug.Log("[LOOT_TAB_FLOW] Inventory OPEN skipped: this interaction system is not local.");
+                return false;
+            }
+
+            if (proximityScanner == null)
+            {
+                Debug.LogWarning("[LOOT_TAB_FLOW] Cannot open nearest loot: ProximityInteractScanner is null.");
+                return false;
+            }
+
+            proximityScanner.ForceScan();
+            proximityScanner.LogNearby();
+
+            var nearbyLootables = proximityScanner.NearbyLootables;
+            var worldItems = CollectNearbyWorldItems();
+            Debug.Log($"[LOOT_TAB_FLOW] Inventory OPEN. NearbyLootables={nearbyLootables.Count} NearbyInteractables={proximityScanner.NearbyInteractables.Count} WorldItems={worldItems.Count}");
+
+            for (int i = 0; i < nearbyLootables.Count; i++)
+            {
+                var lootable = nearbyLootables[i];
+                if (lootable == null)
+                    continue;
+
+                var interactable = lootable as IInteractable;
+                if (interactable == null)
+                {
+                    Debug.LogWarning($"[LOOT_TAB_FLOW] Lootable[{i}] does not implement IInteractable.");
+                    continue;
+                }
+
+                bool canInteract = interactable.CanInteract(gameObject);
+                string label = interactable.InteractLabel;
+                int itemCount = lootable.GetStorage()?.Count ?? 0;
+                Debug.Log($"[LOOT_TAB_FLOW] Candidate[{i}] type={lootable.GetType().Name} label='{label}' open={lootable.IsOpen} items={itemCount} canInteract={canInteract} storage={FormatLootStorage(lootable.GetStorage())}");
+
+                if (!canInteract)
+                    continue;
+
+                if (!lootable.IsOpen)
+                    continue;
+
+                LootContainerUI.Instance?.ShowOpenedLootableFromInventory(lootable, gameObject, "InventoryOpen:already-open");
+                Debug.Log($"[LOOT_TAB_FLOW] Inventory OPEN showed already-open lootable '{label}'.");
+                return true;
+            }
+
+            var nearby = proximityScanner.NearbyInteractables;
+            Debug.Log($"[LOOT_TAB_FLOW] No container/corpse in proximity. NearbyInteractables={nearby.Count}");
+            for (int i = 0; i < nearby.Count; i++)
+            {
+                var interactable = nearby[i];
+                if (interactable == null)
+                    continue;
+
+                bool canInteract = interactable.CanInteract(gameObject);
+                Debug.Log($"[LOOT_TAB_FLOW] Nearby[{i}] type={interactable.GetType().Name} label='{interactable.InteractLabel}' canInteract={canInteract}");
+            }
+
+            if (worldItems.Count > 0 && LootContainerUI.Instance != null)
+            {
+                LootContainerUI.Instance.ShowWorldItems(worldItems);
+                return true;
+            }
+
+            for (int i = 0; i < nearbyLootables.Count; i++)
+            {
+                var lootable = nearbyLootables[i];
+                if (lootable is not IInteractable interactable || !interactable.CanInteract(gameObject))
+                    continue;
+
+                interactable.Interact(gameObject);
+                Debug.Log($"[LOOT_TAB_FLOW] Inventory OPEN requested open for closed lootable '{interactable.InteractLabel}'. Waiting for server/open event.");
+                return true;
+            }
+
+            Debug.Log("[LOOT_TAB_FLOW] Inventory OPEN: no interactable loot container/corpse/world item in proximity.");
+            return false;
+        }
+
+        public bool HandleInventoryClosed()
+        {
+            if (!IsLocalPlayer)
+            {
+                Debug.Log("[LOOT_TAB_FLOW] Inventory CLOSE skipped: this interaction system is not local.");
+                return false;
+            }
+
+            if (proximityScanner == null)
+            {
+                Debug.LogWarning("[LOOT_TAB_FLOW] Inventory CLOSE: ProximityInteractScanner is null, hiding loot UI.");
+                return false;
+            }
+
+            proximityScanner.ForceScan();
+            proximityScanner.LogNearby();
+
+            var nearbyLootables = proximityScanner.NearbyLootables;
+            Debug.Log($"[LOOT_TAB_FLOW] Inventory CLOSE. NearbyLootables={nearbyLootables.Count}. Ground nearby will NOT be shown while inventory is closed.");
+
+            for (int i = 0; i < nearbyLootables.Count; i++)
+            {
+                var lootable = nearbyLootables[i];
+                if (lootable == null)
+                    continue;
+
+                var interactable = lootable as IInteractable;
+                bool canInteract = interactable != null && interactable.CanInteract(gameObject);
+                string label = interactable?.InteractLabel ?? lootable.GetType().Name;
+                int itemCount = lootable.GetStorage()?.Count ?? 0;
+                Debug.Log($"[LOOT_TAB_FLOW] CloseCandidate[{i}] type={lootable.GetType().Name} label='{label}' open={lootable.IsOpen} items={itemCount} canInteract={canInteract} storage={FormatLootStorage(lootable.GetStorage())}");
+
+                if (!lootable.IsOpen || !canInteract)
+                    continue;
+
+                bool shown = LootContainerUI.Instance != null &&
+                             LootContainerUI.Instance.ShowOpenedLootableFromInventory(lootable, gameObject, "InventoryClose:keep-opened-lootable");
+                Debug.Log($"[LOOT_TAB_FLOW] Inventory CLOSE keep-opened-lootable label='{label}' shown={shown}.");
+                return shown;
+            }
+
+            Debug.Log("[LOOT_TAB_FLOW] Inventory CLOSE: no valid opened container/corpse nearby. Loot UI should hide.");
+            return false;
+        }
+
+        public bool RefreshNearbyWorldItemsForInventory()
+        {
+            if (!IsLocalPlayer || proximityScanner == null)
+                return false;
+
+            proximityScanner.ForceScan();
+
+            var nearbyLootables = proximityScanner.NearbyLootables;
+            for (int i = 0; i < nearbyLootables.Count; i++)
+            {
+                var lootable = nearbyLootables[i];
+                if (lootable != null && lootable.IsOpen && lootable is IInteractable interactable && interactable.CanInteract(gameObject))
+                    return false;
+            }
+
+            var nearby = proximityScanner.NearbyInteractables;
+            var worldItems = CollectNearbyWorldItems();
+            for (int i = 0; i < nearby.Count; i++)
+            {
+                if (nearby[i] != null)
+                    Debug.Log($"[LOOT_TAB_FLOW] RefreshNearby interactable[{i}] type={nearby[i].GetType().Name} label='{nearby[i].InteractLabel}' canInteract={nearby[i].CanInteract(gameObject)}");
+            }
+
+            if (worldItems.Count > 0 && LootContainerUI.Instance != null)
+            {
+                LootContainerUI.Instance.ShowWorldItems(worldItems);
+                Debug.Log($"[LOOT_TAB_FLOW] Realtime nearby world item refresh: {worldItems.Count} item(s).");
+                return true;
+            }
+
+            if (LootContainerUI.Instance != null && LootContainerUI.Instance.IsShowingWorldItems)
+            {
+                LootContainerUI.Instance.Hide();
+                Debug.Log("[LOOT_TAB_FLOW] Realtime nearby world item refresh: no items left, hiding panel.");
+                return true;
+            }
+
+            return false;
+        }
+
+        private System.Collections.Generic.List<WorldItem> CollectNearbyWorldItems()
+        {
+            var result = new System.Collections.Generic.List<WorldItem>();
+
+            if (proximityScanner == null)
+                return result;
+
+            var nearby = proximityScanner.NearbyWorldItems;
+            for (int i = 0; i < nearby.Count; i++)
+            {
+                if (IsValidNearbyWorldItem(nearby[i]))
+                    AddUniqueWorldItem(result, nearby[i]);
+            }
+
+            Debug.Log($"[LOOT_TAB_FLOW] CollectNearbyWorldItems count={result.Count} radius={proximityScanner.ScanRadius:F2} scannerWorldItems={nearby.Count}");
+            return result;
+        }
+
+        private bool IsValidNearbyWorldItem(WorldItem worldItem)
+            => worldItem != null && !worldItem.IsPickupPending && worldItem.CanInteract(gameObject);
+
+        private static void AddUniqueWorldItem(System.Collections.Generic.List<WorldItem> list, WorldItem worldItem)
+        {
+            if (!list.Contains(worldItem))
+                list.Add(worldItem);
+        }
 
         /// <summary>True while a hold-interaction is in progress.</summary>
         public bool IsHolding => _isHolding;
@@ -254,7 +459,7 @@ namespace NightHunt.GameplaySystems.Interaction
 
             if (_holdTimer >= _holdingInteractable.HoldDuration)
             {
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log($"[Interact] Hold complete: {_holdingInteractable.InteractLabel}");
                 (_holdingInteractable as IInteractable)?.Interact(gameObject);
 
@@ -273,10 +478,20 @@ namespace NightHunt.GameplaySystems.Interaction
             var target = raycastDetector?.CurrentInteractable;
             if (target != null && target.CanInteract(gameObject))
             {
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
-                    Debug.Log($"[Pickup] Single: {target.InteractLabel}");
-                target.Interact(gameObject);
-                return;
+                // Skip hold-type interactables (e.g. closed containers, doors with HoldDuration > 0).
+                // Those must be opened via the E-hold path, not the instant F-pickup.
+                if (target is IHoldInteractable hold && hold.HoldDuration > 0f)
+                {
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
+                        Debug.Log($"[Pickup] Skipping hold-type interactable on F key: {target.InteractLabel} (hold={hold.HoldDuration:F1}s). Use E to interact.");
+                }
+                else
+                {
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
+                        Debug.Log($"[Pickup] Single: {target.InteractLabel}");
+                    target.Interact(gameObject);
+                    return;
+                }
             }
 
             if (target != null && !target.CanInteract(gameObject))
@@ -303,12 +518,12 @@ namespace NightHunt.GameplaySystems.Interaction
                     if (!float.IsNaN(maxDist))
                         Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m, max={maxDist:F2}m)");
                     else
-                        if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                        if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                             Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel} (dist={dist:F2}m)");
                 }
                 else
                 {
-                    if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                         Debug.Log($"[Pickup] Target found but CanInteract == false: {target.InteractLabel}");
                 }
             }
@@ -320,7 +535,7 @@ namespace NightHunt.GameplaySystems.Interaction
                 var playerNob = GetLocalPlayerNob();
                 if (playerNob != null)
                 {
-                    if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                         Debug.Log($"[Pickup] Legacy path: {pickup.ItemDefinitionID} x{pickup.Quantity}");
                     pickup.RequestPickup(playerNob);
                 }
@@ -340,7 +555,7 @@ namespace NightHunt.GameplaySystems.Interaction
             var nearby = proximityScanner.NearbyInteractables;
             if (nearby.Count == 0)
             {
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log("[Pickup] PickupAll: nothing nearby.");
                 return;
             }
@@ -355,7 +570,7 @@ namespace NightHunt.GameplaySystems.Interaction
                 }
             }
 
-            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log($"[Pickup] PickupAll: triggered {count} pickup(s).");
         }
 
@@ -391,7 +606,7 @@ namespace NightHunt.GameplaySystems.Interaction
         {
             if (player == _networkPlayer)
             {
-                if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log("[PlayerInteractionSystem] NetworkPlayer owner ready → trying to subscribe input.");
                 TrySubscribeInput();
             }
@@ -420,7 +635,7 @@ namespace NightHunt.GameplaySystems.Interaction
 
             _inputSubscribed = true;
 
-            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] Subscribed to InteractionInputHandler events (local player).");
         }
 
@@ -446,8 +661,28 @@ namespace NightHunt.GameplaySystems.Interaction
 
             _inputSubscribed = false;
 
-            if (_debugConfig != null && _debugConfig.EnableInteractionDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] Unsubscribed from InteractionInputHandler events.");
+        }
+
+        private static string FormatLootStorage(IReadOnlyList<ItemInstanceData> storage)
+        {
+            if (storage == null) return "null";
+            if (storage.Count == 0) return "[]";
+
+            var parts = new List<string>(storage.Count);
+            for (int i = 0; i < storage.Count; i++)
+            {
+                var item = storage[i];
+                parts.Add($"{i}:{item.DefinitionID}x{item.Quantity}#{ShortId(item.InstanceID)}");
+            }
+            return "[" + string.Join(", ", parts) + "]";
+        }
+
+        private static string ShortId(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return "null";
+            return id.Length <= 8 ? id : id.Substring(0, 8);
         }
     }
 }

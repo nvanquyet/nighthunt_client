@@ -15,13 +15,13 @@ MonoBehaviour:
   ItemID: HEAL_BANDAGE
   DisplayName: Bandage
   Description: 
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: 1bca275804bd86a4a95a0c40e6eb9ead, type: 3}
   Rarity: 0
   IsStackable: 1
   MaxStackSize: 5
   Weight: 0.2
-  _heldPrefab: {fileID: 0}
-  _groundPrefab: {fileID: 0}
+  _visualPrefab: {fileID: 7342610198373781452, guid: 3f4f370e6bdc40f199b2789ff799b019,
+    type: 3}
   ValidSlots: 00000000
   UsageDuration: 2
   _canCancelUsage: 1

@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using Cam = UnityEngine.Camera;
+using NightHunt.Gameplay.ClientEffects;
 
 namespace NightHunt.Gameplay.Feedback
 {
@@ -48,6 +49,23 @@ namespace NightHunt.Gameplay.Feedback
         [SerializeField] private GameObject hitIndicatorPrefab;
         [SerializeField] private float      indicatorLifetime     = 0.5f;
 
+        [Header("Hit Sparks")]
+        [Tooltip("World-space particle prefab spawned at the impact point when the local player lands a hit. " +
+                 "Must be a SimpleEffectPool-compatible prefab (ParticleSystem, loops=false).")]
+        [SerializeField] private GameObject _hitSparksPrefab;
+        [SerializeField] private float      _hitSparksLifetime   = 1f;
+
+        [Header("Heal Burst")]
+        [Tooltip("World-space particle prefab spawned at the player's position on heal.")]
+        [SerializeField] private GameObject _healBurstPrefab;
+        [SerializeField] private float      _healBurstLifetime   = 1.5f;
+
+        [Header("Pool Warm-up")]
+        [Tooltip("Instances of DamageNumber pre-spawned at Start to eliminate first-shot allocation.")]
+        [SerializeField] private int _initialDamageNumberPoolSize = 8;
+        [Tooltip("Instances of HitIndicator pre-spawned at Start.")]
+        [SerializeField] private int _initialHitIndicatorPoolSize = 4;
+
         // Typed pools — instances stay under this Canvas GO.
         private readonly Stack<DamageNumber>  _numberPool    = new Stack<DamageNumber>(8);
         private readonly Stack<HitIndicator>  _indicatorPool = new Stack<HitIndicator>(4);
@@ -65,6 +83,28 @@ namespace NightHunt.Gameplay.Feedback
 #else
             _playerCamera = Cam.main ?? FindObjectOfType<Cam>();
 #endif
+            WarmPools();
+        }
+
+        private void WarmPools()
+        {
+            if (damageNumberPrefab != null)
+                for (int i = 0; i < _initialDamageNumberPoolSize; i++)
+                {
+                    var n = Instantiate(damageNumberPrefab, transform).GetComponent<DamageNumber>();
+                    if (n == null) break;
+                    n.gameObject.SetActive(false);
+                    _numberPool.Push(n);
+                }
+
+            if (hitIndicatorPrefab != null)
+                for (int i = 0; i < _initialHitIndicatorPoolSize; i++)
+                {
+                    var h = Instantiate(hitIndicatorPrefab, transform).GetComponent<HitIndicator>();
+                    if (h == null) break;
+                    h.gameObject.SetActive(false);
+                    _indicatorPool.Push(h);
+                }
         }
 
         // -----------------------------------------------------------------
@@ -93,6 +133,28 @@ namespace NightHunt.Gameplay.Feedback
         }
 
         /// <summary>
+        /// Spawn a world-space hit-spark particle at the impact point.
+        /// Call only on the local client (same filter as ShowDamageNumber).
+        /// </summary>
+        public void ShowHitEffect(Vector3 worldPos, Vector3 hitNormal)
+        {
+            if (_hitSparksPrefab == null) return;
+            var rot = hitNormal.sqrMagnitude > 0.001f
+                ? Quaternion.LookRotation(hitNormal)
+                : Quaternion.identity;
+            SpawnWorldEffect(_hitSparksPrefab, worldPos, rot, _hitSparksLifetime);
+        }
+
+        /// <summary>
+        /// Spawn a world-space heal-burst particle at the given position.
+        /// </summary>
+        public void ShowHealEffect(Vector3 worldPos)
+        {
+            if (_healBurstPrefab == null) return;
+            SpawnWorldEffect(_healBurstPrefab, worldPos, Quaternion.identity, _healBurstLifetime);
+        }
+
+        /// <summary>
         /// Show a directional hit indicator (the red arrow pointing toward incoming fire).
         /// hitDirection should be the incoming bullet direction (not the normal).
         /// </summary>
@@ -108,6 +170,18 @@ namespace NightHunt.Gameplay.Feedback
         // -----------------------------------------------------------------
         // Pool management
         // -----------------------------------------------------------------
+
+        private void SpawnWorldEffect(GameObject prefab, Vector3 position, Quaternion rotation, float lifetime)
+        {
+            var pool = SimpleEffectPool.Instance;
+            if (pool != null)
+            {
+                pool.Play(prefab, position, rotation, lifetime);
+                return;
+            }
+            // Fallback: SimpleEffectPool not placed in scene yet.
+            Destroy(Instantiate(prefab, position, rotation), lifetime);
+        }
 
         private DamageNumber RentNumber()
         {

@@ -73,6 +73,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_weaponSystem != null)
             {
                 _weaponSystem.OnShotFired           += HandleShotFired;
+                _weaponSystem.OnHitscanResult       += HandleHitscanResult;
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
             }
             if (_modelController != null)
@@ -84,6 +85,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_weaponSystem != null)
             {
                 _weaponSystem.OnShotFired           -= HandleShotFired;
+                _weaponSystem.OnHitscanResult       -= HandleHitscanResult;
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
             }
             if (_modelController != null)
@@ -96,7 +98,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private void LateUpdate()
         {
-            if (_aimTrailLine == null || !_aimTrailLine.enabled) return;
+            if (_aimTrailLine == null || !_aimTrailLine.enabled || _hideTrailCoroutine != null) return;
             if (_muzzlePoint  == null) { SetTrailVisible(false); return; }
 
             Vector3 dir = _weaponSystem?.GetAimDirection() ?? Vector3.zero;
@@ -126,6 +128,17 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             if (_muzzlePoint == null) return;
             StopHideCoroutine();
+            SetTrailVisible(true);
+            _hideTrailCoroutine = StartCoroutine(HideAfterDelay(_aimTrailLingerDuration));
+        }
+
+        private void HandleHitscanResult(WeaponSlotType slot, Vector3 origin, Vector3 endpoint)
+        {
+            if (_aimTrailLine == null) return;
+
+            StopHideCoroutine();
+            _aimTrailLine.SetPosition(0, origin);
+            _aimTrailLine.SetPosition(1, endpoint);
             SetTrailVisible(true);
             _hideTrailCoroutine = StartCoroutine(HideAfterDelay(_aimTrailLingerDuration));
         }

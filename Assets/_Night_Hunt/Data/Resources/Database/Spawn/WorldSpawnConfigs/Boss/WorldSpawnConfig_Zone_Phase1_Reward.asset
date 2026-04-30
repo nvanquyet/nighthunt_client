@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1bf0bbdc6f8ad46439896af8058fe9ff, type: 3}
   m_Name: WorldSpawnConfig_Zone_Phase1_Reward
   m_EditorClassIdentifier: 
-  SpawnType: 1
+  SpawnType: 0
   SpawnTable: {fileID: 11400000, guid: 00bc05741beb8e74bb5ebebf62ae3147, type: 2}
   CanRespawn: 0
-  RespawnTime: 120
+  RespawnTime: 90
   MaxRespawnCount: 1
-  MaxActive: 1
-  ScatterRadius: 0
+  MaxActive: 4
+  ScatterRadius: 2
   SpawnLocked: 0
   ContainerAutoReset: 0
   ContainerResetDelay: 60

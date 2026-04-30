@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -18,19 +18,19 @@ namespace NightHunt.Editor.Tools
     /// Generates ready-to-use template prefabs for every major system:
     ///
     ///   UI (under Assets/_Night_Hunt/Prefabs/UI/):
-    ///     DamageNumber_Template     — DamageNumber + TextMeshProUGUI (floating text)
-    ///     HitIndicator_Template     — HitIndicator + Image (directional hit arrow)
+    ///     DamageNumber_Template     â€” DamageNumber + TextMeshProUGUI (floating text)
+    ///     HitIndicator_Template     â€” HitIndicator + Image (directional hit arrow)
     ///
     ///   Projectiles (under Assets/_Night_Hunt/Prefabs/Items/Projectile/):
-    ///     Projectile_Hitscan_Template   — visual-only bullet trail
-    ///     Projectile_Physics_Template   — physics projectile (rocket / grenade)
+    ///     Projectile_Hitscan_Template   â€” visual-only bullet trail
+    ///     Projectile_Physics_Template   â€” physics projectile (rocket / grenade)
     ///
     ///   Weapons (under Assets/_Night_Hunt/Prefabs/Items/Weapon/):
-    ///     Weapon_Hitscan_Template   — HitscanWeapon component tree (AR / SMG / Shotgun)
-    ///     Weapon_Projectile_Template — ProjectileWeapon component tree (Rocket / Launcher)
+    ///     Weapon_Hitscan_Template   â€” HitscanWeapon component tree (AR / SMG / Shotgun)
+    ///     Weapon_Projectile_Template â€” ProjectileWeapon component tree (Rocket / Launcher)
     ///
     /// VFX (under Assets/_Night_Hunt/Prefabs/VFX/):
-    ///     VFX_SimpleEffect_Template — bare GameObject for SimpleEffectPool (hit spark / heal etc.)
+    ///     VFX_SimpleEffect_Template â€” bare GameObject for SimpleEffectPool (hit spark / heal etc.)
     ///
     /// HOW IT WORKS:
     ///   Each method builds a temporary scene hierarchy, attaches the right components with
@@ -38,58 +38,58 @@ namespace NightHunt.Editor.Tools
     ///   then destroys the temporary scene object. The prefab is then ready to be assigned
     ///   in Inspector fields.
     ///
-    /// CONSUMERS — where to assign each generated prefab:
+    /// CONSUMERS â€” where to assign each generated prefab:
     ///
     ///   DamageNumber_Template
-    ///     → DamageFeedbackSystem.damageNumberPrefab  (on [DamageFeedback] child of HUD Canvas)
+    ///     â†’ DamageFeedbackSystem.damageNumberPrefab  (on [DamageFeedback] child of HUD Canvas)
     ///
     ///   HitIndicator_Template
-    ///     → DamageFeedbackSystem.hitIndicatorPrefab  (same GameObject)
-    ///     → open template, assign a directional arrow sprite to the Image
+    ///     â†’ DamageFeedbackSystem.hitIndicatorPrefab  (same GameObject)
+    ///     â†’ open template, assign a directional arrow sprite to the Image
     ///
     ///   Projectile_Hitscan_Template
-    ///     → WeaponBase.projectilePrefab  on any HitscanWeapon prefab   (visual-only)
-    ///     → BossController._projectilePrefab  when _isHitscanWeapon=true
+    ///     â†’ WeaponBase.projectilePrefab  on any HitscanWeapon prefab   (visual-only)
+    ///     â†’ BossController._projectilePrefab  when _isHitscanWeapon=true
     ///
     ///   Projectile_Physics_Template
-    ///     → WeaponBase.projectilePrefab  on any ProjectileWeapon prefab (authoritative)
-    ///     → BossController._projectilePrefab  when _isHitscanWeapon=false
-    ///     → ThrowableDefinition.ProjectilePrefab  for grenades/molotovs
+    ///     â†’ WeaponBase.projectilePrefab  on any ProjectileWeapon prefab (authoritative)
+    ///     â†’ BossController._projectilePrefab  when _isHitscanWeapon=false
+    ///     â†’ ThrowableDefinition.ProjectilePrefab  for grenades/molotovs
     ///
     ///   Weapon_Hitscan_Template
-    ///     → PhysicalItemDefinition.HeldPrefab  on WeaponDefinition assets (AR/SMG/Pistol/Shotgun)
+    ///     â†’ PhysicalItemDefinition.VisualPrefab  on WeaponDefinition assets (AR/SMG/Pistol/Shotgun)
     ///
     ///   Weapon_Projectile_Template
-    ///     → PhysicalItemDefinition.HeldPrefab  on WeaponDefinition assets (Launcher)
+    ///     â†’ PhysicalItemDefinition.VisualPrefab  on WeaponDefinition assets (Launcher)
     ///
     ///   VFX_HitSpark_Template
-    ///     → ClientEffectManager.damageEffectPrefab  (on VFX/Systems scene GO)
+    ///     â†’ ClientEffectManager.damageEffectPrefab  (on VFX/Systems scene GO)
     ///
     ///   VFX_HealBurst_Template
-    ///     → ClientEffectManager.healEffectPrefab
+    ///     â†’ ClientEffectManager.healEffectPrefab
     ///
     ///   VFX_MuzzleFlash_Template
-    ///     → ClientEffectManager.muzzleFlashPrefab   (standalone, not the one inside projectile prefab)
+    ///     â†’ ClientEffectManager.muzzleFlashPrefab   (standalone, not the one inside projectile prefab)
     ///
     ///   VFX_BulletTrail_Template
-    ///     → ClientEffectManager.projectileTrailPrefab  (stationary muzzle-origin tracer)
-    ///     → or leave that field null and use [MainVisual] TrailRenderer inside Projectile_Hitscan_Template
+    ///     â†’ ClientEffectManager.projectileTrailPrefab  (stationary muzzle-origin tracer)
+    ///     â†’ or leave that field null and use [MainVisual] TrailRenderer inside Projectile_Hitscan_Template
     ///
-    /// AFTER GENERATING — open each template in prefab edit mode:
-    ///   • Projectile/Weapon prefabs: add mesh + ParticleSystem to [Model]/[MuzzleFlash]/[DetonationVFX]
-    ///   • Weapon prefabs: move [FirePoint] to muzzle tip, [LeftHandIK] to grip position
-    ///   • HitIndicator: assign arrow sprite to Image; set pivot center, sprite pointing UP
-    ///   • VFX prefabs: add ParticleSystem, set loops=false, duration ≤ lifetime field on ClientEffectManager
+    /// AFTER GENERATING â€” open each template in prefab edit mode:
+    ///   â€¢ Projectile/Weapon prefabs: add mesh + ParticleSystem to [Model]/[MuzzleFlash]/[DetonationVFX]
+    ///   â€¢ Weapon prefabs: move [FirePoint] to muzzle tip, [LeftHandIK] to grip position
+    ///   â€¢ HitIndicator: assign arrow sprite to Image; set pivot center, sprite pointing UP
+    ///   â€¢ VFX prefabs: add ParticleSystem, set loops=false, duration â‰¤ lifetime field on ClientEffectManager
     /// </summary>
     public static class NightHuntPrefabBuilder
     {
-        // ── Output paths ──────────────────────────────────────────────────────────
+        // â”€â”€ Output paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private const string UIPrefabPath         = "Assets/_Night_Hunt/Prefabs/UI";
-        private const string ProjectilePrefabPath = "Assets/_Night_Hunt/Prefabs/Items/Projectile";
+        private const string ProjectilePrefabPath = "Assets/_Night_Hunt/Prefabs/_Generated/Templates/Projectile";
         private const string WeaponPrefabPath     = "Assets/_Night_Hunt/Prefabs/Items/Weapon";
         private const string VFXPrefabPath        = "Assets/_Night_Hunt/Prefabs/VFX";
 
-        // ── Menu entries ──────────────────────────────────────────────────────────
+        // â”€â”€ Menu entries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         [MenuItem("NightHunt/Tools/Build Template Prefabs/All", priority = 50)]
         public static void BuildAll()
@@ -109,7 +109,7 @@ namespace NightHunt.Editor.Tools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            log.Add("\n✅ All template prefabs created. See paths above.");
+            log.Add("\nâœ… All template prefabs created. See paths above.");
             log.Add("Next: open each prefab, add meshes / particles to placeholder children.");
             Debug.Log(string.Join("\n", log));
 
@@ -153,12 +153,12 @@ namespace NightHunt.Editor.Tools
             Debug.Log(string.Join("\n", log));
         }
 
-        // ── UI Prefabs ────────────────────────────────────────────────────────────
+        // â”€â”€ UI Prefabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static List<string> BuildUIPrefabs()
         {
             var log = new List<string>();
-            log.Add("\n── UI Prefabs ──");
+            log.Add("\nâ”€â”€ UI Prefabs â”€â”€");
             log.Add(SavePrefab(BuildDamageNumberPrefab(), UIPrefabPath, "DamageNumber_Template"));
             log.Add(SavePrefab(BuildHitIndicatorPrefab(), UIPrefabPath, "HitIndicator_Template"));
             return log;
@@ -168,13 +168,13 @@ namespace NightHunt.Editor.Tools
         /// DamageNumber_Template
         ///   Root (RectTransform + CanvasRenderer + CanvasGroup)
         ///     DamageNumber (script)
-        ///   └─ Text (TextMeshProUGUI) ← _text field target
+        ///   â””â”€ Text (TextMeshProUGUI) â† _text field target
         ///
         /// SETUP IN HUD CANVAS:
         ///   This prefab must be a child of a Canvas. DamageFeedbackSystem instantiates it
         ///   under its own transform (which is under the HUD Canvas).
-        ///   Typical size: 200×60 px, pivot center.
-        ///   Font size: 40–60 pt, bold, outline.
+        ///   Typical size: 200Ã—60 px, pivot center.
+        ///   Font size: 40â€“60 pt, bold, outline.
         /// </summary>
         private static GameObject BuildDamageNumberPrefab()
         {
@@ -215,7 +215,7 @@ namespace NightHunt.Editor.Tools
         ///
         /// SETUP:
         ///   Image source: assign a directional arrow/wedge sprite in Inspector.
-        ///   Typical size: 300×300 px, pivot center.
+        ///   Typical size: 300Ã—300 px, pivot center.
         ///   Color: semi-transparent red  (1, 0.15, 0.15, 0.7).
         /// </summary>
         private static GameObject BuildHitIndicatorPrefab()
@@ -235,31 +235,31 @@ namespace NightHunt.Editor.Tools
             return root;
         }
 
-        // ── Projectile Prefabs ────────────────────────────────────────────────────
+        // â”€â”€ Projectile Prefabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static List<string> BuildProjectilePrefabs()
         {
             var log = new List<string>();
-            log.Add("\n── Projectile Prefabs ──");
+            log.Add("\nâ”€â”€ Projectile Prefabs â”€â”€");
             log.Add(SavePrefab(BuildHitscanProjectilePrefab(),  ProjectilePrefabPath, "Projectile_Hitscan_Template"));
             log.Add(SavePrefab(BuildPhysicsProjectilePrefab(),  ProjectilePrefabPath, "Projectile_Physics_Template"));
             return log;
         }
 
         /// <summary>
-        /// Projectile_Hitscan_Template — visual-only bullet trail.
+        /// Projectile_Hitscan_Template â€” visual-only bullet trail.
         ///
         ///   Root       ProjectileComponent (isImpact=true, fuseTime=0, hideTrailOnImpact=true)
         ///              SphereCollider (trigger, radius 0.05)
-        ///   ├─ [MuzzleFlash]     — ParticleSystem placeholder (inactive)
-        ///   ├─ [MainVisual]      — TrailRenderer placeholder   (active)
-        ///   └─ [DetonationVFX]   — ParticleSystem placeholder  (inactive)
+        ///   â”œâ”€ [MuzzleFlash]     â€” ParticleSystem placeholder (inactive)
+        ///   â”œâ”€ [MainVisual]      â€” TrailRenderer placeholder   (active)
+        ///   â””â”€ [DetonationVFX]   â€” ParticleSystem placeholder  (inactive)
         ///
         /// CONTEXT:
         ///   HitscanWeapon spawns this as useHitscan=true. The projectile teleports to the
         ///   impact endpoint immediately and triggers DetonationVFX (spark/blood) there.
-        ///   Trail shows the bullet path. No damage logic — damage was done by the raycast.
-        ///   Speed should be high (≥300) so the trail renders before teleport.
+        ///   Trail shows the bullet path. No damage logic â€” damage was done by the raycast.
+        ///   Speed should be high (â‰¥300) so the trail renders before teleport.
         ///   MaxRange matches WeaponBase.maxRange on the weapon component.
         /// </summary>
         private static GameObject BuildHitscanProjectilePrefab()
@@ -279,11 +279,11 @@ namespace NightHunt.Editor.Tools
             so.FindProperty("muzzleFlashDuration")?.SetValue(0.05f);
 
             var muzzle = BuildPlaceholderChild(root, "[MuzzleFlash]",   active: false,
-                note: "Add ParticleSystem — short burst, world-space, plays on bullet spawn.");
+                note: "Add ParticleSystem â€” short burst, world-space, plays on bullet spawn.");
             var visual = BuildPlaceholderChild(root, "[MainVisual]",    active: true,
-                note: "Add TrailRenderer — shows bullet path. Width: 0.01–0.03. Duration: 0.05s.");
+                note: "Add TrailRenderer â€” shows bullet path. Width: 0.01â€“0.03. Duration: 0.05s.");
             var detonation = BuildPlaceholderChild(root, "[DetonationVFX]", active: false,
-                note: "Add ParticleSystem — impact spark. Stop-action: StopEmittingAndClear.");
+                note: "Add ParticleSystem â€” impact spark. Stop-action: StopEmittingAndClear.");
 
             so.FindProperty("muzzleFlashChild")?.SetValue(muzzle);
             so.FindProperty("mainVisualChild")?.SetValue(visual);
@@ -294,19 +294,19 @@ namespace NightHunt.Editor.Tools
         }
 
         /// <summary>
-        /// Projectile_Physics_Template — authoritative physics projectile (rocket / grenade).
+        /// Projectile_Physics_Template â€” authoritative physics projectile (rocket / grenade).
         ///
         ///   Root       ProjectileComponent (isImpact=true, hideTrailOnImpact=true)
         ///              SphereCollider (trigger, radius 0.2)
-        ///   ├─ [MuzzleFlash]     — ParticleSystem placeholder (inactive)
-        ///   ├─ [MainVisual]      — MeshFilter + MeshRenderer + TrailRenderer placeholder (active)
-        ///   └─ [DetonationVFX]   — ParticleSystem placeholder — explosion / smoke (inactive)
+        ///   â”œâ”€ [MuzzleFlash]     â€” ParticleSystem placeholder (inactive)
+        ///   â”œâ”€ [MainVisual]      â€” MeshFilter + MeshRenderer + TrailRenderer placeholder (active)
+        ///   â””â”€ [DetonationVFX]   â€” ParticleSystem placeholder â€” explosion / smoke (inactive)
         ///
         /// CONTEXT:
         ///   ProjectileWeapon spawns this. SetOwnerData() is called on the owner so damage
         ///   RPCs are sent exactly once. GravityScale > 0 gives ballistic arc.
         ///   Remote clients receive a visual-only copy via ShowProjectileOnClientsRpc.
-        ///   lifetimeAfterImpact should be long enough for the explosion VFX to finish (2–4s).
+        ///   lifetimeAfterImpact should be long enough for the explosion VFX to finish (2â€“4s).
         /// </summary>
         private static GameObject BuildPhysicsProjectilePrefab()
         {
@@ -324,11 +324,11 @@ namespace NightHunt.Editor.Tools
             so.FindProperty("muzzleFlashDuration")?.SetValue(0.08f);
 
             var muzzle     = BuildPlaceholderChild(root, "[MuzzleFlash]",   active: false,
-                note: "Add ParticleSystem — muzzle blast, plays once on spawn.");
+                note: "Add ParticleSystem â€” muzzle blast, plays once on spawn.");
             var visual     = BuildPlaceholderChild(root, "[MainVisual]",    active: true,
                 note: "Add MeshFilter + MeshRenderer (rocket body) + TrailRenderer (smoke trail).");
             var detonation = BuildPlaceholderChild(root, "[DetonationVFX]", active: false,
-                note: "Add ParticleSystem — explosion. loops=false, duration≥2s.");
+                note: "Add ParticleSystem â€” explosion. loops=false, durationâ‰¥2s.");
 
             so.FindProperty("muzzleFlashChild")?.SetValue(muzzle);
             so.FindProperty("mainVisualChild")?.SetValue(visual);
@@ -338,38 +338,38 @@ namespace NightHunt.Editor.Tools
             return root;
         }
 
-        // ── Weapon Prefabs ────────────────────────────────────────────────────────
+        // â”€â”€ Weapon Prefabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static List<string> BuildWeaponPrefabs()
         {
             var log = new List<string>();
-            log.Add("\n── Weapon Prefabs ──");
+            log.Add("\nâ”€â”€ Weapon Prefabs â”€â”€");
             log.Add(SavePrefab(BuildHitscanWeaponPrefab(),    WeaponPrefabPath, "Weapon_Hitscan_Template"));
             log.Add(SavePrefab(BuildProjectileWeaponPrefab(), WeaponPrefabPath, "Weapon_Projectile_Template"));
             return log;
         }
 
         /// <summary>
-        /// Weapon_Hitscan_Template — weapon model prefab for AR / SMG / Pistol / Shotgun.
+        /// Weapon_Hitscan_Template â€” weapon model prefab for AR / SMG / Pistol / Shotgun.
         ///
         ///   Root       HitscanWeapon
-        ///   ├─ [Model]           — empty placeholder, add skinned/static mesh here
-        ///   ├─ [FirePoint]       — muzzle tip: weapon.FirePoint reads this
-        ///   └─ [LeftHandIK]      — left-hand IK anchor: WeaponModelController reads this
+        ///   â”œâ”€ [Model]           â€” empty placeholder, add skinned/static mesh here
+        ///   â”œâ”€ [FirePoint]       â€” muzzle tip: weapon.FirePoint reads this
+        ///   â””â”€ [LeftHandIK]      â€” left-hand IK anchor: WeaponModelController reads this
         ///
         /// CONTEXT:
         ///   WeaponModelController.GetWeaponBase() calls GetComponent&lt;WeaponBase&gt;() on this root.
         ///   HitscanWeapon.Fire() uses FirePoint.position as the ray origin.
-        ///   pelletCount=1 → rifle/SMG. pelletCount=8 → shotgun.
-        ///   projectilePrefab → assign Projectile_Hitscan_Template.
-        ///   hitLayers → everything except Player layer that owns this weapon.
+        ///   pelletCount=1 â†’ rifle/SMG. pelletCount=8 â†’ shotgun.
+        ///   projectilePrefab â†’ assign Projectile_Hitscan_Template.
+        ///   hitLayers â†’ everything except Player layer that owns this weapon.
         ///
         /// SETUP AFTER GENERATING:
         ///   1. Add 3D mesh as child of [Model].
         ///   2. Set [FirePoint] position to the muzzle tip via Scene view.
         ///   3. Set [LeftHandIK] position to where the left hand rests on the foregrip.
-        ///   4. Assign projectilePrefab → Projectile_Hitscan_Template.
-        ///   5. Assign this prefab to WeaponDefinition.HeldPrefab (via PhysicalItemDefinition).
+        ///   4. Assign projectilePrefab â†’ Projectile_Hitscan_Template.
+        ///   5. Assign this prefab to WeaponDefinition.VisualPrefab (via PhysicalItemDefinition).
         /// </summary>
         private static GameObject BuildHitscanWeaponPrefab()
         {
@@ -405,37 +405,37 @@ namespace NightHunt.Editor.Tools
             so.ApplyModifiedProperties();
 
             AddContextNote(root,
-                "HitscanWeapon — AR/SMG/Pistol/Shotgun.\n" +
+                "HitscanWeapon â€” AR/SMG/Pistol/Shotgun.\n" +
                 "1. Add mesh under [Model].\n" +
                 "2. Move [FirePoint] to muzzle tip.\n" +
                 "3. Move [LeftHandIK] to left-hand grip position.\n" +
-                "4. Assign projectilePrefab → Projectile_Hitscan_Template.\n" +
+                "4. Assign projectilePrefab â†’ Projectile_Hitscan_Template.\n" +
                 "5. Set pelletCount=1 (rifle) or 8 (shotgun).\n" +
-                "6. Assign to WeaponDefinition.HeldPrefab.");
+                "6. Assign to WeaponDefinition.VisualPrefab.");
 
             return root;
         }
 
         /// <summary>
-        /// Weapon_Projectile_Template — weapon model prefab for Rocket Launcher / Grenade Launcher.
+        /// Weapon_Projectile_Template â€” weapon model prefab for Rocket Launcher / Grenade Launcher.
         ///
         ///   Root       ProjectileWeapon
-        ///   ├─ [Model]       — placeholder for 3D mesh
-        ///   ├─ [FirePoint]   — muzzle tip
-        ///   └─ [LeftHandIK]  — left-hand IK anchor
+        ///   â”œâ”€ [Model]       â€” placeholder for 3D mesh
+        ///   â”œâ”€ [FirePoint]   â€” muzzle tip
+        ///   â””â”€ [LeftHandIK]  â€” left-hand IK anchor
         ///
         /// CONTEXT:
         ///   ProjectileWeapon.Fire() spawns one Projectile_Physics_Template per shot.
         ///   SetOwnerData() is called immediately so damage is authoritative.
         ///   gravityScale=0.3 gives a gentle arc for rockets; use 1.5 for grenades.
-        ///   projectileSpeed=30–60 for lobbable grenades, 80–120 for rockets.
+        ///   projectileSpeed=30â€“60 for lobbable grenades, 80â€“120 for rockets.
         ///
         /// SETUP AFTER GENERATING:
         ///   1. Add mesh under [Model].
         ///   2. Move [FirePoint] to the barrel/muzzle end.
-        ///   3. Assign projectilePrefab → Projectile_Physics_Template.
+        ///   3. Assign projectilePrefab â†’ Projectile_Physics_Template.
         ///   4. Tune gravityScale + projectileSpeed for the desired arc.
-        ///   5. Assign to WeaponDefinition.HeldPrefab.
+        ///   5. Assign to WeaponDefinition.VisualPrefab.
         /// </summary>
         private static GameObject BuildProjectileWeaponPrefab()
         {
@@ -466,48 +466,48 @@ namespace NightHunt.Editor.Tools
             so.ApplyModifiedProperties();
 
             AddContextNote(root,
-                "ProjectileWeapon — Rocket/Grenade Launcher.\n" +
+                "ProjectileWeapon â€” Rocket/Grenade Launcher.\n" +
                 "1. Add mesh under [Model].\n" +
                 "2. Move [FirePoint] to barrel end.\n" +
-                "3. Assign projectilePrefab → Projectile_Physics_Template.\n" +
+                "3. Assign projectilePrefab â†’ Projectile_Physics_Template.\n" +
                 "4. Tune gravityScale (0.3 rocket / 1.5 grenade) + projectileSpeed.\n" +
-                "5. Assign to WeaponDefinition.HeldPrefab (WeaponClass.Launcher).");
+                "5. Assign to WeaponDefinition.VisualPrefab (WeaponClass.Launcher).");
 
             return root;
         }
 
-        // ── VFX Prefabs ───────────────────────────────────────────────────────────
+        // â”€â”€ VFX Prefabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         private static List<string> BuildVFXPrefabs()
         {
             var log = new List<string>();
-            log.Add("\n── VFX Prefabs ──");
+            log.Add("\nâ”€â”€ VFX Prefabs â”€â”€");
             log.Add(SavePrefab(BuildSimpleEffectPrefab("VFX_HitSpark_Template",
-                "SimpleEffectPool target — hit spark.\n" +
+                "SimpleEffectPool target â€” hit spark.\n" +
                 "Add a ParticleSystem. Stop-action: StopEmittingAndClear.\n" +
                 "SimpleEffectPool returns this after lifetime expires (no Destroy).\n" +
                 "Assign to: ClientEffectManager.damageEffectPrefab"),
                 VFXPrefabPath, "VFX_HitSpark_Template"));
 
             log.Add(SavePrefab(BuildSimpleEffectPrefab("VFX_HealBurst_Template",
-                "SimpleEffectPool target — heal burst.\n" +
+                "SimpleEffectPool target â€” heal burst.\n" +
                 "Add a green/gold ParticleSystem. One-shot, no loop.\n" +
                 "Assign to: ClientEffectManager.healEffectPrefab"),
                 VFXPrefabPath, "VFX_HealBurst_Template"));
 
             log.Add(SavePrefab(BuildSimpleEffectPrefab("VFX_MuzzleFlash_Template",
-                "SimpleEffectPool target — standalone muzzle flash.\n" +
-                "Add a very short ParticleSystem burst. Duration: 0.05–0.1s.\n" +
+                "SimpleEffectPool target â€” standalone muzzle flash.\n" +
+                "Add a very short ParticleSystem burst. Duration: 0.05â€“0.1s.\n" +
                 "Spawned by SpawnMuzzleFlash() via ClientEffectManager at the fire point. " +
                 "Different from the [MuzzleFlash] inside the projectile prefab (which fires with the projectile).\n" +
                 "Assign to: ClientEffectManager.muzzleFlashPrefab"),
                 VFXPrefabPath, "VFX_MuzzleFlash_Template"));
 
             log.Add(SavePrefab(BuildSimpleEffectPrefab("VFX_BulletTrail_Template",
-                "SimpleEffectPool target — muzzle-origin tracer/trail effect.\n" +
+                "SimpleEffectPool target â€” muzzle-origin tracer/trail effect.\n" +
                 "Spawned STATIONARY at the projectile launch position when ProjectileSpawnEvent fires.\n" +
-                "This does NOT follow the bullet — it plays at the barrel and fades out.\n" +
-                "Use a short cone/streak ParticleSystem (looping=false, duration ≤ projectileTrailLifetime).\n" +
+                "This does NOT follow the bullet â€” it plays at the barrel and fades out.\n" +
+                "Use a short cone/streak ParticleSystem (looping=false, duration â‰¤ projectileTrailLifetime).\n" +
                 "For a trail that FOLLOWS the projectile, use the [MainVisual] child inside Projectile_Hitscan_Template instead.\n" +
                 "Assign to: ClientEffectManager.projectileTrailPrefab (leave null if using projectile-embedded trail)"),
                 VFXPrefabPath, "VFX_BulletTrail_Template"));
@@ -522,7 +522,7 @@ namespace NightHunt.Editor.Tools
             return root;
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────────
+        // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
         /// <summary>Saves a temporary scene object as a prefab asset, then destroys the scene object.</summary>
         private static string SavePrefab(GameObject sceneObject, string folder, string prefabName)
@@ -534,13 +534,13 @@ namespace NightHunt.Editor.Tools
 
             if (success)
             {
-                string msg = $"  ✅ {fullPath}";
+                string msg = $"  âœ… {fullPath}";
                 Debug.Log($"[PrefabBuilder] Created: {fullPath}");
                 return msg;
             }
             else
             {
-                string msg = $"  ❌ FAILED: {fullPath}";
+                string msg = $"  âŒ FAILED: {fullPath}";
                 Debug.LogError($"[PrefabBuilder] Failed to save: {fullPath}");
                 return msg;
             }
@@ -559,14 +559,14 @@ namespace NightHunt.Editor.Tools
 
         /// <summary>
         /// Add a disabled MonoBehaviour stub that stores a context string visible in the Inspector.
-        /// Uses a generic TextAsset workaround — no custom class needed.
+        /// Uses a generic TextAsset workaround â€” no custom class needed.
         /// </summary>
         private static void AddContextNote(GameObject go, string note)
         {
-            // Store note as a GameObject name tooltip — visible in hierarchy during prefab edit.
+            // Store note as a GameObject name tooltip â€” visible in hierarchy during prefab edit.
             // Also log so devs see context in console when tool runs.
             // A real project might use a custom [ContextNote] MonoBehaviour; kept minimal here.
-            _ = note; // suppress unused warning — note is shown in SavePrefab log
+            _ = note; // suppress unused warning â€” note is shown in SavePrefab log
         }
 
         private static void EnsureDirectories()
@@ -591,7 +591,7 @@ namespace NightHunt.Editor.Tools
             => EditorUtility.DisplayDialog(title, body, "Build", "Cancel");
     }
 
-    // ── SerializedProperty extension ─────────────────────────────────────────────
+    // â”€â”€ SerializedProperty extension â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     internal static class SerializedPropertyExtensions
     {
@@ -627,3 +627,5 @@ namespace NightHunt.Editor.Tools
         }
     }
 }
+
+

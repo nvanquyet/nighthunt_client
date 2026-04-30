@@ -35,9 +35,7 @@ namespace NightHunt.Networking
         [Tooltip("Total players expected before starting Phase 1.\n" +
                  "Tự động resolve từ RoomState.PlayerCount (Ranked) hoặc GameModeConfig khi OnStartNetwork.\n" +
                  "Chỉ cần đặt thủ công khi test trong Editor (dev mode, GameMode.None).")]
-        [SerializeField]
         private int _expectedPlayerCount = 2;
-        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         private RegistryService _registryService;
         private NetworkManager _networkManager;
@@ -104,7 +102,7 @@ namespace NightHunt.Networking
             //           → keep Inspector value (dev/editor fallback)
             ResolveExpectedPlayerCount();
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log("[ServerGameManager] ✅ Initialized");
         }
 
@@ -118,7 +116,7 @@ namespace NightHunt.Networking
             if (roomState != null && roomState.PlayerCount > 0)
             {
                 _expectedPlayerCount = roomState.PlayerCount;
-                if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                     Debug.Log($"[ServerGameManager] ExpectedPlayerCount resolved from RoomState: {_expectedPlayerCount} (mode={roomState.CurrentGameMode})");
                 return;
             }
@@ -130,7 +128,7 @@ namespace NightHunt.Networking
             if (NightHunt.Server.ServerBootstrap.BootstrappedExpectedPlayers > 0)
             {
                 _expectedPlayerCount = NightHunt.Server.ServerBootstrap.BootstrappedExpectedPlayers;
-                if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                     Debug.Log($"[ServerGameManager] ExpectedPlayerCount resolved from ServerBootstrap.BootstrappedExpectedPlayers: {_expectedPlayerCount}");
                 return;
             }
@@ -144,14 +142,14 @@ namespace NightHunt.Networking
                     || GameModeConfig.TryGetByKey(modeKey, false, out entry))
                 {
                     _expectedPlayerCount = entry.playersPerTeam * 2;
-                    if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                         Debug.Log($"[ServerGameManager] ExpectedPlayerCount resolved from GameModeConfig ({modeKey}): {_expectedPlayerCount}");
                     return;
                 }
             }
 
             // 4. Keep Inspector value — dev mode or no data available
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.LogWarning($"[ServerGameManager] ExpectedPlayerCount using Inspector value: {_expectedPlayerCount}. " +
                                  "Ensure RoomState is populated or --expectedPlayers is passed before scene load in production.");
         }
@@ -197,7 +195,7 @@ namespace NightHunt.Networking
         private void OnPlayerConnected(NetworkConnection conn)
         {
             int fishnetClientId = conn.ClientId;
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Player connected - FishNet ClientId: {fishnetClientId}");
 
             //Spawn ClientNetworkHandler cho client nÃ y
@@ -216,7 +214,7 @@ namespace NightHunt.Networking
         {
             int fishnetClientId = conn.ClientId;
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log(
                 $"[ServerGameManager] Received client data - FishNet ID: {fishnetClientId}, Backend ID: {clientData.BackendPlayerId}, Name: {clientData.DisplayName}");
 
@@ -234,7 +232,7 @@ namespace NightHunt.Networking
         {
             int fishnetClientId = conn.ClientId;
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] === Starting spawn workflow for ClientId: {fishnetClientId} ===");
 
             // STEP 1: Instantiate prefab
@@ -259,7 +257,7 @@ namespace NightHunt.Networking
                 return;
             }
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Step 1: Prefab instantiated");
 
             // STEP 2: SpawnSystem xá»­ lÃ½ (assign team, position)
@@ -267,7 +265,7 @@ namespace NightHunt.Networking
             if (_spawnSystem != null)
             {
                 serverData = _spawnSystem.ProcessSpawn(playerObj, conn, clientData);
-                if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                     Debug.Log($"[ServerGameManager] Step 2: SpawnSystem processed - Team: {serverData.TeamId}");
             }
             else
@@ -299,7 +297,7 @@ namespace NightHunt.Networking
 
             _networkManager.ServerManager.Spawn(netObj, conn);
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Step 3: Network spawned");
 
             // STEP 4: Set PUBLIC data AFTER spawn so the SyncVar change is
@@ -311,7 +309,7 @@ namespace NightHunt.Networking
             PlayerPublicData publicData = PlayerPublicData.FromRegistryData(serverData);
             networkPlayer.SetPublicData(publicData);
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Step 4: Public data set");
 
             // STEP 4b: Inform PlayerModelLoader of the chosen character skin.
@@ -328,13 +326,13 @@ namespace NightHunt.Networking
                 Debug.LogWarning("[ServerGameManager] PlayerModelLoader not found on player prefab. " +
                                  "Add PlayerModelLoader to the root PlayerPrefab.");
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Step 4b: ModelIndex set to {serverData.CharacterModelIndex}");
 
             // STEP 5: Register vá»›i RegistryService (lÆ°u PRIVATE data)
             _registryService.RegisterPlayer(networkPlayer, serverData);
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Step 5: Registered with RegistryService");
 
             // STEP 6: Track
@@ -352,7 +350,7 @@ namespace NightHunt.Networking
             // can show "N / M players ready" in real-time.
             RpcOnPlayerSpawned(serverData.DisplayName, _spawnedPlayerCount, _expectedPlayerCount);
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log(
                 $"[ServerGameManager] === âœ… Spawn complete ({_spawnedPlayerCount}/{_expectedPlayerCount}) - {serverData.DisplayName}, Team: {serverData.TeamId} ===");
 
@@ -366,7 +364,7 @@ namespace NightHunt.Networking
         [Server]
         private void OnAllPlayersSpawned()
         {
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log("[ServerGameManager] âœ… All players spawned â€” starting match!");
             OnAllPlayersReady?.Invoke();
 
@@ -383,7 +381,7 @@ namespace NightHunt.Networking
         [ObserversRpc]
         private void RpcOnSpawningStarted()
         {
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log("[ServerGameManager] CLIENT: First player spawned — advancing to Spawning stage.");
             GameplayEventBus.Instance?.Publish(new SpawningStartedEvent());
         }
@@ -396,7 +394,7 @@ namespace NightHunt.Networking
         [ObserversRpc]
         private void RpcOnPlayerSpawned(string displayName, int spawnedCount, int expectedCount)
         {
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] CLIENT: Player spawned — {displayName} ({spawnedCount}/{expectedCount})");
             GameplayEventBus.Instance?.Publish(new PlayerSpawnedEvent
             {
@@ -409,7 +407,7 @@ namespace NightHunt.Networking
         [ObserversRpc]
         private void RpcOnAllPlayersReady()
         {
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log("[ServerGameManager] CLIENT: All players ready — dismissing loading screen.");
             GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
@@ -421,7 +419,7 @@ namespace NightHunt.Networking
         {
             int fishnetClientId = conn.ClientId;
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Player disconnecting - FishNet ClientId: {fishnetClientId}");
 
             // Get player object
@@ -445,7 +443,7 @@ namespace NightHunt.Networking
 
             string backendId = _registryService.GetBackendIdByFishNetId(fishnetClientId);
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Cleaning up - Backend ID: {backendId}, Name: {networkPlayer.DisplayName}");
 
             // Unregister (RegistryService lÆ°u data cho reconnect)
@@ -461,7 +459,7 @@ namespace NightHunt.Networking
             // Remove tracking
             _spawnedPlayers.Remove(fishnetClientId);
 
-            if (_debugConfig != null && _debugConfig.EnableNetworkDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] âœ… Cleanup complete for ClientId: {fishnetClientId}");
         }
 #if UNITY_EDITOR

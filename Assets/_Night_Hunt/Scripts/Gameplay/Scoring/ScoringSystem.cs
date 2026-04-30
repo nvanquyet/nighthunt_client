@@ -49,15 +49,13 @@ namespace NightHunt.Gameplay.Scoring
                                  "Right-click component → 'NightHunt/Setup Default Score Configs' to populate. " +
                                  "Falling back to hardcoded defaults.");
 
-            // Subscribe to gameplay events so scoring fires automatically
-            GameplayEventBus.Instance?.Subscribe<PlayerKilledEvent>(OnPlayerKilled);
+            // Kills are awarded directly by PlayerHealthSystem on the server when death is confirmed.
             GameplayEventBus.Instance?.Subscribe<BossKilledEvent>(OnBossKilled);
         }
 
         public override void OnStopServer()
         {
             base.OnStopServer();
-            GameplayEventBus.Instance?.Unsubscribe<PlayerKilledEvent>(OnPlayerKilled);
             GameplayEventBus.Instance?.Unsubscribe<BossKilledEvent>(OnBossKilled);
         }
 
@@ -96,7 +94,7 @@ namespace NightHunt.Gameplay.Scoring
             float phaseMultiplier = 1f;
             if (phaseManager != null)
             {
-                phaseMultiplier = ScoreMultiplier.GetPhaseMultiplier(phaseManager.CurrentPhase);
+                phaseMultiplier = phaseManager.GetScoreMultiplier();
             }
 
             // Calculate final score

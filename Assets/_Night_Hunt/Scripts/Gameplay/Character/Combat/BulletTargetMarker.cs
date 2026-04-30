@@ -1,5 +1,6 @@
 using UnityEngine;
 using NightHunt.Utilities;
+using NightHunt.Networking.Player;
 
 namespace NightHunt.Gameplay.Character.Combat
 {
@@ -14,7 +15,7 @@ namespace NightHunt.Gameplay.Character.Combat
     ///      assign it to <see cref="_hitTargetRef"/> (or leave null for auto-resolve via parent).
     ///
     /// ALTERNATIVE:
-    ///   Domain classes (e.g. BeaconPlaceable) can implement <see cref="IBulletTarget"/> directly
+    ///   Domain classes (e.g. DeployablePlacementHandler) can implement <see cref="IBulletTarget"/> directly
     ///   and call Register/Unregister themselves, avoiding this component.
     ///
     /// NOTE — character players already have <see cref="PlayerHitboxMarker"/> on each hitbox collider.
@@ -54,7 +55,22 @@ namespace NightHunt.Gameplay.Character.Combat
         public Vector3 AcquirePoint =>
             transform.position + transform.TransformDirection(_acquirePointLocalOffset);
 
-        public bool IsAcquirable => isActiveAndEnabled;
+        public bool IsAcquirable
+        {
+            get
+            {
+                if (!isActiveAndEnabled)
+                    return false;
+
+                _networkPlayer ??= ComponentResolver.Find<NetworkPlayer>(this)
+                    .OnSelf()
+                    .InParent()
+                    .InRootChildren()
+                    .Resolve();
+
+                return _networkPlayer == null || _networkPlayer.IsAlive;
+            }
+        }
 
         public IHittable HitTarget
         {
@@ -84,6 +100,7 @@ namespace NightHunt.Gameplay.Character.Combat
         // ── Private ───────────────────────────────────────────────────────────
 
         private IHittable _resolvedHitTarget;
+        private NetworkPlayer _networkPlayer;
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
 

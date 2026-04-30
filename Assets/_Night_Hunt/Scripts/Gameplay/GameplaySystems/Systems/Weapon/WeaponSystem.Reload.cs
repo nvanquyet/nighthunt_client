@@ -1,4 +1,5 @@
 using System.Collections;
+using FishNet.Object;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
@@ -15,11 +16,47 @@ namespace NightHunt.GameplaySystems.Weapon
         public void RequestReload()
         {
             var slot = _activeSlot.Value;
+            Debug.Log($"[WEAPON_FLOW] [01][Reload.Request] slot={slot?.ToString() ?? "none"} reloading={_isReloading} isServer={IsServerInitialized} isOwner={IsOwner}");
             if (slot == null || _isReloading) return;
-            if (!_weaponCache.TryGetValue(slot.Value, out var inst)) return;
-            // Guard: do not reload if no reserve ammo remains.
-            if (!CanReload(slot.Value)) return;
+            if (!_weaponCache.TryGetValue(slot.Value, out var inst))
+            {
+                Debug.LogWarning($"[WEAPON_FLOW] [01][Reload.Blocked] no weapon cache slot={slot.Value}");
+                return;
+            }
+            if (!CanReload(slot.Value))
+            {
+                Debug.Log($"[WEAPON_FLOW] [01][Reload.Blocked] CanReload=false slot={slot.Value} mag={(int)inst.GetCurrentValue(ItemStatType.MagazineSize)} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)}");
+                return;
+            }
+
+            if (IsServerInitialized)
+            {
+                StartCoroutine(ReloadCoroutine(slot.Value, inst, syncInventoryOnComplete: true, broadcastRemoteState: true));
+                return;
+            }
+
+            if (!IsOwner)
+                return;
+
+            RequestReloadServerRpc(slot.Value);
             StartCoroutine(ReloadCoroutine(slot.Value, inst));
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void RequestReloadServerRpc(WeaponSlotType slot)
+        {
+            if (_isReloading)
+                return;
+
+            if (!_weapons.TryGetValue(slot, out var id))
+                return;
+
+            var inst = _inventorySystem?.GetItemByInstanceID(id);
+            if (inst == null || !CanReload(slot))
+                return;
+
+            Debug.Log($"[WEAPON_FLOW] [02][Reload.ServerRpc] slot={slot} owner={Owner?.ClientId}");
+            StartCoroutine(ReloadCoroutine(slot, inst, syncInventoryOnComplete: true, broadcastRemoteState: true));
         }
 
         public int   GetCurrentMagazine(WeaponSlotType slot) =>
@@ -66,15 +103,20 @@ namespace NightHunt.GameplaySystems.Weapon
             w.AdjustCurrentValue(ItemStatType.MaxAmmo, -actual);
             int newMag = (int)w.GetCurrentValue(ItemStatType.MagazineSize);
             OnWeaponReloaded?.Invoke(slot, newMag);
+            _inventorySystem?.SyncItemState(w.InstanceID);
         }
 
         // -- Internal coroutine -------------------------------------------------
 
         /// <summary>
-        /// Runs on the owner client. Broadcasts reload state to all remote clients
-        /// via BroadcastReloadStateServerRpc so their animators stay in sync.
+        /// Runs on the owner client for prediction and on the server for authoritative ammo state.
+        /// The server pass broadcasts reload state to remote clients.
         /// </summary>
-        internal IEnumerator ReloadCoroutine(WeaponSlotType slot, ItemInstance inst)
+        internal IEnumerator ReloadCoroutine(
+            WeaponSlotType slot,
+            ItemInstance inst,
+            bool syncInventoryOnComplete = false,
+            bool broadcastRemoteState = false)
         {
             if (_isReloading) yield break;
 
@@ -89,8 +131,10 @@ namespace NightHunt.GameplaySystems.Weapon
 
             // -- Start reload --
             _isReloading = true;
+            Debug.Log($"[WEAPON_FLOW] [03][Reload.Start] slot={slot} duration={reloadTime:F2} mag={(int)inst.GetCurrentValue(ItemStatType.MagazineSize)} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)}");
             OnReloadStateChanged?.Invoke(true);
-            if (IsOwner) BroadcastReloadStateServerRpc(true);     // ? remote animators
+            if (broadcastRemoteState && IsServerInitialized)
+                BroadcastReloadStateObserversRpc(true);
 
             yield return new WaitForSeconds(reloadTime);
 
@@ -104,9 +148,14 @@ namespace NightHunt.GameplaySystems.Weapon
             OnWeaponReloaded?.Invoke(slot, newMag);
             OnAmmoChanged?.Invoke(newMag, (int)inst.GetCurrentValue(ItemStatType.MaxAmmo), (int)magCap);
 
+            if (syncInventoryOnComplete)
+                _inventorySystem?.SyncItemState(inst.InstanceID);
+
             _isReloading = false;
+            Debug.Log($"[WEAPON_FLOW] [04][Reload.Done] slot={slot} mag={newMag}/{(int)magCap} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)}");
             OnReloadStateChanged?.Invoke(false);
-            if (IsOwner) BroadcastReloadStateServerRpc(false);    // ? remote animators
+            if (broadcastRemoteState && IsServerInitialized)
+                BroadcastReloadStateObserversRpc(false);
 
             if (DebugLogs) Debug.Log($"[WeaponSystem] Reload done: {newMag}/{magCap}");
         }

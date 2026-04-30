@@ -42,8 +42,8 @@ namespace NightHunt.GameplaySystems.Weapon
         [SerializeField] private PlayerStatSystem _statSystemSource;
         [SerializeField] private InventorySystem _inventorySystemSource;
 
-        [Header("Slot Priority (auto-built from InventoryConfig — only used as fallback)")]
-        [Tooltip("Override slot auto-equip priority. Usually leave empty and let InventoryConfig.WeaponConfig.Priority drive it.")]
+        [Header("Slot Priority Override")]
+        [Tooltip("Override slot auto-equip priority. If empty, defaults to Primary, Secondary, Melee.")]
         [SerializeField] private WeaponSlotType[] _slotPriorityOverride;
 
         [Header("Debug")]
@@ -56,6 +56,16 @@ namespace NightHunt.GameplaySystems.Weapon
         [Header("Targeting")]
         [Tooltip("Optional Bullet Target Config asset. Leave null to disable registry and use physics raycast fallback.")]
         [SerializeField] private NightHunt.GameplaySystems.Core.Configs.BulletTargetConfig _bulletTargetConfig;
+
+        [Tooltip("Maximum pitch angle allowed for bullet/projectile visuals. Keeps top-down shots from flying into the sky while preserving head/body elevation.")]
+        [SerializeField, Range(0f, 75f)] private float _maxFireElevationAngle = 35f;
+
+        [Header("Server Anti-Cheat")]
+        [Tooltip("Maximum accepted aim direction turn rate between authoritative shots, in degrees per second.")]
+        [SerializeField, Range(90f, 1440f)] private float _maxServerAimDeltaDegPerSecond = 720f;
+
+        [Tooltip("Extra per-shot grace angle to avoid rejecting normal low-FPS or latency jitter.")]
+        [SerializeField, Range(0f, 45f)] private float _serverAimDeltaGraceDegrees = 12f;
 
         // ── Private service refs ───────────────────────────────────────────────
         private IPlayerStatSystem  _statSystem;
@@ -94,6 +104,8 @@ namespace NightHunt.GameplaySystems.Weapon
         private WeaponModelController _weaponModelController;
         private float _currentElevationAngle = 0f;
         private Vector3 _lastFireEndpoint = Vector3.zero;
+        private Vector3 _lastServerShotDirection = Vector3.zero;
+        private float _lastServerShotTime = -1f;
 
         // ── Events (IWeaponSystem) ─────────────────────────────────────────────
         public event Action<WeaponSlotType, ItemInstance>      OnWeaponEquipped;
@@ -125,6 +137,8 @@ namespace NightHunt.GameplaySystems.Weapon
             _weapons.OnChange   -= OnWeaponsChangedCallback;
             _activeSlot.OnChange -= OnActiveSlotChangedCallback;
             _weaponCache.Clear();
+            _lastServerShotDirection = Vector3.zero;
+            _lastServerShotTime = -1f;
         }
 
         public void Dispose()
@@ -132,6 +146,8 @@ namespace NightHunt.GameplaySystems.Weapon
             _weapons.OnChange   -= OnWeaponsChangedCallback;
             _activeSlot.OnChange -= OnActiveSlotChangedCallback;
             _weaponCache.Clear();
+            _lastServerShotDirection = Vector3.zero;
+            _lastServerShotTime = -1f;
         }
 
         // ── IWeaponSystem — simple getters ─────────────────────────────────────
@@ -156,22 +172,31 @@ namespace NightHunt.GameplaySystems.Weapon
                                                             ? GetWeapon(_activeSlot.Value.Value)
                                                             : null;
         public bool IsSlotOccupied(WeaponSlotType slot) => _weapons.ContainsKey(slot);
+        public bool IsFireInputHeld => _isFiring;
 
         public bool CanEquipInSlot(string defID, WeaponSlotType slot)
         {
             var def = ItemDatabase.GetDefinition(defID) as WeaponDefinition;
             if (def == null) return false;
 
-            // Slot must be configured in InventoryConfig to be usable.
-            var slotCfg = _inventoryConfig?.GetWeaponSlot(slot);
-            if (slotCfg == null)
-            {
-                // No config = allow all (backward-compat when no config is assigned)
-                return true;
-            }
+            return CanEquipDefinitionInSlot(def, slot);
+        }
 
-            // AllowedClasses empty = accept all weapon classes.
-            return slotCfg.Value.AcceptsWeaponClass(def.WeaponClass);
+        internal bool CanEquipDefinitionInSlot(WeaponDefinition def, WeaponSlotType slot)
+        {
+            if (def == null) return false;
+
+            // WeaponSlotType constraints are now hardcoded or ignored (accept all).
+            switch (slot)
+            {
+                case WeaponSlotType.Primary:
+                case WeaponSlotType.Secondary:
+                    return def.WeaponClass != WeaponClass.Melee;
+                case WeaponSlotType.Melee:
+                    return def.WeaponClass == WeaponClass.Melee;
+                default:
+                    return true;
+            }
         }
 
         // ── Internal helpers ───────────────────────────────────────────────────
@@ -180,6 +205,23 @@ namespace NightHunt.GameplaySystems.Weapon
             foreach (var s in _slotPriority)
                 if (!_weapons.ContainsKey(s)) return s;
             return _slotPriority[0];
+        }
+
+        internal WeaponSlotType FindAvailableSlot(WeaponDefinition def)
+        {
+            if (def == null) return FindAvailableSlot();
+
+            foreach (var s in _slotPriority)
+                if (!_weapons.ContainsKey(s) && CanEquipDefinitionInSlot(def, s))
+                    return s;
+
+            foreach (var s in _slotPriority)
+                if (CanEquipDefinitionInSlot(def, s))
+                    return s;
+
+            return def.WeaponClass == WeaponClass.Melee
+                ? WeaponSlotType.Melee
+                : WeaponSlotType.Primary;
         }
 
         internal int FindNextAvailableInventoryIndex() =>
@@ -233,10 +275,6 @@ namespace NightHunt.GameplaySystems.Weapon
             {
                 _slotPriority = _slotPriorityOverride;
             }
-            else if (_inventoryConfig?.WeaponConfig != null && _inventoryConfig.WeaponConfig.Length > 0)
-            {
-                _slotPriority = _inventoryConfig.GetWeaponSlotOrder();
-            }
             else
             {
                 // Hard fallback: classic 3-slot layout.
@@ -284,6 +322,7 @@ namespace NightHunt.GameplaySystems.Weapon
             {
                 case SyncDictionaryOperation.Add:
                 case SyncDictionaryOperation.Set:
+                    _fireModes.Remove(key);
                     var w = _inventorySystem?.GetItemByInstanceID(value);
                     if (w != null) { _weaponCache[key] = w; OnWeaponEquipped?.Invoke(key, w); }
                     break;
@@ -291,6 +330,7 @@ namespace NightHunt.GameplaySystems.Weapon
                     if (!_weaponCache.TryGetValue(key, out var removed) && !string.IsNullOrEmpty(value))
                         removed = _inventorySystem?.GetItemByInstanceID(value);
                     _weaponCache.Remove(key);
+                    _fireModes.Remove(key);
                     if (removed != null) OnWeaponUnequipped?.Invoke(key, removed);
                     break;
                 case SyncDictionaryOperation.Clear:
@@ -301,7 +341,8 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private void OnActiveSlotChangedCallback(WeaponSlotType? oldV, WeaponSlotType? newV, bool asServer)
         {
-            if (asServer) return;
+            if (newV.HasValue)
+                _fireModes.Remove(newV.Value);
             OnActiveWeaponChanged?.Invoke(oldV, newV);
         }
 

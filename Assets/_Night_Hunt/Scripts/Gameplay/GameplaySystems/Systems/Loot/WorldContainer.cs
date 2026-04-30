@@ -26,7 +26,6 @@ namespace NightHunt.GameplaySystems.Loot
     {
         /// <summary>Fired server-side khi container bị despawn.</summary>
         public event System.Action OnDespawned;
-        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         // Runtime-only — inject qua InitializeBeforeSpawn()
         private SpawnTable spawnTable;
@@ -65,7 +64,7 @@ namespace NightHunt.GameplaySystems.Loot
         {
             get
             {
-                if (isLocked) return "[E] Locked";
+                if (isLocked) return "[Hold E] Unlock Container";
                 if (IsLooted) return "[E] Empty";
                 if (!IsOpen) return HoldDuration > 0 ? "[Hold E] Open Container" : "[E] Open Container";
                 return "[E] Loot Container";
@@ -79,11 +78,10 @@ namespace NightHunt.GameplaySystems.Loot
         // ── IHoldInteractable ─────────────────────────────────────────────────────
 
         // When container is already open, show loot UI instantly (no hold needed).
-        public float HoldDuration => IsOpen ? 0f : (_lootableConfig?.HoldDuration ?? holdDuration);
+        public float HoldDuration => IsOpen ? 0f : Mathf.Max(0.1f, _lootableConfig?.HoldDuration ?? holdDuration);
 
         public bool CanInteract(GameObject interactor)
         {
-            if (isLocked) return false;
             if (IsLooted) return false;
             if (!IsOpen && _isOpenPending) return false; // Đang chờ server confirm open — chặn spam
             return Vector3.Distance(transform.position, interactor.transform.position) <= GetInteractDistance();
@@ -91,7 +89,7 @@ namespace NightHunt.GameplaySystems.Loot
 
         public void Interact(GameObject interactor)
         {
-            Debug.Log($"[WorldContainer] Interact: IsOpen={IsOpen} isLocked={isLocked} _isOpenPending={_isOpenPending} storage={storage.Count}");
+            LogLootFlow($"[01][Interact] obj={ObjectId} open={IsOpen} locked={isLocked} pending={_isOpenPending} storage={storage.Count}");
             var playerNob = ComponentResolver.Find<NetworkObject>(interactor)
                 .OnSelf()
                 .InParent()
@@ -102,14 +100,15 @@ namespace NightHunt.GameplaySystems.Loot
             if (IsOpen)
             {
                 // Container đã mở — re-show loot UI locally, không cần server call.
-                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
-                    Debug.Log($"[WorldContainer] Interact: already open, re-showing loot UI. Items={storage.Count}");
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
+                    Debug.Log($"[LOOT_FLOW] Container [02][AlreadyOpen] obj={ObjectId} owner={playerNob.Owner?.ClientId} storage={storage.Count}");
                 OnContainerOpened?.Invoke(this, playerNob.Owner);
                 return;
             }
 
             if (_isOpenPending) return;
             _isOpenPending = true;
+            LogLootFlow($"[02][RequestOpen.Client] obj={ObjectId} owner={playerNob.Owner?.ClientId}");
             RequestOpen(playerNob);
         }
 
@@ -121,9 +120,12 @@ namespace NightHunt.GameplaySystems.Loot
 
         public void OnHoverEnter(GameObject interactor)
         {
-            if (IsOpen && !IsLooted)
+            // Only auto-show loot UI when the player is actually within interact range.
+            // Without this check the UI would open whenever the crosshair lands on an
+            // open container, regardless of how far away the player is.
+            if (IsOpen && !IsLooted && CanInteract(interactor))
             {
-                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                     Debug.Log(
                     $"[WorldContainer] OnHoverEnter: container open — auto-showing loot UI. Items={storage.Count}");
                 OnAnyHoverEnter?.Invoke(this);
@@ -132,7 +134,7 @@ namespace NightHunt.GameplaySystems.Loot
 
         public void OnHoverExit(GameObject interactor)
         {
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log("[WorldContainer] OnHoverExit — hiding loot UI if open.");
             OnAnyHoverExit?.Invoke(this);
         }
@@ -181,7 +183,7 @@ namespace NightHunt.GameplaySystems.Loot
             bool autoReset = false,
             float autoResetDelay = 60f)
         {
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log($"[WorldContainer] ── InitializeBeforeSpawn ENTRY ── locked={locked}");
 
             spawnTable = table;
@@ -199,7 +201,7 @@ namespace NightHunt.GameplaySystems.Loot
             // Roll items ngay lúc spawn — không đợi player mở (mặc định initialize luôn)
             RollLootInternal();
 
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log(
                 $"[WorldContainer] InitializeBeforeSpawn: locked={locked} autoReset={autoReset} storage={storage.Count} ObjId={ObjectId}");
         }
@@ -258,9 +260,10 @@ namespace NightHunt.GameplaySystems.Loot
 
             if (isLocked)
             {
-                Debug.LogWarning("[WorldContainer] RequestOpen: container bị khóa.");
-                RpcOnOpenRejected(conn);
-                return;
+                isLocked = false;
+                syncIsLocked.Value = false;
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldContainer] RequestOpen: locked container unlocked by hold. ObjId={ObjectId}");
             }
 
             // Items has been roll tại InitializeBeforeSpawn → không cần roll lại.
@@ -276,11 +279,12 @@ namespace NightHunt.GameplaySystems.Loot
                 _pendingDropResults = null;
             }
 
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log(
                 $"[WorldContainer] RequestOpen: opening ObjId={ObjectId} storage={storage.Count} items → ClientId={conn?.ClientId}");
+            LogLootFlow($"[03][RequestOpen.Server] obj={ObjectId} storage={storage.Count} targetClient={conn?.ClientId}");
             syncIsOpen.Value = true;
-            RpcOnContainerOpened(conn);
+            TargetOnContainerOpened(conn);
         }
 
         /// <summary>
@@ -291,7 +295,7 @@ namespace NightHunt.GameplaySystems.Loot
         private void RpcOnOpenRejected(NetworkConnection conn)
         {
             _isOpenPending = false;
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log("[WorldContainer] RpcOnOpenRejected: _isOpenPending reset — có thể thử lại.");
         }
 
@@ -303,49 +307,54 @@ namespace NightHunt.GameplaySystems.Loot
         {
             if (spawnTable == null)
             {
+                Debug.LogWarning($"[LOOT_FLOW] Container [00][Roll.Empty] obj={ObjectId} reason=SpawnTableNull");
                 Debug.LogWarning("[WorldContainer] RollLootInternal: SpawnTable là NULL — container sẽ empty!");
                 hasRolled = true;
                 syncHasRolled.Value = true;
                 return;
             }
 
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            LogLootFlow($"[00][Roll.Start] obj={ObjectId} table='{spawnTable.name}' mode={spawnTable.Mode} dropToWorld={spawnTable.DropToWorldOnOpen}");
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log(
                 $"[WorldContainer] RollLootInternal: START SpawnTable='{spawnTable.name}' Mode={spawnTable.Mode} DropToWorld={spawnTable.DropToWorldOnOpen}");
 
             if (spawnTable.DropToWorldOnOpen)
             {
                 _pendingDropResults = spawnTable.Roll();
-                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                LogLootFlow($"[00][Roll.PendingScatter] obj={ObjectId} count={_pendingDropResults?.Count ?? 0}");
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                     Debug.Log(
                     $"[WorldContainer] RollLootInternal: DropToWorldOnOpen=true — {_pendingDropResults.Count} item(s) sẽ scatter khi mở.");
             }
             else
             {
                 var results = spawnTable.Roll();
-                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                LogLootFlow($"[00][Roll.Storage] obj={ObjectId} rolled={results.Count}");
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                     Debug.Log($"[WorldContainer] RollLootInternal: Rolled {results.Count} item(s):");
                 foreach (var result in results)
                 {
                     if (result.ItemDef == null)
                     {
+                        Debug.LogWarning($"[LOOT_FLOW] Container [00][Roll.SkipResult] obj={ObjectId} reason=ItemDefNull");
                         Debug.LogWarning("[WorldContainer] RollLootInternal:   ✗ ItemDef null — bỏ qua!");
                         continue;
                     }
 
-                    var instance = new ItemInstance(result.ItemDef.ItemID, result.Quantity, -1);
-                    var data = instance.ToData();
+                    var data = ItemInstanceFactory.CreateData(result.ItemDef, result.Quantity, -1);
                     storage.Add(data);
                     syncStorage.Add(data);
-                    if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                         Debug.Log(
                         $"[WorldContainer] RollLootInternal:   + '{result.ItemDef.ItemID}' ({result.ItemDef.DisplayName}) x{result.Quantity}");
                 }
 
-                if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                     Debug.Log($"[WorldContainer] RollLootInternal: DONE — storage.Count={storage.Count}");
             }
 
+            LogLootFlow($"[00][Roll.Complete] obj={ObjectId} storage={storage.Count} pendingScatter={_pendingDropResults?.Count ?? 0}");
             hasRolled = true;
             syncHasRolled.Value = true;
         }
@@ -394,6 +403,11 @@ namespace NightHunt.GameplaySystems.Loot
 
             var itemData = storage[storageIndex];
             int takeQty = Mathf.Min(quantity, itemData.Quantity);
+            if (takeQty <= 0)
+            {
+                Debug.LogWarning($"[WorldContainer] RequestTakeItem: invalid quantity {quantity}.");
+                return;
+            }
 
             var inventory = ComponentResolver.Find<IInventorySystem>(playerNob)
                 .OnSelf()
@@ -406,7 +420,8 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            inventory.AddItem(itemData.DefinitionID, takeQty);
+            var takenData = ItemInstanceFactory.CopyDataForQuantity(itemData, takeQty, newInstanceId: true);
+            inventory.AddItemFromData(takenData);
 
             if (takeQty >= itemData.Quantity)
             {
@@ -445,7 +460,7 @@ namespace NightHunt.GameplaySystems.Loot
             for (int i = 0; i < syncStorage.Count; i++)
                 storage.Add(syncStorage[i]);
 
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log(
                 $"[WorldContainer] OnStartClient: storage rebuilt from syncStorage. Count={storage.Count} ObjId={ObjectId}");
         }
@@ -495,7 +510,7 @@ namespace NightHunt.GameplaySystems.Loot
 
         private IEnumerator AutoResetCoroutine()
         {
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log($"[WorldContainer] Auto-reset sau {_autoResetDelay}s... ObjId={ObjectId}");
             yield return new WaitForSeconds(_autoResetDelay);
 
@@ -510,15 +525,26 @@ namespace NightHunt.GameplaySystems.Loot
             RollLootInternal();
 
             _autoResetCoroutine = null;
-            if (_debugConfig != null && _debugConfig.EnableInventoryDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log($"[WorldContainer] Reset xong — ready loot lại. storage={storage.Count} ObjId={ObjectId}");
         }
 
-        // ── ObserversRpc ──────────────────────────────────────────────────────────
+        // Target only the client that requested the loot window.
 
-        [ObserversRpc]
-        private void RpcOnContainerOpened(NetworkConnection viewer)
-            => OnContainerOpened?.Invoke(this, viewer);
+        [TargetRpc]
+        private void TargetOnContainerOpened(NetworkConnection viewer)
+        {
+            _isOpenPending = false;
+            LogLootFlow($"[04][TargetOpen.Client] obj={ObjectId} viewer={viewer?.ClientId} storage={storage.Count}");
+            OnContainerOpened?.Invoke(this, viewer);
+        }
+
+        private static void LogLootFlow(string message)
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            if (cfg == null || cfg.EnableInventoryDebugLogs)
+                Debug.Log($"[LOOT_FLOW] Container {message}");
+        }
 
         public IReadOnlyList<ItemInstanceData> GetStorage() => storage;
     }

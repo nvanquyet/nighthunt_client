@@ -1,0 +1,43 @@
+using UnityEngine;
+
+namespace NightHunt.GameplaySystems.Core.Data
+{
+    public enum DeployableKind
+    {
+        Generic = 0,
+        VisionNode = 1,
+        LightPoint = 2,
+        ExplosiveMine = 3,
+        ShockField = 4,
+    }
+
+    /// <summary>
+    /// Definition for placeable items. VisualPrefab is inherited from
+    /// PhysicalItemDefinition and must stay pure visual; NetworkDeployablePrefab is
+    /// the server-spawned network object used after placement is confirmed.
+    /// </summary>
+    [CreateAssetMenu(fileName = "Deployable_", menuName = "NightHunt/Items/Deployable Definition")]
+    public sealed class DeployableDefinition : PhysicalItemDefinition
+    {
+        public override ItemType Type => ItemType.Deployable;
+
+        [Header("Deployable")]
+        public DeployableKind DeployableKind = DeployableKind.Generic;
+
+        [Tooltip("NetworkObject prefab spawned by the server when placement is confirmed.")]
+        public GameObject NetworkDeployablePrefab;
+
+        [Tooltip("Optional placement preview. If empty, VisualPrefab is used.")]
+        public GameObject PlacementPreviewPrefab;
+
+        [Min(1)] public int MaxHP = 100;
+
+        [Header("Placement")]
+        [Min(0.25f)] public float PlacementDistance = 3f;
+        [Min(0.05f)] public float PlacementCheckRadius = 0.5f;
+        public LayerMask PlacementLayerMask = ~0;
+
+        [Range(0f, 60f)]
+        public float MaxPlacementSlope = 30f;
+    }
+}

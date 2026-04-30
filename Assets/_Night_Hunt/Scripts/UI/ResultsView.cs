@@ -28,14 +28,32 @@ namespace NightHunt.UI
         // ── Inspector ─────────────────────────────────────────────────────────
         [Header("Layout")] [SerializeField] private GameObject _panel;
 
-        [Header("Result")] [SerializeField] private TextMeshProUGUI _resultHeaderText; // "VICTORY" / "DEFEAT" / "DRAW"
-        [SerializeField] private TextMeshProUGUI _reasonText; // e.g. "Team eliminated"
-        [SerializeField] private TextMeshProUGUI _countdownText; // "Returning in 10s…"
+        [Header("Result Image")]
+        [Tooltip("Image showing Win/Lose/Draw result sprite.")]
+        [SerializeField] private Image _resultImage;
+        [SerializeField] private Sprite _winSprite;
+        [SerializeField] private Sprite _loseSprite;
+        [SerializeField] private Sprite _drawSprite;
 
-        [Header("Scoreboard")] [SerializeField]
-        private Transform _scoreboardContainer;
+        [Header("Score & Time")]
+        [Tooltip("Score label e.g. '230 : 195'. Uses rich-text color tags per team.")]
+        [SerializeField] private TextMeshProUGUI _scoreLabel;
+        [Tooltip("Total match duration label e.g. 'Time: 09:12'.")]
+        [SerializeField] private TextMeshProUGUI _matchTimeText;
+        [SerializeField] private Color _localTeamColor = Color.cyan;
+        [SerializeField] private Color _enemyTeamColor = Color.red;
 
+        [Header("Scoreboard")]
+        [Tooltip("Container for the local player's team rows.")]
+        [SerializeField] private Transform _team1Container;
+        [Tooltip("Container for the enemy team rows.")]
+        [SerializeField] private Transform _team2Container;
         [SerializeField] private GameObject _resultRowPrefab;
+        [Tooltip("Tint applied to the local player's own result row.")]
+        [SerializeField] private Color _ownerRowColor = Color.yellow;
+
+        [Header("Countdown")]
+        [SerializeField] private TextMeshProUGUI _countdownText; // "Returning in 10s…"
 
         [Header("ELO Change (Ranked)")] [SerializeField]
         private GameObject _eloPanel;
@@ -54,6 +72,7 @@ namespace NightHunt.UI
 
         // Last match end result (cached for post-match backend call)
         private MatchEndedEvent? _lastMatchResult;
+        private float            _matchStartTime;
 
         // ──────────────────────────────────────────────────────────────────────
 
@@ -61,6 +80,8 @@ namespace NightHunt.UI
 
         private void Awake()
         {
+            _matchStartTime = Time.time;
+
             if (_panel != null)
                 _panel.SetActive(false);
 
@@ -68,11 +89,13 @@ namespace NightHunt.UI
                 _continueButton.onClick.AddListener(OnContinueClicked);
 
             GameplayEventBus.Instance?.Subscribe<MatchEndedEvent>(OnMatchEnded);
+            GameplayEventBus.Instance?.Subscribe<MatchEndedWsResultsEvent>(OnMatchEndedWsResults);
         }
 
         private void OnDestroy()
         {
             GameplayEventBus.Instance?.Unsubscribe<MatchEndedEvent>(OnMatchEnded);
+            GameplayEventBus.Instance?.Unsubscribe<MatchEndedWsResultsEvent>(OnMatchEndedWsResults);
         }
 
         #endregion
@@ -87,6 +110,17 @@ namespace NightHunt.UI
             ShowResults(evt);
             ShowMatchResultToast(evt);
             StartCoroutine(CountdownCoroutine());
+        }
+
+        private void OnMatchEndedWsResults(MatchEndedWsResultsEvent evt)
+        {
+            if (!_lastMatchResult.HasValue || evt.PlayerResults == null || evt.PlayerResults.Length == 0)
+                return;
+
+            var updated = _lastMatchResult.Value;
+            updated.PlayerResults = evt.PlayerResults;
+            _lastMatchResult = updated;
+            ShowResults(updated);
         }
 
         private void ShowMatchResultToast(MatchEndedEvent evt)
@@ -138,29 +172,44 @@ namespace NightHunt.UI
                 if (np != null) localTeam = np.TeamId;
             }
 
-            // Header
-            if (_resultHeaderText != null)
+            // Result image
+            if (_resultImage != null)
             {
-                if (evt.WinnerTeamId == -1)
-                    _resultHeaderText.text = "DRAW";
-                else if (evt.WinnerTeamId == localTeam)
-                    _resultHeaderText.text = "VICTORY";
-                else
-                    _resultHeaderText.text = "DEFEAT";
+                Sprite s = evt.WinnerTeamId == -1 ? _drawSprite
+                         : evt.WinnerTeamId == localTeam ? _winSprite
+                         : _loseSprite;
+                if (s != null) { _resultImage.sprite = s; _resultImage.enabled = true; }
             }
 
-            // Reason
-            if (_reasonText != null)
-                _reasonText.text = evt.Reason switch
+            // Score label with per-team colors
+            if (evt.PlayerResults != null && _scoreLabel != null)
+            {
+                int team0Score = 0, team1Score = 0;
+                foreach (var r in evt.PlayerResults)
                 {
-                    MatchEndReason.TeamEliminated => "Enemy team eliminated",
-                    MatchEndReason.TimerExpired => "Timer expired",
-                    MatchEndReason.Draw => "Match drawn",
-                    _ => ""
-                };
+                    if (r.TeamId == 0) team0Score += r.Score;
+                    else               team1Score += r.Score;
+                }
+
+                bool   localIsTeam0 = localTeam == 0;
+                string localHex     = ColorUtility.ToHtmlStringRGB(_localTeamColor);
+                string enemyHex     = ColorUtility.ToHtmlStringRGB(_enemyTeamColor);
+                string s0 = $"<color=#{(localIsTeam0 ? localHex : enemyHex)}>{team0Score}</color>";
+                string s1 = $"<color=#{(localIsTeam0 ? enemyHex : localHex)}>{team1Score}</color>";
+                _scoreLabel.text = $"{s0} : {s1}";
+            }
+
+            // Match duration
+            if (_matchTimeText != null)
+            {
+                float elapsed = Time.time - _matchStartTime;
+                int   minutes = Mathf.FloorToInt(elapsed / 60f);
+                int   seconds = Mathf.FloorToInt(elapsed % 60f);
+                _matchTimeText.text = $"Time: {minutes:00}:{seconds:00}";
+            }
 
             // Scoreboard rows
-            BuildScoreboard(evt.PlayerResults);
+            BuildScoreboard(evt.PlayerResults, localTeam);
 
             // ELO (only for Ranked)
             bool isRanked = RoomState.Instance?.CurrentGameMode == NightHunt.Networking.GameMode.Ranked_DS;
@@ -168,7 +217,6 @@ namespace NightHunt.UI
 
             if (isRanked && _eloChangeText != null)
             {
-                // Find local player ELO change
                 int eloChange = 0;
                 if (session != null && evt.PlayerResults != null)
                     foreach (var r in evt.PlayerResults)
@@ -184,23 +232,36 @@ namespace NightHunt.UI
             }
         }
 
-        private void BuildScoreboard(MatchResult[] results)
+        private void BuildScoreboard(MatchResult[] results, int localTeamId)
         {
-            if (_scoreboardContainer == null || _resultRowPrefab == null || results == null)
-                return;
+            if (_resultRowPrefab == null || results == null) return;
 
-            foreach (Transform t in _scoreboardContainer)
-                Destroy(t.gameObject);
+            string localBackendId = SessionState.Instance?.UserId.ToString() ?? string.Empty;
+
+            // Clear both containers.
+            if (_team1Container != null) foreach (Transform t in _team1Container) Destroy(t.gameObject);
+            if (_team2Container != null) foreach (Transform t in _team2Container) Destroy(t.gameObject);
 
             foreach (var r in results)
             {
-                var go = Instantiate(_resultRowPrefab, _scoreboardContainer);
+                // Route to local-team container or enemy container.
+                Transform container = r.TeamId == localTeamId ? _team1Container : _team2Container;
+                if (container == null) continue;
+
+                var go  = Instantiate(_resultRowPrefab, container);
                 var row = ComponentResolver.Find<ResultRowView>(go)
                     .OnSelf()
                     .InChildren()
                     .OrLogWarning("[Auto] ResultRowView not found")
                     .Resolve();
                 row?.SetData(r);
+
+                // Highlight the owner row.
+                if (!string.IsNullOrEmpty(localBackendId) && r.BackendPlayerId == localBackendId)
+                {
+                    var img = go.GetComponentInChildren<Image>(true);
+                    if (img != null) img.color = _ownerRowColor;
+                }
             }
         }
 
@@ -272,7 +333,6 @@ namespace NightHunt.UI
             string matchId = roomState.CurrentMatchId;
             if (string.IsNullOrEmpty(matchId))
                 matchId = roomState.CurrentRoom?.matchId ?? string.Empty;
-            }
 
             if (string.IsNullOrEmpty(matchId))
             {

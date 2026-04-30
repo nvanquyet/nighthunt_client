@@ -465,6 +465,17 @@
                 {
                     "name": "",
                     "id": "c3d4e5f6-a7b8-4c5d-0e1f-2a3b4c5d6e70",
+                    "path": "<Keyboard>/4",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "ThrowGrenade",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "2bf65b07-38e0-4eba-9f50-2c989518bc04",
                     "path": "<Keyboard>/g",
                     "interactions": "",
                     "processors": "",
@@ -476,6 +487,17 @@
                 {
                     "name": "",
                     "id": "d4e5f6a7-b8c9-4d5e-1f2a-3b4c5d6e7f81",
+                    "path": "<Keyboard>/5",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "UseAbility",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "3803ec8c-71a2-4806-a61d-c89e539bca55",
                     "path": "<Keyboard>/leftAlt",
                     "interactions": "",
                     "processors": "",

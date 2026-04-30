@@ -115,13 +115,13 @@ namespace NightHunt.GameplaySystems.ItemSelection
         {
             if (!IsServerInitialized) return;
 
+            Debug.Log($"[ITEM_FLOW] [04][Server.Select] instance='{instanceID}' current='{_selectedInstanceId.Value}' owner={Owner?.ClientId}");
             Debug.Log($"[ItemSelectionSystem] SelectItem('{instanceID}') — current='{_selectedInstanceId.Value}'");
 
-            // Toggle: selecting the current item cancels it.
+            // Re-selecting current item is a no-op. Cancel is explicit.
             if (_selectedInstanceId.Value == instanceID && !string.IsNullOrEmpty(instanceID))
             {
                 Debug.Log($"[ItemSelectionSystem] SelectItem: same item already selected → CancelSelection");
-                CancelSelection();
                 return;
             }
 
@@ -168,14 +168,17 @@ namespace NightHunt.GameplaySystems.ItemSelection
             var item = SelectedItem;
             if (item == null)
             {
+                Debug.LogWarning($"[ITEM_SELECT_FLOW] UseSelectedItem failed: no selected item. selectedId='{_selectedInstanceId.Value}' owner={Owner?.ClientId}");
                 Debug.LogWarning($"[ItemSelectionSystem] UseSelectedItem: no item selected (SelectedItem = null).");
                 return;
             }
             if (_itemUseSystem?.IsUsingItem == true)
             {
+                Debug.LogWarning($"[ITEM_SELECT_FLOW] UseSelectedItem blocked: already using '{_itemUseSystem.CurrentItem?.InstanceID ?? "null"}'.");
                 Debug.LogWarning($"[ItemSelectionSystem] UseSelectedItem: already using an item, ignoring.");
                 return;
             }
+            Debug.Log($"[ITEM_FLOW] [06][Server.UseSelected] item={item.InstanceID} def={item.DefinitionID} qty={item.Quantity}");
             Debug.Log($"[ItemSelectionSystem] UseSelectedItem: '{item.InstanceID}'");
             _itemUseSystem?.UseItem(item);
         }
@@ -207,6 +210,7 @@ namespace NightHunt.GameplaySystems.ItemSelection
         [ServerRpc(RequireOwnership = true)]
         public void RequestSelectItem(string instanceID)
         {
+            Debug.Log($"[ITEM_FLOW] [04][Rpc.Select] instance='{instanceID}' owner={Owner?.ClientId}");
             Debug.Log($"[ItemSelectionSystem] RequestSelectItem('{instanceID}') received on server");
             SelectItem(instanceID);
         }
@@ -223,6 +227,7 @@ namespace NightHunt.GameplaySystems.ItemSelection
         [ServerRpc(RequireOwnership = true)]
         public void RequestUseSelectedItem()
         {
+            Debug.Log($"[ITEM_FLOW] [05][Rpc.UseSelected] selected='{_selectedInstanceId.Value}' owner={Owner?.ClientId}");
             Debug.Log($"[ItemSelectionSystem] RequestUseSelectedItem received on server");
             UseSelectedItem();
         }
@@ -248,6 +253,7 @@ namespace NightHunt.GameplaySystems.ItemSelection
         /// </summary>
         private void OnSelectedInstanceIdChanged(string prev, string next, bool asServer)
         {
+            Debug.Log($"[ITEM_FLOW] [07][Sync.Selected] '{prev}' -> '{next}' asServer={asServer}");
             Debug.Log($"[ItemSelectionSystem] SyncVar changed: '{prev}' → '{next}'  asServer={asServer}");
             if (string.IsNullOrEmpty(next))
             {

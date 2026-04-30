@@ -89,6 +89,7 @@ namespace NightHunt.GameplaySystems.Aim
 
         public Vector3 FinalAimDir   { get; private set; }
         public Vector3 FinalAimPos   { get; private set; }
+        public Vector3 FinalAimGroundPos { get; private set; }
         public Vector3 AimWorldPoint { get; private set; }
         public bool    IsThrowableMode => _isThrowableMode;
 
@@ -267,6 +268,7 @@ namespace NightHunt.GameplaySystems.Aim
 
             FinalAimPos  = origin + FinalAimDir * dist;
             FinalAimPos  = new Vector3(FinalAimPos.x, origin.y, FinalAimPos.z);
+            FinalAimGroundPos = new Vector3(FinalAimPos.x, _groundHeight, FinalAimPos.z);
 
             // Reposition the world cursor and rotate it to face the player.
             // Only the configured axis angle is changed; the other two keep their designer-set values.
@@ -275,7 +277,7 @@ namespace NightHunt.GameplaySystems.Aim
                 // FIX: Place cursor at configured ground plane (+ small lift to avoid z-fighting),
                 // NOT at origin.y (player pivot may be at capsule centre, causing cursor to float).
                 // FinalAimPos.y intentionally stays at origin.y for weapon/ability game logic.
-                Vector3 cursorPos = new Vector3(FinalAimPos.x, _groundHeight + _cursorYOffset, FinalAimPos.z);
+                Vector3 cursorPos = FinalAimGroundPos + Vector3.up * _cursorYOffset;
                 _worldAimCursor.position = cursorPos;
                 if (FinalAimDir.sqrMagnitude > 0.001f)
                 {

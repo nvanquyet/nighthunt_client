@@ -1,5 +1,6 @@
 using System;
 using NightHunt.GameplaySystems.Core.Data;
+using UnityEngine.Serialization;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -13,6 +14,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         /// <see cref="UISlotId.ParentInstanceID"/> identifies the parent item.
         /// </summary>
         Attachment,
+        Loot,
     }
 
     /// <summary>
@@ -27,6 +29,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public EquipmentSlotType? EquipmentSlot;
         public WeaponSlotType? WeaponSlot;
         public string ParentInstanceID; // Cho attachment slots
+        public string LootContainerID; // Cho loot slots
 
         public static UISlotId Inventory(int index) => new UISlotId
         {
@@ -61,13 +64,21 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             ParentInstanceID = parentInstanceID
         };
 
+        public static UISlotId Loot(string containerId, int index) => new UISlotId
+        {
+            Type = UISlotType.Loot,
+            Index = index,
+            LootContainerID = containerId
+        };
+
         public bool Equals(UISlotId other)
         {
             return Type == other.Type &&
                    Index == other.Index &&
                    EquipmentSlot == other.EquipmentSlot &&
                    WeaponSlot == other.WeaponSlot &&
-                   ParentInstanceID == other.ParentInstanceID;
+                   ParentInstanceID == other.ParentInstanceID &&
+                   LootContainerID == other.LootContainerID;
         }
 
         public override bool Equals(object obj) => obj is UISlotId other && Equals(other);
@@ -81,6 +92,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 hash = (hash * 397) ^ (EquipmentSlot?.GetHashCode() ?? 0);
                 hash = (hash * 397) ^ (WeaponSlot?.GetHashCode() ?? 0);
                 hash = (hash * 397) ^ (ParentInstanceID?.GetHashCode() ?? 0);
+                hash = (hash * 397) ^ (LootContainerID?.GetHashCode() ?? 0);
                 return hash;
             }
         }
@@ -92,7 +104,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 case UISlotType.Inventory:  return $"Inventory[{Index}]";
                 case UISlotType.Equipment:  return $"Equip[{EquipmentSlot}]";
                 case UISlotType.Weapon:     return $"Weapon[{WeaponSlot}]";
-                case UISlotType.Attachment: return $"Attachment[{ParentInstanceID}][{Index}]";
+                case UISlotType.Attachment: return $"Attachment[{Index + 1}]";
+                case UISlotType.Loot:       return $"Loot[{LootContainerID}][{Index}]";
                 default: return Type.ToString();
             }
         }
@@ -112,7 +125,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         // Visual metadata (usually derived from ItemDefinition)
         public UnityEngine.Sprite Icon;
-        public UnityEngine.Color BackgroundColor;
+        public UnityEngine.Sprite Background;
         public int StackCount;
     }
 
@@ -129,6 +142,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         DropToWorld, // Any slot → outside panel (no target slot)
         Attach,      // Inventory → Attachment sub-slot
         Detach,      // Attachment sub-slot → Inventory
+        LootToInventory, // Loot → Inventory
     }
 
     /// <summary>

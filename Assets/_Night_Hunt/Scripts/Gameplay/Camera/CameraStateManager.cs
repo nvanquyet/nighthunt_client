@@ -7,6 +7,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
+using NightHunt.Gameplay.Spectator;
 
 namespace NightHunt.Gameplay.Camera
 {
@@ -47,6 +48,7 @@ namespace NightHunt.Gameplay.Camera
         // ─────────────────────────────────────────────────────────────────────
 
         private IWeaponSystem _weaponSystem;
+        private NetworkPlayer _ownerPlayer;
 
         private CameraState _currentState   = CameraState.Free;
         private CameraState _previousState  = CameraState.Free; // restored when WeaponAim exits
@@ -76,7 +78,7 @@ namespace NightHunt.Gameplay.Camera
                                "Assign the CinemachineCamera in the Inspector on the player prefab.", this);
                 return;
             }
-            _virtualCamera.gameObject.SetActive(active);
+            SetVirtualCameraActive(active);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -86,9 +88,12 @@ namespace NightHunt.Gameplay.Camera
         private void Awake()
         {
             _weaponSystem = _weaponSystemMB as IWeaponSystem;
+            _ownerPlayer = GetComponentInParent<NetworkPlayer>(includeInactive: true);
 
             if (_weaponSystemMB != null && _weaponSystem == null)
                 Debug.LogError("[CameraStateManager] _weaponSystemMB does not implement IWeaponSystem!", this);
+
+            SetVirtualCameraActive(false);
         }
 
         private void OnEnable()
@@ -106,6 +111,14 @@ namespace NightHunt.Gameplay.Camera
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
             
             NetworkPlayer.OnOwnerReady += HandleOwnerReady;
+
+            if (SpectateManager.Instance != null)
+                SpectateManager.Instance.OnCurrentPlayerChanged += HandleCurrentPlayerChanged;
+        }
+
+        private void Start()
+        {
+            HandleCurrentPlayerChanged(SpectateManager.Instance?.GetCurrentPlayer());
         }
         
 
@@ -117,6 +130,9 @@ namespace NightHunt.Gameplay.Camera
             if (_weaponSystem != null)
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
             NetworkPlayer.OnOwnerReady -= HandleOwnerReady;
+
+            if (SpectateManager.Instance != null)
+                SpectateManager.Instance.OnCurrentPlayerChanged -= HandleCurrentPlayerChanged;
         }
 
         
@@ -133,7 +149,21 @@ namespace NightHunt.Gameplay.Camera
                                "Assign it in the Inspector on the player prefab.", this);
                 return;
             }
-            _virtualCamera.gameObject.SetActive(player != null && player.IsLocalPlayer);
+            HandleCurrentPlayerChanged(SpectateManager.Instance != null
+                ? SpectateManager.Instance.GetCurrentPlayer()
+                : player);
+        }
+
+        private void HandleCurrentPlayerChanged(NetworkPlayer player)
+        {
+            SetVirtualCameraActive(player != null && _ownerPlayer != null && player == _ownerPlayer);
+        }
+
+        private void SetVirtualCameraActive(bool active)
+        {
+            if (_virtualCamera == null) return;
+            if (_virtualCamera.gameObject.activeSelf != active)
+                _virtualCamera.gameObject.SetActive(active);
         }
         
         // ─────────────────────────────────────────────────────────────────────
@@ -208,9 +238,6 @@ namespace NightHunt.Gameplay.Camera
 
             ApplyStateSettings(newState);
             OnStateChanged?.Invoke(from, newState);
-
-            if (Debug.isDebugBuild)
-                Debug.Log($"[CameraStateManager] {from} → {newState}");
         }
 
         /// <summary>

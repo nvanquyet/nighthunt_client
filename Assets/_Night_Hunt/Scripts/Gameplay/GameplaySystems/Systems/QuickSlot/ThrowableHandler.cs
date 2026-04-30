@@ -1,4 +1,5 @@
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Configs;
 using UnityEngine;
 using NightHunt.Utilities;
 using FishNet;
@@ -33,13 +34,37 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// </summary>
         public void SpawnProjectile(ThrowableDefinition def, Transform spawnOrigin, Vector3 aimWorldTarget)
         {
+            if (!InstanceFinder.IsServerStarted)
+            {
+                Debug.LogError($"[THROW_FLOW] SpawnProjectile blocked: server is not started. def={def?.ItemID ?? "null"}");
+                return;
+            }
+
+            if (def == null)
+            {
+                Debug.LogError("[THROW_FLOW] SpawnProjectile blocked: throwable definition is null.");
+                return;
+            }
+
+            if (spawnOrigin == null)
+            {
+                Debug.LogError($"[THROW_FLOW] SpawnProjectile blocked: spawn origin is null. def={def.ItemID}");
+                return;
+            }
+
             if (def.ProjectilePrefab == null)
             {
                 Debug.LogError($"[ThrowableHandler] '{def.DisplayName}' has no ProjectilePrefab!");
                 return;
             }
 
-            Vector3 pos = spawnOrigin.position + spawnOrigin.forward * 0.5f + Vector3.up * 1.5f;
+            Vector3 basePos      = spawnOrigin.position + Vector3.up * 1.5f;
+            Vector3 toAimFromRoot = aimWorldTarget - spawnOrigin.position;
+            Vector3 aimForward   = new Vector3(toAimFromRoot.x, 0f, toAimFromRoot.z);
+            Vector3 spawnForward = aimForward.sqrMagnitude > 0.001f
+                                   ? aimForward.normalized
+                                   : spawnOrigin.forward;
+            Vector3 pos = basePos + spawnForward * 0.5f;
             Vector3 toTarget     = aimWorldTarget - pos;
             Vector3 horizToTarget = new Vector3(toTarget.x, 0f, toTarget.z);
             float   horizDist    = horizToTarget.magnitude;
@@ -56,7 +81,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                 velocity = (horizDir * Mathf.Cos(angleRad) + Vector3.up * Mathf.Sin(angleRad)) * def.ThrowForce;
             }
 
-            Debug.Log($"[ThrowableHandler] SpawnProjectile\n" +
+            LogThrowable($"SpawnProjectile\n" +
                       $"  item       = {def.DisplayName} ({def.ThrowableType})\n" +
                       $"  spawnPos   = {pos:F2}   (origin={spawnOrigin.position:F2})\n" +
                       $"  aimTarget  = {aimWorldTarget:F2}\n" +
@@ -70,11 +95,16 @@ namespace NightHunt.GameplaySystems.ItemUse
             // FishNet calls Physics.Simulate synchronously on the same tick as Spawn(),
             // so without this the grenade would immediately hit the thrower.
             var projColliders = go.GetComponentsInChildren<Collider>(includeInactive: true);
-            if (_ownerColliders == null)
-                _ownerColliders = spawnOrigin.root.GetComponentsInChildren<Collider>();
+            _ownerColliders = spawnOrigin.root.GetComponentsInChildren<Collider>(includeInactive: true);
             foreach (var oc in _ownerColliders)
+            {
+                if (oc == null) continue;
                 foreach (var pc in projColliders)
+                {
+                    if (pc == null) continue;
                     Physics.IgnoreCollision(oc, pc, ignore: true);
+                }
+            }
 
             // Network-spawn the projectile so all clients see it.
             var nob = go.GetComponent<FishNet.Object.NetworkObject>();
@@ -87,7 +117,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (rb != null)
             {
                 rb.linearVelocity = velocity;
-                Debug.Log($"[ThrowableHandler] Velocity applied — rb={rb.name}  linearVelocity={rb.linearVelocity:F2}");
+                LogThrowable($"Velocity applied — rb={rb.name}  linearVelocity={rb.linearVelocity:F2}");
             }
             else
             {
@@ -99,7 +129,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (proj != null)
                 proj.Initialize(def, spawnOrigin.root);
 
-            Debug.Log($"[ThrowableHandler] Spawn complete — go='{go.name}'  hasRb={rb != null}  hasProj={proj != null}  networked={nob != null}");
+            LogThrowable($"Spawn complete — go='{go.name}'  hasRb={rb != null}  hasProj={proj != null}  networked={nob != null}");
         }
 
         /// <summary>
@@ -133,6 +163,18 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             Vector3 horizDir = toTargetXZ.normalized;
             return horizDir * (vMag * cosA) + Vector3.up * (vMag * Mathf.Sin(angleRad));
+        }
+
+        private static bool ThrowableDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableThrowableDebugLogs;
+        }
+
+        private static void LogThrowable(string message)
+        {
+            if (ThrowableDebugEnabled())
+                Debug.Log($"[ThrowableHandler] {message}");
         }
     }
 }

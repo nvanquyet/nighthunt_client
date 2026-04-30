@@ -6,18 +6,20 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Configs;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Stat;
 using NightHunt.Utilities;
+using NightHunt.UI;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
     /// Hover tooltip showing item stats, player modifiers, and slot label.
     ///
-    /// TOOLTIP MODES (set via UISlotLayoutConfig.TooltipMode):
+    /// TOOLTIP MODES (set via InventoryConfig.TooltipMode):
     ///   FollowMouse — updates position every frame to track the cursor.
     ///   SnapToSlot  — positions itself at the slot on Show(), then stays.
-    ///   Fixed       — always at UISlotLayoutConfig.TooltipFixedPosition.
+    ///   Fixed       — always at InventoryConfig.TooltipFixedPosition.
     ///
     /// SHOW/HIDE RULES:
     ///   Show  : on SlotHoverEnter when item != null.
@@ -54,9 +56,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         // ── Runtime ───────────────────────────────────────────────────────────
 
-        private ItemInstance             _currentItem;
-        private UISlotLayoutConfig       _uiConfig;
-        private UIDomainBridge           _bridge;
+        private ItemInstance              _currentItem;
+        private UIPlayerContext           _bridge;
         private RectTransform            _currentSlotRect;
         private TooltipMode              _activeMode = TooltipMode.FollowMouse;
         private readonly List<GameObject> _statRows = new();
@@ -68,6 +69,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             if (_tooltipRoot != null)
                 _tooltipRoot.SetActive(false);
+        }
+
+        private void OnDisable()
+        {
+            Hide();
         }
 
         private void Update()
@@ -84,14 +90,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         #region Public API
 
         /// <summary>Called by InventoryScreen once at startup.</summary>
-        public void Initialize(UIDomainBridge bridge)
+        public void Initialize(UIPlayerContext bridge)
         {
             _bridge = bridge;
         }
 
         /// <summary>
         /// Show the tooltip for <paramref name="item"/>.
-        /// Position is determined by the <see cref="UISlotLayoutConfig.TooltipMode"/>.
+        /// Position is determined by the <see cref="TooltipMode"/>.
         /// </summary>
         public void Show(
             ItemInstance       item,
@@ -100,8 +106,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             string             slotLabel = null)
         {
             // Pick mode from config if available.
-            _uiConfig        = UISlotLayoutConfig.Instance;
-            _activeMode      = _uiConfig?.TooltipMode ?? TooltipMode.FollowMouse;
+            var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+            _activeMode      = config?.TooltipMode ?? TooltipMode.FollowMouse;
             _currentSlotRect = slotRect;
 
             if (item == null) { Hide(); return; }
@@ -135,6 +141,54 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _tooltipRoot.SetActive(true);
         }
 
+        public void ShowSlot(
+            string             title,
+            Vector3            mouseScreenPos,
+            RectTransform      slotRect  = null,
+            string             description = null)
+        {
+            var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+            _activeMode      = config?.TooltipMode ?? TooltipMode.FollowMouse;
+            _currentSlotRect = slotRect;
+            _currentItem     = null;
+
+            ClearStats();
+
+            if (_slotLabelText != null)
+            {
+                _slotLabelText.gameObject.SetActive(false);
+                _slotLabelText.text = string.Empty;
+            }
+
+            if (_itemNameText != null)
+                _itemNameText.text = string.IsNullOrEmpty(title) ? "Empty Slot" : title;
+
+            if (_itemDescriptionText != null)
+                _itemDescriptionText.text = string.IsNullOrEmpty(description) ? "Empty slot." : description;
+
+            if (_itemStatsSection != null)
+                _itemStatsSection.SetActive(false);
+            if (_playerModifiersSection != null)
+                _playerModifiersSection.SetActive(false);
+
+            switch (_activeMode)
+            {
+                case TooltipMode.FollowMouse:
+                    ApplyPosition(mouseScreenPos);
+                    break;
+                case TooltipMode.SnapToSlot:
+                    if (slotRect != null) ApplyPositionFromRect(slotRect);
+                    else ApplyPosition(mouseScreenPos);
+                    break;
+                case TooltipMode.Fixed:
+                    ApplyFixed();
+                    break;
+            }
+
+            if (_tooltipRoot != null)
+                _tooltipRoot.SetActive(true);
+        }
+
         public void Hide()
         {
             if (_tooltipRoot != null)
@@ -149,7 +203,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         /// </summary>
         public void HideIfNotDragVisible()
         {
-            bool showDuring = _uiConfig?.ShowTooltipDuringDrag ?? false;
+            var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+            bool showDuring = config?.ShowTooltipDuringDrag ?? false;
             if (!showDuring) Hide();
         }
 
@@ -171,7 +226,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             Camera cam = CanvasCamera(canvas);
-            Vector2 offset = _uiConfig?.TooltipOffset ?? new Vector2(16f, -16f);
+            var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+            Vector2 offset = config?.TooltipOffset ?? new Vector2(16f, -16f);
 
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 canvas.transform as RectTransform, screenPos, cam, out Vector2 local);
@@ -196,7 +252,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             var rt = GetTooltipRect();
             if (rt == null) return;
-            rt.anchoredPosition = _uiConfig?.TooltipFixedPosition ?? Vector2.zero;
+            var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+            rt.anchoredPosition = config?.TooltipFixedPosition ?? Vector2.zero;
         }
 
         private RectTransform GetTooltipRect()

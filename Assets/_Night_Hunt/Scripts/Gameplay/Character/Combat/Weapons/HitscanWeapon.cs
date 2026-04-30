@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
 using NightHunt.Data;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Utilities;
 
@@ -10,8 +12,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
     /// Also supports multiple pellets per shot, making it suitable for shotguns.
     ///
     /// BALLISTIC MODEL:
-    ///   Each shot fires <see cref="pelletCount"/> raycasts. Damage is applied immediately on the
-    ///   owner machine — no projectile physics involved.  A visual-only ProjectileComponent is
+    ///   Each shot fires <see cref="pelletCount"/> raycasts for local visuals only.
+    ///   Server-side WeaponSystem resolves final damage. A visual-only ProjectileComponent is
     ///   spawned from the pool for the bullet trail and impact VFX so remote clients see the
     ///   same effect via the network-broadcast projectile spawn.
     ///
@@ -36,6 +38,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         // Cached once in Start() — the player root that owns this weapon model.
         // Used to skip self-hits in FirePellet() without per-raycast allocations.
         private Transform _shooterRoot;
+        private readonly RaycastHit[] _raycastHits = new RaycastHit[32];
 
         [Tooltip("Damage multiplier applied when the ray hits a headshot collider.")]
         [SerializeField, Min(1f)] private float damageHeadMultiplier = 2f;
@@ -50,6 +53,9 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         [Tooltip("Extra spread half-angle added per pellet for multi-pellet shots (degrees). " +
                  "Ignored when pelletCount = 1. Stacks ON TOP of the base radial spread from WeaponBase.")]
         [SerializeField, Min(0f)] private float pelletSpreadBonus = 3f;
+
+        public int PelletCount => pelletCount;
+        public float PelletSpreadBonus => pelletSpreadBonus;
 
         // ── WeaponBase.Fire implementation ────────────────────────────────────
 
@@ -102,53 +108,19 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         private Vector3 FirePellet(Vector3 origin, Vector3 direction,
                                    WeaponConfigData config, int shooterNetObjId)
         {
-            bool hit = Physics.Raycast(origin, direction, out RaycastHit rayHit, maxRange,
-                                       hitLayers, QueryTriggerInteraction.Ignore);
-
-            if (!hit)
+            if (!TryGetFirstNonSelfHit(origin, direction, maxRange, out RaycastHit rayHit))
                 return origin + direction * maxRange;
 
             // ── Self-hit guard ────────────────────────────────────────────────
-            // The muzzle point is OUTSIDE the character mesh but the raycast can still
-            // register on the shooter's own colliders when _shooterRoot is not null.
-            // Skip any hit that is part of the shooter's own hierarchy.
-            if (_shooterRoot != null &&
-                (rayHit.collider.transform == _shooterRoot ||
-                 rayHit.collider.transform.IsChildOf(_shooterRoot)))
-            {
-                // Continue the ray past the self-hit (extend origin to just beyond the hit
-                // and fire again so we don't silently miss legitimate targets behind the body).
-                Vector3 newOrigin = rayHit.point + direction * 0.05f;
-                float   remaining = maxRange - rayHit.distance;
-                if (remaining > 0.1f)
-                {
-                    bool hit2 = Physics.Raycast(newOrigin, direction, out RaycastHit rayHit2,
-                                                remaining, hitLayers, QueryTriggerInteraction.Ignore);
-                    if (hit2 &&
-                        rayHit2.collider.transform != _shooterRoot &&
-                        !rayHit2.collider.transform.IsChildOf(_shooterRoot))
-                    {
-                        // Treat hit2 as the real hit.
-                        rayHit   = rayHit2;
-                        hit      = true;
-                    }
-                    else
-                    {
-                        return origin + direction * maxRange;
-                    }
-                }
-                else
-                {
-                    return origin + direction * maxRange;
-                }
-            }
-
             Vector3 endpoint = rayHit.point;
 
             // Try player hitbox first.
             var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(rayHit.collider)
                                           .OnSelf().InParent()
                                           .Resolve();
+
+            if (!config.ApplyDamage)
+                return endpoint;
 
             if (hitbox != null && hitbox.HealthSystem != null)
             {
@@ -182,6 +154,44 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             return endpoint;
         }
 
+        private bool TryGetFirstNonSelfHit(Vector3 origin, Vector3 direction, float range, out RaycastHit hit)
+        {
+            hit = default;
+
+            int count = Physics.RaycastNonAlloc(origin, direction, _raycastHits, range, hitLayers, QueryTriggerInteraction.Ignore);
+            if (count <= 0)
+                return false;
+
+            System.Array.Sort(_raycastHits, 0, count, RaycastHitDistanceComparer.Instance);
+            for (int i = 0; i < count; i++)
+            {
+                if (_raycastHits[i].collider == null || IsSelfHit(_raycastHits[i].collider))
+                    continue;
+
+                hit = _raycastHits[i];
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool IsSelfHit(Collider collider)
+        {
+            return _shooterRoot != null &&
+                   collider != null &&
+                   (collider.transform == _shooterRoot || collider.transform.IsChildOf(_shooterRoot));
+        }
+
+        private sealed class RaycastHitDistanceComparer : IComparer<RaycastHit>
+        {
+            public static readonly RaycastHitDistanceComparer Instance = new();
+
+            public int Compare(RaycastHit x, RaycastHit y)
+            {
+                return x.distance.CompareTo(y.distance);
+            }
+        }
+
         /// <summary>
         /// Spawns a visual-only ProjectileComponent from the pool so the trail and impact VFX play.
         /// Sets useHitscan = true so the component skips damage on collision.
@@ -192,7 +202,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         {
             if (projectilePrefab == null)
             {
-                Debug.LogWarning($"[SHOOT.PLAYER] HitscanWeapon.SpawnVisualBullet — projectilePrefab is NULL on '{name}'. " +
+                WarnProjectile($"[SHOOT.PLAYER] HitscanWeapon.SpawnVisualBullet — projectilePrefab is NULL on '{name}'. " +
                                  $"Assign Projectile_Hitscan_Template prefab to the weapon model component. " +
                                  $"Owner will NOT see bullet visual.");
                 return;
@@ -200,12 +210,11 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             var pool = ProjectilePool.Instance;
             if (pool == null)
-            {
-                Debug.LogWarning("[SHOOT.PLAYER] HitscanWeapon.SpawnVisualBullet — ProjectilePool not found in scene.", this);
-                return;
-            }
+                WarnProjectile("[SHOOT.PLAYER] HitscanWeapon.SpawnVisualBullet — ProjectilePool not found in scene. Instantiating one-shot visual.", this);
 
-            var proj = pool.Get(projectilePrefab, origin, Quaternion.LookRotation(direction));
+            var proj = pool != null
+                ? pool.Get(projectilePrefab, origin, Quaternion.LookRotation(direction))
+                : Instantiate(projectilePrefab, origin, Quaternion.LookRotation(direction)).GetComponent<ProjectileComponent>();
             if (proj == null) return;
 
             // Ignore collisions between the hitscan trail projectile and the owner so the
@@ -221,7 +230,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             proj.Initialize(config, direction, useHitscan: true, hitscanEndpoint: endpoint);
 
-            Debug.Log($"[SHOOT.PLAYER] HitscanWeapon.SpawnVisualBullet — origin={origin:F1}  " +
+            LogProjectile($"[SHOOT.PLAYER] HitscanWeapon.SpawnVisualBullet — origin={origin:F1}  " +
                       $"endpoint={endpoint:F1}  dir={direction:F2}  proj='{proj.gameObject.name}'");
         }
 
@@ -238,6 +247,26 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             right = right.normalized;
             Vector3 up = Vector3.Cross(right, direction).normalized;
             return (direction + right * disc.x + up * disc.y).normalized;
+        }
+
+        private static bool ProjectileDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableProjectileDebugLogs;
+        }
+
+        private static void LogProjectile(string message)
+        {
+            if (ProjectileDebugEnabled())
+                Debug.Log(message);
+        }
+
+        private static void WarnProjectile(string message, UnityEngine.Object context = null)
+        {
+            if (context != null)
+                Debug.LogWarning(message, context);
+            else
+                Debug.LogWarning(message);
         }
     }
 }

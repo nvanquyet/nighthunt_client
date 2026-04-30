@@ -527,7 +527,7 @@ namespace NightHunt.Gameplay.Core
             // ── N — simulate boss spawn notification ──────────────────────────────
             if (UnityEngine.Input.GetKeyDown(KeyCode.N))
             {
-                Debug.Log("[TestOrchestrator] N pressed: publishing debug BossSpawnedEvent → BossHUDPanel will show");
+                Debug.Log("[TestOrchestrator] N pressed: publishing debug BossSpawnedEvent");
                 GameplayEventBus.Instance?.Publish(new BossSpawnedEvent
                 {
                     BossId   = "debug_boss",

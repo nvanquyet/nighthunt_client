@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d43377b348fd2374d9366239afbb39b6, type: 3}
+  m_Name: SpawnTable_PhaseTest_AllItems
+  m_EditorClassIdentifier: 
+  Mode: 2
+  FixedEntries:
+  - Item: {fileID: 11400000, guid: b14037a3120cbbc4882f1aa8db781dca, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: 214de9bd2ed6e8a49a96592e7b13ec1f, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 930f5770eab2bb94cb97e6cab81297b3, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 70235c38294d7ec47a68c9568a71e5c2, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: c958c98e11c7b5c40adc0f5edd061724, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 41de86abecaed69419975ebda7de4f6c, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 9d3e334d665542c88e69d7e8e66de0af, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 4abd8a463f09bfb44963e31e87943822, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 0f851431afcd2b44995f3025196e9d90, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 27e18dbf58e0ada42a3b57ab4cfa0254, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 7c5d8284d2763614e9bd83f6cbe75714, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  MinRandomCount: 1
+  MaxRandomCount: 2
+  RollOnOpen: 1
+  DropToWorldOnOpen: 0
+  MinTotalItems: 1
+  MaxTotalItems: 3

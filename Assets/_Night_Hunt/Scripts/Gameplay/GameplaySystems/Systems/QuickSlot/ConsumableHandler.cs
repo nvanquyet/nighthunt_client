@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
@@ -46,6 +47,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             _statSystem   = statSystem;
             _orchestrator = orchestrator;
             orchestrator?.RegisterExternalContributor(this);
+            DebugConsumable($"Initialize statSystem={(_statSystem != null)} orchestrator={(_orchestrator != null)}");
         }
 
         // ── IStatContributor ─────────────────────────────────────────────────────
@@ -116,6 +118,14 @@ namespace NightHunt.GameplaySystems.ItemUse
                     AddTempMod(PlayerStatType.Armor, fx, percentage: false);
                     break;
 
+                case ConsumableEffectType.VisionIncrease:
+                    AddTempMod(PlayerStatType.VisionRange, fx, percentage: false);
+                    break;
+
+                case ConsumableEffectType.NoiseReduce:
+                    Debug.Log($"[ConsumableHandler] {fx.EffectType} -> hook into audio/noise stat system");
+                    break;
+
                 case ConsumableEffectType.IncreaseMaxHealth:
                     AddTempMod(PlayerStatType.MaxHealth, fx, percentage: false);
                     break;
@@ -131,6 +141,13 @@ namespace NightHunt.GameplaySystems.ItemUse
                 case ConsumableEffectType.Revive:
                 case ConsumableEffectType.DamageBoost:
                     Debug.Log($"[ConsumableHandler] {fx.EffectType} → hook into buff/combat system");
+                    break;
+
+                case ConsumableEffectType.DeployBeacon:
+                case ConsumableEffectType.PlaceVisionNode:
+                case ConsumableEffectType.PlaceExplosiveTrap:
+                case ConsumableEffectType.PlaceSlowField:
+                    Debug.LogWarning($"[ConsumableHandler] {fx.EffectType} is a deploy effect and should be configured as DeployableDefinition, not ConsumableDefinition.");
                     break;
 
                 default:
@@ -184,6 +201,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                 };
                 _activeMods.Add(mod);
                 _orchestrator.ScheduleRecalc();
+                DebugConsumable($"AddTempMod via orchestrator stat={stat} value={fx.Value} type={(percentage ? "Percentage" : "Flat")} duration={fx.Duration}");
 
                 // Schedule cleanup coroutine so we trigger a recalc exactly on expiry
                 if (fx.Duration > 0f)
@@ -197,6 +215,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                     ? StatModifier.CreatePercentage(src, fx.Value, 0, fx.Description)
                     : StatModifier.CreateFlat(src, fx.Value, 0, fx.Description);
                 _statSystem?.AddModifier(stat, mod);
+                DebugConsumable($"AddTempMod legacy stat={stat} source={src} value={fx.Value} type={(percentage ? "Percentage" : "Flat")} duration={fx.Duration}");
                 if (fx.Duration > 0f)
                     StartCoroutine(ExpireModLegacy(stat, src, fx.Duration));
             }
@@ -207,6 +226,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         private IEnumerator ExpireModAfter(float delay)
         {
             yield return new WaitForSeconds(delay);
+            DebugConsumable("Temporary modifier expired; scheduling stat recalc.");
             _orchestrator?.ScheduleRecalc();
         }
 
@@ -214,7 +234,15 @@ namespace NightHunt.GameplaySystems.ItemUse
         private IEnumerator ExpireModLegacy(PlayerStatType stat, string src, float delay)
         {
             yield return new WaitForSeconds(delay);
+            DebugConsumable($"Legacy temporary modifier expired source={src} stat={stat}");
             _statSystem?.RemoveModifier(stat, src);
+        }
+
+        private static void DebugConsumable(string message)
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            if (cfg != null && cfg.EnableConsumableDebugLogs)
+                Debug.Log($"[ConsumableHandler] {message}");
         }
 
         private void OnDestroy()

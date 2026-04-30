@@ -12,12 +12,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d43377b348fd2374d9366239afbb39b6, type: 3}
   m_Name: SpawnTable_BossDrop_Tier1_Medical
   m_EditorClassIdentifier: 
-  Mode: 1
-  FixedEntries: []
-  RandomEntries: []
-  MinRandomCount: 0
-  MaxRandomCount: 0
+  Mode: 2
+  FixedEntries:
+  - Item: {fileID: 11400000, guid: 4abd8a463f09bfb44963e31e87943822, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: d00bb1a76c06474438b0ae0d9d400ba1, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 6873c1d7cee7e834ea1e257d2f3d4588, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  MinRandomCount: 1
+  MaxRandomCount: 4
   RollOnOpen: 1
   DropToWorldOnOpen: 0
-  MinTotalItems: 5
+  MinTotalItems: 1
   MaxTotalItems: 5

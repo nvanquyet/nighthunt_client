@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using FishNet.Connection;
 using FishNet.Object;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -9,6 +10,7 @@ using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Gameplay.Character;
 using NightHunt.GameplaySystems.Weapon;
+using NightHunt.Core;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.ItemUse
@@ -36,7 +38,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         private float _defaultUseTime = 3.5f;
 
         [Header("Visual")]
-        [Tooltip("PrActorUtils in the player prefab — provides WeaponR hand bone. " +
+        [Tooltip("PrActorUtils in the player prefab - provides WeaponR hand bone. " +
                  "Auto-resolved via GetComponentInChildren if not assigned.")]
         [SerializeField] private PrActorUtils _actorUtils;
 
@@ -46,13 +48,15 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         private IWeaponSystem _weaponSystem;
         private IPlayerStatSystem _statSystem;
+        private IStatApplyOrchestrator _statOrchestrator;
         private IInventorySystem _inventorySystem;
+        private IDeployableHandler _deployableHandler;
         private bool _isUsingItem;
         private ItemInstance _currentItem;
         private WeaponSlotType? _previousWeaponSlot;
         private Coroutine _useCoroutine;
         private GameObject _itemInHandModel;   // throwable model instantiated on WeaponR bone
-        // Last confirmed throw target — set in ExecuteThrow so DetachItemFromHand
+        // Last confirmed throw target set in ExecuteThrow so DetachItemFromHand
         // can toss the hand model in the right direction without touching any client-only statics.
         private Vector3 _pendingThrowTarget;
 
@@ -62,6 +66,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         public bool IsUsingItem => _isUsingItem;
         public ItemInstance CurrentItem => _currentItem;
+        public bool IsDeploying => _deployableHandler?.IsDeploying == true;
 
         #endregion
 
@@ -117,6 +122,14 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (_statSystem is PlayerStatSystem ssConcrete)
                 _statSystemComponent = ssConcrete;
 
+            _statOrchestrator = ComponentResolver.Find<IStatApplyOrchestrator>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrLogWarning("[ItemUseSystem] IStatApplyOrchestrator not found - consumable temporary modifiers will use legacy stat path.")
+                .Resolve();
+
             _inventorySystem = ComponentResolver.Find<IInventorySystem>(this)
                 .UseExisting(_inventorySystemComponent)
                 .OnSelf()
@@ -129,6 +142,13 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (_inventorySystem is InventorySystem invConcrete)
                 _inventorySystemComponent = invConcrete;
 
+            _deployableHandler = ComponentResolver.Find<IDeployableHandler>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .Resolve();
+
             if (_weaponSystem == null)
                 Debug.LogError("[ItemUseSystem] IWeaponSystem is null!");
 
@@ -137,6 +157,9 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             if (_inventorySystem == null)
                 Debug.LogError("[ItemUseSystem] IInventorySystem is null!");
+
+            if (_deployableHandler == null)
+                Debug.LogWarning("[ItemUseSystem] IDeployableHandler not found. Deployable items need DeployablePlacementHandler on the player prefab.");
         }
 
         private void InitializeHandlers()
@@ -146,9 +169,9 @@ namespace NightHunt.GameplaySystems.ItemUse
             {
                 _consumableHandler = gameObject.AddComponent<ConsumableHandler>();
                 if (_statSystem == null)
-                    Debug.LogWarning("[ItemUseSystem] ConsumableHandler created but IPlayerStatSystem is null — consumable effects won't apply.");
-                _consumableHandler.Initialize(_statSystem);
+                    Debug.LogWarning("[ItemUseSystem] ConsumableHandler created but IPlayerStatSystem is null - consumable effects won't apply.");
             }
+            _consumableHandler.Initialize(_statSystem, _statOrchestrator);
 
             if (_throwableHandler == null)
             {
@@ -160,7 +183,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (_actorUtils == null)
                 _actorUtils = ComponentResolver.Find<PrActorUtils>(this)
                     .OnSelf().InChildren().InRootChildren()
-                    .OrLogWarning("[ItemUseSystem] PrActorUtils not found — throwable hand model will be skipped")
+                    .OrLogWarning("[ItemUseSystem] PrActorUtils not found - throwable hand model will be skipped")
                     .Resolve();
         }
 
@@ -171,25 +194,30 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// <summary>
         /// Main entry point for item use. Routes to the server automatically when called
         /// from the owning client (dedicated server or host mode).
-        /// For the return value on client→server calls the result is always true
+        /// For client-to-server calls the return value is always true
         /// (fire-and-forget via ServerRpc); the authoritative outcome fires via events.
         /// </summary>
         public bool UseItem(ItemInstance item)
         {
             if (item == null)
             {
+                Debug.LogWarning("[ITEM_SELECT_FLOW] ItemUse.UseItem failed: item is null.");
                 Debug.LogWarning("[ItemUseSystem] UseItem: item is null");
                 return false;
             }
+
+            Debug.Log($"[ITEM_SELECT_FLOW] ItemUse.UseItem entry item={item.InstanceID} def={item.DefinitionID} qty={item.Quantity} isServer={IsServerInitialized} isOwner={IsOwner}");
 
             // Client in dedicated-server mode: route to server via RPC.
             if (!IsServerInitialized)
             {
                 if (IsOwner)
                 {
+                    Debug.Log($"[ITEM_SELECT_FLOW] ItemUse.UseItem -> RequestUseItemServerRpc item={item.InstanceID}");
                     RequestUseItemServerRpc(item.InstanceID);
-                    return true; // Optimistic — outcome fires via events.
+                    return true; // Optimistic; outcome fires via events.
                 }
+                Debug.LogWarning($"[ITEM_SELECT_FLOW] ItemUse.UseItem blocked: caller does not own item-use object item={item.InstanceID}.");
                 Debug.LogWarning("[ItemUseSystem] UseItem: caller does not own this object.");
                 return false;
             }
@@ -204,9 +232,11 @@ namespace NightHunt.GameplaySystems.ItemUse
         [ServerRpc(RequireOwnership = true)]
         private void RequestUseItemServerRpc(string instanceID)
         {
+            Debug.Log($"[ITEM_SELECT_FLOW] RequestUseItemServerRpc received instance='{instanceID}' owner={Owner?.ClientId}");
             var item = _inventorySystem?.GetItemByInstanceID(instanceID);
             if (item == null)
             {
+                Debug.LogWarning($"[ITEM_SELECT_FLOW] RequestUseItemServerRpc failed: item '{instanceID}' not found on server inventory.");
                 Debug.LogWarning($"[ItemUseSystem] RequestUseItemServerRpc: item '{instanceID}' not found on server.");
                 return;
             }
@@ -231,9 +261,12 @@ namespace NightHunt.GameplaySystems.ItemUse
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
             if (def == null)
             {
+                Debug.LogError($"[ITEM_SELECT_FLOW] UseItemServer failed: no definition '{item.DefinitionID}' item={item.InstanceID}.");
                 Debug.LogError($"[ItemUseSystem] No definition: {item.DefinitionID}");
                 return false;
             }
+
+            Debug.Log($"[ITEM_FLOW] [07][UseServer.Route] item={item.InstanceID} def={item.DefinitionID} defType={def.GetType().Name} itemType={def.Type}");
 
             if (def is ConsumableDefinition cd)
                 return BeginConsumable(item, cd);
@@ -272,17 +305,23 @@ namespace NightHunt.GameplaySystems.ItemUse
             }
 
             // Reuse the shared _useCoroutine slot so CancelUse() can interrupt mid-prepare.
-            _pendingThrowTarget = aimTarget;
-            _useCoroutine = StartCoroutine(PrepareAndThrow(def, aimTarget));
+            if (_useCoroutine != null)
+            {
+                Debug.LogWarning("[ItemUseSystem] ExecuteThrow ignored: throw is already preparing.");
+                return;
+            }
+
+            Vector3 sanitizedTarget = SanitizeThrowableTarget(def, aimTarget);
+            _pendingThrowTarget = sanitizedTarget;
+            _useCoroutine = StartCoroutine(PrepareAndThrow(def, sanitizedTarget));
         }
 
         [Server]
         private IEnumerator PrepareAndThrow(ThrowableDefinition def, Vector3 aimTarget)
         {
+            // Throwable wind-up is animation timing only. It must not drive progress UI.
             if (def.PrepareTime > 0f)
-            {
                 yield return new WaitForSeconds(def.PrepareTime);
-            }
 
             // Guard: might have been cancelled during wind-up.
             if (!_isUsingItem || _currentItem == null)
@@ -297,11 +336,45 @@ namespace NightHunt.GameplaySystems.ItemUse
             CompleteUse(item);
         }
 
+        private Vector3 SanitizeThrowableTarget(ThrowableDefinition def, Vector3 requestedTarget)
+        {
+            Vector3 origin = transform.position;
+            Vector3 flatOffset = requestedTarget - origin;
+            flatOffset.y = 0f;
+
+            float maxThrowRange = def != null ? def.GetMaxThrowDistance() : 0f;
+            float visionRange = _statSystem != null
+                ? _statSystem.GetStat(NightHunt.Gameplay.StatSystem.Core.Types.PlayerStatType.VisionRange)
+                : 0f;
+
+            float maxRange = maxThrowRange > 0.1f ? maxThrowRange : 10f;
+            if (visionRange > 0.1f)
+                maxRange = Mathf.Min(maxRange, visionRange);
+
+            Vector3 direction = flatOffset.sqrMagnitude > 0.0001f
+                ? flatOffset.normalized
+                : transform.forward;
+            Vector3 clamped = origin + direction * Mathf.Clamp(flatOffset.magnitude, 0.5f, maxRange);
+
+            Vector3 grounded = ProjectThrowableTargetToGround(clamped);
+            Debug.Log($"[THROW_FLOW] Sanitize target requested={requestedTarget:F2} grounded={grounded:F2} maxRange={maxRange:F2} def={def?.ItemID ?? "null"}");
+            return grounded;
+        }
+
+        private static Vector3 ProjectThrowableTargetToGround(Vector3 target)
+        {
+            Vector3 rayOrigin = target + Vector3.up * 8f;
+            if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 24f, NightHuntLayers.MaskGroundAim, QueryTriggerInteraction.Ignore))
+                return hit.point;
+
+            return target;
+        }
+
         /// <summary>
         /// Called by the owning client (CombatInputHandler.BeginFire / ItemAimController
         /// mobile ConfirmAim) to trigger ExecuteThrow on the server.
         /// FishNet ServerRpcs from the same client are ordered, so a prior
-        /// item-selection RPC (→ BeginThrowable) is guaranteed to complete
+        /// item-selection RPC is guaranteed to complete
         /// before this one processes.
         /// </summary>
         // BUG 2 FIX: aimTarget is the client-side world position of the cursor.
@@ -310,6 +383,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         [ServerRpc(RequireOwnership = true)]
         public void RequestExecuteThrow(Vector3 aimTarget)
         {
+            Debug.Log($"[ITEM_SELECT_FLOW] RequestExecuteThrow RPC server received target={aimTarget:F2} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem} owner={Owner?.ClientId}");
             ExecuteThrow(aimTarget);
         }
 
@@ -322,6 +396,44 @@ namespace NightHunt.GameplaySystems.ItemUse
         public void RequestCancelUse()
         {
             CancelUse();
+        }
+
+        public bool TryConfirmDeploy()
+        {
+            _deployableHandler ??= ComponentResolver.Find<IDeployableHandler>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .Resolve();
+
+            if (_deployableHandler == null)
+            {
+                Debug.LogWarning("[DEPLOY_FLOW] TryConfirmDeploy failed: IDeployableHandler missing on owner.");
+                return false;
+            }
+
+            string instanceId = _currentItem?.InstanceID;
+            bool confirmed = _deployableHandler.ConfirmDeploy();
+            Debug.Log($"[DEPLOY_FLOW] TryConfirmDeploy result={confirmed} item={instanceId ?? "null"} using={_isUsingItem}");
+
+            if (confirmed && !string.IsNullOrEmpty(instanceId))
+                RequestCompleteDeployUse(instanceId);
+
+            return confirmed;
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void RequestCompleteDeployUse(string instanceId)
+        {
+            if (!_isUsingItem || _currentItem == null || _currentItem.InstanceID != instanceId)
+            {
+                Debug.LogWarning($"[DEPLOY_FLOW] RequestCompleteDeployUse ignored: requested={instanceId} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem}");
+                return;
+            }
+
+            Debug.Log($"[DEPLOY_FLOW] RequestCompleteDeployUse accepted: item={instanceId}");
+            CompleteUse(_currentItem);
         }
 
         /// <summary>
@@ -352,9 +464,26 @@ namespace NightHunt.GameplaySystems.ItemUse
             _isUsingItem = false;
             _currentItem = null;
 
+            _deployableHandler?.CancelDeploy();
+            TargetCancelDeploy(Owner);
+
             OnItemUseCancelled?.Invoke(item);
+            TargetEndItemUseVisual(Owner);
             DestroyItemInHand();
             RestoreWeapon();
+        }
+
+        [TargetRpc]
+        private void TargetCancelDeploy(NetworkConnection conn)
+        {
+            _deployableHandler ??= ComponentResolver.Find<IDeployableHandler>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .Resolve();
+
+            _deployableHandler?.CancelDeploy();
         }
 
         #endregion
@@ -363,6 +492,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         private bool BeginConsumable(ItemInstance item, ConsumableDefinition def)
         {
+            Debug.Log($"[ITEM_FLOW] [08][BeginConsumable] item={item.InstanceID} def={def.ItemID} duration={(def.UsageDuration > 0f ? def.UsageDuration : _defaultUseTime):F2}");
             HolsterAndSave();
             _currentItem = item;
             _isUsingItem = true;
@@ -374,8 +504,10 @@ namespace NightHunt.GameplaySystems.ItemUse
             _useCoroutine = StartCoroutine(ConsumableRoutine(item, def, duration));
 
             OnItemUseStarted?.Invoke(item);
+            TargetBeginHeldItem(Owner, item.InstanceID, item.DefinitionID);
+            var visualPrefab = ItemVisualResolver.ResolveVisualPrefab(def);
             Debug.Log($"[ItemUseSystem] Consumable started: '{def.DisplayName}' ({duration:F1}s) " +
-                      $"prefab={(def.HeldPrefab != null ? def.HeldPrefab.name : "none")}");
+                      $"prefab={(visualPrefab != null ? visualPrefab.name : "runtime fallback")}");
 
             return true;
         }
@@ -405,6 +537,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         private bool BeginThrowable(ItemInstance item, ThrowableDefinition def)
         {
+            Debug.Log($"[ITEM_FLOW] [08][BeginThrowable] item={item.InstanceID} def={def.ItemID} prepare={def.PrepareTime:F2}");
             HolsterAndSave();
             _currentItem = item;
             _isUsingItem = true;
@@ -413,6 +546,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             SpawnItemInHand(def);
 
             OnItemUseStarted?.Invoke(item);
+            TargetBeginHeldItem(Owner, item.InstanceID, item.DefinitionID);
             Debug.Log($"[ItemUseSystem] Throw mode: '{def.DisplayName}'. Press Fire to throw.");
 
             return true;
@@ -423,54 +557,90 @@ namespace NightHunt.GameplaySystems.ItemUse
         #region Deployable Flow
 
         /// <summary>
-        /// Stub for deployable items (beacons, etc.).
-        /// TODO: implement placement-mode UI (range indicator + confirm/cancel).
-        ///
-        /// Item type distinctions to implement later:
-        ///   • Beacon (ReviveBeacon) — spawns a world object at the placed position;
-        ///     teammates can respawn at it.  Does NOT affect the placing player directly.
-        ///   • SupplyBeacon — spawns a loot crate or airdrop marker.
-        ///   • General Deployable — any trap / equipment placed in the world.
+        /// Deployables enter client-side placement mode through IDeployableHandler.
+        /// The handler owns preview, confirm/cancel input, server validation, spawn
+        /// and inventory consumption. ItemUseSystem only routes the request.
         /// </summary>
         private bool BeginDeployable(ItemInstance item, ItemDefinition def)
         {
+            Debug.Log($"[ITEM_FLOW] [08][BeginDeployable] item={item.InstanceID} def={def.ItemID} handler={(_deployableHandler != null ? "ok" : "null")}");
+            if (_deployableHandler == null)
+            {
+                Debug.LogWarning($"[ItemUseSystem] Deployable '{def.DisplayName}' selected but no IDeployableHandler is present on the player.");
+                return false;
+            }
+
             HolsterAndSave();
             _currentItem = item;
             _isUsingItem = true;
 
-            SpawnItemInHandGeneric(def);
             OnItemUseStarted?.Invoke(item);
+            TargetBeginDeployable(Owner, item.InstanceID, item.DefinitionID);
 
-            float usable = (def as UsableItemDefinition)?.UsageDuration ?? 0f;
-            float duration = usable > 0f ? usable : 2f;
-            _useCoroutine = StartCoroutine(DeployableRoutine(item, def, duration));
-
-            Debug.Log($"[ItemUseSystem] Deployable '{def.DisplayName}': placing in {duration:F1}s...");
+            Debug.Log($"[ItemUseSystem] Deployable '{def.DisplayName}': entering placement mode.");
             return true;
         }
 
-        private IEnumerator DeployableRoutine(ItemInstance item, ItemDefinition def, float duration)
+        [TargetRpc]
+        private void TargetBeginDeployable(NetworkConnection conn, string instanceId, string definitionId)
         {
-            float elapsed = 0f;
-            while (elapsed < duration)
+            var item = _inventorySystem?.GetItemByInstanceID(instanceId);
+            var def = ItemDatabase.GetDefinition(definitionId);
+            if (item == null || def == null)
             {
-                elapsed += Time.deltaTime;
-                OnItemUseProgress?.Invoke(item, Mathf.Clamp01(elapsed / duration));
-                yield return null;
+                Debug.LogWarning($"[ItemUseSystem] TargetBeginDeployable failed: item={instanceId} def={definitionId}");
+                return;
             }
 
-            Debug.Log($"[ItemUseSystem] Deployable '{def.DisplayName}' placed at {transform.position:F1}.");
+            _deployableHandler ??= ComponentResolver.Find<IDeployableHandler>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .Resolve();
 
-            ConsumeItem(item);
-            CompleteUse(item);
+            if (_deployableHandler == null || !_deployableHandler.BeginDeploy(item, def))
+                Debug.LogWarning($"[ItemUseSystem] No deployable handler accepted '{def.DisplayName}'.");
+            else
+            {
+                _currentItem = item;
+                _isUsingItem = true;
+                SpawnItemInHandGeneric(def);
+                Debug.Log($"[DEPLOY_FLOW] TargetBeginDeployable active: item={item.InstanceID} def={def.ItemID}");
+            }
         }
 
         #endregion
 
         #region Hand Model
 
+        [TargetRpc]
+        private void TargetBeginHeldItem(NetworkConnection conn, string instanceId, string definitionId)
+        {
+            var item = _inventorySystem?.GetItemByInstanceID(instanceId);
+            var def = ItemDatabase.GetDefinition(definitionId);
+            if (item == null || def == null)
+            {
+                Debug.LogWarning($"[ItemUseSystem] TargetBeginHeldItem failed: item={instanceId} def={definitionId}");
+                return;
+            }
+
+            _currentItem = item;
+            _isUsingItem = true;
+            SpawnItemInHandGeneric(def);
+            Debug.Log($"[ITEM_FLOW] [09][TargetBeginHeldItem] item={item.InstanceID} def={def.ItemID}");
+        }
+
+        [TargetRpc]
+        private void TargetEndItemUseVisual(NetworkConnection conn)
+        {
+            _isUsingItem = false;
+            _currentItem = null;
+            DestroyItemInHand();
+        }
+
         /// <summary>
-        /// Instantiate the throwable's <see cref="PhysicalItemDefinition.HeldPrefab"/> on the
+        /// Instantiate the item's <see cref="PhysicalItemDefinition.VisualPrefab"/> on the
         /// right-hand bone (WeaponR) so the player visually holds the item while in
         /// throw-aim mode.  Uses the same parent and local transform as WeaponModelController.
         /// </summary>
@@ -480,20 +650,18 @@ namespace NightHunt.GameplaySystems.ItemUse
         }
 
         /// <summary>
-        /// Generic hand-model spawner — tries ThrowableDefinition.HeldPrefab first,
-        /// falls back to ItemDefinition.EquippedPrefab (for consumables / deployables).
+        /// Generic hand-model spawner for consumables / throwables / deployables.
         /// </summary>
         private void SpawnItemInHandGeneric(ItemDefinition def)
         {
             DestroyItemInHand();
-            GameObject prefab = null;
-            if (def is ThrowableDefinition td)
-                prefab = td.HeldPrefab;
-            if (prefab == null)
-                prefab = def.HeldPrefab;   // virtual on ItemDefinition, overridden in PhysicalItemDefinition
-            if (prefab == null) return;
+            GameObject prefab = ItemVisualResolver.ResolveVisualPrefab(def);
             Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
-            _itemInHandModel = Instantiate(prefab, parent);
+            _itemInHandModel = prefab != null
+                ? Instantiate(prefab, parent)
+                : ItemVisualResolver.CreateRuntimeFallback(def, ItemVisualPurpose.Held);
+            if (_itemInHandModel.transform.parent != parent)
+                _itemInHandModel.transform.SetParent(parent, worldPositionStays: false);
             _itemInHandModel.transform.localPosition = Vector3.zero;
             _itemInHandModel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
         }
@@ -547,7 +715,14 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             _previousWeaponSlot = _weaponSystem.GetActiveWeaponSlot();
             if (_previousWeaponSlot.HasValue)
+            {
+                Debug.Log($"[ITEM_FLOW] [08][HolsterWeapon] previousSlot={_previousWeaponSlot.Value}");
                 _weaponSystem.HolsterWeapon();
+            }
+            else
+            {
+                Debug.Log("[ITEM_FLOW] [08][HolsterWeapon] previousSlot=none");
+            }
         }
 
         private void RestoreWeapon()
@@ -577,6 +752,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             _useCoroutine = null;
 
             OnItemUseCompleted?.Invoke(item);
+            TargetEndItemUseVisual(Owner);
             DestroyItemInHand();
             RestoreWeapon();
         }

@@ -30,6 +30,7 @@ namespace NightHunt.Gameplay.AntiCamping
                  "Default: 5 HP/s  (= 100HP player sẽ chết sau ~20s camping)")]
         [Min(0f)]
         [SerializeField] private float _healthDrainPerSecond = 5f;
+        [SerializeField] private float _activityMovementThreshold = 0.25f;
 
         [Header("Visual")]
         [SerializeField] private GameObject revealIndicatorPrefab;
@@ -113,9 +114,11 @@ namespace NightHunt.Gameplay.AntiCamping
             CampingData data = playerCampingData[playerId];
             float positionThreshold = _gameplayConfig != null ? _gameplayConfig.CampingPositionThreshold : 5f;
             float distanceMoved = Vector3.Distance(currentPosition, data.StartPosition);
+            float frameMovement = Vector3.Distance(currentPosition, data.LastPosition);
 
-            if (distanceMoved > positionThreshold)
+            if (distanceMoved > positionThreshold || frameMovement > _activityMovementThreshold)
             {
+                Debug.Log($"[ANTI_CAMP_FLOW] Reset camping for {player.DisplayName}: totalMove={distanceMoved:F2}/{positionThreshold:F2}, recentMove={frameMovement:F2}/{_activityMovementThreshold:F2}.");
                 data.StartPosition = currentPosition;
                 data.StartTime = Time.time;
                 data.LastPosition = currentPosition;
@@ -197,6 +200,26 @@ namespace NightHunt.Gameplay.AntiCamping
                 {
                     _drainCoroutines.Remove(playerId);
                     yield break;
+                }
+
+                float positionThreshold = _gameplayConfig != null ? _gameplayConfig.CampingPositionThreshold : 5f;
+                if (playerCampingData.TryGetValue(playerId, out var data))
+                {
+                    float distanceMoved = Vector3.Distance(player.transform.position, data.StartPosition);
+                    float frameMovement = Vector3.Distance(player.transform.position, data.LastPosition);
+                    if (distanceMoved > positionThreshold || frameMovement > _activityMovementThreshold)
+                    {
+                        Debug.Log($"[ANTI_CAMP_FLOW] Stop drain for {player.DisplayName}: totalMove={distanceMoved:F2}/{positionThreshold:F2}, recentMove={frameMovement:F2}/{_activityMovementThreshold:F2}.");
+                        data.StartPosition = player.transform.position;
+                        data.StartTime = Time.time;
+                        data.LastPosition = player.transform.position;
+                        revealedPlayers[playerId] = false;
+                        if (networkRevealedPlayers.Contains(playerId))
+                            networkRevealedPlayers.Remove(playerId);
+                        RpcRemoveReveal(playerId);
+                        _drainCoroutines.Remove(playerId);
+                        yield break;
+                    }
                 }
 
                 var info = new DamageInfo

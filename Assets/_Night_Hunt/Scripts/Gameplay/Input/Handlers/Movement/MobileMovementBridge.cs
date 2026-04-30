@@ -3,42 +3,25 @@ using UnityEngine;
 namespace NightHunt.Gameplay.Input.Handlers.Movement
 {
     /// <summary>
-    /// Scene-level bridge that feeds a Joystick Pack joystick into the local
-    /// player's <see cref="MovementInputHandler"/>.
+    /// Lifecycle bridge that binds the local player's <see cref="MovementInputHandler"/>
+    /// to the mobile HUD.
     ///
-    /// Hierarchy:
-    ///   [MoveJoystick] (FixedJoystick + MobileMovementBridge)
-    ///     └── Background (Image)
-    ///           └── Handle   (Image)
-    ///
-    /// Inspector:
-    ///   • <c>_joystick</c> — assign the FixedJoystick on the same GO (auto-wired by DemoSceneGenerator).
+    /// The joystick reference and per-frame input feeding have been moved to
+    /// <see cref="NightHunt.UI.Mobile.MobileHUDPanel"/>, which owns the joystick
+    /// and calls <see cref="MovementInputHandler.SetMobileMove"/> in its Update loop.
     ///
     /// HUD Wiring:
-    ///   Call <see cref="BindHandler"/> from GameHUD / UIRootController once the local
-    ///   player spawns and its MovementInputHandler is known.
+    ///   Call <see cref="BindHandler"/> from <see cref="NightHunt.UI.Mobile.MobileHUDPanel.Bind"/>
+    ///   once the local player spawns and its MovementInputHandler is known.
     ///   Call <see cref="UnbindHandler"/> when the local player despawns.
-    ///
-    /// PC behaviour:
-    ///   On non-touch platforms the joystick input is always zero, so the bridge
-    ///   has no effect — WASD continues to drive movement via InputSystem.
     /// </summary>
     public class MobileMovementBridge : MonoBehaviour
     {
-        [Header("Joystick (same GO — FixedJoystick / DynamicJoystick)")]
-        [SerializeField] private Joystick _joystick;
-
         private MovementInputHandler _handler;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Unity
         // ─────────────────────────────────────────────────────────────────────
-
-        private void Update()
-        {
-            if (_handler == null || _joystick == null) return;
-            _handler.SetMobileMove(_joystick.Direction);
-        }
 
         private void OnDisable()
         {
@@ -51,7 +34,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
 
         /// <summary>
         /// Bind to the local player's MovementInputHandler.
-        /// Call from the HUD orchestrator (GameHUD.OnLocalPlayerSpawned) after the player spawns.
+        /// Called by <see cref="NightHunt.UI.Mobile.MobileHUDPanel.Bind"/> after the player spawns.
         /// </summary>
         public void BindHandler(MovementInputHandler handler)
         {

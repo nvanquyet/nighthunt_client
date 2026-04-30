@@ -15,15 +15,14 @@ MonoBehaviour:
   ItemID: armor_gloves
   DisplayName: Tactical Gloves
   Description: Improves grip and handling
-  Icon: {fileID: 0}
+  Icon: {fileID: 21300000, guid: b9d6d9d7736ca06499af187818e18124, type: 3}
   Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 0.2
-  _heldPrefab: {fileID: 0}
-  _groundPrefab: {fileID: 0}
+  _visualPrefab: {fileID: 0}
   ValidSlots: 0000000001000000
   _attachmentSlots: 
   StatConfig: {fileID: 11400000, guid: ddf2a9295a491124fabff2d594d035e8, type: 2}
-  EquipmentSlot: 2
+  EquipmentSlot: 7
   DurabilityLossRate: 1

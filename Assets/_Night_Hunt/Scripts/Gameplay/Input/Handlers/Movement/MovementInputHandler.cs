@@ -255,13 +255,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         #region Public API
 
         // ── Mobile joystick override ─────────────────────────────────────────────
-        // _mobileMove is set each frame by MobileMovementBridge (scene-level component).
+        // _mobileMove is set each frame by MobileHUDPanel (scene-level component).
         // GetMoveInput() prefers _mobileMove when the joystick is actively pushed;
         // falls back to keyboard/gamepad moveInput so PC controls are unaffected.
         private Vector2 _mobileMove;
 
         /// <summary>
-        /// Called every frame by <see cref="MobileMovementBridge"/> to inject joystick direction.
+        /// Called every frame by <see cref="NightHunt.UI.Mobile.MobileHUDPanel"/> to inject joystick direction.
         /// Pass <see cref="Vector2.zero"/> to clear the override (joystick released).
         /// </summary>
         public void SetMobileMove(Vector2 dir) { _mobileMove = dir; }
@@ -271,6 +271,30 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
 
         public bool IsSprinting() => isSprinting;
         public bool IsCrouching() => isCrouching;
+
+        public void SimulateSprint(bool pressed)
+        {
+            if (!inputEnabled) return;
+            isSprinting = pressed;
+        }
+
+        public void SimulateCrouchToggle()
+        {
+            if (!inputEnabled) return;
+            isCrouching = !isCrouching;
+        }
+
+        public void SimulateJump()
+        {
+            if (!inputEnabled) return;
+            isJumping = true;
+        }
+
+        public void SimulateRoll()
+        {
+            if (!inputEnabled) return;
+            isRolling = true;
+        }
 
         // ── Camera Lock Override ─────────────────────────────────────────────────────
 

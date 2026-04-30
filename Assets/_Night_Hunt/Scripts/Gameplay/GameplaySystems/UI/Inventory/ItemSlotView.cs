@@ -28,26 +28,28 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Tooltip("Alpha applied to this slot when in spectator read-only mode.")]
         [SerializeField] [Range(0.1f, 1f)] private float _lockedAlpha = 0.5f;
 
-        [Header("Config")]
-        [SerializeField] private UISlotLayoutConfig _uiConfig;
+        public RectTransform RectTransform => (RectTransform)transform;
+        // Removed _uiConfig
 
         public UISlotId   SlotId             { get; private set; }
         public UISlotState State             { get; private set; }
         public bool       IsSelectedVisually { get; private set; }
         public bool       IsLocked           { get; private set; }
+        private Sprite _initialIconSprite;
+        private Sprite _initialBackgroundSprite;
+        private bool _capturedPlaceholderState;
 
         // ─────────────────────────────────────────────────────────────────────
 
-        public void Initialize(UISlotLayoutConfig uiConfig, UISlotId id)
+        private void Awake()
         {
-            _uiConfig = uiConfig;
-            SlotId    = id;
-            SetEmptyState();
+            CapturePlaceholderState();
         }
 
         public void Initialize(UISlotId id)
         {
             SlotId = id;
+            CapturePlaceholderState();
             SetEmptyState();
         }
 
@@ -71,7 +73,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             if (_background != null)
-                _background.color = state.BackgroundColor;
+                _background.sprite = state.Background;
 
             // Stack count
             if (_stackObj != null)
@@ -99,9 +101,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             State = new UISlotState();
 
             Sprite defaultIcon = null;
-            if (_uiConfig != null && _uiConfig.InventoryConfig != null)
+            var config = NightHunt.GameplaySystems.Core.Configs.InventoryConfig.Instance;
+            if (config != null)
             {
-                defaultIcon = _uiConfig.InventoryConfig.GetDefaultEmptyIcon(
+                defaultIcon = config.GetDefaultEmptyIcon(
                     SlotId.Type,
                     SlotId.EquipmentSlot,
                     SlotId.WeaponSlot);
@@ -115,6 +118,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 _icon.sprite  = null;
                 _icon.enabled = false;
+                if (defaultIcon == null)
+                    defaultIcon = _initialIconSprite;
                 if (defaultIcon != null)
                 {
                     _icon.sprite  = defaultIcon;
@@ -126,8 +131,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 Debug.LogWarning($"[ItemSlotView] SetEmptyState: _icon is null!");
             }
 
-            if (_background != null && _uiConfig != null && _uiConfig.DefaultBackground != null)
-                _background.sprite = _uiConfig.DefaultBackground;
+            if (_background != null)
+            {
+                if (config != null && config.DefaultSlotBackground != null)
+                    _background.sprite = config.DefaultSlotBackground;
+                else if (_initialBackgroundSprite != null)
+                    _background.sprite = _initialBackgroundSprite;
+            }
 
             if (_stackObj != null)
                 _stackObj.SetActive(false);
@@ -196,6 +206,16 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _canvasGroup.alpha          = IsLocked ? _lockedAlpha : 1f;
                 _canvasGroup.blocksRaycasts = !IsLocked;
             }
+        }
+
+        private void CapturePlaceholderState()
+        {
+            if (_capturedPlaceholderState)
+                return;
+
+            _capturedPlaceholderState = true;
+            _initialIconSprite = _icon != null ? _icon.sprite : null;
+            _initialBackgroundSprite = _background != null ? _background.sprite : null;
         }
 
         #endregion

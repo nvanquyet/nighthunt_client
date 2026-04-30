@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
+using NightHunt.Core;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Loot;
 using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Input.Handlers.Interaction
@@ -36,6 +38,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         [Tooltip("Layer mask for interactable colliders.")]
         [SerializeField] private LayerMask interactableLayerMask = ~0;
+
+        [Tooltip("Optional extra scan for dropped WorldItem visuals/triggers when they are not on the Interactable layer.")]
+        [SerializeField] private bool includeWorldItems = true;
+
+        [Tooltip("WorldItem fallback layers. Leave empty to scan Interactable + Items.")]
+        [SerializeField] private LayerMask worldItemLayerMask = 0;
 
         [Tooltip("Max objects checked per scan (pre-allocated buffer).")]
         [FormerlySerializedAs("maxResults")]
@@ -72,6 +80,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         /// </summary>
         public IReadOnlyList<ILootable> NearbyLootables => _nearbyLootables;
 
+        /// <summary>Dropped world items currently within range, sorted closest-first.</summary>
+        public IReadOnlyList<WorldItem> NearbyWorldItems => _nearbyWorldItems;
+
         // ── Events ───────────────────────────────────────────────────────────────
 
         /// <summary>
@@ -95,9 +106,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
         private readonly List<IInteractable> _nearby = new List<IInteractable>();
         private readonly List<ILootable> _nearbyLootables = new List<ILootable>();
+        private readonly List<WorldItem> _nearbyWorldItems = new List<WorldItem>();
         private Collider[] _overlapBuffer;
         private float _nextScanTime;
         private IInteractable _previousClosest;
+        private int _lastHitCount;
 
         // ── Unity lifecycle ──────────────────────────────────────────────────────
 
@@ -109,6 +122,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         private void Update()
         {
             if (Time.time < _nextScanTime) return;
+            _nextScanTime = Time.time + _scanInterval;
+            PerformScan();
+        }
+
+        /// <summary>
+        /// Immediately refresh the nearby cache. Used by UI flows that need an up-to-date
+        /// proximity list before the next throttled scan tick.
+        /// </summary>
+        public void ForceScan()
+        {
             _nextScanTime = Time.time + _scanInterval;
             PerformScan();
         }
@@ -126,6 +149,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
                 transform.position, _scanRadius, _overlapBuffer, interactableLayerMask,
                 QueryTriggerInteraction.Collide);
 
+            if (hitCount >= _overlapBuffer.Length)
+            {
+                _overlapBuffer = new Collider[_overlapBuffer.Length * 2];
+                hitCount = Physics.OverlapSphereNonAlloc(
+                    transform.position, _scanRadius, _overlapBuffer, interactableLayerMask,
+                    QueryTriggerInteraction.Collide);
+                Debug.LogWarning($"[ProximityScanner] Overlap buffer grew to {_overlapBuffer.Length}. Increase max results on the scanner prefab if this repeats.");
+            }
+
+            _lastHitCount = hitCount;
+
             // Collect unique IInteractable references from the hit colliders
             var found = new List<IInteractable>(hitCount);
             for (int i = 0; i < hitCount; i++)
@@ -141,6 +175,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
                 found.Add(interactable);
             }
 
+            if (includeWorldItems)
+                AddWorldItemsInRange(found);
+
             // Sort by distance (closest first) using SqrMagnitude for speed
             found.Sort((a, b) =>
             {
@@ -151,15 +188,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
 
             // Diff with previous list
             bool changed = HasListChanged(found);
-            if (!changed) return;
-
-            _nearby.Clear();
-            _nearby.AddRange(found);
-            OnNearbyListChanged?.Invoke(_nearby);
+            if (changed)
+            {
+                _nearby.Clear();
+                _nearby.AddRange(found);
+                OnNearbyListChanged?.Invoke(_nearby);
+            }
 
             // Cập nhật danh sách lootable riêng (rương / xác)
             var lootables = new List<ILootable>();
-            foreach (var item in _nearby)
+            foreach (var item in found)
             {
                 if (item is ILootable lootable)
                     lootables.Add(lootable);
@@ -172,11 +210,18 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
                 OnNearbyLootablesChanged?.Invoke(_nearbyLootables);
             }
 
-            if (logOnChange)
+            _nearbyWorldItems.Clear();
+            foreach (var item in found)
+            {
+                if (item is WorldItem worldItem)
+                    _nearbyWorldItems.Add(worldItem);
+            }
+
+            if (logOnChange && changed)
                 LogNearby();
 
             // Notify closest changed
-            IInteractable newClosest = _nearby.Count > 0 ? _nearby[0] : null;
+            IInteractable newClosest = found.Count > 0 ? found[0] : null;
             if (newClosest != _previousClosest)
             {
                 _previousClosest = newClosest;
@@ -189,9 +234,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         /// </summary>
         public void ClearAll()
         {
-            if (_nearby.Count == 0 && _nearbyLootables.Count == 0) return;
+            if (_nearby.Count == 0 && _nearbyLootables.Count == 0 && _nearbyWorldItems.Count == 0) return;
             _nearby.Clear();
             _nearbyLootables.Clear();
+            _nearbyWorldItems.Clear();
             _previousClosest = null;
             OnNearbyListChanged?.Invoke(_nearby);
             OnClosestChanged?.Invoke(null);
@@ -223,6 +269,43 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             return false;
         }
 
+        private void AddWorldItemsInRange(List<IInteractable> found)
+        {
+            LayerMask mask = worldItemLayerMask.value != 0
+                ? worldItemLayerMask
+                : LayerMask.GetMask(NightHuntLayers.Interactable, NightHuntLayers.Items);
+
+            int hitCount = Physics.OverlapSphereNonAlloc(
+                transform.position,
+                _scanRadius,
+                _overlapBuffer,
+                mask,
+                QueryTriggerInteraction.Collide);
+
+            if (hitCount >= _overlapBuffer.Length)
+            {
+                _overlapBuffer = new Collider[_overlapBuffer.Length * 2];
+                hitCount = Physics.OverlapSphereNonAlloc(
+                    transform.position,
+                    _scanRadius,
+                    _overlapBuffer,
+                    mask,
+                    QueryTriggerInteraction.Collide);
+            }
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                WorldItem worldItem = _overlapBuffer[i] != null
+                    ? _overlapBuffer[i].GetComponentInParent<WorldItem>()
+                    : null;
+
+                if (worldItem == null || found.Contains(worldItem))
+                    continue;
+
+                found.Add(worldItem);
+            }
+        }
+
         /// <summary>
         /// Print the current nearby list to the console.
         /// Called automatically when <see cref="logOnChange"/> is true,
@@ -230,6 +313,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         /// </summary>
         public void LogNearby()
         {
+            Debug.Log($"[ProximityScanner] Snapshot pos={transform.position:F2} radius={_scanRadius:F2} mask={interactableLayerMask.value} rawHits={_lastHitCount} interactables={_nearby.Count} lootables={_nearbyLootables.Count} worldItems={_nearbyWorldItems.Count}");
+            if (_lastHitCount > 0)
+                Debug.Log($"[ProximityScanner] RawHits: {FormatRawHits()}");
             if (_nearby.Count == 0)
             {
                 Debug.Log("[ProximityScanner] No interactables nearby.");
@@ -258,6 +344,30 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         }
 
         // ── Gizmos ───────────────────────────────────────────────────────────────
+
+        private string FormatRawHits()
+        {
+            var sb = new System.Text.StringBuilder();
+            int count = Mathf.Min(_lastHitCount, _overlapBuffer != null ? _overlapBuffer.Length : 0);
+            for (int i = 0; i < count; i++)
+            {
+                var col = _overlapBuffer[i];
+                if (col == null)
+                    continue;
+
+                if (sb.Length > 0)
+                    sb.Append(" | ");
+
+                var root = col.transform.root;
+                sb.Append(col.name)
+                  .Append("@layer")
+                  .Append(col.gameObject.layer)
+                  .Append(" root=")
+                  .Append(root != null ? root.name : "null");
+            }
+
+            return sb.Length > 0 ? sb.ToString() : "none";
+        }
 
         private void OnGUI()
         {

@@ -62,8 +62,8 @@ MonoBehaviour:
     IsCurrentValue: 0
     RelatedMaxStatType: 7
   - Type: 8
-    DefaultValue: 10
+    DefaultValue: 18
     MinValue: 0
-    MaxValue: 200
+    MaxValue: 80
     IsCurrentValue: 0
     RelatedMaxStatType: 8

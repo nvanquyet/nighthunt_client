@@ -13,17 +13,16 @@ MonoBehaviour:
   m_Name: Armor_Backpack
   m_EditorClassIdentifier: 
   ItemID: armor_backpack
-  DisplayName: 
-  Description: 
-  Icon: {fileID: 21300000, guid: 57fddd8b9308e014ca623b7e8a612e1f, type: 3}
+  DisplayName: Tactical Backpack
+  Description: Increases carry capacity with a small movement penalty.
+  Icon: {fileID: 21300000, guid: 462068b52d0069b4f8d7bdee7ceb6588, type: 3}
   Rarity: 0
   IsStackable: 0
   MaxStackSize: 1
   Weight: 2
-  _heldPrefab: {fileID: 0}
-  _groundPrefab: {fileID: 0}
+  _visualPrefab: {fileID: 0}
   ValidSlots: 0000000001000000
-  _attachmentSlots: 
+  _attachmentSlots: 07000000
   StatConfig: {fileID: 11400000, guid: 941aa3fd1517b5145853818f005a4cfb, type: 2}
   EquipmentSlot: 3
   DurabilityLossRate: 1

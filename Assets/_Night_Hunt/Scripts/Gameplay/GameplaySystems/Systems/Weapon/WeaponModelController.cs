@@ -220,15 +220,16 @@ namespace NightHunt.GameplaySystems.Weapon
                 Debug.LogWarning($"[WeaponModelController] No ItemDatabase entry for '{inst.DefinitionID}'.");
                 return;
             }
-            if (def.HeldPrefab == null)
+            var visualPrefab = ItemVisualResolver.ResolveVisualPrefab(def);
+            if (visualPrefab == null)
             {
-                Debug.LogWarning($"[WeaponModelController] '{def.DisplayName}' has no HeldPrefab.");
+                Debug.LogWarning($"[WeaponModelController] '{def.DisplayName}' has no VisualPrefab.");
                 return;
             }
 
             Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
 
-            _currentModel = Instantiate(def.HeldPrefab, parent);
+            _currentModel = Instantiate(visualPrefab, parent);
             _currentModel.transform.localPosition = Vector3.zero;
             // Use ApplyWeaponRotation so elevation is included from the first frame
             // (typically 0° on spawn, but preserves any elevation set before the model was ready).

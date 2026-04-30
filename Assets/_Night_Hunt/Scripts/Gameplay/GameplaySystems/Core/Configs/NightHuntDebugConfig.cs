@@ -1,3 +1,6 @@
+using GameKit.Dependencies.Utilities.Types;
+using NightHunt.Core;
+using UnityEditor;
 using UnityEngine;
 
 namespace NightHunt.GameplaySystems.Core.Configs
@@ -8,7 +11,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
     /// Create via: Assets → Create → NightHunt/Debug/Debug Config
     /// </summary>
     [CreateAssetMenu(fileName = "NightHuntDebugConfig", menuName = "NightHunt/Debug/Debug Config")]
-    public class NightHuntDebugConfig : ScriptableObject
+    public class NightHuntDebugConfig : ScriptableObjectSingleton<NightHuntDebugConfig>
     {
         [Header("System Logging")]
         [Tooltip("Enable debug logs for the stat system.")]

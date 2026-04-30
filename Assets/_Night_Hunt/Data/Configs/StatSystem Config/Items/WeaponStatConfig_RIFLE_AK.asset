@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c352bde8d500b15478b1415863abf707, type: 3}
-  m_Name: WeaponStatConfig_RIFLE_AK
+  m_Name: WeaponStatConfig_AR
   m_EditorClassIdentifier: 
   Stats:
   - Type: 10
@@ -41,9 +41,17 @@ MonoBehaviour:
     DefaultValue: 1.4
     MinValue: 0
     MaxValue: 10
+  - Type: 17
+    DefaultValue: 1.2
+    MinValue: 0
+    MaxValue: 30
+  - Type: 18
+    DefaultValue: 2.5
+    MinValue: 0
+    MaxValue: 30
   PlayerModifiers:
   - StatType: 4
     Value: -0.13
     ModifierType: 1
-    Description: RIFLE_AK move penalty
+    Description: AR move penalty
   ItemModifiers: []

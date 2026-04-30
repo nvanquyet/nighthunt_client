@@ -60,9 +60,22 @@ namespace NightHunt.Gameplay.Character
         // rather than walking up them. Matches CharacterController's slopeLimit.
         [SerializeField] private float maxSlopeAngle = 46f;
 
+        [Header("Crouch Capsule")]
+        [Tooltip("Capsule height when standing. Must match your character's collider in the Inspector.")]
+        [SerializeField] private float standHeight   = 2.0f;
+        [Tooltip("Capsule height when crouching.")]
+        [SerializeField] private float crouchHeight  = 1.1f;
+        [Tooltip("Capsule center Y offset when standing (typically standHeight * 0.5).")]
+        [SerializeField] private float standCenterY  = 1.0f;
+        [Tooltip("Capsule center Y offset when crouching (typically crouchHeight * 0.5).")]
+        [SerializeField] private float crouchCenterY = 0.55f;
+        [Tooltip("Extra radius used in the stand-up overlap check. Slightly smaller than capsule radius to avoid false positives.")]
+        [SerializeField, Range(0.01f, 0.5f)] private float standCheckRadius = 0.24f;
+
         private Rigidbody _rigidbody;
         private CapsuleCollider _capsule;
         private bool _isGroundedCached;
+        private bool _isCrouchingPhysics; // tracks last applied crouch state to avoid redundant resizes
 
         // Surface normal of the ground below the character, updated every IsGrounded() call.
         // Used to project horizontal movement onto slopes and determine whether a surface is walkable.
@@ -506,24 +519,63 @@ namespace NightHunt.Gameplay.Character
 
         #region ADDITIONAL FEATURES
 
-        /// <summary>
-        /// Get Rigidbody component
-        /// </summary>
+        /// <summary>Get Rigidbody component.</summary>
         public Rigidbody GetRigidbody() => _rigidbody;
 
-        /// <summary>
-        /// Apply external force to character (explosions, knockback, etc.)
-        /// </summary>
+        /// <summary>Apply external force (explosions, knockback, etc.).</summary>
         public void ApplyExternalForce(Vector3 force, ForceMode mode = ForceMode.Impulse)
         {
             if (_rigidbody == null) return;
             _rigidbody.AddForce(force, mode);
         }
 
-        /// <summary>
-        /// Check if rigidbody is valid
-        /// </summary>
+        /// <summary>Check if rigidbody is valid and active.</summary>
         public bool IsRigidbodyValid() => _rigidbody != null && !_rigidbody.isKinematic;
+
+        // ── Crouch capsule resize ──────────────────────────────────────────────
+        /// <summary>
+        /// Resize the CapsuleCollider to match the crouch/stand state.
+        /// Called by BaseCharacterPredictedMovement.SimulateMovement each tick when state changes.
+        ///
+        /// Stand-up safety: if the space above the crouched capsule is blocked,
+        /// the crouch is kept active until it clears (prevents standing inside geometry).
+        /// </summary>
+        protected override void UpdateCrouchPhysics(bool isCrouching)
+        {
+            if (_capsule == null) return;
+            if (isCrouching == _isCrouchingPhysics) return; // no change
+
+            if (isCrouching)
+            {
+                _capsule.height = crouchHeight;
+                _capsule.center = new Vector3(0f, crouchCenterY, 0f);
+                _isCrouchingPhysics = true;
+            }
+            else
+            {
+                // Before standing, check that the space above is clear.
+                if (!CanStandUp()) return;
+
+                _capsule.height = standHeight;
+                _capsule.center = new Vector3(0f, standCenterY, 0f);
+                _isCrouchingPhysics = false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if there is enough headroom to stand up from crouch.
+        /// Uses a CheckSphere at the top of the standing capsule position.
+        /// </summary>
+        private bool CanStandUp()
+        {
+            if (_capsule == null) return true;
+
+            // Top of the standing capsule sphere centre.
+            Vector3 topCenter = transform.position
+                                + Vector3.up * (standCenterY + standHeight * 0.5f - _capsule.radius);
+            return !Physics.CheckSphere(topCenter, standCheckRadius,
+                groundDetectionLayer, QueryTriggerInteraction.Ignore);
+        }
 
         #endregion
 

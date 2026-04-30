@@ -1,9 +1,9 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Interaction;
 using NightHunt.Gameplay.Input.Handlers.Interaction;
+using NightHunt.GameplaySystems.UI;
 
 namespace NightHunt.GameplaySystems.UI.Interaction
 {
@@ -30,15 +30,15 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         [SerializeField] private TextMeshProUGUI _keyText;        // "[E]"
         [SerializeField] private TextMeshProUGUI _actionText;     // "Pick up AK-47"
 
-        [Header("Hold progress bar (only shown during hold)")]
-        [SerializeField] private GameObject   _holdProgressRoot;
-        [SerializeField] private Slider       _holdProgressSlider;
+        // Injected at runtime by GameHUDController.WireInteractionPrompt.
+        private ActionProgressPresenter _progressPresenter;
 
         // ── Runtime ───────────────────────────────────────────────────────────
 
         private RaycastDetector          _detector;
         private PlayerInteractionSystem  _interactionSystem;
         private IInteractable            _lastTarget;
+        private bool                     _presentingHoldProgress;
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -54,6 +54,7 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         public void Hide()
         {
             if (_promptPanel != null) _promptPanel.SetActive(false);
+            HideSharedProgress();
         }
 
         // ── Unity lifecycle ───────────────────────────────────────────────────
@@ -61,7 +62,14 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         private void Awake()
         {
             Hide();
-            if (_holdProgressRoot != null) _holdProgressRoot.SetActive(false);
+        }
+
+        /// <summary>
+        /// Called by GameHUDController.WireInteractionPrompt after the local player spawns.
+        /// </summary>
+        public void BindProgress(ActionProgressPresenter presenter)
+        {
+            _progressPresenter = presenter;
         }
 
         private void Update()
@@ -79,6 +87,7 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             {
                 if (_lastTarget != null) Hide();
                 _lastTarget = null;
+                HideSharedProgress();
                 return;
             }
 
@@ -93,11 +102,23 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             bool isHolding = _interactionSystem != null && _interactionSystem.IsHolding;
             bool isHoldTarget = target is IHoldInteractable h && h.HoldDuration > 0f;
 
-            if (_holdProgressRoot != null)
-                _holdProgressRoot.SetActive(isHolding && isHoldTarget);
+            if (isHolding && isHoldTarget)
+            {
+                if (!_presentingHoldProgress)
+                {
+                    _progressPresenter?.Show(
+                        ActionProgressKind.Interaction,
+                        target.InteractLabel ?? "Interact",
+                        false);
+                    _presentingHoldProgress = true;
+                }
 
-            if (isHolding && isHoldTarget && _holdProgressSlider != null && _interactionSystem != null)
-                _holdProgressSlider.value = _interactionSystem.HoldProgress;
+                _progressPresenter?.SetProgress(ActionProgressKind.Interaction, _interactionSystem.HoldProgress);
+            }
+            else
+            {
+                HideSharedProgress();
+            }
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
@@ -113,6 +134,14 @@ namespace NightHunt.GameplaySystems.UI.Interaction
 
             if (_actionText != null)
                 _actionText.text = target.InteractLabel ?? "Interact";
+        }
+
+        private void HideSharedProgress()
+        {
+            if (_presentingHoldProgress && _progressPresenter != null)
+                _progressPresenter.Hide(ActionProgressKind.Interaction);
+
+            _presentingHoldProgress = false;
         }
     }
 }

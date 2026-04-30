@@ -21,12 +21,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         public RectTransform RectTransform => (RectTransform)transform;
 
+        private void Awake()
+        {
+            EnsureRuntimeComponents();
+        }
+
         // ─────────────────────────────────────────────────────────────────────
         #region Setup
 
         /// <summary>Copy visual state from <paramref name="sourceView"/> to the ghost.</summary>
         public void SetupFromSlot(ItemSlotView sourceView)
         {
+            EnsureRuntimeComponents();
             var state = sourceView?.State;
             if (state == null) return;
 
@@ -37,13 +43,54 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
 
             if (_background != null)
-                _background.color = state.BackgroundColor;
+                _background.sprite = state.Background;
 
             if (_highlightFrame != null)
                 _highlightFrame.enabled = state.IsHighlight;
 
             if (_canvasGroup != null)
+            {
                 _canvasGroup.alpha = 1f;
+                _canvasGroup.interactable = false;
+                _canvasGroup.blocksRaycasts = false;
+            }
+        }
+
+        private void EnsureRuntimeComponents()
+        {
+            if (_canvasGroup == null)
+                _canvasGroup = GetComponent<CanvasGroup>() ?? gameObject.AddComponent<CanvasGroup>();
+
+            if (_background == null)
+                _background = GetComponent<Image>() ?? gameObject.AddComponent<Image>();
+
+            if (_icon == null)
+            {
+                var iconTransform = transform.Find("Icon");
+                if (iconTransform != null)
+                    _icon = iconTransform.GetComponent<Image>();
+
+                if (_icon == null)
+                {
+                    var iconGO = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+                    iconGO.transform.SetParent(transform, false);
+
+                    var iconRect = (RectTransform)iconGO.transform;
+                    iconRect.anchorMin = Vector2.zero;
+                    iconRect.anchorMax = Vector2.one;
+                    iconRect.offsetMin = Vector2.zero;
+                    iconRect.offsetMax = Vector2.zero;
+
+                    _icon = iconGO.GetComponent<Image>();
+                }
+            }
+
+            if (_highlightFrame == null)
+            {
+                var highlightTransform = transform.Find("Highlight");
+                if (highlightTransform != null)
+                    _highlightFrame = highlightTransform.GetComponent<Image>();
+            }
         }
 
         public void SetAlpha(float alpha)

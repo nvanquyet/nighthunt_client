@@ -13,11 +13,35 @@ MonoBehaviour:
   m_Name: SpawnTable_LockedChest
   m_EditorClassIdentifier: 
   Mode: 2
-  FixedEntries: []
-  RandomEntries: []
-  MinRandomCount: 0
-  MaxRandomCount: 2
+  FixedEntries:
+  - Item: {fileID: 11400000, guid: 930f5770eab2bb94cb97e6cab81297b3, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  RandomEntries:
+  - Item: {fileID: 11400000, guid: 0f851431afcd2b44995f3025196e9d90, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: bbece5e30026cb348af13e72a6bc4bc0, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 2
+    Chance: 1
+  - Item: {fileID: 11400000, guid: c958c98e11c7b5c40adc0f5edd061724, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 70235c38294d7ec47a68c9568a71e5c2, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  - Item: {fileID: 11400000, guid: 7c33b3e3c0b26ad4280386a84fabc140, type: 2}
+    MinQuantity: 1
+    MaxQuantity: 1
+    Chance: 1
+  MinRandomCount: 1
+  MaxRandomCount: 3
   RollOnOpen: 1
   DropToWorldOnOpen: 0
   MinTotalItems: 1
-  MaxTotalItems: 3
+  MaxTotalItems: 4

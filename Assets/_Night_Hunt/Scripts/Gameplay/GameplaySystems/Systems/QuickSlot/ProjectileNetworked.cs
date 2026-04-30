@@ -40,6 +40,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         // Transform hierarchy check because it survives rig-model refactors and correctly
         // excludes every hitbox bone (PlayerHitBox layer) regardless of depth in the rig.
         private PlayerHealthSystem _ownerHealthSystem;
+        private int _ownerNetworkObjectId = -1;
 
         private bool _initialized;
         private bool _exploded;
@@ -113,6 +114,13 @@ namespace NightHunt.GameplaySystems.ItemUse
                 ? (ownerRoot.GetComponent<PlayerHealthSystem>()
                    ?? ownerRoot.GetComponentInChildren<PlayerHealthSystem>(true))
                 : null;
+
+            var ownerNetworkObject = ownerRoot != null
+                ? (ownerRoot.GetComponent<NetworkObject>()
+                   ?? ownerRoot.GetComponentInParent<NetworkObject>()
+                   ?? ownerRoot.GetComponentInChildren<NetworkObject>(true))
+                : null;
+            _ownerNetworkObjectId = ownerNetworkObject != null ? (int)ownerNetworkObject.ObjectId : -1;
             
             // Physics bounciness — reuse shared static material to avoid a new allocation per spawn.
             if (!def.CanBounce)
@@ -144,7 +152,21 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (def.ThrowableType == ThrowableType.Proximity)
                 StartCoroutine(ProximityDetection());
 
-            // Intentionally no per-spawn debug log in production.
+            RpcPlaySpawnVfx(transform.position, transform.rotation);
+        }
+
+        [ObserversRpc]
+        private void RpcPlaySpawnVfx(Vector3 position, Quaternion rotation)
+        {
+            transform.SetPositionAndRotation(position, rotation);
+            _projectileBase ??= GetComponent<ProjectileBase>();
+            if (_projectileBase == null)
+            {
+                Debug.LogWarning($"[PROJ_VFX] RpcPlaySpawnVfx: ProjectileBase component is NULL on '{name}' — no spawn VFX will play. Add ProjectileBase to the prefab.");
+            }
+            _projectileBase?.PlayMainVisual();
+            _projectileBase?.PlayMuzzleFlash();
+            Debug.Log($"[PROJ_VFX] Network projectile spawn VFX projectile='{name}' pos={position:F2}");
         }
         
         private IEnumerator FuseCountdown(float fuse)
@@ -344,7 +366,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                             IsHeadshot            = false,
                             HitPoint              = hit.transform.position,
                             HitNormal             = (hit.transform.position - origin).normalized,
-                            ShooterNetworkObjectId = -1,  // world/grenade damage
+                            ShooterNetworkObjectId = _ownerNetworkObjectId,
                             WeaponId              = _def != null ? _def.ItemID : string.Empty,
                         };
                         hs.ApplyDamageServer(info);
@@ -359,7 +381,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                         IsHeadshot            = false,
                         HitPoint              = hit.transform.position,
                         HitNormal             = (hit.transform.position - origin).normalized,
-                        ShooterNetworkObjectId = -1,
+                        ShooterNetworkObjectId = _ownerNetworkObjectId,
                         WeaponId              = _def != null ? _def.ItemID : string.Empty,
                     };
                     hittable.RequestDamage(info);

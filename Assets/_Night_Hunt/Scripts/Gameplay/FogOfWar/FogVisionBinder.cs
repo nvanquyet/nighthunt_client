@@ -2,6 +2,7 @@ using FOW;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Utilities;
 using UnityEngine;
 
@@ -172,6 +173,12 @@ namespace NightHunt.Gameplay.FogOfWar
             }
 
             _revealer.ViewRadius = radius;
+
+            var cfg = NightHuntDebugConfig.Instance;
+            if (cfg != null && cfg.EnableStatDebugLogs)
+            {
+                Debug.Log($"[STAT_FLOW][FogVisionBinder] Apply VisionRange radius={radius:F2} statSystem={(_statSystem != null)} revealerEnabled={_revealer.enabled}", this);
+            }
         }
     }
 }

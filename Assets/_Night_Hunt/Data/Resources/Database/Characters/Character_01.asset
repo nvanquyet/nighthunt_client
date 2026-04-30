@@ -17,6 +17,6 @@ MonoBehaviour:
   Description: 
   Thumbnail: {fileID: 21300000, guid: c6d02f050cea94d4cb15203a01a9b880, type: 3}
   Icon: {fileID: 21300000, guid: ca08acf24e3375842b15762e883aaced, type: 3}
-  ModelPrefab: {fileID: 5605150209726870207, guid: 4e28200b0d4bef147a1ead2d11b0c9b9,
+  ModelPrefab: {fileID: 4755055634653407508, guid: ee17c7eeb8c947447b4f2718640e0987,
     type: 3}
   IsUnlocked: 1

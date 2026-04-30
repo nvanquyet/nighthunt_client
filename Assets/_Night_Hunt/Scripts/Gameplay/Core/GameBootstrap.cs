@@ -45,7 +45,6 @@ namespace NightHunt.Gameplay.Core
 
         [Header("Settings")] [SerializeField] private bool _initializeOnStart = true;
         [SerializeField] private bool _autoSpawnNetworkObjects = true;
-        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         #endregion
 
@@ -121,7 +120,7 @@ namespace NightHunt.Gameplay.Core
                 return;
             }
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== Initializing Gameplay Systems =====");
 
             // Step 1: Initialize singleton services
@@ -142,7 +141,7 @@ namespace NightHunt.Gameplay.Core
 
             _isInitialized = true;
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== ✅ All Systems Initialized =====");
 
             // Notify listeners (ServerGameManager)
@@ -155,7 +154,7 @@ namespace NightHunt.Gameplay.Core
 
         private void InitializeSingletonServices()
         {
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] Initializing singleton services...");
 
             // Verify singleton services exist
@@ -173,7 +172,7 @@ namespace NightHunt.Gameplay.Core
                 teamGO.AddComponent<TeamService>();
             }
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] âœ… Singleton services initialized");
         }
 
@@ -183,7 +182,7 @@ namespace NightHunt.Gameplay.Core
 
         private void ValidateSystemReferences()
         {
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] Validating system references...");
 
             // Auto-find systems if not assigned
@@ -208,7 +207,7 @@ namespace NightHunt.Gameplay.Core
                     Debug.LogError("[GameBootstrap] TeamAssignmentSystem not found!");
             }
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] âœ… System references validated");
         }
 
@@ -221,7 +220,7 @@ namespace NightHunt.Gameplay.Core
         /// </summary>
         private void SpawnNetworkSystems()
         {
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] Spawning network systems...");
 
             // Spawn MatchPhaseManager
@@ -239,7 +238,7 @@ namespace NightHunt.Gameplay.Core
                 SpawnNetworkSystem(TeamService.Instance, "TeamService");
             }
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] âœ… Network systems spawned");
         }
 
@@ -266,12 +265,12 @@ namespace NightHunt.Gameplay.Core
                 if (!networkObject.IsSpawned)
                 {
                     _networkManager.ServerManager.Spawn(networkObject);
-                    if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                         Debug.Log($"[GameBootstrap] âœ… Spawned {systemName} on network");
                 }
                 else
                 {
-                    if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                         Debug.Log($"[GameBootstrap] {systemName} already spawned");
                 }
             }
@@ -281,7 +280,7 @@ namespace NightHunt.Gameplay.Core
                 if (!system.gameObject.activeSelf)
                 {
                     system.gameObject.SetActive(true);
-                    if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                         Debug.Log($"[GameBootstrap] âœ… Activated {systemName}");
                 }
             }
@@ -310,7 +309,7 @@ namespace NightHunt.Gameplay.Core
         /// </summary>
         public void ActivatePhase1Systems()
         {
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== Activating Phase 1 Systems =====");
 
             // Ensure WorldSpawnManager starts its loot spawn loop.
@@ -323,7 +322,7 @@ namespace NightHunt.Gameplay.Core
             if (antiCamp == null)
                 Debug.LogWarning("[GameBootstrap] Phase 1: AntiCampingSystem not found in scene.");
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ✅ Phase 1 systems activated");
         }
 
@@ -332,7 +331,7 @@ namespace NightHunt.Gameplay.Core
         /// </summary>
         public void ActivatePhase2Systems()
         {
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== Activating Phase 2 Systems =====");
 
             // BossSpawnManager self-activates via MatchPhaseManager.OnPhaseStarted.
@@ -345,7 +344,7 @@ namespace NightHunt.Gameplay.Core
             if (scoring == null)
                 Debug.LogWarning("[GameBootstrap] Phase 2: ScoringSystem not found.");
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ✅ Phase 2 systems activated");
         }
 
@@ -354,15 +353,17 @@ namespace NightHunt.Gameplay.Core
         /// </summary>
         public void ActivatePhase3Systems()
         {
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== Activating Phase 3 Systems =====");
 
             // LockdownZone self-activates: checks CurrentPhase in Update().
             var zone      = FindFirstObjectByType<LockdownZone>();
             if (zone == null)
                 Debug.LogWarning("[GameBootstrap] Phase 3: LockdownZone not found in scene — zone damage will not apply.");
+            else
+                zone.ActivateForLockdown();
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ✅ Phase 3 systems activated");
         }
 
@@ -389,7 +390,7 @@ namespace NightHunt.Gameplay.Core
                 if (_networkManager != null && _networkManager.IsServerStarted)
                 {
                     _networkManager.ServerManager.Despawn(networkObject);
-                    if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                         Debug.Log($"[GameBootstrap] Despawned {systemName}");
                 }
             }
@@ -397,7 +398,7 @@ namespace NightHunt.Gameplay.Core
             {
                 // Regular GameObject - deactivate
                 system.gameObject.SetActive(false);
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log($"[GameBootstrap] Deactivated {systemName}");
             }
         }
@@ -417,13 +418,13 @@ namespace NightHunt.Gameplay.Core
             if (_matchPhaseManager != null)
                 _matchPhaseManager.OnPhaseStarted -= HandlePhaseStarted;
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] Cleaning up gameplay systems...");
 
             // Clean up: clear event subscribers, reset state, unload resources
             _isInitialized = false;
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] âœ… Cleanup complete");
         }
 

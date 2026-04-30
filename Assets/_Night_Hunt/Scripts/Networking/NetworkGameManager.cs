@@ -51,6 +51,9 @@ namespace NightHunt.Networking
         private bool _dsReady;          // true after ds_ready WS received
         private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
 
+        /// <summary>Fired each reconnect attempt. Parameters: (currentAttempt, maxAttempts).</summary>
+        public event System.Action<int, int> OnRetryAttempt;
+
         protected override void OnSingletonAwake()
         {
             if (networkManager == null)
@@ -395,6 +398,7 @@ namespace NightHunt.Networking
                 return;
             }
             _retryCount++;
+            OnRetryAttempt?.Invoke(_retryCount, _maxRetries);
             Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
             Invoke(nameof(RetryConnect), _retryDelay);
         }
@@ -432,6 +436,32 @@ namespace NightHunt.Networking
 
             Disconnect();
             roomState?.ClearNetworkSession();
+        }
+
+        /// <summary>
+        /// Called by MatchFlowCoordinator in Custom_Relay mode (no DS to wait for).
+        /// Marks the relay as ready and attempts connection if the game scene is loaded.
+        /// </summary>
+        public void NotifyRelayReady()
+        {
+            _dsReady = true;
+            Debug.Log("[NetworkGameManager] Relay ready — checking if scene loaded to connect.");
+            TryConnectIfReady();
+        }
+
+        /// <summary>Static convenience wrapper for <see cref="NotifyDsReady"/> (called from MatchFlowCoordinator).</summary>
+        public static void SignalDsReady() => Instance?.NotifyDsReady();
+
+        /// <summary>Resets connection-state flags. Called by RoomState.ClearRoom().</summary>
+        public static void ResetConnectionFlags() => Instance?.ResetFlags();
+
+        private void ResetFlags()
+        {
+            _connectionStarted = false;
+            _connected         = false;
+            _dsReady           = false;
+            _gameSceneLoaded   = false;
+            _retryCount        = 0;
         }
 
         /// <summary>Immediately stop all FishNet connections.</summary>

@@ -59,12 +59,6 @@ namespace NightHunt.GameplaySystems.Core.Data
         // These allow callers that hold an ItemDefinition reference to access common
         // subclass properties without casting. Subclasses override the ones they support.
 
-        /// <summary>World prefab held in hands. Null for items without a held representation.</summary>
-        public virtual GameObject HeldPrefab  { get => null; set { } }
-
-        /// <summary>World prefab shown on the ground. Null for items without a ground representation.</summary>
-        public virtual GameObject GroundPrefab { get => null; set { } }
-
         /// <summary>Attachment socket types this item exposes. Null for non-equippable items.</summary>
         public virtual AttachmentSlotType[] AttachmentSlots { get => null; set { } }
 

@@ -9,8 +9,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
     /// BALLISTIC MODEL:
     ///   Each shot spawns ONE physics-based ProjectileComponent from the pool.
     ///   The projectile moves under gravity (configurable) and applies damage on collision.
-    ///   Only the owner machine marks the projectile as authoritative (SetOwnerData)
-    ///   so damage RPCs are sent exactly once.
+    ///   Client projectiles are visual-only in production. Server-side WeaponSystem resolves
+    ///   projectile travel and damage.
     ///
     /// VFX:
     ///   All effects (muzzle flash, trail, detonation / explosion) are owned by the
@@ -35,10 +35,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             var pool = ProjectilePool.Instance;
             if (pool == null)
-            {
-                Debug.LogWarning("[ProjectileWeapon] ProjectilePool not found in scene.", this);
-                return;
-            }
+                Debug.LogWarning("[ProjectileWeapon] ProjectilePool not found in scene. Instantiating projectile directly.", this);
 
             if (projectilePrefab == null)
             {
@@ -46,7 +43,9 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 return;
             }
 
-            var proj = pool.Get(projectilePrefab, origin, Quaternion.LookRotation(fireDir));
+            var proj = pool != null
+                ? pool.Get(projectilePrefab, origin, Quaternion.LookRotation(fireDir))
+                : Instantiate(projectilePrefab, origin, Quaternion.LookRotation(fireDir)).GetComponent<ProjectileComponent>();
             if (proj == null)
             {
                 Debug.LogWarning($"[SHOOT.PLAYER] ProjectileWeapon.Fire — pool.Get() returned null. " +
@@ -62,9 +61,11 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 foreach (var pc in projCols)
                     Physics.IgnoreCollision(oc, pc, true);
 
-            // Initialize as authoritative (damage-dealing) projectile.
+            // Initialize projectile. In production mode the server owns damage; client
+            // projectiles are visual-only unless config explicitly allows damage.
             proj.Initialize(config, fireDir, useHitscan: false, hitscanEndpoint: null);
-            proj.SetOwnerData(shooterNetObjId, config.WeaponId);
+            if (config.ApplyDamage)
+                proj.SetOwnerData(shooterNetObjId, config.WeaponId);
 
             Debug.Log($"[SHOOT.PLAYER] ProjectileWeapon.Fire — origin={origin:F1}  dir={fireDir:F2}  " +
                       $"proj='{proj.gameObject.name}'  shooterNetObjId={shooterNetObjId}  " +

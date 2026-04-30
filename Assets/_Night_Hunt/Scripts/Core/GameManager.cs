@@ -40,7 +40,6 @@ namespace NightHunt.Core
         [Header("State")]
         [SerializeField] private SessionState sessionState;
         [SerializeField] private RoomState    roomState;
-        [Header("Debug")] [SerializeField] private NightHuntDebugConfig _debugConfig;
 
         // ── Public getters ────────────────────────────────────────────────
         public BackendHttpClient    BackendClient    => backendHttpClient;
@@ -83,7 +82,7 @@ namespace NightHunt.Core
                 : Application.isEditor;
 
             Application.runInBackground = runInBg;
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log($"[GameManager] runInBackground = {runInBg}");
         }
 
@@ -114,7 +113,7 @@ namespace NightHunt.Core
                 DontDestroyOnLoad(go);
             }
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameManager] All services initialized");
         }
 
@@ -151,7 +150,7 @@ namespace NightHunt.Core
 
         private async void OnApplicationQuit()
         {
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameManager] Application quitting — cleaning up...");
             await CleanupOnExit();
 
@@ -235,13 +234,11 @@ namespace NightHunt.Core
 
         private async void HandleApplicationResumed()
         {
-            bool shouldRefresh = instanceConfig != null
-                ? instanceConfig.ShouldRefreshOnFocusReturn()
-                : true;
+            bool shouldRefresh = instanceConfig == null || instanceConfig.ShouldRefreshOnFocusReturn();
 
             if (!shouldRefresh)
             {
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] Refresh on focus disabled — skipping");
                 return;
             }
@@ -253,7 +250,7 @@ namespace NightHunt.Core
             {
                 if (gameWebSocketService != null && !gameWebSocketService.IsWsConnected)
                 {
-                    if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                         Debug.Log("[GameManager] Reconnecting WebSocket...");
                     // Re-enable auto-reconnect (DisconnectWebSocket disabled it); now that we
                     // are explicitly reconnecting, future server-initiated closes should retry.
@@ -277,7 +274,7 @@ namespace NightHunt.Core
         {
             if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated)
             {
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] Not authenticated — skip refresh");
                 return;
             }
@@ -289,7 +286,7 @@ namespace NightHunt.Core
                 return;
             }
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log($"[GameManager] Refreshing data for panel: {nav.CurrentPanel}");
 
             try
@@ -303,17 +300,17 @@ namespace NightHunt.Core
 
                     case PanelType.Home:
                         // Home không cần refresh đặc biệt
-                        if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                        if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                             Debug.Log("[GameManager] Home panel — no refresh needed");
                         break;
 
                     case PanelType.Login:
-                        if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                        if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                             Debug.Log("[GameManager] Login panel � no refresh needed");
                         break;
 
                     default:
-                        if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                        if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                             Debug.Log($"[GameManager] Panel {nav.CurrentPanel} � no refresh logic defined");
                         break;
                 }
@@ -328,13 +325,13 @@ namespace NightHunt.Core
         {
             if (roomState == null || !roomState.IsInRoom || roomService == null) return;
 
-            if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log($"[GameManager] Refreshing room data: {roomState.RoomId}");
             var result = await roomService.GetRoom(roomState.RoomId);
 
             if (result.Success && result.Data != null)
             {
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] Room data refreshed");
                 var lobbyView = FindFirstObjectByType<UI.CustomLobbyView>();
                 lobbyView?.RefreshPlayerList();
@@ -353,14 +350,14 @@ namespace NightHunt.Core
         {
             try
             {
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] Starting exit cleanup...");
 
                 if (roomState != null && roomState.IsInRoom && roomService != null)
                 {
                     try
                     {
-                        if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                        if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                             Debug.Log($"[GameManager] Leaving room {roomState.RoomId}...");
                         await roomService.LeaveRoom(roomState.RoomId);
                     }
@@ -368,7 +365,7 @@ namespace NightHunt.Core
                 }
 
                 DisconnectWebSocket();
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] Exit cleanup done");
             }
             catch (Exception ex) { Debug.LogError($"[GameManager] Cleanup error: {ex.Message}"); }

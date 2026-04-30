@@ -1,0 +1,34 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f265d370025f82741ae41bbd0ab638d7, type: 3}
+  m_Name: Deployable_DEPLOY_BEACON
+  m_EditorClassIdentifier: 
+  ItemID: DEPLOY_BEACON
+  DisplayName: Respawn Beacon
+  Description: 
+  Icon: {fileID: 21300000, guid: e50a413f18dbfb34d8897937f018e546, type: 3}
+  Rarity: 1
+  IsStackable: 0
+  MaxStackSize: 1
+  Weight: 2.5
+  _visualPrefab: {fileID: 7277718707913719503, guid: 9e6910ed64665c94d8847cd90f541339,
+    type: 3}
+  ValidSlots: 00000000
+  NetworkBeaconPrefab: {fileID: 7277718707913719503, guid: 0fcf0ac418020474f9ba20df77d84eee,
+    type: 3}
+  BeaconHP: 100
+  PlacementPreviewPrefab: {fileID: 7342610198373781452, guid: 307509faf96941b8a50957426c16adf4,
+    type: 3}
+  PlacementLayerMask:
+    serializedVersion: 2
+    m_Bits: 22052865
+  MaxPlacementSlope: 59.7

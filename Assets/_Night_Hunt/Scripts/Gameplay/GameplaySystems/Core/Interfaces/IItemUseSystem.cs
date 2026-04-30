@@ -29,6 +29,11 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Returns null if no item in use
         /// </summary>
         ItemInstance CurrentItem { get; }
+
+        /// <summary>
+        /// True while a deployable placement preview is active on the owning client.
+        /// </summary>
+        bool IsDeploying { get; }
         
         /// <summary>
         /// Start using an item
@@ -70,6 +75,12 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// always processes BeginThrowable before ExecuteThrow on the server.
         /// </summary>
         void RequestExecuteThrow(Vector3 aimTarget);
+
+        /// <summary>
+        /// Confirm the active deployable preview from the owning client.
+        /// Returns true when placement confirmation was accepted locally.
+        /// </summary>
+        bool TryConfirmDeploy();
 
         /// <summary>
         /// Request cancel of the in-progress item use from the owning client.

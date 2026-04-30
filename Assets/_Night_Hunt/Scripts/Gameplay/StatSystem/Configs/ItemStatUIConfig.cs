@@ -151,6 +151,30 @@ namespace NightHunt.Gameplay.StatSystem.Configs
                         def.IsPositiveStat = true;
                         break;
 
+                    case ItemStatType.SpreadMax:
+                        def.DisplayName = "Spread Max";
+                        def.DisplayColor = new Color(1f, 0.4f, 0.4f);
+                        def.TextColor = new Color(1f, 0.65f, 0.65f);
+                        def.DisplayFormat = "0.0";
+                        def.IsPositiveStat = false;
+                        break;
+
+                    case ItemStatType.RecoilHorizontal:
+                        def.DisplayName = "Horizontal Recoil";
+                        def.DisplayColor = new Color(1f, 0.42f, 0.32f);
+                        def.TextColor = new Color(1f, 0.68f, 0.6f);
+                        def.DisplayFormat = "0.0";
+                        def.IsPositiveStat = false;
+                        break;
+
+                    case ItemStatType.RecoilVertical:
+                        def.DisplayName = "Vertical Recoil";
+                        def.DisplayColor = new Color(1f, 0.42f, 0.32f);
+                        def.TextColor = new Color(1f, 0.68f, 0.6f);
+                        def.DisplayFormat = "0.0";
+                        def.IsPositiveStat = false;
+                        break;
+
                     case ItemStatType.DrawSpeed:
                         def.DisplayName = "Draw Speed";
                         def.DisplayColor = new Color(0.5f, 0.8f, 1f);

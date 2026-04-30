@@ -11,6 +11,7 @@ using NightHunt.GameplaySystems.Weapon;
 using NightHunt.GameplaySystems.ItemUse;
 using NightHunt.GameplaySystems.ItemSelection;
 using NightHunt.GameplaySystems.Attachment;
+using NightHunt.Gameplay.Beacon;
 
 namespace NightHunt.GameplaySystems.Editor
 {
@@ -29,6 +30,37 @@ namespace NightHunt.GameplaySystems.Editor
             var window = GetWindow<PlayerPrefabSetupTool>("Player Setup");
             window.minSize = new Vector2(450, 700);
             window.Show();
+        }
+
+        [MenuItem("Tools/GameplaySystems/Fix Default Player Prefab Deployables")]
+        public static void FixDefaultPlayerPrefabDeployables()
+        {
+            const string path = "Assets/_Night_Hunt/Prefabs/PlayerPrefab.prefab";
+            var root = PrefabUtility.LoadPrefabContents(path);
+            if (root == null)
+            {
+                Debug.LogError($"[PlayerPrefabSetupTool] Default player prefab not found at {path}");
+                return;
+            }
+
+            try
+            {
+                if (root.GetComponent<DeployablePlacementHandler>() == null)
+                {
+                    root.AddComponent<DeployablePlacementHandler>();
+                    PrefabUtility.SaveAsPrefabAsset(root, path);
+                    Debug.Log($"[PlayerPrefabSetupTool] Added DeployablePlacementHandler / IDeployableHandler to {path}");
+                }
+                else
+                {
+                    Debug.Log($"[PlayerPrefabSetupTool] DeployablePlacementHandler already exists on {path}");
+                }
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+                AssetDatabase.SaveAssets();
+            }
         }
         
         private void OnGUI()
@@ -106,6 +138,7 @@ namespace NightHunt.GameplaySystems.Editor
             DrawComponentCheck<EquipmentSystem>("EquipmentSystem");
             DrawComponentCheck<WeaponSystem>("WeaponSystem");
             DrawComponentCheck<ItemUseSystem>("ItemUseSystem");
+            DrawComponentCheck<DeployablePlacementHandler>("DeployablePlacementHandler / IDeployableHandler");
             DrawComponentCheck<ItemSelectionSystem>("ItemSelectionSystem");
             DrawComponentCheck<AttachmentSystem>("AttachmentSystem");
         }
@@ -150,6 +183,7 @@ namespace NightHunt.GameplaySystems.Editor
             componentsAdded += SetupEquipmentSystem(inventoryConfig);
             componentsAdded += SetupWeaponSystem(inventoryConfig);
             componentsAdded += SetupItemUseSystem();
+            componentsAdded += SetupDeployablePlacementHandler();
             componentsAdded += SetupItemSelectionSystem();
             componentsAdded += SetupAttachmentSystem();
             
@@ -268,6 +302,20 @@ namespace NightHunt.GameplaySystems.Editor
 
             Debug.Log("Setup: ItemUseSystem");
             return 1;
+        }
+
+        private int SetupDeployablePlacementHandler()
+        {
+            var component = _selectedPrefab.GetComponent<DeployablePlacementHandler>();
+            if (component == null)
+            {
+                _selectedPrefab.AddComponent<DeployablePlacementHandler>();
+                Debug.Log("Setup: DeployablePlacementHandler / IDeployableHandler");
+                return 1;
+            }
+
+            Debug.Log("Setup: DeployablePlacementHandler already present");
+            return 0;
         }
         
         private int SetupItemSelectionSystem()
