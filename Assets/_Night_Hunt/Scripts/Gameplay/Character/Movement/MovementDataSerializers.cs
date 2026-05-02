@@ -1,4 +1,4 @@
-﻿// MovementDataSerializers.cs
+// MovementDataSerializers.cs
 // Custom FishNet serializers for MovementReplicateData / MovementReconcileData.
 //
 // STATUS: NOT NEEDED — FishNet auto-generates serializers for these structs via

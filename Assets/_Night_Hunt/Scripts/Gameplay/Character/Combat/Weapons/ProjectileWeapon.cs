@@ -55,6 +55,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             // Prevent the bullet from immediately triggering on the shooter's own colliders.
             var shooterRoot = transform.root;
+            proj.SetIgnoredRoot(shooterRoot);
             var ownerCols   = shooterRoot.GetComponentsInChildren<Collider>();
             var projCols    = proj.GetComponentsInChildren<Collider>(true);
             foreach (var oc in ownerCols)

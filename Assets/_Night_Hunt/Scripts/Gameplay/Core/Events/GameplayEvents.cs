@@ -34,6 +34,22 @@ namespace NightHunt.Gameplay.Core.Events
     }
 
     /// <summary>
+    /// A match phase has just started on the server and has been broadcast to all clients.
+    /// Fired by MatchPhaseManager immediately after networkPhase SyncVar is set.
+    /// UI: show phase banner, refresh objective list.
+    /// </summary>
+    public struct PhaseStartedEvent : IGameplayEvent
+    {
+        public float          Timestamp   => Time.time;
+        /// <summary>The phase that just started.</summary>
+        public MatchPhaseState Phase;
+        /// <summary>Human-readable display name (e.g. "PHASE 2: HUNT &amp; OBJECTIVES").</summary>
+        public string          DisplayName;
+        /// <summary>Formatted objective bullet-points for this phase (newline-separated).</summary>
+        public string          ObjectivesSummary;
+    }
+
+    /// <summary>
     /// Phase transition is approaching.
     /// Fired by MatchPhaseManager <see cref="WarningTime"/> seconds before the phase ends.
     /// </summary>
@@ -239,5 +255,23 @@ namespace NightHunt.Gameplay.Core.Events
     {
         public float Timestamp => Time.time;
         public bool IsSpectating;
+    }
+
+    // ── Score ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Fired on the server each time a score action is resolved (Kill, Assist, BossKill, etc.).
+    /// Optional hook for analytics, sound cues, or future per-player feed.
+    /// Note: MatchUI receives full snapshots via <see cref="ScoreDataSyncedEvent"/> from ScoreSync — 
+    /// this event is NOT for the score display. Consumers MUST be subscribed before AwardScore() runs.
+    /// </summary>
+    public struct ScoreAwardedEvent : IGameplayEvent
+    {
+        public float  Timestamp  => Time.time;
+        public int    TeamId;
+        public uint   PlayerId;
+        public int    Score;
+        /// <summary>E.g. "Kill", "Assist", "BossKill", "ObjectiveCapture", "Survival".</summary>
+        public string ActionType;
     }
 }

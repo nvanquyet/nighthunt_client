@@ -1,3 +1,4 @@
+
 namespace NightHunt.Networking.Prediction.Input
 {
     /// <summary>

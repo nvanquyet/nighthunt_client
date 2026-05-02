@@ -2,14 +2,12 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using FishNet.Object;
-using FishNet.Object.Synchronizing;
 using NightHunt.Data;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Utilities;
-using FishNet;
 
 namespace NightHunt.Gameplay.Scoring
 {
@@ -27,9 +25,6 @@ namespace NightHunt.Gameplay.Scoring
         [Header("Score Action Configs")]
         [Tooltip("Config cho từng action (Kill, Assist, BossKill, ...). Assign trong Inspector.")]
         [SerializeField] private List<ScoreSystemData> _scoreConfigList = new List<ScoreSystemData>();
-
-        // Synchronized scores
-        private readonly SyncVar<string> scoreDataJson = new SyncVar<string>();
 
         private MatchPhaseManager phaseManager;
         private List<ScoreSystemData> scoreConfigs;
@@ -49,7 +44,7 @@ namespace NightHunt.Gameplay.Scoring
                                  "Right-click component → 'NightHunt/Setup Default Score Configs' to populate. " +
                                  "Falling back to hardcoded defaults.");
 
-            // Kills are awarded directly by PlayerHealthSystem on the server when death is confirmed.
+            // Kills are awarded directly by PlayerHealthSystem → AwardKill().  No bus subscription needed.
             GameplayEventBus.Instance?.Subscribe<BossKilledEvent>(OnBossKilled);
         }
 
@@ -57,13 +52,6 @@ namespace NightHunt.Gameplay.Scoring
         {
             base.OnStopServer();
             GameplayEventBus.Instance?.Unsubscribe<BossKilledEvent>(OnBossKilled);
-        }
-
-        [Server]
-        private void OnPlayerKilled(PlayerKilledEvent evt)
-        {
-            if (evt.KillerNetworkObjectId == 0) return; // world/environment kill — no score
-            AwardKill(evt.KillerNetworkObjectId, evt.VictimNetworkObjectId);
         }
 
         [Server]
@@ -99,11 +87,17 @@ namespace NightHunt.Gameplay.Scoring
 
             // Calculate final score
             int finalScore = Mathf.RoundToInt(baseScore * multiplier * phaseMultiplier);
-            
-            // Publish score event
-            var scoreEvent = new ScoreEvent(GetTeamId(playerId), finalScore, action);
-            NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance?.Publish(scoreEvent);
             playerScores[playerId].TotalScore += finalScore;
+
+            // Publish lightweight hook event (analytics, audio cues) — NOT used by MatchUI.
+            // MatchUI receives score via ScoreDataSyncedEvent emitted by ScoreSync after SyncScores().
+            GameplayEventBus.Instance?.Publish(new ScoreAwardedEvent
+            {
+                TeamId     = GetTeamId(playerId),
+                PlayerId   = playerId,
+                Score      = finalScore,
+                ActionType = action
+            });
 
             // Update team score
             NetworkPlayer player = GetPlayerById(playerId);
@@ -259,7 +253,7 @@ namespace NightHunt.Gameplay.Scoring
                 Players = new List<PlayerScore>(playerScores.Values),
             };
             string json = JsonUtility.ToJson(snapshot);
-            scoreDataJson.Value = json;
+            // ScoreSync.SyncScoreData() sets its own networkScoreData SyncVar → clients receive ScoreDataSyncedEvent.
             _scoreSync?.SyncScoreData(json);
         }
 

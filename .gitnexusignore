@@ -1,0 +1,74 @@
+# Third-party / vendor assets - exclude from GitNexus index
+Assets/FishNet/
+Assets/SciFi_Space_Soldier_Complete/
+Assets/FogOfWar/
+Assets/Modern UI Pack/
+Assets/DOTween/
+Assets/Plugins/
+Assets/TextMesh Pro/
+Assets/Unity/
+Assets/PackageCache/
+Packages/
+Assets/FishNet.Demos/
+Assets/GameKit/
+Assets/glTFast/
+Assets/Purchasing/
+Assets/ShaderCrew/
+Assets/ParrelSync/
+
+# Asset packs (vendor - no game logic)
+Assets/Shift - Complete Sci-Fi UI/
+Assets/Epic Toon FX/
+Assets/Synty/
+Assets/Joystick Pack/
+Assets/SCI-FI UI Pack Pro/
+Assets/Hovl Studio/
+Assets/WebSocket/
+Assets/Toon_Soldiers/
+Assets/PolygonMilitary/
+Assets/SimpleMilitary/
+Assets/Mech_Constructor_Turrets/
+Assets/Top-Down SF/
+Assets/Samples/
+Assets/KriptoFX/
+
+# Other non-essential Unity assets
+Assets/PPv2URPConverters/
+Assets/IAPResolver/
+Assets/DocCodeExamples/
+Assets/EndlessBook/
+Assets/Imported/
+Assets/Resources/
+Assets/StreamingAssets/
+Assets/Analytics/
+Assets/KriptoFX/
+
+# Generated / build artifacts
+Library/
+Temp/
+obj/
+Build/
+ProjectSettings/
+UserSettings/
+
+# Files with GitNexus scope extraction bugs (large/complex C# patterns)
+# These cause scopeResolution crash - tracked for future GitNexus fixes
+Assets/_Night_Hunt/Scripts/UI/CustomLobbyView.cs
+Assets/_Night_Hunt/Scripts/UI/Editor/NightHuntUISetupWizard.cs
+Assets/_Night_Hunt/Scripts/Editor/Tools/WorldSpawnSetupTool.cs
+Assets/_Night_Hunt/Scripts/Gameplay/Character/Movement/RigidbodyPredictedMovement.cs
+Assets/_Night_Hunt/Scripts/Gameplay/Character/Movement/BaseCharacterPredictedMovement.cs
+Assets/_Night_Hunt/Scripts/Services/Game/GameWebSocketService.cs
+Assets/_Night_Hunt/Scripts/Editor/Tools/NightHuntUISetupTool.cs
+Assets/_Night_Hunt/Scripts/Gameplay/GameplaySystems/UI/Inventory/DragDropController.cs
+Assets/_Night_Hunt/Scripts/Gameplay/Input/Handlers/Combat/CombatInputHandler.cs
+Assets/_Night_Hunt/Scripts/Editor/Tools/NightHuntLayerSetupTool.cs
+Assets/_Night_Hunt/Scripts/Editor/Tools/NightHuntDataMigrationTool.cs
+Assets/_Night_Hunt/Scripts/Editor/Tools/NightHuntAudioSetupTool.cs
+Assets/_Night_Hunt/Scripts/Gameplay/GameplaySystems/Systems/QuickSlot/ItemUseSystem.cs
+Assets/_Night_Hunt/Scripts/Editor/Tests/DemoSceneGenerator.cs
+Assets/_Night_Hunt/Scripts/Gameplay/Character/CharacterAnimationController.cs
+Assets/_Night_Hunt/Scripts/UI/GameHUDController.cs
+Assets/_Night_Hunt/Scripts/Gameplay/GameplaySystems/Systems/Inventory/InventorySystem.cs
+Assets/_Night_Hunt/Scripts/Gameplay/GameplaySystems/Systems/Interaction/PlayerInteractionSystem.cs
+Assets/_Night_Hunt/Scripts/Gameplay/GameplaySystems/UI/LootContainerUI.cs

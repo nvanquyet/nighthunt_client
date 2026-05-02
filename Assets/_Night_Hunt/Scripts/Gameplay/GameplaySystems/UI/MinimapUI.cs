@@ -71,6 +71,13 @@ namespace NightHunt.GameplaySystems.UI
         public void SetFullMapVisible(bool visible)
         {
             _fullMapVisible = visible;
+
+            if (visible)
+            {
+                EnsureFullMapOverlay();
+                ApplyTextures();
+            }
+
             if (_fullMapRoot != null)
                 _fullMapRoot.SetActive(visible);
         }
@@ -81,7 +88,67 @@ namespace NightHunt.GameplaySystems.UI
                 _minimapRawImage.texture = _renderTexture;
 
             if (_fullMapRawImage != null)
-                _fullMapRawImage.texture = _fullMapRenderTexture != null ? _fullMapRenderTexture : _renderTexture;
+                _fullMapRawImage.texture = ResolveFullMapTexture();
+        }
+
+        private Texture ResolveFullMapTexture()
+        {
+            if (_fullMapRenderTexture != null)
+                return _fullMapRenderTexture;
+
+            var cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                var camera = cameras[i];
+                if (camera == null || camera.name != "FullMapCamera" || camera.targetTexture == null)
+                    continue;
+
+                _fullMapRenderTexture = camera.targetTexture;
+                return _fullMapRenderTexture;
+            }
+
+            return _renderTexture;
+        }
+
+        private void EnsureFullMapOverlay()
+        {
+            if (_fullMapRoot != null && _fullMapRawImage != null)
+                return;
+
+            var canvas = GetComponentInParent<Canvas>();
+            Transform parent = canvas != null ? canvas.transform : transform;
+
+            if (_fullMapRoot == null)
+            {
+                _fullMapRoot = new GameObject("FullMapOverlay", typeof(RectTransform), typeof(Image));
+                _fullMapRoot.transform.SetParent(parent, false);
+                _fullMapRoot.transform.SetAsLastSibling();
+
+                var rect = (RectTransform)_fullMapRoot.transform;
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+
+                var background = _fullMapRoot.GetComponent<Image>();
+                background.color = new Color(0f, 0f, 0f, 0.82f);
+            }
+
+            if (_fullMapRawImage == null)
+            {
+                var rawImageObject = new GameObject("FullMapRawImage", typeof(RectTransform), typeof(RawImage));
+                rawImageObject.transform.SetParent(_fullMapRoot.transform, false);
+
+                var rect = (RectTransform)rawImageObject.transform;
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = new Vector2(24f, 24f);
+                rect.offsetMax = new Vector2(-24f, -24f);
+
+                _fullMapRawImage = rawImageObject.GetComponent<RawImage>();
+                _fullMapRawImage.color = Color.white;
+                _fullMapRawImage.raycastTarget = false;
+            }
         }
     }
 }

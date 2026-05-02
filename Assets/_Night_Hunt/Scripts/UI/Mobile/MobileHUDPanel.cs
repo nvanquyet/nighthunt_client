@@ -266,6 +266,10 @@ namespace NightHunt.UI.Mobile
 
         private void ResolveMissingButtonReferences()
         {
+            _sprintButton ??= FindButtonByName("sprint", "run", "btn run", "btnrun");
+            _crouchButton ??= FindButtonByName("crouch", "btncrouch", "btn crouch");
+            _jumpButton ??= FindButtonByName("jump", "btnjump", "btn jump");
+            _rollButton ??= FindButtonByName("roll", "btnroll", "btn roll");
             _reloadButton ??= FindButtonByName("reload", "btn_reload", "reloadbutton");
         }
 
@@ -314,11 +318,45 @@ namespace NightHunt.UI.Mobile
             if (_reloadButton != null) _reloadButton.onClick.RemoveListener(OnReloadClicked);
         }
 
-        private void OnSprintPressed(BaseEventData _) => _boundInput?.MovementHandler?.SimulateSprint(true);
-        private void OnSprintReleased(BaseEventData _) => _boundInput?.MovementHandler?.SimulateSprint(false);
-        private void OnCrouchClicked() => _boundInput?.MovementHandler?.SimulateCrouchToggle();
-        private void OnJumpClicked() => _boundInput?.MovementHandler?.SimulateJump();
-        private void OnRollClicked() => _boundInput?.MovementHandler?.SimulateRoll();
+        private MovementInputHandler ResolveMovementHandler()
+            => _boundInput?.MovementHandler ?? InputManager.Instance?.MovementHandler;
+
+        private void OnSprintPressed(BaseEventData _)
+        {
+            var movement = ResolveMovementHandler();
+            Debug.Log($"[MOBILE_INPUT] Sprint press movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"}");
+            movement?.SimulateSprint(true);
+        }
+
+        private void OnSprintReleased(BaseEventData _)
+        {
+            var movement = ResolveMovementHandler();
+            Debug.Log($"[MOBILE_INPUT] Sprint release movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"}");
+            movement?.SimulateSprint(false);
+        }
+
+        private void OnCrouchClicked()
+        {
+            var movement = ResolveMovementHandler();
+            Debug.Log($"[MOBILE_INPUT] Crouch click movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"}");
+            movement?.SimulateCrouchToggle();
+        }
+
+        private void OnJumpClicked()
+        {
+            var movement = ResolveMovementHandler();
+            Debug.Log($"[MOBILE_INPUT] Jump click movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"}");
+            movement?.SimulateJump();
+        }
+
+        private void OnRollClicked()
+        {
+            var movement = ResolveMovementHandler();
+            Debug.Log($"[MOBILE_INPUT] Roll click movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"} cooldown={_rollCooldownRemaining:F2}");
+            movement?.SimulateRoll();
+            if (_rollCooldownRemaining <= 0f)
+                StartRollCooldown();
+        }
         private void OnReloadClicked()
         {
             var activeSlot = _boundWeaponSystem?.GetActiveWeaponSlot();

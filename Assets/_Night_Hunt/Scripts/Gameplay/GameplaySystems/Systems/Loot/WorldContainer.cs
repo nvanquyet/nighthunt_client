@@ -30,6 +30,7 @@ namespace NightHunt.GameplaySystems.Loot
         // Runtime-only — inject qua InitializeBeforeSpawn()
         private SpawnTable spawnTable;
         private bool isLocked = false;
+        private bool _dropToWorldOnOpen = false;   // moved from SpawnTable; set via WorldSpawnConfig
         private float holdDuration = 1.5f;
         private LootableConfig _lootableConfig;
         private bool _autoReset = false;
@@ -181,13 +182,15 @@ namespace NightHunt.GameplaySystems.Loot
             bool locked,
             LootableConfig lootableConfig = null,
             bool autoReset = false,
-            float autoResetDelay = 60f)
+            float autoResetDelay = 60f,
+            bool dropToWorldOnOpen = false)
         {
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
-                Debug.Log($"[WorldContainer] ── InitializeBeforeSpawn ENTRY ── locked={locked}");
+                Debug.Log($"[WorldContainer] ── InitializeBeforeSpawn ENTRY ── locked={locked} dropToWorld={dropToWorldOnOpen}");
 
             spawnTable = table;
             isLocked = locked;
+            _dropToWorldOnOpen = dropToWorldOnOpen;
             _lootableConfig = lootableConfig;
             _autoReset = autoReset;
             _autoResetDelay = autoResetDelay;
@@ -314,12 +317,12 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            LogLootFlow($"[00][Roll.Start] obj={ObjectId} table='{spawnTable.name}' mode={spawnTable.Mode} dropToWorld={spawnTable.DropToWorldOnOpen}");
+            LogLootFlow($"[00][Roll.Start] obj={ObjectId} table='{spawnTable.name}' mode={spawnTable.Mode} dropToWorld={_dropToWorldOnOpen}");
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log(
-                $"[WorldContainer] RollLootInternal: START SpawnTable='{spawnTable.name}' Mode={spawnTable.Mode} DropToWorld={spawnTable.DropToWorldOnOpen}");
+                $"[WorldContainer] RollLootInternal: START SpawnTable='{spawnTable.name}' Mode={spawnTable.Mode} DropToWorld={_dropToWorldOnOpen}");
 
-            if (spawnTable.DropToWorldOnOpen)
+            if (_dropToWorldOnOpen)
             {
                 _pendingDropResults = spawnTable.Roll();
                 LogLootFlow($"[00][Roll.PendingScatter] obj={ObjectId} count={_pendingDropResults?.Count ?? 0}");

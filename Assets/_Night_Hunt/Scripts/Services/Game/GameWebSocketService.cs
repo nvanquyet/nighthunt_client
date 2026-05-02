@@ -78,6 +78,7 @@ namespace NightHunt.Services.Game
         public event Action<YouWereKickedEvent> OnYouWereKicked;
 
         // Matchmaking Events
+        public event Action<MatchFoundEvent>     OnMatchFound;
         public event Action<MatchReadyEvent>     OnMatchReady;
         public event Action<MatchCancelledEvent> OnMatchCancelled;
         /// <summary>
@@ -618,6 +619,19 @@ namespace NightHunt.Services.Game
                         break;
 
                     // Matchmaking Events
+                    case "match_found":
+                        var matchFound = JsonUtility.FromJson<MatchFoundEvent>(messageData.data);
+                        if (matchFound != null)
+                        {
+                            Debug.Log($"[GWS] match_found -> lobbyToken={matchFound.lobbyToken} mode={matchFound.gameMode} players={matchFound.playerIds?.Length ?? 0}");
+                            OnMatchFound?.Invoke(matchFound);
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"[GWS] match_found - failed to deserialize payload: {messageData.data}");
+                        }
+                        break;
+
                     case "match_ready":
                         var matchReady = JsonUtility.FromJson<MatchReadyEvent>(messageData.data);
                         if (matchReady != null)
@@ -1084,6 +1098,14 @@ namespace NightHunt.Services.Game
         }
 
         // ── Matchmaking event data ───────────────────────────────────────────
+
+        [Serializable]
+        public class MatchFoundEvent
+        {
+            public string lobbyToken;
+            public string gameMode;
+            public long[] playerIds;
+        }
 
         [Serializable]
         public class MatchReadyEvent

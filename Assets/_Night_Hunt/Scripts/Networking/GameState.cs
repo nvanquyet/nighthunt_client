@@ -1,4 +1,5 @@
-﻿namespace NightHunt.Networking
+using System;
+namespace NightHunt.Networking
 {
     /// <summary>
     /// Server game state machine

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NightHunt.Networking;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;

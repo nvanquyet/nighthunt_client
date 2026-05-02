@@ -39,7 +39,10 @@ namespace NightHunt.Gameplay.Match
 
         // Synchronized phase state
         private readonly SyncVar<int> networkPhase = new SyncVar<int>();
-        private readonly SyncVar<float> networkPhaseStartTime = new SyncVar<float>();
+        // Tick-based start time — uint wraps safely at 4 billion ticks (~27 hours at 50 Hz).
+        // FishNet synchronizes TimeManager.Tick across all peers, so late-joining clients
+        // compute the correct elapsed time without relying on the unsynchronized Time.time.
+        private readonly SyncVar<uint> networkPhaseStartTick = new SyncVar<uint>();
         private readonly SyncVar<float> networkPhaseDuration = new SyncVar<float>();
 
         private MatchPhaseConfigData currentPhaseConfig;
@@ -49,7 +52,17 @@ namespace NightHunt.Gameplay.Match
 
         public MatchPhaseState CurrentPhase => phaseStateMachine?.CurrentState ?? initialState;
         public string CurrentPhaseName => GetPhaseName(CurrentPhase);
-        public float PhaseElapsedTime => Time.time - networkPhaseStartTime.Value;
+        public float PhaseElapsedTime
+        {
+            get
+            {
+                // TimeManager.Tick is synchronized across all FishNet peers.
+                // uint subtraction wraps correctly for positive elapsed ticks.
+                if (TimeManager == null) return 0f;
+                uint elapsed = TimeManager.Tick - networkPhaseStartTick.Value;
+                return elapsed * (float)TimeManager.TickDelta;
+            }
+        }
         public float PhaseRemainingTime => networkPhaseDuration.Value - PhaseElapsedTime;
 
         private void Awake()
@@ -232,7 +245,7 @@ namespace NightHunt.Gameplay.Match
 
             // Sync to network
             networkPhase.Value          = (int)phase;
-            networkPhaseStartTime.Value = Time.time;
+            networkPhaseStartTick.Value = TimeManager.Tick;
             networkPhaseDuration.Value  = UnityEngine.Random.Range(config.DurationMin, config.DurationMax) * 60f;
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
@@ -240,8 +253,25 @@ namespace NightHunt.Gameplay.Match
 
             hasStartedFirstPhase = true;
 
-            // ? Broadcast � pass enum state + display name (k�ng ph?i raw string const n?a)
+            // Broadcast to all clients via GameplayEventBus so UI panels can react.
+            string objectives = config.BuildObjectivesSummary();
+            RpcPhaseStarted((int)phase, displayName, objectives);
+
+            // ✅ Broadcast — pass enum state + display name (không phải raw string const nữa)
             OnPhaseStarted?.Invoke(phase, displayName);
+        }
+
+        [ObserversRpc]
+        private void RpcPhaseStarted(int phaseInt, string displayName, string objectivesSummary)
+        {
+            var phase = (MatchPhaseState)phaseInt;
+            Debug.Log($"[FLOW §15] CLIENT MatchPhaseManager.RpcPhaseStarted: phase={phase} name='{displayName}'  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.PhaseStartedEvent
+            {
+                Phase            = phase,
+                DisplayName      = displayName,
+                ObjectivesSummary = objectivesSummary
+            });
         }
 
         /// <summary>

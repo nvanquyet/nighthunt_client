@@ -424,12 +424,25 @@ namespace NightHunt.Gameplay.Character
             }
 
             // Cancel any in-progress switch before starting a new one.
-            if (_weaponSwitchCoroutine != null)
+            if (_isSwitching && _weaponSwitchCoroutine != null)
+            {
                 StopCoroutine(_weaponSwitchCoroutine);
+                _isSwitching = false;
+            }
+            else if (_weaponSwitchCoroutine != null)
+            {
+                StopCoroutine(_weaponSwitchCoroutine);
+            }
 
-            _weaponSwitchCoroutine = newSlot.HasValue
-                ? StartCoroutine(WeaponEquipCoroutine(newType))
-                : StartCoroutine(WeaponHolsterCoroutine());
+            // When swapping between two armed states: play a short holster first, then equip.
+            // When drawing from unarmed: skip holster, go straight to equip.
+            // When holstering: full holster coroutine.
+            bool wasArmed = _activeWeaponType != 0;
+            _weaponSwitchCoroutine = (newSlot.HasValue && wasArmed)
+                ? StartCoroutine(WeaponSwapCoroutine(newType))
+                : newSlot.HasValue
+                    ? StartCoroutine(WeaponEquipCoroutine(newType))
+                    : StartCoroutine(WeaponHolsterCoroutine());
         }
 
         private void OnWeaponEquipped(WeaponSlotType slot, ItemInstance _)
@@ -463,6 +476,43 @@ namespace NightHunt.Gameplay.Character
             yield return new WaitForEndOfFrame();
 
             anim = _actorUtils?.charAnimator; // re-fetch after yield (model may have swapped)
+            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+
+            SafeSetTrigger(anim, WpnChangedHash);
+            SafeSetTrigger(anim, WpnChangedUBHash);
+            SafeSetTrigger(anim, WpnChangedDeathHash);
+            SafeSetTrigger(anim, DrawHash);
+
+            _isSwitching = false;
+        }
+
+        /// <summary>
+        /// Swap coroutine: used when switching between two armed weapon slots.
+        /// Plays a short holster, then equips the new weapon with WeaponChanged + Draw.
+        /// Faster than WeaponHolsterCoroutine (0.2 s vs 0.4 s) to keep swapping snappy.
+        /// </summary>
+        private IEnumerator WeaponSwapCoroutine(int newType)
+        {
+            _isSwitching = true;
+
+            var anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+
+            // Short holster for the current weapon.
+            ClearWeaponTriggers(anim);
+            SafeSetTrigger(anim, HolsterHash);
+
+            yield return new WaitForSeconds(0.2f);
+
+            anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+
+            _activeWeaponType = newType;
+            anim.SetInteger(WeaponTypeHash, newType);
+
+            yield return new WaitForEndOfFrame();
+
+            anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
             SafeSetTrigger(anim, WpnChangedHash);

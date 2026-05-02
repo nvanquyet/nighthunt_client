@@ -1,4 +1,4 @@
-﻿using System.Threading.Tasks;
+using System.Threading.Tasks;
 using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;

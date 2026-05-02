@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.UI.Combat;   // ItemAimController.IsAimingPC guard
@@ -56,6 +57,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private System.Action<InputAction.CallbackContext> _onSlot1;
         private System.Action<InputAction.CallbackContext> _onSlot2;
         private System.Action<InputAction.CallbackContext> _onSlot3;
+        // Delegate that bridges OnWeaponSlotChanged(int) → weaponSystem.SelectWeapon(WeaponSlotType).
+        // Stored as a field so it can be unsubscribed cleanly on rebind.
+        private System.Action<int> _weaponSlotSelectionHandler;
 
         // ── State ─────────────────────────────────────────────────────────────────
         private bool    _isFiring;
@@ -361,12 +365,6 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             bool overUI = IsPointerOverAnyUIByRaycast();
             bool uiConsumed = _uiConsumedThisPress;
 
-            // When an item is already armed/in-use (throwable, deployable, consumable),
-            // bypass the UI overlay check so the player can confirm placement or throw
-            // even when the item HUD icon is covering the screen.
-            if (overUI && _itemUseSystem != null && _itemUseSystem.IsUsingItem)
-                overUI = false;
-
             // A UI ActionButton already handled this press through EventSystem.
             if (uiConsumed) { _uiConsumedThisPress = false; return; }
 
@@ -408,7 +406,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_itemUseSystem != null && _itemUseSystem.IsDeploying)
             {
                 bool confirmed = _itemUseSystem.TryConfirmDeploy();
-                Debug.Log($"[DEPLOY_FLOW] BeginFire routed to deploy confirm result={confirmed}");
+                LogDeploy($"BeginFire routed to deploy confirm result={confirmed}");
                 return;
             }
 
@@ -433,7 +431,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                     _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
                 if (Application.isMobilePlatform)
                     _aimSystem?.SetCursorVisible(true);
-                Debug.Log($"[ITEM_FLOW] [10][BeginFire.ThrowAim] currentItem={_itemUseSystem?.CurrentItem?.InstanceID ?? "null"} activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"}");
+                LogThrowable($"BeginFire.ThrowAim currentItem={_itemUseSystem?.CurrentItem?.InstanceID ?? "null"} activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"} aim={_aimDirection:F2} target={GetCurrentThrowAimTarget():F2}");
                 return;
             }
 
@@ -522,7 +520,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_isFiring && IsCurrentItemThrowable() && !ItemAimController.IsAimingPC)
             {
                 Vector3 throwTarget = GetCurrentThrowAimTarget();
-                Debug.Log($"[ITEM_FLOW] [11][EndFire.ThrowConfirm] target={throwTarget:F2} currentItem={_itemUseSystem?.CurrentItem?.InstanceID ?? "null"} activeWeapon={hasActiveWeapon}");
+                LogThrowable($"EndFire.ThrowConfirm target={throwTarget:F2} currentItem={_itemUseSystem?.CurrentItem?.InstanceID ?? "null"} activeWeapon={hasActiveWeapon}");
                 _itemUseSystem?.RequestExecuteThrow(throwTarget);
             }
 
@@ -903,6 +901,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 OnReload   -= _weaponSystem.RequestReload;
                 _weaponSystem.OnReloadStateChanged -= SetReloading;
             }
+            // Unsubscribe slot selection handler from previous weapon system.
+            if (_weaponSlotSelectionHandler != null)
+                OnWeaponSlotChanged -= _weaponSlotSelectionHandler;
 
             _movementInputHandler = movementInputHandler;
             _weaponSystem         = weaponSystem;
@@ -917,6 +918,23 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 OnReload   += _weaponSystem.RequestReload;
                 _weaponSystem.OnReloadStateChanged += SetReloading;
             }
+
+            // Wire hotkeys 1/2/3 → WeaponSystem.SelectWeapon(slot).
+            // Without this, SwitchToWeaponSlot() fires OnWeaponSlotChanged(int) but nothing calls SelectWeapon.
+            _weaponSlotSelectionHandler = slot =>
+            {
+                var slotType = slot switch
+                {
+                    0 => NightHunt.GameplaySystems.Core.Data.WeaponSlotType.Primary,
+                    1 => NightHunt.GameplaySystems.Core.Data.WeaponSlotType.Secondary,
+                    2 => NightHunt.GameplaySystems.Core.Data.WeaponSlotType.Melee,
+                    3 => NightHunt.GameplaySystems.Core.Data.WeaponSlotType.Slot3,
+                    4 => NightHunt.GameplaySystems.Core.Data.WeaponSlotType.Slot4,
+                    _ => NightHunt.GameplaySystems.Core.Data.WeaponSlotType.Primary
+                };
+                _weaponSystem?.SelectWeapon(slotType);
+            };
+            OnWeaponSlotChanged += _weaponSlotSelectionHandler;
 
             if (_cameraStateManager == null)
                 Debug.LogWarning("[CombatInputHandler] CameraStateManager not bound — " +
@@ -957,6 +975,30 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         public void SetCameraLockOverride(bool active, bool forcedValue)
         {
             _movementInputHandler?.SetCameraLockOverride(active, forcedValue);
+        }
+
+        private static bool ThrowableDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableThrowableDebugLogs;
+        }
+
+        private static bool DeployDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableDeployableDebugLogs;
+        }
+
+        private static void LogThrowable(string message)
+        {
+            if (ThrowableDebugEnabled())
+                Debug.Log($"[THROW_FLOW] {message}");
+        }
+
+        private static void LogDeploy(string message)
+        {
+            if (DeployDebugEnabled())
+                Debug.Log($"[DEPLOY_FLOW] {message}");
         }
     }
 }

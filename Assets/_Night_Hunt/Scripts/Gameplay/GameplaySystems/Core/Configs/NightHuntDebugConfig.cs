@@ -46,6 +46,9 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Tooltip("Enable debug logs for throwable aim, spawn and fly path.")]
         public bool EnableThrowableDebugLogs = false;
 
+        [Tooltip("Enable debug logs for deployable preview, confirm and server placement validation.")]
+        public bool EnableDeployableDebugLogs = false;
+
         [Tooltip("Enable debug logs for drop dialog, cancel, and backend drop calls.")]
         public bool EnableDropDebugLogs = false;
 

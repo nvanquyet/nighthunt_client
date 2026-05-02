@@ -1,8 +1,10 @@
 using FOW;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Spectator;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 using UnityEngine;
 
@@ -25,6 +27,7 @@ namespace NightHunt.Gameplay.FogOfWar
         private IPlayerStatSystem _statSystem;
         private CharacterLifecycleController _lifecycle;
         private FogTeamVisibilityBinder _teamBinder;
+        private NetworkPlayer _networkPlayer;
         private bool _initialized;
 
         private void Awake()
@@ -47,6 +50,11 @@ namespace NightHunt.Gameplay.FogOfWar
             _teamBinder = ComponentResolver.Find<FogTeamVisibilityBinder>(this)
                 .OnSelf().InParent().InRootChildren()
                 .Resolve();
+
+            // Needed to compare against SpectateManager.GetCurrentPlayer() for spectate-override.
+            _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+                .OnSelf().InChildren().InParent()
+                .Resolve();
         }
 
         private void OnEnable()
@@ -68,6 +76,9 @@ namespace NightHunt.Gameplay.FogOfWar
                 _teamBinder.OnEnemyStateChanged += HandleEnemyStateChanged;
             }
 
+            if (SpectateManager.Instance != null)
+                SpectateManager.Instance.OnCurrentPlayerChanged += HandleSpectateChanged;
+
             RefreshRevealerState();
         }
 
@@ -86,6 +97,9 @@ namespace NightHunt.Gameplay.FogOfWar
             {
                 _teamBinder.OnEnemyStateChanged -= HandleEnemyStateChanged;
             }
+
+            if (SpectateManager.Instance != null)
+                SpectateManager.Instance.OnCurrentPlayerChanged -= HandleSpectateChanged;
         }
 
         private void TryInit()
@@ -111,6 +125,11 @@ namespace NightHunt.Gameplay.FogOfWar
                     .OnSelf().InParent().InRootChildren()
                     .Resolve();
 
+            if (_networkPlayer == null)
+                _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+                    .OnSelf().InChildren().InParent()
+                    .Resolve();
+
             _initialized = true;
         }
 
@@ -121,12 +140,23 @@ namespace NightHunt.Gameplay.FogOfWar
             RefreshRevealerState();
         }
 
+        private void HandleSpectateChanged(NetworkPlayer _) => RefreshRevealerState();
+
         private void RefreshRevealerState()
         {
             if (_revealer == null) return;
 
             bool isAlive = _lifecycle == null || !_lifecycle.IsDead;
-            bool isAlly = _teamBinder == null || !_teamBinder.IsEnemyToLocal;
+            bool isAlly  = _teamBinder == null || !_teamBinder.IsEnemyToLocal;
+
+            // Spectate-override: when the local player is spectating this exact player,
+            // treat them as an ally for FOW revelation so the spectator sees through
+            // the spectated player's eyes — regardless of team affiliation.
+            if (!isAlly && _networkPlayer != null && SpectateManager.Instance != null
+                && SpectateManager.Instance.GetCurrentPlayer() == _networkPlayer)
+            {
+                isAlly = true;
+            }
 
             _revealer.enabled = isAlive && isAlly;
 

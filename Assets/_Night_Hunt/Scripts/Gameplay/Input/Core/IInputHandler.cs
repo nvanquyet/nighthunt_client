@@ -1,4 +1,4 @@
-﻿using UnityEngine.InputSystem;
+using UnityEngine.InputSystem;
 
 namespace NightHunt.Gameplay.Input.Core
 {

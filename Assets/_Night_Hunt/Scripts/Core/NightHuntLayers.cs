@@ -51,7 +51,9 @@ namespace NightHunt.Core
     //   • Pure floor (ground) → "Ground" only; STS should NOT be applied
     //
     //  MINIMAP camera cullingMask:
-    //   Set to:  Minimap | Ground | Wall | MapStatic | MapObstacle
+    //   Set to:  Default | Minimap | Ground | Wall | MapStatic | MapObstacle
+    //   Default is included because the current Map 05 prefab still serializes
+    //   many floor/wall renderers there.
     //   Do NOT include: Player, Items, Projectile etc.  (clutters minimap)
     //   Add MinimapMarkerController to player / objective prefabs (auto-sets layer).
     // ──────────────────────────────────────────────────────────────────────────
@@ -154,7 +156,14 @@ namespace NightHunt.Core
 
         /// <summary>Layers the aim-ground raycast (CombatInputHandler / AimSystem) hits.</summary>
         public static LayerMask MaskGroundAim =>
-            LayerMask.GetMask(Ground);
+            LayerMask.GetMask(Default, Ground, Wall, MapStatic, MapObstacle);
+
+        /// <summary>
+        /// Surfaces deployables and throwable targets may be projected onto.
+        /// Includes Default because the current Map 05 prefab serializes most map colliders there.
+        /// </summary>
+        public static LayerMask MaskPlacementSurface =>
+            LayerMask.GetMask(Default, Ground, Wall, MapStatic, MapObstacle);
 
         /// <summary>Interaction proximity sphere cast (InteractionSystem).</summary>
         public static LayerMask MaskInteraction =>
@@ -173,7 +182,7 @@ namespace NightHunt.Core
         /// Assign this to the <c>MinimapCameraController</c> camera in the Inspector.
         /// </summary>
         public static LayerMask MaskMinimapCamera =>
-            LayerMask.GetMask(Minimap, Ground, Wall, MapStatic, MapObstacle);
+            LayerMask.GetMask(Default, Minimap, Ground, Wall, MapStatic, MapObstacle);
 
         /// <summary>
         /// FOW shadow-casting obstacles (used by FogOfWarRevealer3D obstacle detection).
@@ -193,6 +202,37 @@ namespace NightHunt.Core
         /// </summary>
         public static LayerMask MaskNavMeshBake =>
             LayerMask.GetMask(Ground, Wall, MapStatic, MapObstacle);
+
+        /// <summary>
+        /// Interaction proximity scan and raycast detection mask (ProximityInteractScanner + RaycastDetector).
+        /// Includes DeadCharacter so corpses on the ground are lootable via interaction.
+        /// Serialized m_Bits = 9216.
+        /// </summary>
+        public static LayerMask MaskInteractScan =>
+            LayerMask.GetMask(Interactable, DeadCharacter);
+
+        /// <summary>
+        /// Ground/movement detection for IsGrounded checks, slope analysis, and step-climbing.
+        /// Any surface the player can physically stand on. Equivalent to MaskNavMeshBake.
+        /// Serialized m_Bits = 29392896.
+        /// </summary>
+        public static LayerMask MaskGroundCheck =>
+            LayerMask.GetMask(Ground, Wall, MapStatic, MapObstacle);
+
+        /// <summary>
+        /// Melee sweep hit detection — player hitboxes, dead bodies, and world surfaces.
+        /// Serialized m_Bits = 25206912.
+        /// </summary>
+        public static LayerMask MaskMeleeHit =>
+            LayerMask.GetMask(PlayerHitBox, DeadCharacter, Wall, Ground, MapObstacle);
+
+        /// <summary>
+        /// Full hitscan weapon raycast mask — bullets stop on players, interactable objectives
+        /// (RadarStation, EMPNode), and all blocking map geometry.
+        /// Serialized m_Bits = 29394048.
+        /// </summary>
+        public static LayerMask MaskHitscanFull =>
+            LayerMask.GetMask(PlayerHitBox, Interactable, Wall, Ground, MapObstacle, MapStatic);
     }
 
     // ──────────────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+
 namespace NightHunt.Gameplay.StatSystem.Core.Types
 {
     /// <summary>

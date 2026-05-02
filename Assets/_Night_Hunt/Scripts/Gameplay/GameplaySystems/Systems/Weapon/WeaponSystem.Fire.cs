@@ -107,10 +107,24 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private IEnumerator AutoFireCoroutine()
         {
+            float nextFireTime = Time.time;
             while (_isFiring)
             {
-                TryFireOnce();
-                yield return new WaitForSeconds(GetCurrentFireDelay());
+                int shotsThisFrame = 0;
+                while (_isFiring && Time.time + 0.0001f >= nextFireTime && shotsThisFrame < 3)
+                {
+                    TryFireOnce();
+                    shotsThisFrame++;
+
+                    float delay = Mathf.Max(0.01f, GetCurrentFireDelay());
+                    nextFireTime += delay;
+
+                    // Avoid dumping a large stale backlog after a hitch or pause.
+                    if (nextFireTime < Time.time - delay * 2f)
+                        nextFireTime = Time.time + delay;
+                }
+
+                yield return null;
             }
             _autoFireCoroutine = null;
         }
@@ -347,10 +361,15 @@ namespace NightHunt.GameplaySystems.Weapon
                 ReloadTime      = inst.GetComputedStat(ItemStatType.ReloadSpeed),
                 MagazineSize    = (int)inst.GetComputedStat(ItemStatType.MagazineSize),
                 ReserveAmmo     = (int)inst.GetCurrentValue(ItemStatType.MaxAmmo),
-                ProjectileSpeed = _currentWeaponBase?.ProjectileSpeed ?? 50f,
-                MaxRange        = _currentWeaponBase?.MaxRange        ?? 150f,
-                GravityScale    = _currentWeaponBase?.GravityScale    ?? 0f,
-                ApplyDamage     = true,
+                ProjectileSpeed   = _currentWeaponBase?.ProjectileSpeed ?? 50f,
+                MaxRange          = _currentWeaponBase?.MaxRange        ?? 150f,
+                GravityScale      = _currentWeaponBase?.GravityScale    ?? 0f,
+                // Clamp bullet visual travel to the owner's VisionRange so projectiles
+                // never fly beyond the visible circle (same radius used by AimSystem).
+                VisionRangeClamp  = _statSystem != null
+                    ? _statSystem.GetStat(NightHunt.Gameplay.StatSystem.Core.Types.PlayerStatType.VisionRange)
+                    : 0f,
+                ApplyDamage       = true,
                 SpreadBase      = inst.GetComputedStat(ItemStatType.SpreadBase),
                 SpreadMoveMul   = inst.GetComputedStat(ItemStatType.SpreadPenalty),
                 RecoilHorizontal = inst.GetComputedStat(ItemStatType.RecoilHorizontal),

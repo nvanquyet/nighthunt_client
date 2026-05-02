@@ -60,8 +60,6 @@ MonoBehaviour:
     MaxQuantity: 1
     Chance: 1
   MinRandomCount: 1
-  MaxRandomCount: 2
-  RollOnOpen: 1
-  DropToWorldOnOpen: 0
-  MinTotalItems: 1
-  MaxTotalItems: 3
+  MaxRandomCount: 10
+  MinTotalItems: 50
+  MaxTotalItems: 509

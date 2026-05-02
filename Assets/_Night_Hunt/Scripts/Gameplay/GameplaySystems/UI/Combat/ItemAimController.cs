@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
@@ -49,27 +50,28 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] private Transform _aimCursor;
 
         [Header("Mobile Drag Threshold")]
-        [Tooltip("Minimum joystick magnitude [0\u20131] for a drag-release to be treated as a confirm throw.")]
+        [Tooltip("Minimum joystick magnitude [0–1] for a drag-release to be treated as a confirm throw.")]
         [SerializeField] private float _dragThreshold = 0.25f;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime refs
         // ─────────────────────────────────────────────────────────────────────
 
-        private IPlayerStatSystem   _statSystem;
+        private IPlayerStatSystem    _statSystem;
         private IItemSelectionSystem _itemSelectionSystem;
-        private Transform           _playerTransform;
-        private Camera              _cam;
-        private IAimSystem          _aimSystem;
-        private IItemUseSystem      _itemUseSystem;
-        private CombatInputHandler _combatInputHandler;
+        private Transform            _playerTransform;
+        private Camera               _cam;
+        private IAimSystem           _aimSystem;
+        private IItemUseSystem       _itemUseSystem;
+        private CombatInputHandler   _combatInputHandler;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Aim state
         // ─────────────────────────────────────────────────────────────────────
 
-        private bool    _inAimMode;
-        private string  _activeItemInstanceId;
+        private bool   _inAimMode;
+        private bool   _inDeployMode;       // separate from throwable aim mode
+        private string _activeItemInstanceId;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Static output (read by ThrowableHandler)
@@ -81,18 +83,20 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// <summary>Normalised world-space aim direction from the player.</summary>
         public static Vector3 AimDirection   { get; private set; }
 
-        /// <summary>True while the controller is in aim mode (for ThrowableHandler / input guards).</summary>
-        public static bool    IsAimingPC     { get; private set; }
+        /// <summary>True while the controller is in throwable aim mode.</summary>
+        public static bool IsAimingPC    { get; private set; }
+
+        /// <summary>True while waiting for the player to confirm a deployable placement.</summary>
+        public static bool IsDeployingPC { get; private set; }
 
         /// <summary>
-        /// Called by <see cref="CombatInputHandler"/> during the fire-hold throwable path
-        /// (armed via FilterPanel, not via TryBeginAim). Keeps the visual aim cursor in sync
-        /// with the already-clamped ground hit point so both paths show the same target.
-        /// No-op when TryBeginAim is active (IsAimingPC=true) since that path owns its raycast.
+        /// Called by <see cref="CombatInputHandler"/> during the fire-hold throwable path.
+        /// Keeps the visual aim cursor in sync with the already-clamped ground hit point.
+        /// No-op when TryBeginAim is active (IsAimingPC=true).
         /// </summary>
         public static void SetExternalAimTarget(Vector3 worldPos)
         {
-            if (IsAimingPC) return;  // TryBeginAim path is authoritative
+            if (IsAimingPC) return;
             AimWorldTarget = worldPos;
         }
 
@@ -102,10 +106,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private bool IsMobile => _forceMobileMode || Application.isMobilePlatform;
 
-        /// <summary>
-        /// True while the controller is in aim mode (waiting for confirm/cancel).
-        /// Used by item-selection buttons to decide whether to start a hold-timer or joystick.
-        /// </summary>
+        /// <summary>True while the controller is in throwable aim mode.</summary>
         public bool IsInAimMode => _inAimMode;
 
         // ─────────────────────────────────────────────────────────────────────
@@ -115,8 +116,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private void Awake()
         {
 #if UNITY_SERVER
-            // DS build: ItemAimController is client-only UI logic.
-            // Disable immediately so Update() never runs on the headless server.
             enabled = false;
             return;
 #endif
@@ -126,23 +125,46 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private void Update()
         {
-            if (!_inAimMode || IsMobile) return;
-
-            UpdatePCRaycast();
-
-            // Confirm on left-click (NOT over a UI element so item button taps work).
-            if (UnityEngine.Input.GetMouseButtonDown(0) &&
-                (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()))
+            // ── Throwable PC aim ──────────────────────────────────────────────────
+            if (_inAimMode && !IsMobile)
             {
-                ConfirmAim();
+                UpdatePCRaycast();
+
+                if (UnityEngine.Input.GetMouseButtonDown(0) &&
+                    (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()))
+                {
+                    ConfirmAim();
+                    return;
+                }
+
+                if (UnityEngine.Input.GetMouseButtonDown(1) ||
+                    UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+                {
+                    CancelAim();
+                }
                 return;
             }
 
-            // Cancel on right-click or Escape.
-            if (UnityEngine.Input.GetMouseButtonDown(1) ||
-                UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+            // ── Deployable PC placement ───────────────────────────────────────────
+            // Release-to-place: PointerDown on item button starts deploy mode (preview visible).
+            // Dragging moves the preview. Releasing the mouse button (PointerUp) confirms placement.
+            // Right-click or Escape cancels at any time.
+            if (_inDeployMode && !IsMobile)
             {
-                CancelAim();
+                // Confirm on mouse RELEASE (not press) — this allows drag-to-place:
+                // hold LMB down → drag to position → release → place.
+                if (UnityEngine.Input.GetMouseButtonUp(0) &&
+                    (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()))
+                {
+                    ConfirmDeploy();
+                    return;
+                }
+
+                if (UnityEngine.Input.GetMouseButtonDown(1) ||
+                    UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+                {
+                    CancelDeploy();
+                }
             }
         }
 
@@ -151,16 +173,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Bind to the local player's systems.  Call when the local player spawns /
-        /// changes (mirrors the pattern in <c>UIRootController</c>).
+        /// Bind to the local player's systems. Call when the local player spawns / changes.
         /// </summary>
         public void Initialize(
-            IPlayerStatSystem  statSystem,
+            IPlayerStatSystem    statSystem,
             IItemSelectionSystem itemSelectionSystem,
-            Transform          playerTransform,
-            IAimSystem         aimSystem            = null,
-            IItemUseSystem     itemUseSystem        = null,
-            CombatInputHandler combatInputHandler   = null)
+            Transform            playerTransform,
+            IAimSystem           aimSystem           = null,
+            IItemUseSystem       itemUseSystem       = null,
+            CombatInputHandler   combatInputHandler  = null)
         {
             _statSystem          = statSystem;
             _itemSelectionSystem = itemSelectionSystem;
@@ -183,63 +204,74 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// <summary>
         /// Called by the selection button when an item is pressed.
         ///
-        /// If the item in <paramref name="slotIndex"/> is a <c>Throwable</c>, enters aim mode.
-        /// Otherwise falls back to direct item selection/use.
+        /// Deployable  → enters deploy-aim mode (click-to-place).
+        /// Throwable   → enters throwable aim mode (joystick/mouse).
+        /// Consumable  → direct use (no aiming needed).
         /// </summary>
         public void TryBeginAim(string instanceID)
         {
             if (_itemSelectionSystem == null || string.IsNullOrEmpty(instanceID)) return;
 
             var bridge = SpectateManager.Instance?.GetCurrentPlayer()?.GamePlaySystemBridge;
-            var item = bridge?.GetItemByInstanceID(instanceID);
+            var item   = bridge?.GetItemByInstanceID(instanceID);
             if (item == null) return;
 
-            var def = ItemDatabase.GetDefinition(item.DefinitionID);
-            bool isThrowable = def != null && def.Type == ItemType.Throwable;
+            var  def          = ItemDatabase.GetDefinition(item.DefinitionID);
+            bool isThrowable  = def != null && def.Type == ItemType.Throwable;
+            bool isDeployable = def != null && def.Type == ItemType.Deployable;
 
-            if (!isThrowable)
+            // ── Deployable: enter deploy mode ──────────────────────────────────
+            if (isDeployable)
             {
-                // Direct use – no aiming needed. Use ServerRpc so it works on any connection.
-                Debug.Log($"[ItemAimController] TryBeginAim: non-throwable '{instanceID}' → RequestSelectItem + RequestUseSelectedItem");
+                if (_inDeployMode) CancelDeploy();
+                if (_inAimMode)    CancelAim();
+
+                _activeItemInstanceId = instanceID;
+                _inDeployMode = true;
+                IsDeployingPC = !IsMobile;
+                _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
+                _aimSystem?.SetCursorVisible(true);
+
+                Debug.Log($"[ItemAimController] TryBeginAim: deployable '{instanceID}' → deploy mode");
                 _itemSelectionSystem.RequestSelectItem(instanceID);
                 _itemSelectionSystem.RequestUseSelectedItem();
                 return;
             }
 
-            // ── Enter aim mode ──────────────────────────────────────────────
-            if (_inAimMode) CancelAim();   // cancel previous aim if any
+            // ── Consumable: direct use ─────────────────────────────────────────
+            if (!isThrowable)
+            {
+                Debug.Log($"[ItemAimController] TryBeginAim: consumable '{instanceID}' → direct use");
+                _itemSelectionSystem.RequestSelectItem(instanceID);
+                _itemSelectionSystem.RequestUseSelectedItem();
+                return;
+            }
+
+            // ── Throwable: enter throwable aim mode ────────────────────────────
+            if (_inAimMode)    CancelAim();
+            if (_inDeployMode) CancelDeploy();
 
             _activeItemInstanceId = instanceID;
-            _inAimMode  = true;
-            IsAimingPC  = !IsMobile;
-            // Force STRAFE mode so the character rotates to face the throw direction
-            // while the player is in aim mode (mirrors BeginFire behaviour).
+            _inAimMode = true;
+            IsAimingPC = !IsMobile;
             _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
+
             float range = GetThrowRange();
             if (_rangeIndicator != null)
                 _rangeIndicator.ShowWithRange(range);
-            // FIX: Show the AimSystem world cursor on mobile when entering throwable aim.
-            // On PC the cursor is always visible (AimSystem.Initialize enables it);
-            // on mobile it is only shown by BeginFire/EndFire — we must do the same here.
             if (IsMobile)
                 _aimSystem?.SetCursorVisible(true);
-            // Select + arm the item via ServerRpc — safe to call on any connection.
-            // RequestSelectItem selects without arming; RequestUseSelectedItem arms (BeginThrowable).
-            // Both are no-ops if the item is already in that state.
-            Debug.Log($"[ItemAimController] TryBeginAim: RequestSelectItem + RequestUseSelectedItem for '{instanceID}'");
+
+            Debug.Log($"[ItemAimController] TryBeginAim: throwable '{instanceID}' mobile={IsMobile} range={range:F2}");
+            LogThrowable($"TryBeginAim start item={instanceID} mobile={IsMobile} range={range:F2} cursor={AimWorldTarget:F2}");
             _itemSelectionSystem.RequestSelectItem(instanceID);
             _itemSelectionSystem.RequestUseSelectedItem();
             if (!IsMobile)
-            {
-                // PC: immediately do a raycast so the ring is ready on first frame.
                 UpdatePCRaycast();
-            }
         }
 
         /// <summary>
         /// Called by the selection button IDragHandler during a mobile drag.
-        /// <paramref name="joystickDir"/> is <see cref="VariableJoystick.Direction"/> — already
-        /// normalised [0,1] joystick space; no further screen-space conversion needed.
         /// </summary>
         public void OnMobileDrag(Vector2 joystickDir)
         {
@@ -254,11 +286,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 AimDirection   = worldDir.magnitude > 0.001f ? worldDir.normalized : Vector3.forward;
                 MoveCursor(AimWorldTarget);
 
-                // FIX: Convert raw joystick → camera-relative world XZ before passing to AimSystem.
-                // AimSystem.ResolveThrowableAim maps input as (x→worldX, y→worldZ) with NO camera rotation.
-                // CombatInputHandler.SetFireMobileJoystick (via FireButton) already sends camera-relative;
-                // ItemAimController must match that convention.
-                Vector2 camRelJoystick = joystickDir;  // fallback = raw (camera == null edge case)
+                Vector2 camRelJoystick = joystickDir;
                 if (_cam != null)
                 {
                     Vector3 cr = _cam.transform.right;   cr.y = 0f; cr.Normalize();
@@ -267,19 +295,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
                     camRelJoystick = new Vector2(w.x, w.z);
                 }
                 _aimSystem?.SetThrowableAim(camRelJoystick);
-
-                // Drive character rotation to face throw direction, same as FireButton mobile drag.
-                // FIX: pass camRelJoystick (camera-relative world XZ) — NOT raw joystickDir.
-                // SetFireMobileJoystick does new Vector3(x, 0, y) = world direction; raw joystick
-                // Y is screen-up which without camera rotation maps inverted when camera faces -Z.
                 _combatInputHandler?.SetFireMobileJoystick(camRelJoystick, active: true);
             }
         }
 
         /// <summary>
         /// Called by the selection button IEndDragHandler when the finger lifts.
-        /// <paramref name="joystickMagnitude"/> is the final <see cref="VariableJoystick.Direction"/>
-        /// magnitude [0,1] at the moment of release.
         /// </summary>
         public void OnMobileDragEnd(float joystickMagnitude)
         {
@@ -292,17 +313,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
         }
 
         /// <summary>
-        /// Defensive version of <see cref="OnMobileDragEnd"/> — only executes if aim mode
-        /// is still active. Called from OnEndDrag to prevent double-resolve when
-        /// OnPointerUp has already handled the event first.
+        /// Defensive version of <see cref="OnMobileDragEnd"/> — no-op if aim mode is inactive.
         /// </summary>
         public void OnMobileDragEndIfStillActive(float joystickMagnitude)
         {
-            // _inAimMode is reset to false if OnPointerUp already called OnMobileDragEnd first.
-            // This guard prevents a double Confirm/Cancel.
             if (!_inAimMode) return;
             OnMobileDragEnd(joystickMagnitude);
-        }        // ─────────────────────────────────────────────────────────────────────
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
         //  PC raycast
         // ─────────────────────────────────────────────────────────────────────
 
@@ -319,29 +338,29 @@ namespace NightHunt.GameplaySystems.UI.Combat
             float   range  = GetThrowRange();
             Vector3 offset = hit - _playerTransform.position;
 
-            // Clamp to VisionRange radius.
             if (offset.magnitude > range)
                 hit = _playerTransform.position + offset.normalized * range;
 
             AimWorldTarget = hit;
             AimDirection   = (hit - _playerTransform.position).normalized;
             MoveCursor(hit);
+
+            Vector3 flatDir = new Vector3(AimDirection.x, 0f, AimDirection.z);
+            if (flatDir.sqrMagnitude > 0.001f)
+                _playerTransform.rotation = Quaternion.LookRotation(flatDir.normalized, Vector3.up);
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Confirm / Cancel
+        //  Confirm / Cancel — Throwable
         // ─────────────────────────────────────────────────────────────────────
 
         private void ConfirmAim()
         {
             if (!_inAimMode) return;
             Vector3 throwTarget = ResolveConfirmedThrowTarget();
+            LogThrowable($"ConfirmAim item={_activeItemInstanceId ?? "null"} target={throwTarget:F2}");
             ResetAimState();
-
-            // Selection was already started in TryBeginAim (server started BeginThrowable).
-            // We only need to request the actual throw execution now.
-            if (_itemUseSystem != null)
-                _itemUseSystem.RequestExecuteThrow(throwTarget);
+            _itemUseSystem?.RequestExecuteThrow(throwTarget);
         }
 
         private Vector3 ResolveConfirmedThrowTarget()
@@ -352,25 +371,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (aimGround.sqrMagnitude > 0.0001f)
                     return aimGround;
             }
-
             return AimWorldTarget;
         }
 
         /// <summary>
-        /// Cancel aim mode and abort the in-progress item use on the server.
-        /// Called by PC right-click/Escape, mobile under-threshold release, or the
-        /// shared Cancel HUD button.
+        /// Cancel throwable aim mode and abort the in-progress item use on the server.
+        /// Also serves as the shared Cancel HUD button handler.
         /// </summary>
         public void CancelAim()
         {
-            // If currently aiming a throwable, clear aim visuals and controls.
             if (_inAimMode)
                 ResetAimState();
 
-            // Always request server-side cancel so shared Cancel button works for both:
-            // - Throwable hold/aim state
-            // - Consumable channeling state
-            // RequestCancelUse is a no-op when no item is active.
             _itemUseSystem?.RequestCancelUse();
         }
 
@@ -382,14 +394,47 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (_rangeIndicator != null) _rangeIndicator.Hide();
             HideCursor();
-            // Exit throwable mode in AimSystem so it reverts to normal mouse aim.
             _aimSystem?.SetThrowableAim(Vector2.zero);
-            // FIX: Hide AimSystem world cursor on mobile (was shown in TryBeginAim).
-            // On PC the cursor is always visible — do not hide it here.
             if (IsMobile)
                 _aimSystem?.SetCursorVisible(false);
-            // Clear mobile aim drive and restore movement lock state.
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
+            _combatInputHandler?.SetCameraLockOverride(active: false, forcedValue: false);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Confirm / Cancel — Deployable
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Confirm deployable placement at the current aim cursor position (PC left-click).
+        /// </summary>
+        private void ConfirmDeploy()
+        {
+            if (!_inDeployMode) return;
+            LogDeploy($"ConfirmDeploy item={_activeItemInstanceId ?? "null"}");
+            ResetDeployState();
+            _itemUseSystem?.TryConfirmDeploy();
+        }
+
+        /// <summary>
+        /// Cancel deploy mode and abort the in-progress placement on the server.
+        /// </summary>
+        public void CancelDeploy()
+        {
+            if (_inDeployMode)
+                ResetDeployState();
+            _itemUseSystem?.RequestCancelUse();
+        }
+
+        private void ResetDeployState()
+        {
+            _inDeployMode = false;
+            IsDeployingPC = false;
+            _activeItemInstanceId = null;
+
+            HideCursor();
+            if (IsMobile)
+                _aimSystem?.SetCursorVisible(false);
             _combatInputHandler?.SetCameraLockOverride(active: false, forcedValue: false);
         }
 
@@ -399,16 +444,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private float GetVisionRange()
         {
-            if (_statSystem == null) return 10f;                 // safe fallback
+            if (_statSystem == null) return 10f;
             float v = _statSystem.GetStat(PlayerStatType.VisionRange);
             return v > 0f ? v : 10f;
         }
 
         /// <summary>
-        /// Returns the effective aim clamp radius for the item currently in <see cref="_activeSlot"/>.
-        /// For throwables: physics-derived max throw distance from <see cref="ThrowableDefinition.GetMaxThrowDistance()">,
-        /// so the aim ring exactly matches what the ballistic arc can reach.
-        /// Falls back to VisionRange for non-throwables or when no item is loaded.
+        /// Effective aim clamp radius for the active throwable item.
+        /// Uses physics-derived max throw distance, clamped to VisionRange.
         /// </summary>
         private float GetThrowRange()
         {
@@ -416,22 +459,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 return GetVisionRange();
 
             var bridge = SpectateManager.Instance?.GetCurrentPlayer()?.GamePlaySystemBridge;
-            var item = bridge?.GetItemByInstanceID(_activeItemInstanceId);
+            var item   = bridge?.GetItemByInstanceID(_activeItemInstanceId);
             if (item == null) return GetVisionRange();
 
-            var def = ItemDatabase.GetDefinition(item.DefinitionID) as NightHunt.GameplaySystems.Core.Data.ThrowableDefinition;
+            var def = ItemDatabase.GetDefinition(item.DefinitionID) as ThrowableDefinition;
             if (def == null) return GetVisionRange();
 
-            float throwRange = def.GetMaxThrowDistance();
+            float throwRange  = def.GetMaxThrowDistance();
             float visionRange = GetVisionRange();
-            // Clamp to VisionRange: the aim ring must not extend beyond what is visible
-            // (prevents a second larger ring appearing outside the FOW visibility circle).
             return throwRange > 0.1f ? Mathf.Min(throwRange, visionRange) : visionRange;
         }
 
-        /// <summary>
-        /// Convert [0,1] joystick value to camera-relative world XZ offset scaled by range.
-        /// </summary>
         private Vector3 Joystick01ToWorldDir(Vector2 joystick01, float range)
         {
             if (_cam == null) return Vector3.zero;
@@ -451,6 +489,30 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (_aimCursor != null)
                 _aimCursor.gameObject.SetActive(false);
+        }
+
+        private static bool ThrowableDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableThrowableDebugLogs;
+        }
+
+        private static bool DeployDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableDeployableDebugLogs;
+        }
+
+        private static void LogThrowable(string message)
+        {
+            if (ThrowableDebugEnabled())
+                Debug.Log($"[THROW_FLOW] {message}");
+        }
+
+        private static void LogDeploy(string message)
+        {
+            if (DeployDebugEnabled())
+                Debug.Log($"[DEPLOY_FLOW] {message}");
         }
     }
 }

@@ -1,6 +1,7 @@
-﻿using UnityEngine;
+using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
+using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Data;
 using NightHunt.Utilities;
 
@@ -264,14 +265,26 @@ namespace NightHunt.Gameplay.Character
                 modelRoot.layer = playerLayer;
 
             // 3. All children of model root (bones, hitboxes, meshes) → "PlayerHitBox"
+            Transform[] children = modelRoot.GetComponentsInChildren<Transform>(true);
             if (hitboxLayer != -1)
             {
-                Transform[] children = modelRoot.GetComponentsInChildren<Transform>(true);
                 foreach (Transform child in children)
                 {
                     if (child.gameObject == modelRoot) continue; // model root already set above
                     child.gameObject.layer = hitboxLayer;
                 }
+            }
+
+            // 3b. Auto-attach PlayerHitboxMarker on every bone that has a Collider.
+            //     Character Model 01 uses trigger colliders (ragdoll-style) with no markers baked in.
+            //     Head bones detected by name pattern → IsHeadshot = true.
+            foreach (Transform child in children)
+            {
+                if (child.gameObject == modelRoot) continue;
+                if (child.GetComponent<Collider>() == null) continue;
+                if (child.GetComponent<PlayerHitboxMarker>() != null) continue; // already set (e.g. Character 01)
+                var marker = child.gameObject.AddComponent<PlayerHitboxMarker>();
+                marker.IsHeadshot = child.name.IndexOf("head", System.StringComparison.OrdinalIgnoreCase) >= 0;
             }
 
             // 4. Disable model-root Rigidbody (make kinematic).

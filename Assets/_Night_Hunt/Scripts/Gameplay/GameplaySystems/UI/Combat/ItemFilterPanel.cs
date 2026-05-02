@@ -31,6 +31,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private ItemType             _filterType;
         private readonly List<ItemType> _filterTypes = new();
         private IItemSelectionSystem _selectionSystem;
+        private IItemUseSystem       _itemUseSystem;
         private IInventorySystem     _inventorySystem;
         private CombatInputHandler   _combatInputHandler;
         private Coroutine            _pendingCollapseRoutine;
@@ -78,6 +79,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             _filterType      = _filterTypes[0];
             _selectionSystem = selectionSystem;
+            _itemUseSystem   = itemUseSystem;
             _inventorySystem = inventorySystem;
             _combatInputHandler = combatInputHandler;
 
@@ -137,6 +139,16 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             _slotButton?.SetTrackedItem(instanceId);
             Debug.Log($"[ITEM_FLOW] [02][FilterPanel.Select] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' useImmediately={useImmediately}");
+
+            if (useImmediately
+                && _itemUseSystem != null
+                && _itemUseSystem.IsUsingItem
+                && _itemUseSystem.CurrentItem?.InstanceID != instanceId)
+            {
+                Debug.Log($"[ITEM_FLOW] [02][FilterPanel.SwitchWhileUsing] from='{_itemUseSystem.CurrentItem?.InstanceID ?? "null"}' to='{instanceId}' action=RequestCancelSelection");
+                _selectionSystem.RequestCancelSelection();
+            }
+
             _selectionSystem.RequestSelectItem(instanceId);
 
             if (_pendingCollapseRoutine != null)

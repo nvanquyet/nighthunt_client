@@ -4,6 +4,9 @@ using FishNet.Transporting;
 using NightHunt.Core;
 using NightHunt.Gameplay.Deployables;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
@@ -27,20 +30,27 @@ namespace NightHunt.Gameplay.Beacon
         [SerializeField] private NetworkPlayer _networkPlayer;
 
         [Header("Fallback Settings")]
-        [SerializeField] private float _placementDistance = 3f;
+        [Tooltip("Fallback only when AimSystem/VisionRange stat is unavailable.")]
+        [SerializeField] private float _fallbackPlacementDistance = 3f;
         [SerializeField] private float _placementCheckRadius = 0.5f;
         [SerializeField] private LayerMask _placementBlockerMask = 0;
+        [SerializeField, Min(0.05f)] private float _previewDebugLogInterval = 0.25f;
 
         private ItemDefinition _activeDefinition;
         private string _activeItemInstanceId;
         private GameObject _previewInstance;
         private bool _isInPlacementMode;
         private bool _placementValid;
+        private string _lastPlacementRejectReason;
+        private Collider _lastBlockingCollider;
         private readonly Collider[] _placementOverlapBuffer = new Collider[24];
         private readonly RaycastHit[] _surfaceHits = new RaycastHit[16];
+        private const float MaxPlacementSurfaceHeightAbovePlayer = 2.5f;
+        private float _nextPreviewDebugLogTime;
 
         private IInventorySystem _inventorySystem;
         private IAimSystem _aimSystem;
+        private IPlayerStatSystem _statSystem;
         private CharacterLifecycleController _lifecycle;
 
         public bool IsDeploying => _isInPlacementMode;
@@ -63,6 +73,14 @@ namespace NightHunt.Gameplay.Beacon
                 .Resolve();
 
             _aimSystem = ComponentResolver.Find<IAimSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrDefault(null)
+                .Resolve();
+
+            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
                 .OnSelf()
                 .InChildren()
                 .InParent()
@@ -115,7 +133,7 @@ namespace NightHunt.Gameplay.Beacon
                 return false;
             }
 
-            Debug.Log($"[DEPLOY_FLOW] BeginDeploy accepted: def={def.ItemID} item={item?.InstanceID ?? "null"} owner={IsOwner}");
+            LogDeploy($"BeginDeploy accepted: def={def.ItemID} item={item?.InstanceID ?? "null"} owner={IsOwner}");
             StartPlacement(def, item.InstanceID);
             return true;
         }
@@ -126,17 +144,17 @@ namespace NightHunt.Gameplay.Beacon
         {
             if (!IsOwner || !_isInPlacementMode)
             {
-                Debug.Log($"[DEPLOY_FLOW] ConfirmDeploy skipped: owner={IsOwner} active={_isInPlacementMode} def={_activeDefinition?.ItemID ?? "null"}");
+                LogDeploy($"ConfirmDeploy skipped: owner={IsOwner} active={_isInPlacementMode} def={_activeDefinition?.ItemID ?? "null"}");
                 return false;
             }
 
             if (!TryGetPlacementPoint(out Vector3 point, out Quaternion rotation, out bool valid) || !valid)
             {
-                Debug.Log($"[DEPLOY_FLOW] ConfirmDeploy rejected: refreshedValid={valid} cachedValid={_placementValid} def={_activeDefinition?.ItemID ?? "null"} point={point:F2}");
+                LogDeploy($"ConfirmDeploy rejected: refreshedValid={valid} cachedValid={_placementValid} def={_activeDefinition?.ItemID ?? "null"} point={point:F2} reason={_lastPlacementRejectReason ?? "unknown"}");
                 return false;
             }
 
-            Debug.Log($"[DEPLOY_FLOW] ConfirmDeploy accepted: point={point:F2} def={_activeDefinition?.ItemID ?? "null"} item={_activeItemInstanceId ?? "null"}");
+            LogDeploy($"ConfirmDeploy accepted: point={point:F2} rot={rotation.eulerAngles:F1} def={_activeDefinition?.ItemID ?? "null"} item={_activeItemInstanceId ?? "null"}");
             RequestPlacement(point, rotation);
             return true;
         }
@@ -151,19 +169,21 @@ namespace NightHunt.Gameplay.Beacon
 
             if (_isInPlacementMode)
             {
-                Debug.Log("[DEPLOY_FLOW] StartPlacement: existing placement mode active, canceling old preview first.");
+                LogDeploy("StartPlacement: existing placement mode active, canceling old preview first.");
                 StopPlacement();
             }
 
             _activeDefinition = definition;
             _activeItemInstanceId = itemInstanceId;
             _isInPlacementMode = true;
+            _nextPreviewDebugLogTime = 0f;
+            _aimSystem?.SetCursorVisible(true);
 
             GameObject previewPrefab = ResolvePlacementPreview(definition);
             if (previewPrefab != null)
             {
                 _previewInstance = Instantiate(previewPrefab);
-                Debug.Log($"[DEPLOY_FLOW] Preview spawned: def={definition.ItemID} preview={previewPrefab.name}");
+                LogDeploy($"Preview spawned: def={definition.ItemID} preview={previewPrefab.name} range={ResolvePlacementDistance(definition):F2}");
             }
             else
             {
@@ -183,6 +203,9 @@ namespace NightHunt.Gameplay.Beacon
                 Destroy(_previewInstance);
                 _previewInstance = null;
             }
+
+            if (Application.isMobilePlatform)
+                _aimSystem?.SetCursorVisible(false);
         }
 
         private void ResolveCamera()
@@ -209,6 +232,7 @@ namespace NightHunt.Gameplay.Beacon
 
             _previewInstance.transform.SetPositionAndRotation(point, rotation);
             _placementValid = valid;
+            LogPreviewPosition(point, rotation, valid);
 
             Color tint = valid
                 ? new Color(0.3f, 1f, 0.3f, 0.5f)
@@ -239,6 +263,7 @@ namespace NightHunt.Gameplay.Beacon
                 Vector3 aimForward = Vector3.ProjectOnPlane(_aimSystem.FinalAimDir, Vector3.up);
                 rotation = aimForward.sqrMagnitude > 0.0001f ? Quaternion.LookRotation(aimForward) : Quaternion.identity;
                 valid = false;
+                _lastPlacementRejectReason = $"surfaceMiss aimPoint={aimPoint:F2} rayOrigin={rayOrigin:F2} surfaceMask={surfaceMask.value}";
                 return true;
             }
 
@@ -262,6 +287,7 @@ namespace NightHunt.Gameplay.Beacon
             point = _cameraTransform.position + _cameraTransform.forward * distance;
             rotation = Quaternion.identity;
             valid = false;
+            _lastPlacementRejectReason = $"cameraSurfaceMiss origin={ray.origin:F2} dir={ray.direction:F2} surfaceMask={surfaceMask.value}";
             return true;
         }
 
@@ -287,6 +313,8 @@ namespace NightHunt.Gameplay.Beacon
             }
 
             System.Array.Sort(_surfaceHits, 0, count, RaycastHitDistanceComparer.Instance);
+            float baseY = _networkPlayer != null ? _networkPlayer.transform.position.y : transform.position.y;
+            float maxSlope = ResolveMaxSlope(_activeDefinition);
             for (int i = 0; i < count; i++)
             {
                 Collider col = _surfaceHits[i].collider;
@@ -298,6 +326,19 @@ namespace NightHunt.Gameplay.Beacon
 
                 if (_networkPlayer != null && col.transform.IsChildOf(_networkPlayer.transform))
                     continue;
+
+                float slope = Vector3.Angle(_surfaceHits[i].normal, Vector3.up);
+                if (slope > maxSlope)
+                {
+                    _lastPlacementRejectReason = $"surfaceSkipSteep surface={col.name} slope={slope:F1} max={maxSlope:F1}";
+                    continue;
+                }
+
+                if (_surfaceHits[i].point.y > baseY + MaxPlacementSurfaceHeightAbovePlayer)
+                {
+                    _lastPlacementRejectReason = $"surfaceSkipHigh surface={col.name} point={_surfaceHits[i].point:F2} playerY={baseY:F2}";
+                    continue;
+                }
 
                 hit = _surfaceHits[i];
                 return true;
@@ -328,6 +369,9 @@ namespace NightHunt.Gameplay.Beacon
                 overlapMask,
                 hit.collider);
             valid = slopeOk && noOverlap;
+            _lastPlacementRejectReason = valid
+                ? "valid"
+                : $"slopeOk={slopeOk} slope={slope:F1} noOverlap={noOverlap} blocker={(_lastBlockingCollider != null ? _lastBlockingCollider.name : "none")} surface={hit.collider?.name ?? "null"}";
         }
 
         private void RequestPlacement(Vector3 position, Quaternion rotation)
@@ -336,7 +380,7 @@ namespace NightHunt.Gameplay.Beacon
             string definitionId = _activeDefinition?.ItemID;
 
             StopPlacement();
-            Debug.Log($"[DEPLOY_FLOW] Sending CmdRequestPlaceDeployable def={definitionId} item={instanceId} pos={position:F2}");
+            LogDeploy($"Sending CmdRequestPlaceDeployable def={definitionId} item={instanceId} pos={position:F2} rot={rotation.eulerAngles:F1}");
             CmdRequestPlaceDeployable(position, rotation, definitionId, instanceId);
         }
 
@@ -377,7 +421,7 @@ namespace NightHunt.Gameplay.Beacon
                 return;
 
             ResolveInventory()?.RemoveItem(itemInstanceId, 1);
-            Debug.Log($"[DeployablePlacementHandler] Consumed deployable item {definitionId}.");
+            LogDeploy($"Consumed deployable item {definitionId} instance={itemInstanceId} pos={position:F2}");
         }
 
         private bool ValidateHeldItem(string itemInstanceId, string definitionId)
@@ -437,7 +481,11 @@ namespace NightHunt.Gameplay.Beacon
                 return false;
             }
 
-            if (deployable is GenericDeployable generic)
+            // Route initialization: VisionWard supports optional radius override from definition.
+            if (deployable is VisionWard visionWard)
+                visionWard.InitializeWithRadius(_networkPlayer.TeamId, def.MaxHP,
+                    def.VisionRadius > 0f ? def.VisionRadius : 0f);
+            else if (deployable is GenericDeployable generic)
                 generic.Initialize(_networkPlayer.TeamId, def.MaxHP, def.DeployableKind, definitionId);
             else
                 deployable.Initialize(_networkPlayer.TeamId, def.MaxHP);
@@ -445,7 +493,7 @@ namespace NightHunt.Gameplay.Beacon
             InstanceFinder.ServerManager.Spawn(go, Owner);
             deployable.StartPlacement();
 
-            Debug.Log($"[DeployablePlacementHandler] Placed deployable {definitionId} kind={def.DeployableKind} at {position}.");
+            LogDeploy($"Placed deployable {definitionId} kind={def.DeployableKind} at {position:F2} owner={Owner?.ClientId}");
             return true;
         }
 
@@ -464,7 +512,19 @@ namespace NightHunt.Gameplay.Beacon
         }
 
         private float ResolvePlacementDistance(ItemDefinition def)
-            => def is DeployableDefinition deployable ? deployable.PlacementDistance : _placementDistance;
+        {
+            float configured = def is DeployableDefinition deployable
+                ? deployable.PlacementDistance
+                : _fallbackPlacementDistance;
+
+            float visionRange = 0f;
+            if (_aimSystem != null)
+                visionRange = _aimSystem.GetVisionRange();
+            if (visionRange <= 0f && _statSystem != null)
+                visionRange = _statSystem.GetStat(PlayerStatType.VisionRange);
+
+            return visionRange > 0.1f ? visionRange : configured;
+        }
 
         private float ResolveCheckRadius(ItemDefinition def)
             => def is DeployableDefinition deployable ? deployable.PlacementCheckRadius : _placementCheckRadius;
@@ -480,9 +540,27 @@ namespace NightHunt.Gameplay.Beacon
         private static LayerMask ResolvePlacementSurfaceMask(ItemDefinition def)
         {
             LayerMask configured = ResolvePlacementMask(def);
-            return configured.value == 0 || configured.value == ~0
-                ? NightHuntLayers.MaskGroundAim
-                : configured;
+            int surface = configured.value == 0 || configured.value == ~0
+                ? NightHuntLayers.MaskPlacementSurface.value
+                : configured.value | NightHuntLayers.MaskPlacementSurface.value;
+
+            int nonSurface = LayerMask.GetMask(
+                NightHuntLayers.Player,
+                NightHuntLayers.PlayerHitBox,
+                NightHuntLayers.Projectile,
+                NightHuntLayers.Throwable,
+                NightHuntLayers.Interactable,
+                NightHuntLayers.Items,
+                NightHuntLayers.DeadCharacter,
+                NightHuntLayers.Zone);
+
+            surface &= ~nonSurface;
+            if (surface == 0)
+                surface = NightHuntLayers.MaskPlacementSurface.value;
+
+            LayerMask mask = default;
+            mask.value = surface;
+            return mask;
         }
 
         private LayerMask ResolvePlacementBlockerMask()
@@ -514,11 +592,19 @@ namespace NightHunt.Gameplay.Beacon
             if (def == null || _networkPlayer == null)
                 return false;
 
-            float maxDistance = ResolvePlacementDistance(def) + 0.75f;
+            // Use VisionRange from StatSystem as the authoritative max distance on the server.
+            // _aimSystem is client-only (null on server), so we must use _statSystem instead.
+            float visionRange = _statSystem != null ? _statSystem.GetStat(PlayerStatType.VisionRange) : 0f;
+            float configured  = def is DeployableDefinition dd ? dd.PlacementDistance : _fallbackPlacementDistance;
+            float maxDistance = (visionRange > 0.1f ? visionRange : configured) + 0.75f;
+
             Vector3 fromPlayer = position - _networkPlayer.transform.position;
             fromPlayer.y = 0f;
             if (fromPlayer.sqrMagnitude > maxDistance * maxDistance)
+            {
+                Debug.LogWarning($"[DEPLOY_FLOW] Server reject: too far def={def?.ItemID ?? "null"} pos={position:F2} player={_networkPlayer.transform.position:F2} max={maxDistance:F2} visionRange={visionRange:F2}");
                 return false;
+            }
 
             LayerMask surfaceMask = ResolvePlacementSurfaceMask(def);
             LayerMask blockerMask = ResolvePlacementBlockerMask();
@@ -530,23 +616,38 @@ namespace NightHunt.Gameplay.Beacon
             {
                 float slope = Vector3.Angle(hit.normal, Vector3.up);
                 if (slope > ResolveMaxSlope(def))
+                {
+                    Debug.LogWarning($"[DEPLOY_FLOW] Server reject: slope def={def.ItemID} slope={slope:F1} max={ResolveMaxSlope(def):F1} surface={hit.collider?.name ?? "null"}");
                     return false;
+                }
 
                 if (Vector3.Distance(hit.point, position) > 0.35f)
+                {
+                    Debug.LogWarning($"[DEPLOY_FLOW] Server reject: point not on surface def={def.ItemID} requested={position:F2} surfacePoint={hit.point:F2}");
                     return false;
+                }
 
                 surface = hit.collider;
             }
             else if (LayerMask.NameToLayer(NightHuntLayers.Ground) >= 0)
             {
+                Debug.LogWarning($"[DEPLOY_FLOW] Server reject: surface ray miss def={def.ItemID} pos={position:F2} surfaceMask={surfaceMask.value}");
                 return false;
             }
 
-            return !HasBlockingOverlap(position, radius, blockerMask, surface);
+            bool blocked = HasBlockingOverlap(position, radius, blockerMask, surface);
+            if (blocked)
+            {
+                Debug.LogWarning($"[DEPLOY_FLOW] Server reject: overlap def={def.ItemID} pos={position:F2} radius={radius:F2} blocker={(_lastBlockingCollider != null ? _lastBlockingCollider.name : "unknown")}");
+                return false;
+            }
+
+            return true;
         }
 
         private bool HasBlockingOverlap(Vector3 point, float radius, LayerMask mask, Collider surfaceCollider)
         {
+            _lastBlockingCollider = null;
             int count = Physics.OverlapSphereNonAlloc(
                 point,
                 radius,
@@ -569,10 +670,39 @@ namespace NightHunt.Gameplay.Beacon
                 if (_networkPlayer != null && col.transform.IsChildOf(_networkPlayer.transform))
                     continue;
 
+                _lastBlockingCollider = col;
                 return true;
             }
 
             return false;
+        }
+
+        private void LogPreviewPosition(Vector3 point, Quaternion rotation, bool valid)
+        {
+            if (!DeployDebugEnabled())
+                return;
+
+            if (Time.unscaledTime < _nextPreviewDebugLogTime)
+                return;
+
+            _nextPreviewDebugLogTime = Time.unscaledTime + Mathf.Max(0.05f, _previewDebugLogInterval);
+            string aimRaw   = _aimSystem != null ? _aimSystem.AimWorldPoint.ToString("F2") : "null";
+            string aimFinal = _aimSystem != null ? _aimSystem.FinalAimGroundPos.ToString("F2") : "null";
+            float  statVision = _statSystem != null ? _statSystem.GetStat(PlayerStatType.VisionRange) : 0f;
+            float  visionRange = _aimSystem != null ? _aimSystem.GetVisionRange() : (statVision > 0f ? statVision : _fallbackPlacementDistance);
+            LogDeploy($"Preview point={point:F2} rot={rotation.eulerAngles:F1} valid={valid} aimRaw={aimRaw} aimGround={aimFinal} visionRange={visionRange:F2} reason={_lastPlacementRejectReason ?? "none"}");
+        }
+
+        private static bool DeployDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableDeployableDebugLogs;
+        }
+
+        private static void LogDeploy(string message)
+        {
+            if (DeployDebugEnabled())
+                Debug.Log($"[DEPLOY_FLOW] {message}");
         }
 
         private sealed class RaycastHitDistanceComparer : System.Collections.Generic.IComparer<RaycastHit>

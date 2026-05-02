@@ -34,6 +34,24 @@ namespace NightHunt.UI
         [SerializeField] private GameObject      _teamAArrow;
         [SerializeField] private GameObject      _teamBArrow;
 
+        // ── Pre-match Countdown ───────────────────────────────────────────────
+        [Header("Pre-Match Countdown")]
+        [Tooltip("Full-screen countdown overlay. Hide when SecondsRemaining==0 (GO!).")]
+        [SerializeField] private GameObject      _countdownPanel;
+        [Tooltip("Large numeric countdown text (5, 4, 3, 2, 1, GO!).")]
+        [SerializeField] private TextMeshProUGUI _countdownText;
+
+        // ── Phase Started Banner ──────────────────────────────────────────────
+        [Header("Phase Started Banner")]
+        [Tooltip("Banner shown briefly when a new phase starts. Reuses the warning panel if unset.")]
+        [SerializeField] private GameObject      _phaseStartPanel;
+        [Tooltip("Phase title text inside the phase-start banner.")]
+        [SerializeField] private TextMeshProUGUI _phaseStartTitleText;
+        [Tooltip("Objectives list text inside the phase-start banner (newline-separated bullets).")]
+        [SerializeField] private TextMeshProUGUI _phaseObjectivesText;
+        [SerializeField] private float           _phaseStartHoldDuration = 3.5f;
+        [SerializeField] private float           _phaseStartFadeDuration = 0.3f;
+
         // ── Phase Warning Banner ──────────────────────────────────────────────
         [Header("Phase Warning Banner")]
         [SerializeField] private GameObject      warningPanel;
@@ -49,17 +67,18 @@ namespace NightHunt.UI
         private float             _phaseManagerRetryTime;
         private const float       PhaseManagerRetryInterval = 1f;
         private Coroutine         _warningCoroutine;
+        private Coroutine         _phaseStartCoroutine;
         private NetworkPlayer     _localPlayer;
         private int               _cachedTeamAScore;
         private int               _cachedTeamBScore;
-
-
 
         // ── Unity Lifecycle ───────────────────────────────────────────────────
 
         private void Awake()
         {
             if (warningPanel != null) warningPanel.SetActive(false);
+            if (_phaseStartPanel != null) _phaseStartPanel.SetActive(false);
+            if (_countdownPanel != null) _countdownPanel.SetActive(false);
             // Arrows start hidden until Initialize() is called with the local player.
             if (_teamAArrow != null) _teamAArrow.SetActive(false);
             if (_teamBArrow != null) _teamBArrow.SetActive(false);
@@ -79,12 +98,16 @@ namespace NightHunt.UI
         private void OnEnable()
         {
             GameplayEventBus.Instance?.Subscribe<PhaseWarningEvent>(OnPhaseWarning);
+            GameplayEventBus.Instance?.Subscribe<PhaseStartedEvent>(OnPhaseStarted);
+            GameplayEventBus.Instance?.Subscribe<MatchCountdownEvent>(OnMatchCountdown);
             GameplayEventBus.Instance?.Subscribe<ScoreDataSyncedEvent>(OnScoreDataSynced);
         }
 
         private void OnDisable()
         {
             GameplayEventBus.Instance?.Unsubscribe<PhaseWarningEvent>(OnPhaseWarning);
+            GameplayEventBus.Instance?.Unsubscribe<PhaseStartedEvent>(OnPhaseStarted);
+            GameplayEventBus.Instance?.Unsubscribe<MatchCountdownEvent>(OnMatchCountdown);
             GameplayEventBus.Instance?.Unsubscribe<ScoreDataSyncedEvent>(OnScoreDataSynced);
         }
 
@@ -154,6 +177,74 @@ namespace NightHunt.UI
             }
         }
 
+        // ── Pre-Match Countdown ───────────────────────────────────────────────
+
+        private void OnMatchCountdown(MatchCountdownEvent evt)
+        {
+            if (_countdownPanel == null && _countdownText == null) return;
+
+            if (evt.SecondsRemaining > 0)
+            {
+                if (_countdownPanel != null) _countdownPanel.SetActive(true);
+                if (_countdownText  != null) _countdownText.text = evt.SecondsRemaining.ToString();
+            }
+            else
+            {
+                // SecondsRemaining == 0 → show GO! then hide
+                if (_countdownText  != null) _countdownText.text = "GO!";
+                StartCoroutine(HideCountdownAfterDelay(0.8f));
+            }
+        }
+
+        private IEnumerator HideCountdownAfterDelay(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (_countdownPanel != null) _countdownPanel.SetActive(false);
+            if (_countdownText  != null) _countdownText.text = string.Empty;
+        }
+
+        // ── Phase Started Banner ──────────────────────────────────────────────
+
+        private void OnPhaseStarted(PhaseStartedEvent evt)
+        {
+            if (_phaseStartCoroutine != null) StopCoroutine(_phaseStartCoroutine);
+
+            // Prefer dedicated phaseStartPanel; fall back to reusing warningPanel.
+            var panel = _phaseStartPanel != null ? _phaseStartPanel : warningPanel;
+            if (panel == null) return;
+
+            if (_phaseStartTitleText != null)
+                _phaseStartTitleText.text = FormatPhaseName(evt.Phase.ToString());
+            else if (warningText != null)
+                warningText.text = FormatPhaseName(evt.Phase.ToString());
+
+            if (_phaseObjectivesText != null)
+                _phaseObjectivesText.text = string.IsNullOrEmpty(evt.ObjectivesSummary)
+                    ? string.Empty
+                    : evt.ObjectivesSummary;
+
+            _phaseStartCoroutine = StartCoroutine(ShowPhaseStartBanner(panel));
+        }
+
+        private IEnumerator ShowPhaseStartBanner(GameObject panel)
+        {
+            panel.SetActive(true);
+            // Simple fade if panel has an Image (same helper used by warning banner)
+            var bg = panel.GetComponentInChildren<Image>(true);
+            if (bg != null)
+            {
+                yield return StartCoroutine(FadePanel(bg, 0f, 1f, _phaseStartFadeDuration));
+                yield return new WaitForSeconds(_phaseStartHoldDuration);
+                yield return StartCoroutine(FadePanel(bg, 1f, 0f, _phaseStartFadeDuration));
+            }
+            else
+            {
+                yield return new WaitForSeconds(_phaseStartHoldDuration);
+            }
+            panel.SetActive(false);
+            _phaseStartCoroutine = null;
+        }
+
         // ── Phase Warning ─────────────────────────────────────────────────────
 
         private void OnPhaseWarning(PhaseWarningEvent evt)
@@ -184,18 +275,22 @@ namespace NightHunt.UI
         private IEnumerator FadeWarning(float from, float to, float duration)
         {
             if (warningBackground == null) yield break;
+            yield return StartCoroutine(FadePanel(warningBackground, from, to, duration));
+        }
 
+        private static IEnumerator FadePanel(Image image, float from, float to, float duration)
+        {
             float elapsed = 0f;
-            Color c       = warningBackground.color;
+            Color c       = image.color;
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
                 c.a = Mathf.Lerp(from, to, elapsed / duration);
-                warningBackground.color = c;
+                image.color = c;
                 yield return null;
             }
             c.a = to;
-            warningBackground.color = c;
+            image.color = c;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
@@ -208,6 +303,12 @@ namespace NightHunt.UI
             _                       => phase
         };
 
-
+        private static string FormatPhaseName(MatchPhaseState phase) => phase switch
+        {
+            MatchPhaseState.Preparation => "PHASE 1: PREPARATION",
+            MatchPhaseState.Hunt        => "PHASE 2: HUNT & OBJECTIVES",
+            MatchPhaseState.Lockdown    => "PHASE 3: FINAL LOCKDOWN",
+            _                           => phase.ToString()
+        };
     }
 }

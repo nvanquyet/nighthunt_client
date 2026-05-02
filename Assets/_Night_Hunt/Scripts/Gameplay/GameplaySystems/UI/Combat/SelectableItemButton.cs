@@ -11,30 +11,29 @@ using NightHunt.GameplaySystems.Inventory;
 namespace NightHunt.GameplaySystems.UI.Combat
 {
     /// <summary>
-    /// Collapsed HUD slot button for a single item type (Throwable or Consumable).
+    /// Collapsed HUD slot button for a single item type (Throwable, Consumable, or Deployable).
     ///
     /// Extends <see cref="SlotHUDButton"/> and shares the same base as
     /// <see cref="WeaponSlotButton"/>: DOTween press animation, double-click
     /// detection, and CombatInputHandler fire-blocking.
     ///
     ///   EMPTY (nothing tracked):
-    ///     Press opens the expanded list through <see cref="OnExpandRequested"/>.
-    ///               can open the expanded list for the player to pick something.
+    ///     Any press opens the expanded list via <see cref="OnExpandRequested"/>.
     ///
-    ///   TRACKED / IDLE (item remembered but not selected in system):
-    ///     Press sends RequestSelectItem and RequestUseSelectedItem.
+    ///   TRACKED / IDLE (item remembered, not selected in system):
+    ///     Single click → RequestSelectItem  (select only; NOT armed yet).
+    ///     Double click → RequestSelectItem + RequestUseSelectedItem (arm/use).
     ///
-    ///   SELECTED (item in server SelectedItem, not yet armed):
-    ///     Press sends RequestUseSelectedItem.
+    ///   SELECTED (item selected in system, not yet armed):
+    ///     Single click → RequestDeselectItem (toggle off).
+    ///     Double click → RequestUseSelectedItem (arm/use).
     ///
-    ///   ARMED (item in hand, IsUsingItem == true):
-    ///     Press sends RequestCancelSelection.
+    ///   ARMED (IsUsingItem == true for the tracked item):
+    ///     Any click → RequestCancelSelection (put down).
     ///
-    ///   On Initialize and whenever the tracked slot becomes empty, the button
-    ///   automatically searches the player's inventory for the first matching
-    ///   item and tracks it locally. It does not select or arm the item.
+    ///   Double-press on an empty slot opens the expanded list instead.
     ///
-    /// Double-press opens the expanded list so the player can switch tracked item.
+    ///   Keyboard shortcuts (ActivateFromShortcut) always arm — treated as double-click intent.
     /// </summary>
     public class SelectableItemButton : SlotHUDButton
     {
@@ -42,6 +41,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] private Image      _icon;
         [SerializeField] private TMP_Text   _quantityText;
         [SerializeField] private GameObject _emptyIndicator;
+        [SerializeField] private GameObject _selectedIndicator;
+        [SerializeField] private Color _selectedIconColor = new Color(0.35f, 0.85f, 1f, 1f);
+        [SerializeField] private Color _armedIconColor    = new Color(0.35f, 1f,  0.45f, 1f);
 
         private ItemType             _filterType;
         private readonly List<ItemType> _filterTypes = new();
@@ -59,8 +61,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         /// <summary>
         /// Fired when the slot is empty and the user presses the button.
-        /// <see cref="ItemFilterPanel"/> subscribes to this event and opens the
-        /// expanded list so the player can pick an item.
+        /// <see cref="ItemFilterPanel"/> subscribes and opens the expanded list.
         /// </summary>
         public event Action OnExpandRequested;
 
@@ -70,6 +71,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             base.OnDestroy();
         }
 
+        // ── Initialization ────────────────────────────────────────────────────────
+
         /// <summary>
         /// Bind to the local player's systems.
         /// Safe to call multiple times (re-init on player / spectate change).
@@ -77,17 +80,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public void Initialize(
             ItemType             filterType,
             IItemSelectionSystem selectionSystem,
-            IItemUseSystem       itemUseSystem      = null,
-            IInventorySystem     inventorySystem    = null)
+            IItemUseSystem       itemUseSystem   = null,
+            IInventorySystem     inventorySystem = null)
         {
             Initialize(new[] { filterType }, selectionSystem, itemUseSystem, inventorySystem);
         }
 
         public void Initialize(
             IReadOnlyList<ItemType> filterTypes,
-            IItemSelectionSystem selectionSystem,
-            IItemUseSystem       itemUseSystem      = null,
-            IInventorySystem     inventorySystem    = null)
+            IItemSelectionSystem    selectionSystem,
+            IItemUseSystem          itemUseSystem   = null,
+            IInventorySystem        inventorySystem = null)
         {
             Unsubscribe();
 
@@ -123,100 +126,120 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void SetTrackedItem(string instanceId)
         {
-
             _trackedInstanceId = instanceId;
             RefreshDisplay();
         }
 
         /// <summary>
-        /// Returns the instance ID currently tracked by this slot (may be null/empty if slot is empty).
+        /// Returns the instance ID currently tracked by this slot (may be null/empty).
         /// Used for shortcut logging and filter-panel state.
         /// </summary>
         public string GetTrackedInstanceId() => _trackedInstanceId;
 
-        public void ActivateFromShortcut()
-        {
-            ActivateFromShortcut(null);
-        }
+        // ── Shortcut / keyboard activation ───────────────────────────────────────
 
-        public void ActivateFromShortcut(ItemType preferredType)
-        {
+        public void ActivateFromShortcut() => ActivateFromShortcut(null);
+
+        public void ActivateFromShortcut(ItemType preferredType) =>
             ActivateFromShortcut((ItemType?)preferredType);
-        }
 
+        /// <summary>
+        /// Keyboard shortcut activation: treated as double-click (arm/use intent).
+        /// Optionally switches the tracked item to <paramref name="preferredType"/> first.
+        /// </summary>
         private void ActivateFromShortcut(ItemType? preferredType)
         {
             if (preferredType.HasValue)
                 TryTrackFirstMatching(preferredType.Value, allowReplace: true);
 
-            Debug.Log($"[SelectableItemButton:{FormatFilterTypes()}] shortcut press preferred={preferredType?.ToString() ?? "none"} tracked='{_trackedInstanceId ?? "null"}'");
-            HandlePress(isDouble: false);
+            Debug.Log($"[SelectableItemButton:{FormatFilterTypes()}] shortcut preferred={preferredType?.ToString() ?? "none"} tracked='{_trackedInstanceId ?? "null"}'");
+            HandlePress(isDouble: true);
         }
+
+        // ── Input handling ────────────────────────────────────────────────────────
 
         public override void OnPointerDown(PointerEventData eventData)
         {
             if (!IsInteractable) return;
-
             base.OnPointerDown(eventData);  // DOTween animation + NotifyUIConsumedPress
-
             if (_selectionSystem == null) return;
-
             HandlePress(ConsumeDoubleClick());
         }
 
+        /// <summary>
+        /// Core interaction logic.
+        ///   isDouble=true  → arm / use the tracked item (or open picker if empty).
+        ///   isDouble=false → select-toggle (select if idle, deselect if selected, cancel if armed).
+        /// </summary>
         private void HandlePress(bool isDouble)
         {
             if (_selectionSystem == null) return;
 
-            // Double-click opens the expanded panel to switch item.
-            if (isDouble)
-            {
-                OnExpandRequested?.Invoke();
-                return;
-            }
-            // Determine current state.
             bool hasTracked = !string.IsNullOrEmpty(_trackedInstanceId);
 
-            // IsArmed: the tracked item is currently held in hand and being used.
-            bool isArmed = hasTracked
-                        && _itemUseSystem != null
-                        && _itemUseSystem.IsUsingItem
-                        && _selectionSystem.SelectedItem?.InstanceID == _trackedInstanceId;
-
-            // IsSelected: the tracked item is marked as selected in the system
-            //             but not yet armed (just recorded, weapon still holstered when clicked).
-            bool isSelected = hasTracked
-                           && !isArmed
-                           && _selectionSystem.SelectedItem?.InstanceID == _trackedInstanceId;
-
-            Debug.Log($"[ITEM_FLOW] [01][CollapsedClick] filters={FormatFilterTypes()} tracked='{_trackedInstanceId}' " +
-                      $"isSelected={isSelected} isArmed={isArmed}");
-
-            if (!hasTracked)
+            // ── Double click: arm / use ───────────────────────────────────────────
+            if (isDouble)
             {
-                Debug.Log($"[ITEM_FLOW] [01][CollapsedClick.Empty] filters={FormatFilterTypes()} action=expand");
-                OnExpandRequested?.Invoke();
-                return;
-            }
+                if (!hasTracked)
+                {
+                    OnExpandRequested?.Invoke();
+                    return;
+                }
 
-            if (isArmed)
-            {
-                Debug.Log($"[ITEM_FLOW] [01][CollapsedClick.Armed] filters={FormatFilterTypes()} action=cancel");
-                _selectionSystem.RequestCancelSelection();
-                return;
-            }
+                // Ensure item is selected before arming (unselected → arm in one gesture).
+                string selId = _selectionSystem.SelectedItem?.InstanceID;
+                if (selId != _trackedInstanceId)
+                    _selectionSystem.RequestSelectItem(_trackedInstanceId);
 
-            if (!isSelected)
-            {
-                Debug.Log($"[ITEM_FLOW] [02][CollapsedSelectUse] filters={FormatFilterTypes()} instance='{_trackedInstanceId}' action=RequestSelectItem+RequestUseSelectedItem");
-                _selectionSystem.RequestSelectItem(_trackedInstanceId);
+                Debug.Log($"[ITEM_FLOW] [01][DoubleClick.Arm] filters={FormatFilterTypes()} instance='{_trackedInstanceId}' action=RequestUseSelectedItem");
                 _selectionSystem.RequestUseSelectedItem();
                 return;
             }
 
-            Debug.Log($"[ITEM_FLOW] [03][CollapsedUse] filters={FormatFilterTypes()} instance='{_trackedInstanceId}' action=RequestUseSelectedItem");
-            _selectionSystem.RequestUseSelectedItem();
+            // ── Single click: select toggle ───────────────────────────────────────
+            if (!hasTracked)
+            {
+                OnExpandRequested?.Invoke();
+                return;
+            }
+
+            string selectedId   = _selectionSystem.SelectedItem?.InstanceID;
+            string currentUseId = _itemUseSystem?.CurrentItem?.InstanceID;
+
+            bool isArmed = hasTracked
+                        && _itemUseSystem != null
+                        && _itemUseSystem.IsUsingItem
+                        && currentUseId == _trackedInstanceId;
+
+            bool isSelected = hasTracked
+                           && !isArmed
+                           && selectedId == _trackedInstanceId;
+
+            Debug.Log($"[ITEM_FLOW] [01][SingleClick] filters={FormatFilterTypes()} tracked='{_trackedInstanceId}' " +
+                      $"selected='{selectedId ?? "null"}' currentUse='{currentUseId ?? "null"}' isSelected={isSelected} isArmed={isArmed}");
+
+            if (isArmed)
+            {
+                // Put the item down.
+                Debug.Log($"[ITEM_FLOW] [01][SingleClick.Armed] action=cancel");
+                _selectionSystem.RequestCancelSelection();
+                return;
+            }
+
+            if (isSelected)
+            {
+                // Toggle off.
+                Debug.Log($"[ITEM_FLOW] [01][SingleClick.Selected] action=deselect");
+                _selectionSystem.RequestDeselectItem();
+                return;
+            }
+
+            // Not yet selected — select only (user must double-click to arm).
+            Debug.Log($"[ITEM_FLOW] [01][SingleClick.NotSelected] action=selectOnly instance='{_trackedInstanceId}'");
+            _selectionSystem.RequestSelectItem(_trackedInstanceId);
         }
+
+        // ── Display refresh ───────────────────────────────────────────────────────
 
         private void RefreshDisplay()
         {
@@ -225,7 +248,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 ? GetItemByInstanceId(_trackedInstanceId)
                 : null;
 
-            var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            var def     = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
             bool hasItem = item != null && MatchesFilter(def);
 
             if (_icon != null)
@@ -241,17 +264,38 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (_emptyIndicator != null)
                 _emptyIndicator.SetActive(!hasItem);
+
+            RefreshStateVisuals(hasItem);
         }
+
+        private void RefreshStateVisuals(bool hasItem)
+        {
+            bool isSelected = hasItem
+                           && _selectionSystem != null
+                           && _selectionSystem.SelectedItem?.InstanceID == _trackedInstanceId;
+
+            bool isArmed = hasItem
+                        && _itemUseSystem != null
+                        && _itemUseSystem.IsUsingItem
+                        && _itemUseSystem.CurrentItem?.InstanceID == _trackedInstanceId;
+
+            if (_selectedIndicator != null)
+                _selectedIndicator.SetActive(isSelected || isArmed);
+
+            if (_icon != null)
+                _icon.color = isArmed
+                    ? _armedIconColor
+                    : (isSelected ? _selectedIconColor : Color.white);
+        }
+
+        // ── Auto-fill ─────────────────────────────────────────────────────────────
 
         /// <summary>
         /// If the tracked slot is empty and the player has a matching item in their
-        /// inventory, track it locally so the collapsed slot shows an icon. This must
-        /// not send selection RPCs; adding loot should never auto-arm or auto-use items.
+        /// inventory, track it locally so the collapsed slot shows an icon.
+        /// Does NOT send selection RPCs — adding loot should never auto-arm items.
         /// </summary>
-        private bool TryAutoFill()
-        {
-            return TryTrackFirstMatching(null, allowReplace: false);
-        }
+        private bool TryAutoFill() => TryTrackFirstMatching(null, allowReplace: false);
 
         private bool TryTrackFirstMatching(ItemType? preferredType, bool allowReplace)
         {
@@ -278,6 +322,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             return false;
         }
+
+        // ── Event subscriptions ───────────────────────────────────────────────────
 
         private void Subscribe()
         {
@@ -332,14 +378,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
             if (!MatchesFilter(def)) return;
 
-            // Refresh quantity display if this is the tracked item.
             if (item.InstanceID == _trackedInstanceId)
             {
                 RefreshDisplay();
                 return;
             }
 
-            // If slot is empty, auto-fill with this newly added item.
             if (string.IsNullOrEmpty(_trackedInstanceId))
                 TryAutoFill();
         }
@@ -355,7 +399,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (wasTracked)
             {
-                RefreshDisplay();  // update qty display
+                RefreshDisplay();
 
                 if (fullyGone)
                 {
@@ -366,6 +410,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
         }
 
+        // ── Private helpers ───────────────────────────────────────────────────────
+
         private ItemInstance GetItemByInstanceId(string instanceId)
         {
             var items = GetCurrentPlayerItems();
@@ -375,10 +421,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             return null;
         }
 
-        private IReadOnlyList<ItemInstance> GetCurrentPlayerItems()
-        {
-            return _inventorySystem?.GetAllItems();
-        }
+        private IReadOnlyList<ItemInstance> GetCurrentPlayerItems() =>
+            _inventorySystem?.GetAllItems();
 
         private bool MatchesFilter(ItemDefinition def)
         {
@@ -386,6 +430,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             for (int i = 0; i < _filterTypes.Count; i++)
             {
                 if (def.Type == _filterTypes[i]) return true;
+                // Deployables are grouped under the Throwable slot.
                 if (_filterTypes[i] == ItemType.Throwable && def.Type == ItemType.Deployable) return true;
             }
             return false;

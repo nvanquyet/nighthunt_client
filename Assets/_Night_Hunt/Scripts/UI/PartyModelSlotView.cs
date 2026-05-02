@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NightHunt.Data.DTOs;
 using NightHunt.Gameplay.Character.Data;
 using NightHunt.State;

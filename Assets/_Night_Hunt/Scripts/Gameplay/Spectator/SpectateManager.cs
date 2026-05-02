@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using NightHunt.Core;
 using UnityEngine;
 using NightHunt.Networking;

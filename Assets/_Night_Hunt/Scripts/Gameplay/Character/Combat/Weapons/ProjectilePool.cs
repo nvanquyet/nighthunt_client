@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
@@ -132,7 +133,9 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             proj.transform.SetParent(null, true);
             proj.transform.SetPositionAndRotation(position, rotation);
-            Debug.Log($"[PROJ_VFX] Pool.Get prefab='{prefab.name}' instance='{proj.name}' parent={(proj.transform.parent != null ? proj.transform.parent.name : "null")} pos={position:F2} rot={rotation.eulerAngles:F1}");
+            if (!proj.gameObject.activeSelf)
+                proj.gameObject.SetActive(true);
+            LogProjectile($"[PROJ_VFX] Pool.Get prefab='{prefab.name}' instance='{proj.name}' parent={(proj.transform.parent != null ? proj.transform.parent.name : "null")} pos={position:F2} rot={rotation.eulerAngles:F1}");
 
             return proj;
         }
@@ -158,7 +161,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             ResetPhysics(proj);
             proj.transform.SetParent(transform, true);
             proj.gameObject.SetActive(false);
-            Debug.Log($"[PROJ_VFX] Pool.Return instance='{proj.name}' parent='{transform.name}' pos={proj.transform.position:F2}");
+            LogProjectile($"[PROJ_VFX] Pool.Return instance='{proj.name}' parent='{transform.name}' pos={proj.transform.position:F2}");
             _pools[prefab].Enqueue(proj);
         }
 
@@ -172,6 +175,18 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
             }
+        }
+
+        private static bool ProjectileDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableProjectileDebugLogs;
+        }
+
+        private static void LogProjectile(string message)
+        {
+            if (ProjectileDebugEnabled())
+                Debug.Log(message);
         }
     }
 }

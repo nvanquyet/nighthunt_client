@@ -274,18 +274,19 @@ namespace NightHunt.UI
             _teamMemberPanel?.Initialize(localPlayer, _playerContext);
             _teamMemberPanel?.SetObservedPlayer(null);
 
-            // ⑤ Interaction prompt — needs RaycastDetector + PlayerInteractionSystem from player prefab.
-            WireInteractionPrompt(localPlayer);
-
-            // ⑥ Mobile input
+            // ⑤ Mobile input
             BindMobileInput(_mobileHUDPanel, localPlayer);
 
-            // ⑦ Global combat events (all players)
+            // ⑥ Global combat events (all players)
             PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;
             PlayerHealthSystem.OnAnyHitReceived += HandleAnyHitReceived;
 
-            // ⑧ Local player lifecycle
+            // ⑦ Local player lifecycle — must come before WireInteractionPrompt because
+            //    SubscribeLifecycle() calls UnsubscribeLifecycle() which resets _localInteractionSystem.
             SubscribeLifecycle(localPlayer);
+
+            // ⑧ Interaction prompt — after SubscribeLifecycle so _localInteractionSystem is not cleared.
+            WireInteractionPrompt(localPlayer);
 
             // ⑨ Spectate start/stop (different from player switch)
             if (SpectateManager.Instance != null)
@@ -322,6 +323,14 @@ namespace NightHunt.UI
 
             bool isSpectating = SpectateManager.Instance != null && SpectateManager.Instance.IsSpectating();
             _teamMemberPanel?.SetObservedPlayer(isSpectating ? newPlayer : null);
+
+            // Wire the proximity scanner of the spectated player so LootContainerUI shows
+            // their nearby open containers in read-only mode.
+            // EndSpectate() is called when isSpectating is false (player switched back to self).
+            if (isSpectating)
+                _localInteractionSystem?.BeginSpectate(newPlayer);
+            else
+                _localInteractionSystem?.EndSpectate();
         }
 
         // ── State Machine ─────────────────────────────────────────────────────
@@ -417,9 +426,20 @@ namespace NightHunt.UI
             SetState(UIState.Combat);
         }
 
-        private void OnSpectateStarted()      => SetState(UIState.Spectating);
+        private void OnSpectateStarted()
+        {
+            // Hide any loot panel that the local player had open before dying.
+            _lootContainerUI?.Hide();
+            SetState(UIState.Spectating);
+        }
 
-        private void OnSpectateStopped()      => SetState(UIState.Combat);
+        private void OnSpectateStopped()
+        {
+            // HideSpectateView is a no-op if the panel is not in spectate mode,
+            // so this is safe to call unconditionally.
+            _lootContainerUI?.HideSpectateView();
+            SetState(UIState.Combat);
+        }
 
         // ── Inventory Toggle ──────────────────────────────────────────────────
 

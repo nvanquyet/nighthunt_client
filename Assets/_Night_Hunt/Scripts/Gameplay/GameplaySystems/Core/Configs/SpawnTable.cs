@@ -59,13 +59,6 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Min(0)]
         public int MaxRandomCount = 2;
 
-        [Header("Roll Settings")]
-        [Tooltip("Container: roll khi mở lần đầu. SpawnPoint: roll ngay on spawn")]
-        public bool RollOnOpen = true;
-
-        [Tooltip("Container: spawn ra world instead of giữ trong storage")]
-        public bool DropToWorldOnOpen = false;
-
         [Header("Total Items")]
         [Tooltip("Số lượng item tối thiểu tổng thể")]
         [Min(0)]

@@ -4,6 +4,7 @@ using UnityEngine;
 using FishNet.Connection;
 using FishNet.Object;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
@@ -254,8 +255,18 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             if (_isUsingItem)
             {
-                Debug.LogWarning("[ItemUseSystem] Already using an item");
-                return false;
+                // If currently in deployable placement mode, allow cancelling it to start a new item use.
+                // All other in-progress items (throwable wind-up, consumable channeling) are protected.
+                if (_deployableHandler?.IsDeploying == true)
+                {
+                    Debug.Log("[ItemUseSystem] UseItemServer: cancelling active deploy to start new item use.");
+                    CancelUse();
+                }
+                else
+                {
+                    Debug.LogWarning("[ItemUseSystem] Already using an item");
+                    return false;
+                }
             }
 
             var def = ItemDatabase.GetDefinition(item.DefinitionID);
@@ -313,6 +324,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             Vector3 sanitizedTarget = SanitizeThrowableTarget(def, aimTarget);
             _pendingThrowTarget = sanitizedTarget;
+            LogThrowable($"ExecuteThrow target requested={aimTarget:F2} sanitized={sanitizedTarget:F2} item={_currentItem.InstanceID} def={def.ItemID} prepare={def.PrepareTime:F2}");
             _useCoroutine = StartCoroutine(PrepareAndThrow(def, sanitizedTarget));
         }
 
@@ -327,12 +339,14 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (!_isUsingItem || _currentItem == null)
                 yield break;
 
+            LogThrowable($"PrepareAndThrow spawning def={def.ItemID} target={aimTarget:F2} player={transform.position:F2}");
             _throwableHandler.SpawnProjectile(def, transform, aimTarget);
             DetachItemFromHand();
             OnThrowExecuted?.Invoke();
 
             var item = _currentItem;
             ConsumeItem(item);
+            LogThrowable($"PrepareAndThrow consumed item={item.InstanceID} def={item.DefinitionID} target={aimTarget:F2}");
             CompleteUse(item);
         }
 
@@ -357,16 +371,18 @@ namespace NightHunt.GameplaySystems.ItemUse
             Vector3 clamped = origin + direction * Mathf.Clamp(flatOffset.magnitude, 0.5f, maxRange);
 
             Vector3 grounded = ProjectThrowableTargetToGround(clamped);
-            Debug.Log($"[THROW_FLOW] Sanitize target requested={requestedTarget:F2} grounded={grounded:F2} maxRange={maxRange:F2} def={def?.ItemID ?? "null"}");
+            LogThrowable($"Sanitize target requested={requestedTarget:F2} grounded={grounded:F2} maxRange={maxRange:F2} def={def?.ItemID ?? "null"}");
             return grounded;
         }
 
         private static Vector3 ProjectThrowableTargetToGround(Vector3 target)
         {
             Vector3 rayOrigin = target + Vector3.up * 8f;
-            if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 24f, NightHuntLayers.MaskGroundAim, QueryTriggerInteraction.Ignore))
+            LayerMask surfaceMask = NightHuntLayers.MaskPlacementSurface;
+            if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 24f, surfaceMask, QueryTriggerInteraction.Ignore))
                 return hit.point;
 
+            Debug.LogWarning($"[THROW_FLOW] Ground projection miss target={target:F2} surfaceMask={surfaceMask.value}. Using clamped fallback.");
             return target;
         }
 
@@ -383,7 +399,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         [ServerRpc(RequireOwnership = true)]
         public void RequestExecuteThrow(Vector3 aimTarget)
         {
-            Debug.Log($"[ITEM_SELECT_FLOW] RequestExecuteThrow RPC server received target={aimTarget:F2} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem} owner={Owner?.ClientId}");
+            LogThrowable($"RequestExecuteThrow RPC server received target={aimTarget:F2} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem} owner={Owner?.ClientId}");
             ExecuteThrow(aimTarget);
         }
 
@@ -415,7 +431,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             string instanceId = _currentItem?.InstanceID;
             bool confirmed = _deployableHandler.ConfirmDeploy();
-            Debug.Log($"[DEPLOY_FLOW] TryConfirmDeploy result={confirmed} item={instanceId ?? "null"} using={_isUsingItem}");
+            LogDeploy($"TryConfirmDeploy result={confirmed} item={instanceId ?? "null"} using={_isUsingItem}");
 
             if (confirmed && !string.IsNullOrEmpty(instanceId))
                 RequestCompleteDeployUse(instanceId);
@@ -432,7 +448,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                 return;
             }
 
-            Debug.Log($"[DEPLOY_FLOW] RequestCompleteDeployUse accepted: item={instanceId}");
+            LogDeploy($"RequestCompleteDeployUse accepted: item={instanceId}");
             CompleteUse(_currentItem);
         }
 
@@ -563,7 +579,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// </summary>
         private bool BeginDeployable(ItemInstance item, ItemDefinition def)
         {
-            Debug.Log($"[ITEM_FLOW] [08][BeginDeployable] item={item.InstanceID} def={def.ItemID} handler={(_deployableHandler != null ? "ok" : "null")}");
+            LogDeploy($"BeginDeployable item={item.InstanceID} def={def.ItemID} handler={(_deployableHandler != null ? "ok" : "null")}");
             if (_deployableHandler == null)
             {
                 Debug.LogWarning($"[ItemUseSystem] Deployable '{def.DisplayName}' selected but no IDeployableHandler is present on the player.");
@@ -577,7 +593,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             OnItemUseStarted?.Invoke(item);
             TargetBeginDeployable(Owner, item.InstanceID, item.DefinitionID);
 
-            Debug.Log($"[ItemUseSystem] Deployable '{def.DisplayName}': entering placement mode.");
+            LogDeploy($"Deployable '{def.DisplayName}': entering placement mode item={item.InstanceID}");
             return true;
         }
 
@@ -605,8 +621,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             {
                 _currentItem = item;
                 _isUsingItem = true;
-                SpawnItemInHandGeneric(def);
-                Debug.Log($"[DEPLOY_FLOW] TargetBeginDeployable active: item={item.InstanceID} def={def.ItemID}");
+                LogDeploy($"TargetBeginDeployable active: item={item.InstanceID} def={def.ItemID}");
             }
         }
 
@@ -656,7 +671,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         {
             DestroyItemInHand();
             GameObject prefab = ItemVisualResolver.ResolveVisualPrefab(def);
-            Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
+            Transform parent = ResolveHandBone();
             _itemInHandModel = prefab != null
                 ? Instantiate(prefab, parent)
                 : ItemVisualResolver.CreateRuntimeFallback(def, ItemVisualPurpose.Held);
@@ -664,6 +679,47 @@ namespace NightHunt.GameplaySystems.ItemUse
                 _itemInHandModel.transform.SetParent(parent, worldPositionStays: false);
             _itemInHandModel.transform.localPosition = Vector3.zero;
             _itemInHandModel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        }
+
+        /// <summary>
+        /// Returns the right-hand weapon bone (WeaponR) to attach held-item models.
+        /// Preference order:
+        ///   1. PrActorUtils.WeaponR assigned in the Inspector.
+        ///   2. Deep-child search by common bone names (covers rig variations).
+        ///   3. This component's own transform as a last resort (item appears at origin).
+        /// </summary>
+        private Transform ResolveHandBone()
+        {
+            if (_actorUtils?.WeaponR != null)
+                return _actorUtils.WeaponR;
+
+            // Search the full character hierarchy for the weapon-hand bone by name.
+            string[] candidateNames = { "WeaponR", "Weapon_R", "Hand_R", "RightHandItem", "R_Weapon", "WeaponRight" };
+            Transform root = transform.root;
+            foreach (string boneName in candidateNames)
+            {
+                Transform found = FindDeepChildByName(root, boneName);
+                if (found != null)
+                {
+                    Debug.LogWarning($"[ItemUseSystem] PrActorUtils.WeaponR was null — resolved hand bone '{boneName}' by name. " +
+                                     "Assign WeaponR in PrActorUtils to suppress this search.");
+                    return found;
+                }
+            }
+
+            Debug.LogWarning("[ItemUseSystem] WeaponR bone not found via PrActorUtils or name search. " +
+                             "Item will appear at player root. Assign PrActorUtils.WeaponR in the prefab.");
+            return transform;
+        }
+
+        private static Transform FindDeepChildByName(Transform root, string boneName)
+        {
+            foreach (Transform t in root.GetComponentsInChildren<Transform>(includeInactive: true))
+            {
+                if (t.name == boneName)
+                    return t;
+            }
+            return null;
         }
 
         private void DestroyItemInHand()
@@ -767,6 +823,30 @@ namespace NightHunt.GameplaySystems.ItemUse
             Debug.Log($"[ItemUseSystem] Using={_isUsingItem} | " +
                       $"Item={_currentItem?.DefinitionID ?? "none"} | " +
                       $"PrevSlot={_previousWeaponSlot}");
+        }
+
+        private static bool ThrowableDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableThrowableDebugLogs;
+        }
+
+        private static bool DeployDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableDeployableDebugLogs;
+        }
+
+        private static void LogThrowable(string message)
+        {
+            if (ThrowableDebugEnabled())
+                Debug.Log($"[THROW_FLOW] {message}");
+        }
+
+        private static void LogDeploy(string message)
+        {
+            if (DeployDebugEnabled())
+                Debug.Log($"[DEPLOY_FLOW] {message}");
         }
 
         #endregion

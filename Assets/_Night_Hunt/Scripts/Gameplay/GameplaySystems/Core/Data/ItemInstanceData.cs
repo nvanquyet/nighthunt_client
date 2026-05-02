@@ -1,3 +1,4 @@
+using System;
 namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>

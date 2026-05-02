@@ -34,7 +34,7 @@ MonoBehaviour:
     BackgroundIcon: {fileID: 21300000, guid: f856981824319fc49b162744906cdbb9, type: 3}
   - Rarity: 5
     BackgroundIcon: {fileID: 21300000, guid: 939ac73987fcb5341b48ccb3b8073d58, type: 3}
-  DefaultSlotBackground: {fileID: 21300000, guid: cebd119eb823d414f89df552285ad41c,
+  DefaultSlotBackground: {fileID: 21300000, guid: 07c33b137d27c18429717433383d7e2b,
     type: 3}
   TooltipMode: 0
   TooltipOffset: {x: 16, y: -16}

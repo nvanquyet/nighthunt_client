@@ -795,8 +795,6 @@ namespace NightHunt.Editor.Tools
             tbl.MaxRandomCount  = maxR;
             tbl.MinTotalItems   = minT;
             tbl.MaxTotalItems   = maxT;
-            tbl.RollOnOpen      = true;
-            tbl.DropToWorldOnOpen = false;
 
             tbl.FixedEntries  = new List<LootItemEntry>(fixd ?? System.Array.Empty<LootItemEntry>());
             tbl.RandomEntries = new List<LootItemEntry>(rand ?? System.Array.Empty<LootItemEntry>());

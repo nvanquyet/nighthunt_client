@@ -1,128 +1,188 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using FishNet.Connection;
 using NightHunt.Core;
+using NightHunt.Gameplay.FogOfWar;
 using NightHunt.GameplaySystems.Core.Data;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
+using NightHunt.Networking.Player;
 using NightHunt.Audio;
 
 namespace NightHunt.GameplaySystems.ItemUse
 {
     /// <summary>
     /// PRODUCTION-READY Networked Projectile
-    /// 
+    ///
     /// Requirements:
     /// - Add NetworkObject component to prefab
     /// - Server spawns, all clients see
     /// - Explosion synced via ObserversRpc
-    /// 
+    ///
     /// Lifecycle:
     /// 1. Server: ThrowableHandler.SpawnProjectile()
-    /// 2. Server: Spawn(prefab) + Initialize(def)
+    /// 2. Server: Spawn(prefab) + Initialize(def, ownerRoot)
     /// 3. All Clients: OnStartNetwork() → visuals ready
     /// 4. Fuse expires or impact → Explode()
     /// 5. Server: RpcExplode() → all clients see VFX
     /// 6. Server: Despawn(gameObject)
+    ///
+    /// FOW:
+    /// Implements IFogTeamOwned so FogTeamVisibilityBinder can hide enemy grenades
+    /// while they are outside the local player's vision reveal radius.
+    /// _ownerTeamId is a SyncVar set once on the server in Initialize().
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(NetworkObject))]
-    public class ProjectileNetworked : NetworkBehaviour
+    [RequireComponent(typeof(FogTeamVisibilityBinder))] // auto-add FOW hider — no prefab edits needed
+    public class ProjectileNetworked : NetworkBehaviour, IFogTeamOwned
     {
+        // ── IFogTeamOwned (FOW visibility) ────────────────────────────────────────
+        // Synced once on spawn — same team as local player → always visible; enemy → FOW-hidden.
+        // -1 = unknown (pre-Initialize) → treated as neutral → always visible.
+        private readonly SyncVar<int> _ownerTeamId = new SyncVar<int>(-1, new SyncTypeSettings
+        {
+            SendRate = 0,     // only send on first sync (spawn snapshot)
+            Channel  = FishNet.Transporting.Channel.Reliable,
+        });
+
+        /// <inheritdoc/>
+        public int  FogOwnerTeamId  => _ownerTeamId.Value;
+        /// <inheritdoc/>
+        /// Enemy grenades ARE hidden by FOW (visible only when entering a reveal radius).
+        public bool FogAlwaysVisible => false;
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Runtime
+        // ─────────────────────────────────────────────────────────────────────────
+
         #region Runtime
 
         private ThrowableDefinition _def;
-        private Rigidbody _rb;
-        private ProjectileBase _projectileBase;
+        private Rigidbody           _rb;
+        private ProjectileBase      _projectileBase;
 
-        // Owner identified by PlayerHealthSystem component reference — more robust than a
-        // Transform hierarchy check because it survives rig-model refactors and correctly
-        // excludes every hitbox bone (PlayerHitBox layer) regardless of depth in the rig.
+        // Owner identified by PlayerHealthSystem reference — survives rig refactors.
         private PlayerHealthSystem _ownerHealthSystem;
         private int _ownerNetworkObjectId = -1;
 
         private bool _initialized;
         private bool _exploded;
 
-        // Restrict the proximity OverlapSphere to relevant layers (e.g. PlayerHitBox | Character).
-        // Default ~0 (everything) works but set to PlayerHitBox in the Inspector for best performance.
-        [Tooltip("Layers polled by ProximityDetection. Set to PlayerHitBox (+ Character) to only " +
-                 "react to approaching players and skip terrain/props entirely.")]
+        [Tooltip("Layers polled by ProximityDetection. Set to PlayerHitBox to skip terrain/props.")]
         [SerializeField] private LayerMask _proximityLayers = ~0;
 
         // Shared static PhysicsMaterial — allocated once, reused by all non-bounce projectiles.
         private static PhysicsMaterial s_noBounce;
 
-        // Pre-allocated overlap buffer for ProximityDetection — avoids a GC allocation every 0.1 s.
-        // 32 slots is generous; a grenade is unlikely to be within proximity of more.
+        // Pre-allocated overlap buffers — no GC alloc per frame/tick.
         private static readonly Collider[] s_proximityBuffer = new Collider[32];
+        private static readonly Collider[] s_aoeBuffer       = new Collider[64];
 
-        // Pre-allocated overlap buffer for AoE damage — sized for realistic explosion area.
-        private static readonly Collider[] s_aoeBuffer = new Collider[64];
-        
         #endregion
-        
+
         #region Events
-        
-        public event System.Action<ProjectileNetworked> OnExploded;
+
+        public event System.Action<ProjectileNetworked>           OnExploded;
         public event System.Action<ProjectileNetworked, Collision> OnImpactHit;
-        
+
         #endregion
-        
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Lifecycle
+        // ─────────────────────────────────────────────────────────────────────────
+
         #region Lifecycle
-        
+
         private void Awake()
         {
-            _rb = GetComponent<Rigidbody>();
+            _rb             = GetComponent<Rigidbody>();
             _projectileBase = GetComponent<ProjectileBase>();
-            // Self-heal layer: always ensure throwables land on the correct physics layer
-            // regardless of the serialised prefab value (layer table renames break prefabs).
+
+            // Self-heal layer — prevents prefab layer renames breaking physics.
             gameObject.layer = LayerMask.NameToLayer(NightHuntLayers.Throwable);
+
+            if (_rb != null)
+            {
+                _rb.interpolation           = RigidbodyInterpolation.Interpolate;
+                _rb.collisionDetectionMode  = CollisionDetectionMode.ContinuousDynamic;
+            }
+
+            // Runtime safety: ensures FogTeamVisibilityBinder exists on prefabs created
+            // before [RequireComponent] was added. No-op if already present.
+            EnsureFogBinder();
         }
-        
+
+        /// <summary>
+        /// Adds <see cref="FogTeamVisibilityBinder"/> at runtime if missing.
+        /// Covers prefabs that existed before [RequireComponent] was added to this class.
+        /// No-op on dedicated server (client-only FOW component).
+        /// </summary>
+        private void EnsureFogBinder()
+        {
+#if !UNITY_SERVER
+            if (GetComponent<FogTeamVisibilityBinder>() == null)
+                gameObject.AddComponent<FogTeamVisibilityBinder>();
+#endif
+        }
+
         public override void OnStartNetwork()
         {
             base.OnStartNetwork();
-            
-            // Client-side: ready to display projectile
-            if (!IsServerInitialized)
-            {
-                // Can enable client-side prediction here if needed
-            }
+            // Clients: visual ready. FogTeamVisibilityBinder (if on prefab) will auto-read
+            // _ownerTeamId.Value from the spawn snapshot and apply/remove FogOfWarHider.
         }
-        
+
         #endregion
-        
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Initialization
+        // ─────────────────────────────────────────────────────────────────────────
+
         #region Initialization
-        
+
         /// <summary>
-        /// Called by server immediately after spawn
+        /// Called by server immediately after Spawn().
         /// </summary>
         [Server]
         public void Initialize(ThrowableDefinition def, Transform ownerRoot = null)
         {
             if (_initialized) return;
-            
             _initialized = true;
             _def = def;
 
-            // Resolve owner by component, not by hierarchy root.
-            // This correctly covers every hitbox bone (PlayerHitBox layer) in the rig model
-            // without relying on IsChildOf() which can silently fail after prefab restructuring.
+            // Owner health system — identifies the thrower for collision/damage skip.
             _ownerHealthSystem = ownerRoot != null
                 ? (ownerRoot.GetComponent<PlayerHealthSystem>()
                    ?? ownerRoot.GetComponentInChildren<PlayerHealthSystem>(true))
                 : null;
 
+            // Owner network object ID — stored for DamageInfo.ShooterNetworkObjectId.
             var ownerNetworkObject = ownerRoot != null
                 ? (ownerRoot.GetComponent<NetworkObject>()
                    ?? ownerRoot.GetComponentInParent<NetworkObject>()
                    ?? ownerRoot.GetComponentInChildren<NetworkObject>(true))
                 : null;
             _ownerNetworkObjectId = ownerNetworkObject != null ? (int)ownerNetworkObject.ObjectId : -1;
-            
-            // Physics bounciness — reuse shared static material to avoid a new allocation per spawn.
+
+            // ── FOW: resolve thrower's team ────────────────────────────────────
+            // NetworkPlayer.TeamId is a SyncVar and always accurate on the server.
+            // FogTeamVisibilityBinder on this GO reads FogOwnerTeamId (= _ownerTeamId.Value)
+            // and decides whether to attach FogOfWarHider on remote clients.
+            if (ownerRoot != null)
+            {
+                var ownerNP = ownerRoot.GetComponent<NetworkPlayer>()
+                              ?? ownerRoot.GetComponentInParent<NetworkPlayer>()
+                              ?? ownerRoot.GetComponentInChildren<NetworkPlayer>(true);
+                _ownerTeamId.Value = ownerNP != null ? ownerNP.TeamId : -1;
+            }
+            // ──────────────────────────────────────────────────────────────────
+
+            // Physics bounciness.
             if (!def.CanBounce)
             {
                 var col = GetComponent<Collider>();
@@ -131,24 +191,21 @@ namespace NightHunt.GameplaySystems.ItemUse
                     if (s_noBounce == null)
                         s_noBounce = new PhysicsMaterial("NoBounce")
                         {
-                            bounciness        = 0f,
-                            frictionCombine   = PhysicsMaterialCombine.Maximum,
-                            bounceCombine     = PhysicsMaterialCombine.Minimum,
+                            bounciness      = 0f,
+                            frictionCombine = PhysicsMaterialCombine.Maximum,
+                            bounceCombine   = PhysicsMaterialCombine.Minimum,
                         };
                     col.material = s_noBounce;
                 }
             }
-            
-            // Start fuse timer if applicable.
-            // Proximity type uses its own sensor loop; Impact type only fires on collision.
+
+            // Fuse timer.
             bool usesFuse = def.FuseTime > 0f
                          && def.ThrowableType != ThrowableType.Impact
                          && def.ThrowableType != ThrowableType.Proximity;
-
             if (usesFuse)
                 StartCoroutine(FuseCountdown(def.FuseTime));
 
-            // Proximity: detect enemies entering detection radius, then explode.
             if (def.ThrowableType == ThrowableType.Proximity)
                 StartCoroutine(ProximityDetection());
 
@@ -161,26 +218,21 @@ namespace NightHunt.GameplaySystems.ItemUse
             transform.SetPositionAndRotation(position, rotation);
             _projectileBase ??= GetComponent<ProjectileBase>();
             if (_projectileBase == null)
-            {
-                Debug.LogWarning($"[PROJ_VFX] RpcPlaySpawnVfx: ProjectileBase component is NULL on '{name}' — no spawn VFX will play. Add ProjectileBase to the prefab.");
-            }
+                Debug.LogWarning($"[PROJ_VFX] ProjectileBase missing on '{name}' — no spawn VFX.");
             _projectileBase?.PlayMainVisual();
             _projectileBase?.PlayMuzzleFlash();
-            Debug.Log($"[PROJ_VFX] Network projectile spawn VFX projectile='{name}' pos={position:F2}");
+            LogThrowable($"Spawn VFX projectile='{name}' pos={position:F2}");
         }
-        
+
         private IEnumerator FuseCountdown(float fuse)
         {
             yield return new WaitForSeconds(fuse);
-            
-            if (!_exploded)
-                Explode();
+            if (!_exploded) Explode();
         }
 
         /// <summary>
         /// Polls nearby colliders every 0.1 s (server-only).
-        /// Detonates when any <see cref="IDamageable"/> enters <see cref="ThrowableDefinition.ProximityDetectionRadius"/>.
-        /// Falls back to 50% of <see cref="ThrowableDefinition.ExplosionRadius"/> when detection radius is 0.
+        /// Detonates when any IDamageable enters ProximityDetectionRadius.
         /// </summary>
         [Server]
         private IEnumerator ProximityDetection()
@@ -193,25 +245,23 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             while (!_exploded)
             {
-                // NonAlloc: writes into the shared static buffer — zero heap allocation per tick.
-                // _proximityLayers restricts detection to relevant physics layers (e.g. PlayerHitBox)
-                // so terrain, props, and other non-player colliders are invisible to the sensor.
-                int count = Physics.OverlapSphereNonAlloc(transform.position, detectionR, s_proximityBuffer, _proximityLayers);
+                int count = Physics.OverlapSphereNonAlloc(
+                    transform.position, detectionR, s_proximityBuffer, _proximityLayers);
+
                 for (int i = 0; i < count; i++)
                 {
                     var hit = s_proximityBuffer[i];
                     if (hit.transform.IsChildOf(transform) || hit.transform == transform)
                         continue;
 
-                    // Skip the thrower's hitboxes — compared by PlayerHealthSystem instance,
-                    // which is unique per player and covers all bones in the rig model.
+                    // Skip thrower hitboxes.
                     if (_ownerHealthSystem != null
                         && hit.TryGetComponent<PlayerHitboxMarker>(out var ownerCheck)
                         && ownerCheck.HealthSystem == _ownerHealthSystem)
                         continue;
 
-                    // Check for players (IHittable via PlayerHitboxMarker) or IHittable on self
-                    if (hit.TryGetComponent<PlayerHitboxMarker>(out _) || hit.TryGetComponent<IHittable>(out _))
+                    if (hit.TryGetComponent<PlayerHitboxMarker>(out _) ||
+                        hit.TryGetComponent<IHittable>(out _))
                     {
                         Explode();
                         yield break;
@@ -223,125 +273,124 @@ namespace NightHunt.GameplaySystems.ItemUse
         }
 
         #endregion
-        
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Collision
+        // ─────────────────────────────────────────────────────────────────────────
+
         #region Collision
-        
+
         private void OnCollisionEnter(Collision col)
         {
-            if (!_initialized || _exploded)
+            if (!_initialized || _exploded) return;
+            if (!IsServerInitialized)       return;
+            if (IsOwnerCollider(col.collider))
+            {
+                LogThrowable($"Ignored owner collision projectile='{name}' collider='{col.collider?.name}'");
                 return;
-
-            // Only server processes collision logic.
-            if (!IsServerInitialized)
-                return;
+            }
 
             OnImpactHit?.Invoke(this, col);
-            
+
             switch (_def.ThrowableType)
             {
-                case ThrowableType.Impact:
-                    Explode();
-                    break;
-                
-                case ThrowableType.Sticky:
-                    StickToSurface(col);
-                    break;
+                case ThrowableType.Impact:  Explode();            break;
+                case ThrowableType.Sticky:  StickToSurface(col);  break;
             }
         }
-        
+
+        private bool IsOwnerCollider(Collider col)
+        {
+            if (col == null || _ownerHealthSystem == null) return false;
+
+            if (col.TryGetComponent<PlayerHitboxMarker>(out var marker) &&
+                marker.HealthSystem == _ownerHealthSystem)
+                return true;
+
+            var health = col.GetComponentInParent<PlayerHealthSystem>();
+            return health != null && health == _ownerHealthSystem;
+        }
+
         [Server]
         private void StickToSurface(Collision col)
         {
-            _rb.isKinematic = true;
-            _rb.linearVelocity = Vector3.zero;
+            _rb.isKinematic     = true;
+            _rb.linearVelocity  = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
-            
+
             var contact = col.GetContact(0);
             transform.SetParent(col.transform, worldPositionStays: true);
             transform.position = contact.point;
-            transform.up = contact.normal;
-            
-            // Start fuse from stick time
+            transform.up       = contact.normal;
+
             if (_def.FuseTime > 0f)
                 StartCoroutine(FuseCountdown(_def.FuseTime));
-            
-            Debug.Log($"[Projectile] Stuck to '{col.gameObject.name}'");
+
+            LogThrowable($"Stuck to '{col.gameObject.name}' pos={transform.position:F2}");
         }
-        
+
         #endregion
-        
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Explosion
+        // ─────────────────────────────────────────────────────────────────────────
+
         #region Explosion
-        
-        /// <summary>
-        /// Trigger explosion (server-side)
-        /// Syncs to all clients via RPC
-        /// </summary>
+
         [Server]
         public void Explode()
         {
             if (_exploded) return;
-            
             _exploded = true;
 
-            // Server: Apply damage
             if (_def != null && _def.ExplosionRadius > 0f)
                 DealAoeDamage();
-            
-            // Clients: Show VFX/SFX
+
             RpcExplode(transform.position, transform.rotation);
-            
             OnExploded?.Invoke(this);
-            
-            // Despawn from network
             StartCoroutine(DespawnAfterExplosion());
         }
-        
-        /// <summary>
-        /// Sync explosion to all clients
-        /// </summary>
+
         [ObserversRpc]
         private void RpcExplode(Vector3 position, Quaternion rotation)
         {
-            // VFX — bật DetonationVFX child instead of Instantiate prefab mới
             _projectileBase?.TriggerDetonation(position, rotation);
 
-            // SFX — route through AudioManager (3D, mixer-controlled, pooled — no GC)
             if (_def?.ImpactSound != null)
             {
                 if (AudioManager.HasInstance)
                     AudioManager.Instance.Play3D(_def.ImpactSound, position,
                         AudioManager.Instance.GroupExplosion);
                 else
-                    AudioSource.PlayClipAtPoint(_def.ImpactSound, position); // fallback
+                    AudioSource.PlayClipAtPoint(_def.ImpactSound, position);
             }
         }
-        
+
         [Server]
         private IEnumerator DespawnAfterExplosion()
         {
-            // Đợi VFX chạy xong rồi mới despawn khỏi network
             float delay = _projectileBase != null ? _projectileBase.lifetimeAfterImpact : 3f;
             yield return new WaitForSeconds(delay);
-
             if (NetworkObject != null)
                 ServerManager.Despawn(gameObject);
         }
-        
+
         #endregion
-        
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Damage
+        // ─────────────────────────────────────────────────────────────────────────
+
         #region Damage
-        
+
         [Server]
         private void DealAoeDamage()
         {
-            // NonAlloc: reuse shared static buffer — no GC per explosion.
-            int count = Physics.OverlapSphereNonAlloc(transform.position, _def.ExplosionRadius, s_aoeBuffer);
+            int count  = Physics.OverlapSphereNonAlloc(transform.position, _def.ExplosionRadius, s_aoeBuffer);
             Vector3 origin = transform.position;
             float radius   = _def.ExplosionRadius;
 
-            // Track which HealthSystems have already been hit to avoid double-damage
-            // (player may have multiple hitbox children in the overlap sphere).
-            var hitSystems = new System.Collections.Generic.HashSet<PlayerHealthSystem>();
+            var hitSystems = new HashSet<PlayerHealthSystem>();
 
             for (int i = 0; i < count; i++)
             {
@@ -351,71 +400,79 @@ namespace NightHunt.GameplaySystems.ItemUse
                 float dist    = Vector3.Distance(origin, hit.transform.position);
                 float falloff = Mathf.Clamp01(1f - dist / radius);
 
-                // ── Path A: Player hitbox ─────────────────────────────────────────
+                // Path A: Player hitbox
                 if (hit.TryGetComponent<PlayerHitboxMarker>(out var marker))
                 {
                     var hs = marker.HealthSystem;
-                    // Skip the thrower — identified by PlayerHealthSystem reference so every
-                    // rig bone (PlayerHitBox layer) is excluded without a hierarchy walk.
                     if (hs != null && hs == _ownerHealthSystem) continue;
                     if (hs != null && hitSystems.Add(hs))
                     {
-                        var info = new DamageInfo
+                        hs.ApplyDamageServer(new DamageInfo
                         {
-                            Damage                = _def.Damage * falloff,
-                            IsHeadshot            = false,
-                            HitPoint              = hit.transform.position,
-                            HitNormal             = (hit.transform.position - origin).normalized,
+                            Damage                 = _def.Damage * falloff,
+                            IsHeadshot             = false,
+                            HitPoint               = hit.transform.position,
+                            HitNormal              = (hit.transform.position - origin).normalized,
                             ShooterNetworkObjectId = _ownerNetworkObjectId,
-                            WeaponId              = _def != null ? _def.ItemID : string.Empty,
-                        };
-                        hs.ApplyDamageServer(info);
+                            WeaponId               = _def?.ItemID ?? string.Empty,
+                        });
                     }
                 }
-                // ── Path B: Generic IHittable (boss, destructibles, etc.) ─────────
+                // Path B: Generic IHittable (boss, destructibles)
                 else if (hit.TryGetComponent<IHittable>(out var hittable))
                 {
-                    var info = new DamageInfo
+                    hittable.RequestDamage(new DamageInfo
                     {
-                        Damage                = _def.Damage * falloff,
-                        IsHeadshot            = false,
-                        HitPoint              = hit.transform.position,
-                        HitNormal             = (hit.transform.position - origin).normalized,
+                        Damage                 = _def.Damage * falloff,
+                        IsHeadshot             = false,
+                        HitPoint               = hit.transform.position,
+                        HitNormal              = (hit.transform.position - origin).normalized,
                         ShooterNetworkObjectId = _ownerNetworkObjectId,
-                        WeaponId              = _def != null ? _def.ItemID : string.Empty,
-                    };
-                    hittable.RequestDamage(info);
+                        WeaponId               = _def?.ItemID ?? string.Empty,
+                    });
                 }
 
-                // Rigidbody impulse for physics objects (crates, etc.)
+                // Rigidbody impulse for physics crates etc.
                 if (hit.TryGetComponent<Rigidbody>(out var rb) && !rb.isKinematic)
-                {
-                    Vector3 dir = (hit.transform.position - origin).normalized;
-                    rb.AddForce(dir * (500f * falloff), ForceMode.Impulse);
-                }
+                    rb.AddForce((hit.transform.position - origin).normalized * (500f * falloff), ForceMode.Impulse);
             }
         }
-        
+
         #endregion
-        
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Gizmos / Debug
+        // ─────────────────────────────────────────────────────────────────────────
+
         #region Gizmos
-        
+
         private void OnDrawGizmosSelected()
         {
             if (_def == null) return;
-            
             Gizmos.color = Color.red;
             Gizmos.DrawWireSphere(transform.position, _def.ExplosionRadius);
         }
-        
+
+        private static bool ThrowableDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableThrowableDebugLogs;
+        }
+
+        private static void LogThrowable(string message)
+        {
+            if (ThrowableDebugEnabled())
+                Debug.Log($"[THROW_FLOW] {message}");
+        }
+
         #endregion
     }
-    
+
     // ══════════════════════════════════════════════════════════════════════════
-    
+
     /// <summary>
-    /// Interface for damageable entities
-    /// Implement on any MonoBehaviour that can receive damage
+    /// Interface for damageable entities.
+    /// Implement on any MonoBehaviour that can receive damage.
     /// </summary>
     public interface IDamageable
     {

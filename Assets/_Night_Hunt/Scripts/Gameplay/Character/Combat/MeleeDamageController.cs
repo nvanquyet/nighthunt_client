@@ -1,5 +1,6 @@
 using FishNet.Object;
 using UnityEngine;
+using NightHunt.Core;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -39,6 +40,10 @@ namespace NightHunt.Gameplay.Character.Combat
                 .InRootChildren()
                 .OrDefault(null)
                 .Resolve();
+            // Self-heal: if _hitLayers is still "Everything" (~0) or empty (0), apply the
+            // canonical melee mask so melee doesn't accidentally hit triggers, zones, items, etc.
+            if (_hitLayers.value == -1 || _hitLayers.value == 0)
+                _hitLayers = NightHuntLayers.MaskMeleeHit;
         }
 
         public void RequestMeleeHit()

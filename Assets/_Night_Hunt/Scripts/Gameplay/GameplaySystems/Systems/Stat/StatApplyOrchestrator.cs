@@ -90,7 +90,11 @@ namespace NightHunt.GameplaySystems.Stat
 
 #if UNITY_EDITOR
         [ContextMenu("Validate References")]
-        private void OnValidate() => ResolveReferences();
+        protected override void OnValidate()
+        {
+            base.OnValidate();
+            ResolveReferences();
+        }
 #endif
 
         private void OnEnable()

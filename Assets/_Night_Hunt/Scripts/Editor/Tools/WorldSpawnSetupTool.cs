@@ -344,8 +344,6 @@ namespace NightHunt.Editor.Tools
             tbl.MaxRandomCount  = maxRandom;
             tbl.MinTotalItems   = minTotal;
             tbl.MaxTotalItems   = maxTotal;
-            tbl.RollOnOpen      = true;
-            tbl.DropToWorldOnOpen = false;
             EditorUtility.SetDirty(tbl);
             AssetDatabase.SaveAssets();
             Log($"Created: {name}  (assign items in Inspector)");

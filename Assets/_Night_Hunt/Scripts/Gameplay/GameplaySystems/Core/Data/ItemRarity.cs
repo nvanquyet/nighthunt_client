@@ -1,3 +1,4 @@
+
 namespace NightHunt.GameplaySystems.Core.Data
 {
     /// <summary>

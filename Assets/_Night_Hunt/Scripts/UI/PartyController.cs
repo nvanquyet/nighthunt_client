@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -358,7 +358,7 @@ namespace NightHunt.UI
             {
                 var r = await GameManager.Instance.BackendClient.PostAsync<object>(
                     Constants.API_MATCHMAKING_QUEUE,
-                    new MatchmakingQueueRequest { gameMode = modeKey, mapId = mapId, allowFill = allowFill });
+                    new MatchmakingQueueRequest { gameMode = modeKey, mapId = mapId, allowFill = allowFill, platform = GetClientPlatform() });
                 success = r.Success;
             }
 
@@ -424,6 +424,7 @@ namespace NightHunt.UI
             if (_ws == null) _ws = GameWebSocketService.Instance;
             if (_ws == null) return;
 
+            _ws.OnMatchFound              += HandleMatchFound;
             _ws.OnMatchReady              += HandleMatchReady;
             _ws.OnMatchCancelled          += HandleMatchCancelled;
             _ws.OnDsReady                 += HandleDsReady;
@@ -443,6 +444,7 @@ namespace NightHunt.UI
         private void UnsubscribeWSEvents()
         {
             if (_ws == null) return;
+            _ws.OnMatchFound              -= HandleMatchFound;
             _ws.OnMatchReady              -= HandleMatchReady;
             _ws.OnMatchCancelled          -= HandleMatchCancelled;
             _ws.OnDsReady                 -= HandleDsReady;
@@ -464,6 +466,44 @@ namespace NightHunt.UI
         {
             Debug.Log($"[PartyController] ds_ready: DS at {e.dsIp}:{e.dsPort} matchId={e.matchId}");
             NetworkGameManager.Instance?.NotifyDsReady();
+        }
+
+        private async void HandleMatchFound(GameWebSocketService.MatchFoundEvent e)
+        {
+            if (e == null || string.IsNullOrEmpty(e.lobbyToken)) return;
+
+            _pendingLobbyToken = e.lobbyToken;
+            long localUserId = _sessionState?.UserId ?? 0L;
+            MatchFoundOverlay.Instance?.Show(e.gameMode, e.playerIds, localUserId);
+
+            try
+            {
+                var result = await GameManager.Instance.BackendClient.PostAsync<object>(
+                    Constants.API_MATCHMAKING_ACCEPT,
+                    new MatchmakingAcceptRequest { lobbyToken = e.lobbyToken });
+
+                if (!result.Success && _pendingLobbyToken == e.lobbyToken)
+                {
+                    _pendingLobbyToken = null;
+                    MatchFoundOverlay.Instance?.Hide();
+                    SetQueueState(RankedQueueState.Idle);
+                    ShowToast("Matchmaking", result.Message ?? "Failed to accept match.");
+                }
+                else if (_pendingLobbyToken == e.lobbyToken)
+                {
+                    MatchFoundOverlay.Instance?.MarkPlayerAccepted(localUserId);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (_pendingLobbyToken == e.lobbyToken)
+                {
+                    _pendingLobbyToken = null;
+                    MatchFoundOverlay.Instance?.Hide();
+                    SetQueueState(RankedQueueState.Idle);
+                }
+                Debug.LogError($"[PartyController] Failed to accept match_found lobby={e.lobbyToken}: {ex.Message}");
+            }
         }
 
         private void HandleMatchReady(GameWebSocketService.MatchReadyEvent e)
@@ -512,6 +552,11 @@ namespace NightHunt.UI
         }
 
         // ── Party ─────────────────────────────────────────────────────────────
+
+        private static string GetClientPlatform()
+        {
+            return Application.isMobilePlatform ? "MOBILE" : "PC";
+        }
 
         private void HandlePartyInvitationReceived(GameWebSocketService.PartyInvitationEvent e)
         {

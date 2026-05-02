@@ -1,4 +1,4 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using NightHunt.Common;
 using NightHunt.Gameplay.Character.Data;
 using NightHunt.Networking.Player;

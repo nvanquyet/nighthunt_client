@@ -1,4 +1,4 @@
-﻿using FishNet.Object;
+using FishNet.Object;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -306,7 +306,8 @@ namespace NightHunt.GameplaySystems.Loot
             container.InitializeBeforeSpawn(config.SpawnTable, config.SpawnLocked,
                 config.LootableConfig,
                 config.ContainerAutoReset,
-                config.ContainerResetDelay);
+                config.ContainerResetDelay,
+                config.DropToWorldOnOpen);
 
             ServerManager.Spawn(netObj);
 

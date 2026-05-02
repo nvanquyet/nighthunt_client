@@ -141,3 +141,4 @@ docker/dedicated-server/build/
 -GhcrOwner
 -AdminSecret
 -GhToken
+.gitnexus

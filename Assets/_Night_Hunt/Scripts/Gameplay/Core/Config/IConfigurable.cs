@@ -1,3 +1,4 @@
+
 namespace NightHunt.Gameplay.Core.Config
 {
     /// <summary>

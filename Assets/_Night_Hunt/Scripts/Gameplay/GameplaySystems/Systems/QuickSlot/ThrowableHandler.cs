@@ -64,7 +64,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             Vector3 spawnForward = aimForward.sqrMagnitude > 0.001f
                                    ? aimForward.normalized
                                    : spawnOrigin.forward;
-            Vector3 pos = basePos + spawnForward * 0.5f;
+            Vector3 pos = basePos + spawnForward * 0.75f;
             Vector3 toTarget     = aimWorldTarget - pos;
             Vector3 horizToTarget = new Vector3(toTarget.x, 0f, toTarget.z);
             float   horizDist    = horizToTarget.magnitude;
@@ -116,6 +116,8 @@ namespace NightHunt.GameplaySystems.ItemUse
                       ?? go.GetComponentInChildren<Rigidbody>();
             if (rb != null)
             {
+                rb.interpolation = RigidbodyInterpolation.Interpolate;
+                rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
                 rb.linearVelocity = velocity;
                 LogThrowable($"Velocity applied — rb={rb.name}  linearVelocity={rb.linearVelocity:F2}");
             }

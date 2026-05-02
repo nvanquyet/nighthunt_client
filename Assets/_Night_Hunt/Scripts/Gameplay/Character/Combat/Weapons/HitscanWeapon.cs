@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using NightHunt.Core;
 using NightHunt.Data;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Gameplay.Character.Combat;
@@ -66,6 +67,10 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             // the shooter's own colliders from the raycast result without any allocation.
             // This weapon is a child of the character's WeaponR bone, so transform.root = player root.
             _shooterRoot = transform.root;
+            // Self-heal: if hitLayers is still "Everything" (~0) or empty (0), apply the
+            // canonical full hitscan mask so bullets stop at correct geometry layers only.
+            if (hitLayers.value == -1 || hitLayers.value == 0)
+                hitLayers = NightHuntLayers.MaskHitscanFull;
         }
 
         public override void Fire(Vector3 origin, Vector3 direction,
@@ -158,7 +163,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         {
             hit = default;
 
-            int count = Physics.RaycastNonAlloc(origin, direction, _raycastHits, range, hitLayers, QueryTriggerInteraction.Ignore);
+            int count = Physics.RaycastNonAlloc(origin, direction, _raycastHits, range, hitLayers, QueryTriggerInteraction.Collide);
             if (count <= 0)
                 return false;
 
@@ -216,6 +221,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 ? pool.Get(projectilePrefab, origin, Quaternion.LookRotation(direction))
                 : Instantiate(projectilePrefab, origin, Quaternion.LookRotation(direction)).GetComponent<ProjectileComponent>();
             if (proj == null) return;
+
+            proj.SetIgnoredRoot(_shooterRoot);
 
             // Ignore collisions between the hitscan trail projectile and the owner so the
             // muzzle-flash child trigger doesn't immediately detonate on the shooter's own body.

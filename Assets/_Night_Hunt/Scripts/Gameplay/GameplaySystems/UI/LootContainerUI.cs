@@ -77,7 +77,11 @@ namespace NightHunt.GameplaySystems.UI
         private WorldContainer _openContainer;
         private WorldCorpse    _openCorpse;
         private readonly List<WorldItem> _openWorldItems = new List<WorldItem>();
+        /// <summary>True when the panel is displaying a lootable that belongs to the SPECTATED player (read-only, no take actions).</summary>
+        private bool _isSpectateMode;
 
+        /// <summary>Public read for PlayerInteractionSystem to decide whether to hide via HideSpectateView.</summary>
+        public bool IsSpectateMode => _isSpectateMode;
         /// <summary>
         /// True when the panel was opened by the player explicitly holding E (interaction RPC).
         /// In that case hover-exit should NOT close the panel â€” the player needs to click the buttons.
@@ -170,7 +174,23 @@ namespace NightHunt.GameplaySystems.UI
             _currentStorage      = null;
             _openWorldItems.Clear();
             _openedViaInteraction = false;
+            // Restore buttons that spectate mode may have hidden.
+            if (_isSpectateMode)
+            {
+                if (_takeAllButton != null) _takeAllButton.gameObject.SetActive(true);
+                if (_closeButton   != null) _closeButton.gameObject.SetActive(true);
+            }
+            _isSpectateMode = false;
             ClearRows();
+        }
+
+        /// <summary>
+        /// Hides only if the panel is currently in spectate mode.
+        /// Avoids clobbering a panel that was opened by the local player after EndSpectate fires.
+        /// </summary>
+        public void HideSpectateView()
+        {
+            if (_isSpectateMode) Hide();
         }
 
         public void ShowWorldItems(IReadOnlyList<WorldItem> worldItems)
@@ -241,6 +261,50 @@ namespace NightHunt.GameplaySystems.UI
         public bool IsShowingOpenedLootable =>
             (_openContainer != null && _openContainer.IsOpen) ||
             (_openCorpse != null && _openCorpse.IsOpen);
+
+        // ── Spectate read-only API ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Shows the contents of an open lootable belonging to a SPECTATED player.
+        /// The panel is displayed in read-only mode: no Take / Take-All actions.
+        /// Canvas-group interactability is disabled so the spectator cannot accidentally click.
+        /// Storage-change events (SyncList) are still subscribed so the view stays live.
+        /// </summary>
+        public bool ShowForSpectating(ILootable lootable, string spectatedPlayerName)
+        {
+            if (lootable == null || !lootable.IsOpen)
+            {
+                Debug.Log($"[SPECTATE] ShowForSpectating skipped: lootable={lootable?.GetType().Name ?? "null"} isOpen={lootable?.IsOpen}");
+                return false;
+            }
+
+            UnsubscribeOpenLootable();
+            _isSpectateMode       = true;
+            _openedViaInteraction = false; // suppress distance-based auto-close
+            _takeItemAction       = null;  // read-only
+
+            if (lootable is WorldContainer container)
+            {
+                _openContainer = container;
+                _openContainer.OnClientStorageChanged += RebuildRows;
+            }
+            else if (lootable is WorldCorpse corpse)
+            {
+                _openCorpse = corpse;
+                _openCorpse.OnClientStorageChanged += RebuildRows;
+            }
+            else
+            {
+                Debug.LogWarning($"[SPECTATE] ShowForSpectating: unsupported lootable type {lootable.GetType().Name}.");
+                _isSpectateMode = false;
+                return false;
+            }
+
+            string title = $"👁 {spectatedPlayerName} (Spectating)";
+            Debug.Log($"[SPECTATE] ShowForSpectating: title='{title}' items={lootable.GetStorage()?.Count ?? 0}");
+            ShowLoot(title, lootable.GetStorage());
+            return true;
+        }
 
         public bool ShowOpenedLootableFromInventory(ILootable lootable, GameObject requester, string reason)
         {
@@ -502,8 +566,17 @@ namespace NightHunt.GameplaySystems.UI
             _currentStorage = storage;
 
             if (_containerPanel != null) _containerPanel.SetActive(true);
-            // Enable CanvasGroup so buttons are clickable.
-            if (_canvasGroup != null) { _canvasGroup.interactable = true; _canvasGroup.blocksRaycasts = true; }
+
+            // Spectate mode: read-only — no clicking or dragging.
+            // Normal mode: fully interactive.
+            if (_canvasGroup != null)
+            {
+                _canvasGroup.interactable   = !_isSpectateMode;
+                _canvasGroup.blocksRaycasts = true;
+            }
+            // Hide action buttons in spectate mode so the spectator cannot accidentally interact.
+            if (_takeAllButton != null) _takeAllButton.gameObject.SetActive(!_isSpectateMode);
+            if (_closeButton   != null) _closeButton.gameObject.SetActive(!_isSpectateMode);
 
             if (_containerNameText != null) _containerNameText.text = title;
 
@@ -558,8 +631,10 @@ namespace NightHunt.GameplaySystems.UI
             IReadOnlyList<ItemInstanceData> src = null;
             if (_openContainer != null) src = _openContainer.GetStorage();
             else if (_openCorpse != null) src = _openCorpse.GetStorage();
-            else if (_openWorldItems.Count > 0)
+            else
             {
+                // World-items mode: build from _openWorldItems even when list is empty,
+                // so the last item is properly cleared from the UI after being picked up.
                 var groundStorage = new List<ItemInstanceData>();
                 for (int i = 0; i < _openWorldItems.Count; i++)
                 {

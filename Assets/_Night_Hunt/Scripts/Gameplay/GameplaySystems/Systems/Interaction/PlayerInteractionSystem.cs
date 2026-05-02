@@ -47,6 +47,15 @@ namespace NightHunt.GameplaySystems.Interaction
         /// <summary>Current hold target — any IHoldInteractable (WorldContainer, WorldDoor, WorldSwitch...).</summary>
         private IHoldInteractable _holdingInteractable;
 
+        /// <summary>True while the inventory screen is open; drives auto-show/hide logic in HandleNearbyLootablesChanged.</summary>
+        private bool _inventoryIsOpen;
+
+        /// <summary>True while we are spectating another player. Local scanner events are suppressed for UI; the spectated player's scanner drives LootContainerUI instead.</summary>
+        private bool _isSpectating;
+
+        /// <summary>The ProximityInteractScanner belonging to the currently spectated player. Null when not spectating.</summary>
+        private ProximityInteractScanner _spectatedPlayerScanner;
+
         // Networking
         private NetworkPlayer _networkPlayer;
         private bool _inputSubscribed;
@@ -92,11 +101,25 @@ namespace NightHunt.GameplaySystems.Interaction
         private void OnEnable()
         {
             TrySubscribeInput();
+            if (proximityScanner != null)
+                proximityScanner.OnNearbyLootablesChanged += HandleNearbyLootablesChanged;
         }
 
         private void OnDisable()
         {
             UnsubscribeInput();
+            if (proximityScanner != null)
+                proximityScanner.OnNearbyLootablesChanged -= HandleNearbyLootablesChanged;
+
+            // Clean up spectated scanner subscription.
+            if (_spectatedPlayerScanner != null)
+            {
+                _spectatedPlayerScanner.OnNearbyLootablesChanged -= HandleSpectatedNearbyLootablesChanged;
+                _spectatedPlayerScanner = null;
+            }
+
+            _inventoryIsOpen = false;
+            _isSpectating   = false;
 
             // Reset local hold state
             _isHolding = false;
@@ -244,6 +267,8 @@ namespace NightHunt.GameplaySystems.Interaction
                 return false;
             }
 
+            _inventoryIsOpen = true;
+
             if (proximityScanner == null)
             {
                 Debug.LogWarning("[LOOT_TAB_FLOW] Cannot open nearest loot: ProximityInteractScanner is null.");
@@ -327,6 +352,8 @@ namespace NightHunt.GameplaySystems.Interaction
                 return false;
             }
 
+            _inventoryIsOpen = false;
+
             if (proximityScanner == null)
             {
                 Debug.LogWarning("[LOOT_TAB_FLOW] Inventory CLOSE: ProximityInteractScanner is null, hiding loot UI.");
@@ -375,8 +402,13 @@ namespace NightHunt.GameplaySystems.Interaction
             for (int i = 0; i < nearbyLootables.Count; i++)
             {
                 var lootable = nearbyLootables[i];
-                if (lootable != null && lootable.IsOpen && lootable is IInteractable interactable && interactable.CanInteract(gameObject))
-                    return false;
+                if (lootable == null || !lootable.IsOpen) continue;
+                if (lootable is not IInteractable interactable || !interactable.CanInteract(gameObject)) continue;
+
+                // Open lootable in range — show it if not already displayed, then skip world-item refresh.
+                if (LootContainerUI.Instance != null && !LootContainerUI.Instance.IsShowingOpenedLootable)
+                    LootContainerUI.Instance.ShowOpenedLootableFromInventory(lootable, gameObject, "InventoryRefresh:open-lootable");
+                return false;
             }
 
             var nearby = proximityScanner.NearbyInteractables;
@@ -402,6 +434,157 @@ namespace NightHunt.GameplaySystems.Interaction
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Fired by <see cref="ProximityInteractScanner.OnNearbyLootablesChanged"/> on every scan tick
+        /// when the nearby-lootable list changes.
+        ///
+        /// Inventory OPEN  → show the closest open lootable immediately (container takes priority over
+        ///                    world items; the 0.5 s timer in GameHUDController handles world-item refresh).
+        /// Inventory CLOSED → auto-show open containers/corpses that enter range; hide when they leave.
+        ///                    Closed containers are intentionally ignored (player must press E to open).
+        /// </summary>
+        // ── Spectate API ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Called by GameHUDController when spectating a new player.
+        /// Unsubscribes from the previous spectated scanner (if any), then subscribes to
+        /// <paramref name="spectatedPlayer"/>'s ProximityInteractScanner.
+        /// The scanner's natural tick (≤0.15 s) will trigger the first panel update.
+        /// </summary>
+        public void BeginSpectate(NetworkPlayer spectatedPlayer)
+        {
+            if (!IsLocalPlayer) return;
+
+            // Unsubscribe from any previous spectated scanner first.
+            if (_spectatedPlayerScanner != null)
+            {
+                _spectatedPlayerScanner.OnNearbyLootablesChanged -= HandleSpectatedNearbyLootablesChanged;
+                _spectatedPlayerScanner = null;
+            }
+
+            _isSpectating = true;
+
+            if (spectatedPlayer != null)
+            {
+                _spectatedPlayerScanner = ComponentResolver.Find<ProximityInteractScanner>(spectatedPlayer)
+                    .OnSelf()
+                    .InChildren()
+                    .Resolve();
+
+                if (_spectatedPlayerScanner != null)
+                    _spectatedPlayerScanner.OnNearbyLootablesChanged += HandleSpectatedNearbyLootablesChanged;
+                else
+                    Debug.LogWarning($"[SPECTATE] ProximityInteractScanner not found on spectated player '{spectatedPlayer.name}'.");
+            }
+
+            Debug.Log($"[SPECTATE] BeginSpectate: player={spectatedPlayer?.name} scanner={(_spectatedPlayerScanner != null ? "found" : "null")}");
+        }
+
+        /// <summary>
+        /// Called by GameHUDController when spectating ends (respawn or stop spectating).
+        /// Cleans up the spectated scanner subscription and hides the loot panel.
+        /// </summary>
+        public void EndSpectate()
+        {
+            if (!IsLocalPlayer) return;
+
+            if (_spectatedPlayerScanner != null)
+            {
+                _spectatedPlayerScanner.OnNearbyLootablesChanged -= HandleSpectatedNearbyLootablesChanged;
+                _spectatedPlayerScanner = null;
+            }
+
+            _isSpectating = false;
+            LootContainerUI.Instance?.HideSpectateView();
+            Debug.Log("[SPECTATE] EndSpectate: spectate mode ended.");
+        }
+
+        // ── Proximity-change handlers ─────────────────────────────────────────────
+
+        private void HandleNearbyLootablesChanged(IReadOnlyList<ILootable> nearbyLootables)
+        {
+            if (!IsLocalPlayer || LootContainerUI.Instance == null) return;
+            // While spectating, the spectated player's scanner drives the UI.
+            if (_isSpectating) return;
+
+            if (_inventoryIsOpen)
+            {
+                // Inventory open: an open lootable takes priority over world items.
+                // Show it immediately so the player doesn't have to wait for the 0.5 s timer.
+                for (int i = 0; i < nearbyLootables.Count; i++)
+                {
+                    var lootable = nearbyLootables[i];
+                    if (lootable == null || !lootable.IsOpen) continue;
+                    if (lootable is not IInteractable interactable || !interactable.CanInteract(gameObject)) continue;
+
+                    if (!LootContainerUI.Instance.IsShowingOpenedLootable)
+                        LootContainerUI.Instance.ShowOpenedLootableFromInventory(lootable, gameObject, "ProximityChange:inventory-open");
+                    return;
+                }
+                // No open lootable — the 0.5 s timer refreshes world items as before.
+            }
+            else
+            {
+                // Inventory closed: auto-show the first open container/corpse that enters range.
+                for (int i = 0; i < nearbyLootables.Count; i++)
+                {
+                    var lootable = nearbyLootables[i];
+                    if (lootable == null || !lootable.IsOpen) continue;
+                    if (lootable is not IInteractable interactable || !interactable.CanInteract(gameObject)) continue;
+
+                    if (!LootContainerUI.Instance.IsShowingOpenedLootable)
+                    {
+                        LootContainerUI.Instance.ShowOpenedLootableFromInventory(lootable, gameObject, "ProximityChange:auto-show");
+                        Debug.Log($"[LOOT_TAB_FLOW] ProximityChange: auto-showed '{interactable.InteractLabel}' (inventory closed).");
+                    }
+                    return;
+                }
+
+                // No open lootable left in range.
+                // LootContainerUI.Update() handles the walk-away distance check for interactive opens.
+                // This branch catches container-closed / container-despawned events specifically.
+                if (LootContainerUI.Instance.IsShowingOpenedLootable)
+                {
+                    LootContainerUI.Instance.Hide();
+                    Debug.Log("[LOOT_TAB_FLOW] ProximityChange: no open lootable in range, hiding loot panel.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Fired by the SPECTATED player's ProximityInteractScanner.
+        ///
+        /// Rules:
+        ///   • Show the first open lootable near the spectated player in read-only mode.
+        ///   • Auto-hide when no open lootable remains in range.
+        ///   • Closed containers are ignored (spectator cannot open them).
+        /// </summary>
+        private void HandleSpectatedNearbyLootablesChanged(IReadOnlyList<ILootable> nearbyLootables)
+        {
+            if (!IsLocalPlayer || !_isSpectating || LootContainerUI.Instance == null) return;
+
+            string spectatedName = NightHunt.Gameplay.Spectator.SpectateManager.Instance
+                ?.GetCurrentPlayer()?.DisplayName ?? "???";
+
+            for (int i = 0; i < nearbyLootables.Count; i++)
+            {
+                var lootable = nearbyLootables[i];
+                if (lootable == null || !lootable.IsOpen) continue;
+
+                // Show if not already showing this lootable in spectate mode.
+                if (!LootContainerUI.Instance.IsShowingOpenedLootable)
+                    LootContainerUI.Instance.ShowForSpectating(lootable, spectatedName);
+                return;
+            }
+
+            // No open lootable near spectated player — hide spectate panel.
+            if (LootContainerUI.Instance.IsSpectateMode)
+            {
+                LootContainerUI.Instance.HideSpectateView();
+                Debug.Log("[SPECTATE] No open lootable near spectated player — hiding panel.");
+            }
         }
 
         private System.Collections.Generic.List<WorldItem> CollectNearbyWorldItems()

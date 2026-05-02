@@ -33,11 +33,16 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Min(1)] public int MaxHP = 100;
 
         [Header("Placement")]
+        [Tooltip("Fallback placement distance when AimSystem/VisionRange is unavailable. Runtime placement is clamped by visible range.")]
         [Min(0.25f)] public float PlacementDistance = 3f;
         [Min(0.05f)] public float PlacementCheckRadius = 0.5f;
         public LayerMask PlacementLayerMask = ~0;
 
         [Range(0f, 60f)]
         public float MaxPlacementSlope = 30f;
+
+        [Header("Vision Ward")]
+        [Tooltip("View radius for VisionWard deployables. 0 = use the prefab's default visionRadius value.")]
+        [Min(0f)] public float VisionRadius = 0f;
     }
 }

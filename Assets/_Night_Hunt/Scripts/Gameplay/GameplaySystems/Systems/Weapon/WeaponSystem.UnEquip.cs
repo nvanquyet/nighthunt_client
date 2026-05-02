@@ -157,8 +157,9 @@ namespace NightHunt.GameplaySystems.Weapon
 
             _inventorySystem.SyncItemState(instanceID);
 
-            // Auto-select if no weapon is currently drawn.
-            if (_activeSlot.Value == null)
+            // Equipping from inventory is also a draw/select action. Keep the
+            // HUD active slot, animator, reload button, and server SyncVar aligned.
+            if (_activeSlot.Value != slot)
                 _activeSlot.Value = slot;
 
             // Fire event on server so host-mode listeners (StatApplyOrchestrator, host UI) are notified.

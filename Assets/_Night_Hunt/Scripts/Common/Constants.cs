@@ -1,3 +1,4 @@
+
 namespace NightHunt.Common
 {
     public static class Constants
@@ -82,7 +83,6 @@ namespace NightHunt.Common
         public const string API_GAME_MODES = "/api/game-modes";
 
         // Match result (post-match summary — client reports to backend after match ends)
-        public const string API_MATCH_RESULT      = "/api/matches/{0}/result";   // reserved / unused by DS
         public const string API_MATCH_END_RANKED  = "/api/match/end/ranked";     // called by DS (server-only)
         public const string API_MATCH_END_CUSTOM  = "/api/match/end/custom";     // called by relay host client
         public const string API_MAPS       = "/api/maps";

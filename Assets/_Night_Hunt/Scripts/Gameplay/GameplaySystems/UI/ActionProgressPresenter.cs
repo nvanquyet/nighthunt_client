@@ -2,6 +2,7 @@ using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using Michsky.MUIP; // ← thêm namespace MUIP
 
 namespace NightHunt.GameplaySystems.UI
 {
@@ -23,7 +24,7 @@ namespace NightHunt.GameplaySystems.UI
     {
         [Header("UI")]
         [SerializeField] private GameObject _root;
-        [SerializeField] private Slider _slider;
+        [SerializeField] private ProgressBar _progressBar; // ← thay Slider
         [SerializeField] private TextMeshProUGUI _label;
         [SerializeField] private Button _cancelButton;
 
@@ -47,11 +48,6 @@ namespace NightHunt.GameplaySystems.UI
                 _cancelButton.onClick.RemoveListener(HandleCancelClicked);
         }
 
-        /// <summary>
-        /// Returns the display priority for a given kind.
-        /// Higher value = higher priority. A lower-priority Show() will not override a
-        /// currently-active higher-priority action (e.g. Reload won't be replaced by ItemUse).
-        /// </summary>
         private static int KindPriority(ActionProgressKind k) => k switch
         {
             ActionProgressKind.Interaction => 30,
@@ -63,8 +59,6 @@ namespace NightHunt.GameplaySystems.UI
 
         public void Show(ActionProgressKind kind, string label, bool cancellable, Action onCancel = null)
         {
-            // Do not interrupt an already-active action of strictly higher priority.
-            // E.g. a Reload bar must not be replaced mid-progress by an ItemUse bar.
             if (_activeKind != ActionProgressKind.None && KindPriority(_activeKind) > KindPriority(kind))
                 return;
 
@@ -74,8 +68,11 @@ namespace NightHunt.GameplaySystems.UI
             if (_root != null)
                 _root.SetActive(true);
 
-            if (_slider != null)
-                _slider.value = 0f;
+            if (_progressBar != null)
+            {
+                _progressBar.currentPercent = 0f; // ← reset về 0 (thang 0–100)
+                _progressBar.isOn = true;         // ← bật counting
+            }
 
             if (_label != null)
                 _label.text = label ?? string.Empty;
@@ -89,8 +86,9 @@ namespace NightHunt.GameplaySystems.UI
             if (_activeKind != kind)
                 return;
 
-            if (_slider != null)
-                _slider.value = Mathf.Clamp01(progress);
+            if (_progressBar != null)
+                // Slider dùng 0–1, ProgressBar dùng 0–100
+                _progressBar.currentPercent = Mathf.Clamp01(progress) * 100f;
         }
 
         public void Hide(ActionProgressKind kind)
@@ -107,8 +105,11 @@ namespace NightHunt.GameplaySystems.UI
             if (_root != null)
                 _root.SetActive(false);
 
-            if (_slider != null)
-                _slider.value = 0f;
+            if (_progressBar != null)
+            {
+                _progressBar.currentPercent = 0f;
+                _progressBar.isOn = false; // ← tắt counting khi ẩn
+            }
 
             if (_cancelButton != null)
                 _cancelButton.gameObject.SetActive(false);

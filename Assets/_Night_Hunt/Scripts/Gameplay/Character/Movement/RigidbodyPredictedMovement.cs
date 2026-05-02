@@ -693,8 +693,10 @@ namespace NightHunt.Gameplay.Character
         }
 
         // ── OnValidate: warn about misconfigured layer masks ──────────────────
-        private void OnValidate()
+        protected override void OnValidate()
         {
+            base.OnValidate();
+
             if (groundDetectionLayer.value == 0)
                 Debug.LogWarning("[RigidbodyPredictedMovement] groundDetectionLayer is set to 'Nothing' — " +
                                  "IsGrounded() will ALWAYS return false! Set it to 'Everything' or include " +

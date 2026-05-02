@@ -1,3 +1,4 @@
+
 namespace NightHunt.Networking.Prediction.Reconciliation
 {
     public class HybridReconciliation<TState> : IReconciliationStrategy<TState> where TState : struct

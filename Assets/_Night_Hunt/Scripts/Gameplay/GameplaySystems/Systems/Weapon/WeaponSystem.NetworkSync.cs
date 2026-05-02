@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using FishNet.Object;
 using System.Collections;
 using NightHunt.Data;
@@ -599,6 +599,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 WarnProjectile($"ShowProjectileOnClientsRpc: pool.Get returned null. Increase ProjectilePool capacity for '{prefab.name}'.");
                 return;
             }
+
+            proj.SetIgnoredRoot(transform.root);
 
             bool isHitscan = config.BallisticType == "Hitscan";
 

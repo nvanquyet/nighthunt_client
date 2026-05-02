@@ -55,6 +55,11 @@ namespace NightHunt.Data
         public string Rarity;
         public int AllowedPhaseMask; // Bitmask: 1=Phase1, 2=Phase2, 4=Phase3
         public string Tags;
+        /// <summary>
+        /// Maximum visual travel distance in metres, clamped to the owner's VisionRange at
+        /// the moment of firing.  Zero = no clamp (weapon range is authoritative).
+        /// </summary>
+        public float VisionRangeClamp;
     }
 
     [Serializable]
@@ -144,6 +149,18 @@ namespace NightHunt.Data
         [Tooltip("Số giây before Phase kết thúc để bắn PhaseWarningEvent.\n" +
                  "Default: 30s cho tất cả Phase.")]
         public float WarningTime;
+
+        [Tooltip("Short bullet-point objectives shown in the in-game phase banner. " +
+                 "One string per bullet. E.g. \"Loot weapons & armor\", \"Find beacons\".\n" +
+                 "Sent to all clients inside PhaseStartedEvent.ObjectivesSummary (newline-joined).")]
+        public string[] PhaseObjectives;
+
+        /// <summary>Joins PhaseObjectives into a single newline-separated string for network sync.</summary>
+        public string BuildObjectivesSummary()
+        {
+            if (PhaseObjectives == null || PhaseObjectives.Length == 0) return string.Empty;
+            return string.Join("\n", PhaseObjectives);
+        }
     }
 
     [Serializable]

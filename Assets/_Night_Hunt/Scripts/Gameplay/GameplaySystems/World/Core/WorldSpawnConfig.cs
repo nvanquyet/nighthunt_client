@@ -52,6 +52,9 @@ namespace NightHunt.GameplaySystems.World
         [Tooltip("Container / Chest spawns locked. Player needs a key or unlock logic to open it.")]
         public bool SpawnLocked = false;
 
+        [Tooltip("When true: opening the container scatters all items as WorldItems on the ground (piñata style).\nWhen false: items stay in the container storage UI for the player to drag out.\nOnly meaningful when SpawnType = Container.")]
+        public bool DropToWorldOnOpen = false;
+
         [Header("Container — Auto Reset")]
         [Tooltip("Whether the container auto-resets after being looted.\nfalse → requires a fresh respawn.\ntrue → resets after ContainerResetDelay seconds (can be opened again with new loot).")]
         public bool ContainerAutoReset = false;

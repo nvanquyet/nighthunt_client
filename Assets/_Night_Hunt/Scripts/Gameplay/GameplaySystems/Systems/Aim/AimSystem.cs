@@ -1,4 +1,5 @@
 using UnityEngine;
+using NightHunt.Core;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Interfaces;
@@ -45,7 +46,7 @@ namespace NightHunt.GameplaySystems.Aim
         [Tooltip("World-space Y coordinate of the aiming plane.")]
         [SerializeField] private float _groundHeight = 0f;
 
-        [Tooltip("Layer mask for optional physics-based ground raycast. Leave at 0 to use the infinite plane fallback.")]
+        [Tooltip("Layer mask for optional physics-based ground raycast. 0 or Everything falls back to NightHuntLayers.MaskGroundAim.")]
         [SerializeField] private LayerMask _groundLayerMask = 0;
 
         [Header("Clamp Settings")]
@@ -211,12 +212,10 @@ namespace NightHunt.GameplaySystems.Aim
         {
             Ray ray = _camera.ScreenPointToRay(Input.mousePosition);
 
-            // Optional physics raycast (only if a layer mask is set)
-            if (_groundLayerMask.value != 0)
-            {
-                if (Physics.Raycast(ray, out RaycastHit hit, 200f, _groundLayerMask))
-                    return hit.point;
-            }
+            LayerMask groundMask = ResolveGroundLayerMask();
+            if (groundMask.value != 0 &&
+                Physics.Raycast(ray, out RaycastHit hit, 200f, groundMask, QueryTriggerInteraction.Ignore))
+                return hit.point;
 
             // Infinite ground plane fallback
             Plane groundPlane = new Plane(Vector3.up, new Vector3(0f, _groundHeight, 0f));
@@ -268,7 +267,7 @@ namespace NightHunt.GameplaySystems.Aim
 
             FinalAimPos  = origin + FinalAimDir * dist;
             FinalAimPos  = new Vector3(FinalAimPos.x, origin.y, FinalAimPos.z);
-            FinalAimGroundPos = new Vector3(FinalAimPos.x, _groundHeight, FinalAimPos.z);
+            FinalAimGroundPos = ProjectAimPointToGround(new Vector3(FinalAimPos.x, _groundHeight, FinalAimPos.z));
 
             // Reposition the world cursor and rotate it to face the player.
             // Only the configured axis angle is changed; the other two keep their designer-set values.
@@ -293,6 +292,43 @@ namespace NightHunt.GameplaySystems.Aim
                     _worldAimCursor.rotation = Quaternion.Euler(e);
                 }
             }
+        }
+
+        private Vector3 ProjectAimPointToGround(Vector3 target)
+        {
+            LayerMask groundMask = ResolveGroundLayerMask();
+            if (groundMask.value != 0)
+            {
+                Vector3 rayOrigin = target + Vector3.up * 8f;
+                if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 32f, groundMask, QueryTriggerInteraction.Ignore))
+                    return hit.point;
+            }
+
+            return new Vector3(target.x, _groundHeight, target.z);
+        }
+
+        private LayerMask ResolveGroundLayerMask()
+        {
+            int value = _groundLayerMask.value;
+            if (value == 0 || value == ~0)
+                return NightHuntLayers.MaskGroundAim;
+
+            int nonGroundMask = LayerMask.GetMask(
+                NightHuntLayers.Player,
+                NightHuntLayers.PlayerHitBox,
+                NightHuntLayers.Projectile,
+                NightHuntLayers.Throwable,
+                NightHuntLayers.Interactable,
+                NightHuntLayers.Items,
+                NightHuntLayers.Zone);
+
+            int sanitized = value & ~nonGroundMask;
+            if (sanitized == 0)
+                sanitized = NightHuntLayers.MaskGroundAim.value;
+
+            LayerMask mask = default;
+            mask.value = sanitized;
+            return mask;
         }
 
 #if UNITY_EDITOR

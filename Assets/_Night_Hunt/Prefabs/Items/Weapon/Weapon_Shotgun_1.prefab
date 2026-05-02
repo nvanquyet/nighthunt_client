@@ -94,7 +94,7 @@ MonoBehaviour:
   canTacticalReload: 1
   hitLayers:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 29394048
   damageHeadMultiplier: 1.5
   pelletCount: 8
   pelletSpreadBonus: 4.5

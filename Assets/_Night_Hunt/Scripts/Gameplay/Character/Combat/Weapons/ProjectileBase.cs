@@ -160,7 +160,11 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             ResetDetachedVfx();
             if (muzzleFlashChild != null) muzzleFlashChild.SetActive(false);
             if (detonationVFXChild != null) detonationVFXChild.SetActive(false);
-            if (mainVisualChild != null) mainVisualChild.SetActive(true);
+            // Keep mainVisualChild INACTIVE so OnEnable() can toggle it on with a proper
+            // SetActive(false→true) cycle that fires OnEnable on child ParticleSystem
+            // components and respects playOnAwake.  This is the key fix for VFX not
+            // replaying when a pooled projectile is reused during rapid auto-fire.
+            if (mainVisualChild != null) mainVisualChild.SetActive(false);
         }
 
         // -----------------------------------------------------------------
