@@ -11,7 +11,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 {
     /// <summary>
     /// Row button inside an expanded <see cref="ItemFilterPanel"/> list.
-    /// Pressing a row selects and arms the item immediately.
+    /// Single click selects the item; double click selects and arms/uses it.
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
     public class ItemFilterButton : ActionButton
@@ -25,9 +25,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IItemSelectionSystem _selectionSystem;
         private ItemFilterPanel _parentPanel;
         private CombatInputHandler _combatInputHandler;
-        private float _lastPressTime;
+        private float _lastPressTime = -999f;
 
-        private const float DoubleClickThreshold = 0.28f;
+        private const float DoubleClickThreshold = 0.45f;
 
         public void Bind(ItemInstance item, IItemSelectionSystem selectionSystem, ItemFilterPanel parentPanel, CombatInputHandler combatInputHandler = null)
         {
@@ -83,8 +83,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             bool isDouble = Time.unscaledTime - _lastPressTime <= DoubleClickThreshold;
             _lastPressTime = Time.unscaledTime;
 
-            Debug.Log($"[ITEM_FLOW] [01][FilterRowClick] instance='{_instanceId}' double={isDouble} go='{name}' action=select+use");
-            _parentPanel?.SelectFromFilter(_instanceId, useImmediately: true);
+            Debug.Log($"[ITEM_FLOW] [01][FilterRowClick] instance='{_instanceId}' double={isDouble} go='{name}' action={(isDouble ? "select+use" : "selectOnly")}");
+            _parentPanel?.SelectFromFilter(_instanceId, useImmediately: isDouble);
         }
     }
 }

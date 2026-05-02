@@ -26,3 +26,4 @@ MonoBehaviour:
   _attachmentSlots: 
   StatConfig: {fileID: 11400000, guid: f5220ff95a3045a46931b3326c47c3c9, type: 2}
   WeaponClass: 0
+  AnimatorWeaponTypeOverride: 0

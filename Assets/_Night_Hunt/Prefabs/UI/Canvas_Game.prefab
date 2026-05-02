@@ -21500,9 +21500,6 @@ MonoBehaviour:
     type: 3}
   _statContainer: {fileID: 7272387448413042717}
   _statUIConfig: {fileID: 11400000, guid: 98cda92836a93de41b98bf65f56af96e, type: 2}
-  _weightSlider: {fileID: 0}
-  _weightBarFill: {fileID: 0}
-  _weightLabel: {fileID: 0}
   _penaltyLabel: {fileID: 0}
   _overweightWarningIcon: {fileID: 0}
 --- !u!1 &5371273404791610882
@@ -37786,7 +37783,7 @@ MonoBehaviour:
   _pressScaleDur: 0.07
   _releaseScaleDur: 0.12
   _disabledAlpha: 0.4
-  _doubleClickThreshold: 0.3
+  _doubleClickThreshold: 0.45
   _icon: {fileID: 941698144508948799}
   _quantityText: {fileID: 5564777783005047840}
   _emptyIndicator: {fileID: 0}
@@ -38441,7 +38438,7 @@ MonoBehaviour:
   _pressScaleDur: 0.07
   _releaseScaleDur: 0.12
   _disabledAlpha: 0.4
-  _doubleClickThreshold: 0.3
+  _doubleClickThreshold: 0.45
   _icon: {fileID: 778730814676106571}
   _quantityText: {fileID: 2140277251600467016}
   _emptyIndicator: {fileID: 0}
@@ -41153,7 +41150,7 @@ MonoBehaviour:
   _pressScaleDur: 0.07
   _releaseScaleDur: 0.12
   _disabledAlpha: 0.4
-  _doubleClickThreshold: 0.3
+  _doubleClickThreshold: 0.45
   _selectedBorder: {fileID: 1441500979214728347}
   _weaponNameText: {fileID: 0}
   _magAmmoText: {fileID: 4320054076461351162}

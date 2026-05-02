@@ -224,9 +224,34 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                     break;
 
                 default:    // SliderWithRange, Text
-                    _valueText.text = current.ToString(_uiDef.DisplayFormat);
+                    _valueText.text = BuildBaseComparisonText(current)
+                        ?? current.ToString(_uiDef.DisplayFormat);
                     break;
             }
+        }
+
+        private string BuildBaseComparisonText(float current)
+        {
+            if (!ShouldShowBaseComparison())
+                return null;
+
+            if (_domainBridge == null || !_domainBridge.IsReady || _domainBridge.Bridge == null)
+                return null;
+
+            float baseValue = _domainBridge.Bridge.GetBaseStat(_statType);
+            float delta = current - baseValue;
+            if (Mathf.Abs(delta) < 0.01f)
+                return null;
+
+            string sign = delta > 0f ? "+" : "";
+            return $"{baseValue.ToString(_uiDef.DisplayFormat)} -> {current.ToString(_uiDef.DisplayFormat)} ({sign}{delta.ToString(_uiDef.DisplayFormat)})";
+        }
+
+        private bool ShouldShowBaseComparison()
+        {
+            return _statType != PlayerStatType.Health
+                && _statType != PlayerStatType.Stamina
+                && _statType != PlayerStatType.CurrentWeight;
         }
     }
 }

@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Configs;
@@ -11,7 +10,7 @@ using NightHunt.UI;
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
     /// <summary>
-    /// Manages player stat display rows and the carry-weight bar.
+    /// Manages player stat display rows and carry-weight penalty indicators.
     ///
     /// LAYOUT:
     ///   Weight Bar (always visible at top of panel):
@@ -23,7 +22,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     ///     MoveSpeed [██████████]  5.0 m/s
     ///     …
     ///
-    /// Weight bar color + penalty label driven by WeightPenaltyConfig tiers.
+    /// Weight is displayed as a normal stat row. Penalty label and warning icon are driven by WeightPenaltyConfig tiers.
     /// Subscribes to UIDomainBridge.OnOverweightChanged and OnWeightChanged.
     /// </summary>
     public class PlayerStatUIPanel : MonoBehaviour
@@ -37,11 +36,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [SerializeField] private RectTransform _statContainer;
         [SerializeField] private PlayerStatUIConfig _statUIConfig;
 
-        [Header("Weight Bar")]
-        [Tooltip("Slider used as a weight bar. Fill color changes per penalty tier.")]
-        [SerializeField] private Slider _weightSlider;
-        [SerializeField] private Image  _weightBarFill;
-        [SerializeField] private TextMeshProUGUI _weightLabel;
+        [Header("Weight Penalty")]
         [Tooltip("Label showing the active penalty tier name (e.g. 'Overweight'). Hidden when none.")]
         [SerializeField] private TextMeshProUGUI _penaltyLabel;
         [SerializeField] private GameObject _overweightWarningIcon;
@@ -53,9 +48,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private bool _isInitialized;
 
         private readonly Dictionary<PlayerStatType, PlayerStatUIView> _statViews = new();
-
-        private float _currentWeight;
-        private float _weightCapacity;
 
         // ─────────────────────────────────────────────────────────────────────
         #region Unity Lifecycle
@@ -151,7 +143,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             // Pull weight values from the bridge directly.
             float w = _bridge.Bridge.GetStat(PlayerStatType.CurrentWeight);
             float cap = _bridge.Bridge.GetStat(PlayerStatType.WeightCapacity);
-            UpdateWeightBar(w, cap);
+            UpdateWeightPenalty(w, cap);
         }
 
         #endregion
@@ -195,14 +187,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void HandleWeightChanged(float current, float capacity)
         {
-            _currentWeight  = current;
-            _weightCapacity = capacity;
-            UpdateWeightBar(current, capacity);
+            UpdateWeightPenalty(current, capacity);
         }
 
         private void HandleOverweightChanged(bool isOverweight, float ratio)
         {
-            // Penalty label is updated inside UpdateWeightBar via the ratio — nothing extra needed here.
+            UpdateWeightPenaltyRatio(ratio);
+
+            // Penalty label is updated from the current weight ratio.
             // Icon visibility is updated based on the ratio.
             if (_overweightWarningIcon != null)
                 _overweightWarningIcon.SetActive(isOverweight);
@@ -211,33 +203,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         #endregion
 
         // ─────────────────────────────────────────────────────────────────────
-        #region Weight Bar
+        #region Weight Penalty
 
-        private void UpdateWeightBar(float current, float capacity)
+        private void UpdateWeightPenalty(float current, float capacity)
         {
             float ratio = capacity > 0f ? current / capacity : 0f;
+            UpdateWeightPenaltyRatio(ratio);
 
-            // Slider fill
-            if (_weightSlider != null)
-            {
-                _weightSlider.minValue = 0f;
-                _weightSlider.maxValue = Mathf.Max(capacity, current); // allow overflow past 1
-                _weightSlider.value    = current;
-            }
+            if (_overweightWarningIcon != null)
+                _overweightWarningIcon.SetActive(ratio >= 1.0f);
+        }
 
-            // Bar fill color from penalty config
-            Color barColor = _weightPenaltyConfig != null
-                ? _weightPenaltyConfig.GetBarColor(ratio)
-                : Color.green;
-
-            if (_weightBarFill != null)
-                _weightBarFill.color = barColor;
-
-            // Weight label
-            if (_weightLabel != null)
-                _weightLabel.text = $"{current:F1} / {capacity:F1} kg";
-
-            // Penalty tier label
+        private void UpdateWeightPenaltyRatio(float ratio)
+        {
             if (_penaltyLabel != null)
             {
                 var tier = _weightPenaltyConfig?.GetActiveTier(ratio);
@@ -245,9 +223,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 if (tier != null)
                     _penaltyLabel.text = tier.Label;
             }
-
-            if (_overweightWarningIcon != null)
-                _overweightWarningIcon.SetActive(ratio >= 1.0f);
         }
 
         #endregion

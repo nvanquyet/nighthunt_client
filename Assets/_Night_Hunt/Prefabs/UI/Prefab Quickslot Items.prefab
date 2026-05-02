@@ -832,7 +832,7 @@ MonoBehaviour:
   _pressScaleDur: 0.07
   _releaseScaleDur: 0.12
   _disabledAlpha: 0.4
-  _doubleClickThreshold: 0.3
+  _doubleClickThreshold: 0.45
   _icon: {fileID: 7889354859810146438}
   _quantityText: {fileID: 836496246251568818}
   _emptyIndicator: {fileID: 6167369891082229053}

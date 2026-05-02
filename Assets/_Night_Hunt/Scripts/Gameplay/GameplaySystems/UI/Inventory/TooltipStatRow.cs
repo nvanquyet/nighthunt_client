@@ -16,6 +16,13 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [SerializeField] private TextMeshProUGUI _labelText;
         [SerializeField] private TextMeshProUGUI _valueText;
         [SerializeField] private Image _iconImage;
+
+        public void Bind(TextMeshProUGUI labelText, TextMeshProUGUI valueText, Image iconImage = null)
+        {
+            _labelText = labelText;
+            _valueText = valueText;
+            _iconImage = iconImage;
+        }
         
         public void SetItemStat(ItemStatDefinition statDef, float value)
         {
@@ -47,6 +54,42 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _iconImage.gameObject.SetActive(false);
             }
         }
+
+        public void SetItemStatComparison(ItemStatDefinition statDef, float baseValue, float finalValue)
+        {
+            SetItemStatLabel(statDef);
+
+            if (_valueText != null)
+            {
+                float delta = finalValue - baseValue;
+                if (Mathf.Abs(delta) < 0.01f)
+                {
+                    _valueText.text = finalValue.ToString(statDef.DisplayFormat);
+                    _valueText.color = ResolveTextColor(statDef);
+                }
+                else
+                {
+                    string sign = delta > 0f ? "+" : "";
+                    _valueText.text = $"{baseValue.ToString(statDef.DisplayFormat)} -> {finalValue.ToString(statDef.DisplayFormat)} ({sign}{delta.ToString(statDef.DisplayFormat)})";
+
+                    bool isBetter = statDef.IsPositiveStat ? delta > 0f : delta < 0f;
+                    _valueText.color = isBetter
+                        ? new Color(0.4f, 1f, 0.4f)
+                        : new Color(1f, 0.6f, 0.6f);
+                }
+            }
+
+            if (_iconImage != null && statDef.Icon != null)
+            {
+                _iconImage.sprite = statDef.Icon;
+                _iconImage.color = statDef.DisplayColor;
+                _iconImage.gameObject.SetActive(true);
+            }
+            else if (_iconImage != null)
+            {
+                _iconImage.gameObject.SetActive(false);
+            }
+        }
         
         public void SetPlayerModifier(PlayerStatModifier modifier)
         {
@@ -71,6 +114,24 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             
             if (_iconImage != null)
                 _iconImage.gameObject.SetActive(false);
+        }
+
+        private void SetItemStatLabel(ItemStatDefinition statDef)
+        {
+            Color textColor = ResolveTextColor(statDef);
+
+            if (_labelText != null)
+            {
+                _labelText.text = statDef.DisplayName + ":";
+                _labelText.color = textColor;
+            }
+        }
+
+        private static Color ResolveTextColor(ItemStatDefinition statDef)
+        {
+            return statDef.TextColor.a > 0.01f
+                ? statDef.TextColor
+                : statDef.DisplayColor;
         }
         
         private string GetPlayerStatName(PlayerStatType type)

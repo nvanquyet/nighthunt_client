@@ -44,7 +44,7 @@ MonoBehaviour:
   ContextMenuGap: 8
   HideContextMenuOnDragStart: 1
   GhostSnapBackDuration: 0.18
-  DoubleClickThreshold: 0.3
+  DoubleClickThreshold: 0.45
   AttachmentSlotHighlightColor: {r: 1, g: 0.85, b: 0.1, a: 0.7}
   AttachmentHighlightPulseSpeed: 2.5
   AttachmentSlotIconConfigs:

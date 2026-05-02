@@ -37,7 +37,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private Coroutine            _pendingCollapseRoutine;
 
         public bool IsExpanded { get; private set; }
-        private const float FilterSingleClickCollapseDelay = 0.3f;
+        private const float FilterSingleClickCollapseDelay = 0.5f;
 
         /// <summary>
         /// Bind this panel to a filter type and the current player's systems.

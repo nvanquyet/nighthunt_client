@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Weapon;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
@@ -132,6 +133,7 @@ namespace NightHunt.Gameplay.Character
         private CharacterLifecycleController      _lifecycle;
         private PlayerHealthSystem                _healthSystem;
         private MeleeDamageController             _meleeDamageController;
+        private WeaponModelController             _weaponModelController;
 
         // ── Animator layer indices (resolved after model binds) ────────────────
         private int _pistolLayer   = -1;
@@ -159,6 +161,7 @@ namespace NightHunt.Gameplay.Character
         private Vector3 _prevPosition;
         private float   _smoothedSpeed;
         private bool    _started;
+        private int[]   _prevAnimatorStateHashes;
 
         // ── Unity lifecycle ────────────────────────────────────────────────────
 
@@ -217,6 +220,11 @@ namespace NightHunt.Gameplay.Character
                 _healthSystem.OnHitReceived += HandleHitReceived;
 
             _meleeDamageController = ComponentResolver.Find<MeleeDamageController>(this)
+                .OnSelf().InChildren().InRootChildren()
+                .OrDefault(null)
+                .Resolve();
+
+            _weaponModelController = ComponentResolver.Find<WeaponModelController>(this)
                 .OnSelf().InChildren().InRootChildren()
                 .OrDefault(null)
                 .Resolve();
@@ -303,6 +311,7 @@ namespace NightHunt.Gameplay.Character
                 _meleeLayer    = GetLayerIndex(anim, "MeleeActions");
                 _launcherLayer = GetLayerIndex(anim, "LauncherActions"); // optional; -1 if absent
                 _partialActionsLayer = GetLayerIndex(anim, "PartialActions");
+                _prevAnimatorStateHashes = new int[anim.layerCount];
                 ApplyWeaponLayerWeights(anim, immediately: true);
 
                 // Push current WeaponType immediately so the animator starts in the correct state.
@@ -311,7 +320,8 @@ namespace NightHunt.Gameplay.Character
                 Debug.Log(
                     $"[ANIM_FIX] Bound animator '{anim.runtimeAnimatorController?.name}' " +
                     $"legacyVelParams={AnimatorHasHash(anim, VelocityXHash) && AnimatorHasHash(anim, VelocityYHash)} " +
-                    $"groundedParams={AnimatorHasHash(anim, OnGroundHash) || AnimatorHasHash(anim, IsGroundedHash)}");
+                    $"groundedParams={AnimatorHasHash(anim, OnGroundHash) || AnimatorHasHash(anim, IsGroundedHash)} " +
+                    "weaponTypeMap=0 Unarmed, 1 Rifle, 2 Pistol/SMG, 3 Launcher, 4 Melee, 5 Shotgun, 6 Sniper");
             }
         }
 
@@ -390,6 +400,35 @@ namespace NightHunt.Gameplay.Character
         }
 
         // ── Weapon event handlers ──────────────────────────────────────────────
+
+        private void LateUpdate()
+        {
+            if (!WeaponAnimDebugEnabled())
+                return;
+
+            var anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled)
+                return;
+
+            if (_prevAnimatorStateHashes == null || _prevAnimatorStateHashes.Length != anim.layerCount)
+                _prevAnimatorStateHashes = new int[anim.layerCount];
+
+            for (int i = 0; i < anim.layerCount; i++)
+            {
+                var info = anim.GetCurrentAnimatorStateInfo(i);
+                if (info.fullPathHash == _prevAnimatorStateHashes[i])
+                    continue;
+
+                var clips = anim.GetCurrentAnimatorClipInfo(i);
+                string clipName = clips.Length > 0 && clips[0].clip != null
+                    ? clips[0].clip.name
+                    : "(no clip)";
+
+                int animatorWeaponType = AnimatorHasHash(anim, WeaponTypeHash) ? anim.GetInteger(WeaponTypeHash) : -1;
+                Debug.Log($"[ANIM_FLOW] State L{i} {anim.GetLayerName(i)} fullPath=#{info.fullPathHash:X8} short=#{info.shortNameHash:X8} clip='{clipName}' weaponType={animatorWeaponType} activeType={_activeWeaponType} activeSlot={_activeSlot?.ToString() ?? "None"} armed={_activeSlot.HasValue}");
+                _prevAnimatorStateHashes[i] = info.fullPathHash;
+            }
+        }
 
         /// <summary>
         /// Called when the active weapon slot changes on all clients.
@@ -717,6 +756,12 @@ namespace NightHunt.Gameplay.Character
             return WeaponClassToInt(def != null ? def.WeaponClass : WeaponClass.Rifle);
         }
 
+        private static bool WeaponAnimDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableWeaponDebugLogs;
+        }
+
         // ── Animation Event Callbacks ─────────────────────────────────────────
         // Called by Animator clip events. Function names must match exactly.
         // Set these on the appropriate animation clip frames in the Animator window.
@@ -725,10 +770,20 @@ namespace NightHunt.Gameplay.Character
         public void OnAnimEventFireBullet() { /* WeaponSystem.OnShotFired covers audio. Add VFX here if needed. */ }
 
         /// <summary>Called at the frame when the weapon becomes visible (draw animation done).</summary>
-        public void OnAnimEventDrawWeapon() { /* Notify WeaponModelController to show weapon mesh. */ }
+        public void OnAnimEventDrawWeapon()
+        {
+            _weaponModelController?.ShowPendingWeaponModelFromAnimation();
+            if (WeaponAnimDebugEnabled())
+                Debug.Log($"[ANIM_FLOW] OnAnimEventDrawWeapon slot={_activeSlot?.ToString() ?? "None"} type={_activeWeaponType}");
+        }
 
         /// <summary>Called at the frame when the weapon should be hidden (holster done).</summary>
-        public void OnAnimEventHolsterComplete() { /* Notify WeaponModelController to hide weapon mesh. */ }
+        public void OnAnimEventHolsterComplete()
+        {
+            _weaponModelController?.CompleteHolsterFromAnimation();
+            if (WeaponAnimDebugEnabled())
+                Debug.Log($"[ANIM_FLOW] OnAnimEventHolsterComplete slot={_activeSlot?.ToString() ?? "None"} type={_activeWeaponType}");
+        }
 
         /// <summary>Magazine ejects (reload-out phase). Play reload-out audio here.</summary>
         public void OnAnimEventReloadOut()

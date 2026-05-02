@@ -4,6 +4,7 @@ using FishNet.Transporting;
 using NightHunt.Core;
 using NightHunt.Gameplay.Deployables;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.GameplaySystems.Aim;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.GameplaySystems.Core.Configs;
@@ -72,13 +73,7 @@ namespace NightHunt.Gameplay.Beacon
                 .OrLogWarning("[Auto] IInventorySystem not found")
                 .Resolve();
 
-            _aimSystem = ComponentResolver.Find<IAimSystem>(this)
-                .OnSelf()
-                .InChildren()
-                .InParent()
-                .InRootChildren()
-                .OrDefault(null)
-                .Resolve();
+            ResolveAimSystem();
 
             _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
                 .OnSelf()
@@ -102,6 +97,7 @@ namespace NightHunt.Gameplay.Beacon
         {
             base.OnStartClient();
             ResolveCamera();
+            ResolveAimSystem();
         }
 
         private void Update()
@@ -187,7 +183,8 @@ namespace NightHunt.Gameplay.Beacon
             }
             else
             {
-                Debug.LogWarning($"[DEPLOY_FLOW] Preview missing: def={definition.ItemID}. Placement still runs but no visual preview will show.");
+                _previewInstance = CreateRuntimePlacementPreview(definition);
+                Debug.LogWarning($"[DEPLOY_FLOW] Preview missing: def={definition.ItemID}. Using runtime fallback placement preview.");
             }
         }
 
@@ -216,6 +213,33 @@ namespace NightHunt.Gameplay.Beacon
             var cam = UnityEngine.Camera.main;
             if (cam != null)
                 _cameraTransform = cam.transform;
+        }
+
+        private void ResolveAimSystem()
+        {
+            if (_aimSystem != null)
+                return;
+
+            _aimSystem = ComponentResolver.Find<IAimSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .OrDefault(null)
+                .Resolve();
+
+            if (_aimSystem == null)
+            {
+#if UNITY_2023_1_OR_NEWER
+                _aimSystem = FindFirstObjectByType<AimSystem>();
+#else
+                _aimSystem = FindObjectOfType<AimSystem>();
+#endif
+            }
+
+            LogDeploy(_aimSystem != null
+                ? $"AimSystem resolved: type={_aimSystem.GetType().Name}"
+                : "AimSystem not resolved; placement will use mouse camera ray fallback.");
         }
 
         private void OnPlayerDied() => StopPlacement();
@@ -275,19 +299,24 @@ namespace NightHunt.Gameplay.Beacon
                 return false;
             }
 
-            Ray ray = new Ray(_cameraTransform.position, _cameraTransform.forward);
+            UnityEngine.Camera cam = _cameraTransform.GetComponent<UnityEngine.Camera>() ?? UnityEngine.Camera.main;
+            Ray ray = cam != null
+                ? cam.ScreenPointToRay(UnityEngine.Input.mousePosition)
+                : new Ray(_cameraTransform.position, _cameraTransform.forward);
 
             if (TryRaycastPlacementSurface(ray.origin, ray.direction, distance * 2f, surfaceMask, out RaycastHit hit))
             {
-                Vector3 forward = Vector3.ProjectOnPlane(_cameraTransform.forward, Vector3.up);
+                Vector3 forward = _networkPlayer != null
+                    ? Vector3.ProjectOnPlane(hit.point - _networkPlayer.transform.position, Vector3.up)
+                    : Vector3.ProjectOnPlane(ray.direction, Vector3.up);
                 BuildPlacementResult(hit, forward, blockerMask, out point, out rotation, out valid);
                 return true;
             }
 
-            point = _cameraTransform.position + _cameraTransform.forward * distance;
+            point = ray.origin + ray.direction * distance;
             rotation = Quaternion.identity;
             valid = false;
-            _lastPlacementRejectReason = $"cameraSurfaceMiss origin={ray.origin:F2} dir={ray.direction:F2} surfaceMask={surfaceMask.value}";
+            _lastPlacementRejectReason = $"cursorSurfaceMiss origin={ray.origin:F2} dir={ray.direction:F2} mouse={UnityEngine.Input.mousePosition:F0} surfaceMask={surfaceMask.value}";
             return true;
         }
 
@@ -509,6 +538,35 @@ namespace NightHunt.Gameplay.Beacon
                     : ItemVisualResolver.ResolveVisualPrefab(deployable),
                 _ => ItemVisualResolver.ResolveVisualPrefab(def)
             };
+        }
+
+        private GameObject CreateRuntimePlacementPreview(ItemDefinition def)
+        {
+            float radius = Mathf.Max(0.15f, ResolveCheckRadius(def));
+            var preview = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            preview.name = $"RuntimePlacementPreview_{def?.ItemID ?? "Unknown"}";
+            preview.transform.localScale = new Vector3(radius * 2f, 0.04f, radius * 2f);
+
+            var collider = preview.GetComponent<Collider>();
+            if (collider != null)
+                Destroy(collider);
+
+            var renderer = preview.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
+                    ?? Shader.Find("Sprites/Default")
+                    ?? Shader.Find("Standard");
+
+                if (shader != null)
+                {
+                    var material = new Material(shader);
+                    material.color = new Color(0.3f, 1f, 0.3f, 0.35f);
+                    renderer.material = material;
+                }
+            }
+
+            return preview;
         }
 
         private float ResolvePlacementDistance(ItemDefinition def)

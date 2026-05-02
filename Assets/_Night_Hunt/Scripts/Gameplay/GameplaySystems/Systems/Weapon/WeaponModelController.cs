@@ -49,11 +49,20 @@ namespace NightHunt.GameplaySystems.Weapon
         [Tooltip("Frames to wait when GetWeapon() returns null (inventory cache not yet populated).")]
         [SerializeField] private int _maxSpawnRetryFrames = 8;
 
+        [Header("Animation Visibility Sync")]
+        [SerializeField] private bool _syncVisibilityWithAnimator = true;
+        [SerializeField, Min(0f)] private float _drawVisualFallbackDelay = 0.35f;
+        [SerializeField, Min(0f)] private float _holsterVisualFallbackDelay = 0.4f;
+
         // ── Runtime refs ───────────────────────────────────────────────────────
         private IWeaponSystem     _weaponSystem;
         private PrActorUtils      _actorUtils;
         private GameObject        _currentModel;
+        private GameObject        _pendingModel;
+        private WeaponBase        _pendingWeaponBase;
+        private Transform         _pendingLeftHandIKTarget;
         private Coroutine         _spawnRetryCoroutine;
+        private Coroutine         _visualFallbackCoroutine;
 
         // ── Elevation state ────────────────────────────────────────────────────
         private float _currentElevationAngle = 0f;
@@ -130,6 +139,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
 
             StopSpawnRetry();
+            StopVisualFallback();
+            DestroyPendingModel();
         }
 
         // ── Public API ─────────────────────────────────────────────────────────
@@ -161,9 +172,17 @@ namespace NightHunt.GameplaySystems.Weapon
         private void HandleActiveWeaponChanged(WeaponSlotType? prev, WeaponSlotType? next)
         {
             StopSpawnRetry();
-            DestroyCurrentModel();
+            StopVisualFallback();
+            DestroyPendingModel();
 
-            if (next == null || _weaponSystem == null) return;
+            if (next == null || _weaponSystem == null)
+            {
+                if (_syncVisibilityWithAnimator && _currentModel != null)
+                    ScheduleHolsterFallback();
+                else
+                    DestroyCurrentModel();
+                return;
+            }
 
             var inst = _weaponSystem.GetWeapon(next.Value);
             if (inst == null)
@@ -173,7 +192,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
             }
 
-            SpawnWeaponModel(next.Value, inst);
+            SpawnWeaponModel(next.Value, inst, _syncVisibilityWithAnimator);
         }
 
         /// <summary>
@@ -190,7 +209,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 var inst = _weaponSystem?.GetWeapon(slot);
                 if (inst != null)
                 {
-                    SpawnWeaponModel(slot, inst);
+                    SpawnWeaponModel(slot, inst, _syncVisibilityWithAnimator);
                     _spawnRetryCoroutine = null;
                     yield break;
                 }
@@ -210,9 +229,18 @@ namespace NightHunt.GameplaySystems.Weapon
             }
         }
 
+        private void StopVisualFallback()
+        {
+            if (_visualFallbackCoroutine != null)
+            {
+                StopCoroutine(_visualFallbackCoroutine);
+                _visualFallbackCoroutine = null;
+            }
+        }
+
         // ── Spawn / Destroy ────────────────────────────────────────────────────
 
-        private void SpawnWeaponModel(WeaponSlotType slot, ItemInstance inst)
+        private void SpawnWeaponModel(WeaponSlotType slot, ItemInstance inst, bool asPending)
         {
             var def = ItemDatabase.GetDefinition(inst.DefinitionID);
             if (def == null)
@@ -229,17 +257,35 @@ namespace NightHunt.GameplaySystems.Weapon
 
             Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
 
-            _currentModel = Instantiate(visualPrefab, parent);
-            _currentModel.transform.localPosition = Vector3.zero;
+            GameObject spawnedModel = Instantiate(visualPrefab, parent);
+            spawnedModel.transform.localPosition = Vector3.zero;
             // Use ApplyWeaponRotation so elevation is included from the first frame
             // (typically 0° on spawn, but preserves any elevation set before the model was ready).
-            ApplyWeaponRotation();
+            ApplyWeaponRotation(spawnedModel);
 
-            var wb = ComponentResolver.Find<WeaponBase>(_currentModel)
+            if (asPending)
+                spawnedModel.SetActive(false);
+
+            var wb = ComponentResolver.Find<WeaponBase>(spawnedModel)
                 .OnSelf().InChildren()
                 .Resolve(); // null is valid — weapon may not have WeaponBase
 
             // Wire WeaponSystem so it delegates fire/FX to the spawned prefab component.
+            if (asPending)
+            {
+                _pendingModel = spawnedModel;
+                _pendingWeaponBase = wb;
+                _pendingLeftHandIKTarget = wb?.LeftHandIKTarget;
+                ScheduleDrawFallback();
+                Debug.Log($"[WeaponModelController] Pending '{def.DisplayName}' until Draw event | parent={parent.name} | WeaponBase={wb != null}");
+                return;
+            }
+
+            float elevation = _currentElevationAngle;
+            DestroyCurrentModel(notify: false);
+            _currentElevationAngle = elevation;
+            _currentModel = spawnedModel;
+
             _weaponSystem.SetFireOrigin(wb?.FirePoint);
             _weaponSystem.SetCurrentWeaponBase(wb);
 
@@ -253,7 +299,89 @@ namespace NightHunt.GameplaySystems.Weapon
                       $"| WeaponBase={wb != null} | FirePoint={wb?.FirePoint != null} | IK={LeftHandIKTarget != null}");
         }
 
-        private void DestroyCurrentModel()
+        public void ShowPendingWeaponModelFromAnimation()
+        {
+            StopVisualFallback();
+            ShowPendingWeaponModel("anim-event");
+        }
+
+        public void CompleteHolsterFromAnimation()
+        {
+            StopVisualFallback();
+            CompleteHolster("anim-event");
+        }
+
+        private void ScheduleDrawFallback()
+        {
+            if (!_syncVisibilityWithAnimator)
+                return;
+
+            _visualFallbackCoroutine = StartCoroutine(DrawVisualFallbackCoroutine());
+        }
+
+        private IEnumerator DrawVisualFallbackCoroutine()
+        {
+            if (_drawVisualFallbackDelay > 0f)
+                yield return new WaitForSeconds(_drawVisualFallbackDelay);
+
+            _visualFallbackCoroutine = null;
+            ShowPendingWeaponModel("fallback");
+        }
+
+        private void ScheduleHolsterFallback()
+        {
+            _visualFallbackCoroutine = StartCoroutine(HolsterVisualFallbackCoroutine());
+        }
+
+        private IEnumerator HolsterVisualFallbackCoroutine()
+        {
+            if (_holsterVisualFallbackDelay > 0f)
+                yield return new WaitForSeconds(_holsterVisualFallbackDelay);
+
+            _visualFallbackCoroutine = null;
+            CompleteHolster("fallback");
+        }
+
+        private void ShowPendingWeaponModel(string reason)
+        {
+            if (_pendingModel == null)
+            {
+                if (_currentModel != null && !_currentModel.activeSelf)
+                    _currentModel.SetActive(true);
+                return;
+            }
+
+            float elevation = _currentElevationAngle;
+            DestroyCurrentModel(notify: false);
+            _currentElevationAngle = elevation;
+
+            _currentModel = _pendingModel;
+            var wb = _pendingWeaponBase;
+            LeftHandIKTarget = _pendingLeftHandIKTarget;
+
+            _pendingModel = null;
+            _pendingWeaponBase = null;
+            _pendingLeftHandIKTarget = null;
+
+            _currentModel.SetActive(true);
+            ApplyWeaponRotation();
+
+            _weaponSystem?.SetFireOrigin(wb?.FirePoint);
+            _weaponSystem?.SetCurrentWeaponBase(wb);
+
+            OnWeaponModelChanged?.Invoke(wb);
+            OnLeftHandIKTargetChanged?.Invoke(LeftHandIKTarget);
+
+            Debug.Log($"[WeaponModelController] Showing weapon model from {reason} | WeaponBase={wb != null} | IK={LeftHandIKTarget != null}");
+        }
+
+        private void CompleteHolster(string reason)
+        {
+            DestroyCurrentModel();
+            Debug.Log($"[WeaponModelController] Holster complete from {reason}.");
+        }
+
+        private void DestroyCurrentModel(bool notify = true)
         {
             if (_currentModel != null)
             {
@@ -266,8 +394,23 @@ namespace NightHunt.GameplaySystems.Weapon
             _weaponSystem?.SetCurrentWeaponBase(null);
             _weaponSystem?.SetFireOrigin(null);
 
-            OnWeaponModelChanged?.Invoke(null);
-            OnLeftHandIKTargetChanged?.Invoke(null);
+            if (notify)
+            {
+                OnWeaponModelChanged?.Invoke(null);
+                OnLeftHandIKTargetChanged?.Invoke(null);
+            }
+        }
+
+        private void DestroyPendingModel()
+        {
+            if (_pendingModel != null)
+            {
+                Destroy(_pendingModel);
+                _pendingModel = null;
+            }
+
+            _pendingWeaponBase = null;
+            _pendingLeftHandIKTarget = null;
         }
 
         // ── Weapon rotation ────────────────────────────────────────────────────
@@ -289,13 +432,18 @@ namespace NightHunt.GameplaySystems.Weapon
         /// </summary>
         private void ApplyWeaponRotation()
         {
-            if (_currentModel == null) return;
+            ApplyWeaponRotation(_currentModel);
+        }
+
+        private void ApplyWeaponRotation(GameObject model)
+        {
+            if (model == null) return;
 
             Quaternion baseRot  = Quaternion.Euler(_localRotationWeapon);
             Quaternion pitchRot = Quaternion.AngleAxis(_currentElevationAngle, _pitchAxis);
 
             // Base × Pitch: pitch is applied first (in parent local space), then base aligns to rig.
-            _currentModel.transform.localRotation = baseRot * pitchRot;
+            model.transform.localRotation = baseRot * pitchRot;
         }
     }
 }

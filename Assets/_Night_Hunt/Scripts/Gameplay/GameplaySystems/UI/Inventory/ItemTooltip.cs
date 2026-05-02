@@ -62,6 +62,26 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private TooltipMode              _activeMode = TooltipMode.FollowMouse;
         private readonly List<GameObject> _statRows = new();
 
+        private static readonly HashSet<ItemStatType> TooltipSummaryStats = new()
+        {
+            ItemStatType.Damage,
+            ItemStatType.FireRate,
+            ItemStatType.MagazineSize,
+            ItemStatType.ArmorValue,
+            ItemStatType.MaxDurability,
+            ItemStatType.BatteryCapacity,
+        };
+
+        private static readonly HashSet<PlayerStatType> TooltipSummaryPlayerModifiers = new()
+        {
+            PlayerStatType.MaxHealth,
+            PlayerStatType.MaxStamina,
+            PlayerStatType.MovementSpeed,
+            PlayerStatType.WeightCapacity,
+            PlayerStatType.Armor,
+            PlayerStatType.VisionRange,
+        };
+
         // ─────────────────────────────────────────────────────────────────────
         #region Unity Lifecycle
 
@@ -307,14 +327,14 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_itemDescriptionText != null) _itemDescriptionText.text =
                 string.IsNullOrEmpty(def.Description) ? "No description." : def.Description;
 
-            bool hasItemStats  = BuildItemStats(item);
+            bool hasItemStats  = BuildItemStats(item, def);
             bool hasModifiers  = BuildPlayerModifiers(def);
 
             if (_itemStatsSection       != null) _itemStatsSection.SetActive(hasItemStats);
             if (_playerModifiersSection != null) _playerModifiersSection.SetActive(hasModifiers);
         }
 
-        private bool BuildItemStats(ItemInstance item)
+        private bool BuildItemStats(ItemInstance item, ItemDefinition def)
         {
             if (_itemStatsContainer == null || _statRowPrefab == null) return false;
 
@@ -328,6 +348,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             foreach (var kvp in allStats)
             {
                 if (kvp.Value == 0) continue;
+                if (!TooltipSummaryStats.Contains(kvp.Key)) continue;
                 if (_itemStatConfig == null) continue;
 
                 var statDef = _itemStatConfig.GetItemStatDefinition(kvp.Key);
@@ -341,7 +362,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
                 if (row != null)
                 {
-                    row.SetItemStat(statDef, kvp.Value);
+                    float baseValue = ItemStatComputer.GetBaseStat(def, kvp.Key);
+                    row.SetItemStatComparison(statDef, baseValue, kvp.Value);
                     _statRows.Add(go);
                     hasStats = true;
                 }
@@ -363,6 +385,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             foreach (var mod in modifiers)
             {
                 if (mod.Value == 0) continue;
+                if (!TooltipSummaryPlayerModifiers.Contains(mod.StatType)) continue;
 
                 var go = Instantiate(_statRowPrefab, _playerModifiersContainer);
                 var row = ComponentResolver.Find<TooltipStatRow>(go)

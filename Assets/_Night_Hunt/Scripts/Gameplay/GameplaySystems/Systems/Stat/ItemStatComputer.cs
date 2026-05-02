@@ -131,6 +131,20 @@ namespace NightHunt.GameplaySystems.Stat
 
         // ── Private Helpers ──────────────────────────────────────────────────
 
+        public static Dictionary<ItemStatType, float> GetBaseStats(ItemDefinition def)
+        {
+            var result = new Dictionary<ItemStatType, float>(16);
+            if (def != null)
+                SeedBaseStats(def, result);
+            return result;
+        }
+
+        public static float GetBaseStat(ItemDefinition def, ItemStatType type)
+        {
+            var stats = GetBaseStats(def);
+            return stats.TryGetValue(type, out float value) ? value : 0f;
+        }
+
         private static void SeedBaseStats(ItemDefinition def, Dictionary<ItemStatType, float> result)
         {
             // Try each concrete definition type that carries a StatConfig.

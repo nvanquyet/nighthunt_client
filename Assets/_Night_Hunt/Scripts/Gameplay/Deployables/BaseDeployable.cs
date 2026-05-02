@@ -30,6 +30,8 @@ namespace NightHunt.Gameplay.Deployables
         protected readonly SyncVar<bool> _isPlaced = new SyncVar<bool>();
         protected readonly SyncVar<bool> _isActive = new SyncVar<bool>();
 
+        private FogTeamVisibilityBinder _fogVisibilityBinder;
+
         public int CurrentHP => _currentHP.Value;
         public int OwnerTeamId => _ownerTeamId.Value;
         public bool IsPlaced => _isPlaced.Value;
@@ -45,12 +47,15 @@ namespace NightHunt.Gameplay.Deployables
             // Runtime safety: [RequireComponent] only auto-adds when script is dragged onto a new GO.
             // Existing prefabs won't have the component until they are opened+saved in the Editor.
             // EnsureFogBinder() covers this gap so all spawned GOs always have the binder.
-            EnsureFogBinder();
+            _fogVisibilityBinder = EnsureFogBinder();
 
             _currentHP.OnChange += OnHPChanged;
             _isPlaced.OnChange  += OnIsPlacedChanged;
+            _ownerTeamId.OnChange += HandleOwnerTeamIdChanged;
+            _isActive.OnChange += HandleActiveStateChanged;
 
             ApplyPlacedVisual(_isPlaced.Value);
+            RefreshFogVisibility("OnStartNetwork");
         }
 
         /// <summary>
@@ -59,11 +64,16 @@ namespace NightHunt.Gameplay.Deployables
         /// [RequireComponent(FogTeamVisibilityBinder)] was added to this class.
         /// No-op if the component already exists.
         /// </summary>
-        private void EnsureFogBinder()
+        private FogTeamVisibilityBinder EnsureFogBinder()
         {
 #if !UNITY_SERVER
-            if (GetComponent<FogTeamVisibilityBinder>() == null)
-                gameObject.AddComponent<FogTeamVisibilityBinder>();
+            var binder = GetComponent<FogTeamVisibilityBinder>();
+            if (binder == null)
+                binder = gameObject.AddComponent<FogTeamVisibilityBinder>();
+
+            return binder;
+#else
+            return null;
 #endif
         }
 
@@ -72,6 +82,8 @@ namespace NightHunt.Gameplay.Deployables
             base.OnStopNetwork();
             _currentHP.OnChange -= OnHPChanged;
             _isPlaced.OnChange -= OnIsPlacedChanged;
+            _ownerTeamId.OnChange -= HandleOwnerTeamIdChanged;
+            _isActive.OnChange -= HandleActiveStateChanged;
         }
 
         /// <summary>Server: Khởi tạo thông tin chủ sở hữu và trạng thái cơ bản.</summary>
@@ -146,6 +158,27 @@ namespace NightHunt.Gameplay.Deployables
         protected virtual void OnIsPlacedChanged(bool oldVal, bool newVal, bool asServer)
         {
             ApplyPlacedVisual(newVal);
+            RefreshFogVisibility("PlacedChanged");
+        }
+
+        private void HandleOwnerTeamIdChanged(int oldVal, int newVal, bool asServer)
+        {
+            RefreshFogVisibility($"OwnerTeamChanged {oldVal}->{newVal}");
+        }
+
+        private void HandleActiveStateChanged(bool oldVal, bool newVal, bool asServer)
+        {
+            RefreshFogVisibility($"ActiveChanged {oldVal}->{newVal}");
+        }
+
+        protected void RefreshFogVisibility(string reason)
+        {
+#if !UNITY_SERVER
+            if (_fogVisibilityBinder == null)
+                _fogVisibilityBinder = GetComponent<FogTeamVisibilityBinder>();
+
+            _fogVisibilityBinder?.RefreshVisibilityForLocalTeam();
+#endif
         }
 
         /// <summary>Xử lý visual dựa trên trạng thái Placed. Subclass có thể override.</summary>

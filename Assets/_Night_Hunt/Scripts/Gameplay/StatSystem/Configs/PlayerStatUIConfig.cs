@@ -239,7 +239,7 @@ namespace NightHunt.Gameplay.StatSystem.Configs
                 {
                     Type = PlayerStatType.VisionRange,
                     DisplayName = "Vision Range",
-                    ShowInUI = false,
+                    ShowInUI = true,
                     DisplayColor = Color.white,
                     TextColor = new Color(0.9f, 0.9f, 0.9f),
                     DisplayFormat = "0.0",

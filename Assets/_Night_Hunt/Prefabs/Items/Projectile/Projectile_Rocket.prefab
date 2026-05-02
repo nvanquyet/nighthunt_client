@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 7601439658133347623}
   - component: {fileID: 1182269823462164824}
   - component: {fileID: 8949143090457225085}
+  - component: {fileID: -5838789328731421853}
   m_Layer: 8
   m_Name: Projectile_Rocket
   m_TagString: Untagged
@@ -56,6 +57,11 @@ MonoBehaviour:
   lifetimeAfterImpact: 1.2
   hideTrailOnImpact: 1
   muzzleFlashDuration: 0.08
+  _hitscanTrailLingerDuration: 0.12
+  _minHitscanVisualSpeed: 180
+  _sweepRadius: 0.08
+  _movementDebugLogInterval: 0.25
+  _selfIgnoreDistance: 0.4
 --- !u!135 &8949143090457225085
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -77,6 +83,33 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.18
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!54 &-5838789328731421853
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 512133451321599961}
+  serializedVersion: 4
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &3582164369475505130
 GameObject:
   m_ObjectHideFlags: 0

@@ -47,6 +47,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [SerializeField] private ItemTooltip     _itemTooltip;
         [SerializeField] private DropQuantityDialog _dropQuantityDialog;
         [SerializeField] private PlayerStatUIPanel  _playerStatPanel;
+        [SerializeField] private ItemStatUIPanel    _itemStatPanel;
 
         [Header("Spectator")]
         [Tooltip("Label displayed when viewing another player's inventory.")]
@@ -140,6 +141,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             HookBridgeEvents(false);
             _domainBridge = domainBridge;
             _playerStatPanel?.RefreshForNewPlayer(_domainBridge);
+            _itemStatPanel?.RefreshForNewPlayer(_domainBridge);
             _itemTooltip?.Initialize(_domainBridge);
             _weaponEquipmentPanel?.Initialize(domainBridge);
             HookBridgeEvents(true);
@@ -263,7 +265,11 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void InitSubPanels()
         {
+            if (_itemStatPanel == null)
+                _itemStatPanel = GetComponent<ItemStatUIPanel>() ?? gameObject.AddComponent<ItemStatUIPanel>();
+
             _playerStatPanel?.Initialize(_domainBridge);
+            _itemStatPanel?.Initialize(_domainBridge);
             _itemTooltip?.Initialize(_domainBridge);
         }
 
@@ -463,6 +469,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             _selectedSlot = slot;
             slot.SetSelectedVisual(true);
+            _itemStatPanel?.Show(slot.State.Item);
             _itemTooltip?.Hide(); // tooltip is redundant while a slot is selected
         }
 
@@ -548,6 +555,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             _selectedSlot?.SetSelectedVisual(false);
             _selectedSlot = null;
+            _itemStatPanel?.Clear();
         }
 
         private void ClearTransientUI()

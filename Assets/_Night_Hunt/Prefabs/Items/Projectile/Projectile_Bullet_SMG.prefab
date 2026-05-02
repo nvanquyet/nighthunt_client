@@ -107,6 +107,7 @@ GameObject:
   - component: {fileID: 9183187943692556038}
   - component: {fileID: 4208469689550930090}
   - component: {fileID: 7768428828676924228}
+  - component: {fileID: -5469982989659114276}
   m_Layer: 8
   m_Name: Projectile_Bullet_SMG
   m_TagString: Untagged
@@ -152,6 +153,11 @@ MonoBehaviour:
   lifetimeAfterImpact: 1.2
   hideTrailOnImpact: 1
   muzzleFlashDuration: 0.05
+  _hitscanTrailLingerDuration: 0.12
+  _minHitscanVisualSpeed: 180
+  _sweepRadius: 0.08
+  _movementDebugLogInterval: 0.25
+  _selfIgnoreDistance: 0.4
 --- !u!135 &7768428828676924228
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -173,6 +179,33 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.04
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!54 &-5469982989659114276
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8547464181950319873}
+  serializedVersion: 4
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1001 &17819574119077395
 PrefabInstance:
   m_ObjectHideFlags: 0

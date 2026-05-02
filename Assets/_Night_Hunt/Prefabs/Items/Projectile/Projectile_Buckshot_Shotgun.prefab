@@ -75,6 +75,7 @@ GameObject:
   - component: {fileID: 9218262015513795555}
   - component: {fileID: 3972224054411670861}
   - component: {fileID: 4775919229992730772}
+  - component: {fileID: -7632211101813610381}
   m_Layer: 8
   m_Name: Projectile_Buckshot_Shotgun
   m_TagString: Untagged
@@ -120,6 +121,11 @@ MonoBehaviour:
   lifetimeAfterImpact: 1.2
   hideTrailOnImpact: 1
   muzzleFlashDuration: 0.05
+  _hitscanTrailLingerDuration: 0.12
+  _minHitscanVisualSpeed: 180
+  _sweepRadius: 0.08
+  _movementDebugLogInterval: 0.25
+  _selfIgnoreDistance: 0.4
 --- !u!135 &4775919229992730772
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -141,6 +147,33 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.035
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!54 &-7632211101813610381
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4224247326197267361}
+  serializedVersion: 4
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &7881082394053158933
 GameObject:
   m_ObjectHideFlags: 0
