@@ -12,9 +12,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
     /// <summary>
     /// HUD button representing a single weapon slot.
     ///
-    /// Single click selects the slot, or reloads when the slot is already active.
-    /// Double click holsters the current weapon. Slot presses also cancel any armed
-    /// consumable, throwable, or deployable before switching weapons.
+    /// Single click toggles the slot: selects it when inactive, holsters when already active.
+    /// Double click reloads when the slot is active, or selects when it is not.
+    /// Both interactions first cancel any armed consumable / throwable / deployable.
     /// </summary>
     public class WeaponSlotButton : SlotHUDButton
     {
@@ -116,18 +116,26 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_weaponSystem == null)
                 return;
 
-            if (ConsumeDoubleClick())
-            {
-                _weaponSystem.HolsterWeapon();
-                return;
-            }
-
+            // Always cancel any armed item first so weapon swap is clean.
             if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
                 _itemSelectionSystem?.RequestCancelSelection();
 
             var activeSlot = _weaponSystem.GetActiveWeaponSlot();
-            if (activeSlot.HasValue && activeSlot.Value == _slotType)
-                _weaponSystem.RequestReload();
+            bool isActiveSlot = activeSlot.HasValue && activeSlot.Value == _slotType;
+
+            if (ConsumeDoubleClick())
+            {
+                // Double click: reload when slot is active, select otherwise.
+                if (isActiveSlot)
+                    _weaponSystem.RequestReload();
+                else
+                    _weaponSystem.SelectWeapon(_slotType);
+                return;
+            }
+
+            // Single click: toggle — holster if active, select if not.
+            if (isActiveSlot)
+                _weaponSystem.HolsterWeapon();
             else
                 _weaponSystem.SelectWeapon(_slotType);
         }

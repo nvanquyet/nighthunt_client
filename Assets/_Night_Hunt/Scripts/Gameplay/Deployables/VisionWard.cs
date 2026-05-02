@@ -28,6 +28,11 @@ namespace NightHunt.Gameplay.Deployables
             if (_revealer == null)
                 _revealer = gameObject.AddComponent<FogOfWarRevealer3D>();
 
+            // Normalize prefab state: start with revealer OFF so we never show
+            // vision until server confirms placement + team check passes.
+            // (Prevents cases where the prefab was saved with it enabled.)
+            _revealer.enabled = false;
+
             _visibilityBinder = GetComponent<FogTeamVisibilityBinder>();
             if (_visibilityBinder == null)
                 _visibilityBinder = gameObject.AddComponent<FogTeamVisibilityBinder>();
@@ -37,14 +42,37 @@ namespace NightHunt.Gameplay.Deployables
         {
             base.OnStartNetwork();
             _ownerTeamId.OnChange += OnOwnerTeamChanged;
-            _isActive.OnChange += OnIsActiveChanged;
+            _isActive.OnChange   += OnIsActiveChanged;
+            // Also subscribe _isPlaced directly (base already subscribes via OnIsPlacedChanged
+            // override, but we add here for explicit logging during first placement.)
+            // Note: base.OnStartNetwork() already wires _isPlaced.OnChange → OnIsPlacedChanged.
 
             if (SpectateManager.Instance != null)
                 SpectateManager.Instance.OnLocalPlayerSet += OnLocalPlayerAvailable;
 
             SubscribeLocalPlayerTeamChange(SpectateManager.Instance?.GetLocalPlayer());
+
+            // Apply radius BEFORE UpdateVisionState so revealer radius is correct.
             ApplyRevealerRadius();
+
+            // Initial state check. At this point _isPlaced is likely false (set true after StartPlacement).
+            Debug.Log($"[VisionWard] OnStartNetwork: isPlaced={_isPlaced.Value} isActive={_isActive.Value} ownerTeam={_ownerTeamId.Value}");
             UpdateVisionState();
+        }
+
+        /// <summary>
+        /// Server-only init override that also sets the vision radius from the data definition.
+        /// Called by DeployablePlacementHandler when VisionRadius > 0 on the DeployableDefinition.
+        /// </summary>
+        [Server]
+        public void InitializeWithRadius(int teamId, int maxHP, float radius)
+        {
+            base.Initialize(teamId, maxHP);
+            if (radius > 0f)
+            {
+                visionRadius = radius;
+                ApplyRevealerRadius();
+            }
         }
 
         public override void OnStopNetwork()
@@ -68,7 +96,10 @@ namespace NightHunt.Gameplay.Deployables
         {
             base.OnDeployablePlaced();
 
-            Debug.Log($"[VisionWard] Team {_ownerTeamId.Value} placed vision ward. hp={_currentHP.Value} radius={visionRadius}");
+            // _isPlaced is now true (set by StartPlacement before calling this).
+            // _isActive is true (set in Initialize).
+            // Client will receive _isPlaced SyncVar delta → OnIsPlacedChanged → UpdateVisionState → enable revealer.
+            Debug.Log($"[VisionWard] OnDeployablePlaced [SERVER]: team={_ownerTeamId.Value} isPlaced={_isPlaced.Value} isActive={_isActive.Value} radius={visionRadius}");
 
             if (lifetimeSeconds > 0f)
                 Invoke(nameof(ExpireWard), lifetimeSeconds);
@@ -118,17 +149,29 @@ namespace NightHunt.Gameplay.Deployables
         private void UpdateVisionState()
         {
             if (_revealer == null)
-                return;
-
-            ApplyRevealerRadius();
-
-            if (!_isPlaced.Value || !_isActive.Value)
             {
-                _revealer.enabled = false;
+                Debug.LogWarning("[VisionWard] UpdateVisionState: revealer is null — component missing?");
                 return;
             }
 
-            _revealer.enabled = !IsEnemyForLocalClient();
+            ApplyRevealerRadius();
+
+            bool shouldEnable = _isPlaced.Value && _isActive.Value && !IsEnemyForLocalClient();
+
+            Debug.Log($"[VisionWard] UpdateVisionState: isPlaced={_isPlaced.Value} isActive={_isActive.Value} " +
+                      $"ownerTeam={_ownerTeamId.Value} " +
+                      $"localTeam={SpectateManager.Instance?.GetLocalPlayer()?.TeamId.ToString() ?? "null(no local player)"} " +
+                      $"isEnemy={IsEnemyForLocalClient()} radius={visionRadius:F1} → revealerEnabled={shouldEnable}");
+
+            // Ensure the revealer's own GameObject is active before toggling the component.
+            // (FogOfWarRevealer3D only processes when both the GO and component are active.)
+            if (shouldEnable && !gameObject.activeInHierarchy)
+            {
+                Debug.LogWarning("[VisionWard] Cannot enable revealer: GameObject is inactive.");
+                return;
+            }
+
+            _revealer.enabled = shouldEnable;
         }
 
         private void ApplyRevealerRadius()

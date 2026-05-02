@@ -3,17 +3,39 @@ using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
-using UnityEngine;
 using NightHunt.Utilities;
+using UnityEngine;
 
 namespace NightHunt.Gameplay.FogOfWar
 {
     /// <summary>
-    /// Controls whether this object should be hidden by FogOfWar for the local client.
-    /// - Lấy local team qua SpectateManager.Instance.GetLocalPlayer().TeamId (KHÔNG đổi khi spectate).
-    /// - Lấy team của object qua NetworkPlayer.TeamId.
-    /// - Nếu object khác team local → gắn FogOfWarHider.
-    /// - Nếu cùng team local → bỏ FogOfWarHider (luôn nhìn thấy).
+    /// Controls whether this object should be hidden by Fog of War for the local client.
+    ///
+    /// VISIBILITY RULES (applied to every networked object in the scene):
+    ///
+    ///   1. AlwaysVisible (IFogTeamOwned.FogAlwaysVisible == true OR no IFogTeamOwned found):
+    ///      → No FogOfWarHider attached  → object always rendered
+    ///      → Examples: map geometry, neutral pickups, ally players, ally deployables
+    ///
+    ///   2. Same team as local player (FogOwnerTeamId == localTeamId):
+    ///      → No FogOfWarHider          → always visible (ally)
+    ///      → Examples: ally grenade, ally VisionWard, ally player
+    ///
+    ///   3. Different team (FogOwnerTeamId != localTeamId):
+    ///      → FogOfWarHider + HiderDisableRenderers attached
+    ///      → Object hidden outside any FogOfWarRevealer3D radius
+    ///      → Examples: enemy player, enemy grenade, enemy VisionWard
+    ///
+    /// TEAM IDENTITY SOURCE (via IFogTeamOwned interface):
+    ///   • NetworkPlayer       → IFogTeamOwned.FogOwnerTeamId = NetworkPlayer.TeamId
+    ///   • BaseDeployable      → IFogTeamOwned.FogOwnerTeamId = BaseDeployable.OwnerTeamId
+    ///   • ProjectileNetworked → IFogTeamOwned.FogOwnerTeamId = thrower's TeamId (set in Initialize)
+    ///   • Any custom object   → implement IFogTeamOwned and this binder handles it automatically
+    ///
+    /// SETUP on prefabs:
+    ///   Add FogTeamVisibilityBinder to the root NetworkBehaviour GO.
+    ///   Ensure the GO (or a child/parent) implements IFogTeamOwned.
+    ///   This binder finds it via ComponentResolver at Awake.
     /// </summary>
     [DisallowMultipleComponent]
     public class FogTeamVisibilityBinder : MonoBehaviour
@@ -21,79 +43,81 @@ namespace NightHunt.Gameplay.FogOfWar
         [Header("Debug")]
         [SerializeField] private bool _logDecisions;
 
-        private FogOfWarHider _hider;
+        private FogOfWarHider       _hider;
         private HiderDisableRenderers _hiderBehavior;
-        private NetworkPlayer _networkPlayer;
-        private NightHunt.Gameplay.Deployables.BaseDeployable _deployable;
-        private PlayerModelLoader _modelLoader;
-        private NetworkPlayer _subscribedLocalPlayer; // tracks local player for team-change callbacks
+
+        // Primary team source: unified interface (preferred over legacy fields).
+        private IFogTeamOwned _teamOwned;
+
+        // Legacy fallback references — kept only for spectate-override logic on NetworkPlayer.
+        private NetworkPlayer      _networkPlayer;
+        private PlayerModelLoader  _modelLoader;
+
+        // Tracks local player subscription for team-change callbacks.
+        private NetworkPlayer _subscribedLocalPlayer;
 
         public bool IsEnemyToLocal { get; private set; }
         public event System.Action<bool> OnEnemyStateChanged;
 
+        // ─────────────────────────────────────────────────────────────────────
+        //  Unity Lifecycle
+        // ─────────────────────────────────────────────────────────────────────
+
         private void Awake()
         {
-            _hider = ComponentResolver.Find<FogOfWarHider>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .Resolve();
+            // Resolve the unified team identity interface first.
+            // ComponentResolver searches Self → Children → Parent so it handles any prefab structure.
+            _teamOwned = ComponentResolver.Find<IFogTeamOwned>(this)
+                .OnSelf().InChildren().InParent()
+                .Resolve();
 
-            // BUG 3 FIX: Add InParent() so this component is found even when placed on a child
-            // object whose NetworkPlayer lives on the parent hierarchy.
+            // NetworkPlayer is still needed for:
+            //   (a) OnPublicDataChanged event (re-run when team changes mid-game)
+            //   (b) Spectate-override in FogVisionBinder
             _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
-        .OnSelf()
-        .InChildren()
-        .InParent()
-        .Resolve();
-            
-            // Nếu không phải Player, có thể đây là một thiết bị thả xuống đất (Mắt/Trạm Hồi Sinh)
-            _deployable = ComponentResolver.Find<NightHunt.Gameplay.Deployables.BaseDeployable>(this)
-        .OnSelf()
-        .InChildren()
-        .Resolve();
+                .OnSelf().InChildren().InParent()
+                .Resolve();
 
-            // Note: Missing NetworkPlayer/Deployable warning is deferred to Start() after a
-            // coroutine retry, to allow network initialization to complete first.
+            if (_networkPlayer != null)
+            {
+                // When the player has a NetworkPlayer, it IS the IFogTeamOwned source.
+                // If for some reason it was not resolved via the interface (old prefab), fall back.
+                if (_teamOwned == null && _networkPlayer is IFogTeamOwned np)
+                    _teamOwned = np;
+            }
 
+            // Existing FogOfWarHider on the prefab (if any) — adopt rather than duplicate.
+            _hider = ComponentResolver.Find<FogOfWarHider>(this)
+                .OnSelf().InChildren().InParent()
+                .Resolve();
+
+            // Model loader for refreshing child renderers after model hot-swap.
             _modelLoader = ComponentResolver.Find<PlayerModelLoader>(this)
-        .OnSelf().OnRoot().InRootChildren()
-        .Resolve();
+                .OnSelf().OnRoot().InRootChildren()
+                .Resolve();
         }
 
         private void Start()
         {
-            // BUG 3 FIX: If NetworkPlayer was not found in Awake (network not yet initialized),
-            // retry once per frame until found, then apply team visibility.
-            if (_networkPlayer == null && _deployable == null)
-                StartCoroutine(WaitForNetworkOwner());
+            // Retry if IFogTeamOwned not found (network not initialized yet).
+            if (_teamOwned == null)
+                StartCoroutine(WaitForTeamOwned());
 
-            // Subscribe to _networkPlayer.OnPublicDataChanged để re-run khi team thay đổi giữa game.
+            // Subscribe to NetworkPlayer team changes.
             if (_networkPlayer != null)
                 _networkPlayer.OnPublicDataChanged += OnNetworkPlayerDataChanged;
 
-            // ALWAYS subscribe to OnLocalPlayerSet so we catch two cases:
-            // (a) Local player not yet registered when Start() runs (late-join).
-            // (b) Local player's _playerData.TeamId SyncVar arrives AFTER Start():
-            //     the spawn packet may carry default TeamId=0; a separate SyncVar
-            //     delta then sets the real team. OnLocalPlayerSet alone won't re-fire,
-            //     so we also call SubscribeLocalPlayerTeamChange to listen on the
-            //     local player's OnPublicDataChanged directly.
+            // Subscribe to local player availability (late-join / spectate changes).
             if (SpectateManager.Instance != null)
                 SpectateManager.Instance.OnLocalPlayerSet += OnLocalPlayerAvailable;
 
-            // Initial refresh — may read TeamId=0 if SyncVar hasn't landed yet.
-            // SubscribeLocalPlayerTeamChange ensures correction when real team arrives.
+            // Initial refresh.
             RefreshVisibilityForLocalTeam();
             var local = SpectateManager.Instance?.GetLocalPlayer();
             if (local != null)
                 SubscribeLocalPlayerTeamChange(local);
 
-            // Refresh renderer list when model finishes loading.
-            // RACE: FishNet fires PlayerModelLoader.OnStartClient() (and thus OnModelReady)
-            // synchronously during LateUpdate when the spawn packet is processed.
-            // Unity defers Start() to the NEXT frame, so by the time we subscribe here
-            // the model may already be instantiated. If so, call the handler immediately.
+            // Refresh renderers when player model loads.
             if (_modelLoader != null)
             {
                 _modelLoader.OnModelReady += OnModelReadyForFog;
@@ -102,29 +126,39 @@ namespace NightHunt.Gameplay.FogOfWar
             }
         }
 
-        private System.Collections.IEnumerator WaitForNetworkOwner()
+        private System.Collections.IEnumerator WaitForTeamOwned()
         {
-            int maxFrames = 60; // give up after 60 frames (~1 s at 60 fps)
+            int maxFrames = 60;
             for (int i = 0; i < maxFrames; i++)
             {
                 yield return null;
-                _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
-                    .OnSelf().InChildren().InParent().Resolve();
-                _deployable = _deployable ?? ComponentResolver.Find<NightHunt.Gameplay.Deployables.BaseDeployable>(this)
-                    .OnSelf().InChildren().Resolve();
 
-                if (_networkPlayer != null || _deployable != null)
+                _teamOwned = ComponentResolver.Find<IFogTeamOwned>(this)
+                    .OnSelf().InChildren().InParent()
+                    .Resolve();
+
+                if (_networkPlayer == null)
+                    _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+                        .OnSelf().InChildren().InParent()
+                        .Resolve();
+
+                if (_teamOwned != null)
                 {
                     if (_networkPlayer != null)
                         _networkPlayer.OnPublicDataChanged += OnNetworkPlayerDataChanged;
+
                     var local = SpectateManager.Instance?.GetLocalPlayer();
                     if (local != null)
                         SubscribeLocalPlayerTeamChange(local);
+
                     RefreshVisibilityForLocalTeam();
                     yield break;
                 }
             }
-            Debug.LogWarning("[FogTeamVisibilityBinder] Không tìm thấy NetworkPlayer hay BaseDeployable sau 60 frames. Script sẽ không biết tính team!");
+
+            Log("IFogTeamOwned not found after 60 frames — treating object as always visible (neutral).");
+            RemoveHiderIfExists();
+            SetEnemyState(false);
         }
 
         private void OnDestroy()
@@ -142,9 +176,10 @@ namespace NightHunt.Gameplay.FogOfWar
                 _modelLoader.OnModelReady -= OnModelReadyForFog;
         }
 
-        /// <summary>
-        /// Call lại RefreshVisibilityForLocalTeam mỗi khi data của object này thay đổi (vd. team switch).
-        /// </summary>
+        // ─────────────────────────────────────────────────────────────────────
+        //  Event Handlers
+        // ─────────────────────────────────────────────────────────────────────
+
         private void OnNetworkPlayerDataChanged(PlayerPublicData prev, PlayerPublicData next)
         {
             if (prev.TeamId != next.TeamId)
@@ -160,12 +195,6 @@ namespace NightHunt.Gameplay.FogOfWar
             RefreshVisibilityForLocalTeam();
         }
 
-        /// <summary>
-        /// Subscribes to the local player's OnPublicDataChanged so that if the local
-        /// player's TeamId SyncVar arrives AFTER Start() already evaluated team visibility
-        /// (e.g. spawn packet carried default TeamId=0 before the SyncVar delta landed),
-        /// every FogTeamVisibilityBinder instance for remote objects still re-evaluates.
-        /// </summary>
         private void SubscribeLocalPlayerTeamChange(NetworkPlayer local)
         {
             if (local == null || local == _subscribedLocalPlayer) return;
@@ -181,52 +210,68 @@ namespace NightHunt.Gameplay.FogOfWar
                 RefreshVisibilityForLocalTeam();
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        //  Core Visibility Logic
+        // ─────────────────────────────────────────────────────────────────────
+
         /// <summary>
-        /// Áp dụng / gỡ FogOfWarHider dựa theo team của local player.
-        /// Returns true if the local team was resolved; false if the local player
-        /// is not yet registered (caller should retry via OnLocalPlayerSet event).
+        /// Re-evaluates team relationship and applies/removes FogOfWarHider accordingly.
+        /// Call this whenever local team or object team may have changed.
+        /// Returns true if team was resolved; false if still waiting for data.
         /// </summary>
         public bool RefreshVisibilityForLocalTeam()
         {
-            int localTeamId;
-            if (!TryGetLocalTeamId(out localTeamId))
+            // Rule 1: AlwaysVisible or no IFogTeamOwned found → never hide.
+            if (_teamOwned == null || _teamOwned.FogAlwaysVisible)
             {
-                // Local player not registered yet.
-                // Default to VISIBLE so no player is accidentally hidden while waiting.
-                // OnLocalPlayerAvailable() will re-run this method once the local
-                // player spawns and registers with SpectateManager.
-                Log("No local team available — defaulting to visible and waiting for OnLocalPlayerSet.");
+                Log(_teamOwned == null
+                    ? "No IFogTeamOwned found — defaulting to always visible."
+                    : $"FogAlwaysVisible=true (teamId={_teamOwned.FogOwnerTeamId}) — never hiding.");
+                RemoveHiderIfExists();
+                SetEnemyState(false);
+                return _teamOwned != null;
+            }
+
+            // Rule 2: Neutral (TeamId == -1) → always visible.
+            int objectTeamId = _teamOwned.FogOwnerTeamId;
+            if (objectTeamId < 0)
+            {
+                Log($"Neutral object (teamId={objectTeamId}) — always visible.");
+                RemoveHiderIfExists();
+                SetEnemyState(false);
+                return true;
+            }
+
+            // Rule 3: Wait for local player.
+            if (!TryGetLocalTeamId(out int localTeamId))
+            {
+                Log("Local player not ready — defaulting to visible, waiting for OnLocalPlayerSet.");
                 RemoveHiderIfExists();
                 SetEnemyState(false);
                 return false;
             }
 
-            int objectTeamId;
-            if (!TryGetObjectTeamId(out objectTeamId))
-            {
-                // Nếu object not available team (neutral) → tuỳ design, ở đây cho luôn visible.
-                Log("No object team detected, treating as neutral (visible).");
-                RemoveHiderIfExists();
-                SetEnemyState(false);
-                return true; // resolved: neutral objects are always visible
-            }
+            // Rule 4: Team comparison.
+            bool isEnemy = objectTeamId != localTeamId;
+            SetEnemyState(isEnemy);
 
-            bool isEnemyToLocal = objectTeamId != localTeamId;
-            SetEnemyState(isEnemyToLocal);
-
-            if (isEnemyToLocal)
+            if (isEnemy)
             {
                 EnsureHiderExists();
-                Log($"Object is enemy (localTeam={localTeamId}, objectTeam={objectTeamId}) → FogOfWarHider ENABLED.");
+                Log($"ENEMY (localTeam={localTeamId}, objectTeam={objectTeamId}) → FogOfWarHider ON.");
             }
             else
             {
                 RemoveHiderIfExists();
-                Log($"Object is ally (localTeam={localTeamId}, objectTeam={objectTeamId}) → FogOfWarHider DISABLED.");
+                Log($"ALLY  (localTeam={localTeamId}, objectTeam={objectTeamId}) → FogOfWarHider OFF.");
             }
 
             return true;
         }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Helpers
+        // ─────────────────────────────────────────────────────────────────────
 
         private void SetEnemyState(bool isEnemy)
         {
@@ -240,35 +285,11 @@ namespace NightHunt.Gameplay.FogOfWar
         private bool TryGetLocalTeamId(out int teamId)
         {
             teamId = -1;
-
-            if (SpectateManager.Instance == null)
-                return false;
-
-            NetworkPlayer local = SpectateManager.Instance.GetLocalPlayer();
-            if (local == null)
-                return false;
-
+            if (SpectateManager.Instance == null) return false;
+            var local = SpectateManager.Instance.GetLocalPlayer();
+            if (local == null) return false;
             teamId = local.TeamId;
             return teamId >= 0;
-        }
-
-        private bool TryGetObjectTeamId(out int teamId)
-        {
-            teamId = -1;
-
-            if (_networkPlayer != null)
-            {
-                teamId = _networkPlayer.TeamId;
-                return true;
-            }
-
-            if (_deployable != null)
-            {
-                teamId = _deployable.OwnerTeamId;
-                return true;
-            }
-
-            return false;
         }
 
         private void EnsureHiderExists()
@@ -280,10 +301,6 @@ namespace NightHunt.Gameplay.FogOfWar
             if (_hider != null) return;
 
             _hider = host.gameObject.AddComponent<FogOfWarHider>();
-
-            // Add renderer-toggling behavior so renderers are actually hidden/shown
-            // when the FOW system marks this object as revealed or concealed.
-            // Without this companion, FogOfWarHider fires OnActiveChanged but nothing acts on it.
             _hiderBehavior = host.gameObject.AddComponent<HiderDisableRenderers>();
             RefreshHiderRenderers();
         }
@@ -292,9 +309,7 @@ namespace NightHunt.Gameplay.FogOfWar
         {
             if (_hider == null) return;
 
-            // Explicitly disable the hider FIRST so FogOfWarHider.OnDisable() fires
-            // synchronously: it calls SetActive(true) → OnActiveChanged(true) →
-            // HiderBehavior.OnReveal() → renderers re-enabled BEFORE the behavior is destroyed.
+            // Disable first so FogOfWarHider.OnDisable() fires synchronously and restores renderers.
             _hider.enabled = false;
 
             if (_hiderBehavior != null)
@@ -307,41 +322,29 @@ namespace NightHunt.Gameplay.FogOfWar
             _hider = null;
         }
 
-        /// <summary>
-        /// Called when the character model finishes loading. Re-captures all child renderers
-        /// so the HiderDisableRenderers behavior covers the freshly instantiated mesh.
-        /// </summary>
         private void OnModelReadyForFog(GameObject _) => RefreshHiderRenderers();
 
-        /// <summary>
-        /// (Re-)populates HiderDisableRenderers with every Renderer currently on this
-        /// object and its children. Safe to call multiple times (e.g. after model swap).
-        /// </summary>
         private void RefreshHiderRenderers()
         {
             if (_hiderBehavior == null) return;
             var host = GetHiderHost();
-            _hiderBehavior.ModifyHiddenRenderers(host.GetComponentsInChildren<Renderer>(includeInactive: true));
+            _hiderBehavior.ModifyHiddenRenderers(
+                host.GetComponentsInChildren<Renderer>(includeInactive: true));
         }
 
         private Transform GetHiderHost()
         {
-            if (_networkPlayer != null)
-                return _networkPlayer.transform;
+            // Use the NetworkPlayer transform as host when available (player prefab).
+            if (_networkPlayer != null) return _networkPlayer.transform;
 
-            if (_deployable != null)
-                return _deployable.transform;
-
+            // For other objects (deployables, projectiles), use this transform.
             return transform;
         }
 
         private void Log(string msg)
         {
             if (_logDecisions)
-            {
-                Debug.Log("[FogTeamVisibilityBinder] " + msg, this);
-            }
+                Debug.Log($"[FogTeamVisibilityBinder:{name}] {msg}", this);
         }
     }
 }
-

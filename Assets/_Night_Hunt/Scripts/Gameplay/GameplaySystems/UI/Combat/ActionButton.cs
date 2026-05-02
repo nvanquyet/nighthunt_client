@@ -24,6 +24,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] protected Image _cooldownRing;
 
         [Header("Animation")]
+        [SerializeField] private float _scaleValue = 1f;
         [SerializeField] private float _pressScaleDown = 0.88f;
         [SerializeField] private float _pressScaleDur = 0.07f;
         [SerializeField] private float _releaseScaleDur = 0.12f;
@@ -85,7 +86,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
 #if !UNITY_SERVER
             DOTween.Kill(transform);
-            transform.DOScale(1f, _releaseScaleDur).SetEase(Ease.OutBack);
+            transform.DOScale(_scaleValue, _releaseScaleDur).SetEase(Ease.OutBack);
 #endif
             OnReleased?.Invoke();
         }

@@ -6,6 +6,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Spectator;
+using NightHunt.Gameplay.FogOfWar;
 using NightHunt.Networking.Player;
 using UnityEngine;
 using Unity.Cinemachine;
@@ -27,8 +28,13 @@ namespace NightHunt.Networking.Player
     /// - Notify server when client is ready
     /// - Setup camera/input for owner
     /// </summary>
-    public class NetworkPlayer : NetworkBehaviour
+    public class NetworkPlayer : NetworkBehaviour, IFogTeamOwned
     {
+        // ── IFogTeamOwned (FOW team visibility) ───────────────────────────────
+        /// <inheritdoc/>
+        public int  FogOwnerTeamId  => TeamId;  // SyncVar-backed, always up-to-date on all clients
+        /// <inheritdoc/>
+        public bool FogAlwaysVisible => false;  // Players obey FOW; ally vs enemy decided by team compare
         /// <summary>
         /// Fired on the owning client when this NetworkPlayer has completed owner-side setup
         /// (camera + input). Used by gameplay systems (e.g. PlayerInteractionSystem) to

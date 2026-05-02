@@ -4,6 +4,7 @@ using UnityEngine;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Character.Combat;
+using NightHunt.Gameplay.FogOfWar;
 
 namespace NightHunt.Gameplay.Deployables
 {
@@ -11,9 +12,18 @@ namespace NightHunt.Gameplay.Deployables
     /// Lớp cơ sở (Base Class) cho tất cả các thiết bị/item có thể đặt xuống đất.
     /// Manages Máu, Trạng thái (Placed/Active), Logic bị phá huỷ.
     /// Visual nên được handle thông qua prefab hierarchy, không cần script tham chiếu ở base.
+    ///
+    /// FOW: [RequireComponent] ensures FogTeamVisibilityBinder is always present on the GO.
+    /// Runtime EnsureFogBinder() covers existing prefabs that were created before this attribute.
     /// </summary>
-    public abstract class BaseDeployable : NetworkBehaviour, IHittable
+    [RequireComponent(typeof(FogTeamVisibilityBinder))]
+    public abstract class BaseDeployable : NetworkBehaviour, IHittable, IFogTeamOwned
     {
+        // ── IFogTeamOwned ──────────────────────────────────────────────────────────────
+        /// <inheritdoc/>
+        public int  FogOwnerTeamId  => OwnerTeamId; // SyncVar-backed — always current on all clients
+        /// <inheritdoc/>
+        public bool FogAlwaysVisible => false;       // Deployables obey FOW based on owner team
         // Synchronized state
         protected readonly SyncVar<int> _currentHP = new SyncVar<int>();
         protected readonly SyncVar<int> _ownerTeamId = new SyncVar<int>();
@@ -32,10 +42,29 @@ namespace NightHunt.Gameplay.Deployables
         {
             base.OnStartNetwork();
 
+            // Runtime safety: [RequireComponent] only auto-adds when script is dragged onto a new GO.
+            // Existing prefabs won't have the component until they are opened+saved in the Editor.
+            // EnsureFogBinder() covers this gap so all spawned GOs always have the binder.
+            EnsureFogBinder();
+
             _currentHP.OnChange += OnHPChanged;
-            _isPlaced.OnChange += OnIsPlacedChanged;
+            _isPlaced.OnChange  += OnIsPlacedChanged;
 
             ApplyPlacedVisual(_isPlaced.Value);
+        }
+
+        /// <summary>
+        /// Ensures <see cref="FogTeamVisibilityBinder"/> exists on this GO.
+        /// Called from <see cref="OnStartNetwork"/> to cover prefabs created before
+        /// [RequireComponent(FogTeamVisibilityBinder)] was added to this class.
+        /// No-op if the component already exists.
+        /// </summary>
+        private void EnsureFogBinder()
+        {
+#if !UNITY_SERVER
+            if (GetComponent<FogTeamVisibilityBinder>() == null)
+                gameObject.AddComponent<FogTeamVisibilityBinder>();
+#endif
         }
 
         public override void OnStopNetwork()
