@@ -1,4 +1,4 @@
-﻿Shader "PolygonR/PBRMetalRough_Multiply" {
+Shader "PolygonR/PBRMetalRough_Multiply" {
     Properties {
         _Color ("Color", Color) = (1,1,1,1)
         _MainTex ("Albedo (RGB)", 2D) = "white" {}
@@ -223,6 +223,7 @@
             #pragma multi_compile_shadowcaster
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
@@ -236,9 +237,7 @@
             };
 
             float4 shadowVert(ShadowAttribs IN) : SV_POSITION {
-                float3 posWS  = TransformObjectToWorld(IN.positionOS.xyz);
-                float3 normWS = TransformObjectToWorldNormal(IN.normalOS);
-                return TransformWorldToHClip(ApplyShadowBias(posWS, normWS, _LightDirection));
+                return GetShadowPositionHClip(IN.positionOS, IN.normalOS);
             }
 
             half4 shadowFrag(float4 pos : SV_POSITION) : SV_Target {
