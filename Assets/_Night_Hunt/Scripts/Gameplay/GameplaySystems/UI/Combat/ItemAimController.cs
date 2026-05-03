@@ -109,6 +109,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// <summary>True while the controller is in throwable aim mode.</summary>
         public bool IsInAimMode => _inAimMode;
 
+        /// <summary>True while the controller is waiting for deploy placement confirm/cancel.</summary>
+        public bool IsInDeployMode => _inDeployMode;
+
         // ─────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle
         // ─────────────────────────────────────────────────────────────────────
@@ -187,14 +190,86 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _itemSelectionSystem = itemSelectionSystem;
             _playerTransform     = playerTransform;
             _aimSystem           = aimSystem;
-            _itemUseSystem       = itemUseSystem;
             _combatInputHandler  = combatInputHandler;
+
+            if (_itemUseSystem != null)
+            {
+                _itemUseSystem.OnItemUseStarted -= HandleItemUseStarted;
+                _itemUseSystem.OnItemUseCompleted -= HandleItemUseEnded;
+                _itemUseSystem.OnItemUseCancelled -= HandleItemUseEnded;
+            }
+
+            _itemUseSystem = itemUseSystem;
+
+            if (_itemUseSystem != null)
+            {
+                _itemUseSystem.OnItemUseStarted += HandleItemUseStarted;
+                _itemUseSystem.OnItemUseCompleted += HandleItemUseEnded;
+                _itemUseSystem.OnItemUseCancelled += HandleItemUseEnded;
+            }
 
             if (_rangeIndicator != null)
                 _rangeIndicator.SetFollowTarget(playerTransform);
 
             if (_cam == null)
                 _cam = Camera.main;
+        }
+
+        private void OnDestroy()
+        {
+            if (_itemUseSystem != null)
+            {
+                _itemUseSystem.OnItemUseStarted -= HandleItemUseStarted;
+                _itemUseSystem.OnItemUseCompleted -= HandleItemUseEnded;
+                _itemUseSystem.OnItemUseCancelled -= HandleItemUseEnded;
+            }
+        }
+
+        private void HandleItemUseStarted(ItemInstance item)
+        {
+            if (item == null) return;
+            var def = ItemDatabase.GetDefinition(item.DefinitionID);
+            if (def == null) return;
+
+            if (def.Type == ItemType.Deployable)
+            {
+                if (_inDeployMode) CancelDeploy();
+                if (_inAimMode)    CancelAim();
+
+                _activeItemInstanceId = item.InstanceID;
+                _inDeployMode = true;
+                IsDeployingPC = !IsMobile;
+                _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
+                _aimSystem?.SetCursorVisible(true);
+
+                Debug.Log($"[ItemAimController] HandleItemUseStarted: deployable '{item.InstanceID}' → deploy mode");
+            }
+            else if (def.Type == ItemType.Throwable)
+            {
+                if (_inAimMode)    CancelAim();
+                if (_inDeployMode) CancelDeploy();
+
+                _activeItemInstanceId = item.InstanceID;
+                _inAimMode = true;
+                IsAimingPC = !IsMobile;
+                _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
+
+                float range = GetThrowRange();
+                if (_rangeIndicator != null)
+                    _rangeIndicator.ShowWithRange(range);
+                if (IsMobile)
+                    _aimSystem?.SetCursorVisible(true);
+
+                Debug.Log($"[ItemAimController] HandleItemUseStarted: throwable '{item.InstanceID}' mobile={IsMobile} range={range:F2}");
+                if (!IsMobile)
+                    UpdatePCRaycast();
+            }
+        }
+
+        private void HandleItemUseEnded(ItemInstance item)
+        {
+            if (_inAimMode) ResetAimState();
+            if (_inDeployMode) ResetDeployState();
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -275,7 +350,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void OnMobileDrag(Vector2 joystickDir)
         {
-            if (!_inAimMode || !IsMobile) return;
+            if ((!_inAimMode && !_inDeployMode) || !IsMobile) return;
 
             float   range    = GetThrowRange();
             Vector3 worldDir = Joystick01ToWorldDir(joystickDir, range);
@@ -304,12 +379,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void OnMobileDragEnd(float joystickMagnitude)
         {
-            if (!_inAimMode || !IsMobile) return;
+            if ((!_inAimMode && !_inDeployMode) || !IsMobile) return;
 
             if (joystickMagnitude >= _dragThreshold)
-                ConfirmAim();
+            {
+                if (_inAimMode) ConfirmAim();
+                else if (_inDeployMode) ConfirmDeploy();
+            }
             else
-                CancelAim();
+            {
+                if (_inAimMode) CancelAim();
+                else if (_inDeployMode) CancelDeploy();
+            }
         }
 
         /// <summary>
@@ -317,7 +398,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void OnMobileDragEndIfStillActive(float joystickMagnitude)
         {
-            if (!_inAimMode) return;
+            if (!_inAimMode && !_inDeployMode) return;
             OnMobileDragEnd(joystickMagnitude);
         }
 
@@ -412,8 +493,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (!_inDeployMode) return;
             LogDeploy($"ConfirmDeploy item={_activeItemInstanceId ?? "null"}");
-            ResetDeployState();
-            _itemUseSystem?.TryConfirmDeploy();
+            bool confirmed = _itemUseSystem?.TryConfirmDeploy() ?? false;
+            if (confirmed)
+                ResetDeployState();
         }
 
         /// <summary>
