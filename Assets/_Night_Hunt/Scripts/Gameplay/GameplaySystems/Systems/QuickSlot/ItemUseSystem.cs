@@ -492,6 +492,10 @@ namespace NightHunt.GameplaySystems.ItemUse
         [TargetRpc]
         private void TargetCancelDeploy(NetworkConnection conn)
         {
+            var prevItem = _currentItem;
+            _isUsingItem = false;
+            _currentItem = null;
+
             _deployableHandler ??= ComponentResolver.Find<IDeployableHandler>(this)
                 .OnSelf()
                 .InChildren()
@@ -500,6 +504,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                 .Resolve();
 
             _deployableHandler?.CancelDeploy();
+            if (prevItem != null) OnItemUseCancelled?.Invoke(prevItem);
         }
 
         #endregion
@@ -621,6 +626,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             {
                 _currentItem = item;
                 _isUsingItem = true;
+                OnItemUseStarted?.Invoke(item);
                 LogDeploy($"TargetBeginDeployable active: item={item.InstanceID} def={def.ItemID}");
             }
         }
@@ -642,6 +648,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             _currentItem = item;
             _isUsingItem = true;
+            OnItemUseStarted?.Invoke(item);
             SpawnItemInHandGeneric(def);
             Debug.Log($"[ITEM_FLOW] [09][TargetBeginHeldItem] item={item.InstanceID} def={def.ItemID}");
         }
@@ -649,8 +656,10 @@ namespace NightHunt.GameplaySystems.ItemUse
         [TargetRpc]
         private void TargetEndItemUseVisual(NetworkConnection conn)
         {
+            var prevItem = _currentItem;
             _isUsingItem = false;
             _currentItem = null;
+            if (prevItem != null) OnItemUseCompleted?.Invoke(prevItem);
             DestroyItemInHand();
         }
 
