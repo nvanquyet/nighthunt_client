@@ -188,5 +188,15 @@ namespace NightHunt.Gameplay.Deployables
 
             return localPlayer.TeamId != _ownerTeamId.Value;
         }
+
+#if UNITY_EDITOR
+        private void OnDrawGizmosSelected()
+        {
+            Gizmos.color = new Color(0f, 1f, 1f, 0.15f); // Semi-transparent cyan
+            Gizmos.DrawSphere(transform.position, visionRadius);
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(transform.position, visionRadius);
+        }
+#endif
     }
 }

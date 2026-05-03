@@ -446,11 +446,38 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         #region Gizmos
 
+#if UNITY_EDITOR
+        [Header("Editor Debug")]
+        [Tooltip("Assign a ThrowableDefinition to preview its radii in the Scene View.")]
+        [SerializeField] private ThrowableDefinition _debugDef;
+#endif
+
         private void OnDrawGizmosSelected()
         {
-            if (_def == null) return;
+            var defToDraw = _def;
+#if UNITY_EDITOR
+            if (defToDraw == null) defToDraw = _debugDef;
+#endif
+            if (defToDraw == null) return;
+
+            // Draw Explosion Radius
+            Gizmos.color = new Color(1f, 0f, 0f, 0.15f);
+            Gizmos.DrawSphere(transform.position, defToDraw.ExplosionRadius);
             Gizmos.color = Color.red;
-            Gizmos.DrawWireSphere(transform.position, _def.ExplosionRadius);
+            Gizmos.DrawWireSphere(transform.position, defToDraw.ExplosionRadius);
+
+            // Draw Proximity Radius if applicable
+            if (defToDraw.ThrowableType == ThrowableType.Proximity)
+            {
+                float proxR = defToDraw.ProximityDetectionRadius > 0f 
+                    ? defToDraw.ProximityDetectionRadius 
+                    : defToDraw.ExplosionRadius * 0.5f;
+                    
+                Gizmos.color = new Color(1f, 1f, 0f, 0.15f);
+                Gizmos.DrawSphere(transform.position, proxR);
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawWireSphere(transform.position, proxR);
+            }
         }
 
         private static bool ThrowableDebugEnabled()
