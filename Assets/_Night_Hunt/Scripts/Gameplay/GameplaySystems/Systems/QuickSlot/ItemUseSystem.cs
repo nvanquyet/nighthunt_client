@@ -13,6 +13,7 @@ using NightHunt.Gameplay.Character;
 using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Core;
 using NightHunt.Utilities;
+using NightHunt.Gameplay.Beacon;
 
 namespace NightHunt.GameplaySystems.ItemUse
 {
@@ -430,26 +431,96 @@ namespace NightHunt.GameplaySystems.ItemUse
             }
 
             string instanceId = _currentItem?.InstanceID;
-            bool confirmed = _deployableHandler.ConfirmDeploy();
-            LogDeploy($"TryConfirmDeploy result={confirmed} item={instanceId ?? "null"} using={_isUsingItem}");
+            bool confirmed = _deployableHandler.TryCapturePlacement(out Vector3 position, out Quaternion rotation);
+            LogDeploy($"TryConfirmDeploy capture={confirmed} item={instanceId ?? "null"} using={_isUsingItem} pos={position:F2} rot={rotation.eulerAngles:F1}");
 
             if (confirmed && !string.IsNullOrEmpty(instanceId))
-                RequestCompleteDeployUse(instanceId);
+            {
+                if (IsServerInitialized)
+                    BeginConfirmedDeployServer(instanceId, position, rotation);
+                else
+                    RequestConfirmDeployUseServerRpc(instanceId, position, rotation);
+            }
 
             return confirmed;
         }
 
         [ServerRpc(RequireOwnership = true)]
-        private void RequestCompleteDeployUse(string instanceId)
+        private void RequestConfirmDeployUseServerRpc(string instanceId, Vector3 position, Quaternion rotation)
+            => BeginConfirmedDeployServer(instanceId, position, rotation);
+
+        [Server]
+        private bool BeginConfirmedDeployServer(string instanceId, Vector3 position, Quaternion rotation)
         {
             if (!_isUsingItem || _currentItem == null || _currentItem.InstanceID != instanceId)
             {
-                Debug.LogWarning($"[DEPLOY_FLOW] RequestCompleteDeployUse ignored: requested={instanceId} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem}");
-                return;
+                Debug.LogWarning($"[DEPLOY_FLOW] BeginConfirmedDeploy ignored: requested={instanceId} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem}");
+                return false;
             }
 
-            LogDeploy($"RequestCompleteDeployUse accepted: item={instanceId}");
-            CompleteUse(_currentItem);
+            if (_useCoroutine != null)
+            {
+                Debug.LogWarning($"[DEPLOY_FLOW] BeginConfirmedDeploy ignored: deploy already in progress item={instanceId}");
+                return false;
+            }
+
+            var def = ItemDatabase.GetDefinition(_currentItem.DefinitionID);
+            if (def == null || def.Type != ItemType.Deployable)
+            {
+                Debug.LogWarning($"[DEPLOY_FLOW] BeginConfirmedDeploy ignored: invalid def={_currentItem.DefinitionID}");
+                return false;
+            }
+
+            float duration = ResolveDeployDuration(def);
+            LogDeploy($"BeginConfirmedDeploy accepted: item={instanceId} def={def.ItemID} duration={duration:F2} pos={position:F2} rot={rotation.eulerAngles:F1}");
+            OnItemUseProgress?.Invoke(_currentItem, 0f);
+            _useCoroutine = StartCoroutine(DeployAfterUseDuration(_currentItem, def, position, rotation, duration));
+            return true;
+        }
+
+        private IEnumerator DeployAfterUseDuration(ItemInstance item, ItemDefinition def, Vector3 position, Quaternion rotation, float duration)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                if (!_isUsingItem || _currentItem == null || _currentItem.InstanceID != item.InstanceID)
+                    yield break;
+
+                elapsed += Time.deltaTime;
+                OnItemUseProgress?.Invoke(item, Mathf.Clamp01(duration > 0f ? elapsed / duration : 1f));
+                yield return null;
+            }
+
+            if (!_isUsingItem || _currentItem == null || _currentItem.InstanceID != item.InstanceID)
+                yield break;
+
+            _deployableHandler ??= ComponentResolver.Find<IDeployableHandler>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .Resolve();
+
+            bool placed = _deployableHandler != null &&
+                          _deployableHandler.PlaceDeployableServer(position, rotation, def.ItemID, item.InstanceID);
+
+            LogDeploy($"DeployAfterUseDuration result={placed} item={item.InstanceID} def={def.ItemID} pos={position:F2}");
+            _useCoroutine = null;
+
+            if (placed)
+                CompleteUse(item);
+            else
+                CancelUse();
+        }
+
+        private float ResolveDeployDuration(ItemDefinition def)
+        {
+            return def switch
+            {
+                DeployableDefinition deployable => Mathf.Max(0f, deployable.DeployDuration),
+                BeaconDefinition beacon => Mathf.Max(0f, beacon.DeployDuration),
+                _ => 0f
+            };
         }
 
         /// <summary>
@@ -659,6 +730,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             var prevItem = _currentItem;
             _isUsingItem = false;
             _currentItem = null;
+            _deployableHandler?.CancelDeploy();
             if (prevItem != null) OnItemUseCompleted?.Invoke(prevItem);
             DestroyItemInHand();
         }

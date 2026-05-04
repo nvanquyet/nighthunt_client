@@ -14,24 +14,28 @@ namespace NightHunt.GameplaySystems.Weapon
 
         public void EquipWeapon(string instanceID)
         {
+            CancelReload("equipWeapon");
             if (IsServerInitialized) { EquipWeaponServer(instanceID); return; }
             if (IsOwner) EquipWeaponServerRpc(instanceID);
         }
 
         public void EquipWeaponToSlot(string instanceID, WeaponSlotType targetSlot)
         {
+            CancelReload($"equipWeaponToSlot {targetSlot}");
             if (IsServerInitialized) { EquipWeaponToSlotServer(instanceID, targetSlot); return; }
             if (IsOwner) EquipWeaponToSlotServerRpc(instanceID, targetSlot);
         }
 
         public void UnequipWeapon(WeaponSlotType slot)
         {
+            CancelReload($"unequipWeapon {slot}");
             if (IsServerInitialized) { UnequipWeaponServer(slot); return; }
             if (IsOwner) UnequipWeaponServerRpc(slot);
         }
 
         public void SwapWeapons(WeaponSlotType s1, WeaponSlotType s2)
         {
+            CancelReload($"swapWeapons {s1}<->{s2}");
             if (IsServerInitialized) { SwapWeaponsServer(s1, s2); return; }
             if (IsOwner) SwapWeaponsServerRpc(s1, s2);
         }
@@ -46,6 +50,7 @@ namespace NightHunt.GameplaySystems.Weapon
         /// </summary>
         public void DropWeapon(WeaponSlotType slot)
         {
+            CancelReload($"dropWeapon {slot}");
             if (IsServerInitialized) { DropWeaponServer(slot); return; }
             if (IsOwner) DropWeaponServerRpc(slot);
             else Debug.LogWarning("[WeaponSystem] DropWeapon: caller does not own this object.");
@@ -53,12 +58,14 @@ namespace NightHunt.GameplaySystems.Weapon
 
         public void SelectWeapon(WeaponSlotType slot)
         {
+            CancelReload($"selectWeapon {slot}");
             if (IsServerInitialized) { SelectWeaponServer(slot); return; }
             if (IsOwner) SelectWeaponServerRpc(slot);
         }
 
         public void HolsterWeapon()
         {
+            CancelReload("holsterWeapon");
             if (IsServerInitialized) { HolsterWeaponServer(); return; }
             if (IsOwner) HolsterWeaponServerRpc();
         }

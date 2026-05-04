@@ -40,13 +40,22 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             {
                 _icon.sprite  = state.Icon;
                 _icon.enabled = state.Icon != null;
+                _icon.preserveAspect = true;
+                _icon.raycastTarget = false;
             }
 
             if (_background != null)
-                _background.sprite = state.Background;
+            {
+                _background.sprite = null;
+                _background.enabled = false;
+                _background.raycastTarget = false;
+            }
 
             if (_highlightFrame != null)
+            {
                 _highlightFrame.enabled = state.IsHighlight;
+                _highlightFrame.raycastTarget = false;
+            }
 
             if (_canvasGroup != null)
             {
@@ -54,6 +63,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 _canvasGroup.interactable = false;
                 _canvasGroup.blocksRaycasts = false;
             }
+
+            DisableGraphicRaycasts();
         }
 
         private void EnsureRuntimeComponents()
@@ -63,6 +74,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (_background == null)
                 _background = GetComponent<Image>() ?? gameObject.AddComponent<Image>();
+            if (_background != null)
+                _background.raycastTarget = false;
 
             if (_icon == null)
             {
@@ -83,6 +96,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
                     _icon = iconGO.GetComponent<Image>();
                 }
+
+                if (_icon != null)
+                    _icon.raycastTarget = false;
             }
 
             if (_highlightFrame == null)
@@ -90,6 +106,19 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 var highlightTransform = transform.Find("Highlight");
                 if (highlightTransform != null)
                     _highlightFrame = highlightTransform.GetComponent<Image>();
+            }
+
+            if (_highlightFrame != null)
+                _highlightFrame.raycastTarget = false;
+        }
+
+        private void DisableGraphicRaycasts()
+        {
+            var graphics = GetComponentsInChildren<Graphic>(true);
+            for (int i = 0; i < graphics.Length; i++)
+            {
+                if (graphics[i] != null)
+                    graphics[i].raycastTarget = false;
             }
         }
 

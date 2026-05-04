@@ -98,12 +98,13 @@ namespace NightHunt.GameplaySystems.Weapon
         }
 
         // hitscanEndpoint = world-space impact point for hitscan weapons (hit point or max-range).
-        // Passing it explicitly lets remote clients teleport the visual bullet to the exact hit
-        // position instead of flying it physics-based (which would make it hit their own body).
+        // Passing it explicitly lets remote clients fly the visual bullet to the exact hit
+        // position while ignoring local collision.
         [ServerRpc(RequireOwnership = true)]
         internal void BroadcastProjectileServerRpc(Vector3 origin, Vector3 direction,
-                                                   WeaponConfigData config, Vector3 hitscanEndpoint)
-            => ShowProjectileOnClientsRpc(origin, direction, config, hitscanEndpoint);
+                                                   WeaponConfigData config, Vector3 hitscanEndpoint,
+                                                   bool hitAnIHittable, Vector3 hitNormal)
+            => ShowProjectileOnClientsRpc(origin, direction, config, hitscanEndpoint, hitAnIHittable, hitNormal);
 
         [ServerRpc(RequireOwnership = true)]
         private void RequestAuthoritativeShotServerRpc(WeaponSlotType slot, Vector3 direction)
@@ -156,7 +157,8 @@ namespace NightHunt.GameplaySystems.Weapon
                     return;
                 }
 
-                inst.AdjustCurrentValue(ItemStatType.MagazineSize, -1f);
+                int ammoCost = ResolveAmmoCostPerShot(inst, mag);
+                inst.AdjustCurrentValue(ItemStatType.MagazineSize, -ammoCost);
             }
 
             var config = BuildWeaponConfigData(inst);
@@ -178,7 +180,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableProjectileDebugLogs)
             {
-                Debug.Log($"[SHOOT.SERVER] Authoritative shot slot={slot} weapon={config.WeaponId} origin={origin:F2} dir={authoritativeFireDir:F2} intentDir={fireDir:F2} spread={serverSpread:F2} endpoint={_lastFireEndpoint:F2} consumeAmmo={consumeAmmo}", this);
+                Debug.Log($"[SHOOT.SERVER] Authoritative shot slot={slot} weapon={config.WeaponId} origin={origin:F2} dir={authoritativeFireDir:F2} intentDir={fireDir:F2} spread={serverSpread:F2} maxRange={config.MaxRange:F1} vision={config.VisionRangeClamp:F1} endpoint={_lastFireEndpoint:F2} consumeAmmo={consumeAmmo}", this);
             }
         }
 
@@ -252,16 +254,43 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private Vector3 ResolveServerFireOrigin(Vector3 fireDir)
         {
-            if (_fireOrigin != null)
-                return _fireOrigin.position;
-
             Transform root = transform.root != null ? transform.root : transform;
             Vector3 flatDir = new Vector3(fireDir.x, 0f, fireDir.z);
             if (flatDir.sqrMagnitude < 0.001f)
                 flatDir = root.forward;
             flatDir.Normalize();
 
-            return root.position + Vector3.up * 1.25f + flatDir * 0.6f;
+            Vector3 fallback = root.position + Vector3.up * 1.25f + flatDir * 0.6f;
+            if (_fireOrigin == null)
+                return fallback;
+
+            Vector3 origin = _fireOrigin.position;
+            Vector3 flatToOrigin = Vector3.ProjectOnPlane(origin - root.position, Vector3.up);
+            bool invalidOrigin =
+                !IsFinite(origin) ||
+                origin.y < root.position.y - 1f ||
+                origin.y > root.position.y + 4f ||
+                flatToOrigin.sqrMagnitude > 16f;
+
+            if (invalidOrigin && TryRepairFireOrigin("ResolveServerFireOrigin"))
+            {
+                origin = _fireOrigin != null ? _fireOrigin.position : fallback;
+                flatToOrigin = Vector3.ProjectOnPlane(origin - root.position, Vector3.up);
+                invalidOrigin =
+                    !IsFinite(origin) ||
+                    origin.y < root.position.y - 1f ||
+                    origin.y > root.position.y + 4f ||
+                    flatToOrigin.sqrMagnitude > 16f;
+
+                if (!invalidOrigin)
+                    LogProjectile($"ResolveServerFireOrigin repaired muzzle={(_fireOrigin != null ? _fireOrigin.name : "null")} origin={origin:F2} root={root.position:F2}");
+            }
+
+            if (!invalidOrigin)
+                return origin;
+
+            LogProjectile($"ResolveServerFireOrigin fallback: invalid muzzle raw={origin:F2} fallback={fallback:F2} root={root.position:F2} flatDistance={flatToOrigin.magnitude:F2}");
+            return fallback;
         }
 
         [Server]
@@ -560,7 +589,8 @@ namespace NightHunt.GameplaySystems.Weapon
 
         [ObserversRpc]
         private void ShowProjectileOnClientsRpc(Vector3 origin, Vector3 direction,
-                                                WeaponConfigData config, Vector3 hitscanEndpoint)
+                                                WeaponConfigData config, Vector3 hitscanEndpoint,
+                                                bool hitAnIHittable, Vector3 hitNormal)
         {
             // Owner already spawned the authoritative projectile locally.
             if (IsOwner)
@@ -604,12 +634,15 @@ namespace NightHunt.GameplaySystems.Weapon
 
             bool isHitscan = config.BallisticType == "Hitscan";
 
-            // For hitscan: teleport the visual bullet to the pre-computed hit point so it doesn't
-            // travel through the remote client's own character and trigger a false impact VFX.
+            // For hitscan: fly the visual bullet to the pre-computed hit point while ignoring
+            // local collision, so impact timing is distance / speed instead of a hard delay.
             // For ballistic projectiles: hitscanEndpoint is ignored (pass null).
             Vector3? endpoint = isHitscan ? (Vector3?)hitscanEndpoint : null;
 
             LogProjectile($"ShowProjectileOnClientsRpc remote visual spawned origin={origin:F1} isHitscan={isHitscan} endpoint={endpoint?.ToString("F1") ?? "null (ballistic)"} proj='{proj.gameObject.name}' weaponId='{config.WeaponId}'");
+
+            if (isHitscan)
+                proj.SetHitscanHitType(hitAnIHittable, hitNormal);
 
             proj.Initialize(config, direction, useHitscan: isHitscan, hitscanEndpoint: endpoint);
         }

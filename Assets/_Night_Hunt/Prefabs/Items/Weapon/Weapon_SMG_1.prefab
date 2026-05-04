@@ -56,7 +56,7 @@ MonoBehaviour:
   projectilePrefab: {fileID: 8547464181950319873, guid: 7a4dbb31913d86f459397d47ff13a600,
     type: 3}
   maxRange: 110
-  projectileSpeed: 420
+  projectileSpeed: 95
   gravityScale: 0
   defaultFireMode: 0
   allowFireModeToggle: 1

@@ -25,7 +25,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
     /// </summary>
     public class DragDropController : Singleton<DragDropController>
     {
-        private const string DragLogPrefix = "[DRAG_FIX]";
+        private const string DragLogPrefix = "[DRAG_SLOT]";
 
         [Header("Ghost")] [SerializeField] private DragDropGhost _ghostPrefab;
         [SerializeField] private Canvas _dragCanvas;
@@ -50,6 +50,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             get
             {
+                if (_uiContext?.Bridge?.Weapon != null)
+                    return _uiContext.Bridge.Weapon;
+
                 var player = SpectateManager.Instance?.GetCurrentPlayer();
                 return player?.GamePlaySystemBridge?.Weapon;
             }
@@ -58,6 +61,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         [Header("Raycast")] [SerializeField] private GraphicRaycaster _raycaster;
 
         private ItemSlotView _currentHoverView;
+        private UIPlayerContext _uiContext;
 
         // FIX: Ghost pointer offset — stores the delta between the slot centre and the actual
         // pointer position in canvas-local space so the ghost doesn't jump on drag start.
@@ -79,10 +83,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             return _dropQuantityDialog;
         }
 
+        public void BindContext(UIPlayerContext context)
+        {
+            _uiContext = context;
+            Log($"{DragLogPrefix} BindContext owner={context?.IsOwner.ToString() ?? "null"} ready={context?.IsReady.ToString() ?? "null"} player={context?.Player?.name ?? "null"}");
+        }
+
         public void RegisterSlotView(ItemSlotView view)
         {
             if (view == null) return;
+            EnsureSlotInput(view);
             _allSlots[view.SlotId] = view;
+            Log($"{DragLogPrefix} RegisterSlot id={view.SlotId} view={view.name} input={(view.GetComponent<ItemSlotInput>() != null ? "ok" : "missing")}");
         }
 
         /// <summary>
@@ -144,15 +156,30 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (sourceView == null)
                 return;
 
+            if (sourceView.IsLocked)
+            {
+                Log($"{DragLogPrefix} BeginDrag blocked - source locked source={sourceView.SlotId}");
+                return;
+            }
+
+            if (_uiContext != null && !_uiContext.IsOwner)
+            {
+                Log($"{DragLogPrefix} BeginDrag blocked - UI context is not owner source={sourceView.SlotId} player={_uiContext.Player?.name ?? "null"}");
+                return;
+            }
+
             var spectate = SpectateManager.Instance;
-            if (spectate == null || !spectate.IsCurrentPlayerLocal())
+            if (_uiContext == null && spectate != null && !spectate.IsCurrentPlayerLocal())
             {
                 Log("BeginDrag blocked – current player is not local.");
                 return;
             }
 
             if (sourceView.State == null || sourceView.State.Item == null)
+            {
+                Log($"{DragLogPrefix} BeginDrag ignored - empty source={sourceView.SlotId}");
                 return;
+            }
 
             _sourceView          = sourceView;
             _sourceId            = sourceView.SlotId;
@@ -186,17 +213,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 var results = new List<RaycastResult>();
                 _raycaster.Raycast(eventData, results);
 
-                ItemSlotView hoverView = null;
-                foreach (var r in results)
-                {
-                    hoverView = ComponentResolver.Find<ItemSlotView>(r.gameObject)
-                        .InParent()
-                        .InRootChildren()
-                        .OrLogWarning("[DragDropController] ItemSlotView not found")
-                        .Resolve();
-                    if (hoverView != null)
-                        break;
-                }
+                ItemSlotView hoverView = ResolveSlotFromPointer(eventData, results);
 
                 if (hoverView != _currentHoverView)
                 {
@@ -247,13 +264,20 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_dropHandled)
                 return;
 
+            var raycastResults = RaycastUi(eventData);
+            var fallbackTarget = ResolveSlotFromPointer(eventData, raycastResults);
+            if (fallbackTarget != null && fallbackTarget != _sourceView)
+            {
+                Log($"{DragLogPrefix} EndDrag fallback target source={_sourceId} target={fallbackTarget.SlotId} hits={FormatRaycastHits(raycastResults, 6)}");
+                NotifyDropTarget(fallbackTarget);
+                return;
+            }
+
             // --- WORLD DROP LOGIC ---
             bool droppedOutsideUI = true;
-            if (_raycaster != null)
+            if (raycastResults.Count > 0)
             {
-                var results = new List<RaycastResult>();
-                _raycaster.Raycast(eventData, results);
-                foreach (var r in results)
+                foreach (var r in raycastResults)
                 {
                     if (r.gameObject.GetComponentInParent<InventoryScreen>() != null ||
                         r.gameObject.GetComponentInParent<WeaponEquipmentPanel>() != null)
@@ -277,7 +301,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             }
             // ------------------------
 
-            Log($"{DragLogPrefix} EndDrag -> cancel source={_sourceId} pointer={eventData.position}");
+            Log($"{DragLogPrefix} EndDrag -> cancel source={_sourceId} pointer={eventData.position} hits={FormatRaycastHits(raycastResults, 6)}");
             StartCoroutine(AnimateCancelAndRestore());
         }
 
@@ -294,7 +318,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
             if (!_validator.CanDrop(_sourceId, targetId, sourceState, targetState, out var action))
             {
-                Log($"{DragLogPrefix} Invalid drop source={_sourceId} target={targetId}");
+                _dropHandled = true;
+                Log($"{DragLogPrefix} Invalid drop source={_sourceId} target={targetId} sourceItem={sourceState?.Item?.DefinitionID ?? "null"} targetItem={targetState?.Item?.DefinitionID ?? "null"}");
                 ShowInvalidDropToast(sourceState?.Item, targetId);
                 StartCoroutine(AnimateCancelAndRestore());
                 return;
@@ -320,6 +345,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             if (_dragCanvas == null)
                 return;
 
+            if (_raycaster == null)
+                _raycaster = _dragCanvas.GetComponent<GraphicRaycaster>() ?? _dragCanvas.rootCanvas?.GetComponent<GraphicRaycaster>();
+
             _activeGhost = _ghostPrefab != null
                 ? Instantiate(_ghostPrefab, _dragCanvas.transform)
                 : CreateRuntimeGhost(_dragCanvas.transform);
@@ -332,31 +360,18 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var rt = _activeGhost.RectTransform;
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = sourceView.RectTransform.rect.size;
+            rt.sizeDelta = ResolveGhostIconSize(sourceView.RectTransform.rect.size);
 
-            // FIX: Compute the canvas-local position of both the pointer and the slot centre.
-            // The difference is stored as _ghostPointerOffset so the ghost appears to stay
-            // "attached" to the exact pixel the user clicked rather than snapping to slot centre.
+            // Compute the canvas-local pointer position for the icon-only ghost.
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 canvasRect,
                 eventData.position,
                 eventData.pressEventCamera,
                 out var pointerLocalPoint);
 
-            var slotCentre = Vector2.zero;
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    canvasRect,
-                    RectTransformUtility.WorldToScreenPoint(eventData.pressEventCamera, sourceView.RectTransform.position),
-                    eventData.pressEventCamera,
-                    out var slotLocalPoint))
-            {
-                slotCentre = slotLocalPoint;
-            }
-
-            // offset = slotCentre - pointerPosition (in canvas-local space)
-            // Applied in MoveGhostToPointer: ghostPos = pointerLocal + offset = slotCentre
-            // This keeps the grab point stable under the finger/cursor.
-            _ghostPointerOffset = slotCentre - pointerLocalPoint;
+            // Icon-only ghost follows the pointer center. Full card/card background sizes
+            // are intentionally not cloned into the drag visual.
+            _ghostPointerOffset = Vector2.zero;
             rt.anchoredPosition = pointerLocalPoint + _ghostPointerOffset;
 
             UITweenUtil.ScaleInstant(rt, 1f);
@@ -542,9 +557,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void ApplyBackendAction(DropAction action, UISlotState sourceState, UISlotState targetState)
         {
-            var spectate = SpectateManager.Instance;
-            var player = spectate != null ? spectate.GetCurrentPlayer() : null;
-            var bridge = player != null ? player.GamePlaySystemBridge : null;
+            var bridge = ResolveGameplayBridge();
             if (bridge == null || !bridge.IsReady)
             {
                 Log("Backend bridge not ready – cannot apply drop action.");
@@ -818,6 +831,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private IAttachmentSystem GetAttachmentSystem()
         {
+            if (_uiContext?.Bridge?.Attachment != null)
+                return _uiContext.Bridge.Attachment;
+
             var spectate = SpectateManager.Instance;
             if (spectate == null) return null;
 
@@ -829,6 +845,171 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 .InChildren()
                 .OrLogWarning("[Auto] IAttachmentSystem not found")
                 .Resolve();
+        }
+
+        private IGameplayBridge ResolveGameplayBridge()
+        {
+            if (_uiContext?.IsReady == true && _uiContext.IsOwner)
+                return _uiContext.Bridge;
+
+            var spectate = SpectateManager.Instance;
+            var player = spectate != null ? spectate.GetCurrentPlayer() : null;
+            return player != null ? player.GamePlaySystemBridge : null;
+        }
+
+        private List<RaycastResult> RaycastUi(PointerEventData eventData)
+        {
+            var results = new List<RaycastResult>();
+            if (_raycaster == null && _dragCanvas != null)
+                _raycaster = _dragCanvas.GetComponent<GraphicRaycaster>() ?? _dragCanvas.rootCanvas?.GetComponent<GraphicRaycaster>();
+
+            if (_raycaster != null)
+                _raycaster.Raycast(eventData, results);
+            else if (EventSystem.current != null)
+                EventSystem.current.RaycastAll(eventData, results);
+
+            return results;
+        }
+
+        private static Vector2 ResolveGhostIconSize(Vector2 sourceSize)
+        {
+            float minAxis = Mathf.Min(Mathf.Abs(sourceSize.x), Mathf.Abs(sourceSize.y));
+            float size = minAxis > 1f ? Mathf.Clamp(minAxis, 48f, 96f) : 72f;
+            return new Vector2(size, size);
+        }
+
+        private ItemSlotView ResolveSlotFromRaycastResults(List<RaycastResult> results)
+        {
+            if (results == null) return null;
+
+            foreach (var r in results)
+            {
+                if (r.gameObject == null) continue;
+                if (IsActiveGhostHit(r.gameObject)) continue;
+                if (IsTrashAreaHit(r.gameObject))
+                {
+                    Log($"{DragLogPrefix} Raycast target blocked by TrashArea hit={r.gameObject.name}");
+                    return null;
+                }
+
+                var slot = r.gameObject.GetComponentInParent<ItemSlotView>();
+                if (slot != null &&
+                    slot.gameObject.activeInHierarchy &&
+                    _allSlots.TryGetValue(slot.SlotId, out var registered) &&
+                    registered == slot)
+                {
+                    return slot;
+                }
+            }
+
+            return null;
+        }
+
+        private ItemSlotView ResolveSlotFromPointer(PointerEventData eventData, List<RaycastResult> results)
+        {
+            ItemSlotView raycastSlot = ResolveSlotFromRaycastResults(results);
+            if (raycastSlot != null || HasTrashAreaHit(results))
+                return raycastSlot;
+
+            return ResolveRegisteredSlotAtPointer(eventData);
+        }
+
+        private ItemSlotView ResolveRegisteredSlotAtPointer(PointerEventData eventData)
+        {
+            if (eventData == null || _allSlots.Count == 0)
+                return null;
+
+            Camera cam = eventData.pressEventCamera ?? eventData.enterEventCamera;
+            if (cam == null && _dragCanvas != null && _dragCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                cam = _dragCanvas.worldCamera ?? _dragCanvas.rootCanvas?.worldCamera;
+
+            ItemSlotView best = null;
+            float bestArea = float.PositiveInfinity;
+
+            foreach (var kvp in _allSlots)
+            {
+                var slot = kvp.Value;
+                if (slot == null || !slot.gameObject.activeInHierarchy)
+                    continue;
+
+                RectTransform rect = slot.RectTransform;
+                if (rect == null ||
+                    !RectTransformUtility.RectangleContainsScreenPoint(rect, eventData.position, cam))
+                    continue;
+
+                Vector2 size = rect.rect.size;
+                float area = Mathf.Abs(size.x * size.y);
+                if (area < bestArea)
+                {
+                    best = slot;
+                    bestArea = area;
+                }
+            }
+
+            if (best != null)
+                Log($"{DragLogPrefix} Geometry fallback target={best.SlotId} pointer={eventData.position}");
+
+            return best;
+        }
+
+        private bool HasTrashAreaHit(List<RaycastResult> results)
+        {
+            if (results == null)
+                return false;
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (results[i].gameObject != null && IsTrashAreaHit(results[i].gameObject))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool IsActiveGhostHit(GameObject go)
+        {
+            return _activeGhost != null &&
+                   go != null &&
+                   (go == _activeGhost.gameObject || go.transform.IsChildOf(_activeGhost.transform));
+        }
+
+        private static bool IsTrashAreaHit(GameObject go)
+        {
+            for (Transform t = go != null ? go.transform : null; t != null; t = t.parent)
+            {
+                if (t.name.ToLowerInvariant().Contains("trash"))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static string FormatRaycastHits(List<RaycastResult> results, int max)
+        {
+            if (results == null || results.Count == 0)
+                return "none";
+
+            int count = Mathf.Min(max, results.Count);
+            string text = string.Empty;
+            for (int i = 0; i < count; i++)
+            {
+                if (i > 0) text += " > ";
+                text += results[i].gameObject != null ? results[i].gameObject.name : "null";
+            }
+
+            if (results.Count > count)
+                text += $" (+{results.Count - count})";
+
+            return text;
+        }
+
+        private void EnsureSlotInput(ItemSlotView view)
+        {
+            if (view == null || view.GetComponent<ItemSlotInput>() != null)
+                return;
+
+            view.gameObject.AddComponent<ItemSlotInput>();
+            Log($"{DragLogPrefix} Added missing ItemSlotInput id={view.SlotId} view={view.name}");
         }
 
         private static void ShowInvalidDropToast(ItemInstance item, UISlotId target)

@@ -27,7 +27,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private CombatInputHandler _combatInputHandler;
         private float _lastPressTime = -999f;
 
-        private const float DoubleClickThreshold = 0.45f;
+        private const float DoubleClickThreshold = 0.65f;
 
         public void Bind(ItemInstance item, IItemSelectionSystem selectionSystem, ItemFilterPanel parentPanel, CombatInputHandler combatInputHandler = null)
         {

@@ -29,8 +29,20 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         public GameObject detonationVFXChild;
 
         // -----------------------------------------------------------------
-        // Config.
+        // Hit VFX Prefabs  (assigned on the projectile prefab in the Inspector)
         // -----------------------------------------------------------------
+        [Header("Hit VFX Prefabs (pooled — leave null to skip)")]
+        [Tooltip("Particle prefab spawned at the hit point when the bullet hits an IHittable (player, deployable, boss).\n" +
+                 "Leave null to use detonationVFXChild for all hit types.")]
+        public GameObject bloodVFXPrefab;
+
+        [Tooltip("Particle prefab spawned at the hit point when the bullet hits environment geometry (wall, floor, obstacle).\n" +
+                 "Leave null to use detonationVFXChild for all hit types.")]
+        public GameObject impactVFXPrefab;
+
+        [Tooltip("Seconds before the spawned hit-VFX GameObject is returned to the pool / destroyed.")]
+        public float hitVFXLifetime = 2f;
+
         [Header("Detonation Config")]
         [Tooltip("Detonate immediately on collision. False = wait for fuseTime only.")]
         public bool isImpact = true;
@@ -63,8 +75,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         // -----------------------------------------------------------------
         protected virtual void OnEnable()
         {
-            EnsureVfxReferences();
             ResetDetachedVfx();
+            EnsureVfxReferences();
 
             if (muzzleFlashChild != null)
                 muzzleFlashChild.SetActive(false);
@@ -86,6 +98,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         /// </summary>
         public virtual void PlayMuzzleFlash()
         {
+            EnsureVfxReferences();
             if (muzzleFlashChild == null) return;
 
             // Enforce a minimum so the flash is visible at typical frame rates.
@@ -118,6 +131,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         /// <summary>Restart main visual (trail/mesh). Called when spawning/reusing from pool.</summary>
         public virtual void PlayMainVisual()
         {
+            EnsureVfxReferences();
             if (mainVisualChild == null)
             {
                 Debug.LogWarning($"[ProjectileBase] PlayMainVisual: mainVisualChild is NULL on '{name}' - assign it in the prefab Inspector.");
@@ -134,6 +148,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         /// </summary>
         public virtual void TriggerDetonation(Vector3 position, Quaternion rotation)
         {
+            EnsureVfxReferences();
             if (hideTrailOnImpact && mainVisualChild != null)
                 mainVisualChild.SetActive(false);
 
@@ -158,6 +173,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             }
 
             ResetDetachedVfx();
+            EnsureVfxReferences();
             if (muzzleFlashChild != null) muzzleFlashChild.SetActive(false);
             if (detonationVFXChild != null) detonationVFXChild.SetActive(false);
             // Keep mainVisualChild INACTIVE so OnEnable() can toggle it on with a proper
@@ -165,6 +181,44 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             // components and respects playOnAwake.  This is the key fix for VFX not
             // replaying when a pooled projectile is reused during rapid auto-fire.
             if (mainVisualChild != null) mainVisualChild.SetActive(false);
+        }
+
+        // -----------------------------------------------------------------
+        // Hit VFX chooser
+        // -----------------------------------------------------------------
+
+        /// <summary>
+        /// Spawn the correct impact VFX at <paramref name="hitPoint"/>:
+        ///   • <paramref name="hitAnIHittable"/> == true  → spawn <see cref="bloodVFXPrefab"/> (player / deployable hit)
+        ///   • <paramref name="hitAnIHittable"/> == false → spawn <see cref="impactVFXPrefab"/> (environment hit)
+        ///
+        /// Falls back to activating <see cref="detonationVFXChild"/> in-place if neither prefab is assigned,
+        /// preserving the original single-VFX behaviour.
+        ///
+        /// Call this from <see cref="ProjectileComponent.HandleImpact"/> instead of letting
+        /// <see cref="TriggerDetonation"/> handle everything so the blood/impact split works for
+        /// both hitscan visual bullets and ballistic projectiles.
+        /// </summary>
+        public bool SpawnHitVFX(Vector3 hitPoint, Vector3 hitNormal, bool hitAnIHittable)
+        {
+            GameObject prefabToSpawn = hitAnIHittable ? bloodVFXPrefab : impactVFXPrefab;
+
+            if (prefabToSpawn != null)
+            {
+                // Use the hit-normal to orient the effect flush with the surface.
+                Quaternion rot = hitNormal.sqrMagnitude > 0.001f
+                    ? Quaternion.LookRotation(hitNormal)
+                    : Quaternion.identity;
+
+                var go = Instantiate(prefabToSpawn, hitPoint, rot);
+                if (hitVFXLifetime > 0f)
+                    Destroy(go, hitVFXLifetime);
+                return true;
+            }
+
+            // Fallback: use the built-in detonation child (original behaviour, no VFX split).
+            TriggerDetonation(hitPoint, Quaternion.LookRotation(hitNormal.sqrMagnitude > 0.001f ? hitNormal : Vector3.up));
+            return false;
         }
 
         // -----------------------------------------------------------------
@@ -201,17 +255,41 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
         private void ResetDetachedVfx()
         {
-            if (muzzleFlashChild != null && _muzzleOriginalParent != null)
+            if (muzzleFlashChild != null && _muzzleOriginalParent != null && CanRestoreOwnedVfx(_muzzleOriginalParent))
                 RestoreOriginalTransform(muzzleFlashChild, _muzzleOriginalParent,
                     _muzzleOriginalLocalPosition, _muzzleOriginalLocalRotation, _muzzleOriginalLocalScale);
+            else if (muzzleFlashChild == null || !IsOwnedVfxChild(muzzleFlashChild))
+                ClearMuzzleTransformCache();
 
-            if (detonationVFXChild != null && _detonationOriginalParent != null)
+            if (detonationVFXChild != null && _detonationOriginalParent != null && CanRestoreOwnedVfx(_detonationOriginalParent))
                 RestoreOriginalTransform(detonationVFXChild, _detonationOriginalParent,
                     _detonationOriginalLocalPosition, _detonationOriginalLocalRotation, _detonationOriginalLocalScale);
+            else if (detonationVFXChild == null || !IsOwnedVfxChild(detonationVFXChild))
+                ClearDetonationTransformCache();
         }
 
         private void EnsureVfxReferences()
         {
+            if (!IsOwnedOrDetachedVfxChild(muzzleFlashChild, _muzzleOriginalParent))
+            {
+                WarnExternalVfxReference(nameof(muzzleFlashChild), muzzleFlashChild);
+                muzzleFlashChild = null;
+                ClearMuzzleTransformCache();
+            }
+
+            if (!IsOwnedVfxChild(mainVisualChild))
+            {
+                WarnExternalVfxReference(nameof(mainVisualChild), mainVisualChild);
+                mainVisualChild = null;
+            }
+
+            if (!IsOwnedOrDetachedVfxChild(detonationVFXChild, _detonationOriginalParent))
+            {
+                WarnExternalVfxReference(nameof(detonationVFXChild), detonationVFXChild);
+                detonationVFXChild = null;
+                ClearDetonationTransformCache();
+            }
+
             if (muzzleFlashChild == null)
                 muzzleFlashChild = FindChildGameObject("[MuzzleFlash]", "MuzzleFlash");
 
@@ -234,6 +312,56 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 if (renderer != null && renderer.gameObject != gameObject)
                     mainVisualChild = renderer.gameObject;
             }
+        }
+
+        private bool IsOwnedVfxChild(GameObject candidate)
+        {
+            return candidate == null ||
+                   (candidate.transform != transform && candidate.transform.IsChildOf(transform));
+        }
+
+        private bool IsOwnedOrDetachedVfxChild(GameObject candidate, Transform originalParent)
+        {
+            if (IsOwnedVfxChild(candidate))
+                return true;
+
+            return candidate != null &&
+                   originalParent != null &&
+                   candidate.transform != transform &&
+                   CanRestoreOwnedVfx(originalParent);
+        }
+
+        private bool CanRestoreOwnedVfx(Transform originalParent)
+        {
+            return originalParent != null &&
+                   (originalParent == transform || originalParent.IsChildOf(transform));
+        }
+
+        private void WarnExternalVfxReference(string fieldName, GameObject candidate)
+        {
+            if (candidate == null)
+                return;
+
+            Debug.LogWarning(
+                $"[ProjectileBase] {fieldName} on '{name}' points outside this projectile instance " +
+                $"('{candidate.name}'). Ignoring it to prevent pooled projectile VFX from detaching weapon transforms.",
+                this);
+        }
+
+        private void ClearMuzzleTransformCache()
+        {
+            _muzzleOriginalParent = null;
+            _muzzleOriginalLocalPosition = Vector3.zero;
+            _muzzleOriginalLocalRotation = Quaternion.identity;
+            _muzzleOriginalLocalScale = Vector3.one;
+        }
+
+        private void ClearDetonationTransformCache()
+        {
+            _detonationOriginalParent = null;
+            _detonationOriginalLocalPosition = Vector3.zero;
+            _detonationOriginalLocalRotation = Quaternion.identity;
+            _detonationOriginalLocalScale = Vector3.one;
         }
 
         private GameObject FindChildGameObject(params string[] names)

@@ -138,10 +138,7 @@ namespace NightHunt.Audio
             float pitch    = _activeProfile.GetFirePitch();
 
             Log($"ShotFired slot={slot} clip={clip?.name ?? "NULL"} pos={pos}");
-            AudioManager.Instance.Play3D(clip, pos,
-                group:  AudioManager.Instance.GroupWeapon,
-                volume: _activeProfile.fireVolume,
-                pitch:  pitch);
+            AudioManager.Instance.PlayWeapon3D(clip, pos, _activeProfile.fireVolume, pitch);
         }
 
         private void HandleReloadStateChanged(bool reloading)
@@ -153,13 +150,11 @@ namespace NightHunt.Audio
 
             if (reloading && _activeProfile.reloadStartClip != null)
             {
-                AudioManager.Instance.Play3D(_activeProfile.reloadStartClip, pos,
-                    AudioManager.Instance.GroupWeapon);
+                AudioManager.Instance.PlayWeapon3D(_activeProfile.reloadStartClip, pos);
             }
             else if (!reloading && _activeProfile.reloadEndClip != null)
             {
-                AudioManager.Instance.Play3D(_activeProfile.reloadEndClip, pos,
-                    AudioManager.Instance.GroupWeapon);
+                AudioManager.Instance.PlayWeapon3D(_activeProfile.reloadEndClip, pos);
             }
         }
 
@@ -176,8 +171,7 @@ namespace NightHunt.Audio
             // Play draw sound if switching to a weapon (not holstering)
             if (next.HasValue && !AudioManager.HasInstance) return;
             if (next.HasValue && _activeProfile?.drawClip != null)
-                AudioManager.Instance.Play3D(_activeProfile.drawClip, GetMuzzlePosition(),
-                    AudioManager.Instance.GroupWeapon);
+                AudioManager.Instance.PlayWeapon3D(_activeProfile.drawClip, GetMuzzlePosition());
         }
 
         private void HandleWeaponDepleted(WeaponSlotType slot)
@@ -186,8 +180,7 @@ namespace NightHunt.Audio
             if (!AudioManager.HasInstance) return;
 
             Log($"WeaponDepleted slot={slot}");
-            AudioManager.Instance.Play3D(_activeProfile.emptyClip, GetMuzzlePosition(),
-                AudioManager.Instance.GroupWeapon);
+            AudioManager.Instance.PlayWeapon3D(_activeProfile.emptyClip, GetMuzzlePosition());
         }
 
         private void HandleHitscanResult(WeaponSlotType slot, Vector3 origin, Vector3 endpoint)
@@ -197,7 +190,7 @@ namespace NightHunt.Audio
             // Use per-weapon override if set, otherwise fall back to AudioLibrary.bulletImpact.
             AudioClip impactClip = _activeProfile?.bulletImpactOverride;
             if (impactClip != null)
-                AudioManager.Instance.Play3D(impactClip, endpoint, AudioManager.Instance.GroupWeapon);
+                AudioManager.Instance.PlayImpact3D(impactClip, endpoint);
             else
                 AudioManager.Instance.PlayBulletImpact(endpoint);
 
@@ -236,8 +229,7 @@ namespace NightHunt.Audio
             if (_activeProfile?.reloadStartClip == null) return;
             if (!AudioManager.HasInstance) return;
             Log("AnimEvent: ReloadStart");
-            AudioManager.Instance.Play3D(_activeProfile.reloadStartClip, GetMuzzlePosition(),
-                AudioManager.Instance.GroupWeapon);
+            AudioManager.Instance.PlayWeapon3D(_activeProfile.reloadStartClip, GetMuzzlePosition());
         }
 
         /// <summary>
@@ -256,8 +248,7 @@ namespace NightHunt.Audio
 
             if (clip == null) return;
             Log($"AnimEvent: ReloadInsert clip={clip.name}");
-            AudioManager.Instance.Play3D(clip, GetMuzzlePosition(),
-                AudioManager.Instance.GroupWeapon);
+            AudioManager.Instance.PlayWeapon3D(clip, GetMuzzlePosition());
         }
 
         public void OnAnimEventReloadEnd()
@@ -265,8 +256,7 @@ namespace NightHunt.Audio
             if (_activeProfile?.reloadEndClip == null) return;
             if (!AudioManager.HasInstance) return;
             Log("AnimEvent: ReloadEnd");
-            AudioManager.Instance.Play3D(_activeProfile.reloadEndClip, GetMuzzlePosition(),
-                AudioManager.Instance.GroupWeapon);
+            AudioManager.Instance.PlayWeapon3D(_activeProfile.reloadEndClip, GetMuzzlePosition());
         }
 
         // OnWeaponModelChanged fires with WeaponBase (null = holstered)

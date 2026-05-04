@@ -272,17 +272,26 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            var takenData = ItemInstanceFactory.CopyDataForQuantity(itemData, takeQty, newInstanceId: true);
-            inventory.AddItemFromData(takenData);
+            if (!LootTransferUtility.TryAddItemWithinWeight(
+                    playerNob,
+                    inventory,
+                    itemData,
+                    takeQty,
+                    newInstanceId: true,
+                    out int acceptedQty))
+            {
+                Debug.Log($"[WorldCorpse] RequestTakeItem rejected by weight cap. idx={storageIndex} requested={takeQty} def={itemData.DefinitionID}");
+                return;
+            }
 
-            if (takeQty >= itemData.Quantity)
+            if (acceptedQty >= itemData.Quantity)
             {
                 storage.RemoveAt(storageIndex);
                 syncStorage.RemoveAt(storageIndex);
             }
             else
             {
-                itemData.Quantity -= takeQty;
+                itemData.Quantity -= acceptedQty;
                 storage[storageIndex] = itemData;
                 syncStorage[storageIndex] = itemData;
             }

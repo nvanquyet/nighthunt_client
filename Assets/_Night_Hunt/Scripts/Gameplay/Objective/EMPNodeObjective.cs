@@ -34,6 +34,9 @@ namespace NightHunt.Gameplay.Objective
         public string ObjectiveId  => objectiveId;
         public string ObjectiveName => objectiveName;
         public bool   IsCompleted  => _syncIsCompleted.Value;
+        public float  CurrentHealth => _syncHealth.Value;
+        public float  MaxHealth => maxHealth;
+        public event System.Action<float, float> OnHealthChanged;
 
         public float Progress
         {
@@ -50,6 +53,19 @@ namespace NightHunt.Gameplay.Objective
             _syncIsCompleted.Value  = false;
             _syncHealth.Value       = maxHealth;
             _lastAttackerTeamId     = -1;
+        }
+
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+            _syncHealth.OnChange += OnHealthSyncChanged;
+            EnsureWorldHealthBar();
+        }
+
+        public override void OnStopClient()
+        {
+            base.OnStopClient();
+            _syncHealth.OnChange -= OnHealthSyncChanged;
         }
 
         public void OnUpdate()
@@ -84,6 +100,19 @@ namespace NightHunt.Gameplay.Objective
         }
 
         public void OnFail() { /* EMP node doesn't fail */ }
+
+        private void OnHealthSyncChanged(float prev, float next, bool asServer)
+        {
+            OnHealthChanged?.Invoke(next, maxHealth);
+        }
+
+        private void EnsureWorldHealthBar()
+        {
+            if (GetComponentInChildren<WorldHealthBarGeneric>(true) != null)
+                return;
+
+            gameObject.AddComponent<WorldHealthBarGeneric>();
+        }
 
         /// <summary>Take damage (server-only helper called by IHittable path).</summary>
         [Server]

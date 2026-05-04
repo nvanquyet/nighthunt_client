@@ -44,13 +44,15 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         private Collider[]       _colliders;
         private Transform        _ignoredRoot;
         private float            _nextMovementLogTime;
+        private Vector3          _lastPhysicsPosition;
+        // True when the last impact was on an IHittable (player / deployable / boss).
+        // Set by HandleImpact or SetHitscanHitType so Detonate picks blood vs. impact VFX.
+        private bool             _lastHitWasHittable;
+        private Vector3          _lastHitNormal;
         private readonly RaycastHit[] _sweepHits = new RaycastHit[16];
 
-        [Tooltip("Seconds to keep the bullet trail visible after a hitscan visual reaches the endpoint before hiding it.")]
+        [Tooltip("Legacy minimum post-impact hold for hitscan visuals. Hit VFX timing is driven by visual flight distance / speed, not this value.")]
         [SerializeField] private float _hitscanTrailLingerDuration = 0.12f;
-
-        [Tooltip("Minimum travel speed for visual-only hitscan bullets. Keeps rifle/SMG trails responsive even when the weapon projectile speed is tuned for physical projectiles.")]
-        [SerializeField] private float _minHitscanVisualSpeed = 180f;
 
         [Tooltip("Fallback radius used by swept collision checks when no enabled collider radius can be resolved.")]
         [SerializeField] private float _sweepRadius = 0.08f;
@@ -86,15 +88,35 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             _despawnRoutine        = null;
             _isOwnerShot           = false;
             _shooterNetObjId       = -1;
+            _lastHitWasHittable    = false;
+            _lastHitNormal         = Vector3.zero;
             _visionRangeClamp      = 0f;
             _spawnPosition         = Vector3.zero;
             _ignoredRoot           = null;
             _nextMovementLogTime   = 0f;
+            _lastPhysicsPosition   = transform.position;
+            StopRigidbodyMotion();
         }
 
         public void SetIgnoredRoot(Transform root)
         {
             _ignoredRoot = root != null ? root.root : null;
+        }
+
+        /// <summary>
+        /// Called by the weapon (HitscanWeapon) on the visual bullet before Initialize so
+        /// the correct blood / impact VFX plays when the visual reaches the endpoint.
+        /// Pass true when the hitscan ray struck a PlayerHitboxMarker or IHittable.
+        /// </summary>
+        public void SetHitscanHitType(bool hitAnIHittable, Vector3 hitNormal)
+        {
+            _lastHitWasHittable = hitAnIHittable;
+            _lastHitNormal = hitNormal.sqrMagnitude > 0.0001f ? hitNormal.normalized : Vector3.zero;
+        }
+
+        public void SetHitscanHitType(bool hitAnIHittable)
+        {
+            SetHitscanHitType(hitAnIHittable, Vector3.zero);
         }
 
         // Called on every spawn or reuse from pool.
@@ -105,7 +127,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         {
             _config     = config;
             _direction  = dir.normalized;
-            _speed      = useHitscan ? Mathf.Max(config.ProjectileSpeed, _minHitscanVisualSpeed) : config.ProjectileSpeed;
+            _speed      = Mathf.Max(1f, config.ProjectileSpeed);
             // Ballistic projectiles still obey the visible-circle clamp. Hitscan
             // visuals already receive an authoritative endpoint, so clamping them
             // by spawn-to-vision distance can despawn the trail before impact when
@@ -117,11 +139,13 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             _damage     = config.DamageBody;
             _weaponId   = config.WeaponId;
             _velocity   = _direction * _speed;
+            _lastPhysicsPosition = transform.position;
+            ApplyRigidbodyVelocity();
             _nextMovementLogTime = Time.time;
 
             LogProjectile($"[PROJ.INIT] Initialize - go='{gameObject.name}'  pos={transform.position:F1}  " +
                       $"dir={_direction:F2}  speed={_speed}  maxRange={_maxRange}  " +
-                      $"useHitscan={useHitscan}  isOwnerShot={_isOwnerShot}  dmg={_damage}  " +
+                      $"visionClamp={_visionRangeClamp:F2}  useHitscan={useHitscan}  isOwnerShot={_isOwnerShot}  dmg={_damage}  " +
                       $"endpoint={hitscanEndpoint?.ToString("F1") ?? "null"}");
 
             // Muzzle flash plays on the projectile (spawned at the muzzle point).
@@ -135,7 +159,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 _hitscanTargetPos      = SanitizeHitscanEndpoint(origin, _direction, hitscanEndpoint.Value, _maxRange);
                 _hitscanTargetDistance = Vector3.Distance(origin, _hitscanTargetPos);
                 _maxRange              = Mathf.Max(_maxRange, _hitscanTargetDistance + 0.25f);
-                LogProjectile($"[PROJ_VFX] Hitscan visual flight go='{gameObject.name}' origin={origin:F2} endpoint={_hitscanTargetPos:F2} dist={_hitscanTargetDistance:F2} speed={_speed:F1}");
+                float flightTime = _hitscanTargetDistance / Mathf.Max(_speed, 0.001f);
+                LogProjectile($"[PROJ_VFX] Hitscan visual flight go='{gameObject.name}' origin={origin:F2} endpoint={_hitscanTargetPos:F2} dist={_hitscanTargetDistance:F2} speed={_speed:F1} eta={flightTime:F3}s");
             }
 
             if (!isImpact && fuseTime > 0f)
@@ -164,11 +189,21 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         // -----------------------------------------------------------------
         // Movement
         // -----------------------------------------------------------------
-        private void Update()
+        private void FixedUpdate()
         {
             if (_hasDetonated || _config == null) return;
 
-            float dt = Time.deltaTime;
+            if (_rigidbody == null)
+                EnsurePhysicsSetup();
+
+            Vector3 currentPosition = _rigidbody != null ? _rigidbody.position : transform.position;
+            float actualDelta = Vector3.Distance(_lastPhysicsPosition, currentPosition);
+            if (actualDelta > 0.0001f && IsFinite(currentPosition))
+                _distanceTraveled += actualDelta;
+            _lastPhysicsPosition = currentPosition;
+
+            float dt = Time.fixedDeltaTime > 0f ? Time.fixedDeltaTime : Time.deltaTime;
+            dt = Mathf.Clamp(dt, 0.001f, 0.05f);
 
             // Accumulate gravity into velocity (matches server ServerProjectileFlight).
             // GravityScale > 0 creates a downward-curving ballistic arc.
@@ -176,18 +211,33 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 _velocity += Vector3.down * (_config.GravityScale * 9.81f * dt);
 
             Vector3 move = _velocity * dt;
+            float nextMoveDistance = move.magnitude;
 
-            Vector3 startPosition = transform.position;
-            if (!_useHitscan && TryGetSweptImpact(startPosition, move, out RaycastHit sweepHit))
+            if (!_useHitscan && TryGetSweptImpact(currentPosition, move, out RaycastHit sweepHit))
             {
-                MoveProjectile(sweepHit.point, move);
-                _distanceTraveled += Vector3.Distance(startPosition, transform.position);
+                SetProjectilePosition(sweepHit.point);
                 HandleImpact(sweepHit.collider, sweepHit.point, sweepHit.normal);
                 return;
             }
 
-            MoveProjectile(startPosition + move, move);
-            _distanceTraveled += move.magnitude;
+            // Hitscan visuals still fly as real Rigidbody projectiles. The endpoint is only
+            // used to stop exactly at the authoritative hit point once distance / speed says
+            // the visual has arrived.
+            if (_useHitscan && _hitscanTargetDistance > 0f)
+            {
+                float remaining = Mathf.Max(0f, _hitscanTargetDistance - _distanceTraveled);
+                if (remaining <= nextMoveDistance + 0.001f)
+                {
+                    SetProjectilePosition(_hitscanTargetPos);
+                    _distanceTraveled = _hitscanTargetDistance;
+                    LogProjectile($"[PROJ.MOVE] Hitscan endpoint reached go='{gameObject.name}' pos={transform.position:F2} traveled={_distanceTraveled:F2}/{_hitscanTargetDistance:F2}");
+                    Detonate();
+                    return;
+                }
+            }
+
+            ApplyFlightRotation(_velocity);
+            ApplyRigidbodyVelocity();
 
             LogMovementTick();
 
@@ -201,15 +251,6 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                     Despawn($"vision-range-exit distXZ={flat.magnitude:F2} clamp={_visionRangeClamp:F2}");
                     return;
                 }
-            }
-
-            // Hitscan: reached target endpoint, snap to exact impact position and detonate.
-            if (_useHitscan && _hitscanTargetDistance > 0f && _distanceTraveled >= _hitscanTargetDistance)
-            {
-                transform.position = _hitscanTargetPos;
-                LogProjectile($"[PROJ.MOVE] Hitscan endpoint reached go='{gameObject.name}' pos={transform.position:F2} traveled={_distanceTraveled:F2}/{_hitscanTargetDistance:F2}");
-                Detonate();
-                return;
             }
 
             // Exceeded max range; despawn.
@@ -244,7 +285,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 return;
 
             if (IsFinite(hitPoint))
-                transform.position = hitPoint;
+                SetProjectilePosition(hitPoint);
 
             Vector3 normal = hitNormal.sqrMagnitude > 0.0001f ? hitNormal.normalized : -_direction;
 
@@ -318,6 +359,12 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 // Visual-only projectile on a remote client copy; no damage applied.
                 LogProjectile($"[PROJ.HIT] Visual-only projectile hit '{other.name}' - isOwnerShot=false, detonating only.");
             }
+            // ── VFX: choose blood vs environment impact ───────────────────────
+            // Runs on ALL clients (not just owner) so everyone sees the correct VFX.
+            _lastHitWasHittable = other.GetComponentInParent<IHittable>() != null ||
+                                  ComponentResolver.Find<PlayerHitboxMarker>(other)
+                                      .OnSelf().InParent().Resolve() != null;
+            _lastHitNormal = normal;
 
             Detonate();
         }
@@ -343,25 +390,24 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 _fuseRoutine = null;
             }
 
-            if (_useHitscan && hideTrailOnImpact && mainVisualChild != null && _hitscanTrailLingerDuration > 0f)
-            {
-                // For hitscan: keep the bullet trail visible for a short time so the player can see it,
-                // then run the normal detonation (hide trail, show impact VFX, start despawn timer).
-                _despawnRoutine = StartCoroutine(HitscanLingerThenDetonate());
-            }
-            else
-            {
-                // Instant detonation for ballistic projectiles and fuse grenades.
-                TriggerDetonation(transform.position, SafeLookRotation(_direction));
-                _despawnRoutine = StartCoroutine(DespawnAfter(lifetimeAfterImpact));
-            }
-        }
+            StopRigidbodyMotion();
 
-        private IEnumerator HitscanLingerThenDetonate()
-        {
-            yield return new WaitForSeconds(_hitscanTrailLingerDuration);
-            TriggerDetonation(transform.position, SafeLookRotation(_direction));
-            yield return StartCoroutine(DespawnAfter(lifetimeAfterImpact));
+            if (hideTrailOnImpact && mainVisualChild != null)
+                mainVisualChild.SetActive(false);
+
+            Vector3 normal = _lastHitNormal.sqrMagnitude > 0.0001f
+                ? _lastHitNormal
+                : -_direction;
+
+            bool spawnedExternalHitVfx = SpawnHitVFX(transform.position, normal, _lastHitWasHittable);
+
+            float despawnDelay = lifetimeAfterImpact;
+            if (_useHitscan && _hitscanTrailLingerDuration > 0f)
+                despawnDelay = spawnedExternalHitVfx
+                    ? _hitscanTrailLingerDuration
+                    : Mathf.Max(despawnDelay, _hitscanTrailLingerDuration);
+
+            _despawnRoutine = StartCoroutine(DespawnAfter(despawnDelay));
         }
 
         // -----------------------------------------------------------------
@@ -388,19 +434,57 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 _rigidbody = gameObject.AddComponent<Rigidbody>();
 
             _rigidbody.useGravity = false;
-            _rigidbody.isKinematic = true;
+            _rigidbody.isKinematic = false;
             _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
-            _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         }
 
         private void MoveProjectile(Vector3 position, Vector3 move)
         {
-            transform.position = position;
+            SetProjectilePosition(position);
             if (move.magnitude > 0.001f)
             {
                 _direction = move.normalized;
                 transform.rotation = SafeLookRotation(_direction);
             }
+        }
+
+        private void ApplyRigidbodyVelocity()
+        {
+            if (_rigidbody == null)
+                return;
+
+            if (_rigidbody.isKinematic)
+                return;
+
+            _rigidbody.linearVelocity = _velocity;
+        }
+
+        private void StopRigidbodyMotion()
+        {
+            if (_rigidbody == null || _rigidbody.isKinematic)
+                return;
+
+            _rigidbody.linearVelocity = Vector3.zero;
+            _rigidbody.angularVelocity = Vector3.zero;
+        }
+
+        private void SetProjectilePosition(Vector3 position)
+        {
+            if (_rigidbody != null)
+                _rigidbody.position = position;
+
+            transform.position = position;
+            _lastPhysicsPosition = position;
+        }
+
+        private void ApplyFlightRotation(Vector3 velocity)
+        {
+            if (velocity.sqrMagnitude <= 0.0001f)
+                return;
+
+            _direction = velocity.normalized;
+            transform.rotation = SafeLookRotation(_direction);
         }
 
         private bool TryGetSweptImpact(Vector3 startPosition, Vector3 move, out RaycastHit hit)

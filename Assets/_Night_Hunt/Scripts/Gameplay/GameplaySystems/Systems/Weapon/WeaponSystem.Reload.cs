@@ -31,7 +31,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
             if (IsServerInitialized)
             {
-                StartCoroutine(ReloadCoroutine(slot.Value, inst, syncInventoryOnComplete: true, broadcastRemoteState: true));
+                _reloadCoroutine = StartCoroutine(ReloadCoroutine(slot.Value, inst, syncInventoryOnComplete: true, broadcastRemoteState: true));
                 return;
             }
 
@@ -39,7 +39,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
 
             RequestReloadServerRpc(slot.Value);
-            StartCoroutine(ReloadCoroutine(slot.Value, inst));
+            _reloadCoroutine = StartCoroutine(ReloadCoroutine(slot.Value, inst));
         }
 
         [ServerRpc(RequireOwnership = true)]
@@ -56,7 +56,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
 
             Debug.Log($"[WEAPON_FLOW] [02][Reload.ServerRpc] slot={slot} owner={Owner?.ClientId}");
-            StartCoroutine(ReloadCoroutine(slot, inst, syncInventoryOnComplete: true, broadcastRemoteState: true));
+            _reloadCoroutine = StartCoroutine(ReloadCoroutine(slot, inst, syncInventoryOnComplete: true, broadcastRemoteState: true));
         }
 
         public int   GetCurrentMagazine(WeaponSlotType slot) =>
@@ -118,16 +118,25 @@ namespace NightHunt.GameplaySystems.Weapon
             bool syncInventoryOnComplete = false,
             bool broadcastRemoteState = false)
         {
-            if (_isReloading) yield break;
+            if (_isReloading)
+            {
+                _reloadCoroutine = null;
+                yield break;
+            }
 
             // NOTE: Reserve ammo is initialised once in AssignToSlot (first equip).
             // Do NOT lazy-reinit here — a gun that deliberately ran out of reserve must stay empty.
             float magCap     = inst.GetComputedStat(ItemStatType.MagazineSize);
             float reloadTime = inst.GetComputedStat(ItemStatType.ReloadSpeed);
             if (reloadTime <= 0f) reloadTime = 2.5f;
+            string reloadInstanceId = inst.InstanceID;
 
             int needed = (int)magCap - (int)inst.GetCurrentValue(ItemStatType.MagazineSize);
-            if (needed <= 0) yield break;
+            if (needed <= 0)
+            {
+                _reloadCoroutine = null;
+                yield break;
+            }
 
             // -- Start reload --
             _isReloading = true;
@@ -137,6 +146,12 @@ namespace NightHunt.GameplaySystems.Weapon
                 BroadcastReloadStateObserversRpc(true);
 
             yield return new WaitForSeconds(reloadTime);
+
+            if (!IsReloadTargetStillValid(slot, reloadInstanceId, inst))
+            {
+                FinishReloadCancelled(slot, reloadInstanceId, "target-changed", broadcastRemoteState);
+                yield break;
+            }
 
             // -- Complete --
             int reserve = (int)inst.GetCurrentValue(ItemStatType.MaxAmmo);
@@ -152,12 +167,57 @@ namespace NightHunt.GameplaySystems.Weapon
                 _inventorySystem?.SyncItemState(inst.InstanceID);
 
             _isReloading = false;
+            _reloadCoroutine = null;
             Debug.Log($"[WEAPON_FLOW] [04][Reload.Done] slot={slot} mag={newMag}/{(int)magCap} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)}");
             OnReloadStateChanged?.Invoke(false);
             if (broadcastRemoteState && IsServerInitialized)
                 BroadcastReloadStateObserversRpc(false);
 
             if (DebugLogs) Debug.Log($"[WeaponSystem] Reload done: {newMag}/{magCap}");
+        }
+
+        internal void CancelReload(string reason)
+        {
+            if (!_isReloading && _reloadCoroutine == null)
+                return;
+
+            if (_reloadCoroutine != null)
+            {
+                StopCoroutine(_reloadCoroutine);
+                _reloadCoroutine = null;
+            }
+
+            bool wasReloading = _isReloading;
+            _isReloading = false;
+
+            if (wasReloading)
+            {
+                Debug.Log($"[WEAPON_FLOW] [04][Reload.Cancel] reason={reason} active={_activeSlot.Value?.ToString() ?? "none"}");
+                OnReloadStateChanged?.Invoke(false);
+                if (IsServerInitialized)
+                    BroadcastReloadStateObserversRpc(false);
+            }
+        }
+
+        private bool IsReloadTargetStillValid(WeaponSlotType slot, string reloadInstanceId, ItemInstance inst)
+        {
+            if (!_activeSlot.Value.HasValue || _activeSlot.Value.Value != slot)
+                return false;
+
+            if (!_weapons.TryGetValue(slot, out var activeInstanceId) || activeInstanceId != reloadInstanceId)
+                return false;
+
+            return inst != null && inst.InstanceID == reloadInstanceId;
+        }
+
+        private void FinishReloadCancelled(WeaponSlotType slot, string reloadInstanceId, string reason, bool broadcastRemoteState)
+        {
+            _isReloading = false;
+            _reloadCoroutine = null;
+            Debug.Log($"[WEAPON_FLOW] [04][Reload.Cancel] slot={slot} item={reloadInstanceId} reason={reason} active={_activeSlot.Value?.ToString() ?? "none"}");
+            OnReloadStateChanged?.Invoke(false);
+            if (broadcastRemoteState && IsServerInitialized)
+                BroadcastReloadStateObserversRpc(false);
         }
     }
 }

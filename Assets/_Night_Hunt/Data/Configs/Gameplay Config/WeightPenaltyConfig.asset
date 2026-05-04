@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: WeightPenaltyConfig
   m_EditorClassIdentifier: 
   Tiers:
-  - ThresholdRatio: 0.8
+  - ThresholdRatio: 0.85
     Label: Heavy
     BarColor: {r: 0.95, g: 0.75, b: 0.25, a: 1}
     Modifiers:

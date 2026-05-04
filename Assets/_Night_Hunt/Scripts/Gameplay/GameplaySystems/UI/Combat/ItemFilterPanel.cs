@@ -34,6 +34,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IItemUseSystem       _itemUseSystem;
         private IInventorySystem     _inventorySystem;
         private CombatInputHandler   _combatInputHandler;
+        private ItemAimController    _aimController;
         private Coroutine            _pendingCollapseRoutine;
 
         public bool IsExpanded { get; private set; }
@@ -49,9 +50,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IItemSelectionSystem selectionSystem,
             IInventorySystem     inventorySystem    = null,
             IItemUseSystem       itemUseSystem      = null,
-            CombatInputHandler   combatInputHandler = null)
+            CombatInputHandler   combatInputHandler = null,
+            ItemAimController    aimController      = null)
         {
-            Initialize(new[] { filterType }, selectionSystem, inventorySystem, itemUseSystem, combatInputHandler);
+            Initialize(new[] { filterType }, selectionSystem, inventorySystem, itemUseSystem, combatInputHandler, aimController);
         }
 
         public void Initialize(
@@ -59,7 +61,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IItemSelectionSystem selectionSystem,
             IInventorySystem     inventorySystem    = null,
             IItemUseSystem       itemUseSystem      = null,
-            CombatInputHandler   combatInputHandler = null)
+            CombatInputHandler   combatInputHandler = null,
+            ItemAimController    aimController      = null)
         {
 
             Unsubscribe();
@@ -82,6 +85,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _itemUseSystem   = itemUseSystem;
             _inventorySystem = inventorySystem;
             _combatInputHandler = combatInputHandler;
+            _aimController   = aimController;
 
             if (_expandButton != null)
             {
@@ -96,7 +100,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _slotButton.OnExpandRequested += ExpandList;
 
                 _slotButton.BindCombatHandler(combatInputHandler);
-                _slotButton.Initialize(_filterTypes, selectionSystem, itemUseSystem, inventorySystem);
+                _slotButton.Initialize(_filterTypes, selectionSystem, itemUseSystem, inventorySystem, aimController);
             }
 
             Subscribe();
@@ -137,10 +141,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 return;
             }
 
-            _slotButton?.SetTrackedItem(instanceId);
-            Debug.Log($"[ITEM_FLOW] [02][FilterPanel.Select] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' useImmediately={useImmediately}");
+            var item = GetItemByInstanceId(instanceId);
+            var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            bool isDeployable = def != null && def.Type == ItemType.Deployable;
+            bool shouldBeginAim = useImmediately || isDeployable;
 
-            if (useImmediately
+            _slotButton?.SetTrackedItem(instanceId);
+            Debug.Log($"[ITEM_FLOW] [02][FilterPanel.Select] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' useImmediately={useImmediately} defType={(def != null ? def.Type.ToString() : "null")} shouldBeginAim={shouldBeginAim}");
+
+            if (shouldBeginAim
                 && _itemUseSystem != null
                 && _itemUseSystem.IsUsingItem
                 && _itemUseSystem.CurrentItem?.InstanceID != instanceId)
@@ -149,24 +158,35 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _selectionSystem.RequestCancelSelection();
             }
 
-            _selectionSystem.RequestSelectItem(instanceId);
-
             if (_pendingCollapseRoutine != null)
             {
                 StopCoroutine(_pendingCollapseRoutine);
                 _pendingCollapseRoutine = null;
             }
 
-            if (useImmediately)
+            if (shouldBeginAim)
             {
-                Debug.Log($"[ITEM_FLOW] [03][FilterPanel.Use] instance='{instanceId}' action=RequestUseSelectedItem");
-                _selectionSystem.RequestUseSelectedItem();
+                if (TryStartAimControllerFlow(instanceId, def))
+                {
+                    Debug.Log($"[ITEM_FLOW] [03][FilterPanel.Use] instance='{instanceId}' action=ItemAimController defType={(def != null ? def.Type.ToString() : "null")}");
+                    CollapseList();
+                    return;
+                }
+
+                Debug.LogWarning($"[ITEM_FLOW] [03][FilterPanel.Use.Reject] instance='{instanceId}' defType={(def != null ? def.Type.ToString() : "null")} aimController={(_aimController != null ? "ok" : "null")}");
+
+                _selectionSystem.RequestSelectItem(instanceId);
+                if (useImmediately)
+                {
+                    Debug.Log($"[ITEM_FLOW] [03][FilterPanel.Use] instance='{instanceId}' action=RequestUseSelectedItem");
+                    _selectionSystem.RequestUseSelectedItem();
+                }
                 CollapseList();
+                return;
             }
-            else
-            {
-                _pendingCollapseRoutine = StartCoroutine(CollapseAfterSingleClickWindow());
-            }
+
+            _selectionSystem.RequestSelectItem(instanceId);
+            _pendingCollapseRoutine = StartCoroutine(CollapseAfterSingleClickWindow());
         }
 
         private System.Collections.IEnumerator CollapseAfterSingleClickWindow()
@@ -295,6 +315,45 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             foreach (var btn in _spawnedButtons)
                 btn?.RefreshSelectedMarker();
+        }
+
+        private bool TryStartAimControllerFlow(string instanceId, ItemDefinition def)
+        {
+            if (string.IsNullOrEmpty(instanceId))
+                return false;
+
+            if (_aimController == null)
+                _aimController = ResolveAimController();
+
+            if (_aimController == null)
+            {
+                Debug.LogWarning($"[ITEM_FLOW] [03][FilterPanel.AimMissing] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' defType={(def != null ? def.Type.ToString() : "null")}");
+                return false;
+            }
+
+            bool handled = _aimController.TryBeginAim(instanceId);
+            if (handled)
+                Debug.Log($"[ITEM_FLOW] [03][FilterPanel.AimHandled] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' defType={(def != null ? def.Type.ToString() : "null")}");
+            return handled;
+        }
+
+        private static ItemAimController ResolveAimController()
+        {
+#if UNITY_2023_1_OR_NEWER
+            return FindFirstObjectByType<ItemAimController>(FindObjectsInactive.Include);
+#else
+            return FindObjectOfType<ItemAimController>(true);
+#endif
+        }
+
+        private ItemInstance GetItemByInstanceId(string instanceId)
+        {
+            var items = GetCurrentPlayerItems();
+            if (items == null) return null;
+
+            foreach (var item in items)
+                if (item?.InstanceID == instanceId) return item;
+            return null;
         }
 
         private IReadOnlyList<ItemInstance> GetCurrentPlayerItems()

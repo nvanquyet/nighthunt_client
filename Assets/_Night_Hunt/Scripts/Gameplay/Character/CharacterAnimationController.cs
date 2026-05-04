@@ -123,6 +123,12 @@ namespace NightHunt.Gameplay.Character
         private static readonly int DieHash              = Animator.StringToHash("Die");
         private static readonly int RespawnHash          = Animator.StringToHash("Respawn");
         private static readonly int DeathIndexHash       = Animator.StringToHash("DeathIndex");
+        // ── Additional action triggers (match SoldierAnimatorTester contract) ─
+        private static readonly int InteractHash         = Animator.StringToHash("Interact");
+        private static readonly int InteractIndexHash    = Animator.StringToHash("InteractIndex");
+        private static readonly int AttackIndexHash      = Animator.StringToHash("AttackIndex");
+        private static readonly int ThrowGrenadeHash     = Animator.StringToHash("ThrowGrenade");
+        private static readonly int DeployHash           = Animator.StringToHash("Deploy");
 
         // ── Runtime refs (bound at runtime) ───────────────────────────────────
         private PrActorUtils                      _actorUtils;
@@ -616,11 +622,20 @@ namespace NightHunt.Gameplay.Character
             var anim = _actorUtils?.charAnimator;
             if (anim != null && anim.enabled)
             {
-                SafeSetTrigger(anim, ShootHash);
                 if (_activeWeaponClass == WeaponClass.Melee)
                 {
+                    int idx = UnityEngine.Random.Range(0, 2);
+                    SafeSetInt(anim, AttackIndexHash, idx);
                     SafeSetTrigger(anim, AttackHash);
                     SafeSetTrigger(anim, MeleeAttackHash);
+                    if (WeaponAnimDebugEnabled())
+                        Debug.Log($"[ANIM_FLOW] OnShotFired melee slot={slot} attackIndex={idx} shootTrigger=false");
+                }
+                else
+                {
+                    SafeSetTrigger(anim, ShootHash);
+                    if (WeaponAnimDebugEnabled())
+                        Debug.Log($"[ANIM_FLOW] OnShotFired ranged slot={slot} class={_activeWeaponClass} shootTrigger=true");
                 }
             }
 
@@ -713,7 +728,71 @@ namespace NightHunt.Gameplay.Character
                 SafeSetTrigger(anim, TakeDamageHash);
         }
 
+        /// <summary>
+        /// Play the Interact animation. <paramref name="interactIndex"/> selects the clip variant
+        /// (0 = pickup/use A, 1 = pickup/use B — matches SoldierAnimatorTester InteractIndex).
+        /// Called by interaction systems and item-pickup handlers.
+        /// </summary>
+        public void TriggerInteract(int interactIndex = 0)
+        {
+            var anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) return;
+            SafeSetInt(anim, InteractIndexHash, interactIndex);
+            SafeSetTrigger(anim, InteractHash);
+        }
+
+        /// <summary>
+        /// Play the Deploy animation (placing a deployable item).
+        /// Falls back to Interact[0] if the Animator Controller has no "Deploy" trigger.
+        /// Called by ItemUseSystem / DeployablePlacementHandler on confirmed placement.
+        /// </summary>
+        public void TriggerDeploy()
+        {
+            var anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) return;
+
+            bool hasDeployParam = false;
+            foreach (var p in anim.parameters)
+                if (p.nameHash == DeployHash) { hasDeployParam = true; break; }
+
+            if (hasDeployParam)
+                SafeSetTrigger(anim, DeployHash);
+            else
+                TriggerInteract(0);  // graceful fallback
+        }
+
+        /// <summary>
+        /// Play a melee attack animation with an optional combo-index.
+        /// Called by MeleeDamageController / WeaponSystem when the fire button is pressed
+        /// with a melee weapon equipped.
+        /// </summary>
+        public void TriggerMeleeAttack(int attackIndex = -1)
+        {
+            var anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) return;
+
+            int idx = attackIndex >= 0 ? attackIndex : UnityEngine.Random.Range(0, 2);
+            SafeSetInt(anim, AttackIndexHash, idx);
+            SafeSetTrigger(anim, AttackHash);
+            SafeSetTrigger(anim, MeleeAttackHash);
+        }
+
+        /// <summary>
+        /// Play the ThrowGrenade animation.
+        /// Called by ItemUseSystem / ThrowableHandler at the moment the grenade is released.
+        /// Note: "Throw" trigger (HandleThrowExecuted) fires at throw-start;
+        /// "ThrowGrenade" fires at grenade-release (end of throw arc start).
+        /// Add both to your animator if you need a two-phase animation.
+        /// </summary>
+        public void TriggerThrowGrenade()
+        {
+            var anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) return;
+            SafeSetTrigger(anim, ThrowGrenadeHash);
+        }
+
         // ── Layer weight helper ────────────────────────────────────────────────
+
 
         private void ApplyWeaponLayerWeights(Animator anim, bool immediately)
         {

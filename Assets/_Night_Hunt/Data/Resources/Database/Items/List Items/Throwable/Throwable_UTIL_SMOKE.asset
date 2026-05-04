@@ -31,7 +31,7 @@ MonoBehaviour:
   LaunchAngleDeg: 45
   ThrowableType: 2
   Damage: 0
-  ExplosionRadius: 8
+  ExplosionRadius: 6
   FuseTime: 2
   ProximityDetectionRadius: 0
   CanBounce: 0

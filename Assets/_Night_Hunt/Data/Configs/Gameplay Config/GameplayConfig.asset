@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: GameplayConfig
   m_EditorClassIdentifier: 
   BaseWeightCapacity: 100
-  MinMovementSpeedPercent: 0.099703
-  MaxOverweightPercent: 1.46
+  MinMovementSpeedPercent: 0.1
+  OverweightStartPercent: 0.85
+  MaxOverweightPercent: 1
   WeightWarningThreshold: 0.9
   DamageInterruptsUsage: 1
   MovementInterruptsUsage: 0

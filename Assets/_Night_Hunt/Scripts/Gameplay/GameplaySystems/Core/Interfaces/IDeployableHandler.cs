@@ -1,4 +1,5 @@
 using NightHunt.GameplaySystems.Core.Data;
+using UnityEngine;
 
 namespace NightHunt.GameplaySystems.Core.Interfaces
 {
@@ -25,6 +26,17 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         /// Returns true when a placement request was sent to the server.
         /// </summary>
         bool ConfirmDeploy();
+
+        /// <summary>
+        /// Lock the current placement preview and return the confirmed transform.
+        /// The caller may delay the final server placement for a deploy/use duration.
+        /// </summary>
+        bool TryCapturePlacement(out Vector3 position, out Quaternion rotation);
+
+        /// <summary>
+        /// Server-side final placement after any deploy/use duration has completed.
+        /// </summary>
+        bool PlaceDeployableServer(Vector3 position, Quaternion rotation, string definitionId, string itemInstanceId);
 
         /// <summary>Cancel any in-progress deployment.</summary>
         void CancelDeploy();

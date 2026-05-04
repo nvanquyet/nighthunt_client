@@ -116,6 +116,9 @@ MonoBehaviour:
   muzzleFlashChild: {fileID: 3669954176476897590}
   mainVisualChild: {fileID: 6913613989509302738}
   detonationVFXChild: {fileID: 1538375880268983142}
+  bloodVFXPrefab: {fileID: 0}
+  impactVFXPrefab: {fileID: 1538375880268983142}
+  hitVFXLifetime: 2
   isImpact: 1
   fuseTime: 0
   lifetimeAfterImpact: 1.2

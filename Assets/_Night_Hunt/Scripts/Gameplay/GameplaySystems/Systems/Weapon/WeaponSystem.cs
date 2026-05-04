@@ -96,14 +96,23 @@ namespace NightHunt.GameplaySystems.Weapon
         internal bool      _isFiring;
         internal bool      _isReloading;
         internal Coroutine _autoFireCoroutine;
+        internal Coroutine _reloadCoroutine;
         internal Vector3   _aimDirection = Vector3.forward;
         internal Transform _fireOrigin;
         internal WeaponBase _currentWeaponBase;
+
+        private Transform _fireOriginParent;
+        private Vector3 _fireOriginLocalPosition;
+        private Quaternion _fireOriginLocalRotation;
+        private Vector3 _fireOriginLocalScale = Vector3.one;
+        private bool _hasFireOriginSnapshot;
         
         // Optional systems / cached state used by Fire + NetworkSync
         private WeaponModelController _weaponModelController;
         private float _currentElevationAngle = 0f;
         private Vector3 _lastFireEndpoint = Vector3.zero;
+        private bool _lastFireHitHittable = false;
+        private Vector3 _lastFireHitNormal = Vector3.up;
         private Vector3 _lastServerShotDirection = Vector3.zero;
         private float _lastServerShotTime = -1f;
 
@@ -341,6 +350,9 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private void OnActiveSlotChangedCallback(WeaponSlotType? oldV, WeaponSlotType? newV, bool asServer)
         {
+            if (oldV != newV)
+                CancelReload($"activeSlotChanged {oldV?.ToString() ?? "none"}->{newV?.ToString() ?? "none"}");
+
             if (newV.HasValue)
                 _fireModes.Remove(newV.Value);
             OnActiveWeaponChanged?.Invoke(oldV, newV);

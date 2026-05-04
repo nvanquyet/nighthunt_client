@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **NightHuntClient** (22380 symbols, 35514 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **nighthunt_client** (22530 symbols, 35864 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -24,10 +24,10 @@ This project is indexed by GitNexus as **NightHuntClient** (22380 symbols, 35514
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/NightHuntClient/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/NightHuntClient/clusters` | All functional areas |
-| `gitnexus://repo/NightHuntClient/processes` | All execution flows |
-| `gitnexus://repo/NightHuntClient/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/nighthunt_client/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/nighthunt_client/clusters` | All functional areas |
+| `gitnexus://repo/nighthunt_client/processes` | All execution flows |
+| `gitnexus://repo/nighthunt_client/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

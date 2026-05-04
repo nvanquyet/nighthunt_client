@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -33,6 +34,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         [Header("Roots")]
         [SerializeField] private RectTransform _inventoryGridRoot;
+        [SerializeField] private ScrollRect _inventoryScrollRect;
 
         [Header("Prefabs — Inventory")]
         // No trash slot. No DropArea. World-drop = drag outside panel.
@@ -63,6 +65,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         // Interaction state
         private ItemSlotView _hoveredSlot;
         private ItemSlotView _selectedSlot;
+        private Coroutine _resetScrollRoutine;
         private readonly HashSet<ItemSlotInput> _hookedSlotInputs = new();
 
         /// <summary>
@@ -105,6 +108,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         public void Initialize(UIPlayerContext domainBridge)
         {
             _domainBridge = domainBridge;
+            DragDropController.Instance?.BindContext(_domainBridge);
 
             Debug.Log($"[INV] InventoryScreen.Initialize — domainBridge={(_domainBridge != null ? "ok" : "NULL")} " +
                       $"IsReady={_domainBridge?.IsReady} layoutBuilt={_layoutBuilt} " +
@@ -124,6 +128,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 RefreshAllSlots();
             }
 
+            QueueResetInventoryScrollToTop();
+
             HookBridgeEvents(true);
             ApplyOwnerLock();
             RefreshSlotInputHooks();
@@ -140,6 +146,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             ClearTransientUI();
             HookBridgeEvents(false);
             _domainBridge = domainBridge;
+            DragDropController.Instance?.BindContext(_domainBridge);
             _playerStatPanel?.RefreshForNewPlayer(_domainBridge);
             _itemStatPanel?.RefreshForNewPlayer(_domainBridge);
             _itemTooltip?.Initialize(_domainBridge);
@@ -148,6 +155,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             RefreshAllSlots();
             ApplyOwnerLock();
             RefreshSlotInputHooks();
+            QueueResetInventoryScrollToTop();
         }
 
         #endregion
@@ -174,6 +182,7 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             // No weapon/equipment/attachment slots are spawned here.
 
             ForceRebuildLayouts();
+            QueueResetInventoryScrollToTop();
             HookSlotEvents(true);
             RefreshSlotInputHooks();
         }
@@ -255,7 +264,52 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         private void ForceRebuildLayouts()
         {
             if (_inventoryGridRoot != null)
-                UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(_inventoryGridRoot);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(_inventoryGridRoot);
+
+            Canvas.ForceUpdateCanvases();
+        }
+
+        private ScrollRect ResolveInventoryScrollRect()
+        {
+            if (_inventoryScrollRect == null && _inventoryGridRoot != null)
+                _inventoryScrollRect = _inventoryGridRoot.GetComponentInParent<ScrollRect>(true);
+
+            return _inventoryScrollRect;
+        }
+
+        private void QueueResetInventoryScrollToTop()
+        {
+            if (!isActiveAndEnabled)
+            {
+                ResetInventoryScrollToTop();
+                return;
+            }
+
+            if (_resetScrollRoutine != null)
+                StopCoroutine(_resetScrollRoutine);
+
+            _resetScrollRoutine = StartCoroutine(ResetInventoryScrollToTopNextFrame());
+        }
+
+        private IEnumerator ResetInventoryScrollToTopNextFrame()
+        {
+            yield return null;
+            _resetScrollRoutine = null;
+            ResetInventoryScrollToTop();
+        }
+
+        private void ResetInventoryScrollToTop()
+        {
+            var scrollRect = ResolveInventoryScrollRect();
+            if (scrollRect == null)
+                return;
+
+            ForceRebuildLayouts();
+            scrollRect.StopMovement();
+            if (scrollRect.vertical)
+                scrollRect.verticalNormalizedPosition = 1f;
+            if (scrollRect.horizontal)
+                scrollRect.horizontalNormalizedPosition = 0f;
         }
 
         #endregion
@@ -419,6 +473,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             _hoveredSlot = slot;
 
+            if (_selectedSlot != null)
+            {
+                _itemTooltip?.Hide();
+                return;
+            }
+
             var item = slot.State?.Item;
             if (item == null)
             {
@@ -436,6 +496,12 @@ namespace NightHunt.GameplaySystems.UI.Inventory
 
         private void ShowEmptySlotTooltip(ItemSlotView slot)
         {
+            if (_selectedSlot != null)
+            {
+                _itemTooltip?.Hide();
+                return;
+            }
+
             if (_itemTooltip == null || slot == null || slot.SlotId.Type == UISlotType.Inventory)
             {
                 _itemTooltip?.Hide();
@@ -457,6 +523,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             if (!CanInteract) return;
 
+            _hoveredSlot = null;
+            _itemTooltip?.Hide();
+
             // Toggle selection: pressing the same slot again deselects it.
             if (_selectedSlot == slot)
             {
@@ -470,7 +539,6 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             _selectedSlot = slot;
             slot.SetSelectedVisual(true);
             _itemStatPanel?.Show(slot.State.Item);
-            _itemTooltip?.Hide(); // tooltip is redundant while a slot is selected
         }
 
         private void OnSlotDoubleClicked(ItemSlotView slot)

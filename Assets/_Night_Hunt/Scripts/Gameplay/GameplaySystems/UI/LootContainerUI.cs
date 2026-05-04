@@ -14,6 +14,7 @@ using NightHunt.Networking.Player;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.UI.Inventory;
+using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.UI
 {
@@ -50,6 +51,7 @@ namespace NightHunt.GameplaySystems.UI
 
         [Header("Item list")]
         [SerializeField] private Transform  _slotsParent;
+        [SerializeField] private ScrollRect _scrollRect;
         [Tooltip("Prefab containing ItemSlotView and ItemSlotInput (like Inventory slot)")]
         [SerializeField] private GameObject _itemSlotPrefab;
 
@@ -93,6 +95,8 @@ namespace NightHunt.GameplaySystems.UI
 
         // Track collapse state — close button toggles this, NOT the whole panel.
         private Coroutine _takeAllCoroutine;
+        private Coroutine _resetScrollRoutine;
+        private ItemSlotView _hoveredLootSlot;
 
         // Debounce hover-exit to prevent flicker when RaycastDetector alternates between
         // hitting and missing a container collider on its edge (happens ~every frame).
@@ -247,8 +251,7 @@ namespace NightHunt.GameplaySystems.UI
 
                 Debug.Log($"[LOOT_TAB_FLOW] RequestPickup ground item idx={idx} def={item.ItemDefinitionID} qty={item.Quantity}.");
                 item.RequestPickupFromUI(_localNob);
-                _openWorldItems.RemoveAt(idx);
-                RebuildRows();
+                StartCoroutine(RebuildRowsNextFrame());
             };
 
             _openedViaInteraction = true;
@@ -665,6 +668,8 @@ namespace NightHunt.GameplaySystems.UI
                 var rowGo  = SpawnSlot(item, i);
                 if (rowGo != null) _spawnedRows.Add(rowGo);
             }
+
+            QueueResetScrollToTop();
         }
 
         private GameObject SpawnSlot(ItemInstanceData itemData, int storageIndex)
@@ -750,12 +755,17 @@ namespace NightHunt.GameplaySystems.UI
         {
             if (view.State != null && view.State.Item != null)
             {
+                _hoveredLootSlot = view;
                 _itemTooltip?.Show(view.State.Item, view.RectTransform.position, view.transform as RectTransform, "Take");
             }
         }
 
         private void HandleSlotHoverExit(ItemSlotView view)
         {
+            if (_hoveredLootSlot != view)
+                return;
+
+            _hoveredLootSlot = null;
             _itemTooltip?.Hide();
         }
 
@@ -789,30 +799,48 @@ namespace NightHunt.GameplaySystems.UI
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                 Debug.Log($"[LootContainerUI] TakeAllRoutine: starting with {count} item(s)");
 
-            const float maxWaitPerItem = 0.35f;
+            const float maxWaitPerItem = 0.2f;
+            int idx = count - 1;
             while (_takeItemAction != null && _currentStorage != null && _currentStorage.Count > 0 && _localNob != null)
             {
+                if (idx >= _currentStorage.Count)
+                    idx = _currentStorage.Count - 1;
+                if (idx < 0)
+                    break;
+
                 int beforeCount = _currentStorage.Count;
-                int idx = beforeCount - 1;
-                int qty = Mathf.Max(1, _currentStorage[idx].Quantity);
+                var beforeItem = _currentStorage[idx];
+                int requestedQty = Mathf.Max(1, beforeItem.Quantity);
+                int qty = EstimateCarryableQuantity(beforeItem, requestedQty);
+                if (qty <= 0)
+                {
+                    idx--;
+                    yield return null;
+                    continue;
+                }
 
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
-                    Debug.Log($"[LootContainerUI] TakeAllRoutine: taking idx={idx} qty={qty} count={beforeCount}");
+                    Debug.Log($"[LootContainerUI] TakeAllRoutine: taking idx={idx} qty={qty}/{requestedQty} count={beforeCount}");
 
                 _takeItemAction.Invoke(idx, qty);
 
                 float elapsed = 0f;
-                while (_currentStorage != null && _currentStorage.Count >= beforeCount && elapsed < maxWaitPerItem)
+                while (_currentStorage != null &&
+                       IsSameStorageEntry(_currentStorage, idx, beforeItem) &&
+                       elapsed < maxWaitPerItem)
                 {
                     elapsed += Time.unscaledDeltaTime;
                     yield return null;
                 }
 
-                if (_currentStorage != null && _currentStorage.Count >= beforeCount)
+                if (_currentStorage != null && IsSameStorageEntry(_currentStorage, idx, beforeItem))
                 {
-                    Debug.LogWarning($"[LootContainerUI] TakeAllRoutine: storage did not shrink after idx={idx}; stopping to avoid request spam.");
-                    break;
+                    idx--;
+                    continue;
                 }
+
+                idx = _currentStorage != null ? _currentStorage.Count - 1 : -1;
+                yield return null;
             }
 
             bool shouldHide = _currentStorage == null || _currentStorage.Count == 0;
@@ -820,6 +848,42 @@ namespace NightHunt.GameplaySystems.UI
 
             if (shouldHide)
                 Hide();
+        }
+
+        private IEnumerator RebuildRowsNextFrame()
+        {
+            yield return null;
+            RebuildRows();
+            if (_currentStorage != null && _currentStorage.Count == 0)
+                Hide();
+        }
+
+        private int EstimateCarryableQuantity(ItemInstanceData itemData, int requestedQuantity)
+        {
+            if (_localNob == null)
+                return requestedQuantity;
+
+            var inventory = ComponentResolver.Find<IInventorySystem>(_localNob)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .OrDefault(null)
+                .Resolve();
+
+            return inventory != null
+                ? LootTransferUtility.CalculateCarryableQuantity(_localNob, inventory, itemData, requestedQuantity)
+                : requestedQuantity;
+        }
+
+        private static bool IsSameStorageEntry(IReadOnlyList<ItemInstanceData> storage, int index, ItemInstanceData before)
+        {
+            if (storage == null || index < 0 || index >= storage.Count)
+                return false;
+
+            var current = storage[index];
+            return current.InstanceID == before.InstanceID &&
+                   current.DefinitionID == before.DefinitionID &&
+                   current.Quantity == before.Quantity;
         }
 
         private void StopTakeAllCoroutine()
@@ -844,9 +908,56 @@ namespace NightHunt.GameplaySystems.UI
                 }
             }
             _spawnedRows.Clear();
+            _hoveredLootSlot = null;
 
             // Need to hide tooltip in case we were hovering over a slot when it was rebuilt/cleared
             _itemTooltip?.Hide();
+        }
+
+        private ScrollRect ResolveScrollRect()
+        {
+            if (_scrollRect == null && _slotsParent != null)
+                _scrollRect = _slotsParent.GetComponentInParent<ScrollRect>(true);
+
+            return _scrollRect;
+        }
+
+        private void QueueResetScrollToTop()
+        {
+            if (!isActiveAndEnabled)
+            {
+                ResetScrollToTop();
+                return;
+            }
+
+            if (_resetScrollRoutine != null)
+                StopCoroutine(_resetScrollRoutine);
+
+            _resetScrollRoutine = StartCoroutine(ResetScrollToTopNextFrame());
+        }
+
+        private IEnumerator ResetScrollToTopNextFrame()
+        {
+            yield return null;
+            _resetScrollRoutine = null;
+            ResetScrollToTop();
+        }
+
+        private void ResetScrollToTop()
+        {
+            var scrollRect = ResolveScrollRect();
+            if (scrollRect == null)
+                return;
+
+            Canvas.ForceUpdateCanvases();
+            if (_slotsParent is RectTransform slotsRect)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(slotsRect);
+
+            scrollRect.StopMovement();
+            if (scrollRect.vertical)
+                scrollRect.verticalNormalizedPosition = 1f;
+            if (scrollRect.horizontal)
+                scrollRect.horizontalNormalizedPosition = 0f;
         }
 
 

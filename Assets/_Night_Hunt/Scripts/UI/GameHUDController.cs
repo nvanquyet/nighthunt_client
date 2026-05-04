@@ -138,6 +138,7 @@ namespace NightHunt.UI
         private NightHunt.GameplaySystems.Interaction.PlayerInteractionSystem _localInteractionSystem;
         private bool _initializedForPlayer;
         private Coroutine _inventoryProximityRefreshCoroutine;
+        private InputManager _subscribedInputManager;
 
         // ── Public accessors ──────────────────────────────────────────────────
 
@@ -170,13 +171,7 @@ namespace NightHunt.UI
             // Primary init trigger: fires when the local player is ready.
             NetworkPlayer.OnOwnerReady += Initialize;
 
-            // Inventory toggle
-            var input = InputManager.Instance;
-            if (input?.InventoryHandler != null)
-            {
-                input.InventoryHandler.OpenInventoryPerformed += HandleInventoryToggle;
-                input.InventoryHandler.QuickSlotPerformed += HandleInventoryQuickSlot;
-            }
+            TrySubscribeInputHandlers();
 
             // Context change from InputLayerManager drives Inventory ↔ Combat transition.
             if (InputLayerManager.Instance != null)
@@ -191,12 +186,7 @@ namespace NightHunt.UI
         {
             NetworkPlayer.OnOwnerReady -= Initialize;
 
-            var input = InputManager.Instance;
-            if (input?.InventoryHandler != null)
-            {
-                input.InventoryHandler.OpenInventoryPerformed -= HandleInventoryToggle;
-                input.InventoryHandler.QuickSlotPerformed -= HandleInventoryQuickSlot;
-            }
+            UnsubscribeInputHandlers();
 
             if (InputLayerManager.Instance != null)
                 InputLayerManager.Instance.OnContextChanged -= HandleContextChanged;
@@ -209,6 +199,8 @@ namespace NightHunt.UI
 
         private void Start()
         {
+            TrySubscribeInputHandlers();
+
             // Edge case: SpectateManager was null during OnEnable (script execution order).
             if (SpectateManager.Instance != null)
             {
@@ -243,6 +235,8 @@ namespace NightHunt.UI
         /// </summary>
         public void Initialize(NetworkPlayer localPlayer)
         {
+            TrySubscribeInputHandlers();
+
             if (localPlayer == null) return;
 
             _initializedForPlayer = true;
@@ -476,6 +470,29 @@ namespace NightHunt.UI
             _itemSelectionHUD.ActivateQuickSlot(oneBasedSlot);
         }
 
+        private void TrySubscribeInputHandlers()
+        {
+            var input = InputManager.Instance;
+            if (input == null || input == _subscribedInputManager || input.InventoryHandler == null)
+                return;
+
+            UnsubscribeInputHandlers();
+            input.InventoryHandler.OpenInventoryPerformed += HandleInventoryToggle;
+            input.InventoryHandler.QuickSlotPerformed += HandleInventoryQuickSlot;
+            _subscribedInputManager = input;
+        }
+
+        private void UnsubscribeInputHandlers()
+        {
+            if (_subscribedInputManager?.InventoryHandler != null)
+            {
+                _subscribedInputManager.InventoryHandler.OpenInventoryPerformed -= HandleInventoryToggle;
+                _subscribedInputManager.InventoryHandler.QuickSlotPerformed -= HandleInventoryQuickSlot;
+            }
+
+            _subscribedInputManager = null;
+        }
+
         private void HandleContextChanged(InputState oldState, InputState newState)
         {
             // Only respond to Inventory transitions when in control (not dead/spectating/results).
@@ -623,12 +640,18 @@ namespace NightHunt.UI
                 panel = GetComponentInChildren<MobileHUDPanel>(true);
             if (panel != null)
             {
+                _mobileHUDPanel = panel;
+                Debug.Log($"[GameHUDController] BindMobileInput panel={panel.name} player={localPlayer.name}");
                 panel.Bind(InputManager.Instance);
                 var statSys = ComponentResolver
                     .Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(localPlayer)
                     .OnSelf().InChildren()
                     .Resolve();
                 panel.BindPlayerContext(localPlayer.transform, statSys);
+            }
+            else
+            {
+                Debug.LogWarning("[GameHUDController] MobileHUDPanel not found under HUD; mobile action buttons cannot bind.");
             }
         }
 

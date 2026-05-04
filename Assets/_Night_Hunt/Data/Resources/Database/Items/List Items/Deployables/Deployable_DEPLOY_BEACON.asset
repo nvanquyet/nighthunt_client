@@ -32,3 +32,6 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 22052865
   MaxPlacementSlope: 59.7
+  PlacementYawOffsetDegrees: 180
+  DeployDuration: 1.25
+  _canCancelDeploy: 1

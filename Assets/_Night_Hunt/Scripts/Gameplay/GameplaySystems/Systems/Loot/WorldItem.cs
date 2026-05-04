@@ -278,7 +278,6 @@ namespace NightHunt.GameplaySystems.Loot
         public void RequestPickupFromUI(NetworkObject playerNob)
         {
             _isPickupPending = true;
-            ApplyPickedUpVisualState(true);
             RequestPickup(playerNob);
         }
 
@@ -598,15 +597,41 @@ namespace NightHunt.GameplaySystems.Loot
                 return;
             }
 
-            inventory.AddItemFromData(_itemData);
-            // Mark as picked up via SyncVar so all clients immediately reflect the state.
-            // This fires OnChange on every observer, letting their CanInteract() return false
-            // without any client needing to track _isPickupPending.
-            _syncIsPickedUp.Value = true;
-            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
-                Debug.Log(
-                $"[WorldItem] ✓ Pickup: '{_itemData.DefinitionID}' ×{_itemData.Quantity} ClientId={conn.ClientId}");
-            DespawnPickup();
+            int requestedQty = Mathf.Max(1, _itemData.Quantity);
+            int acceptedQty = LootTransferUtility.CalculateCarryableQuantity(playerNob, inventory, _itemData, requestedQty);
+            if (acceptedQty <= 0)
+            {
+                _isPickupPending = false;
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldItem] RequestPickup rejected by weight cap: '{_itemData.DefinitionID}' x{_itemData.Quantity} ClientId={conn.ClientId}");
+                return;
+            }
+
+            bool takingFullStack = acceptedQty >= _itemData.Quantity;
+            var acceptedData = takingFullStack
+                ? _itemData
+                : ItemInstanceFactory.CopyDataForQuantity(_itemData, acceptedQty, newInstanceId: true);
+            inventory.AddItemFromData(acceptedData);
+
+            if (takingFullStack)
+            {
+                // Mark as picked up via SyncVar so all clients immediately reflect the state.
+                // This fires OnChange on every observer, letting their CanInteract() return false
+                // without any client needing to track _isPickupPending.
+                _syncIsPickedUp.Value = true;
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
+                    Debug.Log(
+                    $"[WorldItem] ✓ Pickup: '{_itemData.DefinitionID}' ×{_itemData.Quantity} ClientId={conn.ClientId}");
+                DespawnPickup();
+            }
+            else
+            {
+                _itemData.Quantity -= acceptedQty;
+                _syncItemData.Value = _itemData;
+                _isPickupPending = false;
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
+                    Debug.Log($"[WorldItem] Partial pickup by weight cap: '{_itemData.DefinitionID}' took={acceptedQty} remain={_itemData.Quantity} ClientId={conn.ClientId}");
+            }
         }
 
         private void OnSyncIsPickedUpChanged(bool oldValue, bool newValue, bool asServer)

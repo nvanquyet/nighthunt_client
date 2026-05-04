@@ -13,6 +13,22 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
     /// </summary>
     public abstract class WeaponBase : MonoBehaviour
     {
+        public readonly struct WeaponFireResult
+        {
+            public readonly Vector3 Origin;
+            public readonly Vector3 Endpoint;
+            public readonly bool HitAnIHittable;
+            public readonly Vector3 HitNormal;
+
+            public WeaponFireResult(Vector3 origin, Vector3 endpoint, bool hitAnIHittable, Vector3 hitNormal)
+            {
+                Origin = origin;
+                Endpoint = endpoint;
+                HitAnIHittable = hitAnIHittable;
+                HitNormal = hitNormal.sqrMagnitude > 0.0001f ? hitNormal.normalized : Vector3.up;
+            }
+        }
+
         [Header("Fire Origin & IK")]
         [Tooltip("Muzzle-tip transform. Leave null to use the weapon root.")]
         [SerializeField] protected Transform firePoint;
@@ -78,6 +94,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         /// Hitscan endpoint is the hit point or max-range point. Projectile endpoint is an estimate.
         /// </summary>
         public event Action<Vector3, Vector3> OnFireResult;
+        public event Action<WeaponFireResult> OnFireResultDetailed;
 
         protected virtual void Awake()
         {
@@ -138,6 +155,12 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         public void ResetSpread() => _currentSpread = spreadBase;
 
         protected void RaiseFireResult(Vector3 origin, Vector3 endpoint)
-            => OnFireResult?.Invoke(origin, endpoint);
+            => RaiseFireResult(origin, endpoint, false, Vector3.up);
+
+        protected void RaiseFireResult(Vector3 origin, Vector3 endpoint, bool hitAnIHittable, Vector3 hitNormal)
+        {
+            OnFireResult?.Invoke(origin, endpoint);
+            OnFireResultDetailed?.Invoke(new WeaponFireResult(origin, endpoint, hitAnIHittable, hitNormal));
+        }
     }
 }

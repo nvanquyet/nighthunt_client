@@ -3,79 +3,59 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
+using NightHunt.Gameplay.Input.Handlers.Camera;
+using NightHunt.Gameplay.Camera;
 
 namespace NightHunt.UI.Mobile
 {
     /// <summary>
     /// Full-screen invisible touch-drag area for mobile camera rotation.
-    /// Drag anywhere on this panel → camera rotates.
+    /// Drag anywhere on this panel and the Cinemachine camera receives mouse-delta input.
     ///
-    /// Works by injecting simulated mouse-delta state events into InputSystem so that
-    /// CinemachineInputAxisController transparently picks them up via the Camera/"MouseDelta"
-    /// action (bound to &lt;Mouse&gt;/delta). No Cinemachine internals are touched.
-    ///
-    /// SETUP in HUD Canvas:
-    ///   1. Create an Image GameObject → anchors Stretch/Stretch (full screen).
-    ///   2. Image color alpha = 0 (invisible). Raycast Target = CHECKED.
-    ///   3. Attach this component.
-    ///   4. Make it the FIRST child in the Canvas (lowest sibling index = rendered
-    ///      behind all buttons/joysticks). Touches on joysticks go to the joystick
-    ///      (EventSystem gives priority to the topmost element that handles the event);
-    ///      touches on empty space fall through to this panel.
-    ///
-    /// PC:
-    ///   On PC a real Mouse device already exists; the drag area silently does nothing
-    ///   on PC (camera rotation is handled by real mouse movement as normal).
+    /// Keep this object behind buttons/joysticks in the HUD hierarchy. Buttons consume their
+    /// own touches; empty HUD space reaches this drag area.
     /// </summary>
     [RequireComponent(typeof(Image))]
     public class MobileCameraDragArea : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
     {
         [Header("Sensitivity")]
-        [Tooltip("Rotation degrees per screen pixel dragged horizontally. Increase for faster spin.")]
+        [Tooltip("Input delta injected per screen pixel dragged horizontally. Increase for faster spin.")]
         [SerializeField] private float _degreesPerPixel = 0.25f;
 
         private Mouse _mouse;
+        private CameraInputHandler _handler;
+        private CameraStateManager _cameraStateManager;
         private bool _addedVirtualMouse;
         private bool _dragging;
+        private bool _missingHandlerLogged;
+        private float _nextDragLogTime;
 
-        // ─────────────────────────────────────────────────────────────────────
-        //  Unity
-        // ─────────────────────────────────────────────────────────────────────
+        private void Awake()
+        {
+            ConfigureRaycastImage();
+        }
+
+        private void OnEnable()
+        {
+            ConfigureRaycastImage();
+            EnsureVirtualMouse();
+        }
 
         private void Start()
         {
-            // Make Image transparent but keep Raycast Target so EventSystem routes touches here.
-            var img = GetComponent<Image>();
-            if (img != null)
-            {
-                var c = img.color;
-                c.a = 0f;
-                img.color = c;
-                img.raycastTarget = true;
-            }
+            ConfigureRaycastImage();
+            EnsureVirtualMouse();
+        }
 
-            // On mobile there is no physical Mouse device.
-            // Adding a virtual one lets any InputAction bound to <Mouse>/delta
-            // receive our injected events — including CinemachineInputAxisController.
-            if (Mouse.current != null)
-            {
-                // PC: real mouse present, drag area is a no-op (camera already driven by mouse move).
-                // Disable raycast target so IsPointerOverGameObject() returns false on PC —
-                // otherwise CombatInputHandler.OnFirePerformed bails out every click.
-                if (img != null) img.raycastTarget = false;
-                _mouse = null;
-                _addedVirtualMouse = false;
-            }
-            else
-            {
-                _mouse = InputSystem.AddDevice<Mouse>();
-                _addedVirtualMouse = true;
-                Debug.Log("[MobileCameraDragArea] Virtual mouse device added for camera rotation.");
-            }
+        private void OnDisable()
+        {
+            _dragging = false;
         }
 
         private void OnDestroy()
         {
+            UnbindHandler();
+
             if (_addedVirtualMouse && _mouse != null)
             {
                 InputSystem.RemoveDevice(_mouse);
@@ -84,29 +64,109 @@ namespace NightHunt.UI.Mobile
             }
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        //  EventSystem handlers
-        // ─────────────────────────────────────────────────────────────────────
+        public void BindHandler(CameraInputHandler handler)
+        {
+            _handler = handler;
+            _missingHandlerLogged = false;
+            Debug.Log($"[MobileCameraDragArea] Bind camera handler={(handler != null ? "ok" : "null")} inputEnabled={handler?.IsInputEnabled.ToString() ?? "n/a"} active={isActiveAndEnabled}");
+        }
 
-        public void OnPointerDown(PointerEventData eventData) => _dragging = true;
+        public void BindCameraStateManager(CameraStateManager cameraStateManager)
+        {
+            _cameraStateManager = cameraStateManager;
+            Debug.Log($"[MobileCameraDragArea] Bind camera state manager={(cameraStateManager != null ? cameraStateManager.name : "null")} state={cameraStateManager?.CurrentState.ToString() ?? "n/a"}");
+        }
 
-        public void OnPointerUp(PointerEventData eventData) => _dragging = false;
+        public void UnbindHandler()
+        {
+            _handler = null;
+            _cameraStateManager = null;
+            _dragging = false;
+            _missingHandlerLogged = false;
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            _dragging = true;
+            EnsureVirtualMouse();
+
+            if (Time.unscaledTime >= _nextDragLogTime)
+            {
+                _nextDragLogTime = Time.unscaledTime + 0.75f;
+                Debug.Log($"[MobileCameraDragArea] PointerDown pointer={eventData.pointerId} pos={eventData.position:F1} handler={(_handler != null ? "ok" : "null")} inputEnabled={_handler?.IsInputEnabled.ToString() ?? "n/a"} virtualMouse={(_mouse != null ? "ok" : "null")}");
+            }
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            _dragging = false;
+        }
 
         public void OnDrag(PointerEventData eventData)
         {
-            // No-op on PC (no virtual mouse) or when not in a drag gesture.
-            if (!_dragging || _mouse == null) return;
+            if (!_dragging)
+                return;
 
-            // When two fingers are on screen (e.g. about to pinch), suppress rotation
-            // to avoid chaotic input mixing.
-            if (UnityEngine.Input.touchCount > 1) return;
+            EnsureVirtualMouse();
+            if (_mouse == null)
+                return;
+
+            // Pinch zoom owns two-finger gestures.
+            if (UnityEngine.Input.touchCount > 1)
+                return;
+
+            if (_handler == null && !_missingHandlerLogged)
+            {
+                _missingHandlerLogged = true;
+                Debug.LogWarning("[MobileCameraDragArea] CameraInputHandler is not bound. Drag still injects virtual mouse delta, but MobileHUDPanel should bind it for diagnostics.");
+            }
+
+            if (_handler != null && !_handler.IsInputEnabled && Time.unscaledTime >= _nextDragLogTime)
+            {
+                _nextDragLogTime = Time.unscaledTime + 0.75f;
+                Debug.LogWarning("[MobileCameraDragArea] Drag received while CameraInputHandler input is disabled. If the camera does not rotate, check CameraStateManager and active input layer.");
+            }
+
+            if (_cameraStateManager != null && _cameraStateManager.IsRotationLocked() && Time.unscaledTime >= _nextDragLogTime)
+            {
+                _nextDragLogTime = Time.unscaledTime + 0.75f;
+                Debug.LogWarning($"[MobileCameraDragArea] Drag received while camera state is {_cameraStateManager.CurrentState}. CinemachineInputAxisController is locked, so mobile camera rotation will not move until the state returns to Free.");
+            }
 
             Vector2 delta = new Vector2(eventData.delta.x * _degreesPerPixel, 0f);
-            if (delta.sqrMagnitude < 0.0001f) return;
+            if (delta.sqrMagnitude < 0.0001f)
+                return;
 
-            // Inject the delta into InputSystem. CinemachineInputAxisController reads
-            // <Mouse>/delta from here and drives camera yaw automatically.
             InputSystem.QueueStateEvent(_mouse, new MouseState { delta = delta });
+
+            if (Time.unscaledTime >= _nextDragLogTime)
+            {
+                _nextDragLogTime = Time.unscaledTime + 0.75f;
+                Debug.Log($"[MobileCameraDragArea] Drag delta={eventData.delta:F1} injected={delta:F2} handler={(_handler != null ? "ok" : "null")} inputEnabled={_handler?.IsInputEnabled.ToString() ?? "n/a"}");
+            }
+        }
+
+        private void ConfigureRaycastImage()
+        {
+            var img = GetComponent<Image>();
+            if (img == null)
+                return;
+
+            var c = img.color;
+            c.a = 0f;
+            img.color = c;
+            img.raycastTarget = true;
+        }
+
+        private void EnsureVirtualMouse()
+        {
+            if (_mouse != null)
+                return;
+
+            string existingMouse = Mouse.current != null ? Mouse.current.displayName : "none";
+            _mouse = InputSystem.AddDevice<Mouse>();
+            _addedVirtualMouse = true;
+            Debug.Log($"[MobileCameraDragArea] Virtual mouse device added for camera rotation. previousMouse={existingMouse}");
         }
     }
 }

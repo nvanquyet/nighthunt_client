@@ -359,8 +359,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (_def?.ImpactSound != null)
             {
                 if (AudioManager.HasInstance)
-                    AudioManager.Instance.Play3D(_def.ImpactSound, position,
-                        AudioManager.Instance.GroupExplosion);
+                    AudioManager.Instance.PlayExplosion3D(_def.ImpactSound, position);
                 else
                     AudioSource.PlayClipAtPoint(_def.ImpactSound, position);
             }

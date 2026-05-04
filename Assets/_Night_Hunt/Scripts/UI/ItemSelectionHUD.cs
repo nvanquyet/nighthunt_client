@@ -7,6 +7,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.UI;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Combat;
+using NightHunt.Utilities;
 
 namespace NightHunt.UI
 {
@@ -49,6 +50,10 @@ namespace NightHunt.UI
         [Header("Filter Panels")]
         [Tooltip("One entry per selectable item type (Consumable, Throwable, etc.).")]
         [SerializeField] private ItemFilterEntry[] _filterPanels;
+
+        [Header("Item Aim Controller")]
+        [Tooltip("Assign the scene ItemAimController so throwable/deployable slots can enter aim and placement mode.")]
+        [SerializeField] private GameplaySystems.UI.Combat.ItemAimController _aimController;
 
         // Injected at runtime by GameHUDController.BindProgress.
         private ActionProgressPresenter _progressPresenter;
@@ -172,6 +177,7 @@ namespace NightHunt.UI
             var combatHandler = InputManager.Instance?.CombatHandler;
             combatHandler?.BindItemSelectionSystem(selectionSys);
             BindCombatShortcuts(combatHandler);
+            BindAimController(context, selectionSys, inventorySys, itemUseSys, combatHandler);
 
             var initializedPanels = new List<GameplaySystems.UI.Combat.ItemFilterPanel>();
             foreach (var entry in _filterPanels)
@@ -180,9 +186,49 @@ namespace NightHunt.UI
                 if (initializedPanels.Contains(entry.Panel)) continue;
 
                 var filterTypes = CollectFilterTypesForPanel(entry.Panel);
-                entry.Panel.Initialize(filterTypes, selectionSys, inventorySys, itemUseSys, combatHandler);
+                entry.Panel.Initialize(filterTypes, selectionSys, inventorySys, itemUseSys, combatHandler, _aimController);
                 initializedPanels.Add(entry.Panel);
             }
+        }
+
+        private void BindAimController(
+            UIPlayerContext context,
+            IItemSelectionSystem selectionSys,
+            IInventorySystem inventorySys,
+            IItemUseSystem itemUseSys,
+            CombatInputHandler combatHandler)
+        {
+            if (_aimController == null)
+                _aimController = GetComponentInChildren<GameplaySystems.UI.Combat.ItemAimController>(true);
+            if (_aimController == null && transform.root != null)
+                _aimController = transform.root.GetComponentInChildren<GameplaySystems.UI.Combat.ItemAimController>(true);
+            if (_aimController == null)
+            {
+#if UNITY_2023_1_OR_NEWER
+                _aimController = FindFirstObjectByType<GameplaySystems.UI.Combat.ItemAimController>(FindObjectsInactive.Include);
+#else
+                _aimController = FindObjectOfType<GameplaySystems.UI.Combat.ItemAimController>(true);
+#endif
+            }
+            if (_aimController == null)
+            {
+                Debug.LogWarning("[DEPLOY_FLOW] ItemSelectionHUD could not resolve ItemAimController. Deploy/throw UI will fall back to server use without local preview.");
+                return;
+            }
+
+            var playerTransform = context?.Player != null ? context.Player.transform : null;
+            var aimSystem = playerTransform != null
+                ? ComponentResolver.Find<IAimSystem>(playerTransform)
+                    .OnSelf()
+                    .InChildren()
+                    .InParent()
+                    .InRootChildren()
+                    .OrDefault(null)
+                    .Resolve()
+                : null;
+
+            _aimController.Initialize(context?.Bridge?.Stat, selectionSys, playerTransform, aimSystem, itemUseSys, combatHandler, inventorySys);
+            Debug.Log($"[DEPLOY_FLOW] ItemSelectionHUD bound ItemAimController='{_aimController.name}' player='{context?.Player?.name ?? "null"}' inventory={(inventorySys != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")}");
         }
 
         private IReadOnlyList<ItemType> CollectFilterTypesForPanel(GameplaySystems.UI.Combat.ItemFilterPanel panel)
@@ -272,6 +318,12 @@ namespace NightHunt.UI
                 return;
             }
 
+            if (def != null && def.Type == ItemType.Deployable)
+            {
+                HideProgress();
+                return;
+            }
+
             if (def != null && def.Type != ItemType.Consumable)
             {
                 HideProgress();
@@ -284,9 +336,13 @@ namespace NightHunt.UI
         private void HandleItemUseProgress(ItemInstance item, float progress)
         {
             var def = item != null ? GameplaySystems.Inventory.ItemDatabase.GetDefinition(item.DefinitionID) : null;
-            if (def == null || def.Type != ItemType.Consumable) return;
+            if (def == null || (def.Type != ItemType.Consumable && def.Type != ItemType.Deployable)) return;
 
-            _progressPresenter?.SetProgress(ActionProgressKind.ItemUse, progress);
+            ActionProgressKind kind = ResolveProgressKind(def);
+            if (_progressPresenter != null && _progressPresenter.ActiveKind != kind)
+                ShowProgress(item);
+
+            _progressPresenter?.SetProgress(kind, progress);
         }
 
         private void HandleItemUseCompleted(ItemInstance item)
@@ -304,24 +360,37 @@ namespace NightHunt.UI
         private void ShowProgress(ItemInstance item)
         {
             string label = string.Empty;
-            if (item != null)
-            {
-                var def = GameplaySystems.Inventory.ItemDatabase.GetDefinition(item.DefinitionID);
-                label = def != null ? def.DisplayName : string.Empty;
-            }
-
-            _progressPresenter?.Show(ActionProgressKind.ItemUse, label, true, OnCancelClicked);
+            var def = item != null ? GameplaySystems.Inventory.ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            label = def != null ? def.DisplayName : string.Empty;
+            _progressPresenter?.Show(ResolveProgressKind(def), label, true, OnCancelClicked);
             if (_cancelButton != null) _cancelButton.gameObject.SetActive(false);
         }
 
         private void HideProgress()
         {
             _progressPresenter?.Hide(ActionProgressKind.ItemUse);
+            _progressPresenter?.Hide(ActionProgressKind.Deployable);
             if (_cancelButton != null) _cancelButton.gameObject.SetActive(false);
+        }
+
+        private static ActionProgressKind ResolveProgressKind(ItemDefinition def)
+        {
+            return def != null && def.Type == ItemType.Deployable
+                ? ActionProgressKind.Deployable
+                : ActionProgressKind.ItemUse;
         }
 
         private void OnCancelClicked()
         {
+            if (_aimController != null)
+            {
+                if (_aimController.IsInDeployMode)
+                    _aimController.CancelDeploy();
+                else
+                    _aimController.CancelAim();
+                return;
+            }
+
             _context?.Bridge?.CancelItemUse();
         }
     }

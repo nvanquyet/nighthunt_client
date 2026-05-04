@@ -51,24 +51,44 @@ namespace NightHunt.GameplaySystems.Weapon
         /// <summary>Current aim direction. Updated every frame by CombatInputHandler.</summary>
         public void SetAimDirection(Vector3 worldDir)
         {
-            _aimDirection = worldDir.sqrMagnitude > 0.001f ? worldDir.normalized : Vector3.forward;
+            _aimDirection = ResolveFlatFireDirection(worldDir);
         }
 
         public Vector3 GetAimDirection() => _aimDirection;
 
+        private Vector3 ResolveFlatFireDirection(Vector3 requestedDirection)
+        {
+            Vector3 flat = Vector3.ProjectOnPlane(requestedDirection, Vector3.up);
+            if (flat.sqrMagnitude <= 0.001f)
+                flat = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (flat.sqrMagnitude <= 0.001f)
+                flat = Vector3.forward;
+            return flat.normalized;
+        }
+
         /// <summary>Called by WeaponModelController after each weapon swap.</summary>
-        public void SetFireOrigin(Transform muzzle) => _fireOrigin = muzzle;
+        public void SetFireOrigin(Transform muzzle)
+        {
+            _fireOrigin = muzzle;
+            CaptureFireOriginSnapshot(muzzle);
+            LogProjectile($"SetFireOrigin muzzle={(muzzle != null ? muzzle.name : "null")} pos={(muzzle != null ? muzzle.position.ToString("F2") : "null")}");
+        }
 
         /// <summary>Called by WeaponModelController after each weapon swap.</summary>
         public void SetCurrentWeaponBase(WeaponBase wb)
         {
             if (_currentWeaponBase != null)
-                _currentWeaponBase.OnFireResult -= HandleWeaponFireResult;
+                _currentWeaponBase.OnFireResultDetailed -= HandleWeaponFireResult;
 
             _currentWeaponBase = wb;
 
             if (_currentWeaponBase != null)
-                _currentWeaponBase.OnFireResult += HandleWeaponFireResult;
+            {
+                _currentWeaponBase.OnFireResultDetailed += HandleWeaponFireResult;
+                if (_currentWeaponBase.FirePoint != null &&
+                    (_fireOrigin == null || !_fireOrigin.IsChildOf(_currentWeaponBase.transform)))
+                    SetFireOrigin(_currentWeaponBase.FirePoint);
+            }
         }
 
         public FireMode GetCurrentFireMode()
@@ -194,7 +214,8 @@ namespace NightHunt.GameplaySystems.Weapon
             }
 
             // Deduct ammo locally (server-auth ammo is handled separately if needed).
-            inst.AdjustCurrentValue(ItemStatType.MagazineSize, -1f);
+            int ammoCost = ResolveAmmoCostPerShot(inst, mag);
+            inst.AdjustCurrentValue(ItemStatType.MagazineSize, -ammoCost);
             float magCap = inst.GetComputedStat(ItemStatType.MagazineSize);
             OnAmmoChanged?.Invoke(
                 (int)inst.GetCurrentValue(ItemStatType.MagazineSize),
@@ -204,20 +225,21 @@ namespace NightHunt.GameplaySystems.Weapon
             // Target acquisition and elevation.
             // 1. Fire origin. If the muzzle model still points behind the player on the
             // first frame of aiming, use a shoulder-level fallback in front of the root.
-            Vector3 origin = ResolveFireOrigin(_aimDirection);
+            Vector3 shotAimDir = ResolveFlatFireDirection(_aimDirection);
+            Vector3 origin = ResolveFireOrigin(shotAimDir);
 
             // 2. Default: fire horizontally in the aim direction (as before).
-            Vector3 finalFireDir    = _aimDirection;
+            Vector3 finalFireDir    = shotAimDir;
             float   elevationAngle  = 0f;
 
             // 3. Query the registry for the best target within the acquisition cone.
             //    _bulletTargetConfig == null means registry disabled, pure physics raycast fallback.
             if (_bulletTargetConfig != null && BulletTargetRegistry.Instance != null)
             {
-                float maxRange = _currentWeaponBase != null ? _currentWeaponBase.MaxRange : 150f;
+                float maxRange = ResolveEffectiveMaxRange();
 
                 var result = BulletTargetRegistry.FindBestTarget(
-                    origin, _aimDirection, maxRange, _bulletTargetConfig);
+                    origin, shotAimDir, maxRange, _bulletTargetConfig);
 
                 if (result.HasTarget)
                 {
@@ -241,11 +263,11 @@ namespace NightHunt.GameplaySystems.Weapon
             _weaponModelController?.SetElevationAngle(elevationAngle);
             _currentElevationAngle = elevationAngle;
 
-            Vector3 ballisticFireDir = ClampFireElevation(finalFireDir, _aimDirection, _maxFireElevationAngle);
+            Vector3 ballisticFireDir = ClampFireElevation(finalFireDir, shotAimDir, _maxFireElevationAngle);
 
             // Fire events and ballistics.
             // Raise local fire event (drives VFX + animation on owner).
-            OnShotFired?.Invoke(slot.Value, _aimDirection);
+            OnShotFired?.Invoke(slot.Value, shotAimDir);
 
             // Delegate ballistics to weapon prefab component.
             // finalFireDir has correct 3-D elevation; spread is applied inside WeaponBase.
@@ -254,7 +276,10 @@ namespace NightHunt.GameplaySystems.Weapon
                 var config = BuildWeaponConfigData(inst);
                 config.ApplyDamage = false;
                 Vector3 visualFireDir = ApplyClientRecoil(ballisticFireDir, config);
-                LogProjectile($"TryFireOnce local shot slot={slot.Value} weaponId='{inst.DefinitionID}' origin={origin:F2} dir={visualFireDir:F2} intentDir={ballisticFireDir:F2} mag={(int)inst.GetCurrentValue(ItemStatType.MagazineSize)} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)} speed={config.ProjectileSpeed:F1} endpointBefore={_lastFireEndpoint:F2}");
+                _lastFireHitHittable = false;
+                _lastFireHitNormal = -visualFireDir.normalized;
+                _lastFireEndpoint = BuildFallbackProjectileEndpoint(origin, visualFireDir, config.MaxRange);
+                LogProjectile($"TryFireOnce local shot slot={slot.Value} weaponId='{inst.DefinitionID}' origin={origin:F2} aimFlat={shotAimDir:F2} dir={visualFireDir:F2} intentDir={ballisticFireDir:F2} ammoCost={ammoCost} mag={(int)inst.GetCurrentValue(ItemStatType.MagazineSize)} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)} speed={config.ProjectileSpeed:F1} maxRange={config.MaxRange:F1} vision={config.VisionRangeClamp:F1} endpointBefore={_lastFireEndpoint:F2}");
                 _currentWeaponBase.Fire(origin, visualFireDir, config, (int)ObjectId);
 
                 if (IsServerInitialized)
@@ -266,9 +291,17 @@ namespace NightHunt.GameplaySystems.Weapon
                 // For hitscan weapons, _lastFireEndpoint is the raycast hit point or max range.
                 if (IsOwner && _currentWeaponBase.ProjectilePrefab != null)
                 {
+                    Vector3 broadcastEndpoint = SanitizeProjectileEndpoint(
+                        origin,
+                        visualFireDir,
+                        _lastFireEndpoint,
+                        config.MaxRange,
+                        "ownerBroadcast");
+                    _lastFireEndpoint = broadcastEndpoint;
 
-                    LogProjectile($"BroadcastProjectileServerRpc origin={origin:F2} dir={visualFireDir:F2} endpoint={_lastFireEndpoint:F2} weaponId='{config.WeaponId}'");
-                    BroadcastProjectileServerRpc(origin, visualFireDir, config, _lastFireEndpoint);
+                    LogProjectile($"BroadcastProjectileServerRpc origin={origin:F2} dir={visualFireDir:F2} endpoint={broadcastEndpoint:F2} weaponId='{config.WeaponId}'");
+                    BroadcastProjectileServerRpc(origin, visualFireDir, config,
+                        broadcastEndpoint, _lastFireHitHittable, _lastFireHitNormal);
                 }
                 else if (IsOwner && _currentWeaponBase.ProjectilePrefab == null)
                 {
@@ -300,7 +333,7 @@ namespace NightHunt.GameplaySystems.Weapon
             // Broadcast shot to remote clients: horizontal aim dir (for body rotation) +
             // elevation angle (for gun pitch on their weapon model).
             if (IsOwner)
-                BroadcastShotFiredServerRpc(slot.Value, _aimDirection, elevationAngle);
+                BroadcastShotFiredServerRpc(slot.Value, shotAimDir, elevationAngle);
         }
 
         private Vector3 ResolveFireOrigin(Vector3 aimDirection)
@@ -316,19 +349,184 @@ namespace NightHunt.GameplaySystems.Weapon
             flatAim.Normalize();
 
             Vector3 flatToOrigin = Vector3.ProjectOnPlane(origin - root.position, Vector3.up);
+            Vector3 fallback = root.position + Vector3.up * 1.25f + flatAim * 0.7f;
+
+            bool invalidOrigin =
+                !IsFinite(origin) ||
+                origin.y < root.position.y - 1f ||
+                origin.y > root.position.y + 4f ||
+                flatToOrigin.sqrMagnitude > 16f;
+
+            if (invalidOrigin)
+            {
+                if (TryRepairFireOrigin("ResolveFireOrigin"))
+                {
+                    origin = _fireOrigin != null ? _fireOrigin.position : root.position;
+                    flatToOrigin = Vector3.ProjectOnPlane(origin - root.position, Vector3.up);
+                    invalidOrigin =
+                        !IsFinite(origin) ||
+                        origin.y < root.position.y - 1f ||
+                        origin.y > root.position.y + 4f ||
+                        flatToOrigin.sqrMagnitude > 16f;
+
+                    if (!invalidOrigin)
+                    {
+                        LogProjectile($"ResolveFireOrigin repaired muzzle={(_fireOrigin != null ? _fireOrigin.name : "null")} origin={origin:F2} root={root.position:F2}");
+                    }
+                }
+
+                if (!invalidOrigin)
+                {
+                    bool repairedBehindRoot = Vector3.Dot(flatToOrigin, flatAim) < -0.05f;
+                    if (!repairedBehindRoot)
+                        return origin;
+                }
+
+                LogProjectile($"ResolveFireOrigin fallback: invalid muzzle. muzzle={(_fireOrigin != null ? _fireOrigin.name : "null")} raw={origin:F2} fallback={fallback:F2} root={root.position:F2} flatDistance={flatToOrigin.magnitude:F2}");
+                return fallback;
+            }
+
             bool muzzleBehindRoot = Vector3.Dot(flatToOrigin, flatAim) < -0.05f;
             if (!muzzleBehindRoot)
                 return origin;
 
-            Vector3 fallback = root.position + Vector3.up * 1.25f + flatAim * 0.7f;
             LogProjectile($"ResolveFireOrigin fallback: muzzle was behind root. raw={origin:F2} fallback={fallback:F2} aim={flatAim:F2} root={root.position:F2}");
+            return fallback;
+        }
+
+        private void CaptureFireOriginSnapshot(Transform muzzle)
+        {
+            if (muzzle == null)
+            {
+                _fireOriginParent = null;
+                _fireOriginLocalPosition = Vector3.zero;
+                _fireOriginLocalRotation = Quaternion.identity;
+                _fireOriginLocalScale = Vector3.one;
+                _hasFireOriginSnapshot = false;
+                return;
+            }
+
+            _fireOriginParent = muzzle.parent;
+            _fireOriginLocalPosition = muzzle.localPosition;
+            _fireOriginLocalRotation = muzzle.localRotation;
+            _fireOriginLocalScale = muzzle.localScale;
+            _hasFireOriginSnapshot = true;
+        }
+
+        private bool TryRepairFireOrigin(string source)
+        {
+            bool repaired = false;
+
+            if (_currentWeaponBase != null && _currentWeaponBase.FirePoint != null &&
+                _fireOrigin != _currentWeaponBase.FirePoint)
+            {
+                _fireOrigin = _currentWeaponBase.FirePoint;
+                CaptureFireOriginSnapshot(_fireOrigin);
+                repaired = true;
+            }
+
+            if (_fireOrigin == null || !_hasFireOriginSnapshot)
+                return repaired;
+
+            if (_fireOriginParent != null && _fireOrigin.parent != _fireOriginParent)
+            {
+                _fireOrigin.SetParent(_fireOriginParent, false);
+                repaired = true;
+            }
+
+            if (_fireOrigin.parent == _fireOriginParent)
+            {
+                if (_fireOrigin.localPosition != _fireOriginLocalPosition)
+                {
+                    _fireOrigin.localPosition = _fireOriginLocalPosition;
+                    repaired = true;
+                }
+
+                if (_fireOrigin.localRotation != _fireOriginLocalRotation)
+                {
+                    _fireOrigin.localRotation = _fireOriginLocalRotation;
+                    repaired = true;
+                }
+
+                if (_fireOrigin.localScale != _fireOriginLocalScale)
+                {
+                    _fireOrigin.localScale = _fireOriginLocalScale;
+                    repaired = true;
+                }
+            }
+
+            if (repaired)
+            {
+                LogProjectile(
+                    $"FireOrigin repair source={source} muzzle={_fireOrigin.name} " +
+                    $"parent={(_fireOrigin.parent != null ? _fireOrigin.parent.name : "null")} " +
+                    $"local={_fireOrigin.localPosition:F2} world={_fireOrigin.position:F2}");
+            }
+
+            return repaired;
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+                   !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+                   !float.IsNaN(value.z) && !float.IsInfinity(value.z);
+        }
+
+        private int ResolveAmmoCostPerShot(ItemInstance inst, int currentMagazine)
+        {
+            var weaponDef = ItemDatabase.GetDefinition(inst.DefinitionID) as WeaponDefinition;
+            bool shotgun = weaponDef != null && weaponDef.WeaponClass == WeaponClass.Shotgun;
+            int pelletCount = _currentWeaponBase is HitscanWeapon hitscanWeapon
+                ? Mathf.Max(1, hitscanWeapon.PelletCount)
+                : 1;
+
+            int cost = shotgun ? pelletCount : 1;
+            return Mathf.Clamp(cost, 1, Mathf.Max(1, currentMagazine));
+        }
+
+        private Vector3 BuildFallbackProjectileEndpoint(Vector3 origin, Vector3 direction, float maxRange)
+        {
+            Vector3 dir = direction.sqrMagnitude > 0.0001f
+                ? direction.normalized
+                : ResolveFlatFireDirection(_aimDirection);
+            float range = Mathf.Max(1f, maxRange);
+            return origin + dir * range;
+        }
+
+        private Vector3 SanitizeProjectileEndpoint(Vector3 origin, Vector3 direction, Vector3 endpoint, float maxRange, string source)
+        {
+            float range = Mathf.Max(1f, maxRange);
+            Vector3 toEndpoint = endpoint - origin;
+            float distance = toEndpoint.magnitude;
+            Vector3 flatDirection = Vector3.ProjectOnPlane(direction, Vector3.up);
+            Vector3 flatToEndpoint = Vector3.ProjectOnPlane(toEndpoint, Vector3.up);
+            bool hasForwardFlatEndpoint =
+                flatDirection.sqrMagnitude > 0.0001f &&
+                flatToEndpoint.sqrMagnitude > 0.0001f &&
+                Vector3.Dot(flatDirection.normalized, flatToEndpoint.normalized) > 0.05f;
+
+            bool invalid =
+                !IsFinite(endpoint) ||
+                distance < 0.05f ||
+                distance > range + 1.5f ||
+                endpoint.y < origin.y - 3f ||
+                endpoint.y > origin.y + 4f ||
+                !hasForwardFlatEndpoint;
+
+            if (!invalid)
+                return endpoint;
+
+            Vector3 fallback = BuildFallbackProjectileEndpoint(origin, direction, range);
+            fallback.y = Mathf.Clamp(fallback.y, origin.y - 1f, origin.y + 2f);
+            LogProjectile($"SanitizeProjectileEndpoint fallback source={source} raw={endpoint:F2} origin={origin:F2} dir={direction:F2} fallback={fallback:F2} maxRange={range:F1}");
             return fallback;
         }
 
         private void FireMelee(WeaponSlotType slot)
         {
             // Melee has no magazine/projectile path. This event drives:
-            // - CharacterAnimationController Shoot/melee attack trigger
+            // - CharacterAnimationController melee Attack/MeleeAttack trigger
             // - CharacterAnimationController melee fallback hit delay
             // - WeaponAudioController swing/attack sound through weapon profile
             OnShotFired?.Invoke(slot, _aimDirection);
@@ -349,6 +547,9 @@ namespace NightHunt.GameplaySystems.Weapon
                 ? weaponDef.WeaponClass == WeaponClass.Launcher
                 : _currentWeaponBase is ProjectileWeapon;
             bool isHitscan = !isProjectileWeapon;
+            float rawMaxRange = _currentWeaponBase?.MaxRange ?? 150f;
+            float visionRangeClamp = ResolveVisionRangeClamp();
+            float effectiveMaxRange = ResolveEffectiveMaxRange(rawMaxRange, visionRangeClamp);
 
             return new WeaponConfigData
             {
@@ -362,19 +563,35 @@ namespace NightHunt.GameplaySystems.Weapon
                 MagazineSize    = (int)inst.GetComputedStat(ItemStatType.MagazineSize),
                 ReserveAmmo     = (int)inst.GetCurrentValue(ItemStatType.MaxAmmo),
                 ProjectileSpeed   = _currentWeaponBase?.ProjectileSpeed ?? 50f,
-                MaxRange          = _currentWeaponBase?.MaxRange        ?? 150f,
+                MaxRange          = effectiveMaxRange,
                 GravityScale      = _currentWeaponBase?.GravityScale    ?? 0f,
                 // Clamp bullet visual travel to the owner's VisionRange so projectiles
                 // never fly beyond the visible circle (same radius used by AimSystem).
-                VisionRangeClamp  = _statSystem != null
-                    ? _statSystem.GetStat(NightHunt.Gameplay.StatSystem.Core.Types.PlayerStatType.VisionRange)
-                    : 0f,
+                VisionRangeClamp  = visionRangeClamp,
                 ApplyDamage       = true,
                 SpreadBase      = inst.GetComputedStat(ItemStatType.SpreadBase),
                 SpreadMoveMul   = inst.GetComputedStat(ItemStatType.SpreadPenalty),
                 RecoilHorizontal = inst.GetComputedStat(ItemStatType.RecoilHorizontal),
                 RecoilVertical   = inst.GetComputedStat(ItemStatType.RecoilVertical),
             };
+        }
+
+        private float ResolveEffectiveMaxRange()
+        {
+            float rawMaxRange = _currentWeaponBase?.MaxRange ?? 150f;
+            return ResolveEffectiveMaxRange(rawMaxRange, ResolveVisionRangeClamp());
+        }
+
+        private static float ResolveEffectiveMaxRange(float rawMaxRange, float visionRangeClamp)
+        {
+            float range = Mathf.Max(1f, rawMaxRange);
+            return visionRangeClamp > 0.1f ? Mathf.Min(range, visionRangeClamp) : range;
+        }
+
+        private float ResolveVisionRangeClamp()
+        {
+            float vision = _statSystem != null ? _statSystem.GetStat(PlayerStatType.VisionRange) : 0f;
+            return vision > 0.1f ? vision : 0f;
         }
 
         private Vector3 ApplyClientRecoil(Vector3 direction, WeaponConfigData config)
@@ -415,13 +632,17 @@ namespace NightHunt.GameplaySystems.Weapon
             return (flat * Mathf.Cos(radians) + Vector3.up * Mathf.Sin(radians)).normalized;
         }
 
-        private void HandleWeaponFireResult(Vector3 origin, Vector3 endpoint)
+        private void HandleWeaponFireResult(WeaponBase.WeaponFireResult result)
         {
             // Cache the endpoint so TryFireOnce can pass it to BroadcastProjectileServerRpc
             // AFTER Fire() returns.  HandleWeaponFireResult is called FROM inside Fire() via
             // the OnFireResult event, which means _lastFireEndpoint is fully populated before
             // BroadcastProjectileServerRpc is reached.
+            Vector3 origin = result.Origin;
+            Vector3 endpoint = result.Endpoint;
             _lastFireEndpoint = endpoint;
+            _lastFireHitHittable = result.HitAnIHittable;
+            _lastFireHitNormal = result.HitNormal;
             var slot = _activeSlot.Value;
             if (slot != null) OnHitscanResult?.Invoke(slot.Value, origin, endpoint);
         }

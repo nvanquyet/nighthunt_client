@@ -64,6 +64,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IAimSystem           _aimSystem;
         private IItemUseSystem       _itemUseSystem;
         private CombatInputHandler   _combatInputHandler;
+        private IInventorySystem     _inventorySystem;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Aim state
@@ -72,6 +73,11 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private bool   _inAimMode;
         private bool   _inDeployMode;       // separate from throwable aim mode
         private string _activeItemInstanceId;
+        private bool   _deployAwaitingServerUse;
+        private bool   _deployReleaseQueued;
+        private bool   _deployPointerWasHeld;
+        private bool   _suppressNextDeployRelease;
+        private bool   _deployConfirmInProgress;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Static output (read by ThrowableHandler)
@@ -152,14 +158,26 @@ namespace NightHunt.GameplaySystems.UI.Combat
             // Release-to-place: PointerDown on item button starts deploy mode (preview visible).
             // Dragging moves the preview. Releasing the mouse button (PointerUp) confirms placement.
             // Right-click or Escape cancels at any time.
-            if (_inDeployMode && !IsMobile)
+            if (_inDeployMode)
             {
                 // Confirm on mouse RELEASE (not press) — this allows drag-to-place:
                 // hold LMB down → drag to position → release → place.
-                if (UnityEngine.Input.GetMouseButtonUp(0) &&
-                    (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()))
+                if (PrimaryPointerReleasedThisFrame())
                 {
-                    ConfirmDeploy();
+                    if (_suppressNextDeployRelease)
+                    {
+                        _suppressNextDeployRelease = false;
+                        IgnoreDeployRelease("initialArmRelease");
+                        return;
+                    }
+
+                    if (!IsMobile && IsPrimaryPointerOverUI())
+                    {
+                        IgnoreDeployRelease("pointerUpOverUI");
+                        return;
+                    }
+
+                    TryConfirmDeployRelease("pointerUp");
                     return;
                 }
 
@@ -167,7 +185,30 @@ namespace NightHunt.GameplaySystems.UI.Combat
                     UnityEngine.Input.GetKeyDown(KeyCode.Escape))
                 {
                     CancelDeploy();
+                    return;
                 }
+
+                bool pointerHeld = IsPrimaryPointerHeld();
+                if (_deployPointerWasHeld && !pointerHeld)
+                {
+                    if (_suppressNextDeployRelease)
+                    {
+                        _suppressNextDeployRelease = false;
+                        IgnoreDeployRelease("initialArmHeldFallback");
+                        return;
+                    }
+
+                    if (!IsMobile && IsPrimaryPointerOverUI())
+                    {
+                        IgnoreDeployRelease("heldFallbackOverUI");
+                        return;
+                    }
+
+                    TryConfirmDeployRelease("heldFallback");
+                    return;
+                }
+
+                _deployPointerWasHeld |= pointerHeld;
             }
         }
 
@@ -184,13 +225,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
             Transform            playerTransform,
             IAimSystem           aimSystem           = null,
             IItemUseSystem       itemUseSystem       = null,
-            CombatInputHandler   combatInputHandler  = null)
+            CombatInputHandler   combatInputHandler  = null,
+            IInventorySystem     inventorySystem     = null)
         {
             _statSystem          = statSystem;
             _itemSelectionSystem = itemSelectionSystem;
             _playerTransform     = playerTransform;
             _aimSystem           = aimSystem;
             _combatInputHandler  = combatInputHandler;
+            _inventorySystem     = inventorySystem;
 
             if (_itemUseSystem != null)
             {
@@ -233,21 +276,31 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (def.Type == ItemType.Deployable)
             {
-                if (_inDeployMode) CancelDeploy();
-                if (_inAimMode)    CancelAim();
+                bool releaseQueued = _deployReleaseQueued;
+                bool pointerWasHeld = _deployPointerWasHeld;
+                if (_inDeployMode) ResetDeployState();
+                if (_inAimMode)    ResetAimState();
 
                 _activeItemInstanceId = item.InstanceID;
                 _inDeployMode = true;
+                _deployAwaitingServerUse = _itemUseSystem?.IsDeploying != true;
+                _deployReleaseQueued = releaseQueued;
+                _deployPointerWasHeld = pointerWasHeld || IsPrimaryPointerHeld();
+                _suppressNextDeployRelease = true;
+                _deployConfirmInProgress = false;
                 IsDeployingPC = !IsMobile;
                 _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
                 _aimSystem?.SetCursorVisible(true);
+                LogDeploy($"[01][ServerUseActive] item={item.InstanceID} mouseHeld={UnityEngine.Input.GetMouseButton(0)} deployHandlerActive={_itemUseSystem?.IsDeploying.ToString() ?? "null"}");
 
                 Debug.Log($"[ItemAimController] HandleItemUseStarted: deployable '{item.InstanceID}' → deploy mode");
+                if (_deployReleaseQueued && _itemUseSystem?.IsDeploying == true)
+                    TryConfirmDeployRelease("queuedAfterServerUse");
             }
             else if (def.Type == ItemType.Throwable)
             {
-                if (_inAimMode)    CancelAim();
-                if (_inDeployMode) CancelDeploy();
+                if (_inAimMode)    ResetAimState();
+                if (_inDeployMode) ResetDeployState();
 
                 _activeItemInstanceId = item.InstanceID;
                 _inAimMode = true;
@@ -283,17 +336,35 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// Throwable   → enters throwable aim mode (joystick/mouse).
         /// Consumable  → direct use (no aiming needed).
         /// </summary>
-        public void TryBeginAim(string instanceID)
+        public bool TryBeginAim(string instanceID)
         {
-            if (_itemSelectionSystem == null || string.IsNullOrEmpty(instanceID)) return;
+            if (_itemSelectionSystem == null || string.IsNullOrEmpty(instanceID))
+            {
+                Debug.LogWarning($"[ITEM_FLOW] [00][Aim.Begin.Reject] selection={(_itemSelectionSystem != null ? "ok" : "null")} instance='{instanceID ?? "null"}'");
+                return false;
+            }
 
-            var bridge = SpectateManager.Instance?.GetCurrentPlayer()?.GamePlaySystemBridge;
-            var item   = bridge?.GetItemByInstanceID(instanceID);
-            if (item == null) return;
+            var item = _inventorySystem?.GetItemByInstanceID(instanceID);
+            if (item == null)
+            {
+                var bridge = SpectateManager.Instance?.GetCurrentPlayer()?.GamePlaySystemBridge;
+                item = bridge?.GetItemByInstanceID(instanceID);
+            }
+            if (item == null)
+            {
+                Debug.LogWarning($"[ITEM_FLOW] [00][Aim.Begin.Reject] item '{instanceID}' not found via bound inventory/current player bridge.");
+                return false;
+            }
 
             var  def          = ItemDatabase.GetDefinition(item.DefinitionID);
-            bool isThrowable  = def != null && def.Type == ItemType.Throwable;
-            bool isDeployable = def != null && def.Type == ItemType.Deployable;
+            if (def == null)
+            {
+                Debug.LogWarning($"[ITEM_FLOW] [00][Aim.Begin.Reject] definition '{item.DefinitionID}' not found for item '{instanceID}'.");
+                return false;
+            }
+
+            bool isThrowable  = def.Type == ItemType.Throwable;
+            bool isDeployable = def.Type == ItemType.Deployable;
 
             // ── Deployable: enter deploy mode ──────────────────────────────────
             if (isDeployable)
@@ -303,14 +374,20 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
                 _activeItemInstanceId = instanceID;
                 _inDeployMode = true;
+                _deployAwaitingServerUse = true;
+                _deployReleaseQueued = false;
+                _deployPointerWasHeld = IsPrimaryPointerHeld();
+                _suppressNextDeployRelease = true;
+                _deployConfirmInProgress = false;
                 IsDeployingPC = !IsMobile;
                 _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
                 _aimSystem?.SetCursorVisible(true);
 
                 Debug.Log($"[ItemAimController] TryBeginAim: deployable '{instanceID}' → deploy mode");
+                LogDeploy($"[00][BeginDeployAim] item={instanceID} def={def.ItemID} mobile={IsMobile} mouseDown={UnityEngine.Input.GetMouseButton(0)}");
                 _itemSelectionSystem.RequestSelectItem(instanceID);
                 _itemSelectionSystem.RequestUseSelectedItem();
-                return;
+                return true;
             }
 
             // ── Consumable: direct use ─────────────────────────────────────────
@@ -319,7 +396,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 Debug.Log($"[ItemAimController] TryBeginAim: consumable '{instanceID}' → direct use");
                 _itemSelectionSystem.RequestSelectItem(instanceID);
                 _itemSelectionSystem.RequestUseSelectedItem();
-                return;
+                return true;
             }
 
             // ── Throwable: enter throwable aim mode ────────────────────────────
@@ -343,6 +420,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _itemSelectionSystem.RequestUseSelectedItem();
             if (!IsMobile)
                 UpdatePCRaycast();
+            return true;
         }
 
         /// <summary>
@@ -350,16 +428,20 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void OnMobileDrag(Vector2 joystickDir)
         {
-            if ((!_inAimMode && !_inDeployMode) || !IsMobile) return;
+            if (!_inAimMode && !_inDeployMode) return;
 
             float   range    = GetThrowRange();
             Vector3 worldDir = Joystick01ToWorldDir(joystickDir, range);
 
             if (_playerTransform != null)
             {
+                if (_inDeployMode && joystickDir.magnitude >= _dragThreshold)
+                    _suppressNextDeployRelease = false;
+
                 AimWorldTarget = _playerTransform.position + worldDir;
                 AimDirection   = worldDir.magnitude > 0.001f ? worldDir.normalized : Vector3.forward;
                 MoveCursor(AimWorldTarget);
+                RotatePlayerTowards(AimDirection);
 
                 Vector2 camRelJoystick = joystickDir;
                 if (_cam != null)
@@ -379,17 +461,29 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void OnMobileDragEnd(float joystickMagnitude)
         {
-            if ((!_inAimMode && !_inDeployMode) || !IsMobile) return;
+            if (!_inAimMode && !_inDeployMode) return;
+
+            if (_inDeployMode)
+            {
+                bool overUi = IsPrimaryPointerOverUI();
+                if (joystickMagnitude < _dragThreshold)
+                {
+                    IgnoreDeployRelease($"mobileDragEndIgnored magnitude={joystickMagnitude:F2} overUI={overUi}");
+                    return;
+                }
+
+                _suppressNextDeployRelease = false;
+                TryConfirmDeployRelease($"mobileDragEnd magnitude={joystickMagnitude:F2} overUI={overUi}");
+                return;
+            }
 
             if (joystickMagnitude >= _dragThreshold)
             {
                 if (_inAimMode) ConfirmAim();
-                else if (_inDeployMode) ConfirmDeploy();
             }
             else
             {
                 if (_inAimMode) CancelAim();
-                else if (_inDeployMode) CancelDeploy();
             }
         }
 
@@ -489,13 +583,59 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// <summary>
         /// Confirm deployable placement at the current aim cursor position (PC left-click).
         /// </summary>
-        private void ConfirmDeploy()
+        private void TryConfirmDeployRelease(string source)
         {
             if (!_inDeployMode) return;
-            LogDeploy($"ConfirmDeploy item={_activeItemInstanceId ?? "null"}");
+
+            if (_deployConfirmInProgress)
+            {
+                LogDeploy($"[02][ReleaseIgnored] source={source} item={_activeItemInstanceId ?? "null"} reason=confirmInProgress");
+                return;
+            }
+
+            if (_deployAwaitingServerUse && _itemUseSystem?.IsDeploying != true)
+            {
+                _deployReleaseQueued = true;
+                _deployPointerWasHeld = false;
+                LogDeploy($"[02][ReleaseQueued] source={source} item={_activeItemInstanceId ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"}");
+                return;
+            }
+
+            _deployReleaseQueued = false;
+            _deployPointerWasHeld = false;
+            ConfirmDeploy(source);
+        }
+
+        private void IgnoreDeployRelease(string source)
+        {
+            _deployPointerWasHeld = false;
+            _deployReleaseQueued = false;
+            _suppressNextDeployRelease = false;
+            LogDeploy($"[02][ReleaseIgnored] source={source} item={_activeItemInstanceId ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"}");
+        }
+
+        private void ConfirmDeploy(string source = "direct")
+        {
+            if (!_inDeployMode) return;
+            if (_deployAwaitingServerUse && _itemUseSystem?.IsDeploying != true)
+            {
+                _deployReleaseQueued = true;
+                LogDeploy($"ConfirmDeploy queued: source={source} waiting for TargetBeginDeployable item={_activeItemInstanceId ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"}");
+                return;
+            }
+            _deployAwaitingServerUse = false;
+            LogDeploy($"[03][ReleaseConfirm] source={source} item={_activeItemInstanceId ?? "null"}");
             bool confirmed = _itemUseSystem?.TryConfirmDeploy() ?? false;
             if (confirmed)
-                ResetDeployState();
+            {
+                _deployConfirmInProgress = true;
+                _deployReleaseQueued = false;
+                _deployPointerWasHeld = false;
+                _suppressNextDeployRelease = false;
+                LogDeploy($"[04][DeployUseStarted] item={_activeItemInstanceId ?? "null"} waitingForUseComplete");
+            }
+            else
+                LogDeploy($"ConfirmDeploy pending/rejected item={_activeItemInstanceId ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"}");
         }
 
         /// <summary>
@@ -513,10 +653,16 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _inDeployMode = false;
             IsDeployingPC = false;
             _activeItemInstanceId = null;
+            _deployAwaitingServerUse = false;
+            _deployReleaseQueued = false;
+            _deployPointerWasHeld = false;
+            _suppressNextDeployRelease = false;
+            _deployConfirmInProgress = false;
 
             HideCursor();
             if (IsMobile)
                 _aimSystem?.SetCursorVisible(false);
+            _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _combatInputHandler?.SetCameraLockOverride(active: false, forcedValue: false);
         }
 
@@ -540,8 +686,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (string.IsNullOrEmpty(_activeItemInstanceId))
                 return GetVisionRange();
 
-            var bridge = SpectateManager.Instance?.GetCurrentPlayer()?.GamePlaySystemBridge;
-            var item   = bridge?.GetItemByInstanceID(_activeItemInstanceId);
+            var item = _inventorySystem?.GetItemByInstanceID(_activeItemInstanceId);
+            if (item == null)
+            {
+                var bridge = SpectateManager.Instance?.GetCurrentPlayer()?.GamePlaySystemBridge;
+                item = bridge?.GetItemByInstanceID(_activeItemInstanceId);
+            }
             if (item == null) return GetVisionRange();
 
             var def = ItemDatabase.GetDefinition(item.DefinitionID) as ThrowableDefinition;
@@ -567,10 +717,72 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _aimCursor.position = worldPos + Vector3.up * 0.1f;
         }
 
+        private void RotatePlayerTowards(Vector3 worldDirection)
+        {
+            if (_playerTransform == null)
+                return;
+
+            Vector3 flatDir = new Vector3(worldDirection.x, 0f, worldDirection.z);
+            if (flatDir.sqrMagnitude <= 0.001f)
+                return;
+
+            _playerTransform.rotation = Quaternion.LookRotation(flatDir.normalized, Vector3.up);
+        }
+
         private void HideCursor()
         {
             if (_aimCursor != null)
                 _aimCursor.gameObject.SetActive(false);
+        }
+
+        private static bool IsPrimaryPointerHeld()
+        {
+            if (UnityEngine.Input.GetMouseButton(0))
+                return true;
+
+            for (int i = 0; i < UnityEngine.Input.touchCount; i++)
+            {
+                TouchPhase phase = UnityEngine.Input.GetTouch(i).phase;
+                if (phase == TouchPhase.Began ||
+                    phase == TouchPhase.Moved ||
+                    phase == TouchPhase.Stationary)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool PrimaryPointerReleasedThisFrame()
+        {
+            if (UnityEngine.Input.GetMouseButtonUp(0))
+                return true;
+
+            for (int i = 0; i < UnityEngine.Input.touchCount; i++)
+            {
+                TouchPhase phase = UnityEngine.Input.GetTouch(i).phase;
+                if (phase == TouchPhase.Ended || phase == TouchPhase.Canceled)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsPrimaryPointerOverUI()
+        {
+            if (EventSystem.current == null)
+                return false;
+
+            if (EventSystem.current.IsPointerOverGameObject())
+                return true;
+
+            for (int i = 0; i < UnityEngine.Input.touchCount; i++)
+            {
+                var touch = UnityEngine.Input.GetTouch(i);
+                if (EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+                    return true;
+            }
+
+            return false;
         }
 
         private static bool ThrowableDebugEnabled()

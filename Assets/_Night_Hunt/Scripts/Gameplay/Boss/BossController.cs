@@ -195,6 +195,7 @@ namespace NightHunt.Gameplay.Boss
             base.OnStartClient();
 
             _syncHp.OnChange += OnHpSyncChanged;
+            EnsureWorldHealthBar();
 
             // Collect turrets in case the serialized list is empty on this peer
             if (_turretGuns == null || _turretGuns.Count == 0)
@@ -222,6 +223,14 @@ namespace NightHunt.Gameplay.Boss
         }
 
         // ── Server Update ──────────────────────────────────────────────────────────
+
+        private void EnsureWorldHealthBar()
+        {
+            if (GetComponentInChildren<WorldHealthBarGeneric>(true) != null)
+                return;
+
+            gameObject.AddComponent<WorldHealthBarGeneric>();
+        }
 
         private void Update()
         {

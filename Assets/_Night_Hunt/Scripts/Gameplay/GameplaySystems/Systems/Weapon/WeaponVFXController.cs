@@ -62,7 +62,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 .OrLogWarning("[WeaponVFXController] WeaponModelController not found")
                 .Resolve();
 
-            EnsureAimTrail();
+            SetTrailVisible(false);
+            Debug.Log("[PROJECTILE_VISUAL] AimTrail LineRenderer disabled. Projectile visibility now depends on projectile prefab/pool visuals.");
         }
 
         /// <summary>Inject IAimSystem at runtime (called by NetworkPlayer after local spawn).</summary>
@@ -72,8 +73,6 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             if (_weaponSystem != null)
             {
-                _weaponSystem.OnShotFired           += HandleShotFired;
-                _weaponSystem.OnHitscanResult       += HandleHitscanResult;
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
             }
             if (_modelController != null)
@@ -84,8 +83,6 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             if (_weaponSystem != null)
             {
-                _weaponSystem.OnShotFired           -= HandleShotFired;
-                _weaponSystem.OnHitscanResult       -= HandleHitscanResult;
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
             }
             if (_modelController != null)

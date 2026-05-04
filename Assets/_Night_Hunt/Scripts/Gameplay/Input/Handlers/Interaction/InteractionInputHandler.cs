@@ -166,5 +166,27 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             LogNearbyPerformed?.Invoke();
         }
 
+        // Mobile HUD API: mirrors the Player/Interact and Player/Pickup actions.
+        public void SimulateInteractPressed()
+        {
+            if (!inputEnabled) return;
+            Debug.Log("[Input][Mobile] Interact performed");
+            InteractPerformed?.Invoke();
+        }
+
+        public void SimulateInteractReleased()
+        {
+            if (!inputEnabled) return;
+            Debug.Log("[Input][Mobile] Interact canceled");
+            InteractCanceled?.Invoke();
+        }
+
+        public void SimulatePickup()
+        {
+            if (!inputEnabled) return;
+            Debug.Log("[Input][Mobile] Pickup performed");
+            PickupPerformed?.Invoke();
+        }
+
     }
 }

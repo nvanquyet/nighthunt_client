@@ -15,7 +15,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
     {
         [Header("Slot Interaction")]
         [Tooltip("Max seconds between two taps that count as a double-click.")]
-        [SerializeField] private float _doubleClickThreshold = 0.45f;
+        [SerializeField] private float _doubleClickThreshold = 0.65f;
 
         protected CombatInputHandler _combatInputHandler;
         private float _lastClickTime = -999f;

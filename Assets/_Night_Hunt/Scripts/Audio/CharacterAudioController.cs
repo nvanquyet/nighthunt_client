@@ -262,10 +262,7 @@ namespace NightHunt.Audio
 
             _stepTimer = 0f; // prevent footstep firing immediately after jump
             Log("Jump sound played");
-            AudioManager.Instance.Play3D(clip, transform.position,
-                AudioManager.Instance.GroupFootstep,
-                jumpVolume,
-                RandomPitch());
+            AudioManager.Instance.PlayFootstep3D(clip, transform.position, jumpVolume, RandomPitch());
         }
 
         private void HandleRoll()
@@ -277,10 +274,7 @@ namespace NightHunt.Audio
             _rollSuppressTimer = 0.7f; // suppress footsteps for roll duration
             _stepTimer = 0f;
             Log($"Roll sound played, suppressing footsteps for {_rollSuppressTimer}s");
-            AudioManager.Instance.Play3D(clip, transform.position,
-                AudioManager.Instance.GroupFootstep,
-                rollVolume,
-                RandomPitch());
+            AudioManager.Instance.PlayFootstep3D(clip, transform.position, rollVolume, RandomPitch());
         }
 
         // ── Landing detection ──────────────────────────────────────────────────
@@ -319,10 +313,7 @@ namespace NightHunt.Audio
             if (clip == null) return;
 
             Log($"Land sound played airTime={_airTime:F2}");
-            AudioManager.Instance.Play3D(clip, transform.position,
-                AudioManager.Instance.GroupFootstep,
-                landVolume,
-                RandomPitch());
+            AudioManager.Instance.PlayFootstep3D(clip, transform.position, landVolume, RandomPitch());
         }
 
         // ── Model binding ──────────────────────────────────────────────────────
@@ -428,10 +419,7 @@ namespace NightHunt.Audio
             float vol = footstepVolume * (type == FootstepType.Sprint ? 1.15f : 1f);
 
             Log($"Footstep type={type} clip={clip.name} pos={pos}");
-            AudioManager.Instance.Play3D(clip, pos,
-                AudioManager.Instance.GroupFootstep,
-                Mathf.Min(vol, 1f),
-                RandomPitch());
+            AudioManager.Instance.PlayFootstep3D(clip, pos, Mathf.Min(vol, 1f), RandomPitch());
         }
 
         // NOTE: We deliberately ignore the raw speed value here because _velocity.magnitude

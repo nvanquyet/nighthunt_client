@@ -35,8 +35,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
     ///
     ///   Keyboard shortcuts (ActivateFromShortcut) always arm — treated as double-click intent.
     /// </summary>
-    public class SelectableItemButton : SlotHUDButton
+    public class SelectableItemButton : SlotHUDButton, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
+        private const float MobileDragFullMagnitudePixels = 120f;
+
         [Header("Item Display")]
         [SerializeField] private Image      _icon;
         [SerializeField] private TMP_Text   _quantityText;
@@ -50,6 +52,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IItemSelectionSystem _selectionSystem;
         private IItemUseSystem       _itemUseSystem;
         private IInventorySystem     _inventorySystem;
+        private ItemAimController    _aimController;
+        private Vector2 _dragStartScreenPosition;
+        private float _lastDragMagnitude;
+        private bool _dragAimStarted;
 
         /// <summary>
         /// The instance ID this slot is currently "remembering".
@@ -81,16 +87,18 @@ namespace NightHunt.GameplaySystems.UI.Combat
             ItemType             filterType,
             IItemSelectionSystem selectionSystem,
             IItemUseSystem       itemUseSystem   = null,
-            IInventorySystem     inventorySystem = null)
+            IInventorySystem     inventorySystem = null,
+            ItemAimController    aimController   = null)
         {
-            Initialize(new[] { filterType }, selectionSystem, itemUseSystem, inventorySystem);
+            Initialize(new[] { filterType }, selectionSystem, itemUseSystem, inventorySystem, aimController);
         }
 
         public void Initialize(
             IReadOnlyList<ItemType> filterTypes,
             IItemSelectionSystem    selectionSystem,
             IItemUseSystem          itemUseSystem   = null,
-            IInventorySystem        inventorySystem = null)
+            IInventorySystem        inventorySystem = null,
+            ItemAimController       aimController   = null)
         {
             Unsubscribe();
 
@@ -111,6 +119,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _selectionSystem = selectionSystem;
             _itemUseSystem   = itemUseSystem;
             _inventorySystem = inventorySystem;
+            _aimController   = aimController;
 
             _trackedInstanceId = null;
 
@@ -166,6 +175,45 @@ namespace NightHunt.GameplaySystems.UI.Combat
             HandlePress(ConsumeDoubleClick());
         }
 
+        public void OnBeginDrag(PointerEventData eventData)
+        {
+            if (!IsInteractable || string.IsNullOrEmpty(_trackedInstanceId) || !IsTrackedAimItem())
+                return;
+
+            if (_aimController == null)
+                _aimController = ResolveAimController();
+
+            _dragStartScreenPosition = eventData.pressPosition.sqrMagnitude > 0.001f
+                ? eventData.pressPosition
+                : eventData.position;
+            _lastDragMagnitude = 0f;
+
+            _dragAimStarted = _aimController != null &&
+                (_aimController.IsInAimMode ||
+                 _aimController.IsInDeployMode ||
+                 TryStartAimControllerFlow(_trackedInstanceId));
+        }
+
+        public void OnDrag(PointerEventData eventData)
+        {
+            if (!_dragAimStarted || _aimController == null)
+                return;
+
+            Vector2 delta = eventData.position - _dragStartScreenPosition;
+            Vector2 joystick = Vector2.ClampMagnitude(delta / MobileDragFullMagnitudePixels, 1f);
+            _lastDragMagnitude = Mathf.Clamp01(joystick.magnitude);
+            _aimController.OnMobileDrag(joystick);
+        }
+
+        public void OnEndDrag(PointerEventData eventData)
+        {
+            if (_dragAimStarted && _aimController != null)
+                _aimController.OnMobileDragEndIfStillActive(_lastDragMagnitude);
+
+            _dragAimStarted = false;
+            _lastDragMagnitude = 0f;
+        }
+
         /// <summary>
         /// Core interaction logic.
         ///   isDouble=true  → arm / use the tracked item (or open picker if empty).
@@ -187,6 +235,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 }
 
                 // Ensure item is selected before arming (unselected → arm in one gesture).
+                if (TryStartAimControllerFlow(_trackedInstanceId))
+                    return;
+
                 string selId = _selectionSystem.SelectedItem?.InstanceID;
                 if (selId != _trackedInstanceId)
                     _selectionSystem.RequestSelectItem(_trackedInstanceId);
@@ -235,6 +286,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
 
             // Not yet selected — select only (user must double-click to arm).
+            if (IsTrackedDeployable() && TryStartAimControllerFlow(_trackedInstanceId))
+            {
+                Debug.Log($"[DEPLOY_FLOW] [01][SingleClick.DeployArm] filters={FormatFilterTypes()} instance='{_trackedInstanceId}' action=ItemAimController");
+                return;
+            }
+
             Debug.Log($"[ITEM_FLOW] [01][SingleClick.NotSelected] action=selectOnly instance='{_trackedInstanceId}'");
             _selectionSystem.RequestSelectItem(_trackedInstanceId);
         }
@@ -441,6 +498,54 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (def == null) return false;
             if (def.Type == preferredType) return true;
             return preferredType == ItemType.Throwable && def.Type == ItemType.Deployable;
+        }
+
+        private bool TryStartAimControllerFlow(string instanceId)
+        {
+            if (string.IsNullOrEmpty(instanceId))
+                return false;
+
+            if (_aimController == null)
+                _aimController = ResolveAimController();
+
+            if (_aimController == null)
+            {
+                Debug.LogWarning($"[ITEM_FLOW] [01][AimController.Missing] filters={FormatFilterTypes()} instance='{instanceId}'");
+                return false;
+            }
+
+            bool handled = _aimController.TryBeginAim(instanceId);
+            if (handled)
+                Debug.Log($"[ITEM_FLOW] [01][AimController.Handled] filters={FormatFilterTypes()} instance='{instanceId}'");
+
+            return handled;
+        }
+
+        private static ItemAimController ResolveAimController()
+        {
+#if UNITY_2023_1_OR_NEWER
+            return FindFirstObjectByType<ItemAimController>(FindObjectsInactive.Include);
+#else
+            return FindObjectOfType<ItemAimController>(true);
+#endif
+        }
+
+        private bool IsTrackedDeployable()
+        {
+            var item = !string.IsNullOrEmpty(_trackedInstanceId)
+                ? GetItemByInstanceId(_trackedInstanceId)
+                : null;
+            var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            return def != null && def.Type == ItemType.Deployable;
+        }
+
+        private bool IsTrackedAimItem()
+        {
+            var item = !string.IsNullOrEmpty(_trackedInstanceId)
+                ? GetItemByInstanceId(_trackedInstanceId)
+                : null;
+            var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            return def != null && (def.Type == ItemType.Throwable || def.Type == ItemType.Deployable);
         }
 
         private string FormatFilterTypes()

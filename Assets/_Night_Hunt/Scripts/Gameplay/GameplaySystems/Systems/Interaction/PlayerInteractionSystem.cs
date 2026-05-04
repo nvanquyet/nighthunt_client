@@ -146,6 +146,13 @@ namespace NightHunt.GameplaySystems.Interaction
             var target = raycastDetector?.CurrentInteractable;
             if (target != null && target.CanInteract(gameObject))
             {
+                if (target is IPickupable)
+                {
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
+                        Debug.Log($"[Interact] Ignored pickup target on E: {target.InteractLabel}. Use Pickup/F.");
+                    return;
+                }
+
             // IHoldInteractable: WorldContainer, WorldDoor, WorldSwitch, etc.
             // HoldDuration == 0 → Instant mode (call Interact immediately).
             if (target is IHoldInteractable holdTarget && holdTarget.HoldDuration > 0)
@@ -661,20 +668,16 @@ namespace NightHunt.GameplaySystems.Interaction
             var target = raycastDetector?.CurrentInteractable;
             if (target != null && target.CanInteract(gameObject))
             {
-                // Skip hold-type interactables (e.g. closed containers, doors with HoldDuration > 0).
-                // Those must be opened via the E-hold path, not the instant F-pickup.
-                if (target is IHoldInteractable hold && hold.HoldDuration > 0f)
+                if (target is IPickupable)
                 {
                     if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
-                        Debug.Log($"[Pickup] Skipping hold-type interactable on F key: {target.InteractLabel} (hold={hold.HoldDuration:F1}s). Use E to interact.");
-                }
-                else
-                {
-                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
-                        Debug.Log($"[Pickup] Single: {target.InteractLabel}");
+                        Debug.Log($"[Pickup] {target.InteractLabel}");
                     target.Interact(gameObject);
                     return;
                 }
+
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
+                    Debug.Log($"[Pickup] Ignored non-pickup target on F: {target.InteractLabel}. Use Interact/E.");
             }
 
             if (target != null && !target.CanInteract(gameObject))
@@ -721,7 +724,16 @@ namespace NightHunt.GameplaySystems.Interaction
                     if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                         Debug.Log($"[Pickup] Legacy path: {pickup.ItemDefinitionID} x{pickup.Quantity}");
                     pickup.RequestPickup(playerNob);
+                    return;
                 }
+            }
+
+            var nearbyPickup = GetClosestNearbyPickupable();
+            if (nearbyPickup != null)
+            {
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
+                    Debug.Log($"[Pickup] Proximity fallback: {nearbyPickup.InteractLabel}");
+                nearbyPickup.Interact(gameObject);
             }
         }
 
@@ -765,6 +777,32 @@ namespace NightHunt.GameplaySystems.Interaction
         .InChildren()
         .OrLogWarning("[Auto] NetworkObject not found")
         .Resolve();
+
+        private IInteractable GetClosestNearbyPickupable()
+        {
+            if (proximityScanner == null)
+                return null;
+
+            proximityScanner.ForceScan();
+
+            var worldItems = proximityScanner.NearbyWorldItems;
+            for (int i = 0; i < worldItems.Count; i++)
+            {
+                var item = worldItems[i];
+                if (item != null && item.CanInteract(gameObject))
+                    return item;
+            }
+
+            var nearby = proximityScanner.NearbyInteractables;
+            for (int i = 0; i < nearby.Count; i++)
+            {
+                var item = nearby[i];
+                if (item is IPickupable && item.CanInteract(gameObject))
+                    return item;
+            }
+
+            return null;
+        }
 
         private NetworkConnection GetLocalConnection()
         {

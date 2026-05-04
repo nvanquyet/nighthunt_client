@@ -181,8 +181,8 @@ namespace NightHunt.Gameplay.Boss
         ///
         /// hitPointOrDir:
         ///   isHitscan=true  → world-space impact point (aimPoint from HitscanAttack).
-        ///                     Used as hitscanEndpoint so the visual teleports immediately
-        ///                     to the hit position instead of flying and detonating on wrong geometry.
+        ///                     Used as hitscanEndpoint so the visual flies to the hit position
+        ///                     before playing hit VFX.
         ///   isHitscan=false → normalized fly direction (from RocketAttack).
         /// </summary>
         [ObserversRpc]
@@ -207,9 +207,8 @@ namespace NightHunt.Gameplay.Boss
             Vector3 dir    = isHitscan ? (hitPointOrDir - origin).normalized : hitPointOrDir.normalized;
 
             // ★ BUG FIX: For hitscan, pass the world-space impact point as hitscanEndpoint.
-            // ProjectileComponent.Initialize() will teleport the visual directly to that position
-            // and call Detonate(), so the effect plays at the correct hit location and not on
-            // whatever geometry the bullet physically touches first (which could be the boss itself).
+            // ProjectileComponent.Initialize() will fly the visual to that position and then
+            // detonate there, so hit VFX is timed by distance / speed.
             Vector3? endpoint = isHitscan ? (Vector3?)hitPointOrDir : null;
 
             Debug.Log($"[VFX.BOSS] RpcSpawnProjectileVisual — isHitscan={isHitscan}  " +
@@ -226,7 +225,10 @@ namespace NightHunt.Gameplay.Boss
                     DamageBody = 0,     // Visual only — damage already applied server-side.
                     BallisticType = isHitscan ? "Hitscan" : "Projectile"
                 };
-                // ★ BUG FIX: Pass endpoint so hitscan visuals teleport to the correct hit position.
+                // Pass endpoint so hitscan visuals reach the correct hit position.
+                if (isHitscan)
+                    proj.SetHitscanHitType(true, -dir);
+
                 proj.Initialize(fakeConfig, dir, isHitscan, endpoint);
             }
             else

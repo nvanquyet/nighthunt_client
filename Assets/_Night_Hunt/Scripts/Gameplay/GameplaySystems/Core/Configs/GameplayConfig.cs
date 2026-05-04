@@ -22,9 +22,14 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Range(0.01f, 1f)]
         public float MinMovementSpeedPercent = 0.1f; // 10% min speed
         
-        [Tooltip("Weight percent tối đa before đạt min speed (1.5 = 150%)")]
-        [Min(1f)]
-        public float MaxOverweightPercent = 1.5f; // 150% weight
+        [Tooltip("Weight percent bắt đầu bị penalty (0.85 = 85%)")]
+        [Min(0f)]
+        public float OverweightStartPercent = 0.85f; // 85% weight starts penalty
+
+        [Tooltip("Weight percent tối đa before đạt min speed (1.0 = 100%)")]
+        [Min(0.1f)]
+        public float MaxOverweightPercent = 1.0f; // 100% weight reaches min speed
+
         
         [Tooltip("Hiển thị warning khi weight vượt quá % này")]
         [Range(0.5f, 1f)]
@@ -55,24 +60,26 @@ namespace NightHunt.GameplaySystems.Core.Configs
         /// <summary>
         /// Tính movement speed multiplier dựa trên weight percent
         /// Formula:
-        /// - 0-100%: Normal speed (1.0)
-        /// - 100-150%: Linear decrease từ 1.0 → 0.1
-        /// - >= 150%: Minimum speed (0.1)
+        /// - 0-85%: Normal speed (1.0)
+        /// - 85-100%: Linear decrease từ 1.0 → 0.1
+        /// - >= 100%: Minimum speed (0.1)
         /// </summary>
         public float CalculateMovementSpeedMultiplier(float weightPercent)
         {
-            // Normal weight (0-100%)
-            if (weightPercent <= 1f)
+            // Normal weight
+            if (weightPercent <= OverweightStartPercent)
                 return 1f;
             
-            // At or above max overweight (>= 150%)
+            // At or above max overweight
             if (weightPercent >= MaxOverweightPercent)
                 return MinMovementSpeedPercent;
             
-            // Overweight range (100% - 150%)
+            // Overweight range
             // Linear interpolation from 1.0 → MinMovementSpeedPercent
-            float overweightRange = MaxOverweightPercent - 1f; // 0.5 (50%)
-            float currentOverweight = weightPercent - 1f;
+            float overweightRange = MaxOverweightPercent - OverweightStartPercent;
+            if (overweightRange <= 0f) return MinMovementSpeedPercent;
+            
+            float currentOverweight = weightPercent - OverweightStartPercent;
             float t = currentOverweight / overweightRange; // 0.0 → 1.0
             
             return Mathf.Lerp(1f, MinMovementSpeedPercent, t);
@@ -87,11 +94,11 @@ namespace NightHunt.GameplaySystems.Core.Configs
         }
         
         /// <summary>
-        /// Check if overweight
+        /// Check if overweight (above start percent)
         /// </summary>
         public bool IsOverweight(float weightPercent)
         {
-            return weightPercent > 1f;
+            return weightPercent > OverweightStartPercent;
         }
         
         /// <summary>
@@ -110,7 +117,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
             if (weightPercent >= MaxOverweightPercent)
                 return new Color(0.8f, 0f, 0f); // Dark red - max overweight
             
-            if (weightPercent > 1f)
+            if (weightPercent > OverweightStartPercent)
                 return new Color(1f, 0.5f, 0f); // Orange - overweight
             
             if (weightPercent >= WeightWarningThreshold)
@@ -127,7 +134,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
             if (weightPercent >= MaxOverweightPercent)
                 return "CRITICALLY OVERWEIGHT";
             
-            if (weightPercent > 1f)
+            if (weightPercent > OverweightStartPercent)
                 return "OVERWEIGHT";
             
             if (weightPercent >= WeightWarningThreshold)
@@ -166,7 +173,8 @@ namespace NightHunt.GameplaySystems.Core.Configs
         {
             // Ensure sane values
             BaseWeightCapacity = Mathf.Max(0f, BaseWeightCapacity);
-            MaxOverweightPercent = Mathf.Max(1f, MaxOverweightPercent);
+            OverweightStartPercent = Mathf.Max(0f, OverweightStartPercent);
+            MaxOverweightPercent = Mathf.Max(OverweightStartPercent + 0.01f, MaxOverweightPercent);
             MinMovementSpeedPercent = Mathf.Clamp(MinMovementSpeedPercent, 0.01f, 1f);
             WeightWarningThreshold = Mathf.Clamp(WeightWarningThreshold, 0.5f, 1f);
             MaxUsageMovementDistance = Mathf.Max(0f, MaxUsageMovementDistance);

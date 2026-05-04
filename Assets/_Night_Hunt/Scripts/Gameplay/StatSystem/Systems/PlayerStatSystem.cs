@@ -85,6 +85,8 @@ namespace NightHunt.Gameplay.StatSystem.Systems
         /// Last weight percent for detecting overweight changes
         /// </summary>
         private float _lastWeightPercent = 0f;
+
+        private float _nextWeightDebugLogTime;
         
         #endregion
         
@@ -262,7 +264,7 @@ namespace NightHunt.Gameplay.StatSystem.Systems
             // Dynamic ceiling for IsCurrentValue stats
             float clampMax = stat.MaxValue;
             var relatedMax = _statConfig.GetRelatedMaxStat(type);
-            if (relatedMax.HasValue && _statCache.TryGetValue(relatedMax.Value, out var maxStat))
+            if (type != PlayerStatType.CurrentWeight && relatedMax.HasValue && _statCache.TryGetValue(relatedMax.Value, out var maxStat))
             {
                 clampMax = maxStat.CurrentValue;
             }
@@ -332,7 +334,18 @@ namespace NightHunt.Gameplay.StatSystem.Systems
             }
             
             float weightPercent = GetWeightPercent();
-            return _gameplayConfig.CalculateMovementSpeedMultiplier(weightPercent);
+            float multiplier = _gameplayConfig.CalculateMovementSpeedMultiplier(weightPercent);
+
+            var debugConfig = NightHuntDebugConfig.Instance;
+            if (debugConfig != null && debugConfig.EnableStatDebugLogs && Time.unscaledTime >= _nextWeightDebugLogTime)
+            {
+                _nextWeightDebugLogTime = Time.unscaledTime + 0.5f;
+                Debug.Log($"[WEIGHT_FLOW] netObj={ObjectId} current={GetCurrentWeight():F2} capacity={GetWeightCapacity():F2} " +
+                          $"ratio={weightPercent:P1} speedMul={multiplier:P0} start={_gameplayConfig.OverweightStartPercent:P0} " +
+                          $"max={_gameplayConfig.MaxOverweightPercent:P0} minSpeed={_gameplayConfig.MinMovementSpeedPercent:P0}");
+            }
+
+            return multiplier;
         }
         
         #endregion
@@ -480,7 +493,7 @@ namespace NightHunt.Gameplay.StatSystem.Systems
             // For flat stats, ceiling is stat.MaxValue (static from config).
             float clampMax = stat.MaxValue;
             var relatedMax = _statConfig.GetRelatedMaxStat(type);
-            if (relatedMax.HasValue && _statCache.TryGetValue(relatedMax.Value, out var maxStat))
+            if (type != PlayerStatType.CurrentWeight && relatedMax.HasValue && _statCache.TryGetValue(relatedMax.Value, out var maxStat))
             {
                 clampMax = maxStat.CurrentValue;
             }

@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 8618743089635903845}
   - component: {fileID: 4534404720239166878}
   - component: {fileID: 3598271652749579449}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Sphere
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -117,7 +117,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6349544795438027634}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Turrret
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -154,7 +154,7 @@ GameObject:
   - component: {fileID: 882535678535313683}
   - component: {fileID: 1920439129381337824}
   - component: {fileID: 6948120476881350637}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -259,7 +259,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8283509202430629872}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Fire Point
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -293,7 +293,7 @@ GameObject:
   - component: {fileID: 4701755589533530868}
   - component: {fileID: 4555550042477980185}
   - component: {fileID: 2883768885690885803}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Cube (2)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -402,7 +402,7 @@ GameObject:
   - component: {fileID: 3473922737133147549}
   - component: {fileID: 2202184493420165465}
   - component: {fileID: 3389332400113677958}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: NetworkDeployable_VisionNode
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -551,7 +551,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2887534129515513877}
   - component: {fileID: 1982136969301419383}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Pivot
   m_TagString: Untagged
   m_Icon: {fileID: 0}

@@ -30,5 +30,16 @@ namespace NightHunt.Gameplay.Beacon
         [Tooltip("Max slope angle (degrees) allowed for placement.")]
         [Range(0f, 60f)]
         public float MaxPlacementSlope = 30f;
+
+        [Tooltip("Yaw offset applied after facing the aim cursor. Use 180 when the prefab model's forward axis points backward.")]
+        public float PlacementYawOffsetDegrees = 180f;
+
+        [Header("Deployment Timing")]
+        [Tooltip("Seconds after release before the beacon is actually placed. The player can cancel during this time.")]
+        [Min(0f)] public float DeployDuration = 1.25f;
+
+        [SerializeField] private bool _canCancelDeploy = true;
+
+        public override bool CanCancelUsage { get => _canCancelDeploy; set => _canCancelDeploy = value; }
     }
 }

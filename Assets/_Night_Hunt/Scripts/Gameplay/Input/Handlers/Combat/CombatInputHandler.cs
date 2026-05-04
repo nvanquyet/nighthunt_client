@@ -376,8 +376,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 if (TryRouteFirePressToCombatUi())
                     return;
 
-                Debug.Log($"[CombatInputHandler] Fire BLOCKED by UI overlay (IsPointerOverUI=true). " +
-                          $"Raycast={DescribePointerRaycastTargets()}");
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableThrowableDebugLogs)
+                    Debug.Log($"[CombatInputHandler] Fire BLOCKED by UI overlay (IsPointerOverUI=true). " +
+                              $"Raycast={DescribePointerRaycastTargets()}");
                 return;
             }
             BeginFire(); // Mouse Down
@@ -405,8 +406,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
             if (_itemUseSystem != null && _itemUseSystem.IsDeploying)
             {
-                bool confirmed = _itemUseSystem.TryConfirmDeploy();
-                LogDeploy($"BeginFire routed to deploy confirm result={confirmed}");
+                LogDeploy("BeginFire ignored while deploy preview is active; placement confirms on pointer release.");
                 return;
             }
 
@@ -592,11 +592,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnSwitchWeaponPerformed(InputAction.CallbackContext ctx)
         {
-            float scroll = ctx.ReadValue<float>();
-            if (scroll > 0f)
-                SwitchToWeaponSlot((_currentWeaponSlot + 1) % 3);
-            else if (scroll < 0f)
-                SwitchToWeaponSlot((_currentWeaponSlot + 2) % 3);
+            // Mouse wheel is reserved for camera zoom. Weapon switching is handled
+            // only by explicit weapon slot input/buttons.
         }
 
         private void OnThrowGrenadePerformed(InputAction.CallbackContext ctx) => OnThrowGrenade?.Invoke();
@@ -864,9 +861,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 _mobileJoystick01   = joystick01;
                 _mobileAimDirection = new Vector3(joystick01.x, 0f, joystick01.y).normalized; // rotation only
                 _aimSystem?.SetThrowableAim(joystick01);   // immediate update; also refreshed in UpdateAimDirection
+                ApplyMobileAimImmediately();
 
-                Debug.Log($"[FireButton] SetFireMobileJoystick active — joystick01={joystick01:F2} mag={joystick01.magnitude:F2}  " +
-                          $"aimPos={_aimSystem?.FinalAimPos:F2}  dir={_mobileAimDirection:F2}");
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableThrowableDebugLogs)
+                    Debug.Log($"[FireButton] SetFireMobileJoystick active - joystick01={joystick01:F2} mag={joystick01.magnitude:F2}  " +
+                              $"aimPos={_aimSystem?.FinalAimPos:F2}  dir={_mobileAimDirection:F2}");
             }
             else
             {
@@ -875,6 +874,23 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 _mobileJoystick01   = Vector2.zero;
                 _aimSystem?.SetThrowableAim(Vector2.zero); // revert AimSystem to mouse aim
             }
+        }
+
+        private void ApplyMobileAimImmediately()
+        {
+            if (_mobileAimDirection.sqrMagnitude <= 0.001f)
+                return;
+
+            _aimDirection = _mobileAimDirection;
+            _weaponSystem?.SetAimDirection(_aimDirection);
+
+            Transform player = _playerTransform != null ? _playerTransform : transform;
+            Vector3 flatAim = _aimDirection;
+            flatAim.y = 0f;
+            if (flatAim.sqrMagnitude <= 0.001f)
+                return;
+
+            player.rotation = Quaternion.LookRotation(flatAim.normalized, Vector3.up);
         }
 
         /// <summary>

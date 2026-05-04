@@ -81,9 +81,18 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             }
 
             var target = _detector.CurrentInteractable;
+            GameObject interactor = _interactionSystem != null ? _interactionSystem.gameObject : null;
 
             // ── No target ────────────────────────────────────────────────────
             if (target == null)
+            {
+                if (_lastTarget != null) Hide();
+                _lastTarget = null;
+                HideSharedProgress();
+                return;
+            }
+
+            if (interactor != null && !target.CanInteract(interactor))
             {
                 if (_lastTarget != null) Hide();
                 _lastTarget = null;
@@ -128,12 +137,28 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             if (_promptPanel != null) _promptPanel.SetActive(true);
 
             bool isHold = target is IHoldInteractable h2 && h2.HoldDuration > 0f;
+            bool isPickup = target is IPickupable;
 
             if (_keyText != null)
-                _keyText.text = isHold ? "[Hold E]" : "[E]";
+                _keyText.text = isPickup ? "[F]" : isHold ? "[Hold E]" : "[E]";
 
             if (_actionText != null)
-                _actionText.text = target.InteractLabel ?? "Interact";
+                _actionText.text = StripLeadingKeyHint(target.InteractLabel ?? (isPickup ? "Pick up" : "Interact"));
+        }
+
+        private static string StripLeadingKeyHint(string label)
+        {
+            if (string.IsNullOrWhiteSpace(label))
+                return label;
+
+            string trimmed = label.TrimStart();
+            if (!trimmed.StartsWith("["))
+                return label;
+
+            int end = trimmed.IndexOf(']');
+            return end >= 0 && end + 1 < trimmed.Length
+                ? trimmed.Substring(end + 1).TrimStart()
+                : label;
         }
 
         private void HideSharedProgress()

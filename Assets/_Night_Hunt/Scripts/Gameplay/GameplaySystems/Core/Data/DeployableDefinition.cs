@@ -41,6 +41,17 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Range(0f, 60f)]
         public float MaxPlacementSlope = 30f;
 
+        [Tooltip("Yaw offset applied after facing the aim cursor. Use 180 when the prefab model's forward axis points backward.")]
+        public float PlacementYawOffsetDegrees = 180f;
+
+        [Header("Deployment Timing")]
+        [Tooltip("Seconds after release before the deployable is actually placed. The player can cancel during this time.")]
+        [Min(0f)] public float DeployDuration = 1.25f;
+
+        [SerializeField] private bool _canCancelDeploy = true;
+
+        public override bool CanCancelUsage { get => _canCancelDeploy; set => _canCancelDeploy = value; }
+
         [Header("Vision Ward")]
         [Tooltip("View radius for VisionWard deployables. 0 = use the prefab's default visionRadius value.")]
         [Min(0f)] public float VisionRadius = 0f;

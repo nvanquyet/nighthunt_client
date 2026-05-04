@@ -76,56 +76,62 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         public override void Fire(Vector3 origin, Vector3 direction,
                                   WeaponConfigData config, int shooterNetObjId)
         {
-            // Ensure _shooterRoot is set even if Awake ran before reparenting.
             if (_shooterRoot == null) _shooterRoot = transform.root;
 
-            RecordShot();   // grows accumulated spread before applying it
+            RecordShot();
 
+            float effectiveRange = Mathf.Max(1f, config.MaxRange > 0f ? config.MaxRange : maxRange);
             Vector3 endpointSum = Vector3.zero;
+            Vector3 hitNormalSum = Vector3.zero;
+            int hitNormalCount = 0;
+            bool hitHittableSum = false;
 
             for (int i = 0; i < pelletCount; i++)
             {
-                // Base radial spread (accumulated from continuous fire).
                 Vector3 pelletDir = ApplyRadialSpread(direction);
 
-                // For multi-pellet weapons also add per-pellet bonus spread so the
-                // full pattern stretches wider than the base cone.
                 if (pelletCount > 1 && pelletSpreadBonus > 0.001f)
                     pelletDir = AddExtraSpread(pelletDir, pelletSpreadBonus);
 
-                Vector3 endpoint = FirePellet(origin, pelletDir, config, shooterNetObjId);
+                (Vector3 endpoint, bool hitHittable, Vector3 hitNormal, bool hitAnything) = FirePellet(origin, pelletDir, config, shooterNetObjId, effectiveRange);
                 endpointSum += endpoint;
+                hitHittableSum |= hitHittable;
+                if (hitAnything)
+                {
+                    hitNormalSum += hitNormal;
+                    hitNormalCount++;
+                }
 
-                // Spawn visual bullet trail from pool — damage already applied above.
-                SpawnVisualBullet(origin, pelletDir, config, endpoint);
+                SpawnVisualBullet(origin, pelletDir, config, endpoint, hitHittable, hitNormal);
             }
 
-            // Report the average endpoint for the aim-trail VFX.
-            RaiseFireResult(origin, endpointSum / pelletCount);
+            Vector3 resultNormal = hitNormalCount > 0 ? hitNormalSum : -direction.normalized;
+            RaiseFireResult(origin, endpointSum / pelletCount, hitHittableSum, resultNormal);
         }
 
         // ── Private helpers ───────────────────────────────────────────────────
 
         /// <summary>
         /// Fires one raycast pellet. Applies damage to the first hittable in range.
-        /// Returns the endpoint (hit point or max-range terminus).
+        /// Returns the endpoint (hit point or max-range terminus), hit type, and hit normal.
         /// </summary>
-        private Vector3 FirePellet(Vector3 origin, Vector3 direction,
-                                   WeaponConfigData config, int shooterNetObjId)
+        private (Vector3 endpoint, bool hitHittable, Vector3 hitNormal, bool hitAnything) FirePellet(Vector3 origin, Vector3 direction,
+                                                                                                     WeaponConfigData config, int shooterNetObjId, float range)
         {
-            if (!TryGetFirstNonSelfHit(origin, direction, maxRange, out RaycastHit rayHit))
-                return origin + direction * maxRange;
+            if (!TryGetFirstNonSelfHit(origin, direction, range, out RaycastHit rayHit))
+                return (origin + direction * range, false, -direction.normalized, false);
 
-            // ── Self-hit guard ────────────────────────────────────────────────
             Vector3 endpoint = rayHit.point;
+            Vector3 hitNormal = rayHit.normal.sqrMagnitude > 0.0001f ? rayHit.normal.normalized : -direction.normalized;
 
-            // Try player hitbox first.
             var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(rayHit.collider)
                                           .OnSelf().InParent()
                                           .Resolve();
+            var hittable = rayHit.collider.GetComponentInParent<IHittable>();
+            bool hitHittable = hitbox != null || hittable != null;
 
             if (!config.ApplyDamage)
-                return endpoint;
+                return (endpoint, hitHittable, hitNormal, true);
 
             if (hitbox != null && hitbox.HealthSystem != null)
             {
@@ -141,11 +147,10 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                     ShooterNetworkObjectId = shooterNetObjId,
                     WeaponId               = config.WeaponId ?? string.Empty,
                 });
-                return endpoint;
+                return (endpoint, true, hitNormal, true);
             }
 
             // Fallback: any other hittable (boss, deployable, objective …).
-            var hittable = rayHit.collider.GetComponentInParent<IHittable>();
             hittable?.RequestDamage(new DamageInfo
             {
                 Damage                 = config.DamageBody,
@@ -156,7 +161,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 WeaponId               = config.WeaponId ?? string.Empty,
             });
 
-            return endpoint;
+            return (endpoint, hitHittable, hitNormal, true);
         }
 
         private bool TryGetFirstNonSelfHit(Vector3 origin, Vector3 direction, float range, out RaycastHit hit)
@@ -200,10 +205,12 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         /// <summary>
         /// Spawns a visual-only ProjectileComponent from the pool so the trail and impact VFX play.
         /// Sets useHitscan = true so the component skips damage on collision.
+        /// <paramref name="hitAnIHittable"/> tells the visual bullet which VFX to play at the endpoint.
         /// No-ops gracefully when the prefab or pool is missing.
         /// </summary>
         private void SpawnVisualBullet(Vector3 origin, Vector3 direction,
-                                       WeaponConfigData config, Vector3 endpoint)
+                                       WeaponConfigData config, Vector3 endpoint,
+                                       bool hitAnIHittable = false, Vector3 hitNormal = default)
         {
             if (projectilePrefab == null)
             {
@@ -223,6 +230,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             if (proj == null) return;
 
             proj.SetIgnoredRoot(_shooterRoot);
+            proj.SetHitscanHitType(hitAnIHittable, hitNormal); // blood vs impact VFX at endpoint
 
             // Ignore collisions between the hitscan trail projectile and the owner so the
             // muzzle-flash child trigger doesn't immediately detonate on the shooter's own body.
@@ -238,7 +246,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             proj.Initialize(config, direction, useHitscan: true, hitscanEndpoint: endpoint);
 
             LogProjectile($"[SHOOT.PLAYER] HitscanWeapon.SpawnVisualBullet — origin={origin:F1}  " +
-                      $"endpoint={endpoint:F1}  dir={direction:F2}  proj='{proj.gameObject.name}'");
+                      $"endpoint={endpoint:F1}  dir={direction:F2}  proj='{proj.gameObject.name}'  hitHittable={hitAnIHittable}");
         }
 
         /// <summary>

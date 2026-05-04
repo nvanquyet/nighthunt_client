@@ -1,5 +1,6 @@
 using FishNet.Object;
 using FOW;
+using System.Collections;
 using NightHunt.Gameplay.FogOfWar;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking.Player;
@@ -21,6 +22,7 @@ namespace NightHunt.Gameplay.Deployables
         private FogOfWarRevealer3D _revealer;
         private FogTeamVisibilityBinder _visibilityBinder;
         private NetworkPlayer _subscribedLocalPlayer;
+        private Coroutine _settleRefreshRoutine;
 
         private void Awake()
         {
@@ -58,6 +60,7 @@ namespace NightHunt.Gameplay.Deployables
             // Initial state check. At this point _isPlaced is likely false (set true after StartPlacement).
             Debug.Log($"[VisionWard] OnStartNetwork: isPlaced={_isPlaced.Value} isActive={_isActive.Value} ownerTeam={_ownerTeamId.Value}");
             UpdateVisionState();
+            StartSettleRefresh("OnStartNetwork");
         }
 
         /// <summary>
@@ -73,6 +76,7 @@ namespace NightHunt.Gameplay.Deployables
                 visionRadius = radius;
                 ApplyRevealerRadius();
             }
+            Debug.Log($"[VisionWard] InitializeWithRadius [SERVER]: team={teamId} maxHP={maxHP} radius={visionRadius:F1}");
         }
 
         public override void OnStopNetwork()
@@ -89,6 +93,12 @@ namespace NightHunt.Gameplay.Deployables
                 _subscribedLocalPlayer.OnPublicDataChanged -= OnLocalTeamChanged;
                 _subscribedLocalPlayer = null;
             }
+
+            if (_settleRefreshRoutine != null)
+            {
+                StopCoroutine(_settleRefreshRoutine);
+                _settleRefreshRoutine = null;
+            }
         }
 
         [Server]
@@ -100,9 +110,18 @@ namespace NightHunt.Gameplay.Deployables
             // _isActive is true (set in Initialize).
             // Client will receive _isPlaced SyncVar delta → OnIsPlacedChanged → UpdateVisionState → enable revealer.
             Debug.Log($"[VisionWard] OnDeployablePlaced [SERVER]: team={_ownerTeamId.Value} isPlaced={_isPlaced.Value} isActive={_isActive.Value} radius={visionRadius}");
+            ObserversRefreshVisionStateRpc("placed");
 
             if (lifetimeSeconds > 0f)
                 Invoke(nameof(ExpireWard), lifetimeSeconds);
+        }
+
+        [ObserversRpc(BufferLast = true)]
+        private void ObserversRefreshVisionStateRpc(string reason)
+        {
+            Debug.Log($"[VisionWard] ObserversRefreshVisionStateRpc: reason={reason} isPlaced={_isPlaced.Value} isActive={_isActive.Value} ownerTeam={_ownerTeamId.Value}");
+            UpdateVisionState();
+            StartSettleRefresh($"rpc:{reason}");
         }
 
         [Server]
@@ -126,6 +145,7 @@ namespace NightHunt.Gameplay.Deployables
         {
             SubscribeLocalPlayerTeamChange(localPlayer);
             UpdateVisionState();
+            StartSettleRefresh("localPlayerAvailable");
         }
 
         private void SubscribeLocalPlayerTeamChange(NetworkPlayer localPlayer)
@@ -143,7 +163,10 @@ namespace NightHunt.Gameplay.Deployables
         private void OnLocalTeamChanged(PlayerPublicData prev, PlayerPublicData next)
         {
             if (prev.TeamId != next.TeamId)
+            {
                 UpdateVisionState();
+                StartSettleRefresh("localTeamChanged");
+            }
         }
 
         private void UpdateVisionState()
@@ -172,6 +195,30 @@ namespace NightHunt.Gameplay.Deployables
             }
 
             _revealer.enabled = shouldEnable;
+        }
+
+        private void StartSettleRefresh(string reason)
+        {
+            if (!isActiveAndEnabled)
+                return;
+
+            if (_settleRefreshRoutine != null)
+                StopCoroutine(_settleRefreshRoutine);
+
+            _settleRefreshRoutine = StartCoroutine(SettleRefreshRoutine(reason));
+        }
+
+        private IEnumerator SettleRefreshRoutine(string reason)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                yield return null;
+                ApplyRevealerRadius();
+                UpdateVisionState();
+            }
+
+            Debug.Log($"[VisionWard] SettleRefresh complete: reason={reason} revealerEnabled={(_revealer != null && _revealer.enabled)} radius={visionRadius:F1}");
+            _settleRefreshRoutine = null;
         }
 
         private void ApplyRevealerRadius()

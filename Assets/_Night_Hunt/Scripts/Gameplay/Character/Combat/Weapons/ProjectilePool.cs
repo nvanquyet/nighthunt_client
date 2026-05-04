@@ -172,8 +172,12 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             foreach (var rb in proj.GetComponentsInChildren<Rigidbody>(true))
             {
+                if (rb.isKinematic)
+                    continue;
+
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
+                rb.Sleep();
             }
         }
 

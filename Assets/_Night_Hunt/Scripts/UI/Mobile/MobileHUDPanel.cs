@@ -4,9 +4,12 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Camera;
+using NightHunt.Gameplay.Input.Handlers.Interaction;
 using NightHunt.Gameplay.Input.Handlers.Movement;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.GameplaySystems.Interaction;
 using NightHunt.GameplaySystems.UI.Combat;
 using NightHunt.GameplaySystems.Weapon;
 
@@ -89,6 +92,12 @@ namespace NightHunt.UI.Mobile
         [Tooltip("Reload button. OnScreenButton controlPath = \"<Gamepad>/buttonWest\".")]
         [SerializeField] private Button _reloadButton;
 
+        [Tooltip("Interact button. Pointer-down mirrors E; pointer-up/exit releases hold interactions.")]
+        [SerializeField] private Button _interactButton;
+
+        [Tooltip("Pickup button. Mirrors F / Pickup.")]
+        [SerializeField] private Button _pickupButton;
+
         [Header("Roll Cooldown Override")]
         [Tooltip("Same MovementSettings SO used by the gameplay character.")]
         [SerializeField] private NightHunt.Gameplay.Character.Movement.MovementSettings _movementSettings;
@@ -108,15 +117,27 @@ namespace NightHunt.UI.Mobile
 
         /// <summary>True when the panel is treating the current runtime as mobile.</summary>
         public bool IsMobile => _forceMobileMode || PlatformManager.IsMobile;
+        private bool ShouldProcessMobileControls =>
+            IsMobile ||
+            (_mobileRoot != null && _mobileRoot.activeInHierarchy) ||
+            (_joystick != null && _joystick.gameObject.activeInHierarchy);
 
         private float _rollCooldownRemaining;
         private UnityEngine.InputSystem.InputAction _rollAction;
         private InputManager _boundInput;
         private IWeaponSystem _boundWeaponSystem;
+        private PlayerInteractionSystem _boundPlayerInteractionSystem;
+        private Transform _boundPlayerTransform;
+        private RaycastDetector _boundRaycastDetector;
+        private ProximityInteractScanner _boundProximityScanner;
         private bool _lastReloadButtonShow;
         private bool _lastReloadButtonInteractable;
+        private bool _lastPickupButtonVisible;
+        private bool _lastInteractButtonVisible;
         private bool _reloadButtonMissingWarned;
-        private float _nextReloadButtonRefreshTime;
+        private Vector2 _lastLoggedMoveDir;
+        private string _lastLoggedJoystickName;
+        private float _nextMoveJoystickLogTime;
 
         private float RollCooldownDuration =>
             (_movementSettings != null && _movementSettings.enableRoll)
@@ -142,6 +163,8 @@ namespace NightHunt.UI.Mobile
             _rollCooldownRemaining = 0f;
             RefreshRollButton();
             if (IsMobile) SubscribeRollCooldown();
+            RefreshReloadButtonVisibility(forceLog: true);
+            RefreshContextualButtonVisibility(forceLog: true);
         }
 
         private void OnDisable()
@@ -151,16 +174,13 @@ namespace NightHunt.UI.Mobile
 
         private void Update()
         {
-            if (!IsMobile) return;
+            if (!ShouldProcessMobileControls) return;
             TickRollCooldown();
-            if (_joystick != null)
-                _boundInput?.MovementHandler?.SetMobileMove(_joystick.Direction);
 
-            if (Time.unscaledTime >= _nextReloadButtonRefreshTime)
-            {
-                _nextReloadButtonRefreshTime = Time.unscaledTime + 0.2f;
-                RefreshReloadButtonVisibility();
-            }
+            RefreshMobileMoveInput();
+
+            RefreshReloadButtonVisibility();
+            RefreshContextualButtonVisibility();
         }
 
         private void OnDestroy()
@@ -170,6 +190,7 @@ namespace NightHunt.UI.Mobile
 
             UnwireActionButtons();
             _pinchZoomBridge?.UnbindHandler();
+            _cameraDragArea?.UnbindHandler();
             UnbindWeaponSystem();
         }
 
@@ -183,9 +204,17 @@ namespace NightHunt.UI.Mobile
         public void Bind(InputManager input)
         {
             _boundInput = input;
+            Debug.Log($"[MOBILE_INPUT] Bind input={(input != null ? "ok" : "null")} combat={(input?.CombatHandler != null ? "ok" : "null")} movement={(input?.MovementHandler != null ? "ok" : "null")}");
 
             if (_pinchZoomBridge != null && input?.CameraHandler != null)
                 _pinchZoomBridge.BindHandler(input.CameraHandler);
+
+            if (_cameraDragArea == null)
+                _cameraDragArea = GetComponentInChildren<MobileCameraDragArea>(true);
+            if (_cameraDragArea != null && input?.CameraHandler != null)
+                _cameraDragArea.BindHandler(input.CameraHandler);
+            else
+                Debug.LogWarning($"[MOBILE_INPUT] Camera drag area binding incomplete: dragArea={(_cameraDragArea != null ? "ok" : "null")} cameraHandler={(input?.CameraHandler != null ? "ok" : "null")}");
                 
             if (_fireButton != null && input != null)
                 _fireButton.Initialize(input.CombatHandler);
@@ -200,6 +229,29 @@ namespace NightHunt.UI.Mobile
         /// </summary>
         public void BindPlayerContext(Transform playerTransform, NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem statSystem)
         {
+            _boundPlayerTransform = playerTransform;
+            _boundRaycastDetector = playerTransform != null
+                ? playerTransform.GetComponentInChildren<RaycastDetector>(true)
+                  ?? playerTransform.GetComponentInParent<RaycastDetector>(true)
+                : null;
+            _boundProximityScanner = playerTransform != null
+                ? playerTransform.GetComponentInChildren<ProximityInteractScanner>(true)
+                  ?? playerTransform.GetComponentInParent<ProximityInteractScanner>(true)
+                : null;
+            _boundPlayerInteractionSystem = playerTransform != null
+                ? playerTransform.GetComponentInChildren<PlayerInteractionSystem>(true)
+                  ?? playerTransform.GetComponentInParent<PlayerInteractionSystem>(true)
+                : null;
+            Debug.Log($"[MOBILE_INPUT] BindPlayerContext player={(playerTransform != null ? playerTransform.name : "null")} raycast={(_boundRaycastDetector != null ? _boundRaycastDetector.name : "null")} proximity={(_boundProximityScanner != null ? _boundProximityScanner.name : "null")} interactionSystem={(_boundPlayerInteractionSystem != null ? _boundPlayerInteractionSystem.name : "null")} joystick={(_joystick != null ? _joystick.name : "null")}");
+
+            if (_cameraDragArea == null)
+                _cameraDragArea = GetComponentInChildren<MobileCameraDragArea>(true);
+            var cameraStateManager = playerTransform != null
+                ? playerTransform.GetComponentInChildren<NightHunt.Gameplay.Camera.CameraStateManager>(true)
+                  ?? playerTransform.GetComponentInParent<NightHunt.Gameplay.Camera.CameraStateManager>(true)
+                : null;
+            _cameraDragArea?.BindCameraStateManager(cameraStateManager);
+
             if (_fireButton != null)
             {
                 float vr = statSystem != null ? statSystem.GetStat(NightHunt.Gameplay.StatSystem.Core.Types.PlayerStatType.VisionRange) : 15f;
@@ -231,6 +283,7 @@ namespace NightHunt.UI.Mobile
             }
 
             RefreshReloadButtonVisibility(forceLog: true);
+            RefreshContextualButtonVisibility(forceLog: true);
         }
 
         /// <summary>
@@ -240,10 +293,19 @@ namespace NightHunt.UI.Mobile
         public void Unbind()
         {
             _pinchZoomBridge?.UnbindHandler();
+            _cameraDragArea?.UnbindHandler();
             _movementBridge?.UnbindHandler();
             _boundInput?.MovementHandler?.SetMobileMove(Vector2.zero);
             UnbindWeaponSystem();
             _boundInput = null;
+            _boundPlayerTransform = null;
+            _boundPlayerInteractionSystem = null;
+            _boundRaycastDetector = null;
+            _boundProximityScanner = null;
+            SetContextualButtonVisible(_interactButton, false);
+            SetContextualButtonVisible(_pickupButton, false);
+            SetContextualButtonVisible(_reloadButton, false);
+            LogContextButtonVisibility(false, false, null, false, force: true);
         }
 
         /// <summary>
@@ -271,6 +333,21 @@ namespace NightHunt.UI.Mobile
             _jumpButton ??= FindButtonByName("jump", "btnjump", "btn jump");
             _rollButton ??= FindButtonByName("roll", "btnroll", "btn roll");
             _reloadButton ??= FindButtonByName("reload", "btn_reload", "reloadbutton");
+            _inventoryButton ??= FindButtonByName("inventory", "bag", "backpack");
+            _interactButton ??= FindButtonByName("interact", "use", "btnuse", "btn interact");
+            _pickupButton ??= FindButtonByName("pickup", "loot", "take", "btnpickup");
+            _joystick ??= FindMovementJoystick();
+            _cameraDragArea ??= GetComponentInChildren<MobileCameraDragArea>(true);
+            _pinchZoomBridge ??= GetComponentInChildren<MobilePinchZoomBridge>(true);
+
+            _interactButton ??= CreateRuntimeButton("InteractButton", "Use", new Vector2(-178f, 168f));
+            _pickupButton ??= CreateRuntimeButton("PickupButton", "Pick", new Vector2(-82f, 230f));
+            _reloadButton ??= CreateRuntimeButton("ReloadButton", "Reload", new Vector2(-130f, 290f));
+            SetContextualButtonVisible(_interactButton, false);
+            SetContextualButtonVisible(_pickupButton, false);
+            SetContextualButtonVisible(_reloadButton, false);
+
+            Debug.Log($"[MOBILE_INPUT] MobileHUD refs root={(_mobileRoot != null ? _mobileRoot.name : "null")} rootActive={(_mobileRoot != null && _mobileRoot.activeInHierarchy)} forceMobile={_forceMobileMode} isMobile={IsMobile} reload={(_reloadButton != null ? _reloadButton.name : "null")} interact={(_interactButton != null ? _interactButton.name : "null")} pickup={(_pickupButton != null ? _pickupButton.name : "null")} cameraDrag={(_cameraDragArea != null ? _cameraDragArea.name : "null")} pinch={(_pinchZoomBridge != null ? _pinchZoomBridge.name : "null")}");
         }
 
         private Button FindButtonByName(params string[] nameTokens)
@@ -293,9 +370,141 @@ namespace NightHunt.UI.Mobile
             return null;
         }
 
-        private static void OnInventoryButtonClicked()
+        private Joystick FindMovementJoystick()
         {
-            InputManager.Instance?.InventoryHandler?.SimulateToggle();
+            Transform root = _mobileRoot != null ? _mobileRoot.transform : transform;
+            var joysticks = root.GetComponentsInChildren<Joystick>(true);
+            Joystick best = null;
+            int bestScore = int.MinValue;
+
+            for (int i = 0; i < joysticks.Length; i++)
+            {
+                Joystick joystick = joysticks[i];
+                if (joystick == null)
+                    continue;
+
+                string name = joystick.name.ToLowerInvariant();
+                string parentName = joystick.transform.parent != null
+                    ? joystick.transform.parent.name.ToLowerInvariant()
+                    : string.Empty;
+                string combined = $"{name} {parentName}";
+
+                int score = 0;
+                if (joystick.gameObject.activeInHierarchy) score += 100;
+                if (joystick.enabled) score += 50;
+                if (combined.Contains("move") || combined.Contains("movement") || combined.Contains("left")) score += 250;
+                if (combined.Contains("fixed")) score += 25;
+                if (combined.Contains("fire") || combined.Contains("aim") || combined.Contains("attack") || combined.Contains("throw")) score -= 500;
+                if (_fireButton != null && joystick.transform.IsChildOf(_fireButton.transform)) score -= 500;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = joystick;
+                }
+            }
+
+            if (best != null)
+                Debug.Log($"[MOBILE_INPUT] Movement joystick bound: '{best.name}' score={bestScore}");
+
+            return best;
+        }
+
+        private void RefreshMobileMoveInput()
+        {
+            if (_joystick == null || IsFireAimJoystick(_joystick))
+                _joystick = FindMovementJoystick();
+
+            var movement = ResolveMovementHandler();
+            Vector2 dir = _joystick != null ? _joystick.Direction : Vector2.zero;
+            movement?.SetMobileMove(dir);
+            LogMoveJoystick(dir, movement);
+        }
+
+        private bool IsFireAimJoystick(Joystick joystick)
+        {
+            if (joystick == null)
+                return false;
+
+            string name = joystick.name.ToLowerInvariant();
+            if (name.Contains("fire") || name.Contains("aim") || name.Contains("attack") || name.Contains("throw"))
+                return true;
+
+            return _fireButton != null && joystick.transform.IsChildOf(_fireButton.transform);
+        }
+
+        private void LogMoveJoystick(Vector2 dir, MovementInputHandler movement)
+        {
+            string joystickName = _joystick != null ? _joystick.name : "null";
+            bool changed = (_lastLoggedMoveDir - dir).sqrMagnitude > 0.01f || _lastLoggedJoystickName != joystickName;
+            bool active = dir.sqrMagnitude > 0.01f;
+            bool missing = _joystick == null || movement == null;
+
+            if (!changed && !missing)
+                return;
+
+            if (!missing && Time.unscaledTime < _nextMoveJoystickLogTime)
+                return;
+
+            _nextMoveJoystickLogTime = Time.unscaledTime + 0.5f;
+            _lastLoggedMoveDir = dir;
+            _lastLoggedJoystickName = joystickName;
+            Debug.Log($"[MOBILE_INPUT] [MoveJoystick] joystick={joystickName} dir={dir:F2} handler={(movement != null ? "ok" : "null")} inputEnabled={movement?.IsInputEnabled.ToString() ?? "n/a"} mobileMode={ShouldProcessMobileControls}");
+        }
+
+        private void OnInventoryButtonClicked()
+        {
+            var input = _boundInput ?? InputManager.Instance;
+            if (input?.InventoryHandler == null)
+            {
+                Debug.LogWarning("[MOBILE_INPUT] Inventory button ignored: InventoryInputHandler is not bound.");
+                return;
+            }
+
+            input.InventoryHandler.SimulateToggle();
+        }
+
+        private Button CreateRuntimeButton(string buttonName, string label, Vector2 anchoredPosition)
+        {
+            if (_mobileRoot == null && !IsMobile)
+                return null;
+
+            Transform root = _mobileRoot != null ? _mobileRoot.transform : transform;
+            var go = new GameObject(buttonName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            go.transform.SetParent(root, false);
+
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(88f, 56f);
+            rt.anchoredPosition = anchoredPosition;
+
+            var image = go.GetComponent<Image>();
+            image.color = new Color(0.08f, 0.10f, 0.12f, 0.82f);
+
+            var textGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            textGo.transform.SetParent(go.transform, false);
+            var textRect = textGo.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+
+            var text = textGo.GetComponent<Text>();
+            text.text = label;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.white;
+            text.fontSize = 18;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = 12;
+            text.resizeTextMaxSize = 18;
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+                     ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (text.font == null)
+                text.font = Font.CreateDynamicFontFromOSFont("Arial", 18);
+
+            Debug.Log($"[MobileHUD] Created runtime fallback button '{buttonName}'. Add a named prefab button to override its layout.");
+            return go.GetComponent<Button>();
         }
 
         private void WireActionButtons()
@@ -304,10 +513,15 @@ namespace NightHunt.UI.Mobile
             AddPointerTrigger(_sprintButton, EventTriggerType.PointerUp, OnSprintReleased);
             AddPointerTrigger(_sprintButton, EventTriggerType.PointerExit, OnSprintReleased);
 
+            AddPointerTrigger(_interactButton, EventTriggerType.PointerDown, OnInteractPressed);
+            AddPointerTrigger(_interactButton, EventTriggerType.PointerUp, OnInteractReleased);
+            AddPointerTrigger(_interactButton, EventTriggerType.PointerExit, OnInteractReleased);
+            AddPointerTrigger(_reloadButton, EventTriggerType.PointerDown, OnReloadPressed);
+            AddPointerTrigger(_pickupButton, EventTriggerType.PointerDown, OnPickupPressed);
+
             if (_crouchButton != null) _crouchButton.onClick.AddListener(OnCrouchClicked);
             if (_jumpButton != null) _jumpButton.onClick.AddListener(OnJumpClicked);
             if (_rollButton != null) _rollButton.onClick.AddListener(OnRollClicked);
-            if (_reloadButton != null) _reloadButton.onClick.AddListener(OnReloadClicked);
         }
 
         private void UnwireActionButtons()
@@ -315,11 +529,25 @@ namespace NightHunt.UI.Mobile
             if (_crouchButton != null) _crouchButton.onClick.RemoveListener(OnCrouchClicked);
             if (_jumpButton != null) _jumpButton.onClick.RemoveListener(OnJumpClicked);
             if (_rollButton != null) _rollButton.onClick.RemoveListener(OnRollClicked);
-            if (_reloadButton != null) _reloadButton.onClick.RemoveListener(OnReloadClicked);
         }
 
         private MovementInputHandler ResolveMovementHandler()
             => _boundInput?.MovementHandler ?? InputManager.Instance?.MovementHandler;
+
+        private InteractionInputHandler ResolveInteractionHandler()
+            => _boundInput?.InteractionHandler ?? InputManager.Instance?.InteractionHandler;
+
+        private PlayerInteractionSystem ResolvePlayerInteractionSystem()
+        {
+            if (_boundPlayerInteractionSystem == null && _boundPlayerTransform != null)
+            {
+                _boundPlayerInteractionSystem =
+                    _boundPlayerTransform.GetComponentInChildren<PlayerInteractionSystem>(true)
+                    ?? _boundPlayerTransform.GetComponentInParent<PlayerInteractionSystem>(true);
+            }
+
+            return _boundPlayerInteractionSystem;
+        }
 
         private void OnSprintPressed(BaseEventData _)
         {
@@ -357,14 +585,48 @@ namespace NightHunt.UI.Mobile
             if (_rollCooldownRemaining <= 0f)
                 StartRollCooldown();
         }
-        private void OnReloadClicked()
+        private void OnReloadPressed(BaseEventData _)
         {
-            var activeSlot = _boundWeaponSystem?.GetActiveWeaponSlot();
-            Debug.Log($"[WEAPON_FLOW] [00][ReloadButton.Click] input={(_boundInput != null ? "ok" : "null")} combat={(_boundInput?.CombatHandler != null ? "ok" : "null")} activeWeapon={activeSlot?.ToString() ?? "none"}");
-            if (_boundWeaponSystem != null)
-                _boundWeaponSystem.RequestReload();
+            var weaponSystem = ResolveWeaponSystem();
+            var activeSlot = weaponSystem?.GetActiveWeaponSlot();
+            Debug.Log($"[WEAPON_FLOW] [00][ReloadButton.Press] weaponSystem={(weaponSystem != null ? "ok" : "null")} input={(_boundInput != null ? "ok" : "null")} combat={(_boundInput?.CombatHandler != null ? "ok" : "null")} activeWeapon={activeSlot?.ToString() ?? "none"}");
+            if (weaponSystem != null)
+                weaponSystem.RequestReload();
             else
                 _boundInput?.CombatHandler?.SimulateReload();
+        }
+
+        private void OnInteractPressed(BaseEventData _)
+        {
+            var interactionSystem = ResolvePlayerInteractionSystem();
+            var interaction = ResolveInteractionHandler();
+            Debug.Log($"[MOBILE_INPUT] Interact press interactionSystem={(interactionSystem != null ? "ok" : "null")} interaction={(interaction != null ? "ok" : "null")} enabled={interaction?.IsInputEnabled.ToString() ?? "n/a"}");
+            if (interactionSystem != null)
+                interactionSystem.HandleInteractPerformed();
+            else
+                interaction?.SimulateInteractPressed();
+        }
+
+        private void OnInteractReleased(BaseEventData _)
+        {
+            var interactionSystem = ResolvePlayerInteractionSystem();
+            var interaction = ResolveInteractionHandler();
+            Debug.Log($"[MOBILE_INPUT] Interact release interactionSystem={(interactionSystem != null ? "ok" : "null")} interaction={(interaction != null ? "ok" : "null")} enabled={interaction?.IsInputEnabled.ToString() ?? "n/a"}");
+            if (interactionSystem != null)
+                interactionSystem.HandleInteractCanceled();
+            else
+                interaction?.SimulateInteractReleased();
+        }
+
+        private void OnPickupPressed(BaseEventData _)
+        {
+            var interactionSystem = ResolvePlayerInteractionSystem();
+            var interaction = ResolveInteractionHandler();
+            Debug.Log($"[MOBILE_INPUT] Pickup press interactionSystem={(interactionSystem != null ? "ok" : "null")} interaction={(interaction != null ? "ok" : "null")} enabled={interaction?.IsInputEnabled.ToString() ?? "n/a"}");
+            if (interactionSystem != null)
+                interactionSystem.HandlePickupPerformed();
+            else
+                interaction?.SimulatePickup();
         }
 
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
@@ -400,9 +662,10 @@ namespace NightHunt.UI.Mobile
 
         private void RefreshReloadButtonVisibility(bool forceLog = false)
         {
-            var activeSlot = _boundWeaponSystem?.GetActiveWeaponSlot();
-            bool show = IsMobile && _boundWeaponSystem != null && activeSlot.HasValue;
-            bool canReload = show && _boundWeaponSystem.CanReload(activeSlot.Value);
+            var weaponSystem = ResolveWeaponSystem();
+            var activeSlot = weaponSystem?.GetActiveWeaponSlot();
+            bool show = ShouldProcessMobileControls && weaponSystem != null && activeSlot.HasValue;
+            bool canReload = show && weaponSystem.CanReload(activeSlot.Value);
 
             if (_reloadButton != null)
             {
@@ -420,10 +683,141 @@ namespace NightHunt.UI.Mobile
 
             if (forceLog || show != _lastReloadButtonShow || canReload != _lastReloadButtonInteractable)
             {
-                Debug.Log($"[WEAPON_FLOW] [00][ReloadButton.Visibility] show={show} interactable={canReload} active={activeSlot?.ToString() ?? "none"} weapon={_boundWeaponSystem?.GetActiveWeapon()?.DefinitionID ?? "null"}");
+                Debug.Log($"[WEAPON_FLOW] [00][ReloadButton.Visibility] show={show} interactable={canReload} active={activeSlot?.ToString() ?? "none"} weapon={weaponSystem?.GetActiveWeapon()?.DefinitionID ?? "null"} mobileMode={ShouldProcessMobileControls}");
                 _lastReloadButtonShow = show;
                 _lastReloadButtonInteractable = canReload;
             }
+        }
+
+        private IWeaponSystem ResolveWeaponSystem()
+        {
+            if (_boundWeaponSystem == null && _boundPlayerTransform != null)
+                _boundWeaponSystem = _boundPlayerTransform.GetComponentInChildren<WeaponSystem>(true);
+
+            return _boundWeaponSystem;
+        }
+
+        private void EnsureInteractionSensors()
+        {
+            if (_boundPlayerTransform == null)
+                return;
+
+            if (_boundRaycastDetector == null)
+            {
+                _boundRaycastDetector =
+                    _boundPlayerTransform.GetComponentInChildren<RaycastDetector>(true)
+                    ?? _boundPlayerTransform.GetComponentInParent<RaycastDetector>(true);
+            }
+
+            if (_boundProximityScanner == null)
+            {
+                _boundProximityScanner =
+                    _boundPlayerTransform.GetComponentInChildren<ProximityInteractScanner>(true)
+                    ?? _boundPlayerTransform.GetComponentInParent<ProximityInteractScanner>(true);
+            }
+        }
+
+        private void RefreshContextualButtonVisibility(bool forceLog = false)
+        {
+            EnsureInteractionSensors();
+
+            if (!ShouldProcessMobileControls)
+            {
+                SetContextualButtonVisible(_interactButton, false);
+                SetContextualButtonVisible(_pickupButton, false);
+                LogContextButtonVisibility(false, false, null, false, forceLog);
+                return;
+            }
+
+            GameObject interactor = _boundPlayerTransform != null ? _boundPlayerTransform.gameObject : null;
+            IInteractable rayTarget = _boundRaycastDetector != null ? _boundRaycastDetector.CurrentInteractable : null;
+            IInteractable interactTarget = ResolveInteractTarget(rayTarget, interactor);
+
+            bool hasNearbyPickup = HasNearbyPickupTarget(interactor);
+            bool showPickup = IsValidPickupTarget(rayTarget, interactor) || hasNearbyPickup;
+            bool showInteract = interactTarget != null;
+
+            SetContextualButtonVisible(_pickupButton, showPickup);
+            SetContextualButtonVisible(_interactButton, showInteract);
+            LogContextButtonVisibility(showPickup, showInteract, interactTarget ?? rayTarget, hasNearbyPickup, forceLog);
+        }
+
+        private IInteractable ResolveInteractTarget(IInteractable rayTarget, GameObject interactor)
+        {
+            if (IsValidNonPickupInteractTarget(rayTarget, interactor))
+                return rayTarget;
+
+            if (_boundProximityScanner == null || interactor == null)
+                return null;
+
+            _boundProximityScanner.ForceScan();
+            var nearby = _boundProximityScanner.NearbyInteractables;
+            for (int i = 0; i < nearby.Count; i++)
+            {
+                if (IsValidNonPickupInteractTarget(nearby[i], interactor))
+                    return nearby[i];
+            }
+
+            return null;
+        }
+
+        private bool HasNearbyPickupTarget(GameObject interactor)
+        {
+            if (_boundProximityScanner == null || interactor == null)
+                return false;
+
+            _boundProximityScanner.ForceScan();
+
+            var worldItems = _boundProximityScanner.NearbyWorldItems;
+            for (int i = 0; i < worldItems.Count; i++)
+            {
+                if (IsValidPickupTarget(worldItems[i], interactor))
+                    return true;
+            }
+
+            var interactables = _boundProximityScanner.NearbyInteractables;
+            for (int i = 0; i < interactables.Count; i++)
+            {
+                if (IsValidPickupTarget(interactables[i], interactor))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsValidPickupTarget(IInteractable target, GameObject interactor)
+        {
+            return target is IPickupable
+                && interactor != null
+                && target.CanInteract(interactor);
+        }
+
+        private static bool IsValidNonPickupInteractTarget(IInteractable target, GameObject interactor)
+        {
+            return target != null
+                && target is not IPickupable
+                && interactor != null
+                && target.CanInteract(interactor);
+        }
+
+        private void LogContextButtonVisibility(bool pickupVisible, bool interactVisible, IInteractable target, bool hasNearbyPickup, bool force = false)
+        {
+            if (!force && pickupVisible == _lastPickupButtonVisible && interactVisible == _lastInteractButtonVisible)
+                return;
+
+            _lastPickupButtonVisible = pickupVisible;
+            _lastInteractButtonVisible = interactVisible;
+
+            Debug.Log($"[MOBILE_INPUT] [ContextButtons.Visibility] pickup={pickupVisible} interact={interactVisible} " +
+                      $"target={target?.GetType().Name ?? "null"} nearbyPickup={hasNearbyPickup} " +
+                      $"raycast={(_boundRaycastDetector != null ? "ok" : "null")} proximity={(_boundProximityScanner != null ? "ok" : "null")} " +
+                      $"mobileMode={ShouldProcessMobileControls}");
+        }
+
+        private static void SetContextualButtonVisible(Button button, bool visible)
+        {
+            if (button != null && button.gameObject.activeSelf != visible)
+                button.gameObject.SetActive(visible);
         }
 
         private void UnbindWeaponSystem()
@@ -512,11 +906,17 @@ namespace NightHunt.UI.Mobile
             if (_mobileRoot == null)
                 _mobileRoot = GetComponentInChildren<RectTransform>(true)?.gameObject;
             if (_joystick == null)
-                _joystick = GetComponentInChildren<Joystick>(true);
+                _joystick = FindMovementJoystick();
             if (_movementBridge == null)
                 _movementBridge = GetComponentInChildren<MobileMovementBridge>(true);
             if (_pinchZoomBridge == null)
                 _pinchZoomBridge = GetComponentInChildren<MobilePinchZoomBridge>(true);
+            if (_cameraDragArea == null)
+                _cameraDragArea = GetComponentInChildren<MobileCameraDragArea>(true);
+            if (_interactButton == null)
+                _interactButton = FindButtonByName("interact", "use", "btnuse", "btn interact");
+            if (_pickupButton == null)
+                _pickupButton = FindButtonByName("pickup", "loot", "take", "btnpickup");
         }
 #endif
     }

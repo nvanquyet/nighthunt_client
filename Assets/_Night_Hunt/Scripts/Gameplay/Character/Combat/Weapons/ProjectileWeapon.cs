@@ -73,7 +73,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                       $"speed={config.ProjectileSpeed}  maxRange={config.MaxRange}");
 
             // Estimated endpoint for the aim-trail VFX on the firing client.
-            RaiseFireResult(origin, origin + fireDir * maxRange);
+            RaiseFireResult(origin, origin + fireDir * Mathf.Max(1f, config.MaxRange));
         }
     }
 }

@@ -206,7 +206,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IAimSystem        aimSystem       = null)
         {
             if (_aimController != null)
-                _aimController.Initialize(statSystem, _itemSelectionSystem, playerTransform, aimSystem, _itemUseSystem, _combatInputHandler);
+                _aimController.Initialize(statSystem, _itemSelectionSystem, playerTransform, aimSystem, _itemUseSystem, _combatInputHandler, _inventorySystem);
         }
 
         /// <summary>
@@ -298,7 +298,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (initializedPanels.Contains(entry.Panel)) continue;
 
                 var filterTypes = CollectFilterTypesForPanel(entry.Panel);
-                entry.Panel.Initialize(filterTypes, _itemSelectionSystem, _inventorySystem, _itemUseSystem, _combatInputHandler);
+                entry.Panel.Initialize(filterTypes, _itemSelectionSystem, _inventorySystem, _itemUseSystem, _combatInputHandler, _aimController);
                 initializedPanels.Add(entry.Panel);
             }
         }
@@ -489,7 +489,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
             Debug.Log("[CombatHUDPanel] Cancel item-use button pressed.");
             // Cancel the aim-mode visuals (hides ring, cursor, resets mobile joystick).
             if (_aimController != null)
-                _aimController.CancelAim();
+            {
+                if (_aimController.IsInDeployMode)
+                    _aimController.CancelDeploy();
+                else
+                    _aimController.CancelAim();
+            }
             else
                 // No aim controller (e.g. consumable with no throwable aim mode)
                 // — still send the server cancel.
