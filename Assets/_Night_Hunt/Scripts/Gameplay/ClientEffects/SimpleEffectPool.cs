@@ -73,6 +73,13 @@ namespace NightHunt.Gameplay.ClientEffects
                 StartCoroutine(ReturnAfter(go, lifetime));
         }
 
+        public void Play(ParticleSystem prefab, Vector3 position, Quaternion rotation, float lifetime)
+        {
+            var system = Rent(prefab, position, rotation);
+            if (system != null)
+                StartCoroutine(ReturnAfter(system.gameObject, lifetime));
+        }
+
         /// <summary>
         /// Get an activated instance from the pool (or instantiate a new one).
         /// The caller is responsible for calling <see cref="Return"/> when done.
@@ -104,12 +111,25 @@ namespace NightHunt.Gameplay.ClientEffects
                 go = Instantiate(prefab, transform);
             }
 
-            _instanceToPrefab[go.GetInstanceID()] = prefab;
-
             go.transform.SetPositionAndRotation(position, rotation);
             go.SetActive(true);
+            RestartEffects(go);
+
+            _instanceToPrefab[go.GetInstanceID()] = prefab;
 
             return go;
+        }
+
+        public ParticleSystem Rent(ParticleSystem prefab, Vector3 position, Quaternion rotation)
+        {
+            if (prefab == null)
+            {
+                Debug.LogWarning("[SimpleEffectPool] Rent called with null ParticleSystem prefab.");
+                return null;
+            }
+
+            GameObject go = Rent(prefab.gameObject, position, rotation);
+            return go != null ? go.GetComponentInChildren<ParticleSystem>(true) : null;
         }
 
         /// <summary>
@@ -121,6 +141,7 @@ namespace NightHunt.Gameplay.ClientEffects
         {
             if (instance == null) return;
 
+            StopEffects(instance);
             instance.SetActive(false);
 
             int id = instance.GetInstanceID();
@@ -131,6 +152,7 @@ namespace NightHunt.Gameplay.ClientEffects
                     queue = new Queue<GameObject>();
                     _pools[sourcePrefab] = queue;
                 }
+                instance.transform.SetParent(transform, true);
                 queue.Enqueue(instance);
             }
             else
@@ -148,6 +170,49 @@ namespace NightHunt.Gameplay.ClientEffects
         {
             yield return new WaitForSeconds(delay);
             Return(instance);
+        }
+
+        private static void RestartEffects(GameObject root)
+        {
+            if (root == null)
+                return;
+
+            foreach (var ps in root.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                ActivateHierarchyUpTo(ps.transform, root.transform);
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                ps.Play(true);
+            }
+
+            foreach (var trail in root.GetComponentsInChildren<TrailRenderer>(true))
+            {
+                ActivateHierarchyUpTo(trail.transform, root.transform);
+                trail.Clear();
+            }
+        }
+
+        private static void StopEffects(GameObject root)
+        {
+            if (root == null)
+                return;
+
+            foreach (var ps in root.GetComponentsInChildren<ParticleSystem>(true))
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+            foreach (var trail in root.GetComponentsInChildren<TrailRenderer>(true))
+                trail.Clear();
+        }
+
+        private static void ActivateHierarchyUpTo(Transform child, Transform root)
+        {
+            while (child != null)
+            {
+                child.gameObject.SetActive(true);
+                if (child == root)
+                    break;
+
+                child = child.parent;
+            }
         }
     }
 }

@@ -119,6 +119,8 @@ namespace NightHunt.Editor.Tools
                 string detonationResult = ApplyEffect(detonation, setup.DetonationEffectName, setup.VfxScale, active: false);
 
                 var so = new SerializedObject(projectileBase);
+                so.FindProperty("muzzleFlashSystem")?.SetValue(FindParticleSystem(muzzle.gameObject));
+                so.FindProperty("detonationVFXSystem")?.SetValue(FindParticleSystem(detonation.gameObject));
                 so.FindProperty("muzzleFlashChild")?.SetValue(muzzle.gameObject);
                 so.FindProperty("mainVisualChild")?.SetValue(visual.gameObject);
                 so.FindProperty("detonationVFXChild")?.SetValue(detonation.gameObject);
@@ -205,6 +207,11 @@ namespace NightHunt.Editor.Tools
             }
 
             return null;
+        }
+
+        private static ParticleSystem FindParticleSystem(GameObject root)
+        {
+            return root != null ? root.GetComponentInChildren<ParticleSystem>(true) : null;
         }
 
         private static Transform EnsureChild(Transform parent, string name, bool active)

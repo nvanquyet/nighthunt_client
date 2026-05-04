@@ -125,6 +125,21 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         public void Initialize(WeaponConfigData config, Vector3 dir, bool useHitscan,
                                Vector3? hitscanEndpoint = null)
         {
+            if (_fuseRoutine != null)
+            {
+                StopCoroutine(_fuseRoutine);
+                _fuseRoutine = null;
+            }
+
+            if (_despawnRoutine != null)
+            {
+                StopCoroutine(_despawnRoutine);
+                _despawnRoutine = null;
+            }
+
+            PrepareVisualStateForLaunch();
+            _hasDetonated = false;
+
             _config     = config;
             _direction  = dir.normalized;
             _speed      = Mathf.Max(1f, config.ProjectileSpeed);
@@ -392,8 +407,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             StopRigidbodyMotion();
 
-            if (hideTrailOnImpact && mainVisualChild != null)
-                mainVisualChild.SetActive(false);
+            if (hideTrailOnImpact)
+                HideMainVisual();
 
             Vector3 normal = _lastHitNormal.sqrMagnitude > 0.0001f
                 ? _lastHitNormal
@@ -639,11 +654,16 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             if (delay > 0f)
                 yield return new WaitForSeconds(delay);
 
-            // Return to pool if available, otherwise just deactivate.
+            // Return to pool if available, otherwise stop VFX before deactivating.
             if (ProjectilePool.Instance != null)
+            {
                 ProjectilePool.Instance.Return(this);
+            }
             else
+            {
+                ResetVisualStateForPool();
                 gameObject.SetActive(false);
+            }
         }
     }
 }
