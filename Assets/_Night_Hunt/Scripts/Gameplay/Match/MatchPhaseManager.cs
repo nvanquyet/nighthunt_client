@@ -9,6 +9,7 @@ using FishNet.Object.Synchronizing;
 using FishNet;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.State;
 
 namespace NightHunt.Gameplay.Match
 {
@@ -30,9 +31,30 @@ namespace NightHunt.Gameplay.Match
         [Header("Phase Config Data")]
         [Tooltip("Config data cho từng phase (Preparation, Hunt, Lockdown). Assign trong Inspector.")]
         [SerializeField] private List<MatchPhaseConfigData> phaseConfigs = new List<MatchPhaseConfigData>();
+
+        [Serializable]
+        private sealed class PlayerCountPhaseProfile
+        {
+            [Tooltip("Total players in the match: 2=1v1, 4=2v2, 8=4v4.")]
+            public int ExpectedPlayerCount;
+            public string ProfileName;
+            public List<MatchPhaseConfigData> PhaseConfigs = new List<MatchPhaseConfigData>();
+        }
+
+        [Header("Mode-Specific Phase Profiles")]
+        [Tooltip("Optional exact profiles by total player count. If empty, phaseConfigs are scaled by player count at runtime.")]
+        [SerializeField] private List<PlayerCountPhaseProfile> _phaseProfilesByExpectedPlayers = new List<PlayerCountPhaseProfile>();
+
+        [Tooltip("When no exact profile is assigned, scale phase durations for 1v1/2v2/4v4 from phaseConfigs.")]
+        [SerializeField] private bool _usePlayerCountPhaseScaling = true;
+
+        [Tooltip("Send PhaseWarningEvent for the final Lockdown phase as well.")]
+        [SerializeField] private bool _sendFinalPhaseWarning = true;
         // ✅ Event system - decoupled communication
         public event Action<MatchPhaseState, string> OnPhaseStarted; // (newPhase, phaseName)
-        public event Action<MatchPhaseState, MatchPhaseState> OnPhaseTransitioned; // (oldPhase, newPhase)        /// <summary>Fired on server when the Lockdown (Phase 3) timer runs out. Used by MatchEndManager for score-based win resolution.</summary>
+        public event Action<MatchPhaseState, MatchPhaseState> OnPhaseTransitioned; // (oldPhase, newPhase)
+
+        /// <summary>Fired on server when the Lockdown timer runs out. Used by MatchEndManager for score-based win resolution.</summary>
         public event Action OnLockdownTimerExpired;
         // State machine
         private StateMachine<MatchPhaseState> phaseStateMachine;
@@ -46,9 +68,11 @@ namespace NightHunt.Gameplay.Match
         private readonly SyncVar<float> networkPhaseDuration = new SyncVar<float>();
 
         private MatchPhaseConfigData currentPhaseConfig;
+        private List<MatchPhaseConfigData> _activePhaseConfigs;
         private bool isInitialized = false;
         private bool hasStartedFirstPhase = false;
         private bool _warningSent = false;   // reset each time a new phase starts
+        private bool _lockdownTimerExpiredSent = false;
 
         public MatchPhaseState CurrentPhase => phaseStateMachine?.CurrentState ?? initialState;
         public string CurrentPhaseName => GetPhaseName(CurrentPhase);
@@ -89,6 +113,8 @@ namespace NightHunt.Gameplay.Match
             base.OnStartServer();
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                 Debug.Log("[MatchPhaseManager] Server started");
+
+            ResolveActivePhaseConfigs();
         }
 
         // ?? Match Start with Countdown ????????????????????????????????????????
@@ -107,6 +133,7 @@ namespace NightHunt.Gameplay.Match
                 return;
             }
             Debug.Log($"[FLOW §14] SERVER MatchPhaseManager.BeginMatch: countdown={_delayBeforeFirstPhase}s before {initialState}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            ResolveActivePhaseConfigs();
             StartCoroutine(CountdownAndStartFirstPhase());
         }
 
@@ -212,11 +239,12 @@ namespace NightHunt.Gameplay.Match
             }
 
             // ? Lookup b?ng enum PhaseType � type-safe, kh�ng b? typo string
-            MatchPhaseConfigData config = phaseConfigs.Find(c => c.PhaseType == phase);
+            MatchPhaseConfigData config = GetPhaseConfig(phase);
             if (config == null)
             {
                 // Fallback: use first available config to avoid hard stop in development
-                config = phaseConfigs.Count > 0 ? phaseConfigs[0] : null;
+                var configs = ActivePhaseConfigs;
+                config = configs.Count > 0 ? configs[0] : null;
                 if (config == null)
                 {
                     Debug.LogError($"[MatchPhaseManager] Phase config not found for PhaseType: {phase}. Add entries to phaseConfigs in Inspector.");
@@ -227,6 +255,7 @@ namespace NightHunt.Gameplay.Match
 
             currentPhaseConfig = config;
             _warningSent = false;
+            _lockdownTimerExpiredSent = false;
 
             // Display name: d�ng field DisplayName n?u c�, fallback v? t�n enum
             string displayName = !string.IsNullOrEmpty(config.DisplayName)
@@ -246,7 +275,10 @@ namespace NightHunt.Gameplay.Match
             // Sync to network
             networkPhase.Value          = (int)phase;
             networkPhaseStartTick.Value = TimeManager.Tick;
-            networkPhaseDuration.Value  = UnityEngine.Random.Range(config.DurationMin, config.DurationMax) * 60f;
+            float durationMinutes = config.DurationMax > config.DurationMin
+                ? UnityEngine.Random.Range((float)config.DurationMin, (float)config.DurationMax)
+                : Mathf.Max(0.1f, config.DurationMin);
+            networkPhaseDuration.Value = durationMinutes * 60f;
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableMatchDebugLogs)
                 Debug.Log($"[MatchPhaseManager] Started phase: {phase} (Duration: {networkPhaseDuration.Value}s)");
@@ -302,8 +334,8 @@ namespace NightHunt.Gameplay.Match
 
             float remaining = PhaseRemainingTime;
 
-            // Phase warning (only for transitioning phases, not final Lockdown)
-            if (!_warningSent && CurrentPhase != MatchPhaseState.Lockdown)
+            // Phase warning: send near the end of the phase, never at phase start.
+            if (!_warningSent && ShouldSendWarningForCurrentPhase())
             {
                 float warningTime = currentPhaseConfig?.WarningTime > 0
                     ? currentPhaseConfig.WarningTime
@@ -343,7 +375,11 @@ namespace NightHunt.Gameplay.Match
             // Lockdown is the final phase � fire timer-expired event for score-based win resolution.
             if (CurrentPhase == MatchPhaseState.Lockdown)
             {
+                if (_lockdownTimerExpiredSent)
+                    return;
+
                 Debug.Log("[MatchPhaseManager] Lockdown timer expired � notifying MatchEndManager.");
+                _lockdownTimerExpiredSent = true;
                 OnLockdownTimerExpired?.Invoke();
                 return;
             }
@@ -386,7 +422,102 @@ namespace NightHunt.Gameplay.Match
         public MatchPhaseConfigData GetCurrentPhaseConfig()
         {
             MatchPhaseState state = (MatchPhaseState)networkPhase.Value;
-            return phaseConfigs.Find(c => c.PhaseType == state);
+            return GetPhaseConfig(state);
+        }
+
+        private List<MatchPhaseConfigData> ActivePhaseConfigs => _activePhaseConfigs ?? phaseConfigs ?? new List<MatchPhaseConfigData>();
+
+        private MatchPhaseConfigData GetPhaseConfig(MatchPhaseState phase)
+        {
+            return ActivePhaseConfigs.Find(c => c.PhaseType == phase);
+        }
+
+        private bool ShouldSendWarningForCurrentPhase()
+        {
+            return CurrentPhase != MatchPhaseState.Lockdown || _sendFinalPhaseWarning;
+        }
+
+        [Server]
+        private void ResolveActivePhaseConfigs()
+        {
+            int expectedPlayers = ResolveExpectedPlayerCountForPhaseConfig();
+
+            if (expectedPlayers > 0)
+            {
+                int profileCount = _phaseProfilesByExpectedPlayers?.Count ?? 0;
+                for (int i = 0; i < profileCount; i++)
+                {
+                    var profile = _phaseProfilesByExpectedPlayers[i];
+                    if (profile == null || profile.ExpectedPlayerCount != expectedPlayers ||
+                        profile.PhaseConfigs == null || profile.PhaseConfigs.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    _activePhaseConfigs = profile.PhaseConfigs;
+                    Debug.Log($"[MatchPhaseManager] Phase profile selected: players={expectedPlayers} name='{profile.ProfileName}' configs={_activePhaseConfigs.Count}");
+                    return;
+                }
+
+                if (_usePlayerCountPhaseScaling && phaseConfigs != null && phaseConfigs.Count > 0)
+                {
+                    _activePhaseConfigs = BuildScaledPhaseConfigs(expectedPlayers);
+                    Debug.Log($"[MatchPhaseManager] Runtime phase profile built for players={expectedPlayers} configs={_activePhaseConfigs.Count}");
+                    return;
+                }
+            }
+
+            _activePhaseConfigs = phaseConfigs;
+        }
+
+        private static int ResolveExpectedPlayerCountForPhaseConfig()
+        {
+            if (RoomState.Instance != null && RoomState.Instance.PlayerCount > 0)
+                return RoomState.Instance.PlayerCount;
+
+            if (NightHunt.Server.ServerBootstrap.BootstrappedExpectedPlayers > 0)
+                return NightHunt.Server.ServerBootstrap.BootstrappedExpectedPlayers;
+
+            int registered = NightHunt.Networking.RegistryService.Instance?.GetConnectedPlayerCount() ?? 0;
+            return registered > 0 ? registered : 0;
+        }
+
+        private List<MatchPhaseConfigData> BuildScaledPhaseConfigs(int expectedPlayers)
+        {
+            float durationScale = expectedPlayers <= 2 ? 0.67f : expectedPlayers >= 8 ? 1.25f : 1f;
+            float warningSeconds = expectedPlayers <= 2 ? 15f : expectedPlayers >= 8 ? 45f : 30f;
+
+            var result = new List<MatchPhaseConfigData>(phaseConfigs?.Count ?? 0);
+            foreach (var source in phaseConfigs)
+            {
+                if (source == null)
+                    continue;
+
+                var clone = ClonePhaseConfig(source);
+                clone.DurationMin = Mathf.Max(1, Mathf.RoundToInt(source.DurationMin * durationScale));
+                clone.DurationMax = Mathf.Max(clone.DurationMin, Mathf.RoundToInt(Mathf.Max(source.DurationMax, source.DurationMin) * durationScale));
+                clone.WarningTime = source.WarningTime > 0f ? Mathf.Min(source.WarningTime, warningSeconds) : warningSeconds;
+                result.Add(clone);
+            }
+
+            return result;
+        }
+
+        private static MatchPhaseConfigData ClonePhaseConfig(MatchPhaseConfigData source)
+        {
+            return new MatchPhaseConfigData
+            {
+                PhaseType = source.PhaseType,
+                DisplayName = source.DisplayName,
+                DurationMin = source.DurationMin,
+                DurationMax = source.DurationMax,
+                RespawnEnabled = source.RespawnEnabled,
+                RespawnDelay = source.RespawnDelay,
+                ScoreMultiplier = source.ScoreMultiplier,
+                SurvivalMultiplier = source.SurvivalMultiplier,
+                WarningTime = source.WarningTime,
+                PhaseObjectives = source.PhaseObjectives
+            };
         }
     }
 }

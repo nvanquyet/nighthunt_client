@@ -1,7 +1,10 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Camera;
 using NightHunt.Gameplay.Input.Handlers.Interaction;
@@ -127,9 +130,11 @@ namespace NightHunt.UI.Mobile
         private InputManager _boundInput;
         private IWeaponSystem _boundWeaponSystem;
         private PlayerInteractionSystem _boundPlayerInteractionSystem;
+        private CharacterLifecycleController _boundLifecycle;
         private Transform _boundPlayerTransform;
         private RaycastDetector _boundRaycastDetector;
         private ProximityInteractScanner _boundProximityScanner;
+        private readonly List<(EventTrigger Trigger, EventTrigger.Entry Entry)> _pointerTriggerBindings = new();
         private bool _lastReloadButtonShow;
         private bool _lastReloadButtonInteractable;
         private bool _lastPickupButtonVisible;
@@ -242,6 +247,10 @@ namespace NightHunt.UI.Mobile
                 ? playerTransform.GetComponentInChildren<PlayerInteractionSystem>(true)
                   ?? playerTransform.GetComponentInParent<PlayerInteractionSystem>(true)
                 : null;
+            _boundLifecycle = playerTransform != null
+                ? playerTransform.GetComponentInChildren<CharacterLifecycleController>(true)
+                  ?? playerTransform.GetComponentInParent<CharacterLifecycleController>(true)
+                : null;
             Debug.Log($"[MOBILE_INPUT] BindPlayerContext player={(playerTransform != null ? playerTransform.name : "null")} raycast={(_boundRaycastDetector != null ? _boundRaycastDetector.name : "null")} proximity={(_boundProximityScanner != null ? _boundProximityScanner.name : "null")} interactionSystem={(_boundPlayerInteractionSystem != null ? _boundPlayerInteractionSystem.name : "null")} joystick={(_joystick != null ? _joystick.name : "null")}");
 
             if (_cameraDragArea == null)
@@ -300,6 +309,7 @@ namespace NightHunt.UI.Mobile
             _boundInput = null;
             _boundPlayerTransform = null;
             _boundPlayerInteractionSystem = null;
+            _boundLifecycle = null;
             _boundRaycastDetector = null;
             _boundProximityScanner = null;
             SetContextualButtonVisible(_interactButton, false);
@@ -526,6 +536,14 @@ namespace NightHunt.UI.Mobile
 
         private void UnwireActionButtons()
         {
+            for (int i = 0; i < _pointerTriggerBindings.Count; i++)
+            {
+                var binding = _pointerTriggerBindings[i];
+                if (binding.Trigger != null)
+                    binding.Trigger.triggers.Remove(binding.Entry);
+            }
+            _pointerTriggerBindings.Clear();
+
             if (_crouchButton != null) _crouchButton.onClick.RemoveListener(OnCrouchClicked);
             if (_jumpButton != null) _jumpButton.onClick.RemoveListener(OnJumpClicked);
             if (_rollButton != null) _rollButton.onClick.RemoveListener(OnRollClicked);
@@ -549,8 +567,31 @@ namespace NightHunt.UI.Mobile
             return _boundPlayerInteractionSystem;
         }
 
+        private bool CanProcessGameplayAction()
+        {
+            if (!ShouldProcessMobileControls)
+                return false;
+
+            if (_boundLifecycle == null && _boundPlayerTransform != null)
+            {
+                _boundLifecycle =
+                    _boundPlayerTransform.GetComponentInChildren<CharacterLifecycleController>(true)
+                    ?? _boundPlayerTransform.GetComponentInParent<CharacterLifecycleController>(true);
+            }
+
+            if (_boundLifecycle != null && _boundLifecycle.IsDead)
+                return false;
+
+            var inputState = InputLayerManager.Instance != null
+                ? InputLayerManager.Instance.CurrentState
+                : InputState.PlayerAlive;
+
+            return inputState == InputState.PlayerAlive || inputState == InputState.None;
+        }
+
         private void OnSprintPressed(BaseEventData _)
         {
+            if (!CanProcessGameplayAction()) return;
             var movement = ResolveMovementHandler();
             Debug.Log($"[MOBILE_INPUT] Sprint press movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"}");
             movement?.SimulateSprint(true);
@@ -558,6 +599,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnSprintReleased(BaseEventData _)
         {
+            if (!ShouldProcessMobileControls) return;
             var movement = ResolveMovementHandler();
             Debug.Log($"[MOBILE_INPUT] Sprint release movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"}");
             movement?.SimulateSprint(false);
@@ -565,6 +607,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnCrouchClicked()
         {
+            if (!CanProcessGameplayAction()) return;
             var movement = ResolveMovementHandler();
             Debug.Log($"[MOBILE_INPUT] Crouch click movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"}");
             movement?.SimulateCrouchToggle();
@@ -572,6 +615,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnJumpClicked()
         {
+            if (!CanProcessGameplayAction()) return;
             var movement = ResolveMovementHandler();
             Debug.Log($"[MOBILE_INPUT] Jump click movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"}");
             movement?.SimulateJump();
@@ -579,6 +623,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnRollClicked()
         {
+            if (!CanProcessGameplayAction()) return;
             var movement = ResolveMovementHandler();
             Debug.Log($"[MOBILE_INPUT] Roll click movement={(movement != null ? "ok" : "null")} enabled={movement?.IsInputEnabled.ToString() ?? "n/a"} cooldown={_rollCooldownRemaining:F2}");
             movement?.SimulateRoll();
@@ -587,6 +632,7 @@ namespace NightHunt.UI.Mobile
         }
         private void OnReloadPressed(BaseEventData _)
         {
+            if (!CanProcessGameplayAction()) return;
             var weaponSystem = ResolveWeaponSystem();
             var activeSlot = weaponSystem?.GetActiveWeaponSlot();
             Debug.Log($"[WEAPON_FLOW] [00][ReloadButton.Press] weaponSystem={(weaponSystem != null ? "ok" : "null")} input={(_boundInput != null ? "ok" : "null")} combat={(_boundInput?.CombatHandler != null ? "ok" : "null")} activeWeapon={activeSlot?.ToString() ?? "none"}");
@@ -598,6 +644,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnInteractPressed(BaseEventData _)
         {
+            if (!CanProcessGameplayAction()) return;
             var interactionSystem = ResolvePlayerInteractionSystem();
             var interaction = ResolveInteractionHandler();
             Debug.Log($"[MOBILE_INPUT] Interact press interactionSystem={(interactionSystem != null ? "ok" : "null")} interaction={(interaction != null ? "ok" : "null")} enabled={interaction?.IsInputEnabled.ToString() ?? "n/a"}");
@@ -609,6 +656,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnInteractReleased(BaseEventData _)
         {
+            if (!ShouldProcessMobileControls) return;
             var interactionSystem = ResolvePlayerInteractionSystem();
             var interaction = ResolveInteractionHandler();
             Debug.Log($"[MOBILE_INPUT] Interact release interactionSystem={(interactionSystem != null ? "ok" : "null")} interaction={(interaction != null ? "ok" : "null")} enabled={interaction?.IsInputEnabled.ToString() ?? "n/a"}");
@@ -620,6 +668,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnPickupPressed(BaseEventData _)
         {
+            if (!CanProcessGameplayAction()) return;
             var interactionSystem = ResolvePlayerInteractionSystem();
             var interaction = ResolveInteractionHandler();
             Debug.Log($"[MOBILE_INPUT] Pickup press interactionSystem={(interactionSystem != null ? "ok" : "null")} interaction={(interaction != null ? "ok" : "null")} enabled={interaction?.IsInputEnabled.ToString() ?? "n/a"}");
@@ -664,13 +713,14 @@ namespace NightHunt.UI.Mobile
         {
             var weaponSystem = ResolveWeaponSystem();
             var activeSlot = weaponSystem?.GetActiveWeaponSlot();
+            bool inputAllowed = CanProcessGameplayAction();
             bool show = ShouldProcessMobileControls && weaponSystem != null && activeSlot.HasValue;
             bool canReload = show && weaponSystem.CanReload(activeSlot.Value);
 
             if (_reloadButton != null)
             {
                 _reloadButton.gameObject.SetActive(show);
-                _reloadButton.interactable = canReload;
+                _reloadButton.interactable = canReload && inputAllowed;
             }
             else
             {
@@ -683,9 +733,9 @@ namespace NightHunt.UI.Mobile
 
             if (forceLog || show != _lastReloadButtonShow || canReload != _lastReloadButtonInteractable)
             {
-                Debug.Log($"[WEAPON_FLOW] [00][ReloadButton.Visibility] show={show} interactable={canReload} active={activeSlot?.ToString() ?? "none"} weapon={weaponSystem?.GetActiveWeapon()?.DefinitionID ?? "null"} mobileMode={ShouldProcessMobileControls}");
+                Debug.Log($"[WEAPON_FLOW] [00][ReloadButton.Visibility] show={show} interactable={canReload && inputAllowed} active={activeSlot?.ToString() ?? "none"} weapon={weaponSystem?.GetActiveWeapon()?.DefinitionID ?? "null"} mobileMode={ShouldProcessMobileControls}");
                 _lastReloadButtonShow = show;
-                _lastReloadButtonInteractable = canReload;
+                _lastReloadButtonInteractable = canReload && inputAllowed;
             }
         }
 
@@ -733,9 +783,10 @@ namespace NightHunt.UI.Mobile
             IInteractable rayTarget = _boundRaycastDetector != null ? _boundRaycastDetector.CurrentInteractable : null;
             IInteractable interactTarget = ResolveInteractTarget(rayTarget, interactor);
 
+            bool inputAllowed = CanProcessGameplayAction();
             bool hasNearbyPickup = HasNearbyPickupTarget(interactor);
-            bool showPickup = IsValidPickupTarget(rayTarget, interactor) || hasNearbyPickup;
-            bool showInteract = interactTarget != null;
+            bool showPickup = inputAllowed && (IsValidPickupTarget(rayTarget, interactor) || hasNearbyPickup);
+            bool showInteract = inputAllowed && interactTarget != null;
 
             SetContextualButtonVisible(_pickupButton, showPickup);
             SetContextualButtonVisible(_interactButton, showInteract);
@@ -835,7 +886,7 @@ namespace NightHunt.UI.Mobile
             _boundWeaponSystem = null;
         }
 
-        private static void AddPointerTrigger(Selectable selectable, EventTriggerType type, UnityAction<BaseEventData> callback)
+        private void AddPointerTrigger(Selectable selectable, EventTriggerType type, UnityAction<BaseEventData> callback)
         {
             if (selectable == null) return;
 
@@ -843,6 +894,7 @@ namespace NightHunt.UI.Mobile
             var entry = new EventTrigger.Entry { eventID = type };
             entry.callback.AddListener(callback);
             trigger.triggers.Add(entry);
+            _pointerTriggerBindings.Add((trigger, entry));
         }
 
         // ── Roll Action Subscription  (drives cooldown UI only) ───────────────

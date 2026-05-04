@@ -328,8 +328,23 @@ namespace NightHunt.Gameplay.FogOfWar
         {
             if (_hiderBehavior == null) return;
             var host = GetHiderHost();
-            _hiderBehavior.ModifyHiddenRenderers(
-                host.GetComponentsInChildren<Renderer>(includeInactive: true));
+            Renderer[] renderers = host.GetComponentsInChildren<Renderer>(includeInactive: true);
+            int count = 0;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] != null)
+                    count++;
+            }
+
+            var filtered = new Renderer[count];
+            int index = 0;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                if (renderers[i] != null)
+                    filtered[index++] = renderers[i];
+            }
+
+            _hiderBehavior.ModifyHiddenRenderers(filtered);
         }
 
         private Transform GetHiderHost()

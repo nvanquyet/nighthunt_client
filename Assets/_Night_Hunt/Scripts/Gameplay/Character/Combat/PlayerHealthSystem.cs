@@ -1,4 +1,5 @@
 using System;
+using FishNet.Connection;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine;
@@ -30,7 +31,7 @@ namespace NightHunt.Gameplay.Character.Combat
     ///   All child hitboxes should have PlayerHitboxMarker referencing this component.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class PlayerHealthSystem : NetworkBehaviour, IHittable
+    public sealed class PlayerHealthSystem : NetworkBehaviour, IHittable, IHealthSource
     {
         [Header("References")]
         [Tooltip("PlayerStatSystem on this player. Auto-resolved if null.")]
@@ -48,8 +49,17 @@ namespace NightHunt.Gameplay.Character.Combat
         [SerializeField] private bool _applyArmorReduction = true;
 
         [Header("Anti-Cheat")]
+        [Tooltip("Legacy fallback only. Player damage should normally come from server-authoritative weapon/projectile systems.")]
+        [SerializeField] private bool _allowClientDamageRequests = false;
+
         [Tooltip("Maximum plausible distance (m) between shooter and target. Hits beyond this are rejected. 0 = disabled.")]
         [SerializeField] private float _maxHitDistance = 500f;
+
+        [Tooltip("Maximum raw damage accepted from the legacy client damage RPC when it is explicitly enabled.")]
+        [SerializeField] private float _maxClientRequestedDamage = 150f;
+
+        [Tooltip("When false, same-team player damage is rejected on the server.")]
+        [SerializeField] private bool _allowFriendlyFire = false;
 
         // ── Instance events (fire on this player's instance on all clients) ─────
         /// <summary>Fired on every client when a hit is confirmed. Use for blood / hit marker VFX.</summary>
@@ -57,6 +67,11 @@ namespace NightHunt.Gameplay.Character.Combat
 
         /// <summary>Fired on every client when health reaches 0. killerName may be empty for world damage.</summary>
         public event Action<string> OnPlayerDied;
+
+        public float CurrentHealth => _statSystem != null ? _statSystem.GetStat(PlayerStatType.Health) : 0f;
+        public float MaxHealth => Mathf.Max(1f, _statSystem != null ? _statSystem.GetStat(PlayerStatType.MaxHealth) : 100f);
+        public bool IsDead => _statSystem != null && CurrentHealth <= 0f;
+        public event Action<HealthChangeEvent> HealthChanged;
 
         // ── Static events (fire for ANY player across all clients) ────────────
         /// <summary>Raised on all clients whenever any player takes a hit. Use for shooter-side damage numbers.</summary>
@@ -117,13 +132,22 @@ namespace NightHunt.Gameplay.Character.Combat
                 _statSystemSource = statConcrete;
         }
 
-        private void EnsureClientWorldHealthBar()
+        public override void OnStartNetwork()
         {
-            if (Application.isBatchMode)
-                return;
+            base.OnStartNetwork();
 
-            if (GetComponentInChildren<WorldHealthBar>(true) == null)
-                gameObject.AddComponent<WorldHealthBar>();
+            ResolveReferences();
+
+            if (_statSystem != null)
+                _statSystem.OnStatChanged += HandleStatChangedForHealthSource;
+        }
+
+        public override void OnStopNetwork()
+        {
+            if (_statSystem != null)
+                _statSystem.OnStatChanged -= HandleStatChangedForHealthSource;
+
+            base.OnStopNetwork();
         }
 
         public override void OnStartServer()
@@ -139,9 +163,19 @@ namespace NightHunt.Gameplay.Character.Combat
             if (_scoringSystem == null)
                 _scoringSystem = FindFirstObjectByType<ScoringSystem>();
 
-            EnsureClientWorldHealthBar();
         }
 
+        private void HandleStatChangedForHealthSource(PlayerStatType type, float oldValue, float newValue)
+        {
+            if (type == PlayerStatType.Health)
+            {
+                HealthChanged?.Invoke(new HealthChangeEvent(oldValue, newValue, MaxHealth));
+                return;
+            }
+
+            if (type == PlayerStatType.MaxHealth)
+                HealthChanged?.Invoke(new HealthChangeEvent(CurrentHealth, CurrentHealth, MaxHealth));
+        }
         // ── IHittable (owner-client call gateway) ─────────────────────────────
 
         /// <summary>
@@ -150,6 +184,12 @@ namespace NightHunt.Gameplay.Character.Combat
         /// </summary>
         public void RequestDamage(DamageInfo info)
         {
+            if (IsServerStarted)
+            {
+                ApplyDamageServer(info);
+                return;
+            }
+
             RequestDamageServerRpc(info);
         }
 
@@ -160,9 +200,9 @@ namespace NightHunt.Gameplay.Character.Combat
         /// Server validates and applies if the hit is legitimate.
         /// </summary>
         [ServerRpc(RequireOwnership = false)]
-        private void RequestDamageServerRpc(DamageInfo info)
+        private void RequestDamageServerRpc(DamageInfo info, NetworkConnection conn = null)
         {
-            if (!ValidateHit(info))
+            if (!ValidateHit(info, conn))
                 return;
 
             float finalDamage = ComputeFinalDamage(info);
@@ -188,7 +228,7 @@ namespace NightHunt.Gameplay.Character.Combat
         // ── Private server logic ──────────────────────────────────────────────
 
         [Server]
-        private bool ValidateHit(DamageInfo info)
+        private bool ValidateHit(DamageInfo info, NetworkConnection sender = null)
         {
             if (_statSystem == null)
             {
@@ -200,6 +240,55 @@ namespace NightHunt.Gameplay.Character.Combat
             if (_statSystem.GetStat(PlayerStatType.Health) <= 0f)
             {
                 Debug.Log($"[PlayerHealthSystem] ValidateHit rejected: {_networkPlayer?.DisplayName} is already dead.");
+                return false;
+            }
+
+            if (sender != null)
+            {
+                if (!_allowClientDamageRequests)
+                {
+                    Debug.LogWarning($"[PlayerHealthSystem] Client damage RPC rejected: legacy client damage is disabled. sender={sender.ClientId} weapon={info.WeaponId}");
+                    return false;
+                }
+
+                if (info.ShooterNetworkObjectId <= 0)
+                {
+                    Debug.LogWarning($"[PlayerHealthSystem] Client damage RPC rejected: missing shooter object id. sender={sender.ClientId}");
+                    return false;
+                }
+
+                if (!FishNet.InstanceFinder.ServerManager.Objects.Spawned.TryGetValue(info.ShooterNetworkObjectId, out var shooterNob))
+                {
+                    Debug.LogWarning($"[PlayerHealthSystem] Client damage RPC rejected: shooter object {info.ShooterNetworkObjectId} not spawned. sender={sender.ClientId}");
+                    return false;
+                }
+
+                if (shooterNob.Owner != sender)
+                {
+                    Debug.LogWarning($"[PlayerHealthSystem] Client damage RPC rejected: sender={sender.ClientId} does not own shooter={info.ShooterNetworkObjectId}.");
+                    return false;
+                }
+
+                if (info.Damage <= 0f || info.Damage > _maxClientRequestedDamage)
+                {
+                    Debug.LogWarning($"[PlayerHealthSystem] Client damage RPC rejected: damage={info.Damage:F1} outside allowed range.");
+                    return false;
+                }
+            }
+
+            NetworkPlayer shooterPlayer = ResolvePlayerByNetworkObjectId(info.ShooterNetworkObjectId);
+            if (shooterPlayer != null && !shooterPlayer.IsAlive)
+            {
+                Debug.LogWarning($"[PlayerHealthSystem] ValidateHit rejected: shooter '{shooterPlayer.DisplayName}' is dead.");
+                return false;
+            }
+
+            if (!_allowFriendlyFire && shooterPlayer != null && _networkPlayer != null &&
+                shooterPlayer.ObjectId != _networkPlayer.ObjectId &&
+                shooterPlayer.TeamId >= 0 && _networkPlayer.TeamId >= 0 &&
+                shooterPlayer.TeamId == _networkPlayer.TeamId)
+            {
+                Debug.LogWarning($"[PlayerHealthSystem] ValidateHit rejected: friendly fire {shooterPlayer.DisplayName} -> {_networkPlayer.DisplayName}.");
                 return false;
             }
 
@@ -302,6 +391,10 @@ namespace NightHunt.Gameplay.Character.Combat
             if (shooterNetObjId < 0)
                 return string.Empty;
 
+            NetworkPlayer shooter = ResolvePlayerByNetworkObjectId(shooterNetObjId);
+            if (shooter != null)
+                return shooter.DisplayName;
+
             var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
             if (players == null)
                 return string.Empty;
@@ -319,6 +412,10 @@ namespace NightHunt.Gameplay.Character.Combat
         private int ResolveKillerTeamId(int shooterNetObjId)
         {
             if (shooterNetObjId < 0) return -1;
+
+            NetworkPlayer shooter = ResolvePlayerByNetworkObjectId(shooterNetObjId);
+            if (shooter != null)
+                return shooter.TeamId;
 
             var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
             if (players == null) return -1;
@@ -338,6 +435,13 @@ namespace NightHunt.Gameplay.Character.Combat
             if (shooterNetObjId < 0)
                 return string.Empty;
 
+            NetworkPlayer shooter = ResolvePlayerByNetworkObjectId(shooterNetObjId);
+            if (shooter != null)
+            {
+                var data = RegistryService.Instance?.GetPrivateDataByFishNetId(shooter.OwnerId);
+                return data?.BackendPlayerId ?? string.Empty;
+            }
+
             var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
             if (players == null)
                 return string.Empty;
@@ -354,6 +458,21 @@ namespace NightHunt.Gameplay.Character.Combat
             return string.Empty;
         }
 
+        private static NetworkPlayer ResolvePlayerByNetworkObjectId(int shooterNetObjId)
+        {
+            if (shooterNetObjId <= 0)
+                return null;
+
+            if (FishNet.InstanceFinder.ServerManager.Objects.Spawned.TryGetValue(shooterNetObjId, out var nob))
+            {
+                return nob.GetComponent<NetworkPlayer>()
+                    ?? nob.GetComponentInChildren<NetworkPlayer>(true)
+                    ?? nob.GetComponentInParent<NetworkPlayer>(true);
+            }
+
+            return null;
+        }
+
         // ── Observer RPCs (server → all clients) ──────────────────────────────
 
         /// <summary>Runs on all clients: spawns blood / hit-marker VFX at the hit point.</summary>
@@ -363,8 +482,23 @@ namespace NightHunt.Gameplay.Character.Combat
             Debug.Log($"[PlayerHealthSystem] Hit received on client — damage: {info.Damage:F1}" +
                       $" at {info.HitPoint}" + (info.IsHeadshot ? " [HEADSHOT]" : ""));
 
+            PublishHitHealthReveal(info);
             OnHitReceived?.Invoke(info);
             OnAnyHitReceived?.Invoke(info);
+        }
+
+        private void PublishHitHealthReveal(DamageInfo info)
+        {
+            float current = CurrentHealth;
+            float max = MaxHealth;
+            float previous = Mathf.Min(max, current + Mathf.Max(1f, info.Damage));
+
+            HealthChanged?.Invoke(new HealthChangeEvent(
+                previous,
+                current,
+                max,
+                info.ShooterNetworkObjectId,
+                forceReveal: true));
         }
 
         /// <summary>Runs on all clients: triggers death screen, kill feed, etc.</summary>
@@ -382,7 +516,7 @@ namespace NightHunt.Gameplay.Character.Combat
             OnAnyPlayerDied?.Invoke(victimName, killerName, weaponId);
 
             // GLOBAL EVENT FOR KILL FEED / MATCH LOGIC / SCORING:
-            NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance.Publish(new NightHunt.Gameplay.Core.Events.PlayerKilledEvent
+            NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.PlayerKilledEvent
             {
                 VictimName = victimName,
                 KillerName = killerName,

@@ -139,6 +139,7 @@ namespace NightHunt.UI
         private bool _initializedForPlayer;
         private Coroutine _inventoryProximityRefreshCoroutine;
         private InputManager _subscribedInputManager;
+        private bool _combatEventsSubscribed;
 
         // ── Public accessors ──────────────────────────────────────────────────
 
@@ -172,6 +173,8 @@ namespace NightHunt.UI
             NetworkPlayer.OnOwnerReady += Initialize;
 
             TrySubscribeInputHandlers();
+            if (_initializedForPlayer)
+                SubscribeCombatEvents();
 
             // Context change from InputLayerManager drives Inventory ↔ Combat transition.
             if (InputLayerManager.Instance != null)
@@ -194,6 +197,7 @@ namespace NightHunt.UI
             if (SpectateManager.Instance != null)
                 SpectateManager.Instance.OnCurrentPlayerChanged -= HandlePlayerChanged;
 
+            UnsubscribeCombatEvents();
             UnsubscribeLifecycle();
         }
 
@@ -219,8 +223,7 @@ namespace NightHunt.UI
 
         private void OnDestroy()
         {
-            PlayerHealthSystem.OnAnyPlayerDied  -= HandleAnyPlayerDied;
-            PlayerHealthSystem.OnAnyHitReceived -= HandleAnyHitReceived;
+            UnsubscribeCombatEvents();
             _playerContext?.Dispose();
         }
 
@@ -272,8 +275,7 @@ namespace NightHunt.UI
             BindMobileInput(_mobileHUDPanel, localPlayer);
 
             // ⑥ Global combat events (all players)
-            PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;
-            PlayerHealthSystem.OnAnyHitReceived += HandleAnyHitReceived;
+            SubscribeCombatEvents();
 
             // ⑦ Local player lifecycle — must come before WireInteractionPrompt because
             //    SubscribeLifecycle() calls UnsubscribeLifecycle() which resets _localInteractionSystem.
@@ -554,6 +556,26 @@ namespace NightHunt.UI
         private void HandleAnyPlayerDied(string victimName, string killerName, string weaponId)
         {
             _killFeedUI?.AddKill(killerName, victimName, weaponId);
+        }
+
+        private void SubscribeCombatEvents()
+        {
+            if (_combatEventsSubscribed)
+                return;
+
+            PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;
+            PlayerHealthSystem.OnAnyHitReceived += HandleAnyHitReceived;
+            _combatEventsSubscribed = true;
+        }
+
+        private void UnsubscribeCombatEvents()
+        {
+            if (!_combatEventsSubscribed)
+                return;
+
+            PlayerHealthSystem.OnAnyPlayerDied  -= HandleAnyPlayerDied;
+            PlayerHealthSystem.OnAnyHitReceived -= HandleAnyHitReceived;
+            _combatEventsSubscribed = false;
         }
 
         private void HandleAnyHitReceived(DamageInfo info)

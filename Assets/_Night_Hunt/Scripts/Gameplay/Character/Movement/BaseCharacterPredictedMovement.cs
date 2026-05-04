@@ -115,6 +115,10 @@ namespace NightHunt.Gameplay.Character
         // ===== ANIMATION EVENTS =====
         public event System.Action OnJumpTriggered;
         public event System.Action OnRollTriggered;
+        private bool _jumpTriggeredThisTick;
+        private bool _rollTriggeredThisTick;
+        private uint _lastRemoteJumpTriggerTick = uint.MaxValue;
+        private uint _lastRemoteRollTriggerTick = uint.MaxValue;
 
         // ===== DEATH STATE =====
         // Resolved lazily in GatherInput() to avoid Awake ordering issues.
@@ -496,6 +500,9 @@ namespace NightHunt.Gameplay.Character
             if      (canSprint)    speed *= GetSprintSpeedMultiplier();
             else if (data.Crouch)  speed *= movementSettings.crouchMultiplier;
 
+            _sprint = canSprint;
+            _crouch = data.Crouch && !canSprint;
+
             // Notify physics implementation when crouch state changes (e.g. capsule resize).
             UpdateCrouchPhysics(data.Crouch);
 
@@ -602,6 +609,7 @@ namespace NightHunt.Gameplay.Character
                     Debug.Log($"[ROLL_FIX] Leap roll start -> allow falling during spawn grace. vertVel={_verticalVelocity:F3}");
                 }
                 
+                _rollTriggeredThisTick = true;
                 OnRollTriggered?.Invoke(); // Fire animation event
             }
 
@@ -653,6 +661,7 @@ namespace NightHunt.Gameplay.Character
                 _verticalVelocity = Mathf.Sqrt(2f * movementSettings.gravity * movementSettings.jumpHeight);
                 _spawnGraceIgnoreDownwardClampUntilGrounded = true;
                 Debug.Log($"[ROLL_FIX] Jump start -> allow falling during spawn grace. vertVel={_verticalVelocity:F3}");
+                _jumpTriggeredThisTick = true;
                 OnJumpTriggered?.Invoke(); // Fire animation event
             }
 
@@ -778,6 +787,9 @@ namespace NightHunt.Gameplay.Character
             if (!IsServerStarted || !IsSpawned)
                 return;
 
+            bool jumpTriggered = _jumpTriggeredThisTick;
+            bool rollTriggered = _rollTriggeredThisTick;
+
             var data = new MovementReconcileData(
                 transform.position,
                 transform.rotation,
@@ -785,10 +797,17 @@ namespace NightHunt.Gameplay.Character
                 _stamina,
                 _isRolling,
                 _rollTimer,
-                _rollDir
+                _rollDir,
+                _sprint,
+                _crouch,
+                _groundedGraceTimer > 0f,
+                jumpTriggered,
+                rollTriggered
             );
 
             Reconcile(data, Channel.Unreliable);
+            _jumpTriggeredThisTick = false;
+            _rollTriggeredThisTick = false;
         }
 
         protected override MovementReconcileData CreateReconcileData()
@@ -800,7 +819,12 @@ namespace NightHunt.Gameplay.Character
                 _stamina,
                 _isRolling,
                 _rollTimer,
-                _rollDir
+                _rollDir,
+                _sprint,
+                _crouch,
+                _groundedGraceTimer > 0f,
+                _jumpTriggeredThisTick,
+                _rollTriggeredThisTick
             );
         }
 
@@ -828,6 +852,27 @@ namespace NightHunt.Gameplay.Character
             {
                 _targetPosition = data.Position;
                 _targetRotation = data.Rotation;
+                _velocity = data.Velocity;
+                _stamina = data.Stamina;
+                _sprint = data.IsSprinting;
+                _crouch = data.IsCrouching;
+                _isRolling = data.IsRolling;
+                _rollTimer = data.RollTimer;
+                _rollDir = data.RollDir;
+                _groundedGraceTimer = data.IsGrounded ? groundedHysteresisTime : 0f;
+
+                uint triggerTick = data.GetTick();
+                if (data.JumpTriggered && triggerTick != _lastRemoteJumpTriggerTick)
+                {
+                    _lastRemoteJumpTriggerTick = triggerTick;
+                    OnJumpTriggered?.Invoke();
+                }
+
+                if (data.RollTriggered && triggerTick != _lastRemoteRollTriggerTick)
+                {
+                    _lastRemoteRollTriggerTick = triggerTick;
+                    OnRollTriggered?.Invoke();
+                }
             }
         }
 

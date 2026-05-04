@@ -57,6 +57,7 @@ namespace NightHunt.Gameplay.Match
 
         // Per-player death counter keyed by BackendPlayerId (Bug #13 fix)
         private readonly Dictionary<string, int> _playerDeathCount = new();
+        private readonly Dictionary<CharacterLifecycleController, Action> _deathSubscriptions = new();
 
         // ── Dependency injection ───────────────────────────────────────────────
         // BeaconManager will self-register; we keep a weak reference here.
@@ -85,8 +86,19 @@ namespace NightHunt.Gameplay.Match
         {
             base.OnStartServer();
 
-            // Subscribe to per-player death so we can re-evaluate elimination after every death
-            RegistryService.Instance.OnPlayerRegistered += (np, _) => SubscribePlayerDeath(np);
+            RegistryService registry = RegistryService.Instance;
+            if (registry != null)
+            {
+                registry.OnPlayerRegistered += HandlePlayerRegistered;
+                registry.OnPlayerUnregistered += HandlePlayerUnregistered;
+
+                foreach (var player in registry.GetAllPlayers())
+                    SubscribePlayerDeath(player);
+            }
+            else
+            {
+                Debug.LogWarning("[MatchEndManager] RegistryService not found; elimination death hooks will attach when registry is available.");
+            }
 
             // Listen for beacon destruction
             GameplayEventBus.Instance?.Subscribe<BeaconDestroyedEvent>(OnBeaconDestroyed);
@@ -100,6 +112,15 @@ namespace NightHunt.Gameplay.Match
         public override void OnStopServer()
         {
             base.OnStopServer();
+            RegistryService registry = RegistryService.Instance;
+            if (registry != null)
+            {
+                registry.OnPlayerRegistered -= HandlePlayerRegistered;
+                registry.OnPlayerUnregistered -= HandlePlayerUnregistered;
+            }
+
+            UnsubscribeAllPlayerDeaths();
+
             GameplayEventBus.Instance?.Unsubscribe<BeaconDestroyedEvent>(OnBeaconDestroyed);
             if (_phaseManager != null)
             {
@@ -201,16 +222,61 @@ namespace NightHunt.Gameplay.Match
 
         #region Player death hook
 
+        private void HandlePlayerRegistered(NetworkPlayer np, PlayerRegistryData _)
+        {
+            SubscribePlayerDeath(np);
+        }
+
+        private void HandlePlayerUnregistered(NetworkPlayer np, PlayerRegistryData _)
+        {
+            UnsubscribePlayerDeath(np);
+        }
+
         private void SubscribePlayerDeath(NetworkPlayer np)
         {
+            if (np == null)
+                return;
+
             // CharacterLifecycleController on the same GameObject fires OnDied
             var lifecycle = ComponentResolver.Find<CharacterLifecycleController>(np)
                 .OnSelf()
                 .InChildren()
                 .OrLogWarning("[Auto] CharacterLifecycleController not found")
                 .Resolve();
-            if (lifecycle != null)
-                lifecycle.OnDied += () => OnPlayerDied(np);
+            if (lifecycle == null || _deathSubscriptions.ContainsKey(lifecycle))
+                return;
+
+            Action handler = () => OnPlayerDied(np);
+            _deathSubscriptions[lifecycle] = handler;
+            lifecycle.OnDied += handler;
+        }
+
+        private void UnsubscribePlayerDeath(NetworkPlayer np)
+        {
+            if (np == null)
+                return;
+
+            var lifecycle = ComponentResolver.Find<CharacterLifecycleController>(np)
+                .OnSelf()
+                .InChildren()
+                .Resolve();
+
+            if (lifecycle == null || !_deathSubscriptions.TryGetValue(lifecycle, out var handler))
+                return;
+
+            lifecycle.OnDied -= handler;
+            _deathSubscriptions.Remove(lifecycle);
+        }
+
+        private void UnsubscribeAllPlayerDeaths()
+        {
+            foreach (var kvp in _deathSubscriptions)
+            {
+                if (kvp.Key != null)
+                    kvp.Key.OnDied -= kvp.Value;
+            }
+
+            _deathSubscriptions.Clear();
         }
 
         private void OnPlayerDied(NetworkPlayer np)

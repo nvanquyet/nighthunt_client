@@ -3,10 +3,12 @@ using FishNet.Connection;
 using FishNet.Object.Synchronizing;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Gameplay.FogOfWar;
+using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using UnityEngine;
 using Unity.Cinemachine;
@@ -58,6 +60,9 @@ namespace NightHunt.Networking.Player
         private NightHunt.GameplaySystems.Core.Interfaces.IAimSystem _cachedAimSystem;
         private NightHunt.Gameplay.Input.Handlers.Movement.MovementInputHandler _cachedMovementHandler;
         private NightHunt.Gameplay.Input.Handlers.Camera.CameraInputHandler _cachedCameraHandler;
+        private PlayerModelLoader _modelLoader;
+        private bool _modelReady;
+        private bool _clientRuntimeReadySent;
 
 
         // ── PUBLIC PLAYER DATA ────────────────────────────────────────────────
@@ -143,10 +148,19 @@ namespace NightHunt.Networking.Player
                 Debug.LogError(
                     "[NetworkPlayer] Failed to initialize GameplaySystemsBridge - missing required systems!");
             }
+
+            _modelLoader = ComponentResolver.Find<PlayerModelLoader>(this)
+                .OnSelf().OnRoot().InRootChildren()
+                .Resolve();
+            if (_modelLoader != null)
+                _modelLoader.OnModelReady += HandleModelReady;
         }
 
         private void OnDestroy()
         {
+            if (_modelLoader != null)
+                _modelLoader.OnModelReady -= HandleModelReady;
+
             // Dispose bridge when player is destroyed
             if (GamePlaySystemBridge is System.IDisposable disposable)
             {
@@ -173,6 +187,13 @@ namespace NightHunt.Networking.Player
             // so we never miss the first change that carries the real player data.
             _playerData.OnChange += OnPlayerDataChanged;
             _isAlive.OnChange += OnAliveStateChanged;
+            _clientRuntimeReadySent = false;
+
+            if (_modelLoader != null && _modelLoader.CurrentModelInstance != null)
+            {
+                _modelReady = true;
+                TryNotifyClientRuntimeReady();
+            }
 
             Debug.Log($"[FLOW §10] NetworkPlayer.OnStartClient: ObjectId={ObjectId} IsOwner={IsOwner} Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId} IsAlive={IsAlive}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
@@ -208,6 +229,7 @@ namespace NightHunt.Networking.Player
             if (IsOwner)
             {
                 _ownerSetupDone = false;
+                _clientRuntimeReadySent = false;
                 if (!string.IsNullOrEmpty(PlayerData.DisplayName))
                     FinishOwnerSetup();
                 // else: wait for next OnPlayerDataChanged (data not yet synced)
@@ -220,6 +242,8 @@ namespace NightHunt.Networking.Player
             _playerData.OnChange -= OnPlayerDataChanged;
             _isAlive.OnChange -= OnAliveStateChanged;
             PlayerPublicRegistry.Instance.Unregister((int)this.ObjectId);
+            _modelReady = false;
+            _clientRuntimeReadySent = false;
         }
 
         /// <summary>
@@ -269,6 +293,32 @@ namespace NightHunt.Networking.Player
             Debug.Log($"[FLOW §10c] NetworkPlayer.FinishOwnerSetup: Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             SetupOwnerSide();
             SpectateManager.Instance?.SetLocalPlayer(this);
+            TryNotifyClientRuntimeReady();
+        }
+
+        private void HandleModelReady(GameObject _)
+        {
+            _modelReady = true;
+            TryNotifyClientRuntimeReady();
+        }
+
+        private void TryNotifyClientRuntimeReady()
+        {
+            if (!IsOwner || _clientRuntimeReadySent || !_ownerSetupDone)
+                return;
+
+            if (_modelLoader != null && !_modelReady && _modelLoader.CurrentModelInstance == null)
+                return;
+
+            _clientRuntimeReadySent = true;
+            Debug.Log($"[FLOW §12] NetworkPlayer client runtime ready: ObjectId={ObjectId} modelReady={_modelReady || _modelLoader == null}");
+            NotifyClientRuntimeReadyServerRpc();
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void NotifyClientRuntimeReadyServerRpc(NetworkConnection conn = null)
+        {
+            ServerGameManager.Instance?.OnPlayerClientRuntimeReady(conn ?? Owner, this);
         }
 
         /// <summary>

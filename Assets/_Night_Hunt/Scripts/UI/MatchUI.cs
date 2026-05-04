@@ -43,7 +43,7 @@ namespace NightHunt.UI
 
         // ── Phase Started Banner ──────────────────────────────────────────────
         [Header("Phase Started Banner")]
-        [Tooltip("Banner shown briefly when a new phase starts. Reuses the warning panel if unset.")]
+        [Tooltip("Banner shown briefly when a new phase starts. Leave null to disable phase-start banners.")]
         [SerializeField] private GameObject      _phaseStartPanel;
         [Tooltip("Phase title text inside the phase-start banner.")]
         [SerializeField] private TextMeshProUGUI _phaseStartTitleText;
@@ -209,21 +209,17 @@ namespace NightHunt.UI
         {
             if (_phaseStartCoroutine != null) StopCoroutine(_phaseStartCoroutine);
 
-            // Prefer dedicated phaseStartPanel; fall back to reusing warningPanel.
-            var panel = _phaseStartPanel != null ? _phaseStartPanel : warningPanel;
-            if (panel == null) return;
+            if (_phaseStartPanel == null) return;
 
             if (_phaseStartTitleText != null)
                 _phaseStartTitleText.text = FormatPhaseName(evt.Phase.ToString());
-            else if (warningText != null)
-                warningText.text = FormatPhaseName(evt.Phase.ToString());
 
             if (_phaseObjectivesText != null)
                 _phaseObjectivesText.text = string.IsNullOrEmpty(evt.ObjectivesSummary)
                     ? string.Empty
                     : evt.ObjectivesSummary;
 
-            _phaseStartCoroutine = StartCoroutine(ShowPhaseStartBanner(panel));
+            _phaseStartCoroutine = StartCoroutine(ShowPhaseStartBanner(_phaseStartPanel));
         }
 
         private IEnumerator ShowPhaseStartBanner(GameObject panel)

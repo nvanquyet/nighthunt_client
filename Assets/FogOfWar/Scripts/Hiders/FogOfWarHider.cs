@@ -33,7 +33,7 @@ namespace FOW
 
         void CalculateSamplePointData()
         {
-            if (SamplePoints.Length == 0)
+            if (SamplePoints == null || SamplePoints.Length == 0)
             {
                 SamplePoints = new Transform[1];
                 SamplePoints[0] = transform;
@@ -41,8 +41,14 @@ namespace FOW
             MaxDistBetweenSamplePoints = 0;
             for (int i = 0; i < SamplePoints.Length; i++)
             {
+                if (SamplePoints[i] == null)
+                    SamplePoints[i] = transform;
+
                 for (int j = i; j < SamplePoints.Length; j++)
                 {
+                    if (SamplePoints[j] == null)
+                        SamplePoints[j] = transform;
+
                     MaxDistBetweenSamplePoints = Mathf.Max(MaxDistBetweenSamplePoints, Vector3.Distance(SamplePoints[i].position, SamplePoints[j].position));
                 }
             }

@@ -14,7 +14,7 @@ namespace NightHunt.Gameplay.Objective
     /// Players destroy this node by dealing damage to it (IHittable).
     /// On completion: awards objective score to the destroying team.
     /// </summary>
-    public class EMPNodeObjective : NetworkBehaviour, IObjective, IHittable
+    public class EMPNodeObjective : NetworkBehaviour, IObjective, IHittable, IHealthSource
     {
         [Header("EMP Node Settings")]
         [SerializeField] private string objectiveId = "EMP_NODE";
@@ -36,7 +36,9 @@ namespace NightHunt.Gameplay.Objective
         public bool   IsCompleted  => _syncIsCompleted.Value;
         public float  CurrentHealth => _syncHealth.Value;
         public float  MaxHealth => maxHealth;
+        public bool   IsDead => IsCompleted || CurrentHealth <= 0f;
         public event System.Action<float, float> OnHealthChanged;
+        public event System.Action<HealthChangeEvent> HealthChanged;
 
         public float Progress
         {
@@ -59,7 +61,6 @@ namespace NightHunt.Gameplay.Objective
         {
             base.OnStartClient();
             _syncHealth.OnChange += OnHealthSyncChanged;
-            EnsureWorldHealthBar();
         }
 
         public override void OnStopClient()
@@ -104,14 +105,7 @@ namespace NightHunt.Gameplay.Objective
         private void OnHealthSyncChanged(float prev, float next, bool asServer)
         {
             OnHealthChanged?.Invoke(next, maxHealth);
-        }
-
-        private void EnsureWorldHealthBar()
-        {
-            if (GetComponentInChildren<WorldHealthBarGeneric>(true) != null)
-                return;
-
-            gameObject.AddComponent<WorldHealthBarGeneric>();
+            HealthChanged?.Invoke(new HealthChangeEvent(prev, next, MaxHealth, forceReveal: next < prev));
         }
 
         /// <summary>Take damage (server-only helper called by IHittable path).</summary>

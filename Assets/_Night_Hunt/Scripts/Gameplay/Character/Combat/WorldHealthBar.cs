@@ -1,221 +1,272 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
-using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Spectator;
-using NightHunt.Gameplay.StatSystem.Core.Interfaces;
-using NightHunt.Gameplay.StatSystem.Core.Types;
-using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat
 {
     /// <summary>
-    /// World-space health bar shown above a character when they are hit by the local player
-    /// or a teammate. Hidden by default; shown for <see cref="_hideDelay"/> seconds from the
-    /// last qualifying hit.
-    ///
-    /// Setup on the player prefab:
-    ///   1. Create a child GameObject "WorldHealthBarRoot" at Y ≈ 2.5.
-    ///   2. Add a Canvas (World Space, Scale 0.01) to the child.
-    ///   3. Inside the canvas add a Slider "HealthBar" and an optional TMP text "HealthText".
-    ///   4. Attach this component to the player prefab root (or the canvas root).
-    ///   5. Assign _barRoot, _healthSlider (and optionally _healthText) in the Inspector.
-    ///   6. DO NOT enable the component on dedicated servers — guard with
-    ///      <c>if (IsServer &amp;&amp; !IsClient) { enabled = false; return; }</c> if needed.
-    ///
-    /// The component subscribes to:
-    ///   • PlayerHealthSystem.OnHitReceived (instance event) → show/reset timer
-    ///   • IPlayerStatSystem.OnStatChanged → refresh bar fill while visible
+    /// Single world-space health bar component. Add this only to prefabs that need a bar.
+    /// The component resolves one IHealthSource in the prefab hierarchy and listens to its
+    /// network-synced health events.
     /// </summary>
+    [DisallowMultipleComponent]
     public class WorldHealthBar : MonoBehaviour
     {
-        // ── Inspector ──────────────────────────────────────────────────────────
+        private enum VisibilityPolicy
+        {
+            Auto,
+            AnyDamage,
+            PlayerShooterTeamOrSpectated
+        }
+
+        [Header("Follow")]
+        [Tooltip("Optional transform the bar follows. If empty, follows the resolved health source transform.")]
+        [SerializeField] private Transform _followTarget;
 
         [Header("References")]
-        [Tooltip("Root GameObject of the health bar canvas. Toggled visible/hidden.")]
+        [Tooltip("Child visual root toggled visible/hidden. Do not assign the GameObject that holds this component.")]
         [SerializeField] private GameObject _barRoot;
 
-        [Tooltip("Slider used as the health fill (value 0–1).")]
+        [Tooltip("Slider used as the health fill (value 0-1).")]
         [SerializeField] private Slider _healthSlider;
 
-        [Tooltip("(Optional) Text showing 'current / max' health.")]
+        [Tooltip("(Optional) TMP text showing 'current / max'.")]
         [SerializeField] private TextMeshProUGUI _healthText;
 
-        [Header("Display Settings")]
-        [Tooltip("Seconds after the last qualifying hit before the bar is hidden automatically.")]
-        [SerializeField] private float _hideDelay = 7f;
+        [Header("Display")]
+        [Tooltip("Auto = player bars use shooter/team rules; non-player bars show on any damage.")]
+        [SerializeField] private VisibilityPolicy _visibilityPolicy = VisibilityPolicy.Auto;
 
-        [Tooltip("World-space height offset above the character pivot.")]
+        [Tooltip("Seconds after the last damage event before the bar hides automatically.")]
+        [SerializeField] private float _hideDelay = 4f;
+
+        [Tooltip("World-space offset from the followed transform.")]
         [SerializeField] private Vector3 _offset = new Vector3(0f, 2.5f, 0f);
 
-        // ── Runtime ────────────────────────────────────────────────────────────
+        [SerializeField] private bool _billboardToCamera = true;
 
-        private PlayerHealthSystem  _healthSystem;
-        private NetworkPlayer       _networkPlayer;
-        private IPlayerStatSystem   _statSystem;
-        private UnityEngine.Camera  _mainCamera;
-        private Coroutine           _hideCoroutine;
+        [Tooltip("Fallback for quick setup. Production prefabs should normally assign references explicitly.")]
+        [SerializeField] private bool _buildViewIfMissing = true;
 
-        // ── Unity Lifecycle ───────────────────────────────────────────────────
+        private IHealthSource _healthSource;
+        private Transform _sourceTransform;
+        private NetworkPlayer _networkPlayer;
+        private UnityEngine.Camera _mainCamera;
+        private Coroutine _hideCoroutine;
+        private bool _subscribed;
+        private float _currentHealth;
+        private float _maxHealth;
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            ResolveViewReferences();
+        }
+#endif
+
+        private void Reset()
+        {
+            ResolveViewReferences();
+        }
 
         private void Awake()
         {
-            // Dedicated server has no Camera — skip entirely.
-            if (UnityEngine.Camera.main == null) { enabled = false; return; }
+#if UNITY_SERVER
+            enabled = false;
+            return;
+#endif
+            ResolveSource();
+            ResolveNetworkPlayer();
 
-            _healthSystem = ComponentResolver.Find<PlayerHealthSystem>(this)
-                .OnSelf().InChildren().InParent()
-                .OrLogWarning("[WorldHealthBar] PlayerHealthSystem not found")
-                .Resolve();
+            if (_healthSource == null)
+            {
+                Debug.LogWarning(
+                    $"[WorldHealthBar] '{name}' has no IHealthSource. Add PlayerHealthSystem/BaseDeployable/etc. on this prefab.",
+                    this);
+                enabled = false;
+                return;
+            }
 
-            _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
-                .OnSelf().InChildren().InParent()
-                .OrLogWarning("[WorldHealthBar] NetworkPlayer not found")
-                .Resolve();
+            if (!EnsureView())
+            {
+                enabled = false;
+                return;
+            }
 
-            _statSystem = ComponentResolver.Find<IPlayerStatSystem>(this)
-                .OnSelf().InChildren().InParent()
-                .OrLogWarning("[WorldHealthBar] IPlayerStatSystem not found")
-                .Resolve();
-
-            EnsureView();
+            SetInitialValues();
             SetVisible(false);
+            _mainCamera = UnityEngine.Camera.main;
         }
 
         private void OnEnable()
         {
-            if (_healthSystem != null)
-                _healthSystem.OnHitReceived += HandleHitReceived;
-
-            if (_statSystem != null)
-                _statSystem.OnStatChanged += HandleStatChanged;
+            Subscribe();
         }
 
         private void OnDisable()
         {
-            if (_healthSystem != null)
-                _healthSystem.OnHitReceived -= HandleHitReceived;
-
-            if (_statSystem != null)
-                _statSystem.OnStatChanged -= HandleStatChanged;
+            Unsubscribe();
+            StopHideTimer();
         }
 
         private void LateUpdate()
         {
-            if (_barRoot == null || !_barRoot.activeSelf) return;
+            if (_barRoot == null || !_barRoot.activeSelf)
+                return;
 
-            // Reposition above the character.
-            _barRoot.transform.position = transform.position + _offset;
+            Transform follow = GetFollowTransform();
+            if (follow != null)
+                _barRoot.transform.position = follow.position + _offset;
 
-            // Billboard — always face the local camera.
-            if (_mainCamera == null) _mainCamera = UnityEngine.Camera.main;
-            if (_mainCamera != null)
-                _barRoot.transform.LookAt(
-                    _barRoot.transform.position + _mainCamera.transform.rotation * Vector3.forward,
-                    _mainCamera.transform.rotation * Vector3.up);
+            if (!_billboardToCamera)
+                return;
+
+            UnityEngine.Camera cam = GetActiveCamera();
+            if (cam == null)
+                return;
+
+            _barRoot.transform.LookAt(
+                _barRoot.transform.position + cam.transform.rotation * Vector3.forward,
+                cam.transform.rotation * Vector3.up);
         }
 
-        // ── Private ──────────────────────────────────────────────────────────
-
-        private void HandleHitReceived(DamageInfo info)
+        private void HandleHealthChanged(HealthChangeEvent evt)
         {
-            if (!ShouldShowForShooter(info.ShooterNetworkObjectId)) return;
+            SetHealth(evt.CurrentHealth, evt.MaxHealth);
 
-            RefreshHealthBar();
-            SetVisible(true);
-
-            // Restart auto-hide timer.
-            if (_hideCoroutine != null) StopCoroutine(_hideCoroutine);
-            _hideCoroutine = StartCoroutine(HideAfterDelay());
-
-            if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableHealthBarDebugLogs)
-                Debug.Log($"[WorldHealthBar] Showing for '{_networkPlayer?.DisplayName}' " +
-                          $"— shooterNetObjId={info.ShooterNetworkObjectId} dmg={info.Damage:F0}");
+            if (evt.IsDamage && ShouldShow(evt))
+                ShowBar();
         }
 
-        private void HandleStatChanged(PlayerStatType type, float oldValue, float newValue)
+        private bool ShouldShow(HealthChangeEvent evt)
         {
-            // Only refresh while the bar is actually visible (avoid unnecessary work).
-            if (_barRoot == null || !_barRoot.activeSelf) return;
-            if (type == PlayerStatType.Health || type == PlayerStatType.MaxHealth)
-                RefreshHealthBar();
+            if (_visibilityPolicy == VisibilityPolicy.AnyDamage)
+                return true;
+
+            bool playerPolicy =
+                _visibilityPolicy == VisibilityPolicy.PlayerShooterTeamOrSpectated ||
+                (_visibilityPolicy == VisibilityPolicy.Auto && _networkPlayer != null);
+
+            if (!playerPolicy)
+                return true;
+
+            return ShouldShowForPlayer(evt.InstigatorNetworkObjectId);
         }
 
-        /// <summary>
-        /// Returns true if the shot was fired by the local player or one of their teammates.
-        /// </summary>
-        private bool ShouldShowForShooter(int shooterNetObjId)
+        private bool ShouldShowForPlayer(int shooterNetObjId)
         {
-            // Don't show on the local player's own character (self-damage / self-heal).
-            if (_networkPlayer != null && _networkPlayer.IsOwner) return false;
+            if (_networkPlayer != null && _networkPlayer.IsOwner)
+                return false;
 
-            var localPlayer = SpectateManager.Instance?.GetLocalPlayer();
-            if (localPlayer == null) return false;
+            var spectate = SpectateManager.Instance;
+            var localPlayer = spectate?.GetLocalPlayer();
+            if (localPlayer == null)
+                return false;
 
-            var currentObserved = SpectateManager.Instance?.GetCurrentPlayer();
+            var currentObserved = spectate.GetCurrentPlayer();
             if (currentObserved != null && _networkPlayer == currentObserved)
                 return true;
 
-            // -1 / 0 = world / boss / anti-camp damage. Show it for teammates so
-            // the local/spectate camera still gets a world-space health reference.
             if (shooterNetObjId <= 0)
                 return _networkPlayer != null && _networkPlayer.TeamId == localPlayer.TeamId;
 
-            // Local player is the shooter → always show.
-            if ((int)localPlayer.ObjectId == shooterNetObjId) return true;
+            if ((int)localPlayer.ObjectId == shooterNetObjId)
+                return true;
 
-            // Teammate is the shooter → show.
             var registry = PlayerPublicRegistry.Instance;
-            if (registry == null) return false;
+            if (registry == null)
+                return false;
 
             var allPlayers = registry.GetAllPlayers();
-            if (allPlayers == null) return false;
+            if (allPlayers == null)
+                return false;
 
             foreach (var player in allPlayers)
             {
-                if (player == null || (int)player.ObjectId != shooterNetObjId) continue;
+                if (player == null || (int)player.ObjectId != shooterNetObjId)
+                    continue;
+
                 return player.TeamId == localPlayer.TeamId;
             }
 
             return false;
         }
 
-        private void RefreshHealthBar()
+        private void ResolveSource()
         {
-            if (_statSystem == null) return;
+            _healthSource = ComponentResolver.Find<IHealthSource>(this)
+                .OnSelf()
+                .InParent()
+                .InChildren()
+                .OrDefault(null)
+                .Resolve();
 
-            float current   = _statSystem.GetStat(PlayerStatType.Health);
-            float maxHealth = _statSystem.GetStat(PlayerStatType.MaxHealth);
-            if (maxHealth <= 0f) maxHealth = 100f;
+            if (_healthSource is Component sourceComponent)
+            {
+                _sourceTransform = sourceComponent.transform;
 
-            if (_healthSlider != null)
-                _healthSlider.value = Mathf.Clamp01(current / maxHealth);
-
-            if (_healthText != null)
-                _healthText.text = $"{Mathf.CeilToInt(current)} / {Mathf.CeilToInt(maxHealth)}";
+                if (_followTarget == null)
+                    _followTarget = sourceComponent.transform;
+            }
         }
 
-        private IEnumerator HideAfterDelay()
+        private void ResolveNetworkPlayer()
         {
-            yield return new WaitForSeconds(_hideDelay);
-            SetVisible(false);
-            _hideCoroutine = null;
+            _networkPlayer = ComponentResolver.Find<NetworkPlayer>(this)
+                .OnSelf()
+                .InParent()
+                .InChildren()
+                .OrDefault(null)
+                .Resolve();
         }
 
-        private void SetVisible(bool visible)
+        private bool EnsureView()
         {
-            if (_barRoot != null && _barRoot.activeSelf != visible)
-                _barRoot.SetActive(visible);
-        }
+            ResolveViewReferences();
 
-        private void EnsureView()
-        {
+            if (_barRoot != null && _barRoot == gameObject)
+            {
+                Debug.LogWarning(
+                    $"[WorldHealthBar] '{name}' has Bar Root on the same GameObject. Use a child visual root.",
+                    this);
+                return false;
+            }
+
             if (_barRoot != null && _healthSlider != null)
-                return;
+                return true;
 
-            var root = new GameObject("WorldHealthBarRoot", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+            if (!_buildViewIfMissing)
+            {
+                Debug.LogWarning($"[WorldHealthBar] '{name}' is missing Bar Root or Health Slider references.", this);
+                return false;
+            }
+
+            BuildDefaultView();
+            return _barRoot != null && _healthSlider != null;
+        }
+
+        private void ResolveViewReferences()
+        {
+            if (_healthSlider == null)
+                _healthSlider = GetComponentInChildren<Slider>(true);
+
+            if (_barRoot == null && _healthSlider != null)
+            {
+                Canvas canvas = _healthSlider.GetComponentInParent<Canvas>(true);
+                _barRoot = canvas != null && canvas.gameObject != gameObject
+                    ? canvas.gameObject
+                    : _healthSlider.gameObject;
+            }
+        }
+
+        private void BuildDefaultView()
+        {
+            var root = new GameObject("HealthBarVisual",
+                typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
             root.transform.SetParent(transform, false);
             root.transform.localPosition = _offset;
             root.transform.localScale = Vector3.one * 0.01f;
@@ -261,6 +312,93 @@ namespace NightHunt.Gameplay.Character.Combat
             _healthSlider.interactable = false;
             _healthSlider.targetGraphic = fill.GetComponent<Image>();
             _healthSlider.fillRect = (RectTransform)fill.transform;
+        }
+
+        private void SetInitialValues()
+        {
+            SetHealth(_healthSource.CurrentHealth, _healthSource.MaxHealth);
+        }
+
+        private void Subscribe()
+        {
+            if (_subscribed || _healthSource == null)
+                return;
+
+            _healthSource.HealthChanged += HandleHealthChanged;
+            _subscribed = true;
+        }
+
+        private void Unsubscribe()
+        {
+            if (!_subscribed || _healthSource == null)
+                return;
+
+            _healthSource.HealthChanged -= HandleHealthChanged;
+            _subscribed = false;
+        }
+
+        private Transform GetFollowTransform()
+        {
+            if (_followTarget != null)
+                return _followTarget;
+
+            return _sourceTransform != null ? _sourceTransform : transform;
+        }
+
+        private UnityEngine.Camera GetActiveCamera()
+        {
+            if (_mainCamera == null)
+                _mainCamera = UnityEngine.Camera.main;
+
+            return _mainCamera;
+        }
+
+        private void ShowBar()
+        {
+            SetVisible(true);
+
+            if (_hideCoroutine != null)
+                StopCoroutine(_hideCoroutine);
+
+            _hideCoroutine = StartCoroutine(HideAfterDelay());
+        }
+
+        private IEnumerator HideAfterDelay()
+        {
+            yield return new WaitForSeconds(_hideDelay);
+            SetVisible(false);
+            _hideCoroutine = null;
+        }
+
+        private void StopHideTimer()
+        {
+            if (_hideCoroutine == null)
+                return;
+
+            StopCoroutine(_hideCoroutine);
+            _hideCoroutine = null;
+        }
+
+        private void SetVisible(bool visible)
+        {
+            if (_barRoot != null && _barRoot.activeSelf != visible)
+                _barRoot.SetActive(visible);
+        }
+
+        private void SetHealth(float current, float max)
+        {
+            _maxHealth = max > 0f ? max : (_maxHealth > 0f ? _maxHealth : 1f);
+            _currentHealth = Mathf.Clamp(current, 0f, _maxHealth);
+            RefreshSlider();
+        }
+
+        private void RefreshSlider()
+        {
+            if (_healthSlider != null)
+                _healthSlider.value = Mathf.Clamp01(_currentHealth / Mathf.Max(1f, _maxHealth));
+
+            if (_healthText != null)
+                _healthText.text = $"{Mathf.CeilToInt(_currentHealth)} / {Mathf.CeilToInt(_maxHealth)}";
         }
 
         private static void Stretch(RectTransform rect)

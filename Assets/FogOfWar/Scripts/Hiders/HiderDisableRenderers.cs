@@ -10,20 +10,32 @@ namespace FOW
 
         protected override void OnHide()
         {
+            if (ObjectsToHide == null)
+                return;
+
             foreach (Renderer renderer in ObjectsToHide)
-                renderer.enabled = false;
+            {
+                if (renderer != null)
+                    renderer.enabled = false;
+            }
         }
 
         protected override void OnReveal()
         {
+            if (ObjectsToHide == null)
+                return;
+
             foreach (Renderer renderer in ObjectsToHide)
-                renderer.enabled = true;
+            {
+                if (renderer != null)
+                    renderer.enabled = true;
+            }
         }
 
         public void ModifyHiddenRenderers(Renderer[] newObjectsToHide)
         {
             OnReveal();
-            ObjectsToHide = newObjectsToHide;
+            ObjectsToHide = newObjectsToHide ?? System.Array.Empty<Renderer>();
             if (!enabled)
                 return;
 

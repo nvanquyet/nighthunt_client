@@ -8,6 +8,7 @@ using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Character;
+using System.Collections;
 using System.Collections.Generic;
 using NightHunt.Networking.Player;
 using NightHunt.Utilities;
@@ -37,9 +38,16 @@ namespace NightHunt.Networking
                  "Chỉ cần đặt thủ công khi test trong Editor (dev mode, GameMode.None).")]
         private int _expectedPlayerCount = 2;
 
+        [Header("Runtime Ready Gate")]
+        [Tooltip("Maximum seconds to wait after all players spawn for owner clients to finish model/HUD runtime init.")]
+        [SerializeField] private float _clientRuntimeReadyTimeoutSeconds = 10f;
+
         private RegistryService _registryService;
         private NetworkManager _networkManager;
         private int _spawnedPlayerCount = 0;
+        private bool _matchStartTriggered;
+        private Coroutine _runtimeReadyTimeoutCoroutine;
+        private readonly HashSet<int> _runtimeReadyClients = new();
 
         // Tracking
         private Dictionary<int, GameObject> _spawnedPlayers = new(); // FishNet ClientId â†’ GameObject
@@ -162,6 +170,17 @@ namespace NightHunt.Networking
             {
                 _networkManager.ServerManager.OnRemoteConnectionState -= OnServerConnectionState;
             }
+
+            if (_runtimeReadyTimeoutCoroutine != null)
+            {
+                StopCoroutine(_runtimeReadyTimeoutCoroutine);
+                _runtimeReadyTimeoutCoroutine = null;
+            }
+
+            _runtimeReadyClients.Clear();
+            _matchStartTriggered = false;
+            _spawnedPlayers.Clear();
+            _spawnedPlayerCount = 0;
         }
 
         // ===== CONNECTION EVENTS =====
@@ -180,6 +199,7 @@ namespace NightHunt.Networking
                     break;
 
                 case RemoteConnectionState.Stopped:
+                    conn.OnLoadedStartScenes -= OnConnectionLoadedStartScenes;
                     OnPlayerDisconnected(conn);
                     break;
             }
@@ -362,10 +382,43 @@ namespace NightHunt.Networking
         }
 
         [Server]
+        public void OnPlayerClientRuntimeReady(NetworkConnection conn, NetworkPlayer player)
+        {
+            if (!IsServerStarted || conn == null)
+                return;
+
+            if (!_spawnedPlayers.TryGetValue(conn.ClientId, out var spawned) ||
+                player == null || spawned != player.gameObject)
+            {
+                Debug.LogWarning($"[ServerGameManager] Runtime-ready rejected for ClientId={conn.ClientId}: player does not match spawned registry.");
+                return;
+            }
+
+            if (!_runtimeReadyClients.Add(conn.ClientId))
+                return;
+
+            Debug.Log($"[ServerGameManager] Client runtime ready ({_runtimeReadyClients.Count}/{_expectedPlayerCount}) - {player.DisplayName}");
+            RpcOnPlayerRuntimeReady(player.DisplayName, _runtimeReadyClients.Count, _expectedPlayerCount);
+            if (_spawnedPlayerCount >= _expectedPlayerCount)
+                OnAllPlayersSpawned();
+        }
+
+        [Server]
         private void OnAllPlayersSpawned()
         {
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log("[ServerGameManager] âœ… All players spawned â€” starting match!");
+            if (_matchStartTriggered)
+                return;
+
+            if (_runtimeReadyClients.Count < _expectedPlayerCount)
+            {
+                if (_runtimeReadyTimeoutCoroutine == null)
+                    _runtimeReadyTimeoutCoroutine = StartCoroutine(WaitForRuntimeReadyTimeout());
+                return;
+            }
+
+            _matchStartTriggered = true;
             OnAllPlayersReady?.Invoke();
 
             // Notify all clients: hide loading screen, show game HUD
@@ -376,6 +429,29 @@ namespace NightHunt.Networking
                 _matchPhaseManager.BeginMatch();
             else
                 Debug.LogError("[ServerGameManager] MatchPhaseManager is null — BeginMatch not called!");
+        }
+
+        [Server]
+        private IEnumerator WaitForRuntimeReadyTimeout()
+        {
+            float deadline = Time.time + Mathf.Max(0f, _clientRuntimeReadyTimeoutSeconds);
+            while (!_matchStartTriggered && Time.time < deadline)
+                yield return null;
+
+            _runtimeReadyTimeoutCoroutine = null;
+
+            if (_matchStartTriggered)
+                yield break;
+
+            Debug.LogWarning($"[ServerGameManager] Runtime-ready timeout. Starting match with ready={_runtimeReadyClients.Count}/{_expectedPlayerCount} to avoid a stuck lobby.");
+            _matchStartTriggered = true;
+            OnAllPlayersReady?.Invoke();
+            RpcOnAllPlayersReady();
+
+            if (_matchPhaseManager != null)
+                _matchPhaseManager.BeginMatch();
+            else
+                Debug.LogError("[ServerGameManager] MatchPhaseManager is null - BeginMatch not called!");
         }
 
         [ObserversRpc]
@@ -405,6 +481,17 @@ namespace NightHunt.Networking
         }
 
         [ObserversRpc]
+        private void RpcOnPlayerRuntimeReady(string displayName, int readyCount, int expectedCount)
+        {
+            GameplayEventBus.Instance?.Publish(new PlayerSpawnedEvent
+            {
+                DisplayName   = displayName,
+                SpawnedCount  = readyCount,
+                ExpectedCount = expectedCount
+            });
+        }
+
+        [ObserversRpc]
         private void RpcOnAllPlayersReady()
         {
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
@@ -421,6 +508,8 @@ namespace NightHunt.Networking
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Player disconnecting - FishNet ClientId: {fishnetClientId}");
+
+            _runtimeReadyClients.Remove(fishnetClientId);
 
             // Get player object
             if (!_spawnedPlayers.TryGetValue(fishnetClientId, out GameObject playerObj))
@@ -458,7 +547,6 @@ namespace NightHunt.Networking
 
             // Remove tracking
             _spawnedPlayers.Remove(fishnetClientId);
-
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] âœ… Cleanup complete for ClientId: {fishnetClientId}");
         }

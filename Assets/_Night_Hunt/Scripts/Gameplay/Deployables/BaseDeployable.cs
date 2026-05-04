@@ -12,7 +12,7 @@ namespace NightHunt.Gameplay.Deployables
     /// Handles owner team, health, placed/active state, damage, despawn, and fog visibility.
     /// </summary>
     [RequireComponent(typeof(FogTeamVisibilityBinder))]
-    public abstract class BaseDeployable : NetworkBehaviour, IHittable, IFogTeamOwned
+    public abstract class BaseDeployable : NetworkBehaviour, IHittable, IFogTeamOwned, IHealthSource
     {
         protected readonly SyncVar<int> _currentHP = new SyncVar<int>();
         protected readonly SyncVar<int> _maxHP = new SyncVar<int>();
@@ -27,12 +27,15 @@ namespace NightHunt.Gameplay.Deployables
         public int OwnerTeamId => _ownerTeamId.Value;
         public bool IsPlaced => _isPlaced.Value;
         public bool IsActive => _isActive.Value;
+        public float CurrentHealth => CurrentHP;
+        public float MaxHealth => MaxHP > 0 ? MaxHP : 100f;
+        public bool IsDead => CurrentHP <= 0;
 
         public int FogOwnerTeamId => OwnerTeamId;
         public bool FogAlwaysVisible => false;
 
         public event Action Destroyed;
-        public event Action<int, int> OnHealthChangedClient;
+        public event Action<HealthChangeEvent> HealthChanged;
 
         public override void OnStartNetwork()
         {
@@ -48,9 +51,6 @@ namespace NightHunt.Gameplay.Deployables
             ApplyPlacedVisual(_isPlaced.Value);
             RefreshFogVisibility("OnStartNetwork");
 
-#if !UNITY_SERVER
-            EnsureWorldHealthBar();
-#endif
         }
 
         public override void OnStopNetwork()
@@ -131,7 +131,7 @@ namespace NightHunt.Gameplay.Deployables
         protected virtual void OnHPChanged(int oldHP, int newHP, bool asServer)
         {
             if (!asServer)
-                OnHealthChangedClient?.Invoke(oldHP, newHP);
+                HealthChanged?.Invoke(new HealthChangeEvent(oldHP, newHP, MaxHealth, forceReveal: newHP < oldHP));
         }
 
         protected virtual void OnIsPlacedChanged(bool oldVal, bool newVal, bool asServer)
@@ -177,14 +177,5 @@ namespace NightHunt.Gameplay.Deployables
         {
         }
 
-#if !UNITY_SERVER
-        private void EnsureWorldHealthBar()
-        {
-            if (GetComponentInChildren<WorldHealthBarGeneric>(true) != null)
-                return;
-
-            gameObject.AddComponent<WorldHealthBarGeneric>();
-        }
-#endif
     }
 }

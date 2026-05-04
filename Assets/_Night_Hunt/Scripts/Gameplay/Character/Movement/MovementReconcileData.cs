@@ -12,6 +12,11 @@ namespace NightHunt.Gameplay.Character.Movement
         public bool IsRolling;
         public float RollTimer;
         public Vector3 RollDir;
+        public bool IsSprinting;
+        public bool IsCrouching;
+        public bool IsGrounded;
+        public bool JumpTriggered;
+        public bool RollTriggered;
 
         private uint _tick;
 
@@ -22,7 +27,12 @@ namespace NightHunt.Gameplay.Character.Movement
             float stamina,
             bool isRolling = false,
             float rollTimer = 0f,
-            Vector3 rollDir = default)
+            Vector3 rollDir = default,
+            bool isSprinting = false,
+            bool isCrouching = false,
+            bool isGrounded = false,
+            bool jumpTriggered = false,
+            bool rollTriggered = false)
         {
             Position = position;
             Rotation = rotation;
@@ -31,6 +41,11 @@ namespace NightHunt.Gameplay.Character.Movement
             IsRolling = isRolling;
             RollTimer = rollTimer;
             RollDir = rollDir;
+            IsSprinting = isSprinting;
+            IsCrouching = isCrouching;
+            IsGrounded = isGrounded;
+            JumpTriggered = jumpTriggered;
+            RollTriggered = rollTriggered;
             _tick = 0;
         }
 

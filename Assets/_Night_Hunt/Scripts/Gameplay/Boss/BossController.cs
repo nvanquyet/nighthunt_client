@@ -66,7 +66,7 @@ namespace NightHunt.Gameplay.Boss
     ///   TurretGun._syncLookDir : SyncVar<Vector3> — hướng xoay mỗi barrel
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class BossController : NetworkBehaviour, IHittable
+    public sealed class BossController : NetworkBehaviour, IHittable, IHealthSource
     {
         // ── SyncVars ──────────────────────────────────────────────────────────────
         private readonly SyncVar<float>     _syncHp    = new SyncVar<float>();
@@ -145,9 +145,12 @@ namespace NightHunt.Gameplay.Boss
         public float     AggroRadius  => _aggroRadius;
         public float     AttackRadius => _attackRadius;
         public bool      IsDead    => _syncState.Value == BossState.Dead;
+        public float     CurrentHealth => CurrentHp;
+        public float     MaxHealth => MaxHp > 0f ? MaxHp : 100f;
         public event Action<BossController> Died;
         /// <summary>Raised on all clients when HP changes. Args: (currentHp, maxHp).</summary>
         public event System.Action<float, float> OnHealthChanged;
+        public event Action<HealthChangeEvent> HealthChanged;
         // ── Dependency Setup ───────────────────────────────────────────────────────
         [Server]
         public void SetDynamicRewardConfig(WorldSpawnConfig rewardConfig)
@@ -195,7 +198,6 @@ namespace NightHunt.Gameplay.Boss
             base.OnStartClient();
 
             _syncHp.OnChange += OnHpSyncChanged;
-            EnsureWorldHealthBar();
 
             // Collect turrets in case the serialized list is empty on this peer
             if (_turretGuns == null || _turretGuns.Count == 0)
@@ -220,17 +222,10 @@ namespace NightHunt.Gameplay.Boss
         private void OnHpSyncChanged(float prev, float next, bool asServer)
         {
             OnHealthChanged?.Invoke(next, _maxHp);
+            HealthChanged?.Invoke(new HealthChangeEvent(prev, next, MaxHealth, forceReveal: next < prev));
         }
 
         // ── Server Update ──────────────────────────────────────────────────────────
-
-        private void EnsureWorldHealthBar()
-        {
-            if (GetComponentInChildren<WorldHealthBarGeneric>(true) != null)
-                return;
-
-            gameObject.AddComponent<WorldHealthBarGeneric>();
-        }
 
         private void Update()
         {

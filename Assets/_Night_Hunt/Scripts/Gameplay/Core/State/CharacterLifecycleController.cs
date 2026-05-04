@@ -58,6 +58,7 @@ namespace NightHunt.Gameplay.Core.State
         }
 
         private IPlayerStatSystem _statSystem;
+        private bool _statsSubscribed;
 
         #region Unity Lifecycle
 
@@ -146,6 +147,9 @@ namespace NightHunt.Gameplay.Core.State
 
         private void SubscribeToStats()
         {
+            if (_statsSubscribed)
+                return;
+
             if (_statSystem is null)
                 ResolveStatSystem();
 
@@ -160,12 +164,16 @@ namespace NightHunt.Gameplay.Core.State
                 if (concrete != null)
                 {
                     concrete.OnStatChanged += HandleStatChanged;
+                    _statsSubscribed = true;
                 }
             }
         }
 
         private void UnsubscribeFromStats()
         {
+            if (!_statsSubscribed)
+                return;
+
             if (_statSystem is Component comp)
             {
                 var concrete = comp as NightHunt.Gameplay.StatSystem.Systems.PlayerStatSystem;
@@ -174,6 +182,8 @@ namespace NightHunt.Gameplay.Core.State
                     concrete.OnStatChanged -= HandleStatChanged;
                 }
             }
+
+            _statsSubscribed = false;
         }
 
         private void HandleStatChanged(PlayerStatType type, float oldValue, float newValue)
@@ -241,7 +251,7 @@ namespace NightHunt.Gameplay.Core.State
             OnRespawned?.Invoke();
 
             // GLOBAL EVENT
-            NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance.Publish(new NightHunt.Gameplay.Core.Events.PlayerRespawnedEvent
+            NightHunt.Gameplay.Core.Events.GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.PlayerRespawnedEvent
             {
                 PlayerName = _networkPlayer != null ? _networkPlayer.DisplayName : string.Empty,
                 TeamId = _networkPlayer != null ? _networkPlayer.TeamId : -1,
