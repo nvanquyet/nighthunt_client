@@ -1,7 +1,9 @@
+using System.Collections;
 using UnityEngine;
 using NightHunt.Utilities;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
+using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
@@ -44,6 +46,7 @@ namespace NightHunt.Gameplay.Character
         private PrCharacterRagdoll _ragdoll;
         private PrActorUtils       _actorUtils;
         private PrCharacterIK      _charIK;
+        private GameObject         _modelRoot;
 
         // IK blend state.
         private Transform _pendingIKTarget;   // target set by weapon swap
@@ -167,6 +170,8 @@ namespace NightHunt.Gameplay.Character
 
         private void BindModel(GameObject modelRoot)
         {
+            _modelRoot = modelRoot;
+
             _actorUtils = ComponentResolver.Find<PrActorUtils>(modelRoot)
                 .OnSelf().InChildren()
                 .OrLogWarning($"[CharacterVisualController] PrActorUtils not found on '{modelRoot.name}'")
@@ -182,9 +187,14 @@ namespace NightHunt.Gameplay.Character
                 .OrLogWarning($"[CharacterVisualController] PrCharacterRagdoll not found on '{modelRoot.name}'")
                 .Resolve();
 
+            InitializeRagdollSafely();
+
             bool isAlive = _networkPlayer == null || _networkPlayer.IsAlive;
             if (isAlive) SetAliveVisuals();
             else         SetDeadVisuals();
+
+            if (isAlive && isActiveAndEnabled)
+                StartCoroutine(ReapplyAliveVisualsAfterRagdollStart());
         }
 
         // ── Visual state ───────────────────────────────────────────────────────
@@ -201,7 +211,8 @@ namespace NightHunt.Gameplay.Character
 
         private void SetAliveVisuals()
         {
-            _ragdoll?.DeactivateRagdoll();
+            DeactivateRagdollSafely();
+            ApplyAliveModelPhysicsAndHitboxes();
 
             if (_actorUtils?.charAnimator != null)
                 _actorUtils.charAnimator.enabled = true;
@@ -212,6 +223,101 @@ namespace NightHunt.Gameplay.Character
 
             // Re-apply whichever IK target the current weapon has (null if holstered).
             SetIKTargetSmooth(_weaponModelController?.LeftHandIKTarget);
+        }
+
+        private IEnumerator ReapplyAliveVisualsAfterRagdollStart()
+        {
+            yield return null;
+
+            if (_networkPlayer != null && !_networkPlayer.IsAlive)
+                yield break;
+
+            SetAliveVisuals();
+        }
+
+        private void InitializeRagdollSafely()
+        {
+            if (_ragdoll == null)
+                return;
+
+            try
+            {
+                _ragdoll.InitializeRagdoll();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[CharacterVisualController] InitializeRagdoll failed on '{_modelRoot?.name}': {ex.Message}", this);
+            }
+        }
+
+        private void DeactivateRagdollSafely()
+        {
+            if (_ragdoll == null)
+                return;
+
+            try
+            {
+                _ragdoll.DeactivateRagdoll();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[CharacterVisualController] DeactivateRagdoll failed on '{_modelRoot?.name}': {ex.Message}", this);
+            }
+        }
+
+        private void ApplyAliveModelPhysicsAndHitboxes()
+        {
+            if (_modelRoot == null)
+                return;
+
+            int playerLayer = LayerMask.NameToLayer("Player");
+            int hitboxLayer = LayerMask.NameToLayer("PlayerHitBox");
+
+            foreach (Transform child in _modelRoot.GetComponentsInChildren<Transform>(true))
+            {
+                if (child == null)
+                    continue;
+
+                if (child.gameObject == _modelRoot)
+                {
+                    if (playerLayer != -1)
+                        child.gameObject.layer = playerLayer;
+                    continue;
+                }
+
+                Collider collider = child.GetComponent<Collider>();
+                if (collider != null && hitboxLayer != -1)
+                    child.gameObject.layer = hitboxLayer;
+                else if (playerLayer != -1)
+                    child.gameObject.layer = playerLayer;
+            }
+
+            foreach (Collider collider in _modelRoot.GetComponentsInChildren<Collider>(true))
+            {
+                if (collider == null)
+                    continue;
+
+                bool isModelRootCapsule = collider is CapsuleCollider && collider.gameObject == _modelRoot;
+                collider.enabled = !isModelRootCapsule;
+
+                if (!isModelRootCapsule && collider.GetComponent<PlayerHitboxMarker>() == null)
+                {
+                    var marker = collider.gameObject.AddComponent<PlayerHitboxMarker>();
+                    marker.IsHeadshot = collider.name.IndexOf("head", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+
+            foreach (Rigidbody rb in _modelRoot.GetComponentsInChildren<Rigidbody>(true))
+            {
+                if (rb == null)
+                    continue;
+
+                rb.isKinematic = true;
+                rb.useGravity = false;
+                rb.detectCollisions = true;
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
         }
 
         // ── IK smooth blend helper ─────────────────────────────────────────────

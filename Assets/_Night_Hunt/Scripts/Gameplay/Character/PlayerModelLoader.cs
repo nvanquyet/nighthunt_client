@@ -246,7 +246,8 @@ namespace NightHunt.Gameplay.Character
         /// Sets the correct physics/rendering layers on the player hierarchy:
         ///   • Root (this GameObject)          → "Player"
         ///   • Model root (e.g. Soldier_White) → "Player"
-        ///   • All children of model root      → "PlayerHitBox"
+        ///   • Model colliders                 → "PlayerHitBox"
+        ///   • Model render-only objects        → "Player"
         /// </summary>
         private void SetupModelLayers(GameObject modelRoot)
         {
@@ -264,30 +265,7 @@ namespace NightHunt.Gameplay.Character
             if (playerLayer != -1)
                 modelRoot.layer = playerLayer;
 
-            // 3. All children of model root (bones, hitboxes, meshes) → "PlayerHitBox"
-            Transform[] children = modelRoot.GetComponentsInChildren<Transform>(true);
-            if (hitboxLayer != -1)
-            {
-                foreach (Transform child in children)
-                {
-                    if (child.gameObject == modelRoot) continue; // model root already set above
-                    child.gameObject.layer = hitboxLayer;
-                }
-            }
-
-            // 3b. Auto-attach PlayerHitboxMarker on every bone that has a Collider.
-            //     Character Model 01 uses trigger colliders (ragdoll-style) with no markers baked in.
-            //     Head bones detected by name pattern → IsHeadshot = true.
-            foreach (Transform child in children)
-            {
-                if (child.gameObject == modelRoot) continue;
-                if (child.GetComponent<Collider>() == null) continue;
-                if (child.GetComponent<PlayerHitboxMarker>() != null) continue; // already set (e.g. Character 01)
-                var marker = child.gameObject.AddComponent<PlayerHitboxMarker>();
-                marker.IsHeadshot = child.name.IndexOf("head", System.StringComparison.OrdinalIgnoreCase) >= 0;
-            }
-
-            // 4. Disable model-root Rigidbody (make kinematic).
+            // 3. Freeze model-root Rigidbody.
             //    Soldier_White prefab has isKinematic=false on its root Rigidbody.
             //    When parented under the player, gravity still acts on it independently
             //    every physics tick and fights the CharacterController on the player root
@@ -301,10 +279,11 @@ namespace NightHunt.Gameplay.Character
             if (modelRb != null)
             {
                 modelRb.isKinematic      = true;
-                modelRb.detectCollisions = false;
+                modelRb.useGravity       = false;
+                modelRb.detectCollisions = true;
             }
 
-            // 5. Disable model-root CapsuleCollider.
+            // 4. Disable model-root CapsuleCollider.
             //    CharacterController on the player root is the authoritative physics capsule.
             CapsuleCollider modelCap = ComponentResolver.Find<CapsuleCollider>(modelRoot)
                 .OnSelf()
@@ -314,7 +293,7 @@ namespace NightHunt.Gameplay.Character
             if (modelCap != null)
                 modelCap.enabled = false;
 
-            // 6. Disable root motion immediately.
+            // 5. Disable root motion immediately.
             //    The prefab stores m_ApplyRootMotion=1. PrActorUtils.Update() overwrites it
             //    false each frame, but charAnimator is cached in PrActorUtils.Awake() now —
             Animator modelAnim = ComponentResolver.Find<Animator>(modelRoot)
@@ -325,10 +304,65 @@ namespace NightHunt.Gameplay.Character
             if (modelAnim != null)
                 modelAnim.applyRootMotion = false;
 
+            ApplyAliveModelPhysicsAndHitboxLayers(modelRoot, playerLayer, hitboxLayer);
+
             Debug.Log($"[PlayerModelLoader] SetupModelLayers: root='{gameObject.name}'({LayerMask.LayerToName(gameObject.layer)}) " +
                       $"modelRoot='{modelRoot.name}'({LayerMask.LayerToName(modelRoot.layer)}) " +
                       $"rb=kinematic={modelRb != null} col=disabled={modelCap != null} rootMotion=off " +
-                      $"children={modelRoot.GetComponentsInChildren<Transform>(true).Length - 1} → 'PlayerHitBox'");
+                      $"children={modelRoot.GetComponentsInChildren<Transform>(true).Length - 1} hitboxes='{LayerMask.LayerToName(hitboxLayer)}'");
+        }
+
+        private static void ApplyAliveModelPhysicsAndHitboxLayers(GameObject modelRoot, int playerLayer, int hitboxLayer)
+        {
+            if (modelRoot == null)
+                return;
+
+            Transform[] children = modelRoot.GetComponentsInChildren<Transform>(true);
+            foreach (Transform child in children)
+            {
+                if (child == null)
+                    continue;
+
+                if (child.gameObject == modelRoot)
+                {
+                    if (playerLayer != -1)
+                        child.gameObject.layer = playerLayer;
+                    continue;
+                }
+
+                Collider collider = child.GetComponent<Collider>();
+                if (collider != null && hitboxLayer != -1)
+                    child.gameObject.layer = hitboxLayer;
+                else if (playerLayer != -1)
+                    child.gameObject.layer = playerLayer;
+            }
+
+            foreach (Collider collider in modelRoot.GetComponentsInChildren<Collider>(true))
+            {
+                if (collider == null)
+                    continue;
+
+                bool isModelRootCapsule = collider is CapsuleCollider && collider.gameObject == modelRoot;
+                collider.enabled = !isModelRootCapsule;
+
+                if (!isModelRootCapsule && collider.GetComponent<PlayerHitboxMarker>() == null)
+                {
+                    var marker = collider.gameObject.AddComponent<PlayerHitboxMarker>();
+                    marker.IsHeadshot = collider.name.IndexOf("head", System.StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+            }
+
+            foreach (Rigidbody rb in modelRoot.GetComponentsInChildren<Rigidbody>(true))
+            {
+                if (rb == null)
+                    continue;
+
+                rb.isKinematic = true;
+                rb.useGravity = false;
+                rb.detectCollisions = true;
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
         }
     }
 }
