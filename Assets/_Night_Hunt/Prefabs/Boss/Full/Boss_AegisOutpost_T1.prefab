@@ -62,15 +62,15 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 65535
+  <PrefabId>k__BackingField: 5
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 4812902114195364821
   <SceneId>k__BackingField: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: 0, y: 0, z: 0, w: 0}
-    Scale: {x: 0, y: 0, z: 0}
-    IsValid: 0
+    Rotation: {x: 0, y: 0, z: 0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
   <IsNested>k__BackingField: 0
   WasActiveDuringEdit: 0
   WasActiveDuringEdit_Set1: 1
@@ -79,10 +79,10 @@ MonoBehaviour:
   <PredictedOwner>k__BackingField: {fileID: 0}
   NetworkBehaviours:
   - {fileID: 1763158046749137967}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 8036308709037691489}
   InitializedParentNetworkBehaviour: {fileID: 0}
-  InitializedNestedNetworkObjects: []
+  InitializedNestedNetworkObjects:
+  - {fileID: 6810367475381853634}
   RuntimeParentNetworkBehaviour: {fileID: 0}
   RuntimeChildNetworkBehaviours: []
   _isNetworked: 1
@@ -148,6 +148,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 412464122802012819}
+  - component: {fileID: 8036308709037691489}
   m_Layer: 0
   m_Name: BossCore_Visual
   m_TagString: Untagged
@@ -171,6 +172,21 @@ Transform:
   - {fileID: 749728657707456656}
   m_Father: {fileID: 3999458803472491730}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8036308709037691489
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 973434800404567940}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a6a39c46bf52104ba8efe3100bce3f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FishNet.Runtime::FishNet.Object.EmptyNetworkBehaviour
+  _componentIndexCache: 1
+  _addedNetworkObject: {fileID: 276143823630444512}
+  _networkObjectCache: {fileID: 276143823630444512}
 --- !u!1 &2282057634454058426
 GameObject:
   m_ObjectHideFlags: 0
@@ -282,6 +298,36 @@ PrefabInstance:
       propertyPath: WasActiveDuringEdit
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000003, guid: 7aa7108f925f57d479080cf52d8db016,
+        type: 3}
+      propertyPath: <IsNested>k__BackingField
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000003, guid: 7aa7108f925f57d479080cf52d8db016,
+        type: 3}
+      propertyPath: <PrefabId>k__BackingField
+      value: 65535
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000003, guid: 7aa7108f925f57d479080cf52d8db016,
+        type: 3}
+      propertyPath: <ComponentIndex>k__BackingField
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000003, guid: 7aa7108f925f57d479080cf52d8db016,
+        type: 3}
+      propertyPath: InitializedParentNetworkBehaviour
+      value: 
+      objectReference: {fileID: 8036308709037691489}
+    - target: {fileID: 8990000000000000003, guid: 7aa7108f925f57d479080cf52d8db016,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Position.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000003, guid: 7aa7108f925f57d479080cf52d8db016,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Rotation.y
+      value: -0
+      objectReference: {fileID: 0}
     - target: {fileID: 9109751118348549900, guid: 7aa7108f925f57d479080cf52d8db016,
         type: 3}
       propertyPath: _addedNetworkObject
@@ -310,6 +356,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f12b66904c079ab4d96ddebc0b0d41f9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Gameplay.Boss.TurretGun
+--- !u!114 &6810367475381853634 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8990000000000000003, guid: 7aa7108f925f57d479080cf52d8db016,
+    type: 3}
+  m_PrefabInstance: {fileID: 2468443722082246081}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26b716c41e9b56b4baafaf13a523ba2e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &7073887055599672153
 PrefabInstance:
   m_ObjectHideFlags: 0

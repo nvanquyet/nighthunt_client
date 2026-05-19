@@ -22,7 +22,7 @@ namespace NightHunt.Gameplay.Input.Core
     /// <code>
     ///  Context        | Player | Combat | Camera | Inventory | Team | UI | Spectator | Objectives | Devices
     ///  ───────────────┼────────┼────────┼────────┼───────────┼──────┼────┼───────────┼────────────┼────────
-    ///  PlayerAlive    |   ✅   |   ✅   |   ✅   |     ✅    |  ✅  | ❌ |     ❌    |     ✅     |   ✅
+    ///  PlayerAlive    |   ✅   |   ✅   |   ✅   |     ✅    |  ✅  | ✅ |     ❌    |     ✅     |   ✅
     ///  InventoryOpen  |   ❌   |   ❌   |   ✅   |     ✅    |  ❌  | ✅ |     ❌    |     ❌     |   ❌
     ///  MapOpen        |   ❌   |   ❌   |   ✅   |     ❌    |  ❌  | ✅ |     ❌    |     ❌     |   ❌
     ///  Paused         |   ❌   |   ❌   |   ❌   |     ❌    |  ❌  | ✅ |     ❌    |     ❌     |   ❌
@@ -52,7 +52,8 @@ namespace NightHunt.Gameplay.Input.Core
             {
                 InputState.PlayerAlive,
                 InputLayer.Player | InputLayer.Combat | InputLayer.Camera |
-                InputLayer.Inventory | InputLayer.Team | InputLayer.Objectives | InputLayer.Devices
+                InputLayer.Inventory | InputLayer.Team | InputLayer.UI |
+                InputLayer.Objectives | InputLayer.Devices
             },
             {
                 InputState.InventoryOpen,

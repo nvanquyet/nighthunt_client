@@ -21,6 +21,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using NightHunt.UI.Settings;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.UI;
 
 namespace NightHunt.Editor.Tools
 {

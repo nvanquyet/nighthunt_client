@@ -62,15 +62,15 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 65535
+  <PrefabId>k__BackingField: 15
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 6546893332352427243
   <SceneId>k__BackingField: 0
   SerializedTransformProperties:
     Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: 0, y: 0, z: 0, w: 0}
-    Scale: {x: 0, y: 0, z: 0}
-    IsValid: 0
+    Rotation: {x: 0, y: 0, z: 0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
   <IsNested>k__BackingField: 0
   WasActiveDuringEdit: 0
   WasActiveDuringEdit_Set1: 1
@@ -79,12 +79,13 @@ MonoBehaviour:
   <PredictedOwner>k__BackingField: {fileID: 0}
   NetworkBehaviours:
   - {fileID: 3185276584674864187}
-  - {fileID: 4955325928492379355}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 2607125857264540814}
+  - {fileID: 6606878968473560751}
+  - {fileID: 2738752391605903771}
   InitializedParentNetworkBehaviour: {fileID: 0}
-  InitializedNestedNetworkObjects: []
+  InitializedNestedNetworkObjects:
+  - {fileID: 4767853183071791131}
+  - {fileID: 6845580024442724909}
+  - {fileID: 1927517330747544593}
   RuntimeParentNetworkBehaviour: {fileID: 0}
   RuntimeChildNetworkBehaviours: []
   _isNetworked: 1
@@ -152,6 +153,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2695430719294862809}
+  - component: {fileID: 2738752391605903771}
   m_Layer: 0
   m_Name: Turrets
   m_TagString: Untagged
@@ -178,6 +180,21 @@ Transform:
   - {fileID: 1924110440759438851}
   m_Father: {fileID: 687394102496539308}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2738752391605903771
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3571626289803458555}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a6a39c46bf52104ba8efe3100bce3f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FishNet.Runtime::FishNet.Object.EmptyNetworkBehaviour
+  _componentIndexCache: 2
+  _addedNetworkObject: {fileID: 3217958736112975831}
+  _networkObjectCache: {fileID: 3217958736112975831}
 --- !u!1 &4355688278747888496
 GameObject:
   m_ObjectHideFlags: 0
@@ -187,6 +204,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8080453572511529085}
+  - component: {fileID: 6606878968473560751}
   m_Layer: 0
   m_Name: BossCore_Visual
   m_TagString: Untagged
@@ -210,6 +228,21 @@ Transform:
   - {fileID: 3016301005827329556}
   m_Father: {fileID: 687394102496539308}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &6606878968473560751
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4355688278747888496}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a6a39c46bf52104ba8efe3100bce3f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FishNet.Runtime::FishNet.Object.EmptyNetworkBehaviour
+  _componentIndexCache: 1
+  _addedNetworkObject: {fileID: 3217958736112975831}
+  _networkObjectCache: {fileID: 3217958736112975831}
 --- !u!1001 &2576771046072394287
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -287,7 +320,7 @@ PrefabInstance:
         type: 3}
       propertyPath: _networkObjectCache
       value: 
-      objectReference: {fileID: 3217958736112975831}
+      objectReference: {fileID: 6845580024442724909}
     - target: {fileID: 7876118397876455155, guid: b29dd50da2c4fa14bb289b70c214b44b,
         type: 3}
       propertyPath: m_Name
@@ -297,6 +330,31 @@ PrefabInstance:
         type: 3}
       propertyPath: WasActiveDuringEdit
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000002, guid: b29dd50da2c4fa14bb289b70c214b44b,
+        type: 3}
+      propertyPath: <IsNested>k__BackingField
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000002, guid: b29dd50da2c4fa14bb289b70c214b44b,
+        type: 3}
+      propertyPath: <PrefabId>k__BackingField
+      value: 65535
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000002, guid: b29dd50da2c4fa14bb289b70c214b44b,
+        type: 3}
+      propertyPath: <ComponentIndex>k__BackingField
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000002, guid: b29dd50da2c4fa14bb289b70c214b44b,
+        type: 3}
+      propertyPath: InitializedParentNetworkBehaviour
+      value: 
+      objectReference: {fileID: 2738752391605903771}
+    - target: {fileID: 8990000000000000002, guid: b29dd50da2c4fa14bb289b70c214b44b,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Position.z
+      value: 9.79
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -315,6 +373,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f12b66904c079ab4d96ddebc0b0d41f9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Gameplay.Boss.TurretGun
+--- !u!114 &6845580024442724909 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8990000000000000002, guid: b29dd50da2c4fa14bb289b70c214b44b,
+    type: 3}
+  m_PrefabInstance: {fileID: 2576771046072394287}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26b716c41e9b56b4baafaf13a523ba2e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!4 &8005940482426184729 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 5537272424372274742, guid: b29dd50da2c4fa14bb289b70c214b44b,
@@ -472,7 +542,7 @@ PrefabInstance:
         type: 3}
       propertyPath: _networkObjectCache
       value: 
-      objectReference: {fileID: 3217958736112975831}
+      objectReference: {fileID: 4767853183071791131}
     - target: {fileID: 2042282790620857106, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
         type: 3}
       propertyPath: m_Name
@@ -487,6 +557,46 @@ PrefabInstance:
         type: 3}
       propertyPath: WasActiveDuringEdit
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+        type: 3}
+      propertyPath: <IsNested>k__BackingField
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+        type: 3}
+      propertyPath: <PrefabId>k__BackingField
+      value: 65535
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+        type: 3}
+      propertyPath: <ComponentIndex>k__BackingField
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+        type: 3}
+      propertyPath: InitializedParentNetworkBehaviour
+      value: 
+      objectReference: {fileID: 6606878968473560751}
+    - target: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Rotation.w
+      value: -0.00000004371139
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Rotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Rotation.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Rotation.z
+      value: -0
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 4064251241408745864, guid: d951a78f9a1f7494fa4d6144f1fa99f7, type: 3}
@@ -516,6 +626,18 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 4532930659197823002}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &4767853183071791131 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8990000000000000001, guid: d951a78f9a1f7494fa4d6144f1fa99f7,
+    type: 3}
+  m_PrefabInstance: {fileID: 4532930659197823002}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26b716c41e9b56b4baafaf13a523ba2e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &5499362517884687341
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -776,10 +898,40 @@ PrefabInstance:
         type: 3}
       propertyPath: _networkObjectCache
       value: 
-      objectReference: {fileID: 3217958736112975831}
+      objectReference: {fileID: 1927517330747544593}
     - target: {fileID: 8990000000000000005, guid: 1413b8be210e05a40ac55a138b6b92a5,
         type: 3}
       propertyPath: WasActiveDuringEdit
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000005, guid: 1413b8be210e05a40ac55a138b6b92a5,
+        type: 3}
+      propertyPath: <IsNested>k__BackingField
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000005, guid: 1413b8be210e05a40ac55a138b6b92a5,
+        type: 3}
+      propertyPath: <PrefabId>k__BackingField
+      value: 65535
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000005, guid: 1413b8be210e05a40ac55a138b6b92a5,
+        type: 3}
+      propertyPath: <ComponentIndex>k__BackingField
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000005, guid: 1413b8be210e05a40ac55a138b6b92a5,
+        type: 3}
+      propertyPath: InitializedParentNetworkBehaviour
+      value: 
+      objectReference: {fileID: 2738752391605903771}
+    - target: {fileID: 8990000000000000005, guid: 1413b8be210e05a40ac55a138b6b92a5,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Rotation.w
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8990000000000000005, guid: 1413b8be210e05a40ac55a138b6b92a5,
+        type: 3}
+      propertyPath: SerializedTransformProperties.Rotation.y
       value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
@@ -799,6 +951,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f12b66904c079ab4d96ddebc0b0d41f9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Gameplay.Boss.TurretGun
+--- !u!114 &1927517330747544593 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8990000000000000005, guid: 1413b8be210e05a40ac55a138b6b92a5,
+    type: 3}
+  m_PrefabInstance: {fileID: 7385076086773568532}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26b716c41e9b56b4baafaf13a523ba2e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!4 &2702155689079452821 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 4828689871885262977, guid: 1413b8be210e05a40ac55a138b6b92a5,

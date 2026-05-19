@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using NightHunt.Audio;
 using NightHunt.Config;
@@ -12,6 +13,8 @@ namespace NightHunt.UI.Settings
     [DisallowMultipleComponent]
     public sealed class SettingsView : MonoBehaviour, INavigableView
     {
+        public event Action CloseRequested;
+
         [Header("Panels")]
         [SerializeField] private GameObject gameplaySettingsRoot;
         [SerializeField] private GameObject audioSettingsRoot;
@@ -28,6 +31,7 @@ namespace NightHunt.UI.Settings
         private GameObject runtimeSettingsRoot;
         private TextMeshProUGUI demoObjectCountLabel;
         private int demoObjectCount = 2;
+        private NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler uiInputHandler;
 
         public bool CanLeave(NavigationContext context) => true;
 
@@ -35,6 +39,7 @@ namespace NightHunt.UI.Settings
         {
             ResolveReferences();
             EnsureRuntimeSettingsContent();
+            HookCancelInput();
 
             gameplaySettingsPanel?.RefreshFromPrefs();
             audioSettingsPanel?.RefreshFromPrefs();
@@ -50,6 +55,7 @@ namespace NightHunt.UI.Settings
 
         public Task OnHideAsync(NavigationContext context)
         {
+            UnhookCancelInput();
             // Pop input context
             NightHunt.Gameplay.Input.Core.InputLayerManager.Instance?.PopContext();
             return Task.CompletedTask;
@@ -58,24 +64,15 @@ namespace NightHunt.UI.Settings
         private void Awake()
         {
             if (closeButton != null)
-                closeButton.onClick.AddListener(() => UINavigator.Instance?.GoBack());
-        }
-
-        private void Start()
-        {
-            // Register for global Cancel event if UIInputHandler is present
-            var uiInput = FindFirstObjectByType<NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler>(FindObjectsInactive.Include);
-            if (uiInput != null)
-            {
-                uiInput.OnCancelPressed += HandleCancel;
-            }
+                closeButton.onClick.AddListener(HandleCloseButtonClicked);
         }
 
         private void OnDestroy()
         {
-            var uiInput = FindFirstObjectByType<NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler>(FindObjectsInactive.Include);
-            if (uiInput != null)
-                uiInput.OnCancelPressed -= HandleCancel;
+            UnhookCancelInput();
+
+            if (closeButton != null)
+                closeButton.onClick.RemoveListener(HandleCloseButtonClicked);
         }
 
         private void HandleCancel()
@@ -84,7 +81,38 @@ namespace NightHunt.UI.Settings
             if (UINavigator.Instance?.CurrentPanel == PanelType.Settings)
             {
                 UINavigator.Instance.GoBack();
+                return;
             }
+
+            CloseRequested?.Invoke();
+        }
+
+        private void HandleCloseButtonClicked()
+        {
+            HandleCancel();
+        }
+
+        private void HookCancelInput()
+        {
+            var found = FindFirstObjectByType<NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler>(FindObjectsInactive.Include);
+            if (found == null)
+                return;
+
+            if (uiInputHandler == found)
+                return;
+
+            UnhookCancelInput();
+            uiInputHandler = found;
+            uiInputHandler.OnCancelPressed += HandleCancel;
+        }
+
+        private void UnhookCancelInput()
+        {
+            if (uiInputHandler == null)
+                return;
+
+            uiInputHandler.OnCancelPressed -= HandleCancel;
+            uiInputHandler = null;
         }
 
         private void Reset()

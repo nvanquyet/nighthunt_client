@@ -29,6 +29,8 @@
 ExportedObj/
 .consulo/
 *.csproj
+*.lscache
+*.lscache.meta
 *.unityproj
 *.sln
 *.suo

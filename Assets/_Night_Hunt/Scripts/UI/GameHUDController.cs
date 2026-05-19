@@ -10,11 +10,14 @@ using NightHunt.Gameplay.Feedback;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
+using NightHunt.Gameplay.Input.Handlers.Inventory;
+using NightHunt.Gameplay.Input.Handlers.UI;
 using NightHunt.UI.Mobile;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Utilities;
 using NightHunt.Audio;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.UI.Settings;
 
 namespace NightHunt.UI
 {
@@ -110,6 +113,9 @@ namespace NightHunt.UI
         [Tooltip("Loot container UI. Manages its own visibility.")]
         [SerializeField] private LootContainerUI _lootContainerUI;
 
+        [Tooltip("Gameplay settings / controls overlay. Auto-found in children if unassigned.")]
+        [SerializeField] private SettingsView _settingsView;
+
         [Tooltip("Floating damage numbers shown when local player deals damage.")]
         [SerializeField] private Gameplay.Feedback.DamageFeedbackSystem _damageFeedback;
 
@@ -147,7 +153,11 @@ namespace NightHunt.UI
         private bool _initializedForPlayer;
         private Coroutine _inventoryProximityRefreshCoroutine;
         private InputManager _subscribedInputManager;
+        private InventoryInputHandler _subscribedInventoryHandler;
+        private UIInputHandler _subscribedUIHandler;
+        private SettingsView _subscribedSettingsView;
         private bool _combatEventsSubscribed;
+        private bool _settingsOpen;
 
         // ── Public accessors ──────────────────────────────────────────────────
 
@@ -197,6 +207,7 @@ namespace NightHunt.UI
         {
             NetworkPlayer.OnOwnerReady -= Initialize;
 
+            CloseSettingsOverlay(true);
             UnsubscribeInputHandlers();
 
             if (InputLayerManager.Instance != null)
@@ -373,13 +384,14 @@ namespace NightHunt.UI
             bool isDead      = _currentState == UIState.Dead;
             bool isSpectate  = _currentState == UIState.Spectating;
             bool isPostMatch = _currentState == UIState.PostMatch;
-            bool isActivePly = isCombat || isInventory; // local player alive and in control
+            bool isSettings  = _currentState == UIState.Settings;
+            bool isActivePly = (isCombat || isInventory) && !isSettings; // local player alive and in control
 
             // ── Combat layer ─────────────────────────────────────────────────
-            SetActive(_weaponHUD,           isCombat);
-            SetActive(_itemSelectionHUD,    isCombat);
+            SetActive(_weaponHUD,           isCombat && !isSettings);
+            SetActive(_itemSelectionHUD,    isCombat && !isSettings);
             SetActive(_playerStatsHUD,      isActivePly);   // also visible in inventory
-            SetActive(_interactionPromptUI,  isCombat);
+            SetActive(_interactionPromptUI,  isCombat && !isSettings);
 
             // Hide designer-specified objects while inventory is open (e.g. action buttons).
             bool enteringInventory = _currentState == UIState.Inventory;
@@ -395,13 +407,13 @@ namespace NightHunt.UI
                 _mobileHUDPanel.SetMobileUIVisible(isActivePly);
 
             // ── Minimap ──────────────────────────────────────────────────────
-            SetActive(_minimapUI, isCombat || isSpectate);
+            SetActive(_minimapUI, (isCombat || isSpectate) && !isSettings);
 
             // ── Inventory ────────────────────────────────────────────────────
-            if (_inventoryRoot != null) _inventoryRoot.SetActive(isInventory);
+            if (_inventoryRoot != null) _inventoryRoot.SetActive(isInventory && !isSettings);
 
             // ── Match layer ──────────────────────────────────────────────────
-            bool matchVisible = !isPostMatch;
+            bool matchVisible = !isPostMatch && !isSettings;
             SetActive(_matchUI,    matchVisible);
             SetActive(_killFeedUI, matchVisible);
             if (_objectiveCaptureHUD != null)
@@ -413,8 +425,9 @@ namespace NightHunt.UI
             // Death screen — panel manages its own Show/Hide animation;
             // we only toggle the root GameObject as a broad on/off.
             if (_deathScreen != null) _deathScreen.gameObject.SetActive(isDead);
-            SetActive(_spectatorHUD,  isSpectate);
-            if (_resultsView != null)  _resultsView.gameObject.SetActive(isPostMatch);
+            SetActive(_spectatorHUD,  isSpectate && !isSettings);
+            if (_resultsView != null)  _resultsView.gameObject.SetActive(isPostMatch && !isSettings);
+            SetActive(_settingsView,   isSettings);
         }
 
         private static void SetActive(Component c, bool active)
@@ -424,16 +437,22 @@ namespace NightHunt.UI
 
         // ── Lifecycle event handlers ──────────────────────────────────────────
 
-        private void OnLocalPlayerDied()      => SetState(UIState.Dead);
+        private void OnLocalPlayerDied()
+        {
+            CloseSettingsOverlay(false);
+            SetState(UIState.Dead);
+        }
 
         private void OnLocalPlayerRespawned()
         {
+            CloseSettingsOverlay(false);
             _deathScreen?.Hide();
             SetState(UIState.Combat);
         }
 
         private void OnSpectateStarted()
         {
+            CloseSettingsOverlay(false);
             // Hide any loot panel that the local player had open before dying.
             _lootContainerUI?.Hide();
             SetState(UIState.Spectating);
@@ -441,6 +460,7 @@ namespace NightHunt.UI
 
         private void OnSpectateStopped()
         {
+            CloseSettingsOverlay(false);
             // HideSpectateView is a no-op if the panel is not in spectate mode,
             // so this is safe to call unconditionally.
             _lootContainerUI?.HideSpectateView();
@@ -448,6 +468,66 @@ namespace NightHunt.UI
         }
 
         // ── Inventory Toggle ──────────────────────────────────────────────────
+
+        private void HandleOpenMenuPressed()
+        {
+            if (_currentState == UIState.PostMatch)
+                return;
+
+            if (_settingsOpen || _currentState == UIState.Settings)
+                CloseSettingsOverlay(true);
+            else
+                OpenSettingsOverlay();
+        }
+
+        private void HandleSettingsCloseRequested()
+        {
+            CloseSettingsOverlay(true);
+        }
+
+        private void OpenSettingsOverlay()
+        {
+            if (_settingsView == null || _settingsOpen)
+                return;
+
+            TrySubscribeSettingsView();
+
+            _settingsOpen = true;
+            _lootContainerUI?.Hide();
+
+            if (!_settingsView.gameObject.activeSelf)
+                _settingsView.gameObject.SetActive(true);
+
+            _ = _settingsView.OnShowAsync(new NavigationContext(PanelType.None, PanelType.Settings, false, true, "Gameplay"));
+        }
+
+        private void CloseSettingsOverlay(bool popContext)
+        {
+            if (_settingsView == null)
+                return;
+
+            if (!_settingsOpen && !_settingsView.gameObject.activeSelf)
+                return;
+
+            _settingsOpen = false;
+
+            if (popContext)
+                _ = _settingsView.OnHideAsync(new NavigationContext(PanelType.Settings, PanelType.None, false, true, "Gameplay"));
+
+            if (_settingsView.gameObject.activeSelf)
+                _settingsView.gameObject.SetActive(false);
+        }
+
+        private static UIState ResolveUiStateFromInputState(InputState state)
+        {
+            return state switch
+            {
+                InputState.InventoryOpen => UIState.Inventory,
+                InputState.PlayerDead => UIState.Dead,
+                InputState.Spectating => UIState.Spectating,
+                _ => UIState.Combat
+            };
+        }
 
         private void HandleInventoryToggle()
         {
@@ -464,42 +544,52 @@ namespace NightHunt.UI
             }
         }
 
-        private void HandleInventoryQuickSlot(int oneBasedSlot)
-        {
-            if (_currentState == UIState.Dead || _currentState == UIState.PostMatch ||
-                _currentState == UIState.Spectating)
-            {
-                Debug.Log($"[ITEM_FLOW] [00][QuickSlot.Ignored] slot={oneBasedSlot} state={_currentState}");
-                return;
-            }
-
-            if (_itemSelectionHUD == null)
-            {
-                Debug.LogWarning($"[ITEM_FLOW] [00][QuickSlot.Ignored] slot={oneBasedSlot} reason=no-item-selection-hud");
-                return;
-            }
-
-            _itemSelectionHUD.ActivateQuickSlot(oneBasedSlot);
-        }
-
         private void TrySubscribeInputHandlers()
         {
             var input = InputManager.Instance;
-            if (input == null || input == _subscribedInputManager || input.InventoryHandler == null)
+            if (input == null)
                 return;
 
-            UnsubscribeInputHandlers();
-            input.InventoryHandler.OpenInventoryPerformed += HandleInventoryToggle;
-            input.InventoryHandler.QuickSlotPerformed += HandleInventoryQuickSlot;
+            if (input.InventoryHandler != null && _subscribedInventoryHandler != input.InventoryHandler)
+            {
+                if (_subscribedInventoryHandler != null)
+                    _subscribedInventoryHandler.OpenInventoryPerformed -= HandleInventoryToggle;
+
+                _subscribedInventoryHandler = input.InventoryHandler;
+                _subscribedInventoryHandler.OpenInventoryPerformed += HandleInventoryToggle;
+            }
+
+            if (input.UIHandler != null && _subscribedUIHandler != input.UIHandler)
+            {
+                if (_subscribedUIHandler != null)
+                    _subscribedUIHandler.OnOpenMenuPressed -= HandleOpenMenuPressed;
+
+                _subscribedUIHandler = input.UIHandler;
+                _subscribedUIHandler.OnOpenMenuPressed += HandleOpenMenuPressed;
+            }
+
+            TrySubscribeSettingsView();
             _subscribedInputManager = input;
         }
 
         private void UnsubscribeInputHandlers()
         {
-            if (_subscribedInputManager?.InventoryHandler != null)
+            if (_subscribedInventoryHandler != null)
             {
-                _subscribedInputManager.InventoryHandler.OpenInventoryPerformed -= HandleInventoryToggle;
-                _subscribedInputManager.InventoryHandler.QuickSlotPerformed -= HandleInventoryQuickSlot;
+                _subscribedInventoryHandler.OpenInventoryPerformed -= HandleInventoryToggle;
+                _subscribedInventoryHandler = null;
+            }
+
+            if (_subscribedUIHandler != null)
+            {
+                _subscribedUIHandler.OnOpenMenuPressed -= HandleOpenMenuPressed;
+                _subscribedUIHandler = null;
+            }
+
+            if (_subscribedSettingsView != null)
+            {
+                _subscribedSettingsView.CloseRequested -= HandleSettingsCloseRequested;
+                _subscribedSettingsView = null;
             }
 
             _subscribedInputManager = null;
@@ -507,6 +597,29 @@ namespace NightHunt.UI
 
         private void HandleContextChanged(InputState oldState, InputState newState)
         {
+            if (newState == InputState.Paused)
+            {
+                SetState(UIState.Settings);
+                return;
+            }
+
+            if (oldState == InputState.Paused)
+            {
+                CloseSettingsOverlay(false);
+                SetState(ResolveUiStateFromInputState(newState));
+
+                if (newState == InputState.InventoryOpen)
+                {
+                    Debug.Log($"[INV] Restoring inventory after settings. _inventoryRoot={(_inventoryRoot != null ? _inventoryRoot.name : "NULL")} " +
+                              $"_inventoryScreen={(_inventoryScreen != null ? "ok" : "NULL")} " +
+                              $"_localInteractionSystem={(_localInteractionSystem != null ? "ok" : "NULL")}");
+                    _localInteractionSystem?.HandleInventoryOpened();
+                    StartInventoryProximityRefresh();
+                }
+
+                return;
+            }
+
             // Only respond to Inventory transitions when in control (not dead/spectating/results).
             if (_currentState == UIState.Dead || _currentState == UIState.PostMatch ||
                 _currentState == UIState.Spectating)
@@ -562,6 +675,21 @@ namespace NightHunt.UI
         }
 
         // ── Combat Event Routing ──────────────────────────────────────────────
+
+        private void TrySubscribeSettingsView()
+        {
+            if (_settingsView == null)
+                return;
+
+            if (_subscribedSettingsView == _settingsView)
+                return;
+
+            if (_subscribedSettingsView != null)
+                _subscribedSettingsView.CloseRequested -= HandleSettingsCloseRequested;
+
+            _subscribedSettingsView = _settingsView;
+            _subscribedSettingsView.CloseRequested += HandleSettingsCloseRequested;
+        }
 
         private void HandleAnyPlayerDied(string victimName, string killerName, string weaponId)
         {
@@ -757,6 +885,20 @@ namespace NightHunt.UI
                 _mobileHUDPanel = GetComponentInChildren<MobileHUDPanel>(true);
             if (_cameraLockIndicator == null)
                 _cameraLockIndicator = GetComponentInChildren<CameraLockIndicator>(true);
+            if (_settingsView == null)
+                _settingsView = GetComponentInChildren<SettingsView>(true);
+            if (_settingsView == null)
+            {
+                var settingsRoot = new GameObject("GameplaySettingsView", typeof(RectTransform));
+                settingsRoot.transform.SetParent(transform, false);
+                var rect = settingsRoot.GetComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+                _settingsView = settingsRoot.AddComponent<SettingsView>();
+            }
+            TrySubscribeSettingsView();
         }
 
         private void SubscribeLifecycle(NetworkPlayer player)
@@ -804,6 +946,7 @@ namespace NightHunt.UI
             if (_inventoryRoot != null)  _inventoryRoot.SetActive(false);
             if (_resultsView != null)    _resultsView.gameObject.SetActive(false);
             if (_spectatorHUD != null)   _spectatorHUD.gameObject.SetActive(false);
+            if (_settingsView != null)   _settingsView.gameObject.SetActive(false);
             _objectiveCaptureHUD?.SetHudVisible(false);
             _bossHealthHUD?.SetHudVisible(false);
         }

@@ -34,5 +34,8 @@ namespace NightHunt.UI
 
         /// <summary>Match has ended: results screen visible, all gameplay HUD hidden.</summary>
         PostMatch = 4,
+
+        /// <summary>Gameplay settings / pause overlay.</summary>
+        Settings = 5,
     }
 }
