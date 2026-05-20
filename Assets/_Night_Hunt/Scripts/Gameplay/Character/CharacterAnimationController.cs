@@ -6,6 +6,7 @@ using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Audio;
@@ -72,6 +73,16 @@ namespace NightHunt.Gameplay.Character
 
         [Tooltip("Seconds after Shoot/attack trigger to run melee damage if no animation event is present.")]
         [SerializeField, Min(0f)] private float _meleeHitFallbackDelay = 0.28f;
+
+        [Header("Weapon Timing")]
+        [Tooltip("Fallback draw/holster seconds when the weapon has no DrawSpeed stat.")]
+        [SerializeField, Min(0.01f)] private float _defaultWeaponDrawSeconds = 0.4f;
+
+        [Tooltip("Fraction of DrawSpeed used for armed-to-armed swap holster anticipation.")]
+        [SerializeField, Range(0.1f, 1f)] private float _swapHolsterDelayScale = 0.5f;
+
+        [SerializeField, Min(0.01f)] private float _minWeaponTransitionSeconds = 0.05f;
+        [SerializeField, Min(0.05f)] private float _maxWeaponTransitionSeconds = 1.5f;
 
         // ── Parameter hashes (computed once) ──────────────────────────────────
         private static readonly int SpeedHash            = Animator.StringToHash("Speed");
@@ -516,6 +527,10 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         private void OnWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
         {
+            ItemInstance previousWeapon = oldSlot.HasValue && _weaponSystem != null
+                ? _weaponSystem.GetWeapon(oldSlot.Value)
+                : null;
+
             _activeSlot = newSlot;
 
             int newType = 0;
@@ -562,10 +577,10 @@ namespace NightHunt.Gameplay.Character
             // When holstering: full holster coroutine.
             bool wasArmed = _activeWeaponType != 0;
             _weaponSwitchCoroutine = (newSlot.HasValue && wasArmed)
-                ? StartCoroutine(WeaponSwapCoroutine(newType))
+                ? StartCoroutine(WeaponSwapCoroutine(newType, previousWeapon))
                 : newSlot.HasValue
                     ? StartCoroutine(WeaponEquipCoroutine(newType))
-                    : StartCoroutine(WeaponHolsterCoroutine());
+                    : StartCoroutine(WeaponHolsterCoroutine(previousWeapon));
         }
 
         private void OnWeaponEquipped(WeaponSlotType slot, ItemInstance _)
@@ -581,9 +596,9 @@ namespace NightHunt.Gameplay.Character
         }
 
         /// <summary>
-        /// Equip coroutine: SetInt → EndOfFrame → WeaponChanged(x3) → Draw.
-        /// SetInteger must happen BEFORE the trigger so the Animator reads the
-        /// correct WeaponType when evaluating its transitions.
+        /// Equip coroutine: SetInt -> WeaponChanged(x3) -> Draw -> EndOfFrame.
+        /// Keeping Draw in the same frame as the weapon type swap avoids the
+        /// visible "idle first, draw later" flash on weapon select.
         /// </summary>
         private IEnumerator WeaponEquipCoroutine(int newType)
         {
@@ -596,25 +611,22 @@ namespace NightHunt.Gameplay.Character
             ClearWeaponTriggers(anim);
             SafeSetInt(anim, WeaponTypeHash, newType);
 
-            yield return new WaitForEndOfFrame();
-
-            anim = _actorUtils?.charAnimator; // re-fetch after yield (model may have swapped)
-            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
-
             bool setChanged = SafeSetTrigger(anim, WpnChangedHash);
             bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
             bool setChangedDeath = SafeSetTrigger(anim, WpnChangedDeathHash);
             LogAnimEvent("WeaponEquipChangeTriggers", anim, $"weaponType={newType} triggers=WeaponChanged,WeaponChangedUB,WeaponChangedDeath setChanged={setChanged} setChangedUB={setChangedUb} setChangedDeath={setChangedDeath}");
 
-            yield return WaitForUpperBodyWeaponReady(newType, "WeaponEquipUpperBodyReady", 24);
-
-            anim = _actorUtils?.charAnimator;
-            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
-
             PrimeWeaponActionParams(anim);
             bool setDraw = SafeSetTrigger(anim, DrawHash);
-            LogAnimEvent("WeaponEquipDrawTrigger", anim, $"weaponType={newType} trigger=Draw setDraw={setDraw}");
+            LogAnimEvent("WeaponEquipDrawTrigger", anim, $"weaponType={newType} trigger=Draw setDraw={setDraw} immediate=True");
             ScheduleAnimPostFrameLog("WeaponEquipTriggersPost", $"weaponType={newType} trigger=Draw setDraw={setDraw}");
+
+            yield return new WaitForEndOfFrame();
+
+            anim = _actorUtils?.charAnimator; // re-fetch after yield (model may have swapped)
+            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+
+            yield return WaitForUpperBodyWeaponReady(newType, "WeaponEquipUpperBodyReady", 24);
 
             _isSwitching = false;
             if (_isReloading)
@@ -623,10 +635,10 @@ namespace NightHunt.Gameplay.Character
 
         /// <summary>
         /// Swap coroutine: used when switching between two armed weapon slots.
-        /// Plays a short holster, then equips the new weapon with WeaponChanged + Draw.
-        /// Faster than WeaponHolsterCoroutine (0.2 s vs 0.4 s) to keep swapping snappy.
+        /// Plays a short holster, then applies the new weapon type and Draw in the same frame.
+        /// Faster than WeaponHolsterCoroutine by scaling the weapon DrawSpeed stat.
         /// </summary>
-        private IEnumerator WeaponSwapCoroutine(int newType)
+        private IEnumerator WeaponSwapCoroutine(int newType, ItemInstance previousWeapon)
         {
             _isSwitching = true;
 
@@ -638,7 +650,9 @@ namespace NightHunt.Gameplay.Character
             bool setHolster = SafeSetTrigger(anim, HolsterHash);
             LogAnimEvent("WeaponSwapHolsterTrigger", anim, $"fromType={_activeWeaponType} toType={newType} trigger=Holster setHolster={setHolster}");
 
-            yield return new WaitForSeconds(0.2f);
+            float holsterDelay = ResolveWeaponTransitionSeconds(previousWeapon, _swapHolsterDelayScale);
+            LogAnimEvent("WeaponSwapHolsterDelay", anim, $"delay={holsterDelay:F2} sourceDraw={DescribeWeaponDrawTiming(previousWeapon)} scale={_swapHolsterDelayScale:F2}");
+            yield return new WaitForSeconds(holsterDelay);
 
             anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
@@ -646,25 +660,22 @@ namespace NightHunt.Gameplay.Character
             _activeWeaponType = newType;
             SafeSetInt(anim, WeaponTypeHash, newType);
 
-            yield return new WaitForEndOfFrame();
-
-            anim = _actorUtils?.charAnimator;
-            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
-
             bool setChanged = SafeSetTrigger(anim, WpnChangedHash);
             bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
             bool setChangedDeath = SafeSetTrigger(anim, WpnChangedDeathHash);
             LogAnimEvent("WeaponSwapChangeTriggers", anim, $"weaponType={newType} triggers=WeaponChanged,WeaponChangedUB,WeaponChangedDeath setChanged={setChanged} setChangedUB={setChangedUb} setChangedDeath={setChangedDeath}");
 
-            yield return WaitForUpperBodyWeaponReady(newType, "WeaponSwapUpperBodyReady", 24);
+            PrimeWeaponActionParams(anim);
+            bool setDraw = SafeSetTrigger(anim, DrawHash);
+            LogAnimEvent("WeaponSwapDrawTrigger", anim, $"weaponType={newType} trigger=Draw setDraw={setDraw} immediate=True");
+            ScheduleAnimPostFrameLog("WeaponSwapDrawTriggersPost", $"weaponType={newType} trigger=Draw setDraw={setDraw}");
+
+            yield return new WaitForEndOfFrame();
 
             anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
-            PrimeWeaponActionParams(anim);
-            bool setDraw = SafeSetTrigger(anim, DrawHash);
-            LogAnimEvent("WeaponSwapDrawTrigger", anim, $"weaponType={newType} trigger=Draw setDraw={setDraw}");
-            ScheduleAnimPostFrameLog("WeaponSwapDrawTriggersPost", $"weaponType={newType} trigger=Draw setDraw={setDraw}");
+            yield return WaitForUpperBodyWeaponReady(newType, "WeaponSwapUpperBodyReady", 24);
 
             _isSwitching = false;
             if (_isReloading)
@@ -672,9 +683,9 @@ namespace NightHunt.Gameplay.Character
         }
 
         /// <summary>
-        /// Holster coroutine: Holster trigger → 0.4 s → SetInt(0) → EndOfFrame → WeaponChanged(x3).
+        /// Holster coroutine: Holster trigger -> DrawSpeed seconds -> SetInt(0) -> EndOfFrame -> WeaponChanged(x3).
         /// </summary>
-        private IEnumerator WeaponHolsterCoroutine()
+        private IEnumerator WeaponHolsterCoroutine(ItemInstance previousWeapon)
         {
             _isSwitching = true;
 
@@ -689,7 +700,9 @@ namespace NightHunt.Gameplay.Character
                 LogAnimEvent("WeaponHolsterTrigger", anim, $"activeType={_activeWeaponType} trigger=Holster setHolster={setHolster}");
             }
 
-            yield return new WaitForSeconds(0.4f);
+            float holsterDelay = ResolveWeaponTransitionSeconds(previousWeapon, 1f);
+            LogAnimEvent("WeaponHolsterDelay", anim, $"delay={holsterDelay:F2} sourceDraw={DescribeWeaponDrawTiming(previousWeapon)}");
+            yield return new WaitForSeconds(holsterDelay);
 
             anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
@@ -709,6 +722,28 @@ namespace NightHunt.Gameplay.Character
             // Unarmed — no Draw trigger.
 
             _isSwitching = false;
+        }
+
+        private float ResolveWeaponTransitionSeconds(ItemInstance weapon, float scale)
+        {
+            float seconds = weapon != null
+                ? weapon.GetComputedStat(ItemStatType.DrawSpeed, _defaultWeaponDrawSeconds)
+                : _defaultWeaponDrawSeconds;
+
+            if (seconds <= 0f)
+                seconds = _defaultWeaponDrawSeconds;
+
+            seconds *= Mathf.Max(0.01f, scale);
+            return Mathf.Clamp(seconds, _minWeaponTransitionSeconds, _maxWeaponTransitionSeconds);
+        }
+
+        private string DescribeWeaponDrawTiming(ItemInstance weapon)
+        {
+            if (weapon == null)
+                return $"none fallback={_defaultWeaponDrawSeconds:F2}";
+
+            float seconds = weapon.GetComputedStat(ItemStatType.DrawSpeed, _defaultWeaponDrawSeconds);
+            return $"{weapon.DefinitionID}:{seconds:F2}";
         }
 
         /// <summary>Reset all weapon triggers to prevent stale-trigger issues on new switch.</summary>

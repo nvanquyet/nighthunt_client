@@ -76,6 +76,8 @@ namespace NightHunt.Services.Game
         public event Action<RoomDisbandedEvent> OnRoomDisbanded;
         /// <summary>Fired only to the player who was kicked.</summary>
         public event Action<YouWereKickedEvent> OnYouWereKicked;
+        /// <summary>Fired when backend reports in-match reconnect/disconnect/abandon state.</summary>
+        public event Action<MatchPresenceNoticeEvent> OnMatchPresenceNotice;
 
         // Matchmaking Events
         public event Action<MatchFoundEvent>     OnMatchFound;
@@ -964,6 +966,16 @@ namespace NightHunt.Services.Game
                             OnYouWereKicked?.Invoke(youWereKicked);
                         break;
 
+                    case "match_presence_notice":
+                        var presenceNotice = JsonUtility.FromJson<MatchPresenceNoticeEvent>(messageData.data);
+                        if (presenceNotice != null)
+                        {
+                            if (presenceNotice.room != null)
+                                SetRoomStateIfRelevant(presenceNotice.room, "match_presence_notice");
+                            OnMatchPresenceNotice?.Invoke(presenceNotice);
+                        }
+                        break;
+
                     case "match_ended":
                         var matchEnded = JsonUtility.FromJson<MatchEndedWsEvent>(messageData.data);
                         if (matchEnded != null)
@@ -1149,7 +1161,24 @@ namespace NightHunt.Services.Game
         public class YouWereKickedEvent
         {
             public long roomId;
+            public string matchId;
             public long kickedByUserId;
+            public string reason;
+            public string message;
+            public int graceSeconds;
+        }
+
+        [Serializable]
+        public class MatchPresenceNoticeEvent
+        {
+            public string matchId;
+            public long userId;
+            public string displayName;
+            public string state;
+            public string reason;
+            public int graceSeconds;
+            public string message;
+            public RoomResponse room;
         }
 
         [Serializable]

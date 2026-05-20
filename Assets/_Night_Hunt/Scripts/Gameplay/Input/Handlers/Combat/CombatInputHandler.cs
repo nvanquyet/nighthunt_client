@@ -105,6 +105,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private bool    _mobileAimActive;
         private Vector3 _mobileAimDirection;   // normalised — used for character rotation
         private Vector2 _mobileJoystick01;     // raw [0,1] with magnitude — used for cursor placement
+        private bool    _mobileFirePressHadDrag;
+        private float   _mobileFirePressReleaseMagnitude;
 
         // ── Events ────────────────────────────────────────────────────────────────
         public event System.Action       OnFire;
@@ -368,11 +370,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         {
             bool overUI = IsPointerOverAnyUIByRaycast();
             bool uiConsumed = _uiConsumedThisPress;
+            Debug.Log($"[NH_FLOW][10][Fire.Performed] overUI={overUI} uiConsumed={uiConsumed} {DescribeCombatFlowState()} raycast={DescribePointerRaycastTargets()}");
 
             // A UI ActionButton already handled this press through EventSystem.
             if (uiConsumed)
             {
                 _uiConsumedThisPress = false;
+                Debug.Log($"[NH_FLOW][10][Fire.Performed.Blocked] reason=ui-consumed {DescribeCombatFlowState()}");
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
                     "FirePerformedConsumedByUI",
@@ -387,11 +391,15 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (overUI)
             {
                 if (TryRouteFirePressToCombatUi())
+                {
+                    Debug.Log($"[NH_FLOW][10][Fire.Performed.RoutedToUI] {DescribeCombatFlowState()}");
                     return;
+                }
 
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableThrowableDebugLogs)
                     Debug.Log($"[CombatInputHandler] Fire BLOCKED by UI overlay (IsPointerOverUI=true). " +
                               $"Raycast={DescribePointerRaycastTargets()}");
+                Debug.Log($"[NH_FLOW][10][Fire.Performed.Blocked] reason=pointer-over-ui {DescribeCombatFlowState()} raycast={DescribePointerRaycastTargets()}");
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
                     "FireBlockedByUI",
@@ -404,10 +412,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnFireCanceled(InputAction.CallbackContext ctx)
         {
+            Debug.Log($"[NH_FLOW][18][Fire.Canceled] suppress={_suppressNextFireCanceled} {DescribeCombatFlowState()}");
             if (_suppressNextFireCanceled)
             {
                 _uiConsumedThisPress = false;
                 _suppressNextFireCanceled = false;
+                Debug.Log($"[NH_FLOW][18][Fire.Canceled.Blocked] reason=ui-consumed {DescribeCombatFlowState()}");
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
                     "FireCanceledConsumedByUI",
@@ -432,10 +442,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         /// </summary>
         private void BeginFire()
         {
-            if (_isFiring) return;
+            Debug.Log($"[NH_FLOW][11][BeginFire.Enter] {DescribeCombatFlowState()}");
+            if (_isFiring)
+            {
+                Debug.Log($"[NH_FLOW][11][BeginFire.Ignored] reason=already-firing {DescribeCombatFlowState()}");
+                return;
+            }
 
             if (_itemUseSystem != null && _itemUseSystem.IsDeploying)
             {
+                Debug.Log($"[NH_FLOW][11][BeginFire.Blocked] reason=deploy-preview-active {DescribeCombatFlowState()}");
                 LogDeploy("BeginFire ignored while deploy preview is active; placement confirms on pointer release.");
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
@@ -477,6 +493,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
             {
                 Debug.Log($"[ITEM_FLOW] [10][BeginFire.ItemInUse] block weapon fire currentItem={_itemUseSystem.CurrentItem?.InstanceID ?? "null"} activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"}");
+                Debug.Log($"[NH_FLOW][11][BeginFire.Blocked] reason=item-in-use {DescribeCombatFlowState()}");
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
                     "FireBlocked",
@@ -485,11 +502,15 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 return;
             }
 
+            if (TryUseSelectedItemFromFire())
+                return;
+
             // Active weapon fire.
             if (_weaponSystem != null && _weaponSystem.GetActiveWeaponSlot() != null)
             {
                 _isFiring = true;
                 FireMode mode = _weaponSystem.GetCurrentFireMode();
+                Debug.Log($"[NH_FLOW][12][BeginWeaponFire] mode={mode} {DescribeCombatFlowState()}");
 
                 // ── Freeze camera at current yaw ──────────────────────────────────
                 if (_cameraStateManager != null)
@@ -529,31 +550,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
             // No weapon, no armed throwable — use selected item on fire press.
             // For throwables this arms the item only; the next deliberate fire press/release confirms the throw.
-            if (_itemSelectionSystem != null && _itemSelectionSystem.HasSelection)
-            {
-                var selectedItem = _itemSelectionSystem.SelectedItem;
-                var def = selectedItem != null ? ItemDatabase.GetDefinition(selectedItem.DefinitionID) : null;
-
-                Debug.Log($"[ITEM_FLOW] [10][BeginFire.UseSelected] selected={selectedItem?.InstanceID ?? "null"} def={def?.ItemID ?? "null"}");
-                _itemSelectionSystem.RequestUseSelectedItem();
-                PhaseTestLog.Log(
-                    PhaseTestLogCategory.Input,
-                    "UseSelectedItemFromFire",
-                    $"selected={selectedItem?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"} aim={_aimDirection:F2} target={_lastGroundHitPoint:F2}",
-                    this);
-
-                if (def != null && def.Type == ItemType.Throwable)
-                {
-                    // Arm/preview only. Do not set _isFiring here, otherwise the same mouse-up
-                    // that armed the item would immediately execute the throw.
-                    if (_rangeIndicator != null)
-                        _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
-                    _aimSystem?.SetCursorVisible(true);
-                }
-                // Consumable: ItemUseSystem handles progress immediately once the server routes use.
-                // Deployable: ItemUseSystem enters placement mode; placement handler owns confirm/cancel.
-                return;
-            }
+            if (!TryUseSelectedItemFromFire())
+                Debug.Log($"[NH_FLOW][11][BeginFire.Ignored] reason=no-weapon-no-selected-item {DescribeCombatFlowState()}");
         }
 
         /// <summary>
@@ -564,13 +562,44 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         ///   2. Restore movement lock state
         ///   3. Restore camera state (re-enable CinemachineInputAxisController if previously Free)
         /// </summary>
+        // Uses selected item intent before weapon fire so HUD/keyboard item selections can be confirmed by Fire.
+        private bool TryUseSelectedItemFromFire()
+        {
+            if (_itemSelectionSystem == null || !_itemSelectionSystem.HasSelection)
+                return false;
+
+            var selectedItem = _itemSelectionSystem.SelectedItem;
+            var def = selectedItem != null ? ItemDatabase.GetDefinition(selectedItem.DefinitionID) : null;
+
+            Debug.Log($"[ITEM_FLOW] [10][BeginFire.UseSelected] selected={selectedItem?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"}");
+            Debug.Log($"[NH_FLOW][13][UseSelectedFromFire] selected={selectedItem?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"} {DescribeCombatFlowState()}");
+            _itemSelectionSystem.RequestUseSelectedItem();
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Input,
+                "UseSelectedItemFromFire",
+                $"selected={selectedItem?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"} activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"} aim={_aimDirection:F2} target={_lastGroundHitPoint:F2}",
+                this);
+
+            if (def != null && def.Type == ItemType.Throwable)
+            {
+                if (_rangeIndicator != null)
+                    _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
+                _aimSystem?.SetCursorVisible(true);
+            }
+
+            return true;
+        }
+
         private void EndFire()
         {
+            Debug.Log($"[NH_FLOW][19][EndFire.Enter] {DescribeCombatFlowState()}");
             if (_itemUseSystem != null && _itemUseSystem.IsDeploying)
             {
-                float joystickMagnitude = _mobileJoystick01.magnitude;
+                float joystickMagnitude = GetMobileFireReleaseJoystickMagnitude();
+                Debug.Log($"[NH_FLOW][20][EndFire.DeployConfirm] joystickMagnitude={joystickMagnitude:F2} current={_mobileJoystick01.magnitude:F2} captured={_mobileFirePressReleaseMagnitude:F2} hadDrag={_mobileFirePressHadDrag} {DescribeCombatFlowState()}");
                 ResolveItemAimController()?.ConfirmDeployFromFireButtonRelease(joystickMagnitude);
                 SetFireMobileJoystick(Vector2.zero, false);
+                ClearMobileFirePressReleaseState();
                 _rangeIndicator?.Hide();
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
@@ -582,6 +611,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
             if (!_isFiring && !_pendingSingleShotOnRelease)
             {
+                Debug.Log($"[NH_FLOW][19][EndFire.Ignored] reason=not-firing-no-single-shot {DescribeCombatFlowState()}");
+                ClearMobileFirePressReleaseState();
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
                     "EndFireIgnored",
@@ -596,6 +627,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_isFiring && IsCurrentItemThrowable() && !ItemAimController.IsAimingPC)
             {
                 Vector3 throwTarget = GetCurrentThrowAimTarget();
+                Debug.Log($"[NH_FLOW][21][EndFire.ThrowConfirm] target={throwTarget:F2} {DescribeCombatFlowState()}");
                 LogThrowable($"EndFire.ThrowConfirm target={throwTarget:F2} currentItem={_itemUseSystem?.CurrentItem?.InstanceID ?? "null"} activeWeapon={hasActiveWeapon}");
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
@@ -608,6 +640,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_pendingSingleShotOnRelease)
             {
                 PrepareImmediateFireAim("ReleaseSingleShot");
+                Debug.Log($"[NH_FLOW][22][EndFire.SingleShot] {DescribeCombatFlowState()}");
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
                     "ReleaseSingleShot",
@@ -640,6 +673,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             _mobileAimActive    = false;
             _mobileAimDirection = Vector3.zero;
             _mobileJoystick01   = Vector2.zero;
+            ClearMobileFirePressReleaseState();
             _aimSystem?.SetThrowableAim(Vector2.zero);  // exit throwable mode if joystick activated it
 
             if (!ItemAimController.IsAimingPC && !ItemAimController.IsDeployingPC)
@@ -648,6 +682,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 ItemAimController.ClearExternalAimTarget();
 
             OnFireStop?.Invoke();
+            Debug.Log($"[NH_FLOW][23][EndFire.Exit] {DescribeCombatFlowState()}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Input,
                 "EndFire",
@@ -668,6 +703,19 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             return _itemAimController;
         }
 
+        private float GetMobileFireReleaseJoystickMagnitude()
+        {
+            return _mobileFirePressHadDrag
+                ? _mobileFirePressReleaseMagnitude
+                : _mobileJoystick01.magnitude;
+        }
+
+        private void ClearMobileFirePressReleaseState()
+        {
+            _mobileFirePressHadDrag = false;
+            _mobileFirePressReleaseMagnitude = 0f;
+        }
+
         // ── Other Input Callbacks ─────────────────────────────────────────────────
 
         private void OnAimPerformed(InputAction.CallbackContext ctx)  { _isAiming = true;  OnAimStart?.Invoke(); }
@@ -675,6 +723,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnReloadPerformed(InputAction.CallbackContext ctx)
         {
+            Debug.Log($"[NH_FLOW][30][Reload.Performed] isReloading={_isReloading} {DescribeCombatFlowState()}");
             if (!_isReloading)
             {
                 PhaseTestLog.Log(
@@ -688,10 +737,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         public void SwitchToWeaponSlot(int slot)
         {
+            Debug.Log($"[NH_FLOW][31][WeaponSlot.Request] slot={slot} {DescribeCombatFlowState()}");
             // Cancel any armed throwable/consumable/deployable when switching to a weapon slot.
-            if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
+            bool hasItemIntent = _itemSelectionSystem != null && _itemSelectionSystem.HasSelection;
+            bool isUsingItem = _itemUseSystem != null && _itemUseSystem.IsUsingItem;
+            if (isUsingItem || hasItemIntent)
             {
-                Debug.Log($"[CombatInputHandler] SwitchToWeaponSlot({slot}): cancelling active item use before switching.");
+                Debug.Log($"[CombatInputHandler] SwitchToWeaponSlot({slot}): cancelling item intent before switching. isUsing={isUsingItem} hasSelection={hasItemIntent}");
+                Debug.Log($"[NH_FLOW][31][WeaponSlot.CancelItemIntent] slot={slot} isUsing={isUsingItem} hasSelection={hasItemIntent} {DescribeCombatFlowState()}");
                 _itemSelectionSystem?.RequestCancelSelection();
             }
 
@@ -760,9 +813,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         /// </summary>
         public void SimulateFire(bool start)
         {
-            if (!_inputEnabled) return;
+            Debug.Log($"[NH_FLOW][09][SimulateFire] start={start} {DescribeCombatFlowState()}");
+            if (!_inputEnabled)
+            {
+                Debug.Log($"[NH_FLOW][09][SimulateFire.Blocked] reason=input-disabled start={start} {DescribeCombatFlowState()}");
+                if (!start)
+                    ClearMobileFirePressReleaseState();
+                return;
+            }
             if (start)
             {
+                ClearMobileFirePressReleaseState();
                 // Immediately activate mobile aim so AimSystem stops chasing the mouse
                 // the moment the button is pressed (before the first OnDrag fires).
                 // Direction is the current _aimDirection (where the cursor already is);
@@ -788,9 +849,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         public void SimulateReload()
         {
+            Debug.Log($"[NH_FLOW][30][SimulateReload] {DescribeCombatFlowState()}");
             if (!_inputEnabled || _isReloading)
             {
                 Debug.Log($"[CombatInputHandler] SimulateReload blocked: inputEnabled={_inputEnabled} isReloading={_isReloading}");
+                Debug.Log($"[NH_FLOW][30][SimulateReload.Blocked] reason=input-disabled-or-reloading {DescribeCombatFlowState()}");
                 return;
             }
 
@@ -822,6 +885,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         {
             _uiConsumedThisPress = true;
             _suppressNextFireCanceled = true;
+            Debug.Log($"[NH_FLOW][08][UIConsumedPress] {DescribeCombatFlowState()}");
         }
 
         /// <summary>
@@ -875,6 +939,21 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             }
 
             return FlattenAimTarget(_lastGroundHitPoint);
+        }
+
+        private string DescribeCombatFlowState()
+        {
+            var layers = InputLayerManager.Instance;
+            var selectedItem = _itemSelectionSystem?.SelectedItem;
+            var selectedDef = selectedItem != null ? ItemDatabase.GetDefinition(selectedItem.DefinitionID) : null;
+            var currentItem = _itemUseSystem?.CurrentItem;
+            var currentDef = currentItem != null ? ItemDatabase.GetDefinition(currentItem.DefinitionID) : null;
+            return $"inputEnabled={_inputEnabled} inputState={layers?.CurrentState.ToString() ?? "null"} layers={(layers != null ? layers.ActiveLayers.ToString() : "null")} " +
+                   $"isFiring={_isFiring} pendingSingle={_pendingSingleShotOnRelease} mobileAim={_mobileAimActive} " +
+                   $"activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"} " +
+                   $"hasSelection={_itemSelectionSystem?.HasSelection.ToString() ?? "null"} selected={selectedItem?.InstanceID ?? "null"} selectedDef={selectedDef?.ItemID ?? "null"} selectedType={selectedDef?.Type.ToString() ?? "null"} " +
+                   $"itemUsing={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"} currentItem={currentItem?.InstanceID ?? "null"} currentDef={currentDef?.ItemID ?? "null"} currentType={currentDef?.Type.ToString() ?? "null"} " +
+                   $"aim={_aimDirection:F2} ground={_lastGroundHitPoint:F2}";
         }
 
         private Vector3 FlattenAimTarget(Vector3 worldPos)
@@ -987,6 +1066,12 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         /// </summary>
         public void SetFireMobileJoystick(Vector2 joystick01, bool active)
         {
+            if (active)
+            {
+                _mobileFirePressHadDrag = true;
+                _mobileFirePressReleaseMagnitude = joystick01.magnitude;
+            }
+
             if (active && joystick01.sqrMagnitude > 0.001f)
             {
                 _mobileAimActive    = true;

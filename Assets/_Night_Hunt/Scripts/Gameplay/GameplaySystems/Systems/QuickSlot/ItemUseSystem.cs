@@ -217,6 +217,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             }
 
             Debug.Log($"[ITEM_SELECT_FLOW] ItemUse.UseItem entry item={item.InstanceID} def={item.DefinitionID} qty={item.Quantity} isServer={IsServerInitialized} isOwner={IsOwner}");
+            Debug.Log($"[NH_FLOW][32][ItemUse.UseItem] item={item.InstanceID} def={item.DefinitionID} qty={item.Quantity} isServer={IsServerInitialized} isOwner={IsOwner} using={_isUsingItem} current='{_currentItem?.InstanceID ?? "null"}' owner={Owner?.ClientId}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.ItemUse,
                 "UseItem",
@@ -229,10 +230,12 @@ namespace NightHunt.GameplaySystems.ItemUse
                 if (IsOwner)
                 {
                     Debug.Log($"[ITEM_SELECT_FLOW] ItemUse.UseItem -> RequestUseItemServerRpc item={item.InstanceID}");
+                    Debug.Log($"[NH_FLOW][33][ItemUse.UseItem.RouteRpc] item={item.InstanceID} def={item.DefinitionID} owner={Owner?.ClientId}");
                     RequestUseItemServerRpc(item.InstanceID);
                     return true; // Optimistic; outcome fires via events.
                 }
                 Debug.LogWarning($"[ITEM_SELECT_FLOW] ItemUse.UseItem blocked: caller does not own item-use object item={item.InstanceID}.");
+                Debug.LogWarning($"[NH_FLOW][33][ItemUse.UseItem.Rejected] reason=not-owner item={item.InstanceID} owner={Owner?.ClientId}");
                 Debug.LogWarning("[ItemUseSystem] UseItem: caller does not own this object.");
                 return false;
             }
@@ -248,10 +251,12 @@ namespace NightHunt.GameplaySystems.ItemUse
         private void RequestUseItemServerRpc(string instanceID)
         {
             Debug.Log($"[ITEM_SELECT_FLOW] RequestUseItemServerRpc received instance='{instanceID}' owner={Owner?.ClientId}");
+            Debug.Log($"[NH_FLOW][34][Rpc.UseItem] instance='{instanceID}' owner={Owner?.ClientId} inventory={(_inventorySystem != null ? "ok" : "null")}");
             var item = _inventorySystem?.GetItemByInstanceID(instanceID);
             if (item == null)
             {
                 Debug.LogWarning($"[ITEM_SELECT_FLOW] RequestUseItemServerRpc failed: item '{instanceID}' not found on server inventory.");
+                Debug.LogWarning($"[NH_FLOW][34][Rpc.UseItem.Rejected] reason=item-not-found instance='{instanceID}' owner={Owner?.ClientId}");
                 Debug.LogWarning($"[ItemUseSystem] RequestUseItemServerRpc: item '{instanceID}' not found on server.");
                 return;
             }
@@ -263,6 +268,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         {
             if (item == null)
             {
+                Debug.LogWarning("[NH_FLOW][35][ItemUse.ServerRejected] reason=null-item");
                 Debug.LogWarning("[ItemUseSystem] UseItemServer: item is null");
                 return false;
             }
@@ -278,6 +284,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                 }
                 else
                 {
+                    Debug.LogWarning($"[NH_FLOW][35][ItemUse.ServerRejected] reason=already-using requested={item.InstanceID} current={_currentItem?.InstanceID ?? "null"} deploying={_deployableHandler?.IsDeploying.ToString() ?? "null"}");
                     Debug.LogWarning("[ItemUseSystem] Already using an item");
                     return false;
                 }
@@ -287,11 +294,13 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (def == null)
             {
                 Debug.LogError($"[ITEM_SELECT_FLOW] UseItemServer failed: no definition '{item.DefinitionID}' item={item.InstanceID}.");
+                Debug.LogError($"[NH_FLOW][35][ItemUse.ServerRejected] reason=def-not-found item={item.InstanceID} def={item.DefinitionID}");
                 Debug.LogError($"[ItemUseSystem] No definition: {item.DefinitionID}");
                 return false;
             }
 
             Debug.Log($"[ITEM_FLOW] [07][UseServer.Route] item={item.InstanceID} def={item.DefinitionID} defType={def.GetType().Name} itemType={def.Type}");
+            Debug.Log($"[NH_FLOW][35][ItemUse.ServerRoute] item={item.InstanceID} def={def.ItemID} defType={def.GetType().Name} itemType={def.Type} previousSlot={_previousWeaponSlot?.ToString() ?? "none"} owner={Owner?.ClientId}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.ItemUse,
                 "UseServerRoute",
@@ -323,6 +332,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         {
             if (!_isUsingItem || _currentItem == null)
             {
+                Debug.LogWarning($"[NH_FLOW][38][ItemUse.ExecuteThrowRejected] reason=no-active-throwable target={aimTarget:F2} using={_isUsingItem} current={_currentItem?.InstanceID ?? "null"}");
                 Debug.LogWarning("[ItemUseSystem] ExecuteThrow: no active throwable");
                 return;
             }
@@ -330,6 +340,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             var def = ItemDatabase.GetDefinition(_currentItem.DefinitionID) as ThrowableDefinition;
             if (def == null)
             {
+                Debug.LogError($"[NH_FLOW][38][ItemUse.ExecuteThrowRejected] reason=current-not-throwable current={_currentItem.InstanceID} def={_currentItem.DefinitionID}");
                 Debug.LogError("[ItemUseSystem] Current item is not throwable");
                 return;
             }
@@ -337,6 +348,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             // Reuse the shared _useCoroutine slot so CancelUse() can interrupt mid-prepare.
             if (_useCoroutine != null)
             {
+                Debug.LogWarning($"[NH_FLOW][38][ItemUse.ExecuteThrowRejected] reason=already-preparing current={_currentItem.InstanceID}");
                 Debug.LogWarning("[ItemUseSystem] ExecuteThrow ignored: throw is already preparing.");
                 return;
             }
@@ -344,6 +356,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             Vector3 sanitizedTarget = SanitizeThrowableTarget(def, aimTarget);
             _pendingThrowTarget = sanitizedTarget;
             LogThrowable($"ExecuteThrow target requested={aimTarget:F2} sanitized={sanitizedTarget:F2} item={_currentItem.InstanceID} def={def.ItemID} prepare={def.PrepareTime:F2}");
+            Debug.Log($"[NH_FLOW][38][ItemUse.ExecuteThrow] item={_currentItem.InstanceID} def={def.ItemID} target={aimTarget:F2} sanitized={sanitizedTarget:F2} prepare={def.PrepareTime:F2}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Throwable,
                 "ExecuteThrow",
@@ -430,6 +443,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         public void RequestExecuteThrow(Vector3 aimTarget)
         {
             LogThrowable($"RequestExecuteThrow RPC server received target={aimTarget:F2} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem} owner={Owner?.ClientId}");
+            Debug.Log($"[NH_FLOW][37][Rpc.ExecuteThrow] target={aimTarget:F2} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem} owner={Owner?.ClientId}");
             ExecuteThrow(aimTarget);
         }
 
@@ -441,6 +455,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         [ServerRpc(RequireOwnership = true)]
         public void RequestCancelUse()
         {
+            Debug.Log($"[NH_FLOW][37][Rpc.CancelUse] current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem} owner={Owner?.ClientId}");
             CancelUse();
         }
 
@@ -480,12 +495,14 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (_deployableHandler == null)
             {
                 Debug.LogWarning("[DEPLOY_FLOW] TryConfirmDeploy failed: IDeployableHandler missing on owner.");
+                Debug.LogWarning($"[NH_FLOW][39][ItemUse.TryConfirmDeployRejected] reason=no-handler current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem}");
                 return false;
             }
 
             string instanceId = _currentItem?.InstanceID;
             bool confirmed = _deployableHandler.TryCapturePlacement(out Vector3 position, out Quaternion rotation);
             LogDeploy($"TryConfirmDeploy capture={confirmed} item={instanceId ?? "null"} using={_isUsingItem} pos={position:F2} rot={rotation.eulerAngles:F1}");
+            Debug.Log($"[NH_FLOW][39][ItemUse.TryConfirmDeploy] capture={confirmed} item={instanceId ?? "null"} using={_isUsingItem} pos={position:F2} rot={rotation.eulerAngles:F1}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Deploy,
                 "TryConfirmDeploy",
@@ -513,12 +530,14 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (!_isUsingItem || _currentItem == null || _currentItem.InstanceID != instanceId)
             {
                 Debug.LogWarning($"[DEPLOY_FLOW] BeginConfirmedDeploy ignored: requested={instanceId} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem}");
+                Debug.LogWarning($"[NH_FLOW][41][ItemUse.ConfirmedDeployRejected] reason=current-mismatch requested={instanceId} current={_currentItem?.InstanceID ?? "null"} using={_isUsingItem}");
                 return false;
             }
 
             if (_useCoroutine != null)
             {
                 Debug.LogWarning($"[DEPLOY_FLOW] BeginConfirmedDeploy ignored: deploy already in progress item={instanceId}");
+                Debug.LogWarning($"[NH_FLOW][41][ItemUse.ConfirmedDeployRejected] reason=already-in-progress item={instanceId}");
                 return false;
             }
 
@@ -526,11 +545,13 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (def == null || def.Type != ItemType.Deployable)
             {
                 Debug.LogWarning($"[DEPLOY_FLOW] BeginConfirmedDeploy ignored: invalid def={_currentItem.DefinitionID}");
+                Debug.LogWarning($"[NH_FLOW][41][ItemUse.ConfirmedDeployRejected] reason=invalid-def item={instanceId} def={_currentItem.DefinitionID}");
                 return false;
             }
 
             float duration = ResolveDeployDuration(def);
             LogDeploy($"BeginConfirmedDeploy accepted: item={instanceId} def={def.ItemID} duration={duration:F2} pos={position:F2} rot={rotation.eulerAngles:F1}");
+            Debug.Log($"[NH_FLOW][41][ItemUse.ConfirmedDeploy] item={instanceId} def={def.ItemID} duration={duration:F2} pos={position:F2} rot={rotation.eulerAngles:F1}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Deploy,
                 "BeginConfirmedDeploy",
@@ -602,12 +623,16 @@ namespace NightHunt.GameplaySystems.ItemUse
         public void CancelUse()
         {
             if (!_isUsingItem)
+            {
+                Debug.Log($"[NH_FLOW][42][ItemUse.CancelIgnored] reason=not-using current={_currentItem?.InstanceID ?? "null"}");
                 return;
+            }
 
             // Check if cancellation allowed
             var def = ItemDatabase.GetDefinition(_currentItem?.DefinitionID);
             if (def != null && !def.CanCancelUsage)
             {
+                Debug.Log($"[NH_FLOW][42][ItemUse.CancelRejected] reason=cannot-cancel item={_currentItem?.InstanceID ?? "null"} def={def.ItemID}");
                 Debug.Log("[ItemUseSystem] This item cannot be cancelled");
                 return;
             }
@@ -630,6 +655,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             TargetEndItemUseVisual(Owner);
             DestroyItemInHand();
             RestoreWeapon();
+            Debug.Log($"[NH_FLOW][42][ItemUse.CancelUse] item={item?.InstanceID ?? "null"} def={item?.DefinitionID ?? "null"} restoreSlot={_previousWeaponSlot?.ToString() ?? "none"}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.ItemUse,
                 "CancelUse",
@@ -662,6 +688,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         private bool BeginConsumable(ItemInstance item, ConsumableDefinition def)
         {
             Debug.Log($"[ITEM_FLOW] [08][BeginConsumable] item={item.InstanceID} def={def.ItemID} duration={(def.UsageDuration > 0f ? def.UsageDuration : _defaultUseTime):F2}");
+            Debug.Log($"[NH_FLOW][36][ItemUse.BeginConsumable] item={item.InstanceID} def={def.ItemID} duration={(def.UsageDuration > 0f ? def.UsageDuration : _defaultUseTime):F2}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.ItemUse,
                 "BeginConsumable",
@@ -809,6 +836,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         private bool BeginThrowable(ItemInstance item, ThrowableDefinition def)
         {
             Debug.Log($"[ITEM_FLOW] [08][BeginThrowable] item={item.InstanceID} def={def.ItemID} prepare={def.PrepareTime:F2}");
+            Debug.Log($"[NH_FLOW][36][ItemUse.BeginThrowable] item={item.InstanceID} def={def.ItemID} prepare={def.PrepareTime:F2}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Throwable,
                 "BeginThrowable",
@@ -840,6 +868,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         private bool BeginDeployable(ItemInstance item, ItemDefinition def)
         {
             LogDeploy($"BeginDeployable item={item.InstanceID} def={def.ItemID} handler={(_deployableHandler != null ? "ok" : "null")}");
+            Debug.Log($"[NH_FLOW][36][ItemUse.BeginDeployable] item={item.InstanceID} def={def.ItemID} handler={(_deployableHandler != null ? "ok" : "null")}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Deploy,
                 "BeginDeployable",
@@ -848,6 +877,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (_deployableHandler == null)
             {
                 Debug.LogWarning($"[ItemUseSystem] Deployable '{def.DisplayName}' selected but no IDeployableHandler is present on the player.");
+                Debug.LogWarning($"[NH_FLOW][36][ItemUse.BeginDeployableRejected] reason=no-handler item={item.InstanceID} def={def.ItemID}");
                 return false;
             }
 
@@ -870,6 +900,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (item == null || def == null)
             {
                 Debug.LogWarning($"[ItemUseSystem] TargetBeginDeployable failed: item={instanceId} def={definitionId}");
+                Debug.LogWarning($"[NH_FLOW][43][Target.BeginDeployableRejected] reason=item-or-def-null item={instanceId} def={definitionId}");
                 return;
             }
 
@@ -881,13 +912,17 @@ namespace NightHunt.GameplaySystems.ItemUse
                 .Resolve();
 
             if (_deployableHandler == null || !_deployableHandler.BeginDeploy(item, def))
+            {
                 Debug.LogWarning($"[ItemUseSystem] No deployable handler accepted '{def.DisplayName}'.");
+                Debug.LogWarning($"[NH_FLOW][43][Target.BeginDeployableRejected] reason=handler-rejected item={item.InstanceID} def={def.ItemID} handler={(_deployableHandler != null ? "ok" : "null")}");
+            }
             else
             {
                 _currentItem = item;
                 _isUsingItem = true;
                 OnItemUseStarted?.Invoke(item);
                 LogDeploy($"TargetBeginDeployable active: item={item.InstanceID} def={def.ItemID}");
+                Debug.Log($"[NH_FLOW][43][Target.BeginDeployable] item={item.InstanceID} def={def.ItemID} handler={_deployableHandler.GetType().Name}");
             }
         }
 
@@ -903,6 +938,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (item == null || def == null)
             {
                 Debug.LogWarning($"[ItemUseSystem] TargetBeginHeldItem failed: item={instanceId} def={definitionId}");
+                Debug.LogWarning($"[NH_FLOW][43][Target.BeginHeldItemRejected] item={instanceId} def={definitionId}");
                 return;
             }
 
@@ -911,6 +947,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             OnItemUseStarted?.Invoke(item);
             SpawnItemInHandGeneric(def);
             Debug.Log($"[ITEM_FLOW] [09][TargetBeginHeldItem] item={item.InstanceID} def={def.ItemID}");
+            Debug.Log($"[NH_FLOW][43][Target.BeginHeldItem] item={item.InstanceID} def={def.ItemID} type={def.Type}");
         }
 
         [TargetRpc]
@@ -922,6 +959,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             _deployableHandler?.CancelDeploy();
             if (prevItem != null) OnItemUseCompleted?.Invoke(prevItem);
             DestroyItemInHand();
+            Debug.Log($"[NH_FLOW][44][Target.EndItemUseVisual] prevItem={prevItem?.InstanceID ?? "null"}");
         }
 
         /// <summary>
@@ -1086,6 +1124,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             TargetEndItemUseVisual(Owner);
             DestroyItemInHand();
             RestoreWeapon();
+            Debug.Log($"[NH_FLOW][44][ItemUse.CompleteUse] item={item?.InstanceID ?? "null"} def={item?.DefinitionID ?? "null"} restoreSlot={_previousWeaponSlot?.ToString() ?? "none"}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.ItemUse,
                 "CompleteUse",

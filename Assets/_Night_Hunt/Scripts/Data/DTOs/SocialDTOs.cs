@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace NightHunt.Data.DTOs
@@ -119,7 +119,7 @@ namespace NightHunt.Data.DTOs
     }
 
     [Serializable]
-    public class PartyMatchmakingRequest
+    public class PartyRankedQueueRequest
     {
         public string gameMode;        // "2v2" | "3v3" | "4v4" | "5v5"
         public bool   allowFill = true;
@@ -145,14 +145,20 @@ namespace NightHunt.Data.DTOs
         public long   hostUserId;           // [WAS: leaderId — FIXED]
         public string hostUsername;
         public string partyStatus;          // "IDLE"|"IN_QUEUE"|"IN_ROOM"|"IN_GAME"|"DISBANDED" [WAS: status — FIXED]
+        /// <summary>NONE | RANKED | CUSTOM — mutual-exclusivity context set by the server.</summary>
+        public string partyMode;
         public int    maxMembers;
         public int    currentMemberCount;
         public string createdAt;
         public List<PartyMemberResponse> members;
 
         // Convenience helpers
-        public bool IsInQueue => partyStatus == "IN_QUEUE";
-        public bool IsInRoom  => partyStatus == "IN_ROOM";
+        public bool IsInQueue  => partyStatus == "IN_QUEUE";
+        public bool IsInRoom   => partyStatus == "IN_ROOM";
+        /// <summary>Party is actively searching for a ranked match.</summary>
+        public bool IsRanked   => partyMode == "RANKED";
+        /// <summary>Party is in a party custom mode room.</summary>
+        public bool IsCustom   => partyMode == "CUSTOM";
     }
 
     /// <summary>

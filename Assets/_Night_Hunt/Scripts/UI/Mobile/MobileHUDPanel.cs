@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using NightHunt.Config;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
@@ -62,9 +63,6 @@ namespace NightHunt.UI.Mobile
         // ── Inspector ─────────────────────────────────────────────────────────
 
         [Header("Platform")]
-        [Tooltip("Treat this panel as mobile even in the Editor — use for in-Editor testing.")]
-        [SerializeField] private bool _forceMobileMode;
-
         [Tooltip("Root GameObject that contains all mobile-only controls. " +
                  "Shown on mobile / hidden on desktop.")]
         [SerializeField] private GameObject _mobileRoot;
@@ -121,7 +119,8 @@ namespace NightHunt.UI.Mobile
         // ── Runtime ───────────────────────────────────────────────────────────
 
         /// <summary>True when the panel is treating the current runtime as mobile.</summary>
-        public bool IsMobile => _forceMobileMode || PlatformManager.IsMobile;
+        public bool IsMobile => IsForceMobileModeEnabled || PlatformManager.IsMobile;
+        private bool IsForceMobileModeEnabled => GameSettings.Instance != null && GameSettings.Instance.ForceMobileMode;
         private bool ShouldProcessMobileControls =>
             IsMobile ||
             (_mobileRoot != null && _mobileRoot.activeInHierarchy) ||
@@ -167,6 +166,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnEnable()
         {
+            GameSettings.OnSettingsChanged += HandleGameSettingsChanged;
             ApplyPlatformVisibility();
             _rollCooldownRemaining = 0f;
             RefreshRollButton();
@@ -177,6 +177,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnDisable()
         {
+            GameSettings.OnSettingsChanged -= HandleGameSettingsChanged;
             UnsubscribeRollCooldown();
         }
 
@@ -307,7 +308,7 @@ namespace NightHunt.UI.Mobile
         }
 
         /// <summary>
-        /// Force the mobile root visibility without changing _forceMobileMode.
+        /// Force the mobile root visibility without changing the config flag.
         /// Useful for toggling mobile UI from a settings screen at runtime.
         /// </summary>
         public void SetMobileUIVisible(bool visible)
@@ -348,7 +349,14 @@ namespace NightHunt.UI.Mobile
             SetContextualButtonVisible(_pickupButton, false);
             SetContextualButtonVisible(_reloadButton, false);
 
-            Debug.Log($"[MOBILE_INPUT] MobileHUD refs root={(_mobileRoot != null ? _mobileRoot.name : "null")} rootActive={(_mobileRoot != null && _mobileRoot.activeInHierarchy)} forceMobile={_forceMobileMode} isMobile={IsMobile} reload={(_reloadButton != null ? _reloadButton.name : "null")} interact={(_interactButton != null ? _interactButton.name : "null")} pickup={(_pickupButton != null ? _pickupButton.name : "null")} cameraDrag={(_cameraDragArea != null ? _cameraDragArea.name : "null")} pinch={(_pinchZoomBridge != null ? _pinchZoomBridge.name : "null")}");
+            Debug.Log($"[MOBILE_INPUT] MobileHUD refs root={(_mobileRoot != null ? _mobileRoot.name : "null")} rootActive={(_mobileRoot != null && _mobileRoot.activeInHierarchy)} forceMobile={IsForceMobileModeEnabled} isMobile={IsMobile} reload={(_reloadButton != null ? _reloadButton.name : "null")} interact={(_interactButton != null ? _interactButton.name : "null")} pickup={(_pickupButton != null ? _pickupButton.name : "null")} cameraDrag={(_cameraDragArea != null ? _cameraDragArea.name : "null")} pinch={(_pinchZoomBridge != null ? _pinchZoomBridge.name : "null")}");
+        }
+
+        private void HandleGameSettingsChanged()
+        {
+            ApplyPlatformVisibility();
+            RefreshReloadButtonVisibility(forceLog: true);
+            RefreshContextualButtonVisibility(forceLog: true);
         }
 
         private Button FindButtonByName(params string[] nameTokens)

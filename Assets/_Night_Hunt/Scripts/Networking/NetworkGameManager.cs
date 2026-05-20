@@ -48,6 +48,7 @@ namespace NightHunt.Networking
         private int  _retryCount;
         private bool _connectionStarted;
         private bool _connected;
+        private bool _intentionalDisconnect;
         private bool _dsReady;          // true after ds_ready WS received
         private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
 
@@ -304,16 +305,37 @@ namespace NightHunt.Networking
             switch (args.ConnectionState)
             {
                 case LocalConnectionState.Started:
+                    _intentionalDisconnect = false;
                     _connected = true;
                     Debug.Log("[NetworkGameManager] ✅ Client connected to match server.");
                     MatchLoadingOverlay.Instance?.MarkConnected();
+                    ReconnectOverlay.Instance?.Hide();
                     break;
 
                 case LocalConnectionState.Stopped:
-                    if (_connectionStarted && !_connected)
+                    if (_intentionalDisconnect)
                     {
-                        Debug.LogWarning("[NetworkGameManager] Connection to match server failed.");
                         _connectionStarted = false;
+                        _connected = false;
+                        _intentionalDisconnect = false;
+                        ReconnectOverlay.Instance?.Hide();
+                        break;
+                    }
+
+                    if (_connectionStarted)
+                    {
+                        bool wasConnected = _connected;
+                        _connected = false;
+                        _connectionStarted = false;
+                        if (wasConnected)
+                        {
+                            Debug.LogWarning("[NetworkGameManager] Match server connection dropped. Attempting reconnect.");
+                            ReconnectOverlay.Instance?.Show();
+                        }
+                        else
+                        {
+                            Debug.LogWarning("[NetworkGameManager] Connection to match server failed.");
+                        }
                         TryRetry();
                     }
                     break;
@@ -400,12 +422,13 @@ namespace NightHunt.Networking
             if (_retryCount >= _maxRetries)
             {
                 Debug.LogError("[NetworkGameManager] Max retries reached — returning to home.");
+                OnRetryAttempt?.Invoke(_maxRetries + 1, _maxRetries);
                 Invoke(nameof(LoadHome), 1.5f);
                 return;
             }
+            Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
             _retryCount++;
             OnRetryAttempt?.Invoke(_retryCount, _maxRetries);
-            Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
             Invoke(nameof(RetryConnect), _retryDelay);
         }
 
@@ -417,9 +440,11 @@ namespace NightHunt.Networking
 
         private void LoadHome()
         {
+            _intentionalDisconnect = true;
             _dsReady         = false;
             _gameSceneLoaded = false;
             RoomState.Instance?.ClearRoom();
+            ReconnectOverlay.Instance?.Hide();
             SceneLoader.LoadHome();
         }
 
@@ -475,6 +500,7 @@ namespace NightHunt.Networking
         {
             if (networkManager == null) return;
             Debug.Log("[NetworkGameManager] Disconnecting...");
+            _intentionalDisconnect = true;
             if (IsServer) networkManager.ServerManager.StopConnection(true);
             if (IsClient) networkManager.ClientManager.StopConnection();
         }

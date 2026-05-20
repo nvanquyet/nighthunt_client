@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using NightHunt.Common;
 using NightHunt.Core;
@@ -19,7 +19,7 @@ namespace NightHunt.UI
     /// Listens for <see cref="MatchEndedEvent"/> via <see cref="GameplayEventBus"/>.
     ///
     /// Post-match routing:
-    ///   Custom_Relay → countdown → LoadCustomLobby()
+    ///   Custom_Relay → countdown → LoadPartyCustomMode()
     ///   Ranked_DS    → countdown → LoadHome()
     /// </summary>
     [DisallowMultipleComponent]

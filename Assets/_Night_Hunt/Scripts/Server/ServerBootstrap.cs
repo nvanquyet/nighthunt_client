@@ -5,6 +5,7 @@ using FishNet.Managing;
 using FishNet.Managing.Scened;
 using NightHunt.Gameplay.Core.Events;   // MatchEndReason
 using NightHunt.Gameplay.Match;          // MatchEndManager
+using NightHunt.Common;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
@@ -34,6 +35,8 @@ namespace NightHunt.Server
     [UnityEngine.DefaultExecutionOrder(-100)]
     public class ServerBootstrap : MonoBehaviour
     {
+        public static ServerBootstrap Instance { get; private set; }
+
         [Header("References")]
         [SerializeField] private NetworkManager networkManager;
 
@@ -67,6 +70,13 @@ namespace NightHunt.Server
 
         private void Awake()
         {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            Instance = this;
+
             // Survive scene changes: 00_DS_Boot gets unloaded when map scene loads (ReplaceScenes=All).
             // HeartbeatLoop, SubscribeMatchEnd, and NotifyGameReady all live on this object →
             // must persist across the scene transition.
@@ -114,6 +124,59 @@ namespace NightHunt.Server
             Debug.Log("[DS-Boot] Awake: _startOnHeadless disabled — server will be started manually in BootSequence.");
 
             StartCoroutine(BootSequence());
+        }
+
+        public void ReportMatchPresence(string backendUserId, string state, string reason)
+        {
+            if (!long.TryParse(backendUserId, out long userId) || userId <= 0)
+            {
+                Debug.LogWarning($"[DS-Boot] Presence ignored: invalid backendUserId='{backendUserId}' state={state}");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_backendUrl) || string.IsNullOrEmpty(_serverId) || string.IsNullOrEmpty(_serverSecret))
+            {
+                Debug.LogWarning($"[DS-Boot] Presence ignored for userId={userId}: DS backend credentials are not ready.");
+                return;
+            }
+
+            StartCoroutine(ReportMatchPresenceRoutine(userId, state, reason));
+        }
+
+        private IEnumerator ReportMatchPresenceRoutine(long userId, string state, string reason)
+        {
+            var body = new MatchPresenceRequest
+            {
+                serverId = _serverId,
+                serverSecret = _serverSecret,
+                matchId = _matchId,
+                userId = userId,
+                state = state,
+                reason = reason,
+            };
+            string json = JsonUtility.ToJson(body);
+
+            for (int attempt = 1; attempt <= 2; attempt++)
+            {
+                using var req = new UnityWebRequest($"{_backendUrl}{Constants.API_DS_MATCH_PRESENCE}", "POST");
+                req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.SetRequestHeader("X-DS-Secret", _serverSecret);
+                req.timeout = 5;
+
+                yield return req.SendWebRequest();
+
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    Debug.Log($"[DS-Boot] Presence {state} reported for userId={userId} matchId={_matchId}.");
+                    yield break;
+                }
+
+                Debug.LogWarning($"[DS-Boot] Presence report {state} userId={userId} attempt {attempt}/2 failed: HTTP={req.responseCode} err={req.error} body={req.downloadHandler?.text}");
+                if (attempt < 2)
+                    yield return new WaitForSeconds(1f);
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -649,6 +712,17 @@ namespace NightHunt.Server
             public int    kills;
             public int    deaths;
             public float  score;
+        }
+
+        [Serializable]
+        private struct MatchPresenceRequest
+        {
+            public string serverId;
+            public string serverSecret;
+            public string matchId;
+            public long   userId;
+            public string state;
+            public string reason;
         }
     }
 }

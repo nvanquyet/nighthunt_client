@@ -136,6 +136,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public void SetTrackedItem(string instanceId)
         {
             _trackedInstanceId = instanceId;
+            Debug.Log($"[NH_FLOW][04][SelectableItem.SetTracked] button={name} filters={FormatFilterTypes()} tracked='{_trackedInstanceId ?? "null"}'");
             RefreshDisplay();
         }
 
@@ -162,6 +163,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 TryTrackFirstMatching(preferredType.Value, allowReplace: true);
 
             Debug.Log($"[SelectableItemButton:{FormatFilterTypes()}] shortcut preferred={preferredType?.ToString() ?? "none"} tracked='{_trackedInstanceId ?? "null"}'");
+            Debug.Log($"[NH_FLOW][04][SelectableItem.Shortcut] button={name} preferred={preferredType?.ToString() ?? "none"} {DescribeItemButtonState()}");
             HandlePress(isDouble: true);
         }
 
@@ -171,8 +173,14 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (!IsInteractable) return;
             base.OnPointerDown(eventData);  // DOTween animation + NotifyUIConsumedPress
-            if (_selectionSystem == null) return;
-            HandlePress(ConsumeDoubleClick());
+            if (_selectionSystem == null)
+            {
+                Debug.LogWarning($"[NH_FLOW][04][SelectableItem.PointerDownIgnored] button={name} reason=null-selection {DescribeItemButtonState()}");
+                return;
+            }
+            bool isDouble = ConsumeDoubleClick();
+            Debug.Log($"[NH_FLOW][04][SelectableItem.PointerDown] button={name} double={isDouble} position={eventData.position} {DescribeItemButtonState()}");
+            HandlePress(isDouble);
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -192,6 +200,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 (_aimController.IsInAimMode ||
                  _aimController.IsInDeployMode ||
                  TryStartAimControllerFlow(_trackedInstanceId));
+            Debug.Log($"[NH_FLOW][15][SelectableItem.BeginDrag] button={name} dragAimStarted={_dragAimStarted} {DescribeItemButtonState()}");
         }
 
         public void OnDrag(PointerEventData eventData)
@@ -210,6 +219,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_dragAimStarted && _aimController != null)
                 _aimController.OnMobileDragEndIfStillActive(_lastDragMagnitude);
 
+            Debug.Log($"[NH_FLOW][17][SelectableItem.EndDrag] button={name} dragAimStarted={_dragAimStarted} lastMagnitude={_lastDragMagnitude:F2} {DescribeItemButtonState()}");
             _dragAimStarted = false;
             _lastDragMagnitude = 0f;
         }
@@ -224,25 +234,34 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_selectionSystem == null) return;
 
             bool hasTracked = !string.IsNullOrEmpty(_trackedInstanceId);
+            Debug.Log($"[NH_FLOW][05][SelectableItem.HandlePress] button={name} double={isDouble} hasTracked={hasTracked} {DescribeItemButtonState()}");
 
             // ── Double click: arm / use ───────────────────────────────────────────
             if (isDouble)
             {
                 if (!hasTracked)
                 {
+                    Debug.Log($"[NH_FLOW][05][SelectableItem.ExpandRequested] button={name} reason=double-empty {DescribeItemButtonState()}");
                     OnExpandRequested?.Invoke();
                     return;
                 }
 
                 // Ensure item is selected before arming (unselected → arm in one gesture).
                 if (TryStartAimControllerFlow(_trackedInstanceId))
+                {
+                    Debug.Log($"[NH_FLOW][06][SelectableItem.UseViaAimController] button={name} {DescribeItemButtonState()}");
                     return;
+                }
 
                 string selId = _selectionSystem.SelectedItem?.InstanceID;
                 if (selId != _trackedInstanceId)
+                {
+                    Debug.Log($"[NH_FLOW][07][SelectableItem.RequestSelectBeforeUse] button={name} selected='{selId ?? "null"}' tracked='{_trackedInstanceId}'");
                     _selectionSystem.RequestSelectItem(_trackedInstanceId);
+                }
 
                 Debug.Log($"[ITEM_FLOW] [01][DoubleClick.Arm] filters={FormatFilterTypes()} instance='{_trackedInstanceId}' action=RequestUseSelectedItem");
+                Debug.Log($"[NH_FLOW][07][SelectableItem.RequestUseSelected] button={name} {DescribeItemButtonState()}");
                 _selectionSystem.RequestUseSelectedItem();
                 return;
             }
@@ -250,6 +269,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             // ── Single click: select toggle ───────────────────────────────────────
             if (!hasTracked)
             {
+                Debug.Log($"[NH_FLOW][05][SelectableItem.ExpandRequested] button={name} reason=single-empty {DescribeItemButtonState()}");
                 OnExpandRequested?.Invoke();
                 return;
             }
@@ -268,11 +288,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             Debug.Log($"[ITEM_FLOW] [01][SingleClick] filters={FormatFilterTypes()} tracked='{_trackedInstanceId}' " +
                       $"selected='{selectedId ?? "null"}' currentUse='{currentUseId ?? "null"}' isSelected={isSelected} isArmed={isArmed}");
+            Debug.Log($"[NH_FLOW][05][SelectableItem.SingleClickState] button={name} isSelected={isSelected} isArmed={isArmed} {DescribeItemButtonState()}");
 
             if (isArmed)
             {
                 // Put the item down.
                 Debug.Log($"[ITEM_FLOW] [01][SingleClick.Armed] action=cancel");
+                Debug.Log($"[NH_FLOW][07][SelectableItem.RequestCancelSelection] button={name} reason=armed {DescribeItemButtonState()}");
                 _selectionSystem.RequestCancelSelection();
                 return;
             }
@@ -281,16 +303,34 @@ namespace NightHunt.GameplaySystems.UI.Combat
             {
                 // Toggle off.
                 Debug.Log($"[ITEM_FLOW] [01][SingleClick.Selected] action=deselect");
+                Debug.Log($"[NH_FLOW][07][SelectableItem.RequestDeselect] button={name} reason=selected {DescribeItemButtonState()}");
                 _selectionSystem.RequestDeselectItem();
                 return;
             }
 
             // Not yet selected — select only. Deployables are armed by an explicit use/fire gesture.
             Debug.Log($"[ITEM_FLOW] [01][SingleClick.NotSelected] action=selectOnly instance='{_trackedInstanceId}'");
+            Debug.Log($"[NH_FLOW][07][SelectableItem.RequestSelectOnly] button={name} {DescribeItemButtonState()}");
             _selectionSystem.RequestSelectItem(_trackedInstanceId);
         }
 
         // ── Display refresh ───────────────────────────────────────────────────────
+
+        private string DescribeItemButtonState()
+        {
+            var tracked = !string.IsNullOrEmpty(_trackedInstanceId)
+                ? GetItemByInstanceId(_trackedInstanceId)
+                : null;
+            var trackedDef = tracked != null ? ItemDatabase.GetDefinition(tracked.DefinitionID) : null;
+            var selected = _selectionSystem?.SelectedItem;
+            var selectedDef = selected != null ? ItemDatabase.GetDefinition(selected.DefinitionID) : null;
+            var current = _itemUseSystem?.CurrentItem;
+            var currentDef = current != null ? ItemDatabase.GetDefinition(current.DefinitionID) : null;
+            return $"filters={FormatFilterTypes()} tracked='{_trackedInstanceId ?? "null"}' trackedDef={trackedDef?.ItemID ?? "null"} trackedType={trackedDef?.Type.ToString() ?? "null"} " +
+                   $"selected='{selected?.InstanceID ?? "null"}' selectedDef={selectedDef?.ItemID ?? "null"} selectedType={selectedDef?.Type.ToString() ?? "null"} " +
+                   $"using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} current='{current?.InstanceID ?? "null"}' currentDef={currentDef?.ItemID ?? "null"} currentType={currentDef?.Type.ToString() ?? "null"} " +
+                   $"aimController={(_aimController != null ? _aimController.name : "null")}";
+        }
 
         private void RefreshDisplay()
         {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NightHunt.Core;
@@ -8,7 +8,7 @@ namespace NightHunt.UI
 {
     /// <summary>
     /// Panel types used by the 01_Home UI flow.
-    /// Lobby is normalized to CustomLobby for old serialized values.
+    /// Lobby is normalized to PartyCustomMode for old serialized values.
     /// </summary>
     public enum PanelType
     {
@@ -16,7 +16,7 @@ namespace NightHunt.UI
         Login = 1,
         Home = 2,
         Lobby = 3,
-        CustomLobby = 4,
+        PartyCustomMode = 4,
         Settings = 5
     }
 
@@ -92,8 +92,8 @@ namespace NightHunt.UI
 
         public void GoLogin() => ShowPanel(PanelType.Login);
         public void GoHome() => ShowPanel(PanelType.Home);
-        public void GoLobby() => ShowPanel(PanelType.CustomLobby);
-        public void GoCustomLobby() => ShowPanel(PanelType.CustomLobby);
+        public void GoLobby() => ShowPanel(PanelType.PartyCustomMode);
+        public void GoPartyCustomMode() => ShowPanel(PanelType.PartyCustomMode);
         public void GoSettings() => ShowPanel(PanelType.Settings);
 
         public void GoBack()
@@ -103,7 +103,7 @@ namespace NightHunt.UI
                 case PanelType.Settings:
                     ShowPanel(GetSettingsReturnPanel(), "Back");
                     break;
-                case PanelType.CustomLobby:
+                case PanelType.PartyCustomMode:
                     ShowPanel(PanelType.Home, "Back");
                     break;
                 case PanelType.Home:
@@ -319,7 +319,7 @@ namespace NightHunt.UI
                     PlayAnimator(splashScreenAnimator, loginAnimatorState);
                     break;
                 case PanelType.Home:
-                case PanelType.CustomLobby:
+                case PanelType.PartyCustomMode:
                 case PanelType.Settings:
                     PlayAnimator(mainPanelsAnimator, mainPanelsStartState);
                     PlayAnimator(splashScreenAnimator, splashHiddenState);
@@ -354,7 +354,7 @@ namespace NightHunt.UI
             {
                 PanelType.Login => FindFirstObjectByType<LoginView>(FindObjectsInactive.Include),
                 PanelType.Home => FindFirstObjectByType<HomeView>(FindObjectsInactive.Include),
-                PanelType.CustomLobby => FindFirstObjectByType<CustomLobbyView>(FindObjectsInactive.Include),
+                PanelType.PartyCustomMode => FindFirstObjectByType<PartyCustomModeView>(FindObjectsInactive.Include),
                 PanelType.Settings => FindFirstObjectByType<NightHunt.UI.Settings.SettingsView>(FindObjectsInactive.Include),
                 _ => null
             };
@@ -376,7 +376,7 @@ namespace NightHunt.UI
 
         private static PanelType Normalize(PanelType panel)
         {
-            return panel == PanelType.Lobby ? PanelType.CustomLobby : panel;
+            return panel == PanelType.Lobby ? PanelType.PartyCustomMode : panel;
         }
     }
 }

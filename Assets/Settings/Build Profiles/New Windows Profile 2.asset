@@ -20,6 +20,7 @@ MonoBehaviour:
     rid: 5309820159008440320
   m_OverrideGlobalSceneList: 0
   m_Scenes: []
+  m_HasScriptingDefines: 0
   m_ScriptingDefines: []
   m_PlayerSettingsYaml:
     m_Settings:
@@ -975,8 +976,11 @@ MonoBehaviour:
         m_ExplicitNullChecks: 0
         m_ExplicitDivideByZeroChecks: 0
         m_ExplicitArrayBoundsChecks: 0
-        m_CompressionType: -1
+        m_CompressionType: 0
         m_InstallInBuildFolder: 0
+        m_InsightsSettingsContainer:
+          m_BuildProfileEngineDiagnosticsState: 2
+        m_AdaptivePerformanceEnabled: 0
         m_WindowsBuildAndRunDeployTarget: 0
         m_Architecture: 0
         m_CreateSolution: 0

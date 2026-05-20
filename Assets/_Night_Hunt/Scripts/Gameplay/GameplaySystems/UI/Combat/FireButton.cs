@@ -73,6 +73,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 return;
 
             base.OnPointerDown(eventData);
+            Debug.Log($"[NH_FLOW][09][FireButton.Down] button={name} pointer={eventData.pointerId} pos={eventData.position} handler={(_combatInputHandler != null ? "ok" : "null")}");
             _pressEventData = eventData;
             _joystickStarted = false;
             _pressActive = true;
@@ -90,6 +91,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public override void OnPointerUp(PointerEventData eventData)
         {
             base.OnPointerUp(eventData);
+            Debug.Log($"[NH_FLOW][18][FireButton.Up] button={name} pointer={eventData.pointerId} pos={eventData.position} pressActive={_pressActive} joystickStarted={_joystickStarted}");
             FinishPress(eventData);
         }
 
@@ -98,6 +100,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (!IsInteractable)
                 return;
 
+            Debug.Log($"[NH_FLOW][15][FireButton.BeginDrag] button={name} pointer={eventData.pointerId} pos={eventData.position} joystickStarted={_joystickStarted}");
             if (!_joystickStarted)
                 StartJoystick(eventData);
         }
@@ -115,11 +118,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             _joystick.OnDrag(eventData);
             Vector2 joystickDir = CamRelativeXZ(_joystick.Direction);
+            Debug.Log($"[NH_FLOW][16][FireButton.Drag] button={name} raw={_joystick.Direction:F2} camRelative={joystickDir:F2}");
             _combatInputHandler?.SetFireMobileJoystick(joystickDir, active: true);
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
+            Debug.Log($"[NH_FLOW][17][FireButton.EndDrag] button={name} pointer={eventData.pointerId} pos={eventData.position} pressActive={_pressActive} joystickStarted={_joystickStarted}");
             FinishPress(eventData);
         }
 
@@ -128,6 +133,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (!_pressActive)
                 return;
 
+            Debug.Log($"[NH_FLOW][18][FireButton.FinishPress] button={name} pointer={eventData.pointerId} joystickStarted={_joystickStarted} handler={(_combatInputHandler != null ? "ok" : "null")}");
             _pressActive = false;
             StopHoldTimer();
 
@@ -138,8 +144,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
 
             _joystickStarted = false;
-            _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _combatInputHandler?.SimulateFire(false);
+            _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _rangeIndicator?.Hide();
         }
 
@@ -195,6 +201,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _joystickStarted = true;
             _joystick.gameObject.SetActive(true);
             _joystick.OnPointerDown(eventData);
+            Debug.Log($"[NH_FLOW][15][FireButton.StartJoystick] button={name} pointer={eventData.pointerId} pos={eventData.position}");
         }
 
         private void StopHoldTimer()

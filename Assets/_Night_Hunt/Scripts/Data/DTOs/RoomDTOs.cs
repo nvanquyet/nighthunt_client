@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace NightHunt.Data.DTOs
@@ -105,7 +105,7 @@ namespace NightHunt.Data.DTOs
 
     /// <summary>
     /// POST /api/rooms/{id}/update-settings
-    /// Always send the full current state — use BuildSettings() in CustomLobbyView.
+    /// Always send the full current state — use BuildSettings() in PartyCustomModeView.
     /// JsonUtility does NOT serialize Nullable&lt;bool&gt; so all fields must be non-nullable.
     /// Server performs partial update: only non-null fields are changed — but since C#
     /// always sends all fields, the server will apply them all as expected.

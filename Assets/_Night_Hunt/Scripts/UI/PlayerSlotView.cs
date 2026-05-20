@@ -1,4 +1,4 @@
-using NightHunt.Data.DTOs;
+﻿using NightHunt.Data.DTOs;
 using NightHunt.State;
 using TMPro;
 using UnityEngine;
@@ -14,9 +14,9 @@ namespace NightHunt.UI
     ///   Empty    → dataContainer hidden; slotText shows "+"
     ///   Occupied → dataContainer visible; shows username + ready indicator
     ///
-    /// Context menu lives in CustomLobbyView (one shared menu, not per-slot prefab).
+    /// Context menu lives in PartyCustomModeView (one shared menu, not per-slot prefab).
     /// Clicking any interactable slot calls onSlotClicked(team, slot).
-    /// CustomLobbyView decides: empty → ChangeTeam, occupied → show context menu.
+    /// PartyCustomModeView decides: empty → ChangeTeam, occupied → show context menu.
     ///
     /// Interactability:
     ///   Empty slot          → interactable (move self to this slot)

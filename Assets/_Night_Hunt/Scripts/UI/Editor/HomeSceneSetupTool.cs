@@ -1,4 +1,4 @@
-#if UNITY_EDITOR
+﻿#if UNITY_EDITOR
 using System.Reflection;
 using TMPro;
 using UnityEditor;
@@ -127,11 +127,11 @@ namespace NightHunt.UI.Editor
 
             CheckComponent<PlayerProfilePanel>(report, "PlayerProfilePanel");
 
-            // Check FriendPanelView, PartyPanelView, SharedPartyContextMenu, CustomLobbyView
+            // Check FriendPanelView, PartyPanelView, SharedPartyContextMenu, PartyCustomModeView
             CheckComponent(report, "FriendPanelView",          typeof(FriendPanelView));
             CheckComponent(report, "PartyPanelView",           typeof(PartyPanelView));
             CheckComponent(report, "SharedPartyContextMenu",   typeof(SharedPartyContextMenu));
-            CheckComponent(report, "CustomLobbyView",          typeof(CustomLobbyView));
+            CheckComponent(report, "PartyCustomModeView",          typeof(PartyCustomModeView));
 
             Debug.Log(report.ToString());
             EditorUtility.DisplayDialog("Wiring Validation", report.ToString(), "OK");

@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace NightHunt.UI
 {
@@ -20,7 +20,7 @@ namespace NightHunt.UI
 
         public void ShowLogin() => Navigator?.ShowPanel(PanelType.Login, "Button");
         public void ShowHome() => Navigator?.ShowPanel(PanelType.Home, "Button");
-        public void ShowCustomLobby() => Navigator?.ShowPanel(PanelType.CustomLobby, "Button");
+        public void ShowPartyCustomMode() => Navigator?.ShowPanel(PanelType.PartyCustomMode, "Button");
         public void ShowSettings() => Navigator?.ShowPanel(PanelType.Settings, "Button");
         public void ShowMultiplayer() => ShowHome();
         public void OpenFriendsPanel() => FriendPanel?.OpenPanel();

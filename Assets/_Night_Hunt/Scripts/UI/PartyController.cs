@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -23,7 +23,7 @@ namespace NightHunt.UI
     ///   • Party display: bottom-left avatar row (PartyMemberListView)
     ///                    + centre model row (PartyModelListView)
     ///   • Ranked matchmaking: PLAY button (Idle → Searching timer → cancel)
-    ///   • Custom Lobby navigation shortcut
+    ///   • Party Custom Mode navigation shortcut
     ///   • All WS events: matchmaking (match_found / match_ready / match_cancelled)
     ///                    + party (member_joined / left / kicked / disbanded / host_changed)
     ///   • InviteFriendToParty() — called by FriendPanelView via Inspector reference
@@ -52,8 +52,8 @@ namespace NightHunt.UI
 
         // ── Navigation ────────────────────────────────────────────────────────
         [Header("Navigation")]
-        [Tooltip("Nút mở Custom Lobby. Nếu đang ghép trận sẽ show modal xác nhận trước.")]
-        [SerializeField] private Button btn_CustomLobby;
+        [Tooltip("Nút mở Party Custom Mode. Nếu đang ghép trận sẽ show modal xác nhận trước.")]
+        [SerializeField] private Button btn_PartyCustomMode;
 
         // ── Party Display Sub-Views ───────────────────────────────────────────
         [Header("Party Display")]
@@ -108,7 +108,7 @@ namespace NightHunt.UI
             }
 
             if (btn_Play        != null) btn_Play.onClick.AddListener(OnPlayClicked);
-            if (btn_CustomLobby != null) btn_CustomLobby.onClick.AddListener(OnCustomLobbyClicked);
+            if (btn_PartyCustomMode != null) btn_PartyCustomMode.onClick.AddListener(OnPartyCustomModeClicked);
             if (modeDropdown    != null) modeDropdown.onValueChanged.AddListener(OnModeDropdownChanged);
             if (mapDropdown     != null) mapDropdown.onValueChanged.AddListener(OnMapDropdownChanged);
             NH_DropdownRuntime.NormalizeModeMapOrder(modeDropdown, mapDropdown);
@@ -161,7 +161,9 @@ namespace NightHunt.UI
         public async Task OnHomeShownAsync()
         {
             HLog($"HomeShown start mode={DescribeSelectedMode()} queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()}");
-            SetQueueState(RankedQueueState.Idle);
+            // Do NOT force-reset to Idle here — let RefreshParty resolve the actual
+            // server-side queue state (solo player may still be SEARCHING on server
+            // after an app-resume, or may have been auto-cancelled).
             await RefreshParty(forceServer: true);
             HLog($"HomeShown done mode={DescribeSelectedMode()} queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()}");
         }
@@ -461,14 +463,71 @@ namespace NightHunt.UI
 
             if (_currentParty != null)
             {
+                // Party player: trust the party's queue state
                 if (_currentParty.IsInQueue)
                     SetQueueState(RankedQueueState.Searching);
                 else if (_queueState == RankedQueueState.Searching && string.IsNullOrEmpty(_pendingLobbyToken))
                     SetQueueState(RankedQueueState.Idle);
             }
+            else
+            {
+                // Solo player: check server-side queue entry to detect state drift
+                // (e.g. client reconnected after crash — server already cancelled the entry
+                // via WS disconnect dequeue, but client UI still shows 'Searching').
+                await SyncSoloQueueStateAsync();
+            }
 
             RefreshPartyDisplay();
             HLog($"RefreshParty done queue={_queueState} party={DescribeCurrentParty()} selectedMode={DescribeSelectedMode()}");
+        }
+
+        /// <summary>
+        /// For solo (no-party) players: polls GET /api/matchmaking/queue/status and
+        /// reconciles local <see cref="_queueState"/> with server reality.
+        /// • Server says SEARCHING/MATCHED  → stay/enter Searching UI
+        /// • Server says not in queue       → reset to Idle (removes stuck timer)
+        /// Skipped when a WS event (match_found / match_cancelled) is already in-flight
+        /// (<see cref="_pendingLobbyToken"/> is set).
+        /// </summary>
+        private async Task SyncSoloQueueStateAsync()
+        {
+            // Don't poll if we're mid-accept flow — the WS event already owns this state.
+            if (!string.IsNullOrEmpty(_pendingLobbyToken)) return;
+
+            try
+            {
+                var client = GameManager.Instance?.BackendClient;
+                if (client == null) return;
+
+                var response = await client.GetAsync<QueueStatusResponse>(Constants.API_MATCHMAKING_STATUS);
+                if (!response.Success)
+                {
+                    // Non-fatal: network hiccup or token expired; leave UI as-is.
+                    HLog($"SyncSoloQueueState: GET status failed ({response.Message})");
+                    return;
+                }
+
+                bool serverActive = response.Data?.IsActive == true;
+                HLog($"SyncSoloQueueState: serverActive={serverActive} localState={_queueState} serverStatus={response.Data?.status ?? "null"}");
+
+                if (serverActive && _queueState == RankedQueueState.Idle)
+                {
+                    // Server still queuing for us (e.g. app resumed quickly) — restore UI.
+                    HLog("SyncSoloQueueState: restoring Searching state from server");
+                    SetQueueState(RankedQueueState.Searching);
+                    _searchElapsed = response.Data.waitSeconds;
+                }
+                else if (!serverActive && _queueState == RankedQueueState.Searching)
+                {
+                    // Server cancelled our queue (timeout / dequeue on disconnect) — fix stuck timer.
+                    HLog("SyncSoloQueueState: server has no active entry — resetting to Idle");
+                    SetQueueState(RankedQueueState.Idle);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[PartyController] SyncSoloQueueStateAsync failed: {ex.Message}");
+            }
         }
 
         public void RefreshPartyDisplay()
@@ -546,6 +605,16 @@ namespace NightHunt.UI
             int partySize = GetCurrentPartySize();
             bool hasParty = _currentParty != null;
             HLog($"StartQueue after party refresh mode={DescribeSelectedMode()} hasParty={hasParty} isPartyHost={isPartyHost} partySize={partySize} party={DescribeCurrentParty()}");
+
+            // Server-authoritative check: party is in a CUSTOM lobby room
+            // (partyMode=CUSTOM). Must leave before starting ranked matchmaking.
+            if (hasParty && _currentParty.IsCustom)
+            {
+                HLog($"StartQueue blocked: party is in CUSTOM mode (in a room). party={DescribeCurrentParty()}");
+                ShowToast("Matchmaking", "Leave the party custom mode before starting ranked matchmaking.");
+                SetQueueState(RankedQueueState.Idle);
+                return;
+            }
 
             if (hasParty && _currentParty.IsInQueue)
             {
@@ -672,15 +741,15 @@ namespace NightHunt.UI
         // NAVIGATION — CUSTOM LOBBY
         // ══════════════════════════════════════════════════════════════════════
 
-        private async void OnCustomLobbyClicked()
+        private async void OnPartyCustomModeClicked()
         {
-            HLog($"CustomLobby clicked queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()} mode={DescribeSelectedMode()}");
+            HLog($"PartyCustomMode clicked queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()} mode={DescribeSelectedMode()}");
             if (_queueState == RankedQueueState.Searching)
             {
                 GameModalWindow.Instance?.ShowConfirm(
                     "Matchmaking Active",
                     "You are currently in the matchmaking queue. Leaving will cancel the search.",
-                    onConfirm: async () => { await CancelQueue(); NavigateCustomLobby(); },
+                    onConfirm: async () => { await CancelQueue(); NavigatePartyCustomMode(); },
                     confirmText: "Leave Queue", cancelText: "Cancel");
                 return;
             }
@@ -689,12 +758,17 @@ namespace NightHunt.UI
             if (_currentParty != null)
             {
                 string status = string.IsNullOrWhiteSpace(_currentParty.partyStatus) ? "IDLE" : _currentParty.partyStatus;
-                if (string.Equals(status, "IN_QUEUE", StringComparison.OrdinalIgnoreCase))
+                // Use server-authoritative partyMode field when available;
+                // fall back to partyStatus string for older server versions.
+                bool isRankedQueued = _currentParty.IsRanked ||
+                    string.Equals(_currentParty.partyStatus, "IN_QUEUE", StringComparison.OrdinalIgnoreCase);
+
+                if (isRankedQueued)
                 {
                     GameModalWindow.Instance?.ShowConfirm(
                         "Party Queue Active",
-                        "Cancel the party matchmaking queue before opening a custom lobby.",
-                        onConfirm: async () => { await CancelQueue(); await LeaveOrDisbandPartyThenNavigateCustomLobby(); },
+                        "Cancel the party matchmaking queue before opening a party custom mode.",
+                        onConfirm: async () => { await CancelQueue(); await LeaveOrDisbandPartyThenNavigatePartyCustomMode(); },
                         confirmText: "Cancel Queue",
                         cancelText: "Stay");
                     return;
@@ -702,14 +776,14 @@ namespace NightHunt.UI
 
                 if (!string.Equals(status, "IDLE", StringComparison.OrdinalIgnoreCase))
                 {
-                    ShowToast("Party", "Finish or leave the current party room before opening a custom lobby.");
-                    HLog($"CustomLobby blocked currentParty={DescribeCurrentParty()}");
+                    ShowToast("Party", "Finish or leave the current party room before opening a party custom mode.");
+                    HLog($"PartyCustomMode blocked currentParty={DescribeCurrentParty()}");
                     return;
                 }
 
                 string desc = IsCurrentUserPartyHost()
-                    ? "Custom lobbies are separate from party matchmaking. Disband your current party before opening Custom Lobby?"
-                    : "Custom lobbies are separate from party matchmaking. Leave your current party before opening Custom Lobby?";
+                    ? "Custom lobbies are separate from party matchmaking. Disband your current party before opening Party Custom Mode?"
+                    : "Custom lobbies are separate from party matchmaking. Leave your current party before opening Party Custom Mode?";
                 string confirmText = IsCurrentUserPartyHost() ? "Disband & Open" : "Leave & Open";
 
                 if (GameModalWindow.Instance != null)
@@ -717,20 +791,20 @@ namespace NightHunt.UI
                     GameModalWindow.Instance.ShowConfirm(
                         "Leave Party?",
                         desc,
-                        onConfirm: async () => await LeaveOrDisbandPartyThenNavigateCustomLobby(),
+                        onConfirm: async () => await LeaveOrDisbandPartyThenNavigatePartyCustomMode(),
                         confirmText: confirmText,
                         cancelText: "Cancel");
                     return;
                 }
 
-                await LeaveOrDisbandPartyThenNavigateCustomLobby();
+                await LeaveOrDisbandPartyThenNavigatePartyCustomMode();
                 return;
             }
 
-            NavigateCustomLobby();
+            NavigatePartyCustomMode();
         }
 
-        private async Task LeaveOrDisbandPartyThenNavigateCustomLobby()
+        private async Task LeaveOrDisbandPartyThenNavigatePartyCustomMode()
         {
             if (_partyService == null)
             {
@@ -739,7 +813,7 @@ namespace NightHunt.UI
             }
 
             bool isHost = IsCurrentUserPartyHost();
-            HLog($"LeaveOrDisbandPartyThenNavigateCustomLobby start isHost={isHost} party={DescribeCurrentParty()}");
+            HLog($"LeaveOrDisbandPartyThenNavigatePartyCustomMode start isHost={isHost} party={DescribeCurrentParty()}");
             var result = isHost
                 ? await _partyService.DisbandParty()
                 : await _partyService.LeaveParty();
@@ -753,22 +827,22 @@ namespace NightHunt.UI
 
             _currentParty = null;
             RefreshPartyDisplay();
-            NavigateCustomLobby();
+            NavigatePartyCustomMode();
         }
 
-        private void NavigateCustomLobby()
+        private void NavigatePartyCustomMode()
         {
             if (UINavigator.Instance != null)
             {
                 string modeKey = SelectedMode.modeKey;
                 string mapId = GetSelectedMapId();
-                var payload = new CustomLobbyView.NavigationPayload(modeKey, mapId);
-                HLog($"NavigateCustomLobby mode={DescribeSelectedMode()} map={mapId ?? "null"} queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()}");
-                _ = UINavigator.Instance.ShowPanelAsync(PanelType.CustomLobby, reason: "HomeCustomLobby", payload: payload);
+                var payload = new PartyCustomModeView.NavigationPayload(modeKey, mapId);
+                HLog($"NavigatePartyCustomMode mode={DescribeSelectedMode()} map={mapId ?? "null"} queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()}");
+                _ = UINavigator.Instance.ShowPanelAsync(PanelType.PartyCustomMode, reason: "HomePartyCustomMode", payload: payload);
                 return;
             }
 
-            Debug.LogWarning("[FLOW][HOME_MODE] Cannot open Custom Lobby: UINavigator is missing.");
+            Debug.LogWarning("[FLOW][HOME_MODE] Cannot open Party Custom Mode: UINavigator is missing.");
         }
 
         // ══════════════════════════════════════════════════════════════════════

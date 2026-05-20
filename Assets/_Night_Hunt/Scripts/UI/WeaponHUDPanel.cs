@@ -308,16 +308,15 @@ namespace NightHunt.UI
 
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
         {
+            Debug.Log($"[NH_FLOW][32][WeaponHUD.ActiveChanged] old={oldSlot?.ToString() ?? "none"} new={newSlot?.ToString() ?? "none"}");
             if (!newSlot.HasValue)
             {
                 StopReloadProgress();
                 return;
             }
 
-            // Mirror server-driven slot change to HUD highlight.
-            // Converts WeaponSlotType to the 0-based bus index (Primary=0, Secondary=1, Melee=2).
-            int idx = (int)newSlot.Value;
-            SyncHighlightToSlotIndex(idx);
+            // WeaponSlotButton instances already mirror highlight from IWeaponSystem.OnActiveWeaponChanged.
+            // Do not call SelectWeapon here or the server will receive a redundant selection and toggle holster.
         }
 
         // ── GameActionBus Handler ─────────────────────────────────────────────────────

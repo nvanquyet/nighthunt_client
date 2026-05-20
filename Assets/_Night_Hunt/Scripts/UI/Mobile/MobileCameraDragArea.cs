@@ -3,6 +3,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.UI;
+using NightHunt.Config;
 using NightHunt.Gameplay.Input.Handlers.Camera;
 using NightHunt.Gameplay.Camera;
 
@@ -29,15 +30,19 @@ namespace NightHunt.UI.Mobile
         private bool _dragging;
         private bool _missingHandlerLogged;
         private float _nextDragLogTime;
+        private float _effectiveDegreesPerPixel;
 
         private void Awake()
         {
             ConfigureRaycastImage();
+            ApplySettingsFromConfig();
         }
 
         private void OnEnable()
         {
             ConfigureRaycastImage();
+            ApplySettingsFromConfig();
+            GameSettings.OnSettingsChanged += ApplySettingsFromConfig;
             EnsureVirtualMouse();
         }
 
@@ -49,6 +54,7 @@ namespace NightHunt.UI.Mobile
 
         private void OnDisable()
         {
+            GameSettings.OnSettingsChanged -= ApplySettingsFromConfig;
             _dragging = false;
         }
 
@@ -133,7 +139,7 @@ namespace NightHunt.UI.Mobile
                 Debug.LogWarning($"[MobileCameraDragArea] Drag received while camera state is {_cameraStateManager.CurrentState}. CinemachineInputAxisController is locked, so mobile camera rotation will not move until the state returns to Free.");
             }
 
-            Vector2 delta = new Vector2(eventData.delta.x * _degreesPerPixel, 0f);
+            Vector2 delta = new Vector2(eventData.delta.x * _effectiveDegreesPerPixel, 0f);
             if (delta.sqrMagnitude < 0.0001f)
                 return;
 
@@ -142,8 +148,15 @@ namespace NightHunt.UI.Mobile
             if (Time.unscaledTime >= _nextDragLogTime)
             {
                 _nextDragLogTime = Time.unscaledTime + 0.75f;
-                Debug.Log($"[MobileCameraDragArea] Drag delta={eventData.delta:F1} injected={delta:F2} handler={(_handler != null ? "ok" : "null")} inputEnabled={_handler?.IsInputEnabled.ToString() ?? "n/a"}");
+                Debug.Log($"[MobileCameraDragArea] Drag delta={eventData.delta:F1} injected={delta:F2} sensitivity={_effectiveDegreesPerPixel:F2} handler={(_handler != null ? "ok" : "null")} inputEnabled={_handler?.IsInputEnabled.ToString() ?? "n/a"}");
             }
+        }
+
+        private void ApplySettingsFromConfig()
+        {
+            _effectiveDegreesPerPixel = GameSettings.Instance != null
+                ? GameSettings.Instance.MobileCameraDegreesPerPixel
+                : _degreesPerPixel;
         }
 
         private void ConfigureRaycastImage()

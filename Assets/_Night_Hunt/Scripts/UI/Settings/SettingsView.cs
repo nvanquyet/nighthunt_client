@@ -32,6 +32,7 @@ namespace NightHunt.UI.Settings
         private TextMeshProUGUI demoObjectCountLabel;
         private int demoObjectCount = 2;
         private NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler uiInputHandler;
+        private bool controlsBindingsGenerated;
 
         public bool CanLeave(NavigationContext context) => true;
 
@@ -45,7 +46,8 @@ namespace NightHunt.UI.Settings
             audioSettingsPanel?.RefreshFromPrefs();
             controlsSettingsPanel?.RefreshFromPrefs();
             graphicsSettingsPanel?.RefreshFromPrefs();
-            EnsureOneSettingsPanelVisible();
+            EnsureControlsBindingsContent();
+            ShowGameplay();
 
             // Push input context so Escape works
             NightHunt.Gameplay.Input.Core.InputLayerManager.Instance?.PushContext(NightHunt.Gameplay.Input.InputState.Paused);
@@ -176,6 +178,7 @@ namespace NightHunt.UI.Settings
             BuildGameplayContent(gameplaySettingsRoot.transform);
             BuildAudioContent(audioSettingsRoot.transform);
             BuildControlsContent(controlsSettingsRoot.transform);
+            controlsBindingsGenerated = true;
             BuildVisualsContent(graphicsSettingsRoot.transform);
         }
 
@@ -252,9 +255,99 @@ namespace NightHunt.UI.Settings
             CreateButton(CreateRow(parent, 54f).transform, "Reset Audio", () => AudioListener.volume = 1f);
         }
 
+        private void BuildMobileControlsContent(Transform parent)
+        {
+            CreateTitle(parent, "Mobile");
+            CreateToggle(parent, "Force Mobile Mode", GameSettings.Instance?.ForceMobileMode ?? false, on =>
+            {
+                if (GameSettings.Instance == null) return;
+                GameSettings.Instance.ForceMobileMode = on;
+                GameSettings.Instance.SaveSettings();
+            });
+            CreateSlider(parent, "Mobile Camera Sensitivity", 0.05f, 1.5f, GameSettings.Instance?.MobileCameraDegreesPerPixel ?? 0.25f, value =>
+            {
+                if (GameSettings.Instance == null) return;
+                GameSettings.Instance.MobileCameraDegreesPerPixel = value;
+                GameSettings.Instance.SaveSettings();
+            });
+        }
+
+        private void EnsureControlsBindingsContent()
+        {
+            if (controlsBindingsGenerated)
+                return;
+
+            var contentRoot = ResolveControlsBindingsRoot();
+            if (contentRoot == null)
+                return;
+
+            if (contentRoot.GetComponentInChildren<RebindActionUI>(true) != null)
+            {
+                controlsBindingsGenerated = true;
+                return;
+            }
+
+            var asset = InputLayerManager.Instance?.Config?.InputActionAsset;
+            if (asset == null)
+            {
+                CreateLabel(contentRoot,
+                    "<color=#FF8C60>Key bindings unavailable\n(InputLayerManager not found in scene)</color>",
+                    16f, TextAlignmentOptions.Left);
+                controlsBindingsGenerated = true;
+                return;
+            }
+
+            BuildKeyBindingsSection(contentRoot, asset);
+            controlsBindingsGenerated = true;
+        }
+
+        private Transform ResolveControlsBindingsRoot()
+        {
+            if (controlsSettingsPanel != null)
+            {
+                var content = controlsSettingsPanel.transform.Find("Content/List/List Content");
+                if (content != null)
+                    return content;
+            }
+
+            if (controlsSettingsRoot != null)
+            {
+                var content = controlsSettingsRoot.transform.Find("Content/List/List Content");
+                if (content != null)
+                    return content;
+
+                return controlsSettingsRoot.transform;
+            }
+
+            return null;
+        }
+
+        private void BuildKeyBindingsSection(Transform parent, InputActionAsset asset)
+        {
+            CreateTitle(parent, "Key Bindings");
+            var resetAllRow = CreateRow(parent, 50f);
+            CreateButton(resetAllRow.transform, "Reset All Bindings", () =>
+            {
+                InputBindingSaveSystem.ResetAllBindings(asset);
+                if (controlsSettingsPanel != null)
+                    controlsSettingsPanel.RefreshFromPrefs();
+                Debug.Log("[SettingsView] All key bindings reset to defaults.");
+            });
+
+            var mapsToShow = new[] { "Player", "Combat", "Inventory", "Camera", "Team" };
+            foreach (var mapName in mapsToShow)
+            {
+                var map = asset.FindActionMap(mapName, throwIfNotFound: false);
+                if (map == null) continue;
+
+                CreateKeyBindingSection(parent, asset, map);
+            }
+        }
+
         private void BuildControlsContent(Transform parent)
         {
             CreateTitle(parent, "Controls");
+            BuildMobileControlsContent(parent);
             CreateSlider(parent, "Mouse Sensitivity", 0.1f, 5f, GameSettings.Instance?.MouseSensitivity ?? 1.5f, value =>
             {
                 if (GameSettings.Instance == null) return;
@@ -278,27 +371,7 @@ namespace NightHunt.UI.Settings
                 return;
             }
 
-            // Reset All button
-            CreateTitle(parent, "Key Bindings");
-            var resetAllRow = CreateRow(parent, 50f);
-            var resetAllBtn = CreateButton(resetAllRow.transform, "Reset All Bindings", () =>
-            {
-                InputBindingSaveSystem.ResetAllBindings(asset);
-                // Rebuild the entire Controls panel to refresh all displayed keys
-                if (controlsSettingsPanel != null)
-                    controlsSettingsPanel.RefreshFromPrefs();
-                Debug.Log("[SettingsView] All key bindings reset to defaults.");
-            });
-
-            // Map groups: only rebindable gameplay maps (skip UI/Debug/Spectator)
-            var mapsToShow = new[] { "Player", "Combat", "Inventory", "Camera", "Team" };
-            foreach (var mapName in mapsToShow)
-            {
-                var map = asset.FindActionMap(mapName, throwIfNotFound: false);
-                if (map == null) continue;
-
-                CreateKeyBindingSection(parent, asset, map);
-            }
+            BuildKeyBindingsSection(parent, asset);
         }
 
         /// <summary>
@@ -660,27 +733,6 @@ namespace NightHunt.UI.Settings
         {
             ResolveReferences();
             ShowSettingsPanel(graphicsSettingsRoot, "Visuals");
-        }
-
-        private void EnsureOneSettingsPanelVisible()
-        {
-            if (IsAnyPanelVisible())
-                return;
-
-            ShowGameplay();
-        }
-
-        private bool IsAnyPanelVisible()
-        {
-            return IsActive(gameplaySettingsRoot)
-                || IsActive(audioSettingsRoot)
-                || IsActive(controlsSettingsRoot)
-                || IsActive(graphicsSettingsRoot);
-        }
-
-        private static bool IsActive(GameObject root)
-        {
-            return root != null && root.activeSelf;
         }
 
         private void ShowSettingsPanel(GameObject activeRoot, string panelName)

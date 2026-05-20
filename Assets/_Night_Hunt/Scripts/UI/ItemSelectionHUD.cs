@@ -122,6 +122,7 @@ namespace NightHunt.UI
             UnsubscribeContext();
 
             _context = context;
+            Debug.Log($"[NH_FLOW][01][ItemSelectionHUD.Bind] context={(context != null ? "ok" : "null")} ready={context?.IsReady.ToString() ?? "null"} player={context?.Player?.name ?? "null"} bridge={(context?.Bridge != null ? "ok" : "null")}");
             if (context == null || !context.IsReady) return;
 
             InitialisePanels(context);
@@ -190,6 +191,7 @@ namespace NightHunt.UI
             var inventorySys  = bridge?.Inventory;
             var itemUseSys    = bridge?.ItemUse;
             var combatHandler = InputManager.Instance?.CombatHandler;
+            Debug.Log($"[NH_FLOW][01][ItemSelectionHUD.InitialisePanels] panels={_filterPanels.Length} selection={(selectionSys != null ? "ok" : "null")} inventory={(inventorySys != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")} combat={(combatHandler != null ? "ok" : "null")}");
             combatHandler?.BindItemSelectionSystem(selectionSys);
             BindCombatShortcuts(combatHandler);
             BindAimController(context, selectionSys, inventorySys, itemUseSys, combatHandler);
@@ -244,6 +246,7 @@ namespace NightHunt.UI
 
             _aimController.Initialize(context?.Bridge?.Stat, selectionSys, playerTransform, aimSystem, itemUseSys, combatHandler, inventorySys);
             Debug.Log($"[DEPLOY_FLOW] ItemSelectionHUD bound ItemAimController='{_aimController.name}' player='{context?.Player?.name ?? "null"}' inventory={(inventorySys != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")}");
+            Debug.Log($"[NH_FLOW][01][ItemSelectionHUD.BindAimController] aimController={_aimController.name} player={context?.Player?.name ?? "null"} aimSystem={(aimSystem != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")} combat={(combatHandler != null ? "ok" : "null")}");
         }
 
         private IReadOnlyList<ItemType> CollectFilterTypesForPanel(GameplaySystems.UI.Combat.ItemFilterPanel panel)
@@ -293,9 +296,13 @@ namespace NightHunt.UI
             if (InputLayerManager.Instance != null &&
                 !InputLayerManager.Instance.IsLayerActive(InputLayer.Player) &&
                 !InputLayerManager.Instance.IsLayerActive(InputLayer.Inventory))
+            {
+                Debug.Log($"[NH_FLOW][02][ItemSelectionHUD.BusIgnored] type={type} reason=input-layer state={InputLayerManager.Instance.CurrentState} layers={InputLayerManager.Instance.ActiveLayers}");
                 return;
+            }
 
             var panel = FindPanel(type);
+            Debug.Log($"[NH_FLOW][02][ItemSelectionHUD.BusReceived] type={type} panel={(panel != null ? panel.name : "null")} state={InputLayerManager.Instance?.CurrentState.ToString() ?? "null"} layers={(InputLayerManager.Instance != null ? InputLayerManager.Instance.ActiveLayers.ToString() : "null")}");
             if (panel != null)
                 panel.ActivateShortcut(type);
             else
@@ -321,10 +328,16 @@ namespace NightHunt.UI
 
         // These now route through the canonical bus so the HUD (subscribed above) reacts once.
         private void HandleThrowGrenadeShortcut()
-            => GameActionBus.RequestItemSlot(ItemType.Throwable);
+        {
+            Debug.Log("[NH_FLOW][02][ItemSelectionHUD.ThrowShortcut]");
+            GameActionBus.RequestItemSlot(ItemType.Throwable);
+        }
 
         private void HandleConsumablePanelShortcut()
-            => GameActionBus.RequestItemSlot(ItemType.Consumable);
+        {
+            Debug.Log("[NH_FLOW][02][ItemSelectionHUD.ConsumableShortcut]");
+            GameActionBus.RequestItemSlot(ItemType.Consumable);
+        }
 
         private GameplaySystems.UI.Combat.ItemFilterPanel FindPanel(ItemType type)
         {
@@ -340,6 +353,7 @@ namespace NightHunt.UI
         private void HandleItemUseStarted(ItemInstance item)
         {
             var def = item != null ? GameplaySystems.Inventory.ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            Debug.Log($"[NH_FLOW][40][ItemSelectionHUD.UseStarted] item={item?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"}");
             if (def != null && def.Type == ItemType.Throwable)
             {
                 HideProgress();
@@ -375,11 +389,15 @@ namespace NightHunt.UI
 
         private void HandleItemUseCompleted(ItemInstance item)
         {
+            var def = item != null ? GameplaySystems.Inventory.ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            Debug.Log($"[NH_FLOW][44][ItemSelectionHUD.UseCompleted] item={item?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"}");
             HideProgress();
         }
 
         private void HandleItemUseCancelled(ItemInstance item)
         {
+            var def = item != null ? GameplaySystems.Inventory.ItemDatabase.GetDefinition(item.DefinitionID) : null;
+            Debug.Log($"[NH_FLOW][45][ItemSelectionHUD.UseCancelled] item={item?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"}");
             HideProgress();
         }
 
@@ -410,6 +428,7 @@ namespace NightHunt.UI
 
         private void OnCancelClicked()
         {
+            Debug.Log($"[NH_FLOW][46][ItemSelectionHUD.CancelClicked] aimController={(_aimController != null ? _aimController.name : "null")} deploy={_aimController?.IsInDeployMode.ToString() ?? "null"} aim={_aimController?.IsInAimMode.ToString() ?? "null"}");
             if (_aimController != null)
             {
                 if (_aimController.IsInDeployMode)

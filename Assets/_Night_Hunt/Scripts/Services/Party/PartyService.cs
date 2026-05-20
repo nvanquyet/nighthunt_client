@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NightHunt.Common;
@@ -13,7 +13,7 @@ using UnityEngine;
 namespace NightHunt.Services.Party
 {
     /// <summary>
-    /// Party System Service — manages party creation, invites, matchmaking, and custom lobby.
+    /// Party System Service — manages party creation, invites, matchmaking, and party custom mode.
     ///
     /// API summary (all paths verified against server PartyController):
     ///   POST   /api/party/create                          → create (user becomes host)
@@ -383,8 +383,8 @@ namespace NightHunt.Services.Party
             LoadingOverlay.Show("Joining queue...");
             try
             {
-                var body   = new PartyMatchmakingRequest { gameMode = gameMode, allowFill = allowFill, mapId = mapId };
-                var result = await backendClient.PostAsync<object>(Constants.API_PARTY_QUEUE, body);
+                var body   = new PartyRankedQueueRequest { gameMode = gameMode, allowFill = allowFill, mapId = mapId };
+                var result = await backendClient.PostAsync<object>(Constants.API_PARTY_RANKED_QUEUE, body);
                 if (result.Success)
                     APICache.InvalidateParty();
                 else
@@ -413,7 +413,7 @@ namespace NightHunt.Services.Party
             LoadingOverlay.Show("Leaving queue...");
             try
             {
-                var result = await backendClient.PostAsync<object>(Constants.API_PARTY_CANCEL_QUEUE);
+                var result = await backendClient.PostAsync<object>(Constants.API_PARTY_RANKED_CANCEL);
                 if (result.Success)
                     APICache.InvalidateParty();
                 else
@@ -438,7 +438,7 @@ namespace NightHunt.Services.Party
         // ══════════════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// POST /api/party/join-room — host brings whole party into custom lobby.
+        /// POST /api/party/join-room — host brings whole party into party custom mode.
         /// All members are automatically added to the room.
         /// </summary>
         public async Task<ApiResult<RoomResponse>> JoinRoomWithParty(string roomCode, string password = null)

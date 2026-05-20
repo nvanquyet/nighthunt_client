@@ -1,5 +1,6 @@
 using System;
 using NightHunt.GameplaySystems.Core.Data;
+using UnityEngine;
 
 namespace NightHunt.Gameplay.Input.Core
 {
@@ -43,7 +44,10 @@ namespace NightHunt.Gameplay.Input.Core
         /// and by mobile/desktop UI buttons instead of calling panel methods directly.
         /// </summary>
         public static void RequestItemSlot(ItemType type)
-            => OnItemSlotRequested?.Invoke(type);
+        {
+            Debug.Log($"[NH_FLOW][00][GameActionBus.ItemSlot] type={type} subscribers={OnItemSlotRequested?.GetInvocationList().Length ?? 0}");
+            OnItemSlotRequested?.Invoke(type);
+        }
 
         // ── Weapon Slot ────────────────────────────────────────────────────────────
 

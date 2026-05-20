@@ -28,6 +28,7 @@ namespace NightHunt.Core
         public event Action<GameWebSocketService.GameStartingEvent> OnGameStarting;
         public event Action<GameWebSocketService.RoomDisbandedEvent> OnRoomDisbanded;
         public event Action<GameWebSocketService.YouWereKickedEvent> OnYouWereKicked;
+        public event Action<GameWebSocketService.MatchPresenceNoticeEvent> OnMatchPresenceNotice;
         public event Action OnForceLogout;
         public event Action OnSessionExpired;
         public event Action OnWebSocketConnected;
@@ -120,6 +121,7 @@ namespace NightHunt.Core
                 ws.OnGameStarting += HandleGameStarting;
                 ws.OnRoomDisbanded += HandleRoomDisbanded;
                 ws.OnYouWereKicked += HandleYouWereKicked;
+                ws.OnMatchPresenceNotice += HandleMatchPresenceNotice;
                 ws.OnForceLogout += HandleForceLogout;
                 ws.OnSessionExpired += HandleSessionExpired;
                 ws.OnConnected += HandleWebSocketConnected;
@@ -195,6 +197,7 @@ namespace NightHunt.Core
                 ws.OnGameStarting -= HandleGameStarting;
                 ws.OnRoomDisbanded -= HandleRoomDisbanded;
                 ws.OnYouWereKicked -= HandleYouWereKicked;
+                ws.OnMatchPresenceNotice -= HandleMatchPresenceNotice;
                 ws.OnForceLogout -= HandleForceLogout;
                 ws.OnSessionExpired -= HandleSessionExpired;
                 ws.OnConnected -= HandleWebSocketConnected;
@@ -260,6 +263,7 @@ namespace NightHunt.Core
         private void HandleGameStarting(GameWebSocketService.GameStartingEvent evt) => OnGameStarting?.Invoke(evt);
         private void HandleRoomDisbanded(GameWebSocketService.RoomDisbandedEvent evt) => OnRoomDisbanded?.Invoke(evt);
         private void HandleYouWereKicked(GameWebSocketService.YouWereKickedEvent evt) => OnYouWereKicked?.Invoke(evt);
+        private void HandleMatchPresenceNotice(GameWebSocketService.MatchPresenceNoticeEvent evt) => OnMatchPresenceNotice?.Invoke(evt);
         private void HandleForceLogout() => OnForceLogout?.Invoke();
         private void HandleSessionExpired() => OnSessionExpired?.Invoke();
         private void HandleWebSocketConnected() => OnWebSocketConnected?.Invoke();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NightHunt.Core;
@@ -22,7 +22,7 @@ namespace NightHunt.UI
     /// - Kick members (leader only)
     /// - Transfer leadership (leader only)
     /// - Queue party for matchmaking
-    /// - Join custom lobby with party
+    /// - Join party custom mode with party
     /// </summary>
     public class PartyPanelView : MonoBehaviour
     {
@@ -52,7 +52,7 @@ namespace NightHunt.UI
         [SerializeField] private GameObject leaderActionsPanel;
         [SerializeField] private Button queueMatchmakingButton;
         [SerializeField] private Button cancelQueueButton;
-        [SerializeField] private Button joinCustomLobbyButton;
+        [SerializeField] private Button joinPartyCustomModeButton;
 
         // ── Invite Friend Dialog ──────────────────────────────────────────────
         [Header("Invite Friend Dialog")]
@@ -101,7 +101,7 @@ namespace NightHunt.UI
             // Leader actions
             if (queueMatchmakingButton != null) queueMatchmakingButton.onClick.AddListener(OnQueueMatchmakingClicked);
             if (cancelQueueButton != null) cancelQueueButton.onClick.AddListener(OnCancelQueueClicked);
-            if (joinCustomLobbyButton != null) joinCustomLobbyButton.onClick.AddListener(OnJoinCustomLobbyClicked);
+            if (joinPartyCustomModeButton != null) joinPartyCustomModeButton.onClick.AddListener(OnJoinPartyCustomModeClicked);
 
             // Dialogs
             if (closeInviteDialogButton != null) closeInviteDialogButton.onClick.AddListener(() => inviteFriendDialog?.SetActive(false));
@@ -447,7 +447,7 @@ namespace NightHunt.UI
             }
         }
 
-        private void OnJoinCustomLobbyClicked()
+        private void OnJoinPartyCustomModeClicked()
         {
             if (roomCodeDialog != null) roomCodeDialog.SetActive(true);
             if (roomCodeInput != null) roomCodeInput.text = "";

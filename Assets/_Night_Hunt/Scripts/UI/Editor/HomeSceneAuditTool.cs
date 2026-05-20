@@ -1,4 +1,4 @@
-#if UNITY_EDITOR
+﻿#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -33,7 +33,7 @@ namespace NightHunt.UI.Editor
         {
             None,
             ShowHome,
-            ShowCustomLobby,
+            ShowPartyCustomMode,
             ShowSettings,
             ShowMultiplayer,
             ShowCampaignUnavailable,
@@ -159,7 +159,7 @@ namespace NightHunt.UI.Editor
             var mainPanel = FindMainPanelManager();
             var loginView = FindView<LoginView>();
             var homeView = FindView<HomeView>();
-            var customLobbyView = FindView<CustomLobbyView>();
+            var partyCustomModeView = FindView<PartyCustomModeView>();
             var settingsView = FindView<SettingsView>();
             var splashRoot = loginView != null ? loginView.gameObject : FindByName("Splash Screen");
             var splashAnimator = splashRoot != null ? splashRoot.GetComponent<Animator>() : null;
@@ -180,7 +180,7 @@ namespace NightHunt.UI.Editor
             {
                 changed += SetRoute(routes, PanelType.Login, splashRoot, loginView);
                 changed += SetRoute(routes, PanelType.Home, FindRouteRoot(routes, PanelType.Home, mainPanel, "Home"), homeView);
-                changed += SetRoute(routes, PanelType.CustomLobby, FindRouteRoot(routes, PanelType.CustomLobby, mainPanel, "CustomGame"), customLobbyView);
+                changed += SetRoute(routes, PanelType.PartyCustomMode, FindRouteRoot(routes, PanelType.PartyCustomMode, mainPanel, "CustomGame"), partyCustomModeView);
                 changed += SetRoute(routes, PanelType.Settings, FindRouteRoot(routes, PanelType.Settings, mainPanel, "Settings"), settingsView);
             }
 
@@ -205,7 +205,7 @@ namespace NightHunt.UI.Editor
         private static int SetupCodeFirstNavigationTargets()
         {
             int changed = 0;
-            foreach (var lobby in UnityEngine.Object.FindObjectsByType<CustomLobbyView>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var lobby in UnityEngine.Object.FindObjectsByType<PartyCustomModeView>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var so = new SerializedObject(lobby);
                 var entries = so.FindProperty("navigationButtons");
@@ -218,7 +218,7 @@ namespace NightHunt.UI.Editor
                     changed += SetEnum(entry.FindPropertyRelative("targetPanel"), PanelType.Home) ? 1 : 0;
                 }
 
-                changed += SetupCustomLobbyRequiredReferences(lobby);
+                changed += SetupPartyCustomModeRequiredReferences(lobby);
 
                 if (changed > 0)
                 {
@@ -230,7 +230,7 @@ namespace NightHunt.UI.Editor
             return changed;
         }
 
-        private static int SetupCustomLobbyRequiredReferences(CustomLobbyView lobby)
+        private static int SetupPartyCustomModeRequiredReferences(PartyCustomModeView lobby)
         {
             if (lobby == null)
                 return 0;
@@ -809,8 +809,8 @@ namespace NightHunt.UI.Editor
                 case "Settings":
                     return ButtonRouteAction.ShowSettings;
                 case "CustomGame":
-                case "CustomLobby":
-                    return ButtonRouteAction.ShowCustomLobby;
+                case "PartyCustomMode":
+                    return ButtonRouteAction.ShowPartyCustomMode;
                 case "Gameplay":
                     return ButtonRouteAction.ShowSettingsGameplay;
                 case "Audio":
@@ -839,8 +839,8 @@ namespace NightHunt.UI.Editor
             {
                 case ButtonRouteAction.ShowHome:
                     return AddPersistentListenerIfMissing(button, router, nameof(HomeUIActionRouter.ShowHome), () => UnityEventTools.AddPersistentListener(button.onClick, router.ShowHome));
-                case ButtonRouteAction.ShowCustomLobby:
-                    return AddPersistentListenerIfMissing(button, router, nameof(HomeUIActionRouter.ShowCustomLobby), () => UnityEventTools.AddPersistentListener(button.onClick, router.ShowCustomLobby));
+                case ButtonRouteAction.ShowPartyCustomMode:
+                    return AddPersistentListenerIfMissing(button, router, nameof(HomeUIActionRouter.ShowPartyCustomMode), () => UnityEventTools.AddPersistentListener(button.onClick, router.ShowPartyCustomMode));
                 case ButtonRouteAction.ShowSettings:
                     return AddPersistentListenerIfMissing(button, router, nameof(HomeUIActionRouter.ShowSettings), () => UnityEventTools.AddPersistentListener(button.onClick, router.ShowSettings));
                 case ButtonRouteAction.ShowMultiplayer:
@@ -993,7 +993,7 @@ namespace NightHunt.UI.Editor
             AppendCount<HomeUIActionRouter>(sb, "HomeUIActionRouter");
             AppendCount<LoginView>(sb, "LoginView");
             AppendCount<HomeView>(sb, "HomeView");
-            AppendCount<CustomLobbyView>(sb, "CustomLobbyView");
+            AppendCount<PartyCustomModeView>(sb, "PartyCustomModeView");
             AppendCount<SettingsView>(sb, "SettingsView");
             AppendCount<LoadingManager>(sb, "LoadingManager");
             AppendCount<BootIntroView>(sb, "BootIntroView");
@@ -1044,7 +1044,7 @@ namespace NightHunt.UI.Editor
             sb.AppendLine("## Expected Final State");
             sb.AppendLine("- Broken UnityEvent target markers should be 0.");
             sb.AppendLine("- Missing script markers should be 0.");
-            sb.AppendLine("- UINavigator has Login/Home/CustomLobby/Settings routes assigned.");
+            sb.AppendLine("- UINavigator has Login/Home/PartyCustomMode/Settings routes assigned.");
             sb.AppendLine("- BootIntroView lives under PersistentUICanvas/CanvasDontDestroy, and LoadingManager.bootIntroView points there.");
             sb.AppendLine("- UINavigator owns route roots and Splash/MainPanels animator states; it does not reference Shift MainPanelManager.");
             sb.AppendLine("- Buttons call HomeUIActionRouter/SettingsView or feature controllers, not Shift MainPanelManager.");

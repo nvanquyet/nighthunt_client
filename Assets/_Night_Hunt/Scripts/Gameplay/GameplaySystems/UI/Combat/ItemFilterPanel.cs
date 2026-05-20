@@ -86,6 +86,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _inventorySystem = inventorySystem;
             _combatInputHandler = combatInputHandler;
             _aimController   = aimController;
+            Debug.Log($"[NH_FLOW][03][ItemFilterPanel.Initialize] panel={name} filters={FormatFilterTypes(_filterTypes)} selection={(selectionSystem != null ? "ok" : "null")} inventory={(inventorySystem != null ? "ok" : "null")} itemUse={(itemUseSystem != null ? "ok" : "null")} combat={(combatInputHandler != null ? "ok" : "null")} aim={(aimController != null ? "ok" : "null")}");
 
             if (_expandButton != null)
             {
@@ -112,6 +113,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IsExpanded = true;
             RebuildList();
             if (_listRoot != null) _listRoot.SetActive(true);
+            Debug.Log($"[NH_FLOW][03][ItemFilterPanel.Expand] panel={name} filters={FormatFilterTypes(_filterTypes)} tracked='{_slotButton?.GetTrackedInstanceId() ?? "null"}'");
 
         }
 
@@ -119,17 +121,20 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             IsExpanded = false;
             if (_listRoot != null) _listRoot.SetActive(false);
+            Debug.Log($"[NH_FLOW][03][ItemFilterPanel.Collapse] panel={name} filters={FormatFilterTypes(_filterTypes)} tracked='{_slotButton?.GetTrackedInstanceId() ?? "null"}'");
         }
 
         public void ActivateShortcut()
         {
             Debug.Log($"[ItemFilterPanel:{FormatFilterTypes(_filterTypes)}] shortcut activate expanded={IsExpanded} tracked='{_slotButton?.GetTrackedInstanceId() ?? "null"}'");
+            Debug.Log($"[NH_FLOW][04][ItemFilterPanel.ActivateShortcut] panel={name} filters={FormatFilterTypes(_filterTypes)} expanded={IsExpanded} tracked='{_slotButton?.GetTrackedInstanceId() ?? "null"}'");
             _slotButton?.ActivateFromShortcut();
         }
 
         public void ActivateShortcut(ItemType preferredType)
         {
             Debug.Log($"[ItemFilterPanel:{FormatFilterTypes(_filterTypes)}] shortcut activate preferred={preferredType} expanded={IsExpanded} tracked='{_slotButton?.GetTrackedInstanceId() ?? "null"}'");
+            Debug.Log($"[NH_FLOW][04][ItemFilterPanel.ActivateShortcut] panel={name} preferred={preferredType} filters={FormatFilterTypes(_filterTypes)} expanded={IsExpanded} tracked='{_slotButton?.GetTrackedInstanceId() ?? "null"}'");
             _slotButton?.ActivateFromShortcut(preferredType);
         }
 
@@ -138,6 +143,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (string.IsNullOrEmpty(instanceId) || _selectionSystem == null)
             {
                 Debug.LogWarning($"[ItemFilterPanel:{FormatFilterTypes(_filterTypes)}] SelectFromFilter ignored instance='{instanceId}' selection={(_selectionSystem != null ? "ok" : "null")}");
+                Debug.LogWarning($"[NH_FLOW][05][ItemFilterPanel.SelectIgnored] panel={name} instance='{instanceId}' selection={(_selectionSystem != null ? "ok" : "null")}");
                 return;
             }
 
@@ -148,6 +154,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             _slotButton?.SetTrackedItem(instanceId);
             Debug.Log($"[ITEM_FLOW] [02][FilterPanel.Select] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' useImmediately={useImmediately} defType={(def != null ? def.Type.ToString() : "null")} isDeployable={isDeployable} shouldBeginAim={shouldBeginAim}");
+            Debug.Log($"[NH_FLOW][05][ItemFilterPanel.Select] panel={name} filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' useImmediately={useImmediately} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} current={_itemUseSystem?.CurrentItem?.InstanceID ?? "null"} aim={(_aimController != null ? "ok" : "null")}");
 
             if (shouldBeginAim
                 && _itemUseSystem != null
@@ -169,16 +176,19 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (TryStartAimControllerFlow(instanceId, def))
                 {
                     Debug.Log($"[ITEM_FLOW] [03][FilterPanel.Use] instance='{instanceId}' action=ItemAimController defType={(def != null ? def.Type.ToString() : "null")}");
+                    Debug.Log($"[NH_FLOW][06][ItemFilterPanel.UseViaAimController] panel={name} instance='{instanceId}' def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"}");
                     CollapseList();
                     return;
                 }
 
                 Debug.LogWarning($"[ITEM_FLOW] [03][FilterPanel.Use.Reject] instance='{instanceId}' defType={(def != null ? def.Type.ToString() : "null")} aimController={(_aimController != null ? "ok" : "null")}");
+                Debug.LogWarning($"[NH_FLOW][06][ItemFilterPanel.UseFallback] panel={name} instance='{instanceId}' def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"} aimController={(_aimController != null ? "ok" : "null")}");
 
                 _selectionSystem.RequestSelectItem(instanceId);
                 if (useImmediately)
                 {
                     Debug.Log($"[ITEM_FLOW] [03][FilterPanel.Use] instance='{instanceId}' action=RequestUseSelectedItem");
+                    Debug.Log($"[NH_FLOW][07][ItemFilterPanel.RequestUseSelected] panel={name} instance='{instanceId}'");
                     _selectionSystem.RequestUseSelectedItem();
                 }
                 CollapseList();
@@ -186,6 +196,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
 
             _selectionSystem.RequestSelectItem(instanceId);
+            Debug.Log($"[NH_FLOW][07][ItemFilterPanel.RequestSelectOnly] panel={name} instance='{instanceId}'");
             _pendingCollapseRoutine = StartCoroutine(CollapseAfterSingleClickWindow());
         }
 

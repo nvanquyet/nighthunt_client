@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using NightHunt.Config;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Data;
@@ -37,10 +38,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
         // ─────────────────────────────────────────────────────────────────────
         //  Inspector
         // ─────────────────────────────────────────────────────────────────────
-
-        [Header("Platform Override")]
-        [Tooltip("Force mobile-style drag joystick even in the editor for testing.")]
-        [SerializeField] private bool _forceMobileMode = false;
 
         [Header("World Indicators")]
         [Tooltip("RangeIndicator GO in the scene — shows VisionRange ring while aiming a throwable.")]
@@ -117,7 +114,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
         //  Properties
         // ─────────────────────────────────────────────────────────────────────
 
-        private bool IsMobile => _forceMobileMode || Application.isMobilePlatform;
+        private bool IsMobile => IsForceMobileModeEnabled || Application.isMobilePlatform;
+        private bool IsForceMobileModeEnabled => GameSettings.Instance != null && GameSettings.Instance.ForceMobileMode;
 
         /// <summary>True while the controller is in throwable aim mode.</summary>
         public bool IsInAimMode => _inAimMode;
@@ -276,6 +274,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _cam = Camera.main;
 
             ClearExternalAimTarget();
+            Debug.Log($"[NH_FLOW][01][ItemAimController.Initialize] controller={name} stat={(statSystem != null ? "ok" : "null")} selection={(itemSelectionSystem != null ? "ok" : "null")} player={(playerTransform != null ? playerTransform.name : "null")} aim={(aimSystem != null ? "ok" : "null")} itemUse={(itemUseSystem != null ? "ok" : "null")} combat={(combatInputHandler != null ? "ok" : "null")} inventory={(inventorySystem != null ? "ok" : "null")}");
         }
 
         private void HandleItemUseStarted(ItemInstance item)
@@ -351,6 +350,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_itemSelectionSystem == null || string.IsNullOrEmpty(instanceID))
             {
                 Debug.LogWarning($"[ITEM_FLOW] [00][Aim.Begin.Reject] selection={(_itemSelectionSystem != null ? "ok" : "null")} instance='{instanceID ?? "null"}'");
+                Debug.LogWarning($"[NH_FLOW][06][ItemAim.BeginRejected] reason=selection-or-instance selection={(_itemSelectionSystem != null ? "ok" : "null")} instance='{instanceID ?? "null"}' {DescribeAimFlowState()}");
                 return false;
             }
 
@@ -363,6 +363,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (item == null)
             {
                 Debug.LogWarning($"[ITEM_FLOW] [00][Aim.Begin.Reject] item '{instanceID}' not found via bound inventory/current player bridge.");
+                Debug.LogWarning($"[NH_FLOW][06][ItemAim.BeginRejected] reason=item-not-found instance='{instanceID}' {DescribeAimFlowState()}");
                 return false;
             }
 
@@ -370,6 +371,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (def == null)
             {
                 Debug.LogWarning($"[ITEM_FLOW] [00][Aim.Begin.Reject] definition '{item.DefinitionID}' not found for item '{instanceID}'.");
+                Debug.LogWarning($"[NH_FLOW][06][ItemAim.BeginRejected] reason=def-not-found instance='{instanceID}' def='{item.DefinitionID}' {DescribeAimFlowState()}");
                 return false;
             }
 
@@ -394,6 +396,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _aimSystem?.SetCursorVisible(true);
 
                 Debug.Log($"[ItemAimController] TryBeginAim: deployable '{instanceID}' → deploy mode");
+                Debug.Log($"[NH_FLOW][06][ItemAim.BeginDeployAim] item={instanceID} def={def.ItemID} mobile={IsMobile} mouseHeld={UnityEngine.Input.GetMouseButton(0)} {DescribeAimFlowState()}");
                 LogDeploy($"[00][BeginDeployAim] item={instanceID} def={def.ItemID} mobile={IsMobile} mouseDown={UnityEngine.Input.GetMouseButton(0)}");
                 _itemSelectionSystem.RequestSelectItem(instanceID);
                 _itemSelectionSystem.RequestUseSelectedItem();
@@ -404,6 +407,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (!isThrowable)
             {
                 Debug.Log($"[ItemAimController] TryBeginAim: consumable '{instanceID}' → direct use");
+                Debug.Log($"[NH_FLOW][06][ItemAim.UseConsumableDirect] item={instanceID} def={def.ItemID} type={def.Type} {DescribeAimFlowState()}");
                 _itemSelectionSystem.RequestSelectItem(instanceID);
                 _itemSelectionSystem.RequestUseSelectedItem();
                 return true;
@@ -425,6 +429,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _aimSystem?.SetCursorVisible(true);
 
             Debug.Log($"[ItemAimController] TryBeginAim: throwable '{instanceID}' mobile={IsMobile} range={range:F2}");
+            Debug.Log($"[NH_FLOW][06][ItemAim.BeginThrowableAim] item={instanceID} def={def.ItemID} mobile={IsMobile} range={range:F2} {DescribeAimFlowState()}");
             LogThrowable($"TryBeginAim start item={instanceID} mobile={IsMobile} range={range:F2} cursor={AimWorldTarget:F2}");
             _itemSelectionSystem.RequestSelectItem(instanceID);
             _itemSelectionSystem.RequestUseSelectedItem();
@@ -471,6 +476,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void OnMobileDragEnd(float joystickMagnitude)
         {
+            Debug.Log($"[NH_FLOW][17][ItemAim.MobileDragEnd] magnitude={joystickMagnitude:F2} {DescribeAimFlowState()}");
             if (!_inAimMode && !_inDeployMode) return;
 
             if (_inDeployMode)
@@ -505,6 +511,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public void ConfirmDeployFromFireButtonRelease(float joystickMagnitude)
         {
+            Debug.Log($"[NH_FLOW][20][ItemAim.FireButtonDeployRelease] magnitude={joystickMagnitude:F2} {DescribeAimFlowState()}");
             if (!_inDeployMode) return;
 
             if (joystickMagnitude < _dragThreshold)
@@ -522,6 +529,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void OnMobileDragEndIfStillActive(float joystickMagnitude)
         {
+            Debug.Log($"[NH_FLOW][17][ItemAim.MobileDragEndIfActive] magnitude={joystickMagnitude:F2} {DescribeAimFlowState()}");
             if (!_inAimMode && !_inDeployMode) return;
             OnMobileDragEnd(joystickMagnitude);
         }
@@ -569,6 +577,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (!_inAimMode) return;
             Vector3 throwTarget = ResolveConfirmedThrowTarget();
             LogThrowable($"ConfirmAim item={_activeItemInstanceId ?? "null"} target={throwTarget:F2}");
+            Debug.Log($"[NH_FLOW][38][ItemAim.ConfirmThrow] item={_activeItemInstanceId ?? "null"} target={throwTarget:F2} {DescribeAimFlowState()}");
             ResetAimState();
             _itemUseSystem?.RequestExecuteThrow(throwTarget);
         }
@@ -590,6 +599,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void CancelAim()
         {
+            Debug.Log($"[NH_FLOW][42][ItemAim.CancelAim] {DescribeAimFlowState()}");
             if (_inAimMode)
                 ResetAimState();
 
@@ -625,6 +635,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (_deployConfirmInProgress)
             {
+                Debug.Log($"[NH_FLOW][39][ItemAim.DeployReleaseIgnored] source={source} reason=confirm-in-progress {DescribeAimFlowState()}");
                 LogDeploy($"[02][ReleaseIgnored] source={source} item={_activeItemInstanceId ?? "null"} reason=confirmInProgress");
                 return;
             }
@@ -633,6 +644,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             {
                 _deployReleaseQueued = true;
                 _deployPointerWasHeld = false;
+                Debug.Log($"[NH_FLOW][39][ItemAim.DeployReleaseQueued] source={source} {DescribeAimFlowState()}");
                 LogDeploy($"[02][ReleaseQueued] source={source} item={_activeItemInstanceId ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"}");
                 return;
             }
@@ -647,6 +659,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _deployPointerWasHeld = false;
             _deployReleaseQueued = false;
             _suppressNextDeployRelease = false;
+            Debug.Log($"[NH_FLOW][39][ItemAim.DeployReleaseIgnored] source={source} {DescribeAimFlowState()}");
             LogDeploy($"[02][ReleaseIgnored] source={source} item={_activeItemInstanceId ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"}");
         }
 
@@ -656,11 +669,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_deployAwaitingServerUse && _itemUseSystem?.IsDeploying != true)
             {
                 _deployReleaseQueued = true;
+                Debug.Log($"[NH_FLOW][39][ItemAim.ConfirmDeployQueued] source={source} {DescribeAimFlowState()}");
                 LogDeploy($"ConfirmDeploy queued: source={source} waiting for TargetBeginDeployable item={_activeItemInstanceId ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"}");
                 return;
             }
             _deployAwaitingServerUse = false;
             LogDeploy($"[03][ReleaseConfirm] source={source} item={_activeItemInstanceId ?? "null"}");
+            Debug.Log($"[NH_FLOW][39][ItemAim.ConfirmDeploy] source={source} {DescribeAimFlowState()}");
             bool confirmed = _itemUseSystem?.TryConfirmDeploy() ?? false;
             if (confirmed)
             {
@@ -669,9 +684,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _deployPointerWasHeld = false;
                 _suppressNextDeployRelease = false;
                 LogDeploy($"[04][DeployUseStarted] item={_activeItemInstanceId ?? "null"} waitingForUseComplete");
+                Debug.Log($"[NH_FLOW][41][ItemAim.ConfirmDeployAccepted] source={source} {DescribeAimFlowState()}");
             }
             else
+            {
+                Debug.Log($"[NH_FLOW][41][ItemAim.ConfirmDeployRejected] source={source} {DescribeAimFlowState()}");
                 LogDeploy($"ConfirmDeploy pending/rejected item={_activeItemInstanceId ?? "null"} using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"}");
+            }
         }
 
         /// <summary>
@@ -679,6 +698,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         /// </summary>
         public void CancelDeploy()
         {
+            Debug.Log($"[NH_FLOW][42][ItemAim.CancelDeploy] {DescribeAimFlowState()}");
             if (_inDeployMode)
                 ResetDeployState();
             _itemUseSystem?.RequestCancelUse();
@@ -706,6 +726,19 @@ namespace NightHunt.GameplaySystems.UI.Combat
         // ─────────────────────────────────────────────────────────────────────
         //  Helpers
         // ─────────────────────────────────────────────────────────────────────
+
+        private string DescribeAimFlowState()
+        {
+            var selected = _itemSelectionSystem?.SelectedItem;
+            var selectedDef = selected != null ? ItemDatabase.GetDefinition(selected.DefinitionID) : null;
+            var current = _itemUseSystem?.CurrentItem;
+            var currentDef = current != null ? ItemDatabase.GetDefinition(current.DefinitionID) : null;
+            return $"inAim={_inAimMode} inDeploy={_inDeployMode} mobile={IsMobile} active='{_activeItemInstanceId ?? "null"}' " +
+                   $"awaitServerUse={_deployAwaitingServerUse} queuedRelease={_deployReleaseQueued} suppressRelease={_suppressNextDeployRelease} confirmInProgress={_deployConfirmInProgress} " +
+                   $"selected='{selected?.InstanceID ?? "null"}' selectedDef={selectedDef?.ItemID ?? "null"} selectedType={selectedDef?.Type.ToString() ?? "null"} " +
+                   $"using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"} current='{current?.InstanceID ?? "null"}' currentDef={currentDef?.ItemID ?? "null"} currentType={currentDef?.Type.ToString() ?? "null"} " +
+                   $"aimTarget={AimWorldTarget:F2} aimDir={AimDirection:F2}";
+        }
 
         private float GetVisionRange()
         {

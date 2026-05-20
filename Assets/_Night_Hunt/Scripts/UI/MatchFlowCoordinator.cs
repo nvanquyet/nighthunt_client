@@ -1,4 +1,4 @@
-using NightHunt.Config;
+﻿using NightHunt.Config;
 using NightHunt.Core;
 using NightHunt.Services.Game;
 using NightHunt.State;
@@ -288,11 +288,11 @@ namespace NightHunt.UI
             }
         }
 
-        // ── room_disbanded (global handler — covers game scene where CustomLobbyView is inactive) ──
+        // ── room_disbanded (global handler — covers game scene where PartyCustomModeView is inactive) ──
 
         /// <summary>
         /// Handles room_disbanded arriving at any time (including during gameplay).
-        /// CustomLobbyView only handles this when it is active; this persistent handler
+        /// PartyCustomModeView only handles this when it is active; this persistent handler
         /// ensures RoomState is always cleared, preventing the "leave custom room" block
         /// from triggering on the next ranked queue attempt.
         /// </summary>
@@ -311,7 +311,7 @@ namespace NightHunt.UI
 
             if (!isGameScene)
             {
-                Debug.Log($"[MFC] room_disbanded roomId={evt.roomId} reason={evt.reason} received outside game scene; CustomLobbyView owns lobby cleanup.");
+                Debug.Log($"[MFC] room_disbanded roomId={evt.roomId} reason={evt.reason} received outside game scene; PartyCustomModeView owns lobby cleanup.");
                 return;
             }
             Debug.Log($"[MFC] room_disbanded ▶ roomId={evt.roomId} reason={evt.reason} — clearing RoomState.  t={System.DateTime.UtcNow:HH:mm:ss.fff}");

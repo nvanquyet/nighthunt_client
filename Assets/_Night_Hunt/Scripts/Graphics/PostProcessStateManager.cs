@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Rendering;
 using NightHunt.Core;
 using NightHunt.UI;
@@ -277,7 +277,7 @@ namespace NightHunt.Graphics
                 case PanelType.Home:
                 case PanelType.Login:
                 case PanelType.Lobby:
-                case PanelType.CustomLobby:
+                case PanelType.PartyCustomMode:
                     SetState(PostProcessState.Home);
                     break;
 

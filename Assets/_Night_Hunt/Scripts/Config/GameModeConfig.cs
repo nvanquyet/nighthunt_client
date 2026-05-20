@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using UnityEngine;
@@ -48,7 +48,7 @@ namespace NightHunt.Config
     // USED BY:
     //   - HomeView → GameModeSelector (HorizontalSelector from Shift UI)
     //   - PartyService.QueueParty(gameMode, allowFill)
-    //   - PartyMatchmakingRequest.gameMode
+    //   - PartyRankedQueueRequest.gameMode
     // ══════════════════════════════════════════════════════════════════════════
 
     [CreateAssetMenu(fileName = "GameModeConfig", menuName = "NightHunt/Config/Game Mode Config")]
@@ -131,13 +131,14 @@ namespace NightHunt.Config
             },
             new GameModeEntry
             {
-                modeKey        = "1v1",
-                displayName    = "1 vs 1 (Dev)",
-                description    = "Solo DS test — 1 player per team. Launch DS with --expectedPlayers 1.",
-                playersPerTeam = 1,
-                allowFill      = true,
-                isEnabled      = false,
-                isDevMode      = true
+                modeKey            = "1v1",
+                displayName        = "1 vs 1 (Dev)",
+                description        = "2-player test mode. Both players queue 1v1 → matched together.",
+                playersPerTeam     = 1,
+                allowFill          = false,
+                isEnabled          = true,
+                matchmakingEnabled = true,
+                isDevMode          = true
             }
         };
 
@@ -231,20 +232,23 @@ namespace NightHunt.Config
         }
 
         /// <summary>
-        /// Entries available for custom lobby (status=AVAILABLE) — plus dev entries in Editor/Development builds.
+        /// Entries available for party custom mode (status=AVAILABLE) — plus dev entries in Editor/Development builds.
         /// Does NOT filter by matchmakingEnabled; use <see cref="GetMatchmakingEnabled"/> for the matchmaking queue.
         /// </summary>
         public static GameModeEntry[] GetEnabled()
         {
+            // Show devMode entries in Editor AND Development builds (Debug.isDebugBuild is always
+            // false in the Editor unless "Development Build" is ticked in Build Settings).
+            bool showDev = Debug.isDebugBuild || Application.isEditor;
             var all   = GetAll();
             int count = 0;
             foreach (var m in all)
-                if ((m.isEnabled && !m.isDevMode) || (m.isDevMode && Debug.isDebugBuild)) count++;
+                if ((m.isEnabled && !m.isDevMode) || (m.isDevMode && showDev)) count++;
 
             var result = new GameModeEntry[count];
             int i = 0;
             foreach (var m in all)
-                if ((m.isEnabled && !m.isDevMode) || (m.isDevMode && Debug.isDebugBuild)) result[i++] = m;
+                if ((m.isEnabled && !m.isDevMode) || (m.isDevMode && showDev)) result[i++] = m;
             return result;
         }
 
@@ -255,15 +259,17 @@ namespace NightHunt.Config
         /// </summary>
         public static GameModeEntry[] GetMatchmakingEnabled()
         {
+            // Show devMode entries in Editor AND Development builds.
+            bool showDev = Debug.isDebugBuild || Application.isEditor;
             var all   = GetAll();
             int count = 0;
             foreach (var m in all)
-                if ((m.isEnabled && m.matchmakingEnabled && !m.isDevMode) || (m.isDevMode && Debug.isDebugBuild)) count++;
+                if ((m.isEnabled && m.matchmakingEnabled && !m.isDevMode) || (m.isDevMode && showDev)) count++;
 
             var result = new GameModeEntry[count];
             int i = 0;
             foreach (var m in all)
-                if ((m.isEnabled && m.matchmakingEnabled && !m.isDevMode) || (m.isDevMode && Debug.isDebugBuild)) result[i++] = m;
+                if ((m.isEnabled && m.matchmakingEnabled && !m.isDevMode) || (m.isDevMode && showDev)) result[i++] = m;
             return result;
         }
 

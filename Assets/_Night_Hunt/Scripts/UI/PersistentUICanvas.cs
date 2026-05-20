@@ -24,6 +24,8 @@ namespace NightHunt.UI
         [SerializeField] private MatchFoundOverlay   matchFoundOverlay;
         [SerializeField] private MatchFlowCoordinator matchFlowCoordinator;
         [SerializeField] private SessionTerminationListener sessionTerminationListener;
+        [SerializeField] private MatchPresenceNoticeListener matchPresenceNoticeListener;
+        [SerializeField] private ReconnectOverlay reconnectOverlay;
         [SerializeField] private PingDisplay         pingDisplay;
         [SerializeField] private ToastService        toastService;
 
@@ -35,6 +37,8 @@ namespace NightHunt.UI
         public MatchFoundOverlay   MatchFoundOverlay    => matchFoundOverlay;
         public MatchFlowCoordinator MatchFlowCoordinator => matchFlowCoordinator;
         public SessionTerminationListener SessionTerminationListener => sessionTerminationListener;
+        public MatchPresenceNoticeListener MatchPresenceNoticeListener => matchPresenceNoticeListener;
+        public ReconnectOverlay ReconnectOverlay => reconnectOverlay;
         public PingDisplay         PingDisplay          => pingDisplay;
         public ToastService        ToastService         => toastService;
 
@@ -134,6 +138,24 @@ namespace NightHunt.UI
                     sessionTerminationListener = FindFirstObjectByType<SessionTerminationListener>(FindObjectsInactive.Include);
                 if (sessionTerminationListener == null)
                     sessionTerminationListener = gameObject.AddComponent<SessionTerminationListener>();
+            }
+
+            if (matchPresenceNoticeListener == null)
+            {
+                matchPresenceNoticeListener = GetComponentInChildren<MatchPresenceNoticeListener>(true);
+                if (matchPresenceNoticeListener == null)
+                    matchPresenceNoticeListener = FindFirstObjectByType<MatchPresenceNoticeListener>(FindObjectsInactive.Include);
+                if (matchPresenceNoticeListener == null)
+                    matchPresenceNoticeListener = gameObject.AddComponent<MatchPresenceNoticeListener>();
+            }
+
+            if (reconnectOverlay == null)
+            {
+                reconnectOverlay = GetComponentInChildren<ReconnectOverlay>(true);
+                if (reconnectOverlay == null)
+                    reconnectOverlay = FindFirstObjectByType<ReconnectOverlay>(FindObjectsInactive.Include);
+                if (reconnectOverlay == null)
+                    reconnectOverlay = gameObject.AddComponent<ReconnectOverlay>();
             }
         }
 
@@ -264,6 +286,12 @@ namespace NightHunt.UI
 
             if (sessionTerminationListener == null)
                 sessionTerminationListener = GetComponentInChildren<SessionTerminationListener>(true);
+
+            if (matchPresenceNoticeListener == null)
+                matchPresenceNoticeListener = GetComponentInChildren<MatchPresenceNoticeListener>(true);
+
+            if (reconnectOverlay == null)
+                reconnectOverlay = GetComponentInChildren<ReconnectOverlay>(true);
         }
 #endif
     }

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using Michsky.MUIP;
 using TMPro;
@@ -9,7 +9,7 @@ using UnityEngine.UI;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Runtime guard for MUIP dropdowns used by Home and Custom Lobby.
+    /// Runtime guard for MUIP dropdowns used by Home and Party Custom Mode.
     /// Keeps scene/prefab templates intact while rebuilding values from server/config state.
     /// </summary>
     public static class NH_DropdownRuntime
@@ -62,7 +62,7 @@ namespace NightHunt.UI
             if (modeRect == null || mapRect == null || modeRect.parent != mapRect.parent)
                 return;
 
-            // Keep Home and Custom Lobby consistent: mode selector above map selector.
+            // Keep Home and Party Custom Mode consistent: mode selector above map selector.
             if (modeRect.anchoredPosition.y >= mapRect.anchoredPosition.y)
                 return;
 

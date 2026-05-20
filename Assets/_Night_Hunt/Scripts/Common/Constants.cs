@@ -1,4 +1,4 @@
-
+﻿
 namespace NightHunt.Common
 {
     public static class Constants
@@ -45,6 +45,7 @@ namespace NightHunt.Common
         public const string API_MATCHMAKING_QUEUE   = "/api/matchmaking/queue";
         public const string API_MATCHMAKING_ACCEPT  = "/api/matchmaking/queue/accept";
         public const string API_MATCHMAKING_DECLINE = "/api/matchmaking/queue/decline";
+        public const string API_MATCHMAKING_STATUS  = "/api/matchmaking/queue/status"; // GET — sync queue state on reconnect
 
         // Friend System
         // Server: FriendController @RequestMapping("/friends") + context-path /api
@@ -74,8 +75,8 @@ namespace NightHunt.Common
         public const string API_PARTY_DECLINE_INVITATION   = "/api/party/invitations/{0}/decline";
         public const string API_PARTY_CANCEL_INVITE        = "/api/party/invitations/{0}/cancel"; // DELETE cancel sent invite
         public const string API_PARTY_KICK                 = "/api/party/kick/{0}";             // POST path param
-        public const string API_PARTY_QUEUE                = "/api/party/queue";
-        public const string API_PARTY_CANCEL_QUEUE         = "/api/party/cancel-queue";
+        public const string API_PARTY_RANKED_QUEUE                = "/api/party/queue";
+        public const string API_PARTY_RANKED_CANCEL         = "/api/party/cancel-queue";
         public const string API_PARTY_JOIN_ROOM            = "/api/party/join-room";
         public const string API_PARTY_TRANSFER_LEADER      = "/api/party/transfer-leader";
 
@@ -85,6 +86,8 @@ namespace NightHunt.Common
         // Match result (post-match summary — client reports to backend after match ends)
         public const string API_MATCH_END_RANKED  = "/api/match/end/ranked";     // called by DS (server-only)
         public const string API_MATCH_END_CUSTOM  = "/api/match/end/custom";     // called by relay host client
+        public const string API_MATCH_PRESENCE    = "/api/match/presence";       // user/host-auth in-match presence
+        public const string API_DS_MATCH_PRESENCE = "/api/ds/match/presence";    // dedicated-server presence
         public const string API_MAPS       = "/api/maps";
 
         // Game Mode keys — must match GameMode.modeKey in DB

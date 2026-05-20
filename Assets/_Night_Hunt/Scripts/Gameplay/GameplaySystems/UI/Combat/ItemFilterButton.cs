@@ -84,6 +84,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _lastPressTime = Time.unscaledTime;
 
             Debug.Log($"[ITEM_FLOW] [01][FilterRowClick] instance='{_instanceId}' double={isDouble} go='{name}' action={(isDouble ? "select+use" : "selectOnly")}");
+            Debug.Log($"[NH_FLOW][04][ItemFilterButton.PointerDown] row={name} instance='{_instanceId}' double={isDouble} parent={(_parentPanel != null ? _parentPanel.name : "null")} action={(isDouble ? "select+use" : "selectOnly")}");
             _parentPanel?.SelectFromFilter(_instanceId, useImmediately: isDouble);
         }
     }

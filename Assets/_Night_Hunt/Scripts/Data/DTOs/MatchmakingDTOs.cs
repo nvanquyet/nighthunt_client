@@ -47,4 +47,21 @@ namespace NightHunt.Data.DTOs
         public int    deaths;
         public int    score;
     }
+    /// <summary>
+    /// Response from GET /api/matchmaking/queue/status.
+    /// Null <c>status</c> means the user is not in an active queue entry.
+    /// </summary>
+    [Serializable]
+    public class QueueStatusResponse
+    {
+        /// <summary>"SEARCHING" | "MATCHED" | null (not in queue)</summary>
+        public string status;
+        public string gameMode;
+        public string lobbyToken;
+        /// <summary>Seconds the player has been waiting.</summary>
+        public long   waitSeconds;
+
+        public bool IsActive =>
+            status == "SEARCHING" || status == "MATCHED";
+    }
 }

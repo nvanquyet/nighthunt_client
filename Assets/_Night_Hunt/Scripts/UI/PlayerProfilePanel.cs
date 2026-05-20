@@ -4,6 +4,7 @@ using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Services.Backend;
+using NightHunt.State;
 using NightHunt.Utils;
 using UnityEngine;
 using UnityEngine.UI;
@@ -31,6 +32,9 @@ namespace NightHunt.UI
 
         [Header("Close button")]
         [SerializeField] private Button btn_Close;
+
+        [Header("Account actions")]
+        [SerializeField] private Button btn_ChangePassword;
 
         [Header("Loading indicator (optional)")]
         [SerializeField] private GameObject loadingIndicator;
@@ -71,6 +75,7 @@ namespace NightHunt.UI
             _currentUserId = userId;
             SetRootActive(true);
             ApplyPolishedRuntimeStyle();
+            UpdateAccountActionVisibility();
             if (root != null) root.transform.SetAsLastSibling();
             else transform.SetAsLastSibling();
             SetPlaceholder(fallbackUsername ?? $"Player {userId}");
@@ -130,6 +135,8 @@ namespace NightHunt.UI
                 var def = NightHunt.Gameplay.Character.Data.CharacterDatabase.Instance?.GetById(profile.selectedCharacterId);
                 if (def != null) img_Character.sprite = def.Thumbnail;
             }
+
+            UpdateAccountActionVisibility();
         }
 
         private void SetRootActive(bool on) { if (root != null) root.SetActive(on); else gameObject.SetActive(on); }
@@ -138,6 +145,7 @@ namespace NightHunt.UI
         {
             if (!HasRequiredReferences())
                 BuildRuntimeHierarchy();
+            EnsureAccountActionButton(ResolveContentTransform());
             ApplyPolishedRuntimeStyle();
             WireButtons();
         }
@@ -150,6 +158,11 @@ namespace NightHunt.UI
         private void WireButtons()
         {
             if (btn_Close != null) { btn_Close.onClick.RemoveAllListeners(); btn_Close.onClick.AddListener(Hide); }
+            if (btn_ChangePassword != null)
+            {
+                btn_ChangePassword.onClick.RemoveAllListeners();
+                btn_ChangePassword.onClick.AddListener(OpenChangePasswordPopup);
+            }
             if (backdrop != null) { backdrop.onClick.RemoveAllListeners(); backdrop.onClick.AddListener(Hide); }
         }
 
@@ -220,6 +233,69 @@ namespace NightHunt.UI
             return tmp;
         }
 
+        private void EnsureAccountActionButton(Transform content)
+        {
+            var actions = content.Find("Actions") ?? CreateUIObject("Actions", content).transform;
+            var actionLayout = actions.GetComponent<LayoutElement>() ?? actions.gameObject.AddComponent<LayoutElement>();
+            actionLayout.preferredHeight = 48f;
+            var actionGroup = actions.GetComponent<VerticalLayoutGroup>() ?? actions.gameObject.AddComponent<VerticalLayoutGroup>();
+            actionGroup.childControlWidth = true;
+            actionGroup.childControlHeight = true;
+            actionGroup.childForceExpandWidth = true;
+            actionGroup.childForceExpandHeight = false;
+            actionGroup.spacing = 0f;
+
+            var buttonGo = actions.Find("ChangePassword") ?? CreateUIObject("ChangePassword", actions).transform;
+            btn_ChangePassword = buttonGo.GetComponent<Button>() ?? buttonGo.gameObject.AddComponent<Button>();
+            var buttonLayout = buttonGo.GetComponent<LayoutElement>() ?? buttonGo.gameObject.AddComponent<LayoutElement>();
+            buttonLayout.preferredHeight = 42f;
+            buttonLayout.minHeight = 42f;
+
+            var buttonImage = buttonGo.GetComponent<Image>() ?? buttonGo.gameObject.AddComponent<Image>();
+            buttonImage.color = new Color(0.14f, 0.26f, 0.34f, 0.95f);
+            btn_ChangePassword.targetGraphic = buttonImage;
+
+            var label = buttonGo.GetComponentInChildren<TMP_Text>(true);
+            if (label == null)
+                label = CreateLabel(buttonGo, "Label", "Change Password", 18f);
+            label.text = "Change Password";
+            label.alignment = TextAlignmentOptions.Center;
+            label.color = Color.white;
+            Stretch(label.GetComponent<RectTransform>());
+
+            UpdateAccountActionVisibility();
+        }
+
+        private void UpdateAccountActionVisibility()
+        {
+            if (btn_ChangePassword == null)
+                return;
+
+            bool isOwnProfile = SessionState.Instance != null
+                && _currentUserId != 0
+                && SessionState.Instance.UserId == _currentUserId;
+
+            var actionContainer = btn_ChangePassword.transform.parent;
+            if (actionContainer != null)
+                actionContainer.gameObject.SetActive(isOwnProfile);
+            btn_ChangePassword.gameObject.SetActive(isOwnProfile);
+        }
+
+        private void OpenChangePasswordPopup()
+        {
+            if (SessionState.Instance == null || SessionState.Instance.UserId != _currentUserId)
+                return;
+
+            if (GameManager.Instance?.AuthService == null)
+            {
+                Debug.LogWarning("[PlayerProfilePanel] AuthService not available for change password.");
+                return;
+            }
+
+            ChangePasswordPopup.Show(async (oldPassword, newPassword, confirmNewPassword) =>
+                await GameManager.Instance.AuthService.ChangePassword(oldPassword, newPassword, confirmNewPassword));
+        }
+
         private void ApplyPolishedRuntimeStyle()
         {
             var panel = ResolvePanelTransform();
@@ -265,6 +341,19 @@ namespace NightHunt.UI
                 closeText.color = Color.white;
                 Stretch(closeText.GetComponent<RectTransform>());
             }
+
+            if (btn_ChangePassword != null)
+            {
+                var actionImage = btn_ChangePassword.GetComponent<Image>() ?? btn_ChangePassword.gameObject.AddComponent<Image>();
+                actionImage.color = new Color(0.14f, 0.26f, 0.34f, 0.95f);
+                var actionText = btn_ChangePassword.GetComponentInChildren<TMP_Text>(true);
+                if (actionText != null)
+                {
+                    actionText.alignment = TextAlignmentOptions.Center;
+                    actionText.color = Color.white;
+                    Stretch(actionText.GetComponent<RectTransform>());
+                }
+            }
         }
 
         private Transform ResolvePanelTransform()
@@ -287,6 +376,29 @@ namespace NightHunt.UI
             }
 
             return root != null ? root.transform : transform;
+        }
+
+        private Transform ResolveContentTransform()
+        {
+            if (txt_Username != null && txt_Username.transform.parent != null)
+                return txt_Username.transform.parent;
+
+            if (root != null)
+            {
+                var panel = root.transform.Find("Panel");
+                if (panel != null)
+                {
+                    var content = panel.Find("Content");
+                    if (content != null)
+                        return content;
+                }
+
+                var directContent = root.transform.Find("Content");
+                if (directContent != null)
+                    return directContent;
+            }
+
+            return transform;
         }
 
         private static void StyleText(TMP_Text text, float size, Color color, FontStyles style)

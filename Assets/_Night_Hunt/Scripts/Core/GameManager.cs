@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using NightHunt.Networking;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;
@@ -295,7 +295,7 @@ namespace NightHunt.Core
                 switch (nav.CurrentPanel)
                 {
                     case PanelType.Lobby:
-                    case PanelType.CustomLobby:
+                    case PanelType.PartyCustomMode:
                         await RefreshLobbyData();
                         break;
 
@@ -334,7 +334,7 @@ namespace NightHunt.Core
             {
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] Room data refreshed");
-                var lobbyView = FindFirstObjectByType<UI.CustomLobbyView>();
+                var lobbyView = FindFirstObjectByType<UI.PartyCustomModeView>();
                 lobbyView?.RefreshPlayerList();
             }
             else

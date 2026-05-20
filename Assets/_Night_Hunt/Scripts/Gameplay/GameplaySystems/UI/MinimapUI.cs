@@ -74,6 +74,29 @@ namespace NightHunt.GameplaySystems.UI
                 SetFullMapVisible(false);
         }
 
+        private void Update()
+        {
+            if (_fullMapVisible && _fullMapRoot != null && !_fullMapRoot.activeInHierarchy)
+            {
+                Debug.Log($"[NH_FLOW][50][Minimap.WatchdogExternalHide] visible={_fullMapVisible} pushed={_pushedInputContext} state={InputLayerManager.Instance?.CurrentState.ToString() ?? "null"} layers={(InputLayerManager.Instance != null ? InputLayerManager.Instance.ActiveLayers.ToString() : "null")}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Input,
+                    "MinimapExternalHideRecovered",
+                    "fullMapRoot was hidden outside MinimapUI; releasing map input context.",
+                    this);
+                SetFullMapVisible(false);
+                return;
+            }
+
+            var inputLayers = InputLayerManager.Instance;
+            if (!_fullMapVisible && _pushedInputContext && inputLayers != null &&
+                inputLayers.CurrentState == InputState.MapOpen)
+            {
+                Debug.Log($"[NH_FLOW][50][Minimap.WatchdogMapOpenLeak] visible={_fullMapVisible} pushed={_pushedInputContext} state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers}");
+                ReleaseMapInputContext(inputLayers, inputLayers.CurrentState, inputLayers.ActiveLayers, "watchdog-hidden-map");
+            }
+        }
+
         public void OnPointerClick(PointerEventData eventData)
         {
             ToggleFullMap();
@@ -96,6 +119,7 @@ namespace NightHunt.GameplaySystems.UI
         public void SetFullMapVisible(bool visible)
         {
             bool wasVisible = _fullMapVisible;
+            Debug.Log($"[NH_FLOW][50][Minimap.SetFullMapVisible] requested={visible} wasVisible={wasVisible} pushed={_pushedInputContext} state={InputLayerManager.Instance?.CurrentState.ToString() ?? "null"} layers={(InputLayerManager.Instance != null ? InputLayerManager.Instance.ActiveLayers.ToString() : "null")}");
             if (wasVisible == visible && !_pushedInputContext)
             {
                 if (_fullMapRoot != null)
@@ -126,6 +150,7 @@ namespace NightHunt.GameplaySystems.UI
 
                     if (inputLayers.CurrentState != InputState.MapOpen)
                     {
+                        Debug.Log($"[NH_FLOW][51][Minimap.PushMapOpen] beforeState={inputLayers.CurrentState} beforeLayers={inputLayers.ActiveLayers}");
                         inputLayers.PushContext(InputState.MapOpen);
                         _pushedInputContext = true;
                     }
@@ -133,21 +158,7 @@ namespace NightHunt.GameplaySystems.UI
             }
             else
             {
-                if (inputLayers != null && (_pushedInputContext || inputLayers.CurrentState == InputState.MapOpen))
-                    inputLayers.PopContext();
-
-                _pushedInputContext = false;
-
-                if (inputLayers != null &&
-                    (inputLayers.CurrentState == InputState.None || inputLayers.CurrentState == InputState.MapOpen))
-                {
-                    PhaseTestLog.Warning(
-                        PhaseTestLogCategory.Input,
-                        "MinimapInputRecoverAfterClose",
-                        $"reason=invalid-after-close state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers} beforeState={beforeState} beforeLayers={beforeLayers}",
-                        this);
-                    inputLayers.TransitionToState(InputState.PlayerAlive);
-                }
+                ReleaseMapInputContext(inputLayers, beforeState, beforeLayers, "close");
             }
 
             if (_fullMapRoot != null)
@@ -158,12 +169,48 @@ namespace NightHunt.GameplaySystems.UI
                 visible ? "MinimapOpen" : "MinimapClose",
                 $"prevVisible={wasVisible} beforeState={beforeState} beforeLayers={beforeLayers} afterState={inputLayers?.CurrentState.ToString() ?? "null"} afterLayers={(inputLayers != null ? inputLayers.ActiveLayers.ToString() : "null")} pushed={_pushedInputContext}",
                 this);
+            Debug.Log($"[NH_FLOW][52][Minimap.VisibleSet] visible={visible} prevVisible={wasVisible} beforeState={beforeState} beforeLayers={beforeLayers} afterState={inputLayers?.CurrentState.ToString() ?? "null"} afterLayers={(inputLayers != null ? inputLayers.ActiveLayers.ToString() : "null")} pushed={_pushedInputContext}");
         }
 
         private void HandleCancelPressed()
         {
             if (_fullMapVisible)
                 SetFullMapVisible(false);
+        }
+
+        private void ReleaseMapInputContext(
+            InputLayerManager inputLayers,
+            InputState beforeState,
+            NightHunt.Gameplay.Input.InputLayer beforeLayers,
+            string reason)
+        {
+            if (inputLayers == null)
+            {
+                _pushedInputContext = false;
+                return;
+            }
+
+            int popCount = 0;
+            while (inputLayers.CurrentState == InputState.MapOpen && popCount < 4)
+            {
+                Debug.Log($"[NH_FLOW][53][Minimap.PopMapOpen] reason={reason} popIndex={popCount} state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers}");
+                inputLayers.PopContext();
+                popCount++;
+            }
+
+            _pushedInputContext = false;
+
+            if (inputLayers.CurrentState == InputState.None || inputLayers.CurrentState == InputState.MapOpen)
+            {
+                Debug.LogWarning($"[NH_FLOW][54][Minimap.RecoverInputState] reason={reason} invalidState={inputLayers.CurrentState} layers={inputLayers.ActiveLayers} beforeState={beforeState} beforeLayers={beforeLayers} popCount={popCount}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Input,
+                    "MinimapInputRecoverAfterClose",
+                    $"reason={reason} invalidState={inputLayers.CurrentState} layers={inputLayers.ActiveLayers} beforeState={beforeState} beforeLayers={beforeLayers} popCount={popCount}",
+                    this);
+                inputLayers.TransitionToState(InputState.PlayerAlive);
+            }
+            Debug.Log($"[NH_FLOW][55][Minimap.ReleaseDone] reason={reason} beforeState={beforeState} beforeLayers={beforeLayers} afterState={inputLayers.CurrentState} afterLayers={inputLayers.ActiveLayers} popCount={popCount}");
         }
 
         private void ApplyTextures()

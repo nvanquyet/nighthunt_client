@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Feedback;
@@ -295,7 +295,7 @@ namespace NightHunt.Audio
                 case PanelType.Login:
                 case PanelType.Home:
                 case PanelType.Lobby:
-                case PanelType.CustomLobby:
+                case PanelType.PartyCustomMode:
                 case PanelType.Settings:
                     PlayBGMHome();
                     break;

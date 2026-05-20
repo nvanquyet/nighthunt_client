@@ -29,6 +29,7 @@ namespace NightHunt.Gameplay.Character.Combat
 
         private readonly Collider[] _hits = new Collider[16];
         private IWeaponSystem _weaponSystem;
+        private Transform _ownerRoot;
         private float _lastHitRequestTime = -999f;
 
         private void Awake()
@@ -40,6 +41,7 @@ namespace NightHunt.Gameplay.Character.Combat
                 .InRootChildren()
                 .OrDefault(null)
                 .Resolve();
+            _ownerRoot = transform.root;
             // Self-heal: if _hitLayers is still "Everything" (~0) or empty (0), apply the
             // canonical melee mask so melee doesn't accidentally hit triggers, zones, items, etc.
             if (_hitLayers.value == -1 || _hitLayers.value == 0)
@@ -76,7 +78,9 @@ namespace NightHunt.Gameplay.Character.Combat
                 return;
 
             Vector3 origin = transform.TransformPoint(_originOffset);
-            Vector3 center = origin + transform.forward * (_range * 0.5f);
+            Transform ownerRoot = _ownerRoot != null ? _ownerRoot : transform.root;
+            Vector3 forward = ownerRoot != null ? ownerRoot.forward : transform.forward;
+            Vector3 center = origin + forward * (_range * 0.5f);
             int count = Physics.OverlapSphereNonAlloc(
                 center,
                 _radius,
@@ -97,8 +101,8 @@ namespace NightHunt.Gameplay.Character.Combat
 
                 Vector3 closest = col.ClosestPoint(origin);
                 Vector3 toTarget = closest - origin;
-                float forward = Vector3.Dot(transform.forward, toTarget);
-                if (forward < 0f || forward > _range)
+                float forwardDist = Vector3.Dot(forward, toTarget);
+                if (forwardDist < 0f || forwardDist > _range)
                     continue;
 
                 var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(col)
@@ -114,7 +118,7 @@ namespace NightHunt.Gameplay.Character.Combat
                     continue;
 
                 float lateral = Vector3.ProjectOnPlane(toTarget, transform.forward).sqrMagnitude;
-                float score = forward + lateral;
+                float score = forwardDist + lateral;
                 if (score >= bestScore)
                     continue;
 
@@ -130,7 +134,7 @@ namespace NightHunt.Gameplay.Character.Combat
             Vector3 hitPoint = bestCollider.ClosestPoint(origin);
             Vector3 normal = (origin - hitPoint).sqrMagnitude > 0.001f
                 ? (origin - hitPoint).normalized
-                : -transform.forward;
+                : -forward;
 
             var info = new DamageInfo
             {
@@ -171,7 +175,11 @@ namespace NightHunt.Gameplay.Character.Combat
 
         private bool IsSelfCollider(Transform target)
         {
-            return target == transform || target.IsChildOf(transform) || transform.IsChildOf(target);
+            if (target == null)
+                return false;
+
+            Transform ownerRoot = _ownerRoot != null ? _ownerRoot : transform.root;
+            return ownerRoot != null && (target == ownerRoot || target.IsChildOf(ownerRoot));
         }
     }
 }

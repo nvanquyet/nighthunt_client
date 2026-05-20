@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using FishNet.Object;
 using FishNet.Managing;
 using FishNet.Connection;
@@ -14,6 +14,9 @@ using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Config;
+using NightHunt.Common;
+using NightHunt.Core;
+using NightHunt.Data.DTOs;
 using NightHunt.State;
 
 namespace NightHunt.Networking
@@ -119,7 +122,7 @@ namespace NightHunt.Networking
         {
             var roomState = RoomState.Instance;
 
-            // 1. RoomState.PlayerCount is populated by match_ready (Ranked_DS) or by custom lobby
+            // 1. RoomState.PlayerCount is populated by match_ready (Ranked_DS) or by party custom mode
             //    room data (Custom_Relay host). Use it for both modes.
             if (roomState != null && roomState.PlayerCount > 0)
             {
@@ -351,6 +354,7 @@ namespace NightHunt.Networking
 
             // STEP 5: Register vá»›i RegistryService (lÆ°u PRIVATE data)
             _registryService.RegisterPlayer(networkPlayer, serverData);
+            ReportMatchPresence(serverData.BackendPlayerId, "CONNECTED", "FISHNET_CONNECTED");
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Step 5: Registered with RegistryService");
@@ -535,6 +539,8 @@ namespace NightHunt.Networking
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Cleaning up - Backend ID: {backendId}, Name: {networkPlayer.DisplayName}");
 
+            ReportMatchPresence(backendId, "DISCONNECTED", "FISHNET_DISCONNECTED");
+
             // Unregister (RegistryService lÆ°u data cho reconnect)
             _registryService.UnregisterPlayer(networkPlayer);
 
@@ -549,6 +555,55 @@ namespace NightHunt.Networking
             _spawnedPlayers.Remove(fishnetClientId);
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] âœ… Cleanup complete for ClientId: {fishnetClientId}");
+        }
+        private async void ReportMatchPresence(string backendUserId, string state, string reason)
+        {
+            if (string.IsNullOrEmpty(backendUserId))
+                return;
+
+            var dsBootstrap = NightHunt.Server.ServerBootstrap.Instance;
+            if (dsBootstrap != null)
+            {
+                dsBootstrap.ReportMatchPresence(backendUserId, state, reason);
+                return;
+            }
+
+            if (!long.TryParse(backendUserId, out long userId) || userId <= 0)
+            {
+                Debug.LogWarning($"[ServerGameManager] Presence ignored: invalid backendUserId='{backendUserId}' state={state}");
+                return;
+            }
+
+            var roomState = RoomState.Instance;
+            string matchId = roomState?.CurrentMatchId;
+            if (string.IsNullOrEmpty(matchId))
+                matchId = roomState?.CurrentRoom?.matchId;
+
+            var backend = GameManager.Instance?.BackendClient;
+            if (backend == null || string.IsNullOrEmpty(matchId))
+            {
+                Debug.LogWarning($"[ServerGameManager] Presence {state} skipped for userId={userId}: backend or matchId missing.");
+                return;
+            }
+
+            try
+            {
+                var result = await backend.PostAsync<object>(Constants.API_MATCH_PRESENCE,
+                    new MatchPresenceRequest
+                    {
+                        matchId = matchId,
+                        userId = userId,
+                        state = state,
+                        reason = reason,
+                    });
+
+                if (!result.Success)
+                    Debug.LogWarning($"[ServerGameManager] Presence {state} failed for userId={userId}: {result.Message}");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[ServerGameManager] Presence {state} error for userId={userId}: {ex.Message}");
+            }
         }
 #if UNITY_EDITOR
         // ── Editor — Context Menu: Auto-assign Known Prefabs ──────────────────

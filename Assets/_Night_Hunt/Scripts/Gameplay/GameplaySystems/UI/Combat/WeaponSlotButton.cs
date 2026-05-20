@@ -116,8 +116,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_weaponSystem == null)
                 return;
 
-            // Always cancel any armed item first so weapon swap is clean.
-            if (_itemUseSystem != null && _itemUseSystem.IsUsingItem)
+            // Always clear selected/armed item intent first so weapon fire regains priority.
+            if ((_itemUseSystem != null && _itemUseSystem.IsUsingItem) ||
+                (_itemSelectionSystem != null && _itemSelectionSystem.HasSelection))
                 _itemSelectionSystem?.RequestCancelSelection();
 
             var activeSlot = _weaponSystem.GetActiveWeaponSlot();
