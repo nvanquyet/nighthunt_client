@@ -9,13 +9,31 @@ namespace Michsky.UI.Shift
 
         void Awake()
         {
-            foreach (Transform child in transform) { mainButtons.Add(child.GetComponent<Animator>()); }
-            for (int i = 0; i < mainButtons.Count; ++i) { mainButtons[i].Play("Normal to Dissolve"); }
+            foreach (Transform child in transform)
+            {
+                var animator = child.GetComponent<Animator>();
+                if (animator != null)
+                    mainButtons.Add(animator);
+            }
 
-            Canvas _canvas = gameObject.AddComponent<Canvas>();
+            for (int i = 0; i < mainButtons.Count; ++i)
+            {
+                var animator = mainButtons[i];
+                if (animator != null &&
+                    animator.runtimeAnimatorController != null &&
+                    animator.isActiveAndEnabled &&
+                    animator.gameObject.activeInHierarchy)
+                {
+                    animator.Play("Normal to Dissolve");
+                }
+            }
+
+            Canvas _canvas = gameObject.GetComponent<Canvas>() ?? gameObject.AddComponent<Canvas>();
             _canvas.overrideSorting = true;
             _canvas.sortingOrder = 999;
-            gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+
+            if (gameObject.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
+                gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
         }
     }
 }

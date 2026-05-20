@@ -32,8 +32,9 @@ namespace Michsky.UI.Shift
 
             if (Application.isPlaying == true && audioObject == null)
             {
-                try { audioObject = GameObject.Find("UI Audio").GetComponent<AudioSource>(); }
-                catch { Debug.Log("<b>[UI Element Sound]</b> No Audio Source found.", this); }
+                GameObject uiAudio = GameObject.Find("UI Audio");
+                if (uiAudio != null)
+                    audioObject = uiAudio.GetComponent<AudioSource>();
             }
 
             if (checkForInteraction == true) { sourceButton = gameObject.GetComponent<Button>(); }
@@ -46,8 +47,8 @@ namespace Michsky.UI.Shift
 
             if (enableHoverSound == true)
             {
-                if (hoverSFX == null) { audioObject.PlayOneShot(UIManagerAsset.hoverSound); }
-                else { audioObject.PlayOneShot(hoverSFX); }
+                AudioClip clip = hoverSFX != null ? hoverSFX : (UIManagerAsset != null ? UIManagerAsset.hoverSound : null);
+                PlaySound(clip);
             }
         }
 
@@ -58,9 +59,17 @@ namespace Michsky.UI.Shift
 
             if (enableClickSound == true)
             {
-                if (clickSFX == null) { audioObject.PlayOneShot(UIManagerAsset.clickSound); }
-                else { audioObject.PlayOneShot(clickSFX); }
+                AudioClip clip = clickSFX != null ? clickSFX : (UIManagerAsset != null ? UIManagerAsset.clickSound : null);
+                PlaySound(clip);
             }
+        }
+
+        private void PlaySound(AudioClip clip)
+        {
+            if (audioObject == null || clip == null)
+                return;
+
+            audioObject.PlayOneShot(clip);
         }
     }
 }

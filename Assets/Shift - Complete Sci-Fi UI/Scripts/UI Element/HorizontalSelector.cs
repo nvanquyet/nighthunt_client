@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
@@ -26,6 +26,7 @@ namespace Michsky.UI.Shift
 
         [Header("Items")]
         public List<Item> itemList = new List<Item>();
+        public UnityEvent<int> onValueChanged = new UnityEvent<int>();
 
         private TextMeshProUGUI label;
         private TextMeshProUGUI labeHelper;
@@ -113,8 +114,8 @@ namespace Michsky.UI.Shift
                     label.text = itemList[index].itemTitle;
 
                     try { itemList[index].onValueChanged.Invoke(); }
-
                     catch { }
+                    onValueChanged.Invoke(index);
 
                     selectorAnimator.Play(null);
                     selectorAnimator.StopPlayback();
@@ -143,6 +144,7 @@ namespace Michsky.UI.Shift
 
                 try { itemList[index].onValueChanged.Invoke(); }
                 catch { }
+                onValueChanged.Invoke(index);
 
                 selectorAnimator.Play(null);
                 selectorAnimator.StopPlayback();
@@ -229,6 +231,7 @@ namespace Michsky.UI.Shift
 
                 try { itemList[index].onValueChanged.Invoke(); }
                 catch { }
+                onValueChanged.Invoke(index);
 
                 selectorAnimator.Play(null);
                 selectorAnimator.StopPlayback();

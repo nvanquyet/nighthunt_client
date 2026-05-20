@@ -29,30 +29,39 @@ namespace Michsky.UI.Shift
 
         void Start()
         {
-            if (useCustomContent == false) { buttonTitleObj.text = buttonTitle; }
+            if (useCustomContent == false && buttonTitleObj != null) { buttonTitleObj.text = buttonTitle; }
         }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             if (enableIconPreview == true)
             {
-                detailImage.gameObject.SetActive(false);
-                detailIcon.gameObject.SetActive(true);
-                detailBackground.gameObject.SetActive(true);
-                detailIcon.sprite = iconSprite;
-                detailBackground.sprite = iconBackground;
+                if (detailImage != null) detailImage.gameObject.SetActive(false);
+                if (detailIcon != null)
+                {
+                    detailIcon.gameObject.SetActive(true);
+                    detailIcon.sprite = iconSprite;
+                }
+                if (detailBackground != null)
+                {
+                    detailBackground.gameObject.SetActive(true);
+                    detailBackground.sprite = iconBackground;
+                }
             }
 
             else
             {
-                detailImage.gameObject.SetActive(true);
-                detailIcon.gameObject.SetActive(false);
-                detailBackground.gameObject.SetActive(false);
-                detailImage.sprite = imageSprite;
+                if (detailImage != null)
+                {
+                    detailImage.gameObject.SetActive(true);
+                    detailImage.sprite = imageSprite;
+                }
+                if (detailIcon != null) detailIcon.gameObject.SetActive(false);
+                if (detailBackground != null) detailBackground.gameObject.SetActive(false);
             }
 
-            detailTitle.text = title;
-            detailDescription.text = description;
+            if (detailTitle != null) detailTitle.text = title;
+            if (detailDescription != null) detailDescription.text = description;
         }
     }
 }
