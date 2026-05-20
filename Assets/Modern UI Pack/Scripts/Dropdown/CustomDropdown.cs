@@ -79,6 +79,7 @@ namespace Michsky.MUIP
         EventTrigger triggerEvent;
         Sprite imageHelper;
         string textHelper;
+        GameObject runtimeItemTemplate;
 
 #if UNITY_EDITOR
         public bool extendEvents = false;
@@ -101,10 +102,12 @@ namespace Michsky.MUIP
             if (!isInitialized) { Initialize(); }
             if (updateOnEnable && index < items.Count) { SetDropdownIndex(selectedItemIndex, false); }
 
+            SyncPanelSizeFromListRect();
             listCG.alpha = 0;
             listCG.interactable = false;
             listCG.blocksRaycasts = false;
-            listRect.sizeDelta = new Vector2(listRect.sizeDelta.x, 0);
+            listCG.gameObject.SetActive(false);
+            PreserveClosedListSize();
         }
 
         void Initialize()
@@ -124,10 +127,11 @@ namespace Michsky.MUIP
                 if (contentCG == null) { contentCG = transform.Find("Content/Item List").GetComponent<CanvasGroup>(); }
                 contentCG.alpha = 1;
 
-                Canvas tempCanvas = contentCG.gameObject.AddComponent<Canvas>();
+                Canvas tempCanvas = contentCG.GetComponent<Canvas>();
+                if (tempCanvas == null) { tempCanvas = contentCG.gameObject.AddComponent<Canvas>(); }
                 tempCanvas.overrideSorting = true;
                 tempCanvas.sortingOrder = 30000;
-                contentCG.gameObject.AddComponent<GraphicRaycaster>();
+                if (contentCG.GetComponent<GraphicRaycaster>() == null) { contentCG.gameObject.AddComponent<GraphicRaycaster>(); }
             }
 
             dropdownAnimator = gameObject.GetComponent<Animator>();
@@ -143,42 +147,66 @@ namespace Michsky.MUIP
         public void SetupDropdown()
         {
             if (!enableScrollbar && scrollbar != null) { Destroy(scrollbar); }
+            if (itemParent == null || itemObject == null) { return; }
             if (itemList == null) { itemList = itemParent.GetComponent<VerticalLayoutGroup>(); }
 
             UpdateItemLayout();
             index = 0;
 
-            foreach (Transform child in itemParent) { Destroy(child.gameObject); }
+            if (items == null || items.Count == 0)
+            {
+                if (selectedText != null) { selectedText.text = string.Empty; }
+                return;
+            }
+
+            selectedItemIndex = Mathf.Clamp(selectedItemIndex, 0, items.Count - 1);
+            GameObject templateObject = ResolveItemTemplate();
+            if (templateObject == null) { return; }
+
+            for (int i = itemParent.childCount - 1; i >= 0; i--)
+            {
+                Transform child = itemParent.GetChild(i);
+                child.gameObject.SetActive(false);
+                Destroy(child.gameObject);
+            }
+
             for (int i = 0; i < items.Count; ++i)
             {
-                GameObject go = Instantiate(itemObject, new Vector3(0, 0, 0), Quaternion.identity);
+                GameObject go = Instantiate(templateObject, new Vector3(0, 0, 0), Quaternion.identity);
                 go.transform.SetParent(itemParent, false);
+                go.SetActive(true);
                 go.name = items[i].itemName;
 
-                setItemText = go.GetComponentInChildren<TextMeshProUGUI>();
+                setItemText = ResolvePrimaryText(go);
                 textHelper = items[i].itemName;
-                setItemText.text = textHelper;
+                if (setItemText != null) { setItemText.text = textHelper; }
 
-                onItemTextChanged?.Invoke(setItemText);
+                if (setItemText != null) { onItemTextChanged?.Invoke(setItemText); }
 
                 Transform goImage = go.gameObject.transform.Find("Icon");
-                setItemImage = goImage.GetComponent<Image>();
+                setItemImage = goImage != null ? goImage.GetComponent<Image>() : null;
 
-                if (items[i].itemIcon == null) { setItemImage.gameObject.SetActive(false); }
-                else { imageHelper = items[i].itemIcon; setItemImage.sprite = imageHelper; }
+                if (setItemImage != null)
+                {
+                    if (items[i].itemIcon == null) { setItemImage.gameObject.SetActive(false); }
+                    else { imageHelper = items[i].itemIcon; setItemImage.sprite = imageHelper; }
+                }
               
                 items[i].itemIndex = i;
                 Item mainItem = items[i];
 
                 Button itemButton = go.GetComponent<Button>();
-                itemButton.onClick.AddListener(Animate);
-                itemButton.onClick.AddListener(items[i].OnItemSelection.Invoke);
-                itemButton.onClick.AddListener(delegate
+                if (itemButton != null)
                 {
-                    SetDropdownIndex(index = mainItem.itemIndex);
-                    onValueChanged.Invoke(index = mainItem.itemIndex);
-                    if (saveSelected) { PlayerPrefs.SetInt("Dropdown_" + saveKey, mainItem.itemIndex); }
-                });
+                    itemButton.onClick.AddListener(Animate);
+                    itemButton.onClick.AddListener(items[i].OnItemSelection.Invoke);
+                    itemButton.onClick.AddListener(delegate
+                    {
+                        SetDropdownIndex(index = mainItem.itemIndex);
+                        onValueChanged.Invoke(index = mainItem.itemIndex);
+                        if (saveSelected) { PlayerPrefs.SetInt("Dropdown_" + saveKey, mainItem.itemIndex); }
+                    });
+                }
             }
 
             if (selectedImage != null && !enableIcon) { selectedImage.gameObject.SetActive(false); }
@@ -191,6 +219,61 @@ namespace Michsky.MUIP
                 else { SetDropdownIndex(PlayerPrefs.GetInt("Dropdown_" + saveKey), false); }
             }
             else if (invokeAtStart) { items[selectedItemIndex].OnItemSelection.Invoke(); }
+        }
+
+        GameObject ResolveItemTemplate()
+        {
+            if (runtimeItemTemplate != null) { return runtimeItemTemplate; }
+            if (itemObject == null) { return null; }
+
+            if (itemParent != null && itemObject.transform.IsChildOf(itemParent))
+            {
+                if (runtimeItemTemplate == null)
+                {
+                    runtimeItemTemplate = Instantiate(itemObject, transform, false);
+                    runtimeItemTemplate.name = "Runtime Dropdown Item Template";
+                    runtimeItemTemplate.SetActive(false);
+                }
+
+                return runtimeItemTemplate;
+            }
+
+            if (itemObject.scene.IsValid()) { itemObject.SetActive(false); }
+            return itemObject;
+        }
+
+        static TextMeshProUGUI ResolvePrimaryText(GameObject root)
+        {
+            if (root == null) { return null; }
+            TextMeshProUGUI[] labels = root.GetComponentsInChildren<TextMeshProUGUI>(true);
+            if (labels == null || labels.Length == 0) { return null; }
+
+            TextMeshProUGUI best = labels[0];
+            float bestScore = float.MinValue;
+            for (int i = 0; i < labels.Length; i++)
+            {
+                TextMeshProUGUI label = labels[i];
+                if (label == null) { continue; }
+
+                float score = label.fontSize;
+                RectTransform rect = label.rectTransform;
+                if (rect != null)
+                    score += Mathf.Abs(rect.rect.width) * 0.05f + Mathf.Abs(rect.rect.height) * 0.02f;
+
+                string n = label.gameObject.name.ToLowerInvariant();
+                if (n.Contains("title") || n.Contains("text") || n.Contains("label") || n.Contains("name"))
+                    score += 100f;
+                if (n.Contains("available") || n.Contains("status") || n.Contains("badge"))
+                    score -= 200f;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = label;
+                }
+            }
+
+            return best;
         }
 
         // Obsolete
@@ -206,6 +289,9 @@ namespace Michsky.MUIP
 
         public void SetDropdownIndex(int itemIndex, bool bypassSound = false)
         {
+            if (items == null || items.Count == 0) { return; }
+            itemIndex = Mathf.Clamp(itemIndex, 0, items.Count - 1);
+
             if (selectedImage != null && enableIcon && items[itemIndex].itemIcon != null) { selectedImage.gameObject.SetActive(true); selectedImage.sprite = items[itemIndex].itemIcon; }
             else if (selectedImage != null && enableIcon && items[itemIndex].itemIcon == null) { selectedImage.gameObject.SetActive(false); }
             if (selectedText != null) { selectedText.text = items[itemIndex].itemName; onItemTextChanged?.Invoke(selectedText); }
@@ -307,6 +393,22 @@ namespace Michsky.MUIP
             itemList.padding.right = itemPaddingRight;
         }
 
+        void SyncPanelSizeFromListRect()
+        {
+            if (listRect == null || isOn)
+                return;
+
+            float configuredHeight = listRect.sizeDelta.y;
+            if (configuredHeight > 1f && Mathf.Abs(configuredHeight - panelSize) > 0.5f)
+                panelSize = configuredHeight;
+        }
+
+        void PreserveClosedListSize()
+        {
+            if (listRect != null)
+                listRect.sizeDelta = new Vector2(listRect.sizeDelta.x, panelSize);
+        }
+
         public void OnPointerClick(PointerEventData eventData)
         {
             if (!isInteractable) { return; }
@@ -339,8 +441,9 @@ namespace Michsky.MUIP
         {
             float elapsedTime = 0;
 
-            Vector2 startPos = listRect.sizeDelta;
+            Vector2 startPos = new Vector2(listRect.sizeDelta.x, 0);
             Vector2 endPos = new Vector2(listRect.sizeDelta.x, panelSize);
+            listRect.sizeDelta = startPos;
 
             while (listRect.sizeDelta.y <= panelSize - 0.1f)
             {
@@ -375,6 +478,7 @@ namespace Michsky.MUIP
             listCG.alpha = 0;
             listRect.sizeDelta = endPos;
             listCG.gameObject.SetActive(false);
+            PreserveClosedListSize();
         }
     }
 }
