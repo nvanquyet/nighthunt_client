@@ -20,7 +20,7 @@ MonoBehaviour:
   IsStackable: 0
   MaxStackSize: 1
   Weight: 8
-  _visualPrefab: {fileID: 8984021994670425735, guid: 6a4fb80df1749e74781949096b2b831b,
+  _visualPrefab: {fileID: 5768917854526666594, guid: 150ee8fc2e497044f9dfe50a1a0d36f1,
     type: 3}
   ValidSlots: 0000000002000000
   _attachmentSlots: 

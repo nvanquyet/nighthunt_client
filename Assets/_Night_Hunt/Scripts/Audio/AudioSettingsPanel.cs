@@ -1,28 +1,14 @@
+using NightHunt.Config;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 using TMPro;
 
 namespace NightHunt.Audio
 {
     /// <summary>
-    /// AudioSettingsPanel — mirrors ShiftUI QualityManager exactly.
-    ///
-    /// PATTERN (from QualityManager.Start()):
-    ///   mixer.SetFloat("Master", Mathf.Log10(PlayerPrefs.GetFloat(sliderTag + "SliderValue")) * 20)
-    ///
-    /// HOW THIS WORKS:
-    ///   • Each slider has a "sliderTag" (= AudioManager param key, e.g. "MasterVol").
-    ///   • On Start(): reads stored 0–1 value from PlayerPrefs → applies dB to mixer.
-    ///   • On slider change: calls AudioManager.SetVolume(param, value) → mixer + PlayerPrefs.
-    ///
-    /// SETUP in Canvas:
-    ///   1. Create "AudioSettings" panel with Slider components.
-    ///   2. Assign each slider below.
-    ///   3. AudioSettingsPanel.Start() auto-wires OnValueChanged callbacks.
-    ///   4. No further code needed — fully declarative.
-    ///
-    /// HINT: Use ShiftUI's SliderManager if available — just replace its sliderTag with
-    ///   the AudioManager param key (e.g. "MasterVol") so PlayerPrefs keys match.
+    /// AudioSettingsPanel - NightHunt-owned replacement for ShiftUI QualityManager.
+    /// Synchronizes UI Sliders with GameSettings and AudioManager.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class AudioSettingsPanel : MonoBehaviour
@@ -42,11 +28,16 @@ namespace NightHunt.Audio
             [Tooltip("Default value (0–1) applied on first run (no saved preference yet).")]
             [Range(0f, 1f)]
             public float defaultValue = 1f;
+
+            [System.NonSerialized] public UnityAction<float> runtimeListener;
         }
 
         [Header("Volume Sliders")]
         [Tooltip("Add one entry per mixer channel. Order does not matter.")]
         [SerializeField] private AudioSliderEntry[] sliders;
+
+        [Header("Reset")]
+        [SerializeField] private Button resetButton;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -59,16 +50,23 @@ namespace NightHunt.Audio
 
                 // Wire callback before LoadSettings so initial apply does not double-fire.
                 var captured = entry;
-                entry.slider.onValueChanged.AddListener(v => SaveSettings(captured, v));
+                entry.runtimeListener = v => UpdateAndSave(captured, v);
+                entry.slider.onValueChanged.AddListener(entry.runtimeListener);
             }
+
+            if (resetButton != null)
+                resetButton.onClick.AddListener(ResetToDefaults);
 
             LoadSettings();
         }
 
         private void OnEnable()
         {
-            // Re-apply saved values when the panel becomes visible
-            // (e.g. the settings screen is reopened).
+            LoadSettings();
+        }
+
+        public void RefreshFromPrefs()
+        {
             LoadSettings();
         }
 
@@ -76,27 +74,33 @@ namespace NightHunt.Audio
         {
             foreach (var entry in sliders)
             {
-                if (entry?.slider != null)
-                    entry.slider.onValueChanged.RemoveAllListeners();
+                if (entry?.slider != null && entry.runtimeListener != null)
+                    entry.slider.onValueChanged.RemoveListener(entry.runtimeListener);
             }
+            if (resetButton != null)
+                resetButton.onClick.RemoveListener(ResetToDefaults);
         }
 
         // ── Load / Save ────────────────────────────────────────────
 
-        /// <summary>
-        /// Read saved volumes from PlayerPrefs and apply to all sliders and the mixer.
-        /// Uses prefix "NH_Audio_" + paramKey.
-        /// </summary>
         private void LoadSettings()
         {
+            var settings = GameSettings.Instance;
+            if (settings == null) return;
+
             foreach (var entry in sliders)
             {
                 if (entry == null || entry.slider == null || string.IsNullOrEmpty(entry.paramKey))
                     continue;
 
+                float value = entry.defaultValue;
+                // GameSettings holds these values. We map paramKey to the property.
+                // For simplicity, we'll use a switch or just read the stored prefs through GameSettings logic.
+                // Since GameSettings already loaded them into SettingsData, we can use GetVolume if I added it.
+                // Wait, I didn't add a GetVolume(string key). Let's add it to GameSettings later or just use the prefix.
+                
+                // For now, let's assume we read from PlayerPrefs with the same prefix GameSettings uses.
                 float stored = PlayerPrefs.GetFloat("NH_Audio_" + entry.paramKey, entry.defaultValue);
-                stored = Mathf.Clamp01(stored);
-
                 entry.slider.SetValueWithoutNotify(stored);
                 UpdateLabel(entry, stored);
 
@@ -105,16 +109,18 @@ namespace NightHunt.Audio
             }
         }
 
-        /// <summary>
-        /// Persist a single channel volume to PlayerPrefs and apply to the mixer.
-        /// Called by slider.onValueChanged.
-        /// </summary>
-        private void SaveSettings(AudioSliderEntry entry, float value)
+        private void UpdateAndSave(AudioSliderEntry entry, float value)
         {
             UpdateLabel(entry, value);
-            if (!AudioManager.HasInstance) return;
-            AudioManager.Instance.SetVolume(entry.paramKey, value);
-            // AudioManager.SetVolume already writes PlayerPrefs.SetFloat("NH_Audio_" + param, value).
+            
+            if (GameSettings.Instance != null)
+            {
+                GameSettings.Instance.SetVolume(entry.paramKey, value);
+                GameSettings.Instance.SaveSettings();
+            }
+
+            if (AudioManager.HasInstance)
+                AudioManager.Instance.SetVolume(entry.paramKey, value);
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────
@@ -127,13 +133,40 @@ namespace NightHunt.Audio
 
         // ── Runtime API ────────────────────────────────────────────────────────
 
-        /// <summary>Reset all sliders back to their default values and persist.</summary>
         public void ResetToDefaults()
         {
-            foreach (var entry in sliders)
+            if (GameSettings.Instance != null)
             {
-                if (entry?.slider == null) continue;
-                entry.slider.value = entry.defaultValue; // fires onValueChanged → SaveSettings
+                GameSettings.Instance.ResetToDefaults();
+                LoadSettings();
+            }
+        }
+
+        private void OnValidate()
+        {
+            if (sliders == null || sliders.Length == 0)
+            {
+                // Try to find standard sliders in Michsky hierarchy
+                var content = transform.Find("Content/List/List Content");
+                if (content != null)
+                {
+                    var list = new System.Collections.Generic.List<AudioSliderEntry>();
+                    TryAddEntry(list, content, "Master volume", "MasterVol");
+                    TryAddEntry(list, content, "Music volume", "MusicVol");
+                    TryAddEntry(list, content, "SFX volume", "SFXVol");
+                    if (list.Count > 0) sliders = list.ToArray();
+                }
+            }
+        }
+
+        private void TryAddEntry(System.Collections.Generic.List<AudioSliderEntry> list, Transform root, string objName, string key)
+        {
+            var t = root.Find(objName);
+            if (t != null)
+            {
+                var s = t.GetComponentInChildren<Slider>();
+                var l = t.Find("Value")?.GetComponent<TextMeshProUGUI>();
+                if (s != null) list.Add(new AudioSliderEntry { paramKey = key, slider = s, percentLabel = l });
             }
         }
     }

@@ -12,37 +12,73 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c335882e540ca2f47a9e1ca67e0bdf1f, type: 3}
   m_Name: AudioLibrary
   m_EditorClassIdentifier: 
-  uiClick: {fileID: 0}
-  uiHover: {fileID: 0}
-  uiPanelOpen: {fileID: 0}
-  uiPanelClose: {fileID: 0}
-  uiNotification: {fileID: 0}
-  uiCountdownBeep: {fileID: 0}
-  uiCountdownFinal: {fileID: 0}
-  uiMatchFound: {fileID: 0}
-  hitMarkerTick: {fileID: 0}
-  hitMarkerHeadshot: {fileID: 0}
-  weaponDepleted: {fileID: 0}
-  killConfirm: {fileID: 0}
-  multiKillClips: []
+  uiClick: {fileID: 8300000, guid: ce5691e2c9d14944299497774344df21, type: 3}
+  uiHover: {fileID: 8300000, guid: 7a6dec044c57a074abb03cd7c61c32a1, type: 3}
+  uiPanelOpen: {fileID: 8300000, guid: 75f486a81828707479c37b85a7c3752d, type: 3}
+  uiPanelClose: {fileID: 8300000, guid: 38e62db4186eee34b852ed232a1313f8, type: 3}
+  uiNotification: {fileID: 8300000, guid: 08f5e3a668600114fa072eee15d0b669, type: 3}
+  uiCountdownBeep: {fileID: 8300000, guid: 9ca1d65a969c9144cbf4c8bef31133be, type: 3}
+  uiCountdownFinal: {fileID: 8300000, guid: 5850147762f3ddc4d97a75ff3d4c5b6e, type: 3}
+  uiMatchFound: {fileID: 8300000, guid: c8dcf56322f04d04b97fc01250d37cc4, type: 3}
+  hitMarkerTick: {fileID: 8300000, guid: 8c896be0d72c0734e8937a3d76cf4d68, type: 3}
+  hitMarkerHeadshot: {fileID: 8300000, guid: 8b40eaee7bf832e4d9d84255caad6a7d, type: 3}
+  weaponDepleted: {fileID: 8300000, guid: 0e78f4b30c7d8ac4aaf67bd5b86a4b7f, type: 3}
+  killConfirm: {fileID: 8300000, guid: 2c9144c9ccc54a84892246ae9b7caf52, type: 3}
+  multiKillClips:
+  - {fileID: 8300000, guid: a01821c35caa60f459646c57f2c3020e, type: 3}
+  - {fileID: 8300000, guid: ab42aaad49a6a1e48b142ead3d136f14, type: 3}
+  - {fileID: 8300000, guid: 45352788bbfb6d84baff2c60f85cd689, type: 3}
+  - {fileID: 8300000, guid: 942a9abfcec9fa84bb7d94e0261a7ab3, type: 3}
   lowHealthHeartbeat: {fileID: 0}
   lowHealthThreshold: 0.3
-  playerDeathStinger: {fileID: 0}
-  bgmHome: {fileID: 0}
-  bgmMatch: {fileID: 0}
-  bgmIntense: {fileID: 0}
-  bgmResults: {fileID: 0}
+  playerDeathStinger: {fileID: 8300000, guid: a77cf81bf73f26642aa07e414e95daa0, type: 3}
+  gameIntro: {fileID: 8300000, guid: 749a1af6c1a421342aef80da97bba60d, type: 3}
+  bgmPlaylist:
+  - {fileID: 8300000, guid: fb5a9eb0a820f5d48b5f0058d9bb84a4, type: 3}
+  - {fileID: 8300000, guid: 0a27c66b49ef1de4fb8b6a1aa276381f, type: 3}
+  - {fileID: 8300000, guid: fb8a195ba314e624b9c6d9cc74da84fa, type: 3}
+  - {fileID: 8300000, guid: 6bc9c9d0a3500cc46a67da23c2609450, type: 3}
+  - {fileID: 8300000, guid: 18ddaa12896bb004786d0b1cf1ce6c8e, type: 3}
+  - {fileID: 8300000, guid: 36e4bbf2e095d304c9f959e3af53b59a, type: 3}
+  bgmHome: {fileID: 8300000, guid: 0a27c66b49ef1de4fb8b6a1aa276381f, type: 3}
+  bgmMatch: {fileID: 8300000, guid: 36e4bbf2e095d304c9f959e3af53b59a, type: 3}
+  bgmIntense: {fileID: 8300000, guid: fb8a195ba314e624b9c6d9cc74da84fa, type: 3}
+  bgmResults: {fileID: 8300000, guid: fb5a9eb0a820f5d48b5f0058d9bb84a4, type: 3}
   footstepWalk:
-  - {fileID: 8300000, guid: 48be7f48cabe1684081d9057974691fd, type: 3}
+  - {fileID: 8300000, guid: dc9592865e0b3b04da1486fb4a317547, type: 3}
+  - {fileID: 8300000, guid: 668e90b1463551b4995b0f96855d32ca, type: 3}
+  - {fileID: 8300000, guid: ab121f63fae4e87498772b208031c510, type: 3}
+  - {fileID: 8300000, guid: d754c4579390b344a818c8ad46058820, type: 3}
+  - {fileID: 8300000, guid: cde3998f10bb1a04a89de25f20d6c0be, type: 3}
+  - {fileID: 8300000, guid: cb33d45a88c3eef4a8127c8ed3e21987, type: 3}
+  - {fileID: 8300000, guid: 424a4940557bddd4b8f302b864db77db, type: 3}
+  - {fileID: 8300000, guid: 220ddf335b1d5284fa71f6c821fd0819, type: 3}
   footstepSprint:
-  - {fileID: 8300000, guid: fbcf6f3a68b753d499db713a298a6dff, type: 3}
+  - {fileID: 8300000, guid: 29a78a838884c1643a3996fd35db1c6a, type: 3}
+  - {fileID: 8300000, guid: ef8be321503cff240a3b43a72fccaad0, type: 3}
+  - {fileID: 8300000, guid: 988ccf76811ff8740b2abf092d1fcb61, type: 3}
+  - {fileID: 8300000, guid: af2e0697d8dbe8a4297635c1f8b57c28, type: 3}
+  - {fileID: 8300000, guid: b84dd27372ee4b44abae334e59225a5e, type: 3}
+  - {fileID: 8300000, guid: 3d7fa6664432a9c43a1a5566d1ba838f, type: 3}
+  - {fileID: 8300000, guid: e21617a33cd49ef4786e3aad6dc69cc9, type: 3}
+  - {fileID: 8300000, guid: 321dbc0897976164286e6a85c4fc3e24, type: 3}
   footstepLand:
-  - {fileID: 8300000, guid: 3b09d59f4499d45428baa7a21e954296, type: 3}
-  footstepJump: {fileID: 8300000, guid: 5897aeed9b676024fbb8c694b421a861, type: 3}
-  footstepRoll: {fileID: 8300000, guid: 5897aeed9b676024fbb8c694b421a861, type: 3}
-  explosionGrenade: {fileID: 8300000, guid: 87b243d597489a044a5bf2f6cf94e093, type: 3}
-  explosionRocket: {fileID: 8300000, guid: 97ba94d6e0f66f44c95d43fa3e7b6591, type: 3}
-  bulletImpact: {fileID: 8300000, guid: d3cf8992bc84f5e4a9dcf7af65d5b438, type: 3}
-  consumableUse: {fileID: 8300000, guid: 407d8e4dc22324a45aca709ea1caade9, type: 3}
-  throwablePull: {fileID: 8300000, guid: 407d8e4dc22324a45aca709ea1caade9, type: 3}
-  ambienceVariants: []
+  - {fileID: 8300000, guid: b6557fdf9ad356a42b4b32ac27817c57, type: 3}
+  - {fileID: 8300000, guid: 34abb4f602e86d3408281ee917b3b4a9, type: 3}
+  - {fileID: 8300000, guid: 0e12a269d65ca2645abd50dd2acaa304, type: 3}
+  - {fileID: 8300000, guid: c9a8ac7c1bb265c4182e9f75bd89d57c, type: 3}
+  - {fileID: 8300000, guid: cc28a2678f4427e48815937512b162d6, type: 3}
+  footstepJump: {fileID: 8300000, guid: d5cf4bb50ad13bb4d9625617bac8bd25, type: 3}
+  footstepRoll: {fileID: 8300000, guid: f55dcdf18dc64124398790f42e94e98c, type: 3}
+  explosionGrenade: {fileID: 8300000, guid: 6b9970a17a5e7ed4c96561d03c0497c9, type: 3}
+  explosionRocket: {fileID: 8300000, guid: 92fbc098f1638314ebd9b53fd15d088b, type: 3}
+  bulletImpact: {fileID: 8300000, guid: e298f1d9d85a1e0498dd268d3efa4f79, type: 3}
+  consumableUse: {fileID: 8300000, guid: 72b3080b5492c484d9db2f7667d5574c, type: 3}
+  throwablePull: {fileID: 8300000, guid: 904523a61a997644b821d0640e4be1d6, type: 3}
+  ambienceVariants:
+  - {fileID: 8300000, guid: 628bcf6486af62a4da68e4ffd21e549b, type: 3}
+  - {fileID: 8300000, guid: e427bdb86a74ab640ad14bbcc580cd39, type: 3}
+  - {fileID: 8300000, guid: 9d382b23b225d06478019b4f578f393b, type: 3}
+  - {fileID: 8300000, guid: 363173a8969c740419f5a7ddb3486157, type: 3}
+  - {fileID: 8300000, guid: e3be1f6109dbaa74d987c659f42f48b3, type: 3}
+  - {fileID: 8300000, guid: a2a66f78a12166949b874d9b94b40010, type: 3}

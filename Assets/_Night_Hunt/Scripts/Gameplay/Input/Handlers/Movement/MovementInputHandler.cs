@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Input.Handlers.Movement
 {
@@ -217,26 +218,31 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         private void OnMovePerformed(InputAction.CallbackContext context)
         {
             moveInput = context.ReadValue<Vector2>();
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "MovePerformed", $"value={moveInput:F2}", this);
         }
 
         private void OnMoveCanceled(InputAction.CallbackContext context)
         {
             moveInput = Vector2.zero;
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "MoveCanceled", "value=(0.00, 0.00)", this);
         }
 
         private void OnSprintPerformed(InputAction.CallbackContext context)
         {
             isSprinting = true;
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "SprintPressed", "sprinting=true", this);
         }
 
         private void OnSprintCanceled(InputAction.CallbackContext context)
         {
             isSprinting = false;
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "SprintReleased", "sprinting=false", this);
         }
 
         private void OnCrouchPerformed(InputAction.CallbackContext context)
         {
             isCrouching = !isCrouching; // Toggle
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "CrouchToggle", $"crouching={isCrouching}", this);
         }
 
         // ✅ NEW: Toggle camera lock handler
@@ -244,11 +250,21 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
         {
             isCameraLocked = !isCameraLocked; // Toggle
             Debug.Log($"[MovementInputHandler] Camera Lock: {(isCameraLocked ? "ON (Strafe)" : "OFF (Tank)")}");
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "CameraLockToggle", $"cameraLocked={isCameraLocked}", this);
             OnCameraLockToggled?.Invoke(isCameraLocked);
         }
 
-        private void OnJumpStarted(InputAction.CallbackContext context) { isJumping = true; }
-        private void OnRollStarted(InputAction.CallbackContext context) { isRolling = true; }
+        private void OnJumpStarted(InputAction.CallbackContext context)
+        {
+            isJumping = true;
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "JumpPressed", $"control={context.control?.path ?? "unknown"}", this);
+        }
+
+        private void OnRollStarted(InputAction.CallbackContext context)
+        {
+            isRolling = true;
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "RollPressed", $"control={context.control?.path ?? "unknown"}", this);
+        }
 
         #endregion
 
@@ -342,7 +358,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Movement
             // prevents CameraStateManager from toggling Free ↔ Locked every fire press/release
             // when the player already had the same lock state before firing.
             if (newEffective != prevEffective)
+            {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Input,
+                    "CameraLockOverride",
+                    $"active={active} forced={forcedValue} prev={prevEffective} next={newEffective}",
+                    this);
                 OnCameraLockToggled?.Invoke(newEffective);
+            }
         }
 
         #endregion

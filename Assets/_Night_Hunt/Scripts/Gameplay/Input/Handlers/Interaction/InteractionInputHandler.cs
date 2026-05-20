@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Input.Handlers.Interaction
 {
@@ -145,24 +146,28 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         private void OnInteractPerformed(InputAction.CallbackContext ctx)
         {
             Debug.Log("[Input][Player] Interact (E) performed");
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "InteractPressed", $"control={ctx.control?.path ?? "unknown"}", this);
             InteractPerformed?.Invoke();
         }
 
         private void OnInteractCanceled(InputAction.CallbackContext ctx)
         {
             Debug.Log("[Input][Player] Interact (E) canceled");
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "InteractReleased", $"control={ctx.control?.path ?? "unknown"}", this);
             InteractCanceled?.Invoke();
         }
 
         private void OnPickupPerformed(InputAction.CallbackContext ctx)
         {
             Debug.Log("[Input][Player] Pickup (F) performed");
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "PickupPressed", $"control={ctx.control?.path ?? "unknown"}", this);
             PickupPerformed?.Invoke();
         }
 
         private void OnLogNearbyPerformed(InputAction.CallbackContext ctx)
         {
             Debug.Log("[Input][Player] LogNearby (F6) performed");
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "LogNearbyPressed", $"control={ctx.control?.path ?? "unknown"}", this);
             LogNearbyPerformed?.Invoke();
         }
 
@@ -171,6 +176,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         {
             if (!inputEnabled) return;
             Debug.Log("[Input][Mobile] Interact performed");
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "MobileInteractPressed", "source=mobile-hud", this);
             InteractPerformed?.Invoke();
         }
 
@@ -178,6 +184,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         {
             if (!inputEnabled) return;
             Debug.Log("[Input][Mobile] Interact canceled");
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "MobileInteractReleased", "source=mobile-hud", this);
             InteractCanceled?.Invoke();
         }
 
@@ -185,6 +192,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
         {
             if (!inputEnabled) return;
             Debug.Log("[Input][Mobile] Pickup performed");
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "MobilePickupPressed", "source=mobile-hud", this);
             PickupPerformed?.Invoke();
         }
 

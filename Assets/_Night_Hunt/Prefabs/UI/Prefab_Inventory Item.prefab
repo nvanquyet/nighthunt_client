@@ -238,6 +238,8 @@ GameObject:
   - component: {fileID: 1266525672637102991}
   - component: {fileID: 712711799490671833}
   - component: {fileID: 1014214004857276941}
+  - component: {fileID: -7500533329336314419}
+  - component: {fileID: 7111550958337024555}
   m_Layer: 5
   m_Name: Prefab_Inventory Item
   m_TagString: Untagged
@@ -359,6 +361,35 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3584dd302eec0c543b0a2d044d44c41c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &-7500533329336314419
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4119418067728346411}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b00fdafdb0f043b478fb83d2d57f29b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.UI.NH_Button
+--- !u!114 &7111550958337024555
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4119418067728346411}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 356e2b2eea1fd1747a7ddd282e2a64f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Audio.UIAudioTrigger
+  overrideClickClip: {fileID: 0}
+  overrideHoverClip: {fileID: 0}
+  playHover: 1
+  playClick: 1
+  volumeMultiplier: 1
 --- !u!1 &4572460759454019755
 GameObject:
   m_ObjectHideFlags: 0
@@ -538,6 +569,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0

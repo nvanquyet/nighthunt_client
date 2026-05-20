@@ -67,3 +67,21 @@ MonoBehaviour:
     MaxValue: 80
     IsCurrentValue: 0
     RelatedMaxStatType: 8
+  - Type: 9
+    DefaultValue: 0
+    MinValue: 0
+    MaxValue: 50
+    IsCurrentValue: 0
+    RelatedMaxStatType: 9
+  - Type: 10
+    DefaultValue: 15
+    MinValue: 0
+    MaxValue: 100
+    IsCurrentValue: 0
+    RelatedMaxStatType: 10
+  - Type: 11
+    DefaultValue: 20
+    MinValue: 0
+    MaxValue: 100
+    IsCurrentValue: 0
+    RelatedMaxStatType: 11

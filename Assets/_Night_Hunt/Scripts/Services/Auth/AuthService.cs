@@ -55,6 +55,12 @@ namespace NightHunt.Services.Auth
 
         public async Task<ApiResult<AuthResponse>> Login(string identifier, string password)
         {
+            if (backendClient == null)
+            {
+                Debug.LogError("[FLOW][AUTH_API] Login blocked: backendClient is null.");
+                return ApiResult<AuthResponse>.Error("Backend client is not ready");
+            }
+
             var request = new LoginRequest
             {
                 identifier        = identifier,
@@ -62,11 +68,23 @@ namespace NightHunt.Services.Auth
                 deviceFingerprint = DeviceFingerprint.GetFingerprint()
             };
 
+            Debug.Log(
+                $"[FLOW][AUTH_API] Login POST start identifier='{identifier}' " +
+                $"fingerprintSet={!string.IsNullOrEmpty(request.deviceFingerprint)} sessionAuthenticated={(sessionState != null && sessionState.IsAuthenticated)}");
             var result = await backendClient.PostAsync<AuthResponse>(Constants.API_AUTH_LOGIN, request);
+            Debug.Log(
+                $"[FLOW][AUTH_API] Login POST result success={result?.Success} errorCode={result?.ErrorCode ?? "null"} " +
+                $"message='{result?.Message ?? "null"}' hasData={result?.Data != null}");
+
+            if (result == null)
+                return ApiResult<AuthResponse>.Error("Login request returned no response");
 
             if (result.Success && result.Data != null)
             {
                 ApplyAuthResponse(result.Data);
+                Debug.Log(
+                    $"[FLOW][AUTH_API] Login ApplyAuthResponse done userId={sessionState?.UserId ?? 0} " +
+                    $"sessionIdSet={!string.IsNullOrEmpty(sessionState?.SessionId)} tokenSet={!string.IsNullOrEmpty(sessionState?.AccessToken)}");
                 
                 // SEC-FIX: Store refresh token in encrypted storage
                 SecureStorage.SetString(LoadingManager.KEY_REFRESH_TOKEN, result.Data.refreshToken ?? "");
@@ -218,7 +236,7 @@ namespace NightHunt.Services.Auth
 
             sessionState.ClearSession();
             DisconnectWebSocket();
-            ToastService.Instance?.Show("Tài khoản bị khóa", result.Message ?? "Tài khoản hoặc thiết bị đã bị khóa.");
+            ToastService.Instance?.Show("Account Locked", result.Message ?? "Your account or device has been locked.");
         }
     }
 }

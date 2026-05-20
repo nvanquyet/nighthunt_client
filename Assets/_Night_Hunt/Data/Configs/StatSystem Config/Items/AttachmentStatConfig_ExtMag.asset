@@ -15,11 +15,11 @@ MonoBehaviour:
   Stats: []
   PlayerModifiers: []
   ItemModifiers:
-  - StatType: 16
+  - StatType: 20
     Value: 50
     ModifierType: 1
     Description: +50% magazine
-  - StatType: 18
-    Value: -10
+  - StatType: 22
+    Value: 10
     ModifierType: 1
     Description: Slower reload

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using NightHunt.Config;
+using System.Collections;
 
 namespace NightHunt.Core
 {
@@ -34,6 +35,7 @@ namespace NightHunt.Core
         /// ActivateLoadedScene() is called by MatchLoadingOverlay.
         /// </summary>
         private static AsyncOperation _pendingSceneOp;
+        private static bool _returnHomeAfterPendingLoad;
 
         // ── Core: Load scene thật ──────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ namespace NightHunt.Core
             Debug.Log("[SceneLoader] LoadHome → " + HomeName);
             // Home loads synchronously — no overlay animation during this transition.
             _pendingSceneOp = null;
+            _returnHomeAfterPendingLoad = false;
             SceneManager.LoadScene(HomeName);
         }
 
@@ -59,6 +62,7 @@ namespace NightHunt.Core
         {
             string sceneName = SceneConfig.GetSceneName(mapId);
             Debug.Log($"[SceneLoader] LoadGame (async) → {mapId} ({sceneName})");
+            _returnHomeAfterPendingLoad = false;
             _pendingSceneOp = SceneManager.LoadSceneAsync(sceneName);
             _pendingSceneOp.allowSceneActivation = false;
         }
@@ -81,6 +85,40 @@ namespace NightHunt.Core
             _pendingSceneOp = null;
         }
 
+        /// <summary>
+        /// Handles cancellation/failure while a gameplay scene is already loading or active.
+        /// Unity cannot truly cancel LoadSceneAsync at 90%, so we activate the pending scene
+        /// and immediately load Home once activation completes.
+        /// </summary>
+        public static void ReturnHomeFromGameplayFlow()
+        {
+            if (_returnHomeAfterPendingLoad)
+                return;
+
+            if (_pendingSceneOp == null)
+            {
+                LoadHome();
+                return;
+            }
+
+            Debug.LogWarning("[SceneLoader] Returning Home while game scene is pending — activating pending load first.");
+            _returnHomeAfterPendingLoad = true;
+
+            var op = _pendingSceneOp;
+            op.allowSceneActivation = true;
+            _pendingSceneOp = null;
+            SceneLoaderHost.Instance.StartCoroutine(ReturnHomeAfterPendingLoad(op));
+        }
+
+        private static IEnumerator ReturnHomeAfterPendingLoad(AsyncOperation op)
+        {
+            while (op != null && !op.isDone)
+                yield return null;
+
+            _returnHomeAfterPendingLoad = false;
+            SceneManager.LoadScene(HomeName);
+        }
+
         // ── Helpers ────────────────────────────────────────────────────────────
 
         /// <summary>True nếu scene đang active là Home scene.</summary>
@@ -89,5 +127,8 @@ namespace NightHunt.Core
 
         /// <summary>True nếu scene đang active là bất kỳ gameplay map nào.</summary>
         public static bool IsInGameplayScene => !IsInHomeScene;
+
+        /// <summary>True while LoadGame() is waiting for overlay fade-in activation.</summary>
+        public static bool HasPendingSceneLoad => _pendingSceneOp != null;
     }
 }

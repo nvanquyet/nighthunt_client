@@ -4,6 +4,7 @@ using NightHunt.Core;
 using NightHunt.Data;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Gameplay.Character.Combat;
+using NightHunt.Diagnostics;
 using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
@@ -119,10 +120,30 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                                                                                                      WeaponConfigData config, int shooterNetObjId, float range)
         {
             if (!TryGetFirstNonSelfHit(origin, direction, range, out RaycastHit rayHit))
+            {
+                if (pelletCount == 1 &&
+                    config != null &&
+                    config.HasProjectileTargetPoint &&
+                    IsUsableRegisteredEndpoint(origin, config.ProjectileTargetPoint, range))
+                {
+                    PhaseTestLog.Log(
+                        PhaseTestLogCategory.Weapon,
+                        "ClientHitscanRegisteredEndpoint",
+                        $"weapon={config.WeaponId} origin={origin:F2} endpoint={config.ProjectileTargetPoint:F2} range={range:F1} speed={config.ProjectileSpeed:F1}",
+                        this);
+                    return (config.ProjectileTargetPoint, true, -direction.normalized, true);
+                }
+
                 return (origin + direction * range, false, -direction.normalized, false);
+            }
 
             Vector3 endpoint = rayHit.point;
             Vector3 hitNormal = rayHit.normal.sqrMagnitude > 0.0001f ? rayHit.normal.normalized : -direction.normalized;
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "ClientHitscanHit",
+                $"weapon={config?.WeaponId ?? "null"} origin={origin:F2} endpoint={endpoint:F2} dist={rayHit.distance:F2} collider={rayHit.collider?.name ?? "null"} layer={(rayHit.collider != null ? PhaseTestLog.DescribeLayer(rayHit.collider.gameObject) : "null")} applyDamage={config?.ApplyDamage ?? false}",
+                this);
 
             var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(rayHit.collider)
                                           .OnSelf().InParent()
@@ -168,7 +189,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         {
             hit = default;
 
-            int count = Physics.RaycastNonAlloc(origin, direction, _raycastHits, range, hitLayers, QueryTriggerInteraction.Collide);
+            int count = Physics.RaycastNonAlloc(origin, direction, _raycastHits, range, hitLayers, QueryTriggerInteraction.Ignore);
             if (count <= 0)
                 return false;
 
@@ -184,6 +205,23 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
             return false;
         }
+
+        private static bool IsUsableRegisteredEndpoint(Vector3 origin, Vector3 endpoint, float range)
+        {
+            if (!IsFinite(endpoint))
+                return false;
+
+            float distance = Vector3.Distance(origin, endpoint);
+            return distance > 0.05f && distance <= Mathf.Max(1f, range) + 1f;
+        }
+
+        private static bool IsFinite(Vector3 value)
+            => !float.IsNaN(value.x)
+            && !float.IsNaN(value.y)
+            && !float.IsNaN(value.z)
+            && !float.IsInfinity(value.x)
+            && !float.IsInfinity(value.y)
+            && !float.IsInfinity(value.z);
 
         private bool IsSelfHit(Collider collider)
         {

@@ -751,6 +751,13 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         protected virtual float GetStaminaRegenRate()
         {
+            if (_playerStatSystem != null)
+            {
+                float statRate = _playerStatSystem.GetStat(PlayerStatType.StaminaRegenRate);
+                if (statRate > 0f)
+                    return statRate;
+            }
+
             return movementSettings != null ? movementSettings.staminaRegenRate : 15f;
         }
 
@@ -759,6 +766,13 @@ namespace NightHunt.Gameplay.Character
         /// </summary>
         protected virtual float GetStaminaDrainRate()
         {
+            if (_playerStatSystem != null)
+            {
+                float statRate = _playerStatSystem.GetStat(PlayerStatType.StaminaDrainRate);
+                if (statRate > 0f)
+                    return statRate;
+            }
+
             return movementSettings != null ? movementSettings.staminaDrainRate : 20f;
         }
 

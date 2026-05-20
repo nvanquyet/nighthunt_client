@@ -1,5 +1,7 @@
 using UnityEngine;
 using NightHunt.Gameplay.ClientEffects;
+using NightHunt.Diagnostics;
+using NightHunt.GameplaySystems.Core.Configs;
 
 namespace NightHunt.Gameplay.Character.Combat.Weapons
 {
@@ -112,8 +114,13 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             ResetDetachedVfx();
             EnsureVfxReferences();
 
-            StopAndHideVfx(GetVfxRoot(muzzleFlashSystem, muzzleFlashChild));
-            StopAndHideVfx(GetVfxRoot(detonationVFXSystem, detonationVFXChild));
+            GameObject muzzleRoot = GetVfxRoot(muzzleFlashSystem, muzzleFlashChild);
+            GameObject detonationRoot = GetVfxRoot(detonationVFXSystem, detonationVFXChild);
+
+            StopAndHideVfx(muzzleRoot);
+            StopAndHideVfx(detonationRoot);
+            StopAndHideOwnedOneShotVfx(muzzleRoot, detonationRoot);
+            StopAndHideNestedOneShotVfx(mainVisualChild, muzzleRoot, detonationRoot);
 
             if (mainVisualChild != null)
             {
@@ -282,6 +289,38 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             }
         }
 
+        private void RestartParticleSystemsExcept(GameObject root, params GameObject[] excludedRoots)
+        {
+            if (root == null)
+                return;
+
+            Transform rootTransform = root.transform;
+            foreach (var ps in root.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                if (IsExcludedVfx(ps.transform, excludedRoots) || IsLikelyOneShotVfx(ps.transform, rootTransform))
+                {
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    continue;
+                }
+
+                ActivateHierarchyUpTo(ps.transform, rootTransform);
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                ps.Play(true);
+            }
+
+            foreach (var trail in root.GetComponentsInChildren<TrailRenderer>(true))
+            {
+                if (IsExcludedVfx(trail.transform, excludedRoots) || IsLikelyOneShotVfx(trail.transform, rootTransform))
+                {
+                    trail.Clear();
+                    continue;
+                }
+
+                ActivateHierarchyUpTo(trail.transform, rootTransform);
+                trail.Clear();
+            }
+        }
+
         protected void StopParticleSystems(GameObject root)
         {
             if (root == null)
@@ -311,8 +350,21 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 return;
             }
 
+            GameObject muzzleRoot = GetVfxRoot(muzzleFlashSystem, muzzleFlashChild);
+            GameObject detonationRoot = GetVfxRoot(detonationVFXSystem, detonationVFXChild);
+            GameObject muzzleExclude = IsNestedVfxRoot(muzzleRoot, mainVisualChild) ? muzzleRoot : null;
+            GameObject detonationExclude = IsNestedVfxRoot(detonationRoot, mainVisualChild) ? detonationRoot : null;
+
             mainVisualChild.SetActive(true);
-            RestartParticleSystems(mainVisualChild);
+            RestartParticleSystemsExcept(mainVisualChild, muzzleExclude, detonationExclude);
+
+            if (muzzleExclude != null)
+                StopAndHideVfx(muzzleExclude);
+            if (detonationExclude != null)
+                StopAndHideVfx(detonationExclude);
+
+            StopAndHideOwnedOneShotVfx(muzzleRoot, detonationRoot);
+            StopAndHideNestedOneShotVfx(mainVisualChild, muzzleExclude, detonationExclude);
         }
 
         protected void HideMainVisual()
@@ -344,6 +396,252 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
 
                 child = child.parent;
             }
+        }
+
+        private static bool IsNestedVfxRoot(GameObject candidate, GameObject mainRoot)
+        {
+            return candidate != null &&
+                   mainRoot != null &&
+                   candidate != mainRoot &&
+                   candidate.transform.IsChildOf(mainRoot.transform);
+        }
+
+        private static bool IsExcludedVfx(Transform child, GameObject[] excludedRoots)
+        {
+            if (child == null || excludedRoots == null)
+                return false;
+
+            for (int i = 0; i < excludedRoots.Length; i++)
+            {
+                var root = excludedRoots[i];
+                if (root == null)
+                    continue;
+
+                if (child == root.transform || child.IsChildOf(root.transform))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void StopAndHideNestedOneShotVfx(GameObject root, params GameObject[] explicitRoots)
+        {
+            if (root == null)
+                return;
+
+            int stopped = 0;
+            Transform rootTransform = root.transform;
+
+            if (explicitRoots != null)
+            {
+                for (int i = 0; i < explicitRoots.Length; i++)
+                {
+                    var explicitRoot = explicitRoots[i];
+                    if (!IsNestedVfxRoot(explicitRoot, root))
+                        continue;
+
+                    StopAndHideVfx(explicitRoot);
+                    stopped++;
+                }
+            }
+
+            foreach (var ps in root.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                if (!IsLikelyOneShotVfx(ps.transform, rootTransform))
+                    continue;
+
+                Transform oneShotRoot = FindOneShotVfxRoot(ps.transform, rootTransform);
+                if (oneShotRoot != null && oneShotRoot != rootTransform)
+                {
+                    StopAndHideVfx(oneShotRoot.gameObject);
+                    stopped++;
+                }
+                else
+                {
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    stopped++;
+                }
+            }
+
+            foreach (var trail in root.GetComponentsInChildren<TrailRenderer>(true))
+            {
+                if (!IsLikelyOneShotVfx(trail.transform, rootTransform))
+                    continue;
+
+                trail.Clear();
+                Transform oneShotRoot = FindOneShotVfxRoot(trail.transform, rootTransform);
+                if (oneShotRoot != null && oneShotRoot != rootTransform)
+                    oneShotRoot.gameObject.SetActive(false);
+                stopped++;
+            }
+
+            if (stopped > 0 && ProjectileDebugEnabled())
+            {
+                Debug.Log($"[PROJ_VFX] One-shot VFX stopped root={root.name} count={stopped} projectile={name}", this);
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Projectile,
+                    "ProjectileOneShotVfxStopped",
+                    $"projectile={name} root={root.name} count={stopped}",
+                    this);
+            }
+        }
+
+        private void StopAndHideOwnedOneShotVfx(params GameObject[] explicitRoots)
+        {
+            int stopped = 0;
+            var stoppedRoots = new System.Collections.Generic.HashSet<Transform>();
+
+            if (explicitRoots != null)
+            {
+                for (int i = 0; i < explicitRoots.Length; i++)
+                {
+                    var explicitRoot = explicitRoots[i];
+                    if (explicitRoot == null ||
+                        explicitRoot == mainVisualChild ||
+                        !IsOwnedVfxChild(explicitRoot) ||
+                        !stoppedRoots.Add(explicitRoot.transform))
+                        continue;
+
+                    StopAndHideVfx(explicitRoot);
+                    stopped++;
+                }
+            }
+
+            foreach (var ps in GetComponentsInChildren<ParticleSystem>(true))
+            {
+                Transform oneShotRoot = FindOneShotVfxRoot(ps.transform, transform);
+                if (oneShotRoot == null ||
+                    oneShotRoot == transform ||
+                    (mainVisualChild != null && oneShotRoot == mainVisualChild.transform) ||
+                    !stoppedRoots.Add(oneShotRoot))
+                    continue;
+
+                StopAndHideVfx(oneShotRoot.gameObject);
+                stopped++;
+            }
+
+            foreach (var trail in GetComponentsInChildren<TrailRenderer>(true))
+            {
+                Transform oneShotRoot = FindOneShotVfxRoot(trail.transform, transform);
+                if (oneShotRoot == null ||
+                    oneShotRoot == transform ||
+                    (mainVisualChild != null && oneShotRoot == mainVisualChild.transform) ||
+                    !stoppedRoots.Add(oneShotRoot))
+                    continue;
+
+                trail.Clear();
+                oneShotRoot.gameObject.SetActive(false);
+                stopped++;
+            }
+
+            if (stopped > 0 && ProjectileDebugEnabled())
+            {
+                Debug.Log($"[PROJ_VFX] Owned one-shot VFX stopped root={name} count={stopped}", this);
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Projectile,
+                    "ProjectileOwnedOneShotVfxStopped",
+                    $"projectile={name} count={stopped}",
+                    this);
+            }
+        }
+
+        private static bool IsLikelyOneShotVfx(Transform child, Transform stopAt)
+        {
+            for (Transform cursor = child; cursor != null && cursor != stopAt; cursor = cursor.parent)
+            {
+                if (IsOneShotVfxName(cursor.name))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static Transform FindOneShotVfxRoot(Transform child, Transform stopAt)
+        {
+            Transform match = null;
+            for (Transform cursor = child; cursor != null && cursor != stopAt; cursor = cursor.parent)
+            {
+                if (IsOneShotVfxName(cursor.name))
+                    match = cursor;
+            }
+
+            return match;
+        }
+
+        private static bool IsOneShotVfxName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+
+            return IsMuzzleVfxName(name)
+                || ContainsIgnoreCase(name, "impact")
+                || ContainsIgnoreCase(name, "detonation")
+                || ContainsIgnoreCase(name, "explosion")
+                || ContainsIgnoreCase(name, "explode")
+                || IsHitVfxName(name)
+                || ContainsIgnoreCase(name, "blood");
+        }
+
+        private static bool IsMuzzleVfxName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+
+            string lower = name.ToLowerInvariant();
+            return ContainsNameToken(lower, "muzzle")
+                || lower.Contains("gunfire")
+                || lower.Contains("gun_fire")
+                || ContainsNameToken(lower, "flash");
+        }
+
+        private static bool IsHitVfxName(string name)
+        {
+            string lower = name.ToLowerInvariant();
+            return lower == "hit"
+                || lower == "hitfx"
+                || lower == "hitvfx"
+                || lower.StartsWith("hit_")
+                || lower.StartsWith("hit-")
+                || lower.StartsWith("[hit")
+                || lower.EndsWith("_hit")
+                || lower.EndsWith("-hit")
+                || lower.Contains("hitfx")
+                || lower.Contains("hitvfx")
+                || lower.Contains("hit_fx")
+                || lower.Contains("hit_vfx")
+                || ContainsNameToken(lower, "hit");
+        }
+
+        private static bool ContainsNameToken(string lowerValue, string token)
+        {
+            if (string.IsNullOrEmpty(lowerValue) || string.IsNullOrEmpty(token))
+                return false;
+
+            int index = lowerValue.IndexOf(token, System.StringComparison.Ordinal);
+            while (index >= 0)
+            {
+                int before = index - 1;
+                int after = index + token.Length;
+                bool beforeBoundary = before < 0 || !char.IsLetterOrDigit(lowerValue[before]);
+                bool afterBoundary = after >= lowerValue.Length || !char.IsLetterOrDigit(lowerValue[after]);
+                if (beforeBoundary && afterBoundary)
+                    return true;
+
+                index = lowerValue.IndexOf(token, index + 1, System.StringComparison.Ordinal);
+            }
+
+            return false;
+        }
+
+        private static bool ContainsIgnoreCase(string value, string token)
+        {
+            return value.IndexOf(token, System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool ProjectileDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && (cfg.EnableProjectileDebugLogs || PhaseTestLog.IsEnabled(PhaseTestLogCategory.Projectile));
         }
 
         private void ResetDetachedVfx()
@@ -392,7 +690,23 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                 mainVisualChild = FindChildGameObject("[MainVisual]", "MainVisual", "[Model]", "Model");
 
             if (detonationVFXChild == null)
-                detonationVFXChild = FindChildGameObject("[DetonationVFX]", "DetonationVFX", "[ImpactVFX]", "ImpactVFX");
+            {
+                detonationVFXChild = FindChildGameObject(
+                    "[DetonationVFX]",
+                    "DetonationVFX",
+                    "[ImpactVFX]",
+                    "ImpactVFX",
+                    "FX_Hit 1",
+                    "FX_Hit",
+                    "FX_Impact",
+                    "FX_ExplosionRoundFire",
+                    "Hit",
+                    "Impact",
+                    "Explosion");
+            }
+
+            if (detonationVFXChild == null)
+                detonationVFXChild = FindFirstOneShotChild(excludeMuzzle: true);
 
             if (muzzleFlashSystem != null && !IsOwnedOrDetachedVfxChild(muzzleFlashSystem.gameObject, _muzzleOriginalParent))
             {
@@ -493,6 +807,27 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                     if (child.name == names[i])
                         return child.gameObject;
                 }
+            }
+
+            return null;
+        }
+
+        private GameObject FindFirstOneShotChild(bool excludeMuzzle)
+        {
+            foreach (var child in GetComponentsInChildren<Transform>(true))
+            {
+                if (child == transform)
+                    continue;
+
+                if (mainVisualChild != null &&
+                    (child.gameObject == mainVisualChild || child.IsChildOf(mainVisualChild.transform)))
+                    continue;
+
+                if (excludeMuzzle && IsMuzzleVfxName(child.name))
+                    continue;
+
+                if (IsOneShotVfxName(child.name))
+                    return child.gameObject;
             }
 
             return null;

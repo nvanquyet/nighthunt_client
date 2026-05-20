@@ -13,15 +13,25 @@ MonoBehaviour:
   m_Name: WAP_Pistol
   m_EditorClassIdentifier: 
   weaponClass: 0
-  fireClips: []
-  fireSuppressedClips: []
+  fireClips:
+  - {fileID: 8300000, guid: ab3aaa80af0bf774ab2f6aa38b4f80a3, type: 3}
+  - {fileID: 8300000, guid: 8219725a579326c49959c9e721ff311e, type: 3}
+  - {fileID: 8300000, guid: b815380801c933a47a744100c5e18a3e, type: 3}
+  - {fileID: 8300000, guid: e535b21343f4b52448157f2106b4a940, type: 3}
+  - {fileID: 8300000, guid: b3e6391f259a06448a6b3d20ab8119d9, type: 3}
+  fireSuppressedClips:
+  - {fileID: 8300000, guid: 27f8eab5dfa8efe498aa5cca415f825c, type: 3}
+  - {fileID: 8300000, guid: 4561fe7816a7ddd4883269513dee09ee, type: 3}
+  - {fileID: 8300000, guid: d068dd773621e2147bcc588c86f12922, type: 3}
+  - {fileID: 8300000, guid: 0bc0907a9f96fc648abebb26ee690fc1, type: 3}
   fireVolume: 1
   firePitch: 1
   firePitchVariance: 0.03
-  reloadStartClip: {fileID: 0}
-  reloadEndClip: {fileID: 0}
-  reloadTacticalClip: {fileID: 0}
-  drawClip: {fileID: 0}
-  holsterClip: {fileID: 0}
-  emptyClip: {fileID: 0}
-  bulletImpactOverride: {fileID: 0}
+  reloadStartClip: {fileID: 8300000, guid: cc75e23ff4ca42f449d404d6a206fa36, type: 3}
+  reloadEndClip: {fileID: 8300000, guid: 922d3208c6d5df6408ff5087f9eecfbd, type: 3}
+  reloadTacticalClip: {fileID: 8300000, guid: f11d14e50f44a8f41972b8c551b6806d, type: 3}
+  drawClip: {fileID: 8300000, guid: 7499f5a9bbd6b9442a3208a332ff77ef, type: 3}
+  holsterClip: {fileID: 8300000, guid: 9ef8a799368ad8f488a8cd94f979274a, type: 3}
+  emptyClip: {fileID: 8300000, guid: 0e78f4b30c7d8ac4aaf67bd5b86a4b7f, type: 3}
+  bulletImpactOverride: {fileID: 8300000, guid: e298f1d9d85a1e0498dd268d3efa4f79,
+    type: 3}

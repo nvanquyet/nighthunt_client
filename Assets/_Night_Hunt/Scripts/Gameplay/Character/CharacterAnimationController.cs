@@ -9,6 +9,7 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Audio;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -24,45 +25,26 @@ namespace NightHunt.Gameplay.Character
     ///   OnShotFired / OnReloadStateChanged are now raised on remote clients too
     ///   (via WeaponSystem.NetworkSync RPCs), so all animator parameters stay in sync.
     ///
-    /// ANIMATOR PARAMETERS EXPECTED:
-    ///   Float    "Speed"              — horizontal speed m/s
-    ///   Float    "X"                  — strafe (right = +)
-    ///   Float    "Y"                  — forward (forward = +)
-    ///   Bool     "OnGround"           — grounded state
-    ///   Float    "VerticalVel"        — vertical velocity
-    ///   Bool     "Armed"              — any weapon drawn
-    ///   Bool     "Aiming"             — true briefly after each shot
-    ///   Bool     "Reloading"          — reload in progress
-    ///   Bool     "IsCrouching"        — crouch stance
-    ///   Bool     "IsSprinting"        — sprint state
-    ///   Int      "WeaponType"         — 0=Unarmed 1=Rifle 2=Pistol/SMG 3=Launcher 4=Melee 5=Shotgun 6=Sniper
-    ///   Trigger  "Shoot"
-    ///   Trigger  "Jump"
-    ///   Trigger  "Roll"
-    ///   Trigger  "Throw"
-    ///   Trigger  "Draw"               — weapon equip animation
-    ///   Trigger  "Holster"            — weapon holster animation
-    ///   Trigger  "WeaponChanged"      — base layer weapon-type transition
-    ///   Trigger  "WeaponChangedUB"    — upper body layer weapon-type transition
-    ///   Trigger  "WeaponChangedDeath" — death layer weapon-type transition
-    ///   Trigger  "Reload"             — reload trigger (fires when reload starts)
-    ///   Trigger  "TakeDamage"         — hit reaction
-    ///   Trigger  "Die"                — death
-    ///   Trigger  "Respawn"            — respawn
-    ///   Int      "DeathIndex"         — random death animation index (0-4)
+    /// CURRENT PLAYER CONTROLLER:
+    ///   Runtime player model uses Toon Soldiers/SoldierAnimatorController.
+    ///   Required movement params: Speed, VelocityX, VelocityY, IsGrounded, IsCrouching, IsSprinting.
+    ///   Required combat params: WeaponType, Shoot, Reload, Draw, WeaponChanged,
+    ///   WeaponChangedUB, WeaponChangedDeath, TakeDamage, Die, Respawn, DeathIndex.
+    ///   Required action params: Interact, InteractIndex, Attack, AttackIndex, ThrowGrenade.
+    ///   Optional legacy params are still written safely when present: X, Y, OnGround,
+    ///   VerticalVel, Armed, Aiming, Reloading, Jump, Throw, Holster, Deploy.
     ///
-    /// ANIMATOR LAYERS EXPECTED:
-    ///   "PistolLyr"    — weight 0→1 when Secondary active     (optional)
-    ///   "RifleActions" — weight 0→1 when Primary active       (optional)
-    ///   "MeleeActions" — weight 0→1 when Melee active         (optional)
-    ///   "Death"        — death overlay; weight 0→1 on die     (index configurable)
+    /// ACTUAL PLAYER LAYERS:
+    ///   Base Layer, UpperBody, Death. Weapon state is selected mainly by WeaponType
+    ///   and WeaponChanged triggers. Legacy per-weapon layer names are optional only.
     ///
     /// WEAPON SWITCH FLOW:
-    ///   Equip:   ClearTriggers → SetInt(WeaponType) → EndOfFrame → WeaponChanged(x3) → Draw
-    ///   Holster: ClearTriggers → Holster trigger → 0.4s → SetInt(0) → EndOfFrame → WeaponChanged(x3)
+    ///   Equip: ClearTriggers -> SetInt(WeaponType) -> EndOfFrame -> WeaponChanged(x3) -> Draw
+    ///   Holster: ClearTriggers -> Holster/WeaponChangedUB flow -> SetInt(0) -> WeaponChanged(x3)
     ///
     /// ANIMATION EVENT CALLBACKS (set in Animator clip events):
     ///   OnAnimEventFireBullet / OnAnimEventDrawWeapon / OnAnimEventHolsterComplete
+    ///   OnAnimEventReloadStart / OnAnimEventReloadInsert / OnAnimEventReloadEnd
     ///   OnAnimEventReloadOut / OnAnimEventReloadIn / OnAnimEventReloadComplete
     ///   OnAnimEventMeleeHit
     /// </summary>
@@ -104,6 +86,10 @@ namespace NightHunt.Gameplay.Character
         private static readonly int AimingHash           = Animator.StringToHash("Aiming");
         private static readonly int ReloadingHash        = Animator.StringToHash("Reloading");
         private static readonly int ShootHash            = Animator.StringToHash("Shoot");
+        private static readonly int ShootBurstHash       = Animator.StringToHash("ShootBurst");
+        private static readonly int ShootLoopHash        = Animator.StringToHash("ShootLoop");
+        private static readonly int ShootBoltHash        = Animator.StringToHash("ShootBolt");
+        private static readonly int ShootShotgunHash     = Animator.StringToHash("ShootShotgun");
         private static readonly int AttackHash           = Animator.StringToHash("Attack");
         private static readonly int MeleeAttackHash      = Animator.StringToHash("MeleeAttack");
         private static readonly int JumpHash             = Animator.StringToHash("Jump");
@@ -111,7 +97,10 @@ namespace NightHunt.Gameplay.Character
         private static readonly int ThrowHash            = Animator.StringToHash("Throw");
         // ── New params ──────────────────────────────────────────────────────────
         private static readonly int CrouchHash           = Animator.StringToHash("IsCrouching");
+        private static readonly int ProneHash            = Animator.StringToHash("IsProne");
+        private static readonly int GuardHash            = Animator.StringToHash("IsGuard");
         private static readonly int SprintHash           = Animator.StringToHash("IsSprinting");
+        private static readonly int OnLadderHash         = Animator.StringToHash("IsOnLadder");
         private static readonly int WeaponTypeHash       = Animator.StringToHash("WeaponType");
         private static readonly int DrawHash             = Animator.StringToHash("Draw");
         private static readonly int HolsterHash          = Animator.StringToHash("Holster");
@@ -147,6 +136,7 @@ namespace NightHunt.Gameplay.Character
         private int _rifleLayer    = -1;
         private int _meleeLayer    = -1;
         private int _launcherLayer = -1;   // Optional "LauncherActions" layer — fallback to rifle
+        private int _upperBodyLayer = -1;
         private int _partialActionsLayer = -1;
 
         // ── Weapon animation state ─────────────────────────────────────────────
@@ -162,6 +152,7 @@ namespace NightHunt.Gameplay.Character
         private bool            _isSwitching;             // blocks new switch during coroutine
         private Coroutine       _weaponSwitchCoroutine;
         private Coroutine       _meleeFallbackCoroutine;
+        private Coroutine       _delayedReloadVisualCoroutine;
 
         // ── Movement state ─────────────────────────────────────────────────────
         private Vector3 _prevPosition;
@@ -241,7 +232,12 @@ namespace NightHunt.Gameplay.Character
                 .Resolve();
 
             if (_itemUseSystem != null)
+            {
+                _itemUseSystem.OnItemUseStarted += HandleItemUseStarted;
+                _itemUseSystem.OnThrowPrepareStarted += HandleThrowPrepareStarted;
                 _itemUseSystem.OnThrowExecuted += HandleThrowExecuted;
+                _itemUseSystem.OnDeployStarted += HandleDeployStarted;
+            }
         }
 
         private void OnDestroy()
@@ -270,10 +266,21 @@ namespace NightHunt.Gameplay.Character
             }
 
             if (_itemUseSystem != null)
+            {
+                _itemUseSystem.OnItemUseStarted -= HandleItemUseStarted;
+                _itemUseSystem.OnThrowPrepareStarted -= HandleThrowPrepareStarted;
                 _itemUseSystem.OnThrowExecuted -= HandleThrowExecuted;
+                _itemUseSystem.OnDeployStarted -= HandleDeployStarted;
+            }
 
             if (_healthSystem != null)
                 _healthSystem.OnHitReceived -= HandleHitReceived;
+
+            if (_delayedReloadVisualCoroutine != null)
+            {
+                StopCoroutine(_delayedReloadVisualCoroutine);
+                _delayedReloadVisualCoroutine = null;
+            }
         }
 
         private void HandleHitReceived(DamageInfo _) => TriggerTakeDamage();
@@ -295,40 +302,95 @@ namespace NightHunt.Gameplay.Character
 
             if (_actorUtils == null) return;
 
-            var anim = _actorUtils.charAnimator;
-            if (anim != null)
+            var anim = ResolveModelAnimator(modelRoot, _actorUtils);
+            if (anim == null)
             {
-                // Validate that this Animator's controller has the required parameters.
-                // If not, PrActorUtils.charAnimator points to the wrong Animator Controller —
-                // a clear error is logged and _actorUtils is cleared so Update() won't spam.
-                if (!AnimatorHasHash(anim, SpeedHash))
-                {
-                    Debug.LogError(
-                        $"[CharacterAnimationController] Animator '{anim.runtimeAnimatorController?.name}' " +
-                        $"on model '{modelRoot.name}' is missing required parameters (e.g. 'Speed'). " +
-                        $"Check PrActorUtils.charAnimator — it must point to the player Animator Controller.");
-                    _actorUtils = null;
-                    return;
-                }
-
-                _pistolLayer   = GetLayerIndex(anim, "PistolLyr");
-                _pistolActionsLayer = GetLayerIndex(anim, "PistolActions");
-                _rifleLayer    = GetLayerIndex(anim, "RifleActions");
-                _meleeLayer    = GetLayerIndex(anim, "MeleeActions");
-                _launcherLayer = GetLayerIndex(anim, "LauncherActions"); // optional; -1 if absent
-                _partialActionsLayer = GetLayerIndex(anim, "PartialActions");
-                _prevAnimatorStateHashes = new int[anim.layerCount];
-                ApplyWeaponLayerWeights(anim, immediately: true);
-
-                // Push current WeaponType immediately so the animator starts in the correct state.
-                SafeSetInt(anim, WeaponTypeHash, _activeWeaponType);
-
-                Debug.Log(
-                    $"[ANIM_FIX] Bound animator '{anim.runtimeAnimatorController?.name}' " +
-                    $"legacyVelParams={AnimatorHasHash(anim, VelocityXHash) && AnimatorHasHash(anim, VelocityYHash)} " +
-                    $"groundedParams={AnimatorHasHash(anim, OnGroundHash) || AnimatorHasHash(anim, IsGroundedHash)} " +
-                    "weaponTypeMap=0 Unarmed, 1 Rifle, 2 Pistol/SMG, 3 Launcher, 4 Melee, 5 Shotgun, 6 Sniper");
+                Debug.LogError(
+                    $"[CharacterAnimationController] Model '{modelRoot.name}' has PrActorUtils but no Animator. " +
+                    "Player animation binding failed.");
+                _actorUtils = null;
+                return;
             }
+
+            // Validate that this Animator's controller has the required parameters.
+            // If not, PrActorUtils.charAnimator points to the wrong Animator Controller -
+            // a clear error is logged and _actorUtils is cleared so Update() won't spam.
+            if (!AnimatorHasHash(anim, SpeedHash))
+            {
+                Debug.LogError(
+                    $"[CharacterAnimationController] Animator '{anim.runtimeAnimatorController?.name}' " +
+                    $"on model '{modelRoot.name}' is missing required parameters (e.g. 'Speed'). " +
+                    "Check PrActorUtils.charAnimator - it must point to the player Animator Controller.");
+                _actorUtils = null;
+                return;
+            }
+
+            _pistolLayer   = GetLayerIndex(anim, "PistolLyr");
+            _pistolActionsLayer = GetLayerIndex(anim, "PistolActions");
+            _rifleLayer    = GetLayerIndex(anim, "RifleActions");
+            _meleeLayer    = GetLayerIndex(anim, "MeleeActions");
+            _launcherLayer = GetLayerIndex(anim, "LauncherActions"); // optional; -1 if absent
+            _upperBodyLayer = GetLayerIndex(anim, "UpperBody");
+            _partialActionsLayer = GetLayerIndex(anim, "PartialActions");
+            _prevAnimatorStateHashes = new int[anim.layerCount];
+            ApplyWeaponLayerWeights(anim, immediately: true);
+
+            // Push current WeaponType immediately so the animator starts in the correct state.
+            SafeSetInt(anim, WeaponTypeHash, _activeWeaponType);
+            BindAnimationEventRelay(anim);
+
+            Debug.Log(
+                $"[ANIM_FIX] Bound animator '{anim.runtimeAnimatorController?.name}' " +
+                $"legacyVelParams={AnimatorHasHash(anim, VelocityXHash) && AnimatorHasHash(anim, VelocityYHash)} " +
+                $"groundedParams={AnimatorHasHash(anim, OnGroundHash) || AnimatorHasHash(anim, IsGroundedHash)} " +
+                "weaponTypeMap=0 Unarmed, 1 Handgun, 2 Infantry, 3 Heavy, 4 Knife, 5 Machinegun, 6 RocketLauncher");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Animation,
+                "AnimatorBound",
+                $"controller={anim.runtimeAnimatorController?.name ?? "null"} layers={anim.layerCount} upperBody={_upperBodyLayer} pistol={_pistolLayer} pistolActions={_pistolActionsLayer} rifle={_rifleLayer} melee={_meleeLayer} launcher={_launcherLayer} partial={_partialActionsLayer} model={modelRoot.name} {DescribeAnimatorLayers(anim)}",
+                this);
+        }
+
+        private static Animator ResolveModelAnimator(GameObject modelRoot, PrActorUtils actorUtils)
+        {
+            if (actorUtils.charAnimator != null)
+                return actorUtils.charAnimator;
+
+            var rootAnimator = modelRoot.GetComponent<Animator>();
+            if (rootAnimator != null)
+                return AssignResolvedAnimator(actorUtils, rootAnimator, modelRoot);
+
+            var childAnimators = modelRoot.GetComponentsInChildren<Animator>(true);
+            foreach (var candidate in childAnimators)
+            {
+                if (AnimatorHasHash(candidate, SpeedHash))
+                    return AssignResolvedAnimator(actorUtils, candidate, modelRoot);
+            }
+
+            return childAnimators.Length > 0
+                ? AssignResolvedAnimator(actorUtils, childAnimators[0], modelRoot)
+                : null;
+        }
+
+        private static Animator AssignResolvedAnimator(PrActorUtils actorUtils, Animator animator, GameObject modelRoot)
+        {
+            actorUtils.charAnimator = animator;
+            animator.applyRootMotion = actorUtils.useRootMotion;
+            Debug.LogWarning(
+                $"[CharacterAnimationController] PrActorUtils.charAnimator was not assigned on '{modelRoot.name}'. " +
+                $"Auto-bound Animator '{animator.runtimeAnimatorController?.name}'.");
+            return animator;
+        }
+
+        private void BindAnimationEventRelay(Animator anim)
+        {
+            if (anim == null) return;
+
+            var relay = anim.GetComponent<CharacterAnimEventRelay>();
+            if (relay == null)
+                relay = anim.gameObject.AddComponent<CharacterAnimEventRelay>();
+
+            relay.controller = this;
         }
 
         private static int GetLayerIndex(Animator anim, string name)
@@ -338,10 +400,10 @@ namespace NightHunt.Gameplay.Character
             return -1;
         }
 
-        private static bool AnimatorHasHash(Animator anim, int hash)
+        private static bool AnimatorHasHash(Animator anim, int hash, AnimatorControllerParameterType? type = null)
         {
             foreach (var p in anim.parameters)
-                if (p.nameHash == hash) return true;
+                if (p.nameHash == hash && (!type.HasValue || p.type == type.Value)) return true;
             return false;
         }
 
@@ -391,13 +453,19 @@ namespace NightHunt.Gameplay.Character
 
             // Stance params — read from movement controller each frame.
             SafeSetBool(anim, CrouchHash, _movement?.IsCrouching() ?? false);
+            SafeSetBool(anim, ProneHash, false);
+            SafeSetBool(anim, GuardHash, false);
             SafeSetBool(anim, SprintHash, _movement?.IsSprinting() ?? false);
+            SafeSetBool(anim, OnLadderHash, false);
 
             // Weapon / combat params.
             SafeSetBool(anim, ArmedHash, _activeSlot.HasValue);
             bool aimingHeld = _isFiring || (_weaponSystem != null && _weaponSystem.IsFireInputHeld);
             SafeSetBool(anim, AimingHash, aimingHeld);
             SafeSetBool(anim, ReloadingHash, _isReloading);
+            SafeSetBool(anim, ShootLoopHash, _activeWeaponClass == WeaponClass.MachineGun && aimingHeld);
+            SafeSetBool(anim, ShootBoltHash, _activeWeaponClass == WeaponClass.Sniper);
+            SafeSetBool(anim, ShootShotgunHash, _activeWeaponClass == WeaponClass.Shotgun);
 
             // Smooth weapon layer weights.
             ApplyWeaponLayerWeights(anim, immediately: false);
@@ -432,6 +500,11 @@ namespace NightHunt.Gameplay.Character
 
                 int animatorWeaponType = AnimatorHasHash(anim, WeaponTypeHash) ? anim.GetInteger(WeaponTypeHash) : -1;
                 Debug.Log($"[ANIM_FLOW] State L{i} {anim.GetLayerName(i)} fullPath=#{info.fullPathHash:X8} short=#{info.shortNameHash:X8} clip='{clipName}' weaponType={animatorWeaponType} activeType={_activeWeaponType} activeSlot={_activeSlot?.ToString() ?? "None"} armed={_activeSlot.HasValue}");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Animation,
+                    "AnimatorStateChanged",
+                    $"layer={i} layerName={anim.GetLayerName(i)} weight={anim.GetLayerWeight(i):F2} fullPath=#{info.fullPathHash:X8} short=#{info.shortNameHash:X8} clip='{clipName}' normalized={info.normalizedTime:F2} weaponType={animatorWeaponType} activeType={_activeWeaponType} activeSlot={_activeSlot?.ToString() ?? "None"} reloading={_isReloading} firing={_isFiring}",
+                    this);
                 _prevAnimatorStateHashes[i] = info.fullPathHash;
             }
         }
@@ -455,6 +528,11 @@ namespace NightHunt.Gameplay.Character
                 _activeWeaponClass = def?.WeaponClass ?? WeaponClass.Rifle;
                 newType = ResolveAnimatorWeaponType(def);
                 Debug.Log($"[ANIM_FLOW] Weapon active changed: slot={newSlot.Value} def={inst?.DefinitionID ?? "null"} class={_activeWeaponClass} weaponType={newType} override={def?.AnimatorWeaponTypeOverride ?? 0}");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Animation,
+                    "WeaponAnimChanged",
+                    $"old={oldSlot?.ToString() ?? "none"} new={newSlot.Value} def={inst?.DefinitionID ?? "null"} class={_activeWeaponClass} weaponType={newType} override={def?.AnimatorWeaponTypeOverride ?? 0}",
+                    this);
 
                 // Keep layer weights in sync for controllers that use them.
                 switch (_activeWeaponClass)
@@ -516,19 +594,31 @@ namespace NightHunt.Gameplay.Character
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
             ClearWeaponTriggers(anim);
-            anim.SetInteger(WeaponTypeHash, newType);
+            SafeSetInt(anim, WeaponTypeHash, newType);
 
             yield return new WaitForEndOfFrame();
 
             anim = _actorUtils?.charAnimator; // re-fetch after yield (model may have swapped)
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
-            SafeSetTrigger(anim, WpnChangedHash);
-            SafeSetTrigger(anim, WpnChangedUBHash);
-            SafeSetTrigger(anim, WpnChangedDeathHash);
-            SafeSetTrigger(anim, DrawHash);
+            bool setChanged = SafeSetTrigger(anim, WpnChangedHash);
+            bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
+            bool setChangedDeath = SafeSetTrigger(anim, WpnChangedDeathHash);
+            LogAnimEvent("WeaponEquipChangeTriggers", anim, $"weaponType={newType} triggers=WeaponChanged,WeaponChangedUB,WeaponChangedDeath setChanged={setChanged} setChangedUB={setChangedUb} setChangedDeath={setChangedDeath}");
+
+            yield return WaitForUpperBodyWeaponReady(newType, "WeaponEquipUpperBodyReady", 24);
+
+            anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+
+            PrimeWeaponActionParams(anim);
+            bool setDraw = SafeSetTrigger(anim, DrawHash);
+            LogAnimEvent("WeaponEquipDrawTrigger", anim, $"weaponType={newType} trigger=Draw setDraw={setDraw}");
+            ScheduleAnimPostFrameLog("WeaponEquipTriggersPost", $"weaponType={newType} trigger=Draw setDraw={setDraw}");
 
             _isSwitching = false;
+            if (_isReloading)
+                ScheduleReloadVisualAfterSwitch();
         }
 
         /// <summary>
@@ -545,7 +635,8 @@ namespace NightHunt.Gameplay.Character
 
             // Short holster for the current weapon.
             ClearWeaponTriggers(anim);
-            SafeSetTrigger(anim, HolsterHash);
+            bool setHolster = SafeSetTrigger(anim, HolsterHash);
+            LogAnimEvent("WeaponSwapHolsterTrigger", anim, $"fromType={_activeWeaponType} toType={newType} trigger=Holster setHolster={setHolster}");
 
             yield return new WaitForSeconds(0.2f);
 
@@ -553,19 +644,31 @@ namespace NightHunt.Gameplay.Character
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
             _activeWeaponType = newType;
-            anim.SetInteger(WeaponTypeHash, newType);
+            SafeSetInt(anim, WeaponTypeHash, newType);
 
             yield return new WaitForEndOfFrame();
 
             anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
-            SafeSetTrigger(anim, WpnChangedHash);
-            SafeSetTrigger(anim, WpnChangedUBHash);
-            SafeSetTrigger(anim, WpnChangedDeathHash);
-            SafeSetTrigger(anim, DrawHash);
+            bool setChanged = SafeSetTrigger(anim, WpnChangedHash);
+            bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
+            bool setChangedDeath = SafeSetTrigger(anim, WpnChangedDeathHash);
+            LogAnimEvent("WeaponSwapChangeTriggers", anim, $"weaponType={newType} triggers=WeaponChanged,WeaponChangedUB,WeaponChangedDeath setChanged={setChanged} setChangedUB={setChangedUb} setChangedDeath={setChangedDeath}");
+
+            yield return WaitForUpperBodyWeaponReady(newType, "WeaponSwapUpperBodyReady", 24);
+
+            anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+
+            PrimeWeaponActionParams(anim);
+            bool setDraw = SafeSetTrigger(anim, DrawHash);
+            LogAnimEvent("WeaponSwapDrawTrigger", anim, $"weaponType={newType} trigger=Draw setDraw={setDraw}");
+            ScheduleAnimPostFrameLog("WeaponSwapDrawTriggersPost", $"weaponType={newType} trigger=Draw setDraw={setDraw}");
 
             _isSwitching = false;
+            if (_isReloading)
+                ScheduleReloadVisualAfterSwitch();
         }
 
         /// <summary>
@@ -581,7 +684,10 @@ namespace NightHunt.Gameplay.Character
             ClearWeaponTriggers(anim);
 
             if (_activeWeaponType != 0)
-                SafeSetTrigger(anim, HolsterHash);
+            {
+                bool setHolster = SafeSetTrigger(anim, HolsterHash);
+                LogAnimEvent("WeaponHolsterTrigger", anim, $"activeType={_activeWeaponType} trigger=Holster setHolster={setHolster}");
+            }
 
             yield return new WaitForSeconds(0.4f);
 
@@ -589,16 +695,17 @@ namespace NightHunt.Gameplay.Character
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
             _activeWeaponType = 0;
-            anim.SetInteger(WeaponTypeHash, 0);
+            SafeSetInt(anim, WeaponTypeHash, 0);
 
             yield return new WaitForEndOfFrame();
 
             anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
-            SafeSetTrigger(anim, WpnChangedHash);
-            SafeSetTrigger(anim, WpnChangedUBHash);
-            SafeSetTrigger(anim, WpnChangedDeathHash);
+            bool setChanged = SafeSetTrigger(anim, WpnChangedHash);
+            bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
+            bool setChangedDeath = SafeSetTrigger(anim, WpnChangedDeathHash);
+            LogAnimEvent("WeaponHolsterDoneTriggers", anim, $"weaponType=0 triggers=WeaponChanged,WeaponChangedUB,WeaponChangedDeath setChanged={setChanged} setChangedUB={setChangedUb} setChangedDeath={setChangedDeath}");
             // Unarmed — no Draw trigger.
 
             _isSwitching = false;
@@ -612,6 +719,14 @@ namespace NightHunt.Gameplay.Character
             SafeResetTrigger(anim, WpnChangedDeathHash);
             SafeResetTrigger(anim, DrawHash);
             SafeResetTrigger(anim, HolsterHash);
+            SafeResetTrigger(anim, ShootHash);
+            SafeResetTrigger(anim, ShootBurstHash);
+            SafeResetTrigger(anim, ReloadTrigHash);
+            SafeResetTrigger(anim, AttackHash);
+            SafeResetTrigger(anim, MeleeAttackHash);
+            SafeResetTrigger(anim, InteractHash);
+            SafeResetTrigger(anim, ThrowGrenadeHash);
+            SafeSetBool(anim, ShootLoopHash, false);
         }
 
         /// <summary>
@@ -625,17 +740,30 @@ namespace NightHunt.Gameplay.Character
                 if (_activeWeaponClass == WeaponClass.Melee)
                 {
                     int idx = UnityEngine.Random.Range(0, 2);
-                    SafeSetInt(anim, AttackIndexHash, idx);
-                    SafeSetTrigger(anim, AttackHash);
-                    SafeSetTrigger(anim, MeleeAttackHash);
+                    SafeResetTrigger(anim, AttackHash);
+                    SafeResetTrigger(anim, MeleeAttackHash);
+                    bool setAttackIndex = SafeSetInt(anim, AttackIndexHash, idx);
+                    bool setAttack = SafeSetTrigger(anim, AttackHash);
+                    bool hasLegacyMeleeAttack = AnimatorHasHash(anim, MeleeAttackHash);
+                    bool setLegacyMeleeAttack = false;
+                    if (hasLegacyMeleeAttack)
+                        setLegacyMeleeAttack = SafeSetTrigger(anim, MeleeAttackHash);
                     if (WeaponAnimDebugEnabled())
-                        Debug.Log($"[ANIM_FLOW] OnShotFired melee slot={slot} attackIndex={idx} shootTrigger=false");
+                        Debug.Log($"[ANIM_FLOW] OnShotFired melee slot={slot} attackIndex={idx} trigger=Attack setAttack={setAttack} setAttackIndex={setAttackIndex} legacyMeleeAttack={setLegacyMeleeAttack} shootTrigger=false");
+                    LogAnimEvent("ShotFiredMelee", anim, $"slot={slot} attackIndex={idx} trigger=Attack setAttack={setAttack} setAttackIndex={setAttackIndex} legacyMeleeAttackParam={hasLegacyMeleeAttack} setLegacyMeleeAttack={setLegacyMeleeAttack}");
+                    ScheduleAnimPostFrameLog("ShotFiredMeleePost", $"slot={slot} attackIndex={idx} trigger=Attack setAttack={setAttack}");
                 }
                 else
                 {
-                    SafeSetTrigger(anim, ShootHash);
+                    SafeSetBool(anim, ShootLoopHash, _activeWeaponClass == WeaponClass.MachineGun);
+                    SafeSetBool(anim, ShootBoltHash, _activeWeaponClass == WeaponClass.Sniper);
+                    SafeSetBool(anim, ShootShotgunHash, _activeWeaponClass == WeaponClass.Shotgun);
+                    SafeResetTrigger(anim, ShootHash);
+                    bool setShoot = SafeSetTrigger(anim, ShootHash);
                     if (WeaponAnimDebugEnabled())
-                        Debug.Log($"[ANIM_FLOW] OnShotFired ranged slot={slot} class={_activeWeaponClass} shootTrigger=true");
+                        Debug.Log($"[ANIM_FLOW] OnShotFired ranged slot={slot} class={_activeWeaponClass} shootTrigger={setShoot}");
+                    LogAnimEvent("ShotFiredRanged", anim, $"slot={slot} class={_activeWeaponClass} trigger=Shoot setShoot={setShoot} shootLoop={_activeWeaponClass == WeaponClass.MachineGun} shootBolt={_activeWeaponClass == WeaponClass.Sniper} shootShotgun={_activeWeaponClass == WeaponClass.Shotgun}");
+                    ScheduleAnimPostFrameLog("ShotFiredRangedPost", $"slot={slot} class={_activeWeaponClass} trigger=Shoot setShoot={setShoot}");
                 }
             }
 
@@ -652,7 +780,13 @@ namespace NightHunt.Gameplay.Character
             Invoke(nameof(ResetFiringFlag), _aimingResetDelay);
         }
 
-        private void ResetFiringFlag() => _isFiring = false;
+        private void ResetFiringFlag()
+        {
+            _isFiring = false;
+            var anim = _actorUtils?.charAnimator;
+            if (anim != null && anim.enabled)
+                SafeSetBool(anim, ShootLoopHash, false);
+        }
 
         /// <summary>
         /// Raised on EVERY client (owner via coroutine, remotes via ObserversRpc in NetworkSync).
@@ -666,8 +800,318 @@ namespace NightHunt.Gameplay.Character
             {
                 var anim = _actorUtils?.charAnimator;
                 if (anim != null && anim.enabled)
-                    SafeSetTrigger(anim, ReloadTrigHash);
+                {
+                    PrimeWeaponActionParams(anim);
+                    if (!IsAnimatorReadyForWeaponAction(anim, out string reason))
+                    {
+                        LogAnimEvent("ReloadTriggerDeferred", anim, $"reloading={reloading} reason={reason}");
+                        ScheduleReloadVisualAfterSwitch();
+                    }
+                    else
+                    {
+                        TriggerReloadVisual(anim, "ReloadTrigger", "reason=immediate");
+                    }
+                }
             }
+            else
+            {
+                if (_delayedReloadVisualCoroutine != null)
+                {
+                    StopCoroutine(_delayedReloadVisualCoroutine);
+                    _delayedReloadVisualCoroutine = null;
+                }
+
+                var anim = _actorUtils?.charAnimator;
+                if (anim != null && anim.enabled)
+                    LogAnimEvent("ReloadStateEnded", anim, $"reloading={reloading}");
+            }
+        }
+
+        private void ScheduleReloadVisualAfterSwitch()
+        {
+            if (_delayedReloadVisualCoroutine != null)
+                StopCoroutine(_delayedReloadVisualCoroutine);
+
+            _delayedReloadVisualCoroutine = StartCoroutine(ReloadVisualAfterSwitchCoroutine());
+        }
+
+        private IEnumerator WaitForUpperBodyWeaponReady(int weaponType, string eventName, int maxFrames)
+        {
+            int frames = 0;
+            string reason = "not-checked";
+
+            while (frames < maxFrames)
+            {
+                var anim = _actorUtils?.charAnimator;
+                if (anim == null || !anim.enabled)
+                {
+                    reason = "animator-null-or-disabled";
+                    break;
+                }
+
+                PrimeWeaponActionParams(anim);
+                if (IsUpperBodyReadyForWeaponTriggers(anim, weaponType, out reason))
+                    break;
+
+                frames++;
+                yield return null;
+            }
+
+            var readyAnim = _actorUtils?.charAnimator;
+            if (readyAnim != null && readyAnim.enabled)
+            {
+                PrimeWeaponActionParams(readyAnim);
+                bool ready = IsUpperBodyReadyForWeaponTriggers(readyAnim, weaponType, out reason);
+                LogAnimEvent(eventName, readyAnim, $"weaponType={weaponType} waitFrames={frames} ready={ready} reason={reason}");
+            }
+        }
+
+        private IEnumerator ReloadVisualAfterSwitchCoroutine()
+        {
+            int guard = 0;
+            string lastReason = "not-checked";
+            while (_isReloading && guard < 90)
+            {
+                var anim = _actorUtils?.charAnimator;
+                if (anim != null && anim.enabled)
+                {
+                    PrimeWeaponActionParams(anim);
+                    if (IsAnimatorReadyForWeaponAction(anim, out lastReason))
+                        break;
+                }
+                else
+                {
+                    lastReason = "animator-null-or-disabled";
+                }
+
+                guard++;
+                yield return null;
+            }
+
+            var readyAnim = _actorUtils?.charAnimator;
+            if (readyAnim != null && readyAnim.enabled)
+                PrimeWeaponActionParams(readyAnim);
+
+            bool ready = readyAnim != null
+                && readyAnim.enabled
+                && IsAnimatorReadyForWeaponAction(readyAnim, out lastReason);
+
+            if (_isReloading && !ready && readyAnim != null && readyAnim.enabled && _activeSlot.HasValue && _activeWeaponType > 0)
+            {
+                bool setChangedUb = SafeSetTrigger(readyAnim, WpnChangedUBHash);
+                LogAnimEvent("ReloadWeaponStateRecovery", readyAnim, $"waitFrames={guard} ready={ready} reason={lastReason} setChangedUB={setChangedUb}");
+
+                int recoveryFrames = 0;
+                while (_isReloading && recoveryFrames < 20)
+                {
+                    yield return null;
+                    recoveryFrames++;
+
+                    readyAnim = _actorUtils?.charAnimator;
+                    if (readyAnim == null || !readyAnim.enabled)
+                    {
+                        lastReason = "animator-null-or-disabled";
+                        continue;
+                    }
+
+                    PrimeWeaponActionParams(readyAnim);
+                    if (IsAnimatorReadyForWeaponAction(readyAnim, out lastReason))
+                    {
+                        ready = true;
+                        guard += recoveryFrames;
+                        break;
+                    }
+                }
+            }
+
+            _delayedReloadVisualCoroutine = null;
+            if (!_isReloading)
+                yield break;
+
+            readyAnim = _actorUtils?.charAnimator;
+            if (readyAnim == null || !readyAnim.enabled)
+                yield break;
+
+            PrimeWeaponActionParams(readyAnim);
+            ready = IsAnimatorReadyForWeaponAction(readyAnim, out lastReason);
+            TriggerReloadVisual(readyAnim, "ReloadTriggerDeferredFire", $"waitFrames={guard} ready={ready} reason={lastReason}");
+        }
+
+        private void TriggerReloadVisual(Animator anim, string eventName, string details)
+        {
+            PrimeWeaponActionParams(anim);
+            SafeResetTrigger(anim, ReloadTrigHash);
+            SafeResetTrigger(anim, ShootHash);
+            SafeResetTrigger(anim, ShootBurstHash);
+            SafeResetTrigger(anim, AttackHash);
+            SafeResetTrigger(anim, MeleeAttackHash);
+            SafeResetTrigger(anim, InteractHash);
+            SafeResetTrigger(anim, ThrowHash);
+            SafeResetTrigger(anim, ThrowGrenadeHash);
+            SafeResetTrigger(anim, DeployHash);
+            bool setReload = SafeSetTrigger(anim, ReloadTrigHash);
+            LogAnimEvent(eventName, anim, $"reloading=True trigger=Reload setReload={setReload} {details}");
+            ScheduleAnimPostFrameLog($"{eventName}Post", $"reloading=True trigger=Reload setReload={setReload} {details}");
+        }
+
+        private void PrimeWeaponActionParams(Animator anim)
+        {
+            if (anim == null || !anim.enabled)
+                return;
+
+            SafeSetInt(anim, WeaponTypeHash, _activeWeaponType);
+            SafeSetBool(anim, ArmedHash, _activeSlot.HasValue);
+            SafeSetBool(anim, ReloadingHash, _isReloading);
+            SafeSetBool(anim, ShootLoopHash, _activeWeaponClass == WeaponClass.MachineGun && _isFiring);
+            SafeSetBool(anim, ShootBoltHash, _activeWeaponClass == WeaponClass.Sniper);
+            SafeSetBool(anim, ShootShotgunHash, _activeWeaponClass == WeaponClass.Shotgun);
+        }
+
+        private bool IsAnimatorReadyForWeaponAction(Animator anim, out string reason)
+        {
+            if (anim == null || !anim.enabled)
+            {
+                reason = "animator-null-or-disabled";
+                return false;
+            }
+
+            if (!_activeSlot.HasValue)
+            {
+                reason = "active-slot-none";
+                return false;
+            }
+
+            if (_activeWeaponType <= 0)
+            {
+                reason = $"active-type-unarmed:{_activeWeaponType}";
+                return false;
+            }
+
+            if (_isSwitching)
+            {
+                reason = "weapon-switching";
+                return false;
+            }
+
+            if (TryGetTransitionLayer(anim, out string transitionLayer))
+            {
+                reason = $"transitioning:{transitionLayer}";
+                return false;
+            }
+
+            if (AnimatorHasHash(anim, WeaponTypeHash, AnimatorControllerParameterType.Int))
+            {
+                int animatorWeaponType = anim.GetInteger(WeaponTypeHash);
+                if (animatorWeaponType != _activeWeaponType)
+                {
+                    reason = $"weapon-type-mismatch animator={animatorWeaponType} active={_activeWeaponType}";
+                    return false;
+                }
+            }
+
+            if (!IsUpperBodyReadyForWeaponTriggers(anim, out reason))
+                return false;
+
+            reason = "ready";
+            return true;
+        }
+
+        private bool IsUpperBodyReadyForWeaponTriggers(Animator anim, out string reason)
+            => IsUpperBodyReadyForWeaponTriggers(anim, _activeWeaponType, out reason);
+
+        private bool IsUpperBodyReadyForWeaponTriggers(Animator anim, int weaponType, out string reason)
+        {
+            if (anim == null || !anim.enabled)
+            {
+                reason = "animator-null-or-disabled";
+                return false;
+            }
+
+            if (_upperBodyLayer < 0 || _upperBodyLayer >= anim.layerCount)
+            {
+                reason = "upperbody-layer-missing";
+                return true;
+            }
+
+            if (anim.IsInTransition(_upperBodyLayer))
+            {
+                reason = "upperbody-transitioning";
+                return false;
+            }
+
+            string machineName = GetUpperBodyMachineName(weaponType);
+            if (string.IsNullOrEmpty(machineName))
+            {
+                reason = $"upperbody-no-machine weaponType={weaponType}";
+                return false;
+            }
+
+            var info = anim.GetCurrentAnimatorStateInfo(_upperBodyLayer);
+            string expectedIdlePath = $"UpperBody.{machineName}.UB_Empty";
+            if (info.IsName(expectedIdlePath))
+            {
+                reason = $"upperbody-ready path={expectedIdlePath}";
+                return true;
+            }
+
+            string clipName = GetCurrentClipName(anim, _upperBodyLayer);
+            reason = $"upperbody-wrong-state expected={expectedIdlePath} clip={(string.IsNullOrEmpty(clipName) ? "(no clip)" : clipName)} state=#{info.fullPathHash:X8}";
+            return false;
+        }
+
+        private static string GetUpperBodyMachineName(int weaponType) => weaponType switch
+        {
+            0 => "Unarmed_UpperBody",
+            1 => "Handgun_UpperBody",
+            2 => "Infantry_UpperBody",
+            3 => "Heavy_UpperBody",
+            4 => "Knife_UpperBody",
+            5 => "Machinegun_UpperBody",
+            6 => "RocketLauncher_UpperBody",
+            _ => string.Empty,
+        };
+
+        private static bool TryGetTransitionLayer(Animator anim, out string layerName)
+        {
+            if (anim != null)
+            {
+                for (int i = 0; i < anim.layerCount; i++)
+                {
+                    if (anim.IsInTransition(i))
+                    {
+                        layerName = anim.GetLayerName(i);
+                        return true;
+                    }
+                }
+            }
+
+            layerName = "none";
+            return false;
+        }
+
+        private static string GetCurrentClipName(Animator anim, int layer)
+        {
+            if (anim == null || layer < 0 || layer >= anim.layerCount)
+                return string.Empty;
+
+            var clips = anim.GetCurrentAnimatorClipInfo(layer);
+            return clips.Length > 0 && clips[0].clip != null
+                ? clips[0].clip.name
+                : string.Empty;
+        }
+
+        private static bool IsAnyLayerInTransition(Animator anim)
+        {
+            if (anim == null)
+                return false;
+
+            for (int i = 0; i < anim.layerCount; i++)
+            {
+                if (anim.IsInTransition(i))
+                    return true;
+            }
+
+            return false;
         }
 
         // ── Movement event handlers ────────────────────────────────────────────
@@ -675,19 +1119,63 @@ namespace NightHunt.Gameplay.Character
         private void OnJump()
         {
             var anim = _actorUtils?.charAnimator;
-            if (anim != null && anim.enabled) SafeSetTrigger(anim, JumpHash);
+            if (anim != null && anim.enabled)
+            {
+                SafeSetTrigger(anim, JumpHash);
+                LogAnimEvent("JumpTrigger", anim, "trigger=Jump");
+            }
         }
 
         private void OnRoll()
         {
             var anim = _actorUtils?.charAnimator;
-            if (anim != null && anim.enabled) SafeSetTrigger(anim, RollHash);
+            if (anim != null && anim.enabled)
+            {
+                SafeSetTrigger(anim, RollHash);
+                LogAnimEvent("RollTrigger", anim, "trigger=Roll");
+            }
+        }
+
+        private void HandleThrowPrepareStarted()
+        {
+            var anim = _actorUtils?.charAnimator;
+            if (anim != null && anim.enabled)
+            {
+                SafeResetTrigger(anim, ThrowHash);
+                SafeResetTrigger(anim, ThrowGrenadeHash);
+                bool setThrow = SafeSetTrigger(anim, ThrowHash);
+                bool setFallbackThrowGrenade = false;
+                if (!setThrow)
+                    setFallbackThrowGrenade = SafeSetTrigger(anim, ThrowGrenadeHash);
+
+                string details = $"trigger=Throw setThrow={setThrow} fallbackThrowGrenade={setFallbackThrowGrenade}";
+                LogAnimEvent("ThrowPrepareTrigger", anim, details);
+                ScheduleAnimPostFrameLog("ThrowPrepareTriggerPost", details);
+            }
         }
 
         private void HandleThrowExecuted()
         {
+            TriggerThrowGrenade();
+        }
+
+        private void HandleDeployStarted()
+        {
+            TriggerDeploy();
+        }
+
+        private void HandleItemUseStarted(ItemInstance item)
+        {
+            var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
             var anim = _actorUtils?.charAnimator;
-            if (anim != null && anim.enabled) SafeSetTrigger(anim, ThrowHash);
+            if (anim == null || !anim.enabled)
+                return;
+
+            ItemType? type = def != null ? def.Type : null;
+            LogAnimEvent("ItemUseStarted", anim, $"item={item?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={type?.ToString() ?? "null"}");
+
+            if (type == ItemType.Consumable || type == ItemType.Misc)
+                TriggerInteract(1);
         }
 
         // ── Lifecycle event handlers ───────────────────────────────────────────
@@ -703,6 +1191,7 @@ namespace NightHunt.Gameplay.Character
                 anim.SetLayerWeight(_deathLayerIndex, 1f);
 
             SafeSetTrigger(anim, DieHash);
+            LogAnimEvent("DieTrigger", anim, $"deathLayer={_deathLayerIndex}");
         }
 
         private void HandleRespawned()
@@ -716,6 +1205,7 @@ namespace NightHunt.Gameplay.Character
             SafeSetTrigger(anim, RespawnHash);
             // Reset stance on respawn so we don't stay crouched from before death.
             SafeSetBool(anim, CrouchHash, false);
+            LogAnimEvent("RespawnTrigger", anim, $"deathLayer={_deathLayerIndex}");
         }
 
         /// <summary>
@@ -725,7 +1215,10 @@ namespace NightHunt.Gameplay.Character
         {
             var anim = _actorUtils?.charAnimator;
             if (anim != null && anim.enabled)
+            {
                 SafeSetTrigger(anim, TakeDamageHash);
+                LogAnimEvent("TakeDamageTrigger", anim, "trigger=TakeDamage");
+            }
         }
 
         /// <summary>
@@ -737,13 +1230,42 @@ namespace NightHunt.Gameplay.Character
         {
             var anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) return;
-            SafeSetInt(anim, InteractIndexHash, interactIndex);
-            SafeSetTrigger(anim, InteractHash);
+            PrimeWeaponActionParams(anim);
+
+            if (_activeWeaponType > 0 && !IsUpperBodyReadyForWeaponTriggers(anim, out string readyReason))
+            {
+                bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
+                LogAnimEvent("InteractTriggerDeferred", anim, $"interactIndex={interactIndex} reason={readyReason} setChangedUB={setChangedUb}");
+                StartCoroutine(TriggerInteractWhenUpperBodyReady(interactIndex));
+                return;
+            }
+
+            TriggerInteractNow(anim, interactIndex, "InteractTrigger");
+        }
+
+        private IEnumerator TriggerInteractWhenUpperBodyReady(int interactIndex)
+        {
+            yield return WaitForUpperBodyWeaponReady(_activeWeaponType, "InteractUpperBodyReady", 24);
+
+            var anim = _actorUtils?.charAnimator;
+            if (anim == null || !anim.enabled) yield break;
+
+            PrimeWeaponActionParams(anim);
+            TriggerInteractNow(anim, interactIndex, "InteractTriggerDeferredFire");
+        }
+
+        private void TriggerInteractNow(Animator anim, int interactIndex, string eventName)
+        {
+            SafeResetTrigger(anim, InteractHash);
+            bool setInteractIndex = SafeSetInt(anim, InteractIndexHash, interactIndex);
+            bool setInteract = SafeSetTrigger(anim, InteractHash);
+            LogAnimEvent(eventName, anim, $"interactIndex={interactIndex} trigger=Interact setInteract={setInteract} setInteractIndex={setInteractIndex}");
+            ScheduleAnimPostFrameLog($"{eventName}Post", $"interactIndex={interactIndex} trigger=Interact setInteract={setInteract}");
         }
 
         /// <summary>
         /// Play the Deploy animation (placing a deployable item).
-        /// Falls back to Interact[0] if the Animator Controller has no "Deploy" trigger.
+        /// Falls back to Interact[1] if the Animator Controller has no "Deploy" trigger.
         /// Called by ItemUseSystem / DeployablePlacementHandler on confirmed placement.
         /// </summary>
         public void TriggerDeploy()
@@ -756,9 +1278,17 @@ namespace NightHunt.Gameplay.Character
                 if (p.nameHash == DeployHash) { hasDeployParam = true; break; }
 
             if (hasDeployParam)
-                SafeSetTrigger(anim, DeployHash);
+            {
+                SafeResetTrigger(anim, DeployHash);
+                bool setDeploy = SafeSetTrigger(anim, DeployHash);
+                LogAnimEvent("DeployTrigger", anim, $"trigger=Deploy setDeploy={setDeploy}");
+                ScheduleAnimPostFrameLog("DeployTriggerPost", $"trigger=Deploy setDeploy={setDeploy}");
+            }
             else
-                TriggerInteract(0);  // graceful fallback
+            {
+                LogAnimEvent("DeployFallbackInteract", anim, "missing Deploy trigger; fallback=Interact[1]");
+                TriggerInteract(1);  // deploy/use is Interact_B
+            }
         }
 
         /// <summary>
@@ -772,9 +1302,16 @@ namespace NightHunt.Gameplay.Character
             if (anim == null || !anim.enabled) return;
 
             int idx = attackIndex >= 0 ? attackIndex : UnityEngine.Random.Range(0, 2);
-            SafeSetInt(anim, AttackIndexHash, idx);
-            SafeSetTrigger(anim, AttackHash);
-            SafeSetTrigger(anim, MeleeAttackHash);
+            SafeResetTrigger(anim, AttackHash);
+            SafeResetTrigger(anim, MeleeAttackHash);
+            bool setAttackIndex = SafeSetInt(anim, AttackIndexHash, idx);
+            bool setAttack = SafeSetTrigger(anim, AttackHash);
+            bool hasLegacyMeleeAttack = AnimatorHasHash(anim, MeleeAttackHash);
+            bool setLegacyMeleeAttack = false;
+            if (hasLegacyMeleeAttack)
+                setLegacyMeleeAttack = SafeSetTrigger(anim, MeleeAttackHash);
+            LogAnimEvent("MeleeAttackTrigger", anim, $"attackIndex={idx} trigger=Attack setAttack={setAttack} setAttackIndex={setAttackIndex} legacyMeleeAttackParam={hasLegacyMeleeAttack} setLegacyMeleeAttack={setLegacyMeleeAttack}");
+            ScheduleAnimPostFrameLog("MeleeAttackTriggerPost", $"attackIndex={idx} trigger=Attack setAttack={setAttack}");
         }
 
         /// <summary>
@@ -788,7 +1325,10 @@ namespace NightHunt.Gameplay.Character
         {
             var anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) return;
-            SafeSetTrigger(anim, ThrowGrenadeHash);
+            SafeResetTrigger(anim, ThrowGrenadeHash);
+            bool setThrowGrenade = SafeSetTrigger(anim, ThrowGrenadeHash);
+            LogAnimEvent("ThrowGrenadeTrigger", anim, $"trigger=ThrowGrenade setThrowGrenade={setThrowGrenade}");
+            ScheduleAnimPostFrameLog("ThrowGrenadeTriggerPost", $"trigger=ThrowGrenade setThrowGrenade={setThrowGrenade}");
         }
 
         // ── Layer weight helper ────────────────────────────────────────────────
@@ -802,7 +1342,8 @@ namespace NightHunt.Gameplay.Character
             SetLayerWeight(anim, _rifleLayer,    _targetRifleWeight,    dt);
             SetLayerWeight(anim, _meleeLayer,    _targetMeleeWeight,    dt);
             SetLayerWeight(anim, _launcherLayer, _targetLauncherWeight, dt);
-            SetLayerWeight(anim, _partialActionsLayer, _activeSlot.HasValue ? 1f : 0f, dt);
+            SetLayerWeight(anim, _upperBodyLayer, 1f, dt);
+            SetLayerWeight(anim, _partialActionsLayer, 1f, dt);
         }
 
         private static void SetLayerWeight(Animator anim, int idx, float target, float dt)
@@ -813,18 +1354,19 @@ namespace NightHunt.Gameplay.Character
 
         // ── WeaponClass → WeaponType int mapping ───────────────────────────────
         // SoldierAnimatorController states:
-        // Animator contract:
-        // 0=Unarmed 1=Rifle 2=Pistol/SMG 3=Launcher 4=Melee 5=Shotgun 6=Sniper.
+        // 0=Unarmed, 1=Handgun, 2=Infantry, 3=Heavy,
+        // 4=Knife, 5=Machinegun, 6=RocketLauncher.
         private static int WeaponClassToInt(WeaponClass cls) => cls switch
         {
-            WeaponClass.Rifle    => 1,
-            WeaponClass.Pistol   => 2,
+            WeaponClass.Pistol   => 1,
+            WeaponClass.Rifle    => 2,
             WeaponClass.SMG      => 2,
-            WeaponClass.Launcher => 3,
+            WeaponClass.Shotgun  => 2,
+            WeaponClass.Sniper   => 2,
             WeaponClass.Melee    => 4,
-            WeaponClass.Shotgun  => 5,
-            WeaponClass.Sniper   => 6,
-            _                    => 1,
+            WeaponClass.MachineGun => 5,
+            WeaponClass.Launcher => 6,
+            _                    => 2,
         };
 
         private static int ResolveAnimatorWeaponType(WeaponDefinition def)
@@ -838,14 +1380,122 @@ namespace NightHunt.Gameplay.Character
         private static bool WeaponAnimDebugEnabled()
         {
             var cfg = NightHuntDebugConfig.Instance;
-            return cfg != null && cfg.EnableWeaponDebugLogs;
+            return (cfg != null && cfg.EnableWeaponDebugLogs)
+                || PhaseTestLog.IsEnabled(PhaseTestLogCategory.Animation);
+        }
+
+        private void LogAnimEvent(string eventName, Animator anim, string details)
+        {
+            if (!PhaseTestLog.IsEnabled(PhaseTestLogCategory.Animation, eventName, details))
+                return;
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Animation,
+                eventName,
+                $"{details} activeSlot={_activeSlot?.ToString() ?? "None"} activeType={_activeWeaponType} class={_activeWeaponClass} switching={_isSwitching} {DescribeAnimatorParameters(anim)} {DescribeAnimatorLayers(anim)}",
+                this);
+        }
+
+        private static string DescribeAnimatorParameters(Animator anim)
+        {
+            if (anim == null)
+                return "params=null";
+
+            string weaponType = AnimatorHasHash(anim, WeaponTypeHash, AnimatorControllerParameterType.Int)
+                ? anim.GetInteger(WeaponTypeHash).ToString()
+                : "missing";
+            string attackIndex = AnimatorHasHash(anim, AttackIndexHash, AnimatorControllerParameterType.Int)
+                ? anim.GetInteger(AttackIndexHash).ToString()
+                : "missing";
+            string interactIndex = AnimatorHasHash(anim, InteractIndexHash, AnimatorControllerParameterType.Int)
+                ? anim.GetInteger(InteractIndexHash).ToString()
+                : "missing";
+            string shootLoop = AnimatorHasHash(anim, ShootLoopHash, AnimatorControllerParameterType.Bool)
+                ? anim.GetBool(ShootLoopHash).ToString()
+                : "missing";
+            string shootBolt = AnimatorHasHash(anim, ShootBoltHash, AnimatorControllerParameterType.Bool)
+                ? anim.GetBool(ShootBoltHash).ToString()
+                : "missing";
+            string shootShotgun = AnimatorHasHash(anim, ShootShotgunHash, AnimatorControllerParameterType.Bool)
+                ? anim.GetBool(ShootShotgunHash).ToString()
+                : "missing";
+
+            return $"params=WeaponType:{weaponType} AttackIndex:{attackIndex} InteractIndex:{interactIndex} ShootLoop:{shootLoop} ShootBolt:{shootBolt} ShootShotgun:{shootShotgun} hasTriggers=Attack:{HasTrigger(anim, AttackHash)} MeleeAttack:{HasTrigger(anim, MeleeAttackHash)} Reload:{HasTrigger(anim, ReloadTrigHash)} Draw:{HasTrigger(anim, DrawHash)} Interact:{HasTrigger(anim, InteractHash)} Shoot:{HasTrigger(anim, ShootHash)} Throw:{HasTrigger(anim, ThrowHash)} ThrowGrenade:{HasTrigger(anim, ThrowGrenadeHash)} Deploy:{HasTrigger(anim, DeployHash)} WpnChanged:{HasTrigger(anim, WpnChangedHash)} WpnChangedUB:{HasTrigger(anim, WpnChangedUBHash)}";
+        }
+
+        private static string DescribeAnimatorLayers(Animator anim)
+        {
+            if (anim == null)
+                return "layers=null";
+
+            var sb = new System.Text.StringBuilder("layers=[");
+            for (int i = 0; i < anim.layerCount; i++)
+            {
+                if (i > 0)
+                    sb.Append(" | ");
+
+                var info = anim.GetCurrentAnimatorStateInfo(i);
+                var clips = anim.GetCurrentAnimatorClipInfo(i);
+                string clipName = clips.Length > 0 && clips[0].clip != null
+                    ? clips[0].clip.name
+                    : "(no clip)";
+                sb.Append(i)
+                    .Append(':')
+                    .Append(anim.GetLayerName(i))
+                    .Append(" w=")
+                    .Append(anim.GetLayerWeight(i).ToString("F2"))
+                    .Append(" state=#")
+                    .Append(info.fullPathHash.ToString("X8"))
+                    .Append(" clip='")
+                    .Append(clipName)
+                    .Append('\'')
+                    .Append(" norm=")
+                    .Append(info.normalizedTime.ToString("F2"));
+
+                if (anim.IsInTransition(i))
+                {
+                    var next = anim.GetNextAnimatorStateInfo(i);
+                    var nextClips = anim.GetNextAnimatorClipInfo(i);
+                    string nextClipName = nextClips.Length > 0 && nextClips[0].clip != null
+                        ? nextClips[0].clip.name
+                        : "(no clip)";
+                    sb.Append(" transition=True next=#")
+                        .Append(next.fullPathHash.ToString("X8"))
+                        .Append(" nextClip='")
+                        .Append(nextClipName)
+                        .Append('\'')
+                        .Append(" nextNorm=")
+                        .Append(next.normalizedTime.ToString("F2"));
+                }
+            }
+
+            sb.Append(']');
+            return sb.ToString();
+        }
+
+        private static bool HasTrigger(Animator anim, int hash)
+        {
+            return AnimatorHasHash(anim, hash, AnimatorControllerParameterType.Trigger);
         }
 
         // ── Animation Event Callbacks ─────────────────────────────────────────
         // Called by Animator clip events. Function names must match exactly.
         // Set these on the appropriate animation clip frames in the Animator window.
 
-        /// <summary>Bullet exits barrel — add VFX timing here if WeaponSystem doesn't cover it.</summary>
+        /// <summary>Logs the Animator state one frame after a trigger is set.</summary>
+        private void ScheduleAnimPostFrameLog(string eventName, string details)
+        {
+            if (PhaseTestLog.IsEnabled(PhaseTestLogCategory.Animation, eventName, details))
+                StartCoroutine(LogAnimPostFrame(eventName, details));
+        }
+
+        private IEnumerator LogAnimPostFrame(string eventName, string details)
+        {
+            yield return null;
+            LogAnimEvent(eventName, _actorUtils?.charAnimator, details);
+        }
+
+        /// <summary>Bullet exits barrel; add VFX timing here if WeaponSystem does not cover it.</summary>
         public void OnAnimEventFireBullet() { /* WeaponSystem.OnShotFired covers audio. Add VFX here if needed. */ }
 
         /// <summary>Called at the frame when the weapon becomes visible (draw animation done).</summary>
@@ -854,6 +1504,7 @@ namespace NightHunt.Gameplay.Character
             _weaponModelController?.ShowPendingWeaponModelFromAnimation();
             if (WeaponAnimDebugEnabled())
                 Debug.Log($"[ANIM_FLOW] OnAnimEventDrawWeapon slot={_activeSlot?.ToString() ?? "None"} type={_activeWeaponType}");
+            LogAnimEvent("AnimEventDrawWeapon", _actorUtils?.charAnimator, "event=OnAnimEventDrawWeapon");
         }
 
         /// <summary>Called at the frame when the weapon should be hidden (holster done).</summary>
@@ -862,22 +1513,29 @@ namespace NightHunt.Gameplay.Character
             _weaponModelController?.CompleteHolsterFromAnimation();
             if (WeaponAnimDebugEnabled())
                 Debug.Log($"[ANIM_FLOW] OnAnimEventHolsterComplete slot={_activeSlot?.ToString() ?? "None"} type={_activeWeaponType}");
+            LogAnimEvent("AnimEventHolsterComplete", _actorUtils?.charAnimator, "event=OnAnimEventHolsterComplete");
         }
 
         /// <summary>Magazine ejects (reload-out phase). Play reload-out audio here.</summary>
         public void OnAnimEventReloadOut()
         {
+            LogAnimEvent("AnimEventReloadOut", _actorUtils?.charAnimator, "event=OnAnimEventReloadOut");
             // TODO: AudioManager.Instance.Play3D(Library.GetReloadOut(_activeWeaponClass), transform.position, ...);
         }
 
         /// <summary>New magazine inserted (reload-in phase). Play reload-in audio here.</summary>
         public void OnAnimEventReloadIn()
         {
+            LogAnimEvent("AnimEventReloadIn", _actorUtils?.charAnimator, "event=OnAnimEventReloadIn");
             // TODO: AudioManager.Instance.Play3D(Library.GetReloadIn(_activeWeaponClass), transform.position, ...);
         }
 
         /// <summary>Reload animation fully done (bolt charged / chamber closed).</summary>
-        public void OnAnimEventReloadComplete() { /* Optionally signal WeaponSystem that anim is done. */ }
+        public void OnAnimEventReloadComplete()
+        {
+            LogAnimEvent("AnimEventReloadComplete", _actorUtils?.charAnimator, "event=OnAnimEventReloadComplete");
+            /* Optionally signal WeaponSystem that anim is done. */
+        }
 
         /// <summary>Melee damage window — notify melee system to run hit detection.</summary>
         public void OnAnimEventMeleeHit()
@@ -889,6 +1547,7 @@ namespace NightHunt.Gameplay.Character
             }
 
             _meleeDamageController?.RequestMeleeHit();
+            LogAnimEvent("AnimEventMeleeHit", _actorUtils?.charAnimator, "event=OnAnimEventMeleeHit");
         }
 
         private IEnumerator MeleeHitFallbackCoroutine()
@@ -904,34 +1563,60 @@ namespace NightHunt.Gameplay.Character
         // Skip silently when an animator controller doesn't have a given param yet.
         // Prevents log spam when using legacy models that lack new params.
 
-        private static void SafeSetBool(Animator anim, int hash, bool value)
+        private static bool SafeSetBool(Animator anim, int hash, bool value)
         {
             foreach (var p in anim.parameters)
-                if (p.nameHash == hash) { anim.SetBool(hash, value); return; }
+                if (p.nameHash == hash && p.type == AnimatorControllerParameterType.Bool) { anim.SetBool(hash, value); return true; }
+
+            return false;
         }
 
-        private static void SafeSetInt(Animator anim, int hash, int value)
+        private static bool SafeSetInt(Animator anim, int hash, int value)
         {
             foreach (var p in anim.parameters)
-                if (p.nameHash == hash) { anim.SetInteger(hash, value); return; }
+                if (p.nameHash == hash && p.type == AnimatorControllerParameterType.Int) { anim.SetInteger(hash, value); return true; }
+
+            return false;
         }
 
-        private static void SafeSetFloat(Animator anim, int hash, float value)
+        private static bool SafeSetFloat(Animator anim, int hash, float value)
         {
             foreach (var p in anim.parameters)
-                if (p.nameHash == hash) { anim.SetFloat(hash, value); return; }
+                if (p.nameHash == hash && p.type == AnimatorControllerParameterType.Float) { anim.SetFloat(hash, value); return true; }
+
+            return false;
         }
 
-        private static void SafeSetTrigger(Animator anim, int hash)
+        private static bool SafeSetTrigger(Animator anim, int hash)
         {
             foreach (var p in anim.parameters)
-                if (p.nameHash == hash) { anim.SetTrigger(hash); return; }
+                if (p.nameHash == hash && p.type == AnimatorControllerParameterType.Trigger) { anim.SetTrigger(hash); return true; }
+
+            return false;
         }
 
-        private static void SafeResetTrigger(Animator anim, int hash)
+        private static bool SafeResetTrigger(Animator anim, int hash)
         {
             foreach (var p in anim.parameters)
-                if (p.nameHash == hash) { anim.ResetTrigger(hash); return; }
+                if (p.nameHash == hash && p.type == AnimatorControllerParameterType.Trigger) { anim.ResetTrigger(hash); return true; }
+
+            return false;
         }
+    }
+
+    internal sealed class CharacterAnimEventRelay : MonoBehaviour
+    {
+        internal CharacterAnimationController controller;
+
+        public void OnAnimEventFireBullet() => controller?.OnAnimEventFireBullet();
+        public void OnAnimEventDrawWeapon() => controller?.OnAnimEventDrawWeapon();
+        public void OnAnimEventHolsterComplete() => controller?.OnAnimEventHolsterComplete();
+        public void OnAnimEventReloadStart() => controller?.OnAnimEventReloadOut();
+        public void OnAnimEventReloadInsert() => controller?.OnAnimEventReloadIn();
+        public void OnAnimEventReloadEnd() => controller?.OnAnimEventReloadComplete();
+        public void OnAnimEventReloadOut() => controller?.OnAnimEventReloadOut();
+        public void OnAnimEventReloadIn() => controller?.OnAnimEventReloadIn();
+        public void OnAnimEventReloadComplete() => controller?.OnAnimEventReloadComplete();
+        public void OnAnimEventMeleeHit() => controller?.OnAnimEventMeleeHit();
     }
 }

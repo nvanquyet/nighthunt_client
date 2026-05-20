@@ -43,6 +43,9 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Tooltip("Amount / magnitude.")]
         public float Value;
 
+        [Tooltip("How Value modifies StatType for generic buff/debuff effects.")]
+        public ModifierType ModifierType;
+
         [Tooltip("Duration in seconds for time-based effects (HealOverTime, buffs …). 0 = permanent.")]
         public float Duration;
 
@@ -98,5 +101,11 @@ namespace NightHunt.GameplaySystems.Core.Data
         PlaceSlowField      = 53,   // TRAP_SHOCK — slow / stun field
         DeploySmokeScreen   = 54,   // (ThrowableDefinition uses Smoke type; kept for completeness)
         DisableBeacon       = 55,   // UTIL_EMP  — (ThrowableDefinition uses Impact type; kept for completeness)
+
+        // Generic StatType + ModifierType + Value effect for boosters/debuff items.
+        ModifyStat          = 60,
+
+        // Tactical intel
+        RevealEnemyPlayers  = 61,   // RADAR_SCANNER — reveal enemy positions to the user for Duration seconds
     }
 }

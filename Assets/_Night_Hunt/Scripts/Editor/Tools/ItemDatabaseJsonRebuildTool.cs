@@ -141,25 +141,29 @@ namespace NightHunt.Editor.Tools
             // WEAPON_PISTOL — DamageBody:18, FireRate:4/s(240RPM), Mag:15, Reserve:45, Reload:1.8s
             //              SpreadBase:0.1→3°, SpreadMoveMul:1.2, MoveSpeedMul:1.0, Weight:1.2, Common
             n += MakeWeapon("WEAPON_PISTOL", "Pistol", WeaponClass.Pistol, ItemRarity.Common,
-                damage:18f, fireRPM:240f, mag:15, reserve:45, reload:1.8f,
-                spread:3f, spreadPenalty:1.2f, weight:1.2f, moveSpeedPct:0f);
+                damage:14f, fireRPM:420f, mag:15, reserve:120, reload:1.4f,
+                spread:3f, spreadPenalty:1.2f, weight:1.2f, moveSpeedPct:-0.03f);
 
             // SMG_SMG — DamageBody:15, FireRate:10/s(600RPM), Mag:30, Reserve:90, Reload:2.2s
             //           SpreadBase:0.2→6°, SpreadMoveMul:1.3, MoveSpeedMul:0.92(-8%), Weight:2.8, Common
             n += MakeWeapon("SMG_SMG", "SMG", WeaponClass.SMG, ItemRarity.Common,
-                damage:15f, fireRPM:600f, mag:30, reserve:90, reload:2.2f,
-                spread:6f, spreadPenalty:1.3f, weight:2.8f, moveSpeedPct:-0.08f);
+                damage:11f, fireRPM:900f, mag:40, reserve:280, reload:1.9f,
+                spread:6f, spreadPenalty:1.3f, weight:2.8f, moveSpeedPct:-0.04f);
 
             // WEAPON_AR — DamageBody:25, FireRate:8/s(480RPM), Mag:30, Reserve:120, Reload:2.4s
             //            SpreadBase:0.25→7.5°, SpreadMoveMul:1.4, MoveSpeedMul:0.87(-13%), Weight:4, Rare
             n += MakeWeapon("WEAPON_AR", "AR", WeaponClass.Rifle, ItemRarity.Rare,
-                damage:25f, fireRPM:480f, mag:30, reserve:120, reload:2.4f,
-                spread:7.5f, spreadPenalty:1.4f, weight:4.0f, moveSpeedPct:-0.13f);
+                damage:18f, fireRPM:780f, mag:36, reserve:288, reload:2.2f,
+                spread:7.5f, spreadPenalty:1.4f, weight:4.0f, moveSpeedPct:-0.08f);
+
+            n += MakeWeapon("WEAPON_MACHINE_GUN", "Machine Gun", WeaponClass.MachineGun, ItemRarity.Epic,
+                damage:12f, fireRPM:900f, mag:100, reserve:500, reload:4.2f,
+                spread:7.5f, spreadPenalty:1.8f, weight:7.2f, moveSpeedPct:-0.18f);
 
             // WEAPON_SHOTGUN — DamageBody:10(×pellets), FireRate:1.2/s(72RPM), Mag:6, Reserve:24, Reload:2.8s
             //             SpreadBase:0.3→9°, SpreadMoveMul:1.5, MoveSpeedMul:0.75(-25%), Weight:4.5, Rare
             n += MakeWeapon("WEAPON_SHOTGUN", "Shotgun", WeaponClass.Shotgun, ItemRarity.Rare,
-                damage:10f, fireRPM:72f, mag:6, reserve:24, reload:2.8f,
+                damage:7f, fireRPM:96f, mag:8, reserve:56, reload:2.6f,
                 spread:9f, spreadPenalty:1.5f, weight:4.5f, moveSpeedPct:-0.25f);
 
             // WEAPON_SNIPER — DamageBody:80, FireRate:0.8/s(48RPM), Mag:5, Reserve:15, Reload:3.0s
@@ -224,6 +228,12 @@ namespace NightHunt.Editor.Tools
                 weight:0.2f, castTime:0.5f, maxStack:2,
                 effects: new[] { Eff(ConsumableEffectType.VisionIncrease, PlayerStatType.VisionRange,
                     5f, 10f, false, "+5 vision range for 10s") });
+
+            // RADAR_SCANNER — Instant tactical intel, reveals enemy player positions to owner for 5s.
+            n += MakeConsumable("RADAR_SCANNER", "Radar Scanner", ItemRarity.Epic,
+                weight:0.3f, castTime:0.75f, maxStack:1,
+                effects: new[] { Eff(ConsumableEffectType.RevealEnemyPlayers, PlayerStatType.VisionRange,
+                    1f, 5f, true, "Reveal enemy player positions for 5s", buffId:"radar_scanner") });
 
             // KEY_CORE — Instant, UnlockObjective, Stack 1, Weight 0.1, Legendary, not droppable
             n += MakeConsumable("KEY_CORE", "Energy Core Key", ItemRarity.Legendary,
@@ -369,6 +379,7 @@ namespace NightHunt.Editor.Tools
             def.Weight       = weight;
             def.StatConfig   = cfg;
             def.WeaponClass  = weapClass;
+            def.AnimatorWeaponTypeOverride = 0;
             def.ValidSlots   = new[] { SlotLocationType.Inventory, SlotLocationType.Weapon };
             EditorUtility.SetDirty(def);
 
@@ -427,6 +438,7 @@ namespace NightHunt.Editor.Tools
             def.VisualPrefab = LoadPrefab("Assets/_Night_Hunt/Prefabs/Items/Visuals/Visual_GenericDeployable.prefab");
             def.NetworkDeployablePrefab = LoadPrefab($"Assets/_Night_Hunt/Prefabs/Items/Runtime/Deployables/{networkPrefabName}.prefab");
             def.PlacementPreviewPrefab = def.VisualPrefab;
+            def.OverridePrefabHealth = false;
             def.MaxHP = 100;
             def.PlacementDistance = 3f;
             def.PlacementCheckRadius = 0.5f;

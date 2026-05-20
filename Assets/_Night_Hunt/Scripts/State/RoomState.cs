@@ -54,17 +54,30 @@ namespace NightHunt.State
 
         public void SetRoom(RoomResponse room)
         {
+            if (room == null)
+            {
+                if (IsInRoom)
+                    ClearRoom();
+                return;
+            }
+
+            if (room.roomId <= 0)
+            {
+                Debug.LogWarning($"[RoomState] Ignoring invalid room payload: roomId={room.roomId}, status={room.status ?? ""}, players={room.players?.Count ?? -1}");
+                return;
+            }
+
             bool wasInRoom = IsInRoom;
-            bool isNewRoom = !wasInRoom || CurrentRoom?.roomId != room?.roomId;
+            bool isNewRoom = !wasInRoom || CurrentRoom?.roomId != room.roomId;
             
             CurrentRoom = room;
             
             // Trigger events
-            if (isNewRoom && room != null)
+            if (isNewRoom)
             {
                 OnRoomJoined?.Invoke(room);
             }
-            else if (room != null)
+            else
             {
                 OnRoomStateChanged?.Invoke(room);
             }

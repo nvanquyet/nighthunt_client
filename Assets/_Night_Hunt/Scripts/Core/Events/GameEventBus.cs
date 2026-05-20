@@ -30,8 +30,31 @@ namespace NightHunt.Core
         public event Action<GameWebSocketService.YouWereKickedEvent> OnYouWereKicked;
         public event Action OnForceLogout;
         public event Action OnSessionExpired;
+        public event Action OnWebSocketConnected;
         public event Action OnWebSocketDisconnected;
+        public event Action OnWebSocketReconnectFailed;
         public event Action<string> OnWebSocketError;
+        public event Action<GameWebSocketService.MatchFoundEvent> OnMatchFound;
+        public event Action<GameWebSocketService.MatchReadyEvent> OnMatchReady;
+        public event Action<GameWebSocketService.DsReadyEvent> OnDsReady;
+        public event Action<GameWebSocketService.MatchCancelledEvent> OnMatchCancelled;
+        public event Action<GameWebSocketService.MatchEndedWsEvent> OnMatchEnded;
+        public event Action<GameWebSocketService.FriendStatusChangedEvent> OnFriendStatusChanged;
+        public event Action<GameWebSocketService.FriendRequestEvent> OnFriendRequestReceived;
+        public event Action<GameWebSocketService.FriendRequestAcceptedEvent> OnFriendRequestAccepted;
+        public event Action<GameWebSocketService.FriendRequestDeclinedEvent> OnFriendRequestDeclined;
+        public event Action<GameWebSocketService.FriendRequestCancelledEvent> OnFriendRequestCancelled;
+        public event Action<GameWebSocketService.FriendRemovedEvent> OnFriendRemoved;
+        public event Action<GameWebSocketService.PartyInvitationEvent> OnPartyInvitationReceived;
+        public event Action<GameWebSocketService.PartyInvitationResponseEvent> OnPartyInvitationDeclined;
+        public event Action<GameWebSocketService.PartyInvitationResponseEvent> OnPartyInvitationCancelled;
+        public event Action<GameWebSocketService.PartyInvitationResponseEvent> OnPartyInvitationExpired;
+        public event Action<GameWebSocketService.PartyMemberJoinedEvent> OnPartyMemberJoined;
+        public event Action<GameWebSocketService.PartyMemberLeftEvent> OnPartyMemberLeft;
+        public event Action<GameWebSocketService.PartyMemberKickedEvent> OnPartyMemberKicked;
+        public event Action<GameWebSocketService.PartyDisbandedEvent> OnPartyDisbanded;
+        public event Action<GameWebSocketService.PartyHostChangedEvent> OnPartyHostChanged;
+        public event Action<GameWebSocketService.PartyStatusChangedEvent> OnPartyStatusChanged;
 
         // Application Lifecycle Events
         public event Action OnAppFocusLost;
@@ -99,8 +122,31 @@ namespace NightHunt.Core
                 ws.OnYouWereKicked += HandleYouWereKicked;
                 ws.OnForceLogout += HandleForceLogout;
                 ws.OnSessionExpired += HandleSessionExpired;
+                ws.OnConnected += HandleWebSocketConnected;
                 ws.OnDisconnected += HandleWebSocketDisconnected;
+                ws.OnReconnectFailed += HandleWebSocketReconnectFailed;
                 ws.OnError += HandleWebSocketError;
+                ws.OnMatchFound += HandleMatchFound;
+                ws.OnMatchReady += HandleMatchReady;
+                ws.OnDsReady += HandleDsReady;
+                ws.OnMatchCancelled += HandleMatchCancelled;
+                ws.OnMatchEnded += HandleMatchEnded;
+                ws.OnFriendStatusChanged += HandleFriendStatusChanged;
+                ws.OnFriendRequestReceived += HandleFriendRequestReceived;
+                ws.OnFriendRequestAccepted += HandleFriendRequestAccepted;
+                ws.OnFriendRequestDeclined += HandleFriendRequestDeclined;
+                ws.OnFriendRequestCancelled += HandleFriendRequestCancelled;
+                ws.OnFriendRemoved += HandleFriendRemoved;
+                ws.OnPartyInvitationReceived += HandlePartyInvitationReceived;
+                ws.OnPartyInvitationDeclined += HandlePartyInvitationDeclined;
+                ws.OnPartyInvitationCancelled += HandlePartyInvitationCancelled;
+                ws.OnPartyInvitationExpired += HandlePartyInvitationExpired;
+                ws.OnPartyMemberJoined += HandlePartyMemberJoined;
+                ws.OnPartyMemberLeft += HandlePartyMemberLeft;
+                ws.OnPartyMemberKicked += HandlePartyMemberKicked;
+                ws.OnPartyDisbanded += HandlePartyDisbanded;
+                ws.OnPartyHostChanged += HandlePartyHostChanged;
+                ws.OnPartyStatusChanged += HandlePartyStatusChanged;
             }
 
             // Subscribe to GameManager lifecycle events
@@ -151,8 +197,31 @@ namespace NightHunt.Core
                 ws.OnYouWereKicked -= HandleYouWereKicked;
                 ws.OnForceLogout -= HandleForceLogout;
                 ws.OnSessionExpired -= HandleSessionExpired;
+                ws.OnConnected -= HandleWebSocketConnected;
                 ws.OnDisconnected -= HandleWebSocketDisconnected;
+                ws.OnReconnectFailed -= HandleWebSocketReconnectFailed;
                 ws.OnError -= HandleWebSocketError;
+                ws.OnMatchFound -= HandleMatchFound;
+                ws.OnMatchReady -= HandleMatchReady;
+                ws.OnDsReady -= HandleDsReady;
+                ws.OnMatchCancelled -= HandleMatchCancelled;
+                ws.OnMatchEnded -= HandleMatchEnded;
+                ws.OnFriendStatusChanged -= HandleFriendStatusChanged;
+                ws.OnFriendRequestReceived -= HandleFriendRequestReceived;
+                ws.OnFriendRequestAccepted -= HandleFriendRequestAccepted;
+                ws.OnFriendRequestDeclined -= HandleFriendRequestDeclined;
+                ws.OnFriendRequestCancelled -= HandleFriendRequestCancelled;
+                ws.OnFriendRemoved -= HandleFriendRemoved;
+                ws.OnPartyInvitationReceived -= HandlePartyInvitationReceived;
+                ws.OnPartyInvitationDeclined -= HandlePartyInvitationDeclined;
+                ws.OnPartyInvitationCancelled -= HandlePartyInvitationCancelled;
+                ws.OnPartyInvitationExpired -= HandlePartyInvitationExpired;
+                ws.OnPartyMemberJoined -= HandlePartyMemberJoined;
+                ws.OnPartyMemberLeft -= HandlePartyMemberLeft;
+                ws.OnPartyMemberKicked -= HandlePartyMemberKicked;
+                ws.OnPartyDisbanded -= HandlePartyDisbanded;
+                ws.OnPartyHostChanged -= HandlePartyHostChanged;
+                ws.OnPartyStatusChanged -= HandlePartyStatusChanged;
             }
 
             if (GameManager.Instance != null)
@@ -193,8 +262,31 @@ namespace NightHunt.Core
         private void HandleYouWereKicked(GameWebSocketService.YouWereKickedEvent evt) => OnYouWereKicked?.Invoke(evt);
         private void HandleForceLogout() => OnForceLogout?.Invoke();
         private void HandleSessionExpired() => OnSessionExpired?.Invoke();
+        private void HandleWebSocketConnected() => OnWebSocketConnected?.Invoke();
         private void HandleWebSocketDisconnected() => OnWebSocketDisconnected?.Invoke();
+        private void HandleWebSocketReconnectFailed() => OnWebSocketReconnectFailed?.Invoke();
         private void HandleWebSocketError(string error) => OnWebSocketError?.Invoke(error);
+        private void HandleMatchFound(GameWebSocketService.MatchFoundEvent evt) => OnMatchFound?.Invoke(evt);
+        private void HandleMatchReady(GameWebSocketService.MatchReadyEvent evt) => OnMatchReady?.Invoke(evt);
+        private void HandleDsReady(GameWebSocketService.DsReadyEvent evt) => OnDsReady?.Invoke(evt);
+        private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent evt) => OnMatchCancelled?.Invoke(evt);
+        private void HandleMatchEnded(GameWebSocketService.MatchEndedWsEvent evt) => OnMatchEnded?.Invoke(evt);
+        private void HandleFriendStatusChanged(GameWebSocketService.FriendStatusChangedEvent evt) => OnFriendStatusChanged?.Invoke(evt);
+        private void HandleFriendRequestReceived(GameWebSocketService.FriendRequestEvent evt) => OnFriendRequestReceived?.Invoke(evt);
+        private void HandleFriendRequestAccepted(GameWebSocketService.FriendRequestAcceptedEvent evt) => OnFriendRequestAccepted?.Invoke(evt);
+        private void HandleFriendRequestDeclined(GameWebSocketService.FriendRequestDeclinedEvent evt) => OnFriendRequestDeclined?.Invoke(evt);
+        private void HandleFriendRequestCancelled(GameWebSocketService.FriendRequestCancelledEvent evt) => OnFriendRequestCancelled?.Invoke(evt);
+        private void HandleFriendRemoved(GameWebSocketService.FriendRemovedEvent evt) => OnFriendRemoved?.Invoke(evt);
+        private void HandlePartyInvitationReceived(GameWebSocketService.PartyInvitationEvent evt) => OnPartyInvitationReceived?.Invoke(evt);
+        private void HandlePartyInvitationDeclined(GameWebSocketService.PartyInvitationResponseEvent evt) => OnPartyInvitationDeclined?.Invoke(evt);
+        private void HandlePartyInvitationCancelled(GameWebSocketService.PartyInvitationResponseEvent evt) => OnPartyInvitationCancelled?.Invoke(evt);
+        private void HandlePartyInvitationExpired(GameWebSocketService.PartyInvitationResponseEvent evt) => OnPartyInvitationExpired?.Invoke(evt);
+        private void HandlePartyMemberJoined(GameWebSocketService.PartyMemberJoinedEvent evt) => OnPartyMemberJoined?.Invoke(evt);
+        private void HandlePartyMemberLeft(GameWebSocketService.PartyMemberLeftEvent evt) => OnPartyMemberLeft?.Invoke(evt);
+        private void HandlePartyMemberKicked(GameWebSocketService.PartyMemberKickedEvent evt) => OnPartyMemberKicked?.Invoke(evt);
+        private void HandlePartyDisbanded(GameWebSocketService.PartyDisbandedEvent evt) => OnPartyDisbanded?.Invoke(evt);
+        private void HandlePartyHostChanged(GameWebSocketService.PartyHostChangedEvent evt) => OnPartyHostChanged?.Invoke(evt);
+        private void HandlePartyStatusChanged(GameWebSocketService.PartyStatusChangedEvent evt) => OnPartyStatusChanged?.Invoke(evt);
 
         // Lifecycle Event Handlers
         private void HandleAppFocusLost() => OnAppFocusLost?.Invoke();

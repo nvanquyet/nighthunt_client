@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using NightHunt.Common;
@@ -76,7 +77,7 @@ namespace NightHunt.Services.Backend
 
             if (traceEndpoint)
             {
-                Debug.Log($"[BackendHttpClient][TRACE] Request => {method} {endpoint} (userId={SessionState.Instance?.UserId ?? 0}, auth={(SessionState.Instance != null && SessionState.Instance.IsAuthenticated)})");
+                Debug.Log($"[FLOW][HTTP] Request => {method} {endpoint} (userId={SessionState.Instance?.UserId ?? 0}, auth={(SessionState.Instance != null && SessionState.Instance.IsAuthenticated)})");
             }
 
             UnityWebRequest request;
@@ -92,6 +93,10 @@ namespace NightHunt.Services.Backend
             else
             {
                 string jsonData = data != null ? JsonUtility.ToJson(data) : "{}";
+                if (traceEndpoint)
+                {
+                    Debug.Log($"[FLOW][HTTP] Payload {endpoint}: {TruncateForLog(RedactForLog(jsonData), TraceBodyMaxLen)}");
+                }
                 request = new UnityWebRequest(url, method)
                 {
                     uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonData)),
@@ -133,7 +138,7 @@ namespace NightHunt.Services.Backend
             {
                 if (traceEndpoint)
                 {
-                    Debug.Log($"[BackendHttpClient][TRACE] Response <= {method} {endpoint} status={request.responseCode} result={request.result}");
+                    Debug.Log($"[FLOW][HTTP] Response <= {method} {endpoint} status={request.responseCode} result={request.result}");
                 }
 
                 // SSL errors now handled at request level via CertificateHandler.
@@ -143,7 +148,7 @@ namespace NightHunt.Services.Backend
                     string jsonResponse = request.downloadHandler.text;
                     if (traceEndpoint)
                     {
-                        Debug.Log($"[BackendHttpClient][TRACE] Body {endpoint}: {TruncateForLog(jsonResponse, TraceBodyMaxLen)}");
+                        Debug.Log($"[FLOW][HTTP] Body {endpoint}: {TruncateForLog(RedactForLog(jsonResponse), TraceBodyMaxLen)}");
                     }
 
                     // IMPORTANT: Check responseCode even if result is Success
@@ -195,7 +200,7 @@ namespace NightHunt.Services.Backend
                             if (traceEndpoint)
                             {
                                 bool dataNull = (object)apiResult.data == null;
-                                Debug.Log($"[BackendHttpClient][TRACE] Parsed ApiResult<{typeof(T).Name}> success={apiResult.success}, dataNull={dataNull}, errorCode={apiResult.errorCode}, message={apiResult.message}");
+                                Debug.Log($"[FLOW][HTTP] Parsed ApiResult<{typeof(T).Name}> success={apiResult.success}, dataNull={dataNull}, errorCode={apiResult.errorCode}, message={apiResult.message}");
                             }
 
                             // Check if success field is set correctly
@@ -232,7 +237,7 @@ namespace NightHunt.Services.Backend
                         if (traceEndpoint)
                         {
                             bool dataNull = (object)resultData == null;
-                            Debug.Log($"[BackendHttpClient][TRACE] Parsed direct<{typeof(T).Name}> dataNull={dataNull}");
+                            Debug.Log($"[FLOW][HTTP] Parsed direct<{typeof(T).Name}> dataNull={dataNull}");
                         }
                         return ApiResult<T>.Ok(resultData);
                     }
@@ -255,7 +260,7 @@ namespace NightHunt.Services.Backend
 
                     if (traceEndpoint)
                     {
-                        Debug.LogWarning($"[BackendHttpClient][TRACE] Error body {endpoint}: {TruncateForLog(responseText, TraceBodyMaxLen)}");
+                        Debug.LogWarning($"[FLOW][HTTP] Error body {endpoint}: {TruncateForLog(RedactForLog(responseText), TraceBodyMaxLen)}");
                     }
 
                     // Try to parse as ApiResult to get message and errorCode from backend
@@ -329,7 +334,20 @@ namespace NightHunt.Services.Backend
 
             return endpoint.StartsWith("/api/friends", StringComparison.OrdinalIgnoreCase)
                    || endpoint.StartsWith("/api/party", StringComparison.OrdinalIgnoreCase)
+                   || endpoint.StartsWith("/api/rooms", StringComparison.OrdinalIgnoreCase)
+                   || endpoint.StartsWith("/api/matchmaking", StringComparison.OrdinalIgnoreCase)
+                   || endpoint.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(endpoint, Constants.API_PROFILE_GET, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string RedactForLog(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            return Regex.Replace(
+                text,
+                "(\"(?:accessToken|refreshToken|token|joinToken|lobbyToken|password|sessionId)\"\\s*:\\s*\")[^\"]*(\")",
+                "$1<redacted>$2",
+                RegexOptions.IgnoreCase);
         }
 
         private static string TruncateForLog(string text, int maxLen)
@@ -341,8 +359,18 @@ namespace NightHunt.Services.Backend
 
         private void HandleAuthError(long statusCode, string errorCode, string message)
         {
+            bool authOrThrottle =
+                statusCode == 401 ||
+                statusCode == 403 ||
+                statusCode == 429 ||
+                string.Equals(errorCode, ErrorCodes.RATE_LIMIT_EXCEEDED) ||
+                (!string.IsNullOrEmpty(errorCode) && errorCode.StartsWith("AUTH_", StringComparison.OrdinalIgnoreCase));
+
+            if (!authOrThrottle)
+                return;
+
             Debug.Log(
-                $"[BackendHttpClient] HandleAuthError called - statusCode: {statusCode}, errorCode: {errorCode}, message: {message}");
+                $"[FLOW][HTTP] HandleAuthError statusCode={statusCode} errorCode={errorCode ?? "null"} message={message ?? "null"}");
 
             // Check for ban errors first
             if (string.Equals(errorCode, ErrorCodes.AUTH_ACCOUNT_BANNED) ||
@@ -365,7 +393,7 @@ namespace NightHunt.Services.Backend
                 }
 
                 // Show ban notification (can be enhanced with UI popup)
-                ShowLoginBlockedNotice(message ?? "Tài khoản hoặc thiết bị đã bị khóa.");
+                ShowLoginBlockedNotice(message ?? "Your account or device has been locked.");
                 return;
             }
 
@@ -404,9 +432,9 @@ namespace NightHunt.Services.Backend
                             Debug.Log(
                                 "[BackendHttpClient] Starting ForceLogoutCoroutine for active session (AUTH_FORCE_LOGOUT)");
                             StartCoroutine(ForceLogoutCoroutine(
-                                title: "Warning log in",
+                                title: "Login Warning",
                                 message: message ??
-                                         "Có người khác đã log in vào tài khoản của bạn từ thiết bị khác. Bạn sẽ bị log out."
+                                         "Your account was signed in from another device. You will be logged out."
                             ));
                         }
                         else
@@ -438,7 +466,7 @@ namespace NightHunt.Services.Backend
                             Debug.Log(
                                 "[BackendHttpClient] Showing login blocked notice (AUTH_FORCE_LOGOUT during new login attempt)");
                             ShowLoginBlockedNotice(message ??
-                                                   "Tài khoản này has been log in ở nơi khác. Vui lòng thử lại sau.");
+                                                   "This account is already signed in elsewhere. Please try again later.");
                         }
                     }
                 }
@@ -462,7 +490,7 @@ namespace NightHunt.Services.Backend
                             StartCoroutine(ForceLogoutCoroutine(
                                 title: "Session expired",
                                 message: message ??
-                                         "Phiên log in của bạn đã expired. Vui lòng log in lại để tiếp tục."
+                                         "Your session has expired. Please log in again to continue."
                             ));
                         }
                         else
@@ -481,7 +509,7 @@ namespace NightHunt.Services.Backend
             if (noticePopup != null)
             {
                 noticePopup.Show(
-                    title: "Đăng nhập failed",
+                    title: "Login Failed",
                     message: message
                 );
             }
@@ -499,7 +527,7 @@ namespace NightHunt.Services.Backend
             {
                 noticePopup.Show(
                     title: title ?? "Warning",
-                    message: message ?? "Phiên log in đã expired. Bạn sẽ bị log out."
+                    message: message ?? "Your session has expired. You will be logged out."
                 );
             }
 
@@ -549,7 +577,9 @@ namespace NightHunt.Services.Backend
             }
 
             // Logout và quay về Login panel (không load scene, dùng UINavigator)
-            LoginView.Logout();
+            SessionTerminationFlow.ShowAndLogout(
+                title ?? "Warning",
+                message ?? "Your session has expired. Please log in again.");
 
             Interlocked.Exchange(ref _forceLogoutFlag, 0);
         }

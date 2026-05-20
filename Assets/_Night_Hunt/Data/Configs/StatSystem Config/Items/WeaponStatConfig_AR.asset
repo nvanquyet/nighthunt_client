@@ -14,11 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Stats:
   - Type: 10
-    DefaultValue: 30
+    DefaultValue: 18
     MinValue: 0
     MaxValue: 200
   - Type: 11
-    DefaultValue: 600
+    DefaultValue: 780
     MinValue: 0
     MaxValue: 1200
   - Type: 12
@@ -42,20 +42,20 @@ MonoBehaviour:
     MinValue: 0
     MaxValue: 10
   - Type: 20
-    DefaultValue: 30
+    DefaultValue: 36
     MinValue: 1
     MaxValue: 200
   - Type: 23
-    DefaultValue: 300
+    DefaultValue: 288
     MinValue: 0
     MaxValue: 2000
   - Type: 22
-    DefaultValue: 2.4
+    DefaultValue: 2.2
     MinValue: 0.1
     MaxValue: 15
   PlayerModifiers:
   - StatType: 4
-    Value: -5
+    Value: -0.08
     ModifierType: 1
     Description: AR penalty
   ItemModifiers: []

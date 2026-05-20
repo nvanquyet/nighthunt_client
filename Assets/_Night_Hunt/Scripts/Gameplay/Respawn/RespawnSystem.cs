@@ -12,6 +12,7 @@ using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Utilities;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Respawn
 {
@@ -101,6 +102,11 @@ namespace NightHunt.Gameplay.Respawn
                 if (needsBeacon && FindRespawnBeacon(player) == null)
                 {
                     Debug.Log($"[RespawnSystem] {player.DisplayName}: beacon destroyed during wait — respawn cancelled.");
+                    PhaseTestLog.Warning(
+                        PhaseTestLogCategory.Death,
+                        "RespawnCancelled",
+                        $"reason=beacon_destroyed player={player.DisplayName} team={player.TeamId} phase={phase}",
+                        this);
                     RpcNotifyRespawnFailed(player.Owner, "beacon_destroyed");
                     playersFailed.Add(player);
                     continue;
@@ -137,6 +143,11 @@ namespace NightHunt.Gameplay.Respawn
             {
                 string reason = GetCannotRespawnReason(player);
                 Debug.Log($"[RespawnSystem] Cannot respawn ({player.DisplayName}): {reason}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Death,
+                    "RespawnRejected",
+                    $"source=server-initiate reason={reason} player={player.DisplayName} team={player.TeamId}",
+                    this);
                 if (player.Owner != null)
                     RpcNotifyRespawnFailed(player.Owner, reason);
                 return;
@@ -145,12 +156,17 @@ namespace NightHunt.Gameplay.Respawn
             float delay = GetRespawnDelay();
             respawnTimers[player] = delay;
             networkRespawnDelay.Value = delay;
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnQueued",
+                $"source=server-initiate player={player.DisplayName} team={player.TeamId} delay={delay:F2} pending={respawnTimers.Count}",
+                this);
         }
 
         /// <summary>
         /// Server: Request respawn for player
         /// </summary>
-        [ServerRpc(RequireOwnership = true)]
+        [ServerRpc(RequireOwnership = false)]
         public void RequestRespawn(NetworkPlayer player, FishNet.Connection.NetworkConnection conn = null)
         {
             if (player == null) return;
@@ -158,12 +174,27 @@ namespace NightHunt.Gameplay.Respawn
 
             // Resolve connection — FishNet injects conn automatically for RequireOwnership RPCs.
             if (conn == null) conn = player.Owner;
+            if (conn != null && player.Owner != conn)
+            {
+                Debug.LogWarning($"[RespawnSystem] Reject respawn request: caller does not own {player.DisplayName}.");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Death,
+                    "RespawnRejected",
+                    $"source=client-request reason=owner-mismatch player={player.DisplayName} owner={player.Owner?.ClientId ?? -1} caller={conn?.ClientId ?? -1}",
+                    this);
+                return;
+            }
 
             // Check phase-based respawn rules — notify client when rejected
             if (!CanRespawn(player))
             {
                 string reason = GetCannotRespawnReason(player);
                 Debug.Log($"[RespawnSystem] Cannot respawn ({player.DisplayName}): {reason}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Death,
+                    "RespawnRejected",
+                    $"source=client-request reason={reason} player={player.DisplayName} team={player.TeamId}",
+                    this);
                 RpcNotifyRespawnFailed(conn, reason);
                 return;
             }
@@ -172,6 +203,11 @@ namespace NightHunt.Gameplay.Respawn
             float delay = GetRespawnDelay();
             respawnTimers[player] = delay;
             networkRespawnDelay.Value = delay;
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnQueued",
+                $"source=client-request player={player.DisplayName} team={player.TeamId} delay={delay:F2} pending={respawnTimers.Count}",
+                this);
         }
 
         /// <summary>
@@ -184,6 +220,11 @@ namespace NightHunt.Gameplay.Respawn
 
             Vector3 respawnPosition = GetRespawnPosition(player);
             Quaternion respawnRotation = player.transform.rotation;
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnApplyStart",
+                $"player={player.DisplayName} team={player.TeamId} pos={respawnPosition:F2} phase={phaseManager?.CurrentPhase.ToString() ?? "null"}",
+                this);
 
             // Issue #5: Destroy the beacon used to respawn (single-use per respawn)
             var usedBeacon = FindRespawnBeacon(player);
@@ -252,7 +293,12 @@ namespace NightHunt.Gameplay.Respawn
         {
             var zone = FindFirstObjectByType<LockdownZone>();
             if (zone != null)
-                return zone.Center;
+            {
+                float configuredRadius = _respawnConfig != null ? _respawnConfig.SafeZoneRespawnRadius : 20f;
+                float radius = Mathf.Max(0f, Mathf.Min(configuredRadius, zone.Radius * 0.75f));
+                Vector2 offset = Random.insideUnitCircle * radius;
+                return zone.Center + new Vector3(offset.x, 0f, offset.y);
+            }
 
             // Fallback: Use neutral team spawn point
             return GetDefaultSpawnPosition(null);
@@ -360,6 +406,11 @@ namespace NightHunt.Gameplay.Respawn
         private void OnPlayerRespawned(NetworkPlayer player)
         {
             Debug.Log($"[RespawnSystem] Player respawned: {player.DisplayName}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnApplyComplete",
+                $"player={player.DisplayName} team={player.TeamId} pos={player.transform.position:F2}",
+                this);
 
             // Mark alive via NetworkPlayer so RegistryService.GetAliveCount is accurate
             player.SetAlive(true);
@@ -372,10 +423,17 @@ namespace NightHunt.Gameplay.Respawn
         {
             // Clients: Forward to HUD so countdown timer can be shown
             if (!asServer)
+            {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Death,
+                    "RespawnDelaySynced",
+                    $"old={oldDelay:F2} new={newDelay:F2}",
+                    this);
                 GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.RespawnTimerEvent
                 {
                     DelaySeconds = newDelay
                 });
+            }
         }
 
         /// <summary>Notify the owning client their respawn was cancelled (beacon destroyed).</summary>
@@ -383,6 +441,11 @@ namespace NightHunt.Gameplay.Respawn
         private void RpcNotifyRespawnFailed(FishNet.Connection.NetworkConnection conn, string reason)
         {
             Debug.Log($"[RespawnSystem] Respawn cancelled: {reason}");
+            PhaseTestLog.Warning(
+                PhaseTestLogCategory.Death,
+                "RespawnCancelledClient",
+                $"reason={reason}",
+                this);
             GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.RespawnCancelledEvent
             {
                 Reason = reason

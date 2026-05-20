@@ -5,6 +5,7 @@ using UnityEngine.UI;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.UI;
+using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.Utilities;
@@ -79,6 +80,19 @@ namespace NightHunt.UI
             }
         }
 
+        private void OnEnable()
+        {
+            // Subscribe to the canonical game-action bus.
+            // All input sources (Key 4/5/6, UI buttons, mobile buttons) call
+            // GameActionBus.RequestItemSlot(type) which raises this event once.
+            GameActionBus.OnItemSlotRequested += HandleItemSlotFromBus;
+        }
+
+        private void OnDisable()
+        {
+            GameActionBus.OnItemSlotRequested -= HandleItemSlotFromBus;
+        }
+
         /// <summary>
         /// Called by GameHUDController after the HUD is initialized.
         /// Injects the shared progress bar if it was not assigned in the Inspector.
@@ -91,6 +105,7 @@ namespace NightHunt.UI
         private void OnDestroy()
         {
             UnsubscribeContext();
+            GameActionBus.OnItemSlotRequested -= HandleItemSlotFromBus;
             if (_cancelButton != null)
                 _cancelButton.onClick.RemoveListener(OnCancelClicked);
         }
@@ -265,6 +280,28 @@ namespace NightHunt.UI
             _context = null;
         }
 
+        // ── GameActionBus Handler ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Canonical handler for ALL item slot requests — keyboard, mobile button, UI click.
+        /// Every source routes through <see cref="GameActionBus.RequestItemSlot"/> which
+        /// raises this event exactly once, keeping UI state always in sync.
+        /// </summary>
+        private void HandleItemSlotFromBus(ItemType type)
+        {
+            // Only respond when gameplay input is active (Player layer enabled).
+            if (InputLayerManager.Instance != null &&
+                !InputLayerManager.Instance.IsLayerActive(InputLayer.Player) &&
+                !InputLayerManager.Instance.IsLayerActive(InputLayer.Inventory))
+                return;
+
+            var panel = FindPanel(type);
+            if (panel != null)
+                panel.ActivateShortcut(type);
+            else
+                TogglePanel(type);
+        }
+
         private void BindCombatShortcuts(CombatInputHandler combatHandler)
         {
             if (_combatHandler != null)
@@ -282,21 +319,12 @@ namespace NightHunt.UI
             }
         }
 
+        // These now route through the canonical bus so the HUD (subscribed above) reacts once.
         private void HandleThrowGrenadeShortcut()
-        {
-            var panel = FindPanel(ItemType.Throwable);
-            if (panel == null) { TogglePanel(ItemType.Throwable); return; }
-
-            panel.ActivateShortcut();
-        }
+            => GameActionBus.RequestItemSlot(ItemType.Throwable);
 
         private void HandleConsumablePanelShortcut()
-        {
-            var panel = FindPanel(ItemType.Consumable);
-            if (panel == null) { TogglePanel(ItemType.Consumable); return; }
-
-            panel.ActivateShortcut();
-        }
+            => GameActionBus.RequestItemSlot(ItemType.Consumable);
 
         private GameplaySystems.UI.Combat.ItemFilterPanel FindPanel(ItemType type)
         {

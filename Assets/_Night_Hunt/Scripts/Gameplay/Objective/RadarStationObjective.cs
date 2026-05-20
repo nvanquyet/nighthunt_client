@@ -1,9 +1,11 @@
 using UnityEngine;
+using FishNet.Connection;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.Networking;
 using NightHunt.Networking.Player;
 
 namespace NightHunt.Gameplay.Objective
@@ -26,7 +28,7 @@ namespace NightHunt.Gameplay.Objective
     {
         [Header("Radar Station Settings")]
         [SerializeField] private string objectiveId   = "RADAR_STATION";
-        [SerializeField] private string objectiveName = "Activate Radar Station";
+        [SerializeField] private string objectiveName = "Secure Radar Uplink";
         [SerializeField] private float  activationTime = 5f;
 
         [Header("Score")]
@@ -117,11 +119,23 @@ namespace NightHunt.Gameplay.Objective
         /// RequireOwnership = false: the radar is not owned by the activating player.
         /// </summary>
         [ServerRpc(RequireOwnership = false)]
-        private void ActivateRadarServerRpc(int teamId)
+        private void ActivateRadarServerRpc(int teamId, NetworkConnection conn = null)
         {
             if (_syncIsActivated.Value) return;   // already activated — ignore race condition
-            _lastActivatingTeamId = teamId;
+            _lastActivatingTeamId = ResolveTeamId(conn, teamId);
             OnComplete();
+        }
+
+        private static int ResolveTeamId(NetworkConnection conn, int fallbackTeamId)
+        {
+            if (conn != null)
+            {
+                var player = RegistryService.Instance?.GetPlayerByFishNetId(conn.ClientId);
+                if (player != null)
+                    return player.TeamId;
+            }
+
+            return fallbackTeamId;
         }
 
         // ── Legacy server helpers (kept for backward compatibility if called elsewhere) ─

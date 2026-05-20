@@ -1,10 +1,13 @@
 using UnityEngine;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Gameplay.Feedback;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.UI;
+using UnityEngine.SceneManagement;
 
 namespace NightHunt.Audio
 {
@@ -23,9 +26,9 @@ namespace NightHunt.Audio
     ///   to sceneLoaded in this component.
     ///
     /// LOCAL PLAYER DETECTION:
-    ///   Uses PlayerHealthSystem.OnAnyHitReceived (static) with killer/victim filtering
-    ///   against the local FishNet ClientId to play hit marker only for THIS client.
-    ///   PlayerHealthSystem.OnAnyPlayerDied is also static — filters locally.
+    ///   Uses CombatFeedbackEvents.LocalHitConfirmed, raised only on the local
+    ///   shooter's client through a server TargetRpc after authoritative damage.
+    ///   PlayerHealthSystem.OnAnyPlayerDied is static, so kill/death audio is filtered locally.
     ///
     /// KILL STREAK:
     ///   Tracked locally (resets on death). Multi-kill window = 4 seconds.
@@ -45,6 +48,10 @@ namespace NightHunt.Audio
 
         // Local player identity (set via Initialize after local player spawns)
         private string _localPlayerName;
+        private int    _localNetworkObjectId = -1;
+        private bool   _eventBusSubscribed;
+        private bool   _uiNavigatorSubscribed;
+        private UINavigator _subscribedNavigator;
 
         // ── BGM State ──────────────────────────────────────────────────────────
         private BGMState _currentBGM = BGMState.None;
@@ -53,22 +60,31 @@ namespace NightHunt.Audio
 
         private void OnEnable()
         {
-            PlayerHealthSystem.OnAnyHitReceived += HandleAnyHit;
+            CombatFeedbackEvents.LocalHitConfirmed += HandleLocalHitConfirmed;
             PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;
-            GameplayEventBus.Instance?.Subscribe<PlayerKilledEvent>(HandlePlayerKilled);
+            SceneManager.sceneLoaded += HandleSceneLoaded;
+            TrySubscribeEventBus();
+            TrySubscribeNavigator();
+            SyncBGMToScene(SceneManager.GetActiveScene());
         }
 
         private void OnDisable()
         {
-            PlayerHealthSystem.OnAnyHitReceived -= HandleAnyHit;
+            CombatFeedbackEvents.LocalHitConfirmed -= HandleLocalHitConfirmed;
             PlayerHealthSystem.OnAnyPlayerDied  -= HandleAnyPlayerDied;
-            GameplayEventBus.Instance?.Unsubscribe<PlayerKilledEvent>(HandlePlayerKilled);
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+            UnsubscribeEventBus();
+            UnsubscribeNavigator();
 
             StopHeartbeat();
+            Cleanup();
         }
 
         private void Update()
         {
+            TrySubscribeEventBus();
+            TrySubscribeNavigator();
+
             // Kill streak timer
             if (_killStreak > 0)
             {
@@ -84,9 +100,14 @@ namespace NightHunt.Audio
         /// Call after local player spawns — needed to filter hit marker to local player.
         /// </summary>
         public void Initialize(IPlayerStatSystem statSystem, string localPlayerName)
+            => Initialize(statSystem, localPlayerName, -1);
+
+        public void Initialize(IPlayerStatSystem statSystem, string localPlayerName, int localNetworkObjectId)
         {
+            Cleanup();
             _statSystem = statSystem;
             _localPlayerName = localPlayerName;
+            _localNetworkObjectId = localNetworkObjectId;
 
             if (_statSystem != null)
                 _statSystem.OnStatChanged += HandleStatChanged;
@@ -140,14 +161,11 @@ namespace NightHunt.Audio
 
         // ── Handlers ───────────────────────────────────────────────────────────
 
-        private void HandleAnyHit(DamageInfo info)
+        private void HandleLocalHitConfirmed(CombatHitFeedbackInfo feedback)
         {
-            // Hit marker fires only when LOCAL player dealt damage
-            // ShooterNetworkObjectId == -1 means world/grenade damage (no hit marker)
-            if (info.ShooterNetworkObjectId < 0) return;
             if (!AudioManager.HasInstance) return;
 
-            AudioManager.Instance.PlayHitMarker(info.IsHeadshot);
+            AudioManager.Instance.PlayHitMarker(feedback.IsHeadshot);
         }
 
         private void HandleAnyPlayerDied(string victim, string killer, string weaponId)
@@ -167,8 +185,16 @@ namespace NightHunt.Audio
         {
             // Kill confirm only for local player as killer
             // Compare killerName — set _localPlayerName via Initialize()
-            if (string.IsNullOrEmpty(_localPlayerName)) return;
-            if (evt.KillerName != _localPlayerName) return;
+            if (_localNetworkObjectId > 0)
+            {
+                if (evt.KillerNetworkObjectId != (uint)_localNetworkObjectId)
+                    return;
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(_localPlayerName)) return;
+                if (evt.KillerName != _localPlayerName) return;
+            }
             if (!AudioManager.HasInstance) return;
 
             _killStreak++;
@@ -212,6 +238,89 @@ namespace NightHunt.Audio
         }
 
         // ── Enums ──────────────────────────────────────────────────────────────
+
+        private void TrySubscribeEventBus()
+        {
+            if (_eventBusSubscribed || GameplayEventBus.Instance == null)
+                return;
+
+            GameplayEventBus.Instance.Subscribe<PlayerKilledEvent>(HandlePlayerKilled);
+            _eventBusSubscribed = true;
+        }
+
+        private void UnsubscribeEventBus()
+        {
+            if (!_eventBusSubscribed)
+                return;
+
+            GameplayEventBus.Instance?.Unsubscribe<PlayerKilledEvent>(HandlePlayerKilled);
+            _eventBusSubscribed = false;
+        }
+
+        private void TrySubscribeNavigator()
+        {
+            if (!UINavigator.HasInstance)
+            {
+                _uiNavigatorSubscribed = false;
+                _subscribedNavigator = null;
+                return;
+            }
+
+            if (_uiNavigatorSubscribed && _subscribedNavigator == UINavigator.Instance)
+                return;
+
+            UnsubscribeNavigator();
+
+            _subscribedNavigator = UINavigator.Instance;
+            _subscribedNavigator.OnPanelChanged += HandleUIPanelChanged;
+            _uiNavigatorSubscribed = true;
+            HandleUIPanelChanged(_subscribedNavigator.CurrentPanel);
+        }
+
+        private void UnsubscribeNavigator()
+        {
+            if (!_uiNavigatorSubscribed)
+                return;
+
+            if (_subscribedNavigator != null)
+                _subscribedNavigator.OnPanelChanged -= HandleUIPanelChanged;
+            _subscribedNavigator = null;
+            _uiNavigatorSubscribed = false;
+        }
+
+        private void HandleUIPanelChanged(PanelType panel)
+        {
+            switch (panel)
+            {
+                case PanelType.Login:
+                case PanelType.Home:
+                case PanelType.Lobby:
+                case PanelType.CustomLobby:
+                case PanelType.Settings:
+                    PlayBGMHome();
+                    break;
+                default:
+                    PlayBGMMatch();
+                    break;
+            }
+        }
+
+        private void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            SyncBGMToScene(scene);
+        }
+
+        private void SyncBGMToScene(Scene scene)
+        {
+            if (!scene.IsValid())
+                return;
+
+            string sceneName = scene.name ?? string.Empty;
+            if (sceneName.Contains("01_Home"))
+                PlayBGMHome();
+            else if (sceneName.Contains("02_Map") || sceneName.Contains("Map_"))
+                PlayBGMMatch();
+        }
 
         private enum BGMState { None, Home, Match, Intense, Results }
     }

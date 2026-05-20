@@ -179,6 +179,7 @@ MonoBehaviour:
   m_VerticalAlignment: 4096
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -428,6 +429,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -2
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0
@@ -1025,6 +1027,8 @@ GameObject:
   - component: {fileID: 3067285573237069402}
   - component: {fileID: 8364051445536505247}
   - component: {fileID: 4433441247382365631}
+  - component: {fileID: -438784212672861498}
+  - component: {fileID: 5670278318306480482}
   m_Layer: 5
   m_Name: Prefab Weapon HUD
   m_TagString: Untagged
@@ -1183,6 +1187,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _iconImage: {fileID: 2670104865306979095}
   _cooldownRing: {fileID: 0}
+  _scaleValue: 1
   _pressScaleDown: 0.88
   _pressScaleDur: 0.07
   _releaseScaleDur: 0.12
@@ -1195,6 +1200,35 @@ MonoBehaviour:
   _reserveAmmoText: {fileID: 4374269969743457190}
   _ammoSlider: {fileID: 0}
   _slotType: 0
+--- !u!114 &-438784212672861498
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7279641938171353362}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b00fdafdb0f043b478fb83d2d57f29b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.UI.NH_Button
+--- !u!114 &5670278318306480482
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7279641938171353362}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 356e2b2eea1fd1747a7ddd282e2a64f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Audio.UIAudioTrigger
+  overrideClickClip: {fileID: 0}
+  overrideHoverClip: {fileID: 0}
+  playHover: 1
+  playClick: 1
+  volumeMultiplier: 1
 --- !u!1 &8381559076894514009
 GameObject:
   m_ObjectHideFlags: 0
@@ -1363,6 +1397,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: -3
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0

@@ -202,7 +202,7 @@ namespace NightHunt.UI
             HideDropdown();
             GameModalWindow.Instance?.ShowConfirm(
                 "Leave Party?",
-                "Bạn có chắc muốn rời khỏi party?",
+                "Are you sure you want to leave the party?",
                 onConfirm: async () => { if (_partyService != null) await _partyService.LeaveParty(); },
                 confirmText: "Leave Party", cancelText: "Cancel");
         }
@@ -211,10 +211,10 @@ namespace NightHunt.UI
         {
             HideDropdown();
             GameModalWindow.Instance?.ShowConfirm(
-                "Giải tán party?",
-                "Tất cả thành viên sẽ bị đưa ra ngoài.",
+                "Disband Party?",
+                "All members will be removed from the party.",
                 onConfirm: async () => { if (_partyService != null) await _partyService.DisbandParty(); },
-                confirmText: "Giải tán", cancelText: "Cancel");
+                confirmText: "Disband", cancelText: "Cancel");
         }
 
         private async void OnKickClicked()

@@ -28,8 +28,9 @@ namespace NightHunt.UI
         // Prevents processing the same match_ready twice (e.g. WS reconnect replay).
         private string _lastHandledMatchId;
 
-        // Guard: prevent double-subscription if OnEnable fires before GameWebSocketService.Awake.
-        private bool _wsSubscribed;
+        // Guard: prevent double-subscription if OnEnable fires before GameEventBus.Awake.
+        private bool _eventBusSubscribed;
+        private Coroutine _subscribeRoutine;
 
         // ── Singleton lifecycle ───────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ namespace NightHunt.UI
         private void OnEnable()
         {
             SubscribeWSEvents();
+            if (!_eventBusSubscribed)
+                _subscribeRoutine = StartCoroutine(SubscribeWhenEventBusReady());
         }
 
         // Start() runs after all Awake() calls — safe retry if OnEnable() fired too early.
@@ -51,40 +54,67 @@ namespace NightHunt.UI
 
         private void OnDisable()
         {
+            if (_subscribeRoutine != null)
+            {
+                StopCoroutine(_subscribeRoutine);
+                _subscribeRoutine = null;
+            }
+
             UnsubscribeWSEvents();
         }
 
-        // ── WS event subscription ─────────────────────────────────────────────
+        // ── Domain event subscription ────────────────────────────────────────
 
         private void SubscribeWSEvents()
         {
-            if (_wsSubscribed) return;
+            if (_eventBusSubscribed) return;
 
-            var ws = GameWebSocketService.Instance;
-            if (ws == null) return;
+            var bus = GameEventBus.Instance;
+            if (bus == null) return;
 
-            ws.OnMatchReady     += HandleMatchReady;
-            ws.OnDsReady        += HandleDsReady;
-            ws.OnMatchCancelled += HandleMatchCancelled;
-            ws.OnMatchEnded     += HandleMatchEnded;
-            ws.OnRoomDisbanded  += HandleRoomDisbandedDuringGame;
-            _wsSubscribed = true;
+            bus.OnMatchReady     += HandleMatchReady;
+            bus.OnDsReady        += HandleDsReady;
+            bus.OnMatchCancelled += HandleMatchCancelled;
+            bus.OnMatchEnded     += HandleMatchEnded;
+            bus.OnRoomDisbanded  += HandleRoomDisbandedDuringGame;
+            _eventBusSubscribed = true;
+            _subscribeRoutine = null;
         }
 
         private void UnsubscribeWSEvents()
         {
-            if (!_wsSubscribed) return;
+            if (!_eventBusSubscribed) return;
 
-            var ws = GameWebSocketService.Instance;
-            if (ws != null)
+            var bus = GameEventBus.Instance;
+            if (bus != null)
             {
-                ws.OnMatchReady     -= HandleMatchReady;
-                ws.OnDsReady        -= HandleDsReady;
-                ws.OnMatchCancelled -= HandleMatchCancelled;
-                ws.OnMatchEnded     -= HandleMatchEnded;
-                ws.OnRoomDisbanded  -= HandleRoomDisbandedDuringGame;
+                bus.OnMatchReady     -= HandleMatchReady;
+                bus.OnDsReady        -= HandleDsReady;
+                bus.OnMatchCancelled -= HandleMatchCancelled;
+                bus.OnMatchEnded     -= HandleMatchEnded;
+                bus.OnRoomDisbanded  -= HandleRoomDisbandedDuringGame;
             }
-            _wsSubscribed = false;
+            _eventBusSubscribed = false;
+        }
+
+        private System.Collections.IEnumerator SubscribeWhenEventBusReady()
+        {
+            const float timeout = 15f;
+            float elapsed = 0f;
+
+            while (!_eventBusSubscribed && elapsed < timeout)
+            {
+                SubscribeWSEvents();
+                if (_eventBusSubscribed)
+                    yield break;
+
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            if (!_eventBusSubscribed)
+                Debug.LogWarning("[MFC] GameEventBus was not available; match flow events are not subscribed.");
+            _subscribeRoutine = null;
         }
 
         // ── match_ready ───────────────────────────────────────────────────────
@@ -199,9 +229,16 @@ namespace NightHunt.UI
             Debug.Log($"[MFC] match_cancelled \u25ba reason={e.reason}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             _lastHandledMatchId = null;
 
+            MatchFoundOverlay.Instance?.Hide();
+            MatchLoadingOverlay.Instance?.Hide();
+            RoomState.Instance?.ClearNetworkSession();
+
             string reason = !string.IsNullOrEmpty(e.reason) ? e.reason : "Match was cancelled.";
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
             toast?.Show("Matchmaking", $"Match cancelled: {reason}");
+
+            if (SceneLoader.HasPendingSceneLoad || SceneLoader.IsInGameplayScene)
+                SceneLoader.ReturnHomeFromGameplayFlow();
         }
 
         // ── match_ended (WS backend confirmation) ────────────────────────────
@@ -261,6 +298,22 @@ namespace NightHunt.UI
         /// </summary>
         private void HandleRoomDisbandedDuringGame(GameWebSocketService.RoomDisbandedEvent evt)
         {
+            var currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            bool isGameScene = currentScene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase);
+            var currentRoomState = RoomState.Instance;
+            long currentRoomId = currentRoomState?.RoomId ?? 0L;
+
+            if (evt.roomId > 0 && currentRoomId > 0 && evt.roomId != currentRoomId)
+            {
+                Debug.LogWarning($"[MFC] Ignoring room_disbanded for roomId={evt.roomId}; current roomId={currentRoomId}.");
+                return;
+            }
+
+            if (!isGameScene)
+            {
+                Debug.Log($"[MFC] room_disbanded roomId={evt.roomId} reason={evt.reason} received outside game scene; CustomLobbyView owns lobby cleanup.");
+                return;
+            }
             Debug.Log($"[MFC] room_disbanded ▶ roomId={evt.roomId} reason={evt.reason} — clearing RoomState.  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             RoomState.Instance?.ClearRoom();
 
@@ -279,7 +332,7 @@ namespace NightHunt.UI
                 string reason = !string.IsNullOrEmpty(evt.reason) ? evt.reason : "unknown";
                 Debug.LogWarning($"[MFC] room_disbanded in game scene while not connected (reason={reason}) — returning to Home.");
                 var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
-                toast?.Show("Trận đấu", $"Phòng bị giải tán ({reason}). Đang trở về Home...");
+                toast?.Show("Match", $"Room was disbanded ({reason}). Returning to Home...");
                 NightHunt.Core.SceneLoader.LoadHome();
             }
         }

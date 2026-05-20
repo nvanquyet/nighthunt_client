@@ -144,10 +144,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var item = GetItemByInstanceId(instanceId);
             var def = item != null ? ItemDatabase.GetDefinition(item.DefinitionID) : null;
             bool isDeployable = def != null && def.Type == ItemType.Deployable;
-            bool shouldBeginAim = useImmediately || isDeployable;
+            bool shouldBeginAim = useImmediately;
 
             _slotButton?.SetTrackedItem(instanceId);
-            Debug.Log($"[ITEM_FLOW] [02][FilterPanel.Select] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' useImmediately={useImmediately} defType={(def != null ? def.Type.ToString() : "null")} shouldBeginAim={shouldBeginAim}");
+            Debug.Log($"[ITEM_FLOW] [02][FilterPanel.Select] filters={FormatFilterTypes(_filterTypes)} instance='{instanceId}' useImmediately={useImmediately} defType={(def != null ? def.Type.ToString() : "null")} isDeployable={isDeployable} shouldBeginAim={shouldBeginAim}");
 
             if (shouldBeginAim
                 && _itemUseSystem != null

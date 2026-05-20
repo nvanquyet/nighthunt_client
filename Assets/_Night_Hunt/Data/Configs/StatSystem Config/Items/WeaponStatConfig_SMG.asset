@@ -14,23 +14,23 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Stats:
   - Type: 10
-    DefaultValue: 15
+    DefaultValue: 11
     MinValue: 0
     MaxValue: 9999
   - Type: 11
-    DefaultValue: 600
+    DefaultValue: 900
     MinValue: 1
     MaxValue: 6000
   - Type: 20
-    DefaultValue: 30
+    DefaultValue: 40
     MinValue: 0
     MaxValue: 999
   - Type: 23
-    DefaultValue: 90
+    DefaultValue: 280
     MinValue: 0
     MaxValue: 9999
   - Type: 22
-    DefaultValue: 2.2
+    DefaultValue: 1.9
     MinValue: 0.1
     MaxValue: 15
   - Type: 13
@@ -51,7 +51,7 @@ MonoBehaviour:
     MaxValue: 30
   PlayerModifiers:
   - StatType: 4
-    Value: -0.08
+    Value: -0.04
     ModifierType: 1
     Description: SMG move penalty
   ItemModifiers: []

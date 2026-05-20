@@ -80,32 +80,32 @@ namespace NightHunt.Services.Room
         // Event handlers (from GameEventBus)
         private void HandleRoomUpdated(RoomResponse room)
         {
-            roomState?.SetRoom(room);
+            SetRoomIfRelevant(room, "room_updated");
         }
 
         private void HandlePlayerJoined(GameWebSocketService.PlayerJoinedEvent evt)
         {
-            roomState?.SetRoom(evt.room);
+            SetRoomIfRelevant(evt.room, "player_joined");
         }
 
         private void HandlePlayerLeft(GameWebSocketService.PlayerLeftEvent evt)
         {
-            roomState?.SetRoom(evt.room);
+            SetRoomIfRelevant(evt.room, "player_left");
         }
 
         private void HandlePlayerReady(GameWebSocketService.PlayerReadyEvent evt)
         {
-            roomState?.SetRoom(evt.room);
+            SetRoomIfRelevant(evt.room, "player_ready");
         }
 
         private void HandleTeamChanged(GameWebSocketService.TeamChangedEvent evt)
         {
-            roomState?.SetRoom(evt.room);
+            SetRoomIfRelevant(evt.room, "team_changed");
         }
 
         private void HandleRoomStatusChanged(GameWebSocketService.RoomStatusChangedEvent evt)
         {
-            roomState?.SetRoom(evt.room);
+            SetRoomIfRelevant(evt.room, "room_status_changed");
         }
 
         private void HandleSwapRequest(GameWebSocketService.SwapRequestEvent evt)
@@ -129,14 +129,81 @@ namespace NightHunt.Services.Room
             }
         }
 
+        private void SetRoomIfRelevant(RoomResponse room, string source)
+        {
+            if (room == null)
+            {
+                Debug.LogWarning($"[RoomService] Ignoring {source}: payload room is null.");
+                return;
+            }
+
+            if (room.roomId <= 0)
+            {
+                Debug.LogWarning($"[RoomService] Ignoring {source}: payload roomId is invalid ({room.roomId}).");
+                return;
+            }
+
+            if (roomState == null)
+                roomState = RoomState.Instance;
+
+            if (roomState == null || !roomState.IsInRoom || roomState.RoomId <= 0)
+            {
+                long localUserId = GameManager.Instance?.SessionState?.UserId ?? 0L;
+                bool payloadContainsLocalPlayer = false;
+                if (localUserId > 0L && room.players != null)
+                {
+                    foreach (var player in room.players)
+                    {
+                        if (player.userId != localUserId) continue;
+                        payloadContainsLocalPlayer = true;
+                        break;
+                    }
+                }
+
+                if (payloadContainsLocalPlayer)
+                {
+                    RLog($"Adopting {source} room payload as active room: roomId={room.roomId}");
+                    roomState?.SetRoom(room);
+                    return;
+                }
+
+                Debug.LogWarning($"[RoomService] Ignoring {source}: no active current room.");
+                return;
+            }
+
+            if (room.roomId != roomState.RoomId)
+            {
+                Debug.LogWarning($"[RoomService] Ignoring {source}: roomId={room.roomId} does not match current roomId={roomState.RoomId}.");
+                return;
+            }
+
+            roomState.SetRoom(room);
+        }
+
         // Overload with DTO
         public async Task<ApiResult<RoomResponse>> CreateRoom(CreateRoomRequest request)
         {
+            if (backendClient == null)
+            {
+                RLog($"CreateRoom blocked: backendClient is null. local={DescribeLocalRoom()}");
+                return ApiResult<RoomResponse>.Error("Backend client is not ready");
+            }
+
+            RLog(
+                $"CreateRoom request mode={request?.mode ?? "null"} mapId={request?.mapId ?? "null"} allowFill={request?.allowFill} " +
+                $"public={request?.isPublic} locked={request?.isLocked} local={DescribeLocalRoom()}");
             var result = await backendClient.PostAsync<RoomResponse>(Constants.API_ROOMS_CREATE, request);
+            RLog(
+                $"CreateRoom response success={result?.Success} errorCode={result?.ErrorCode ?? "null"} message='{result?.Message ?? "null"}' " +
+                $"room={DescribeRoom(result?.Data)} localBeforeSet={DescribeLocalRoom()}");
+
+            if (result == null)
+                return ApiResult<RoomResponse>.Error("Create room returned no response");
             
             if (result.Success && result.Data != null)
             {
                 roomState.SetRoom(result.Data);
+                RLog($"CreateRoom local state set. local={DescribeLocalRoom()}");
                 // GameWebSocketService is already connected after login - no need to connect again
             }
 
@@ -144,12 +211,13 @@ namespace NightHunt.Services.Room
         }
 
         // Overload with parameters
-        public async Task<ApiResult<RoomResponse>> CreateRoom(string mode, bool allowFill = true, bool isPublic = true, bool isLocked = false, string password = null)
+        public async Task<ApiResult<RoomResponse>> CreateRoom(string mode, bool allowFill = true, bool isPublic = true, bool isLocked = false, string password = null, string mapId = null)
         {
             var request = new CreateRoomRequest
             {
                 mode      = mode,
                 allowFill = allowFill,
+                mapId     = mapId,
                 isPublic  = isPublic,
                 isLocked  = isLocked,
                 password  = password
@@ -161,11 +229,25 @@ namespace NightHunt.Services.Room
         // Overload with DTO
         public async Task<ApiResult<RoomResponse>> JoinRoomByCode(JoinRoomRequest request)
         {
+            if (backendClient == null)
+            {
+                RLog($"JoinRoomByCode blocked: backendClient is null. code={request?.roomCode ?? "null"} local={DescribeLocalRoom()}");
+                return ApiResult<RoomResponse>.Error("Backend client is not ready");
+            }
+
+            RLog($"JoinRoomByCode request code={request?.roomCode ?? "null"} passwordSet={!string.IsNullOrEmpty(request?.password)} local={DescribeLocalRoom()}");
             var result = await backendClient.PostAsync<RoomResponse>(Constants.API_ROOMS_JOIN_BY_CODE, request);
+            RLog(
+                $"JoinRoomByCode response success={result?.Success} errorCode={result?.ErrorCode ?? "null"} message='{result?.Message ?? "null"}' " +
+                $"room={DescribeRoom(result?.Data)} localBeforeSet={DescribeLocalRoom()}");
+
+            if (result == null)
+                return ApiResult<RoomResponse>.Error("Join room returned no response");
             
             if (result.Success && result.Data != null)
             {
                 roomState.SetRoom(result.Data);
+                RLog($"JoinRoomByCode local state set. local={DescribeLocalRoom()}");
             }
 
             return result;
@@ -188,11 +270,25 @@ namespace NightHunt.Services.Room
         // Overload with DTO
         public async Task<ApiResult<RoomResponse>> QuickPlay(QuickPlayRequest request)
         {
+            if (backendClient == null)
+            {
+                RLog($"QuickPlay blocked: backendClient is null. local={DescribeLocalRoom()}");
+                return ApiResult<RoomResponse>.Error("Backend client is not ready");
+            }
+
+            RLog($"QuickPlay request mode={request?.mode ?? "null"} mapId={request?.mapId ?? "null"} allowFill={request?.allowFill} local={DescribeLocalRoom()}");
             var result = await backendClient.PostAsync<RoomResponse>(Constants.API_ROOMS_QUICK_PLAY, request);
+            RLog(
+                $"QuickPlay response success={result?.Success} errorCode={result?.ErrorCode ?? "null"} message='{result?.Message ?? "null"}' " +
+                $"room={DescribeRoom(result?.Data)} localBeforeSet={DescribeLocalRoom()}");
+
+            if (result == null)
+                return ApiResult<RoomResponse>.Error("Quick play returned no response");
             
             if (result.Success && result.Data != null)
             {
                 roomState.SetRoom(result.Data);
+                RLog($"QuickPlay local state set. local={DescribeLocalRoom()}");
                 // GameWebSocketService is already connected after login - no need to connect again
             }
 
@@ -200,12 +296,13 @@ namespace NightHunt.Services.Room
         }
 
         // Overload with mode string
-        public async Task<ApiResult<RoomResponse>> QuickPlay(string mode, bool allowFill = true)
+        public async Task<ApiResult<RoomResponse>> QuickPlay(string mode, bool allowFill = true, string mapId = null)
         {
             var request = new QuickPlayRequest
             {
                 mode      = mode,
-                allowFill = allowFill
+                allowFill = allowFill,
+                mapId     = mapId
             };
 
             return await QuickPlay(request);
@@ -266,11 +363,17 @@ namespace NightHunt.Services.Room
         {
             // Note: GameWebSocketService stays connected (it's session-wide, not room-specific)
             string endpoint = string.Format(Constants.API_ROOMS_LEAVE, roomId);
+            RLog($"LeaveRoom request roomId={roomId} local={DescribeLocalRoom()}");
             var result = await backendClient.PostAsync<object>(endpoint);
+            RLog($"LeaveRoom response success={result?.Success} errorCode={result?.ErrorCode ?? "null"} message='{result?.Message ?? "null"}' localBeforeClear={DescribeLocalRoom()}");
+
+            if (result == null)
+                return ApiResult.Error("Leave room returned no response");
             
             if (result.Success)
             {
                 roomState.ClearRoom();
+                RLog($"LeaveRoom local state cleared. local={DescribeLocalRoom()}");
             }
 
             return result.Success ? ApiResult.Ok() : ApiResult.Error(result.Message);
@@ -287,11 +390,17 @@ namespace NightHunt.Services.Room
         {
             // Note: GameWebSocketService stays connected (it's session-wide, not room-specific)
             string endpoint = string.Format(Constants.API_ROOMS_DISBAND, roomId);
+            RLog($"DisbandRoom request roomId={roomId} local={DescribeLocalRoom()}");
             var result = await backendClient.PostAsync<object>(endpoint);
+            RLog($"DisbandRoom response success={result?.Success} errorCode={result?.ErrorCode ?? "null"} message='{result?.Message ?? "null"}' localBeforeClear={DescribeLocalRoom()}");
+
+            if (result == null)
+                return ApiResult.Error("Disband room returned no response");
             
             if (result.Success)
             {
                 roomState.ClearRoom();
+                RLog($"DisbandRoom local state cleared. local={DescribeLocalRoom()}");
             }
 
             return result.Success ? ApiResult.Ok() : ApiResult.Error(result.Message);
@@ -327,6 +436,7 @@ namespace NightHunt.Services.Room
         {
             if (SessionState.Instance == null || !SessionState.Instance.IsAuthenticated)
             {
+                RLog($"Reconnect blocked: not authenticated. roomId={roomId?.ToString() ?? "null"} local={DescribeLocalRoom()}");
                 return ApiResult<RoomResponse>.Error("Not authenticated");
             }
 
@@ -334,14 +444,22 @@ namespace NightHunt.Services.Room
             {
                 accessToken = SessionState.Instance.AccessToken,
                 sessionId = SessionState.Instance.SessionId,
-                roomId = roomId
+                roomId = roomId.HasValue && roomId.Value > 0 ? roomId.Value : 0L
             };
 
+            RLog($"Reconnect request roomId={roomId?.ToString() ?? "null"} payloadRoomId={request.roomId} local={DescribeLocalRoom()}");
             var result = await backendClient.PostAsync<RoomResponse>(Constants.API_ROOMS_RECONNECT, request);
+            RLog(
+                $"Reconnect response success={result?.Success} errorCode={result?.ErrorCode ?? "null"} message='{result?.Message ?? "null"}' " +
+                $"room={DescribeRoom(result?.Data)} localBeforeSet={DescribeLocalRoom()}");
+
+            if (result == null)
+                return ApiResult<RoomResponse>.Error("Reconnect returned no response");
             
             if (result.Success && result.Data != null)
             {
                 roomState.SetRoom(result.Data);
+                RLog($"Reconnect local state set. local={DescribeLocalRoom()}");
             }
 
             return result;
@@ -460,6 +578,32 @@ namespace NightHunt.Services.Room
 
         // Note: GameWebSocketService is connected after login/auto-login and stays connected throughout the session
         // No need for room-specific WebSocket connections anymore
+        private void RLog(string message)
+        {
+            Debug.Log($"[FLOW][ROOM_API] {message}");
+        }
+
+        private string DescribeLocalRoom()
+        {
+            if (roomState == null)
+                roomState = RoomState.Instance;
+
+            if (roomState == null)
+                return "roomState=null";
+
+            return
+                $"isInRoom={roomState.IsInRoom},roomId={roomState.RoomId},code={roomState.RoomCode},status={roomState.Status},players={roomState.PlayerCount}";
+        }
+
+        private static string DescribeRoom(RoomResponse room)
+        {
+            if (room == null)
+                return "null";
+
+            int players = room.players != null ? room.players.Count : 0;
+            return
+                $"id={room.roomId},code={room.roomCode},mode={room.mode},map={room.mapId},status={room.status},owner={room.ownerId},players={players}";
+        }
     }
 }
 

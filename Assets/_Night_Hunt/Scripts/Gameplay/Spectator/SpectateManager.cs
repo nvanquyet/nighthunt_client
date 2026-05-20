@@ -3,6 +3,7 @@ using NightHunt.Core;
 using UnityEngine;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Spectator
 {
@@ -75,6 +76,11 @@ namespace NightHunt.Gameplay.Spectator
             }
 
             Log($"Local player set: {player.DisplayName}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Spectate,
+                "LocalPlayerSet",
+                $"player={player.DisplayName} obj={player.ObjectId} team={player.TeamId} alive={player.IsAlive}",
+                this);
         }
 
         public void StartSpectating(NetworkPlayer player)
@@ -103,6 +109,11 @@ namespace NightHunt.Gameplay.Spectator
             OnSpectateStarted?.Invoke();
 
             Log($"Started spectating {player.DisplayName}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Spectate,
+                "SpectateStart",
+                $"local={localPlayer?.DisplayName ?? "null"} localTeam={localPlayer?.TeamId ?? -1} target={player.DisplayName} targetObj={player.ObjectId} targetTeam={player.TeamId} targetAlive={player.IsAlive}",
+                this);
         }
 
         public void StopSpectating()
@@ -117,6 +128,11 @@ namespace NightHunt.Gameplay.Spectator
             OnSpectateStopped?.Invoke();
 
             Log($"Stopped spectating {previousSpectated?.DisplayName}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Spectate,
+                "SpectateStop",
+                $"local={localPlayer?.DisplayName ?? "null"} previous={previousSpectated?.DisplayName ?? "null"}",
+                this);
         }
 
         /// <summary>
@@ -138,6 +154,7 @@ namespace NightHunt.Gameplay.Spectator
             allPlayers = System.Array.FindAll(allPlayers, CanSpectate);
             if (allPlayers.Length == 0)
             {
+                PhaseTestLog.Log(PhaseTestLogCategory.Spectate, "SpectateSwitchNoTargets", $"local={localPlayer.DisplayName} team={localPlayer.TeamId}", this);
                 StopSpectating();
                 return;
             }

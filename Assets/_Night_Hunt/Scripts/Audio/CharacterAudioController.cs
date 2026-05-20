@@ -355,6 +355,16 @@ namespace NightHunt.Audio
             if (relayTarget != modelRoot)
                 Log($"BindModel: Animator is on child '{relayTarget.name}' (not root '{modelRoot.name}') — relay added to Animator GO.");
 
+            bool hasFootstepEvents = HasFootstepAnimationEvents(animator);
+            if (footstepMethod == FootstepMethod.AnimEvent && !hasFootstepEvents)
+            {
+                footstepMethod = FootstepMethod.TimeBased;
+                Debug.LogWarning(
+                    "[CAC] Animator clips have no FootStep/footstep animation events. " +
+                    "Falling back to time-based footsteps for this model.",
+                    this);
+            }
+
             // Diagnostic: when _debugLog is on, dump all animation clips and their events
             // so we can verify FootStep events were actually imported from the .meta files.
             if (_debugLog && animator != null)
@@ -427,6 +437,30 @@ namespace NightHunt.Audio
         // physics settling. Using the explicit sprint-input flag is more reliable.
         private FootstepType GetFootstepTypeFromSpeed(float speed)
             => _movement != null && _movement.IsSprinting() ? FootstepType.Sprint : FootstepType.Walk;
+
+        private static bool HasFootstepAnimationEvents(Animator animator)
+        {
+            var clips = animator?.runtimeAnimatorController?.animationClips;
+            if (clips == null) return false;
+
+            foreach (var clip in clips)
+            {
+                if (clip == null) continue;
+                foreach (var ev in clip.events)
+                {
+                    string name = ev.functionName;
+                    if (name == "FootStep" ||
+                        name == "OnAnimEventFootstep" ||
+                        name == "OnAnimEventFootstepL" ||
+                        name == "OnAnimEventFootstepR")
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Maps the animation event data string to a <see cref="FootstepType"/>.

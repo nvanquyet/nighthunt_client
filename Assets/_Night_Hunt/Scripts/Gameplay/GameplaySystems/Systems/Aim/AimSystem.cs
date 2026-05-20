@@ -3,6 +3,7 @@ using NightHunt.Core;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Interfaces;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.Aim
 {
@@ -83,6 +84,7 @@ namespace NightHunt.GameplaySystems.Aim
         // Throwable override
         private bool    _isThrowableMode;
         private Vector2 _throwableJoystick;
+        private bool    _cursorVisible;
 
         // ─────────────────────────────────────────────────────────────────────
         //  IAimSystem Implementation
@@ -118,7 +120,11 @@ namespace NightHunt.GameplaySystems.Aim
 
             // Save the mesh's designed tilt (X, Z) so we only rotate Y at runtime.
             if (_worldAimCursor != null)
+            {
                 _cursorInitialEuler = _worldAimCursor.eulerAngles;
+                _worldAimCursor.gameObject.SetActive(false);
+                _cursorVisible = false;
+            }
         }
 
         /// <inheritdoc/>
@@ -141,16 +147,28 @@ namespace NightHunt.GameplaySystems.Aim
             if (_camera == null)
                 _camera = UnityEngine.Camera.main;
 
-            // PC: cursor always visible after player spawns.
-            if (!Application.isMobilePlatform)
-                SetCursorVisible(true);
+            SetCursorVisible(false);
         }
 
         /// <inheritdoc/>
         public void SetCursorVisible(bool visible)
         {
+            bool changed = _cursorVisible != visible ||
+                           (_worldAimCursor != null && _worldAimCursor.gameObject.activeSelf != visible);
+
             if (_worldAimCursor != null)
                 _worldAimCursor.gameObject.SetActive(visible);
+
+            _cursorVisible = visible;
+
+            if (changed)
+            {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Input,
+                    "AimCursorVisibility",
+                    $"visible={visible} cursor={(_worldAimCursor != null ? _worldAimCursor.name : "null")} throwableMode={_isThrowableMode}",
+                    this);
+            }
         }
 
         /// <inheritdoc/>
@@ -265,16 +283,17 @@ namespace NightHunt.GameplaySystems.Aim
             FinalAimDir = dist > 0.001f ? toTarget.normalized : transform.forward;
             FinalAimDir = new Vector3(FinalAimDir.x, 0f, FinalAimDir.z).normalized;
 
-            FinalAimPos  = origin + FinalAimDir * dist;
-            FinalAimPos  = new Vector3(FinalAimPos.x, origin.y, FinalAimPos.z);
-            FinalAimGroundPos = ProjectAimPointToGround(new Vector3(FinalAimPos.x, _groundHeight, FinalAimPos.z));
+            FinalAimPos = origin + FinalAimDir * dist;
+            FinalAimPos = new Vector3(FinalAimPos.x, origin.y, FinalAimPos.z);
+
+            // Keep the visual cursor on the configured flat aim plane.
+            // Physics projection can hit vehicle/wall tops and make AimTargetMesh jump upward.
+            FinalAimGroundPos = new Vector3(FinalAimPos.x, _groundHeight, FinalAimPos.z);
 
             // Reposition the world cursor and rotate it to face the player.
             // Only the configured axis angle is changed; the other two keep their designer-set values.
             if (_worldAimCursor != null)
             {
-                // FIX: Place cursor at configured ground plane (+ small lift to avoid z-fighting),
-                // NOT at origin.y (player pivot may be at capsule centre, causing cursor to float).
                 // FinalAimPos.y intentionally stays at origin.y for weapon/ability game logic.
                 Vector3 cursorPos = FinalAimGroundPos + Vector3.up * _cursorYOffset;
                 _worldAimCursor.position = cursorPos;

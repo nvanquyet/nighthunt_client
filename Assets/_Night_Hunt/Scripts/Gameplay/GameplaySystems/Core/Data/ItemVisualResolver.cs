@@ -15,6 +15,9 @@ namespace NightHunt.GameplaySystems.Core.Data
     /// </summary>
     public static class ItemVisualResolver
     {
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
+
         public static GameObject ResolveVisualPrefab(ItemDefinition definition)
         {
             return definition is PhysicalItemDefinition physical
@@ -38,19 +41,60 @@ namespace NightHunt.GameplaySystems.Core.Data
                 : "UnknownItem";
 
             var root = new GameObject($"Fallback_{purpose}_{itemName}");
-            var primitiveType = purpose == ItemVisualPurpose.Ground ? PrimitiveType.Cube : PrimitiveType.Capsule;
+            var primitiveType = ResolveFallbackPrimitive(definition, purpose);
             var visual = GameObject.CreatePrimitive(primitiveType);
             visual.name = "[FallbackVisual]";
             visual.transform.SetParent(root.transform, false);
+            visual.transform.localScale = ResolveFallbackScale(definition, purpose);
 
-            if (purpose == ItemVisualPurpose.Ground)
-                visual.transform.localScale = new Vector3(0.35f, 0.12f, 0.35f);
-            else
-                visual.transform.localScale = new Vector3(0.12f, 0.28f, 0.12f);
+            var collider = visual.GetComponent<Collider>();
+            if (collider != null)
+                Object.Destroy(collider);
 
-            Object.Destroy(visual.GetComponent<Collider>());
             TintFallback(visual, definition);
             return root;
+        }
+
+        private static PrimitiveType ResolveFallbackPrimitive(ItemDefinition definition, ItemVisualPurpose purpose)
+        {
+            if (definition == null)
+                return purpose == ItemVisualPurpose.Ground ? PrimitiveType.Cube : PrimitiveType.Capsule;
+
+            return definition.Type switch
+            {
+                ItemType.Consumable => PrimitiveType.Capsule,
+                ItemType.Throwable => PrimitiveType.Sphere,
+                ItemType.Deployable => PrimitiveType.Cylinder,
+                ItemType.Attachment => PrimitiveType.Cube,
+                ItemType.Equipment => PrimitiveType.Cube,
+                _ => purpose == ItemVisualPurpose.Ground ? PrimitiveType.Cube : PrimitiveType.Capsule,
+            };
+        }
+
+        private static Vector3 ResolveFallbackScale(ItemDefinition definition, ItemVisualPurpose purpose)
+        {
+            ItemType type = definition != null ? definition.Type : ItemType.Misc;
+
+            if (purpose == ItemVisualPurpose.Held)
+            {
+                return type switch
+                {
+                    ItemType.Throwable => new Vector3(0.16f, 0.16f, 0.16f),
+                    ItemType.Deployable => new Vector3(0.18f, 0.08f, 0.18f),
+                    ItemType.Consumable => new Vector3(0.12f, 0.28f, 0.12f),
+                    _ => new Vector3(0.12f, 0.28f, 0.12f),
+                };
+            }
+
+            return type switch
+            {
+                ItemType.Weapon => new Vector3(0.18f, 0.10f, 0.48f),
+                ItemType.Throwable => new Vector3(0.22f, 0.22f, 0.22f),
+                ItemType.Deployable => new Vector3(0.32f, 0.10f, 0.32f),
+                ItemType.Equipment => new Vector3(0.34f, 0.16f, 0.28f),
+                ItemType.Attachment => new Vector3(0.22f, 0.08f, 0.16f),
+                _ => new Vector3(0.35f, 0.12f, 0.35f),
+            };
         }
 
         private static void TintFallback(GameObject visual, ItemDefinition definition)
@@ -59,9 +103,12 @@ namespace NightHunt.GameplaySystems.Core.Data
             if (renderer == null)
                 return;
 
-            var material = new Material(Shader.Find("Standard"));
-            material.color = GetFallbackColor(definition);
-            renderer.sharedMaterial = material;
+            Color color = GetFallbackColor(definition);
+            var block = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(block);
+            block.SetColor(BaseColorId, color);
+            block.SetColor(ColorId, color);
+            renderer.SetPropertyBlock(block);
         }
 
         private static Color GetFallbackColor(ItemDefinition definition)
@@ -71,6 +118,7 @@ namespace NightHunt.GameplaySystems.Core.Data
 
             return definition.Type switch
             {
+                ItemType.Equipment => new Color(0.18f, 0.42f, 0.48f),
                 ItemType.Weapon => new Color(0.24f, 0.24f, 0.26f),
                 ItemType.Consumable => new Color(0.1f, 0.55f, 0.25f),
                 ItemType.Throwable => new Color(0.55f, 0.34f, 0.1f),

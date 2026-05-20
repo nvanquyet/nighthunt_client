@@ -1,190 +1,382 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using NightHunt.Core;
 using UnityEngine;
-using UnityEngine.Events;
 
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Panel types used across the codebase to identify the current screen.
+    /// Panel types used by the 01_Home UI flow.
+    /// Lobby is normalized to CustomLobby for old serialized values.
     /// </summary>
     public enum PanelType
     {
-        None,
-        Login,
-        Home,
-        Lobby
+        None = 0,
+        Login = 1,
+        Home = 2,
+        Lobby = 3,
+        CustomLobby = 4,
+        Settings = 5
     }
 
     /// <summary>
-    /// UINavigator — Event-driven navigation hub.
-    ///
-    /// DESIGN:
-    ///   UINavigator does NOT manage any panels directly.
-    ///   It only fires the corresponding UnityEvent → wire actions in the Inspector:
-    ///   any action: Play animator, SetActive, call method, etc.
-    ///
-    /// INSPECTOR SETUP (example with Shift UI):
-    ///   OnGoLogin  → SplashScreenAnimator.Play("Login")
-    ///                or LoginPanel.SetActive(true)
-    ///   OnGoHome   → MainPanelManager.OpenFirstTab()
-    ///                + SplashScreen.SetActive(false)
-    ///                + MainPanels.SetActive(true)
-    ///                + MainPanelsAnimator.Play("Start")
-    ///   OnGoLobby  → same as OnGoHome but navigates to the Lobby tab
-    ///   OnGoNone   → hide all (optional)
-    ///
-    /// IN CODE:
-    ///   UINavigator.Instance.GoLogin();   // fired from LoadingManager
-    ///   UINavigator.Instance.GoHome();    // fired after login success
-    ///   UINavigator.Instance.GoLobby();   // fired when joining a room
-    ///
-    /// QUERY STATE:
-    ///   UINavigator.Instance.CurrentPanel  → current PanelType
-    ///   UINavigator.Instance.OnPanelChanged += handler;
+    /// Code-first navigation hub for 01_Home.
+    /// Buttons call controller/navigator methods in code; this class owns the visual
+    /// transition order so gameplay/state logic never calls Shift package panels directly.
     /// </summary>
     public class UINavigator : Singleton<UINavigator>
     {
-        // ─────────────────────────────────────────────
-        // Events — wire in Inspector
-        // ─────────────────────────────────────────────
+        [Serializable]
+        public sealed class NavigationRoute
+        {
+            public PanelType panel = PanelType.None;
+            [Tooltip("Optional route root. Navigator activates this before OnShowAsync.")]
+            public GameObject rootObject;
+            [Tooltip("Optional view implementing INavigableView. Auto-resolved when empty.")]
+            public MonoBehaviour view;
+        }
 
-        [Header("Navigation Events — Wire in Inspector")]
+        [Header("Code-First Routes")]
+        [SerializeField] private List<NavigationRoute> routes = new();
 
-        [Tooltip("Fired when navigating to the Login screen.\n" +
-                 "Example: SplashScreenAnimator.Play(\"Login\") or LoginPanel.SetActive(true)")]
-        public UnityEvent OnGoLogin = new();
+        [Header("Visual State")]
+        [Tooltip("Animator on the splash/login screen root.")]
+        [SerializeField] private Animator splashScreenAnimator;
+        [Tooltip("Animator on the main Shift panel root.")]
+        [SerializeField] private Animator mainPanelsAnimator;
+        [SerializeField] private string loginAnimatorState = "Login";
+        [SerializeField] private string splashHiddenState = "Invisible";
+        [SerializeField] private string mainPanelsStartState = "Start";
+        [SerializeField] private string mainPanelsHiddenState = "Invisible";
+        [SerializeField] private string routePanelInState = "Panel In";
 
-        [Tooltip("Fired when navigating to the Home screen.\n" +
-                 "Example: MainPanels.SetActive(true) + MainPanelsAnimator.Play(\"Start\") + MainPanelManager.OpenFirstTab()")]
-        public UnityEvent OnGoHome = new();
-
-        [Tooltip("Fired when navigating to the Lobby screen.\n" +
-                 "Example: MainPanels.SetActive(true) + MainPanelManager.OpenPanel(\"Lobby\")")]
-        public UnityEvent OnGoLobby = new();
-
-        [Tooltip("Fired when resetting / hiding all panels (optional — use on logout or returning to initial state).")]
-        public UnityEvent OnGoNone = new();
-
-        // ─────────────────────────────────────────────
-        // State (read-only from outside)
-        // ─────────────────────────────────────────────
-
+        private readonly Dictionary<PanelType, NavigationRoute> _routeLookup = new();
+        private readonly Dictionary<PanelType, INavigableView> _viewCache = new();
         private PanelType _currentPanel = PanelType.None;
+        private PanelType _settingsReturnPanel = PanelType.Home;
+        private int _navigationVersion;
+        private bool _isNavigating;
 
-        /// <summary>The panel currently displayed.</summary>
         public PanelType CurrentPanel => _currentPanel;
+        public bool IsNavigating => _isNavigating;
 
-        /// <summary>Fired every time the panel changes. Param = new panel.</summary>
-        public event System.Action<PanelType> OnPanelChanged;
-
-        /// <summary>
-        /// Fired by HomeView after all async data fetches complete
-        /// (profile, party, friends). Subscribe to know when it is safe to render
-        /// server-driven content (PLAY button, invite UI, etc.).
-        /// </summary>
-        public event System.Action OnPlayerDataLoaded;
-
-        // ─────────────────────────────────────────────
-        // Lifecycle
-        // ─────────────────────────────────────────────
+        public event Action<PanelType> OnPanelChanged;
+        public event Action OnPlayerDataLoaded;
 
         protected override void OnSingletonAwake()
         {
-            // No setup required — all UI is wired via Inspector.
+            RebuildRouteLookup();
         }
 
-        // ─────────────────────────────────────────────
-        // Public navigation API
-        // ─────────────────────────────────────────────
-
-        /// <summary>
-        /// Navigate to the Login screen.
-        /// Fires the OnGoLogin UnityEvent — wire actions in the Inspector.
-        /// </summary>
-        public void GoLogin()
+        private void OnValidate()
         {
-            if (_currentPanel == PanelType.Login) return;
-            _currentPanel = PanelType.Login;
-            Debug.Log($"[FLOW][UINavigator] ──▶ LOGIN  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            OnGoLogin?.Invoke();
-            OnPanelChanged?.Invoke(PanelType.Login);
+            RebuildRouteLookup();
         }
 
-        /// <summary>
-        /// Navigate to the Home screen.
-        /// Fires the OnGoHome UnityEvent — wire actions in the Inspector.
-        /// </summary>
-        public void GoHome()
+        private void RebuildRouteLookup()
         {
-            if (_currentPanel == PanelType.Home) return;
-            _currentPanel = PanelType.Home;
-            Debug.Log($"[FLOW][UINavigator] ──▶ HOME  (data loading...)  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            OnGoHome?.Invoke();
-            OnPanelChanged?.Invoke(PanelType.Home);
+            _routeLookup.Clear();
+            if (routes == null) return;
+
+            foreach (var route in routes)
+            {
+                if (route == null) continue;
+                var panel = Normalize(route.panel);
+                if (panel == PanelType.None) continue;
+                _routeLookup[panel] = route;
+            }
+
+            _viewCache.Clear();
         }
 
-        /// <summary>
-        /// Navigate to the Lobby screen.
-        /// Fires the OnGoLobby UnityEvent — wire actions in the Inspector.
-        /// </summary>
-        public void GoLobby()
+        public void GoLogin() => ShowPanel(PanelType.Login);
+        public void GoHome() => ShowPanel(PanelType.Home);
+        public void GoLobby() => ShowPanel(PanelType.CustomLobby);
+        public void GoCustomLobby() => ShowPanel(PanelType.CustomLobby);
+        public void GoSettings() => ShowPanel(PanelType.Settings);
+
+        public void GoBack()
         {
-            if (_currentPanel == PanelType.Lobby) return;
-            _currentPanel = PanelType.Lobby;
-            Debug.Log($"[FLOW][UINavigator] ──▶ LOBBY  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            OnGoLobby?.Invoke();
-            OnPanelChanged?.Invoke(PanelType.Lobby);
+            switch (_currentPanel)
+            {
+                case PanelType.Settings:
+                    ShowPanel(GetSettingsReturnPanel(), "Back");
+                    break;
+                case PanelType.CustomLobby:
+                    ShowPanel(PanelType.Home, "Back");
+                    break;
+                case PanelType.Home:
+                    // Maybe show exit confirm
+                    break;
+            }
         }
 
-        /// <summary>
-        /// Called by HomeView after all async data fetches in OnShow() complete.
-        /// Fires <see cref="OnPlayerDataLoaded"/> so subscribers (PLAY button, invite UI, etc.)
-        /// know they can safely render server-driven content.
-        /// </summary>
+        public void GoForce(PanelType target)
+        {
+            ShowPanel(target, forceInstant: true, bypassCanLeave: true);
+        }
+
+        public void ShowPanel(PanelType target, bool forceInstant = false)
+        {
+            _ = ShowPanelAsync(target, forceInstant);
+        }
+
+        public void ShowPanel(PanelType target, string reason)
+        {
+            _ = ShowPanelAsync(target, reason: reason);
+        }
+
+        public void ShowPanel(PanelType target, bool forceInstant, bool bypassCanLeave)
+        {
+            _ = ShowPanelAsync(target, forceInstant, bypassCanLeave);
+        }
+
+        public async Task ShowPanelAsync(
+            PanelType target,
+            bool forceInstant = false,
+            bool bypassCanLeave = false,
+            string reason = null,
+            object payload = null)
+        {
+            var normalizedTarget = Normalize(target);
+            if (_currentPanel == normalizedTarget && !forceInstant)
+                return;
+
+            int version = ++_navigationVersion;
+            _isNavigating = true;
+
+            var from = _currentPanel;
+            var context = new NavigationContext(from, normalizedTarget, forceInstant, bypassCanLeave, reason, payload);
+            var currentView = ResolveView(from);
+
+            if (normalizedTarget == PanelType.Settings && from != PanelType.Settings && from != PanelType.None)
+                _settingsReturnPanel = from;
+
+            if (!bypassCanLeave && currentView != null && !currentView.CanLeave(context))
+            {
+                if (version == _navigationVersion)
+                    _isNavigating = false;
+                return;
+            }
+
+            try
+            {
+                if (currentView != null)
+                {
+                    // Disable interaction immediately on the outgoing panel
+                    var fromRoute = GetRoute(from);
+                    if (fromRoute?.rootObject != null)
+                        SetRouteCanvasGroupInteractive(fromRoute.rootObject, false);
+
+                    await currentView.OnHideAsync(context);
+                }
+
+                if (version != _navigationVersion)
+                    return;
+
+                _currentPanel = normalizedTarget;
+                Debug.Log($"[FLOW][UINavigator] {from} -> {_currentPanel} reason='{context.Reason}'  t={DateTime.UtcNow:HH:mm:ss.fff}");
+
+                // Activate the target route before OnShowAsync so inactive UI can be populated,
+                // but defer visible shell animation until the view finishes its data lifecycle.
+                ApplyRouteRootState(normalizedTarget);
+
+                var nextView = ResolveView(normalizedTarget);
+                if (nextView != null)
+                {
+                    // Ensure the new panel is not interactable yet
+                    var nextRoute = GetRoute(normalizedTarget);
+                    if (nextRoute?.rootObject != null)
+                        SetRouteCanvasGroupInteractive(nextRoute.rootObject, false);
+
+                    await nextView.OnShowAsync(context);
+                }
+
+                if (version != _navigationVersion)
+                    return;
+
+                ApplyActiveRouteVisualState(normalizedTarget);
+                ApplyShellVisualState(normalizedTarget);
+
+                // Final re-enable of interaction after everything is shown
+                var finalRoute = GetRoute(normalizedTarget);
+                if (finalRoute?.rootObject != null)
+                    SetRouteCanvasGroupInteractive(finalRoute.rootObject, true);
+
+                OnPanelChanged?.Invoke(normalizedTarget);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[UINavigator] Navigation {from} -> {normalizedTarget} failed: {ex}");
+            }
+            finally
+            {
+                if (version == _navigationVersion)
+                    _isNavigating = false;
+            }
+        }
+
+        private PanelType GetSettingsReturnPanel()
+        {
+            return _settingsReturnPanel == PanelType.None || _settingsReturnPanel == PanelType.Settings
+                ? PanelType.Home
+                : _settingsReturnPanel;
+        }
+
         public void NotifyPlayerDataLoaded()
         {
-            Debug.Log($"[FLOW][UINavigator] ◆ OnPlayerDataLoaded — profile + party + friends ready  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            Debug.Log($"[FLOW][UINavigator] OnPlayerDataLoaded  t={DateTime.UtcNow:HH:mm:ss.fff}");
             OnPlayerDataLoaded?.Invoke();
         }
 
-        /// <summary>
-        /// Force-navigate even when already on the same panel (bypasses the guard).
-        /// Use when you need to refresh / re-trigger the event on the current panel.
-        /// </summary>
-        public void GoForce(PanelType target)
+        private void InvokeVisualRoute(PanelType panel)
         {
-            _currentPanel = PanelType.None; // reset guard
-            switch (target)
+            ApplyRouteRootState(panel);
+            ApplyActiveRouteVisualState(panel);
+            ApplyShellVisualState(panel);
+        }
+
+        private void ApplyRouteRootState(PanelType panel)
+        {
+            var activePanel = Normalize(panel);
+            if (routes == null)
+                return;
+
+            foreach (var route in routes)
             {
-                case PanelType.Login: GoLogin();  break;
-                case PanelType.Home:  GoHome();   break;
-                case PanelType.Lobby: GoLobby();  break;
+                if (route?.rootObject == null)
+                    continue;
+
+                var routePanel = Normalize(route.panel);
+                if (routePanel == PanelType.None)
+                    continue;
+
+                bool shouldBeActive = routePanel == activePanel;
+
+                // Shell roots are animated by ApplyShellVisualState. Keep them alive so
+                // the intro/login fade states can run instead of being hard-disabled.
+                if (IsShellRoot(route.rootObject))
+                {
+                    if (shouldBeActive && !route.rootObject.activeSelf)
+                        route.rootObject.SetActive(true);
+                    continue;
+                }
+
+                if (route.rootObject.activeSelf != shouldBeActive)
+                    route.rootObject.SetActive(shouldBeActive);
+            }
+        }
+
+        private bool IsShellRoot(GameObject root)
+        {
+            return root != null &&
+                   (root == splashScreenAnimator?.gameObject ||
+                    root == mainPanelsAnimator?.gameObject);
+        }
+
+        private void ApplyActiveRouteVisualState(PanelType panel)
+        {
+            var route = GetRoute(panel);
+            if (route?.rootObject == null || IsShellRoot(route.rootObject))
+                return;
+
+            if (!route.rootObject.activeSelf)
+                route.rootObject.SetActive(true);
+
+            bool animated = PlayAnimator(route.rootObject.GetComponent<Animator>(), routePanelInState);
+            SetRouteCanvasGroupInteractive(route.rootObject, true);
+
+            if (!animated)
+                SetRouteCanvasGroupVisible(route.rootObject, true);
+        }
+
+        private static void SetRouteCanvasGroupInteractive(GameObject root, bool interactive)
+        {
+            if (root == null || !root.TryGetComponent<CanvasGroup>(out var canvasGroup))
+                return;
+
+            canvasGroup.interactable = interactive;
+            canvasGroup.blocksRaycasts = interactive;
+        }
+
+        private static void SetRouteCanvasGroupVisible(GameObject root, bool visible)
+        {
+            if (root == null || !root.TryGetComponent<CanvasGroup>(out var canvasGroup))
+                return;
+
+            canvasGroup.alpha = visible ? 1f : 0f;
+            canvasGroup.interactable = visible;
+            canvasGroup.blocksRaycasts = visible;
+        }
+
+        private void ApplyShellVisualState(PanelType panel)
+        {
+            switch (Normalize(panel))
+            {
+                case PanelType.Login:
+                    PlayAnimator(mainPanelsAnimator, mainPanelsHiddenState);
+                    PlayAnimator(splashScreenAnimator, loginAnimatorState);
+                    break;
+                case PanelType.Home:
+                case PanelType.CustomLobby:
+                case PanelType.Settings:
+                    PlayAnimator(mainPanelsAnimator, mainPanelsStartState);
+                    PlayAnimator(splashScreenAnimator, splashHiddenState);
+                    break;
                 default:
-                    _currentPanel = PanelType.None;
-                    OnGoNone?.Invoke();
-                    OnPanelChanged?.Invoke(PanelType.None);
+                    PlayAnimator(mainPanelsAnimator, mainPanelsHiddenState);
+                    PlayAnimator(splashScreenAnimator, splashHiddenState);
                     break;
             }
         }
 
-        /// <summary>
-        /// Navigate by PanelType enum.
-        /// Called from LoadingManager: ShowPanel(_targetPanel).
-        /// </summary>
-        public void ShowPanel(PanelType target, bool forceInstant = false)
+        private static bool PlayAnimator(Animator animator, string stateName)
         {
-            // forceInstant is not used in event-driven design — kept for API compatibility.
-            switch (target)
+            return ShiftUIBridge.PlayAnimatorState(animator, stateName);
+        }
+
+        private INavigableView ResolveView(PanelType panel)
+        {
+            panel = Normalize(panel);
+            if (panel == PanelType.None)
+                return null;
+
+            if (_viewCache.TryGetValue(panel, out var cached))
+                return cached;
+
+            INavigableView view = null;
+            var route = GetRoute(panel);
+            if (route?.view is INavigableView routeView)
+                view = routeView;
+
+            view ??= panel switch
             {
-                case PanelType.Login: GoLogin();  break;
-                case PanelType.Home:  GoHome();   break;
-                case PanelType.Lobby: GoLobby();  break;
-                default:
-                    _currentPanel = PanelType.None;
-                    OnGoNone?.Invoke();
-                    OnPanelChanged?.Invoke(PanelType.None);
-                    break;
-            }
+                PanelType.Login => FindFirstObjectByType<LoginView>(FindObjectsInactive.Include),
+                PanelType.Home => FindFirstObjectByType<HomeView>(FindObjectsInactive.Include),
+                PanelType.CustomLobby => FindFirstObjectByType<CustomLobbyView>(FindObjectsInactive.Include),
+                PanelType.Settings => FindFirstObjectByType<NightHunt.UI.Settings.SettingsView>(FindObjectsInactive.Include),
+                _ => null
+            };
+
+            if (view != null)
+                _viewCache[panel] = view;
+
+            return view;
+        }
+
+        private NavigationRoute GetRoute(PanelType panel)
+        {
+            panel = Normalize(panel);
+            if (_routeLookup.Count == 0)
+                RebuildRouteLookup();
+            _routeLookup.TryGetValue(panel, out var route);
+            return route;
+        }
+
+        private static PanelType Normalize(PanelType panel)
+        {
+            return panel == PanelType.Lobby ? PanelType.CustomLobby : panel;
         }
     }
 }

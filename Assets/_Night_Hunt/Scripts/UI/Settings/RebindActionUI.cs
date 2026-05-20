@@ -4,6 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using NightHunt.Gameplay.Input.Core;
 
 namespace NightHunt.UI.Settings
 {
@@ -112,6 +113,10 @@ namespace NightHunt.UI.Settings
             if (_waitingOverlay != null) _waitingOverlay.SetActive(false);
             if (_rebindButton   != null) _rebindButton.interactable = true;
 
+            // Persist the new override so it survives scene/app restarts.
+            var asset = _actionRef.action.actionMap?.asset;
+            if (asset != null) InputBindingSaveSystem.SaveBindings(asset);
+
             UpdateBindingDisplay();
             OnBindingChanged?.Invoke();
         }
@@ -135,9 +140,20 @@ namespace NightHunt.UI.Settings
             if (action == null) return;
 
             action.RemoveBindingOverride(_bindingIndex);
+
+            // Persist the reset so it survives restarts.
+            var asset = action.actionMap?.asset;
+            if (asset != null) InputBindingSaveSystem.SaveBindings(asset);
+
             UpdateBindingDisplay();
             OnBindingChanged?.Invoke();
         }
+
+        /// <summary>
+        /// Public helper called by <see cref="NightHunt.UI.Settings.ControlsSettingsPanel"/>
+        /// when resetting all bindings — updates display after external reset.
+        /// </summary>
+        public void RefreshDisplay() => UpdateBindingDisplay();
 
         // ── Helpers ────────────────────────────────────────────────────────────
 

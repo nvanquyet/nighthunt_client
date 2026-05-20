@@ -111,15 +111,15 @@ namespace NightHunt.GameplaySystems.ItemUse
 
                 // Temporary modifiers — now routed through IStatContributor
                 case ConsumableEffectType.SpeedBoost:
-                    AddTempMod(PlayerStatType.MovementSpeed, fx, percentage: true);
+                    AddTempMod(PlayerStatType.MovementSpeed, fx, ModifierType.Percentage);
                     break;
 
                 case ConsumableEffectType.ArmorBoost:
-                    AddTempMod(PlayerStatType.Armor, fx, percentage: false);
+                    AddTempMod(PlayerStatType.Armor, fx, ModifierType.Flat);
                     break;
 
                 case ConsumableEffectType.VisionIncrease:
-                    AddTempMod(PlayerStatType.VisionRange, fx, percentage: false);
+                    AddTempMod(PlayerStatType.VisionRange, fx, ModifierType.Flat);
                     break;
 
                 case ConsumableEffectType.NoiseReduce:
@@ -127,20 +127,28 @@ namespace NightHunt.GameplaySystems.ItemUse
                     break;
 
                 case ConsumableEffectType.IncreaseMaxHealth:
-                    AddTempMod(PlayerStatType.MaxHealth, fx, percentage: false);
+                    AddTempMod(PlayerStatType.MaxHealth, fx, ModifierType.Flat);
                     break;
 
                 case ConsumableEffectType.IncreaseMaxStamina:
-                    AddTempMod(PlayerStatType.MaxStamina, fx, percentage: false);
+                    AddTempMod(PlayerStatType.MaxStamina, fx, ModifierType.Flat);
                     break;
 
                 // Hooks
                 case ConsumableEffectType.ApplyBuff:
                 case ConsumableEffectType.ApplyDebuff:
+                case ConsumableEffectType.ModifyStat:
+                    AddTempMod(fx.StatType, fx, fx.ModifierType);
+                    break;
+
                 case ConsumableEffectType.Cure:
                 case ConsumableEffectType.Revive:
                 case ConsumableEffectType.DamageBoost:
                     Debug.Log($"[ConsumableHandler] {fx.EffectType} → hook into buff/combat system");
+                    break;
+
+                case ConsumableEffectType.RevealEnemyPlayers:
+                    // Network reveal is handled by ItemUseSystem because it needs the owning connection.
                     break;
 
                 case ConsumableEffectType.DeployBeacon:
@@ -183,7 +191,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         /// and automatically expires when Duration elapses (next Recalculate polls expiry).
         /// Falls back to legacy direct AddModifier if no orchestrator.
         /// </summary>
-        private void AddTempMod(PlayerStatType stat, ConsumableEffect fx, bool percentage)
+        private void AddTempMod(PlayerStatType stat, ConsumableEffect fx, ModifierType modifierType)
         {
             if (_orchestrator != null)
             {
@@ -194,14 +202,14 @@ namespace NightHunt.GameplaySystems.ItemUse
                     {
                         StatType     = stat,
                         Value        = fx.Value,
-                        ModifierType = percentage ? ModifierType.Percentage : ModifierType.Flat,
+                        ModifierType = modifierType,
                         Description  = fx.Description
                     },
                     ExpireAt = fx.Duration > 0f ? Time.time + fx.Duration : 0f
                 };
                 _activeMods.Add(mod);
                 _orchestrator.ScheduleRecalc();
-                DebugConsumable($"AddTempMod via orchestrator stat={stat} value={fx.Value} type={(percentage ? "Percentage" : "Flat")} duration={fx.Duration}");
+                DebugConsumable($"AddTempMod via orchestrator stat={stat} value={fx.Value} type={modifierType} duration={fx.Duration}");
 
                 // Schedule cleanup coroutine so we trigger a recalc exactly on expiry
                 if (fx.Duration > 0f)
@@ -211,11 +219,14 @@ namespace NightHunt.GameplaySystems.ItemUse
             {
                 // Legacy path (no orchestrator wired): direct AddModifier with GUID key
                 string src = $"consumable_{stat}_{Guid.NewGuid():N}";
-                var mod = percentage
-                    ? StatModifier.CreatePercentage(src, fx.Value, 0, fx.Description)
-                    : StatModifier.CreateFlat(src, fx.Value, 0, fx.Description);
+                var mod = modifierType switch
+                {
+                    ModifierType.Percentage => StatModifier.CreatePercentage(src, fx.Value, 0, fx.Description),
+                    ModifierType.Override => StatModifier.CreateOverride(src, fx.Value, fx.Description),
+                    _ => StatModifier.CreateFlat(src, fx.Value, 0, fx.Description)
+                };
                 _statSystem?.AddModifier(stat, mod);
-                DebugConsumable($"AddTempMod legacy stat={stat} source={src} value={fx.Value} type={(percentage ? "Percentage" : "Flat")} duration={fx.Duration}");
+                DebugConsumable($"AddTempMod legacy stat={stat} source={src} value={fx.Value} type={modifierType} duration={fx.Duration}");
                 if (fx.Duration > 0f)
                     StartCoroutine(ExpireModLegacy(stat, src, fx.Duration));
             }

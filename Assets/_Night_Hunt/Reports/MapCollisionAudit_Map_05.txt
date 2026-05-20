@@ -1,0 +1,14 @@
+[MapCollisionSetup] target=Map 05 scanned=33845 needsCollider=5126 added=5126 box=4134 mesh=992 cleared=0 layersSet=5127 existingCollider=314 vfx=968 tiny=204 noMesh=27036 decorative=60 missingLayer=0
+
+Generated collider layer counts:
+- Ground: 992
+- MapObstacle: 3194
+- Wall: 940
+
+Skipped:
+- Existing blocking collider: 314
+- VFX/effect/minimap/UI: 968
+- Tiny decorative: 204
+- No MeshFilter mesh: 27036
+- Unsupported renderer type: 137
+- Decorative/unclassified: 60

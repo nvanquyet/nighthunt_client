@@ -110,10 +110,25 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         event Action<ItemInstance> OnItemUseCancelled;
 
         /// <summary>
+        /// Event fired when throwable wind-up starts.
+        /// </summary>
+        event Action OnThrowPrepareStarted;
+
+        /// <summary>
         /// Event fired the instant a throw is executed (projectile spawned).
         /// Subscribe in CharacterAnimationController to trigger the Throw animator parameter.
         /// </summary>
         event Action OnThrowExecuted;
+
+        /// <summary>
+        /// Event fired when a deployable placement confirmation starts its deploy timer.
+        /// </summary>
+        event Action OnDeployStarted;
+
+        /// <summary>
+        /// Event fired after the deployable was placed successfully.
+        /// </summary>
+        event Action OnDeployCompleted;
         
         /// <summary>
         /// Event fired during item use progress

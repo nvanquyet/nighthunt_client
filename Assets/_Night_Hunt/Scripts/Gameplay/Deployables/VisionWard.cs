@@ -68,9 +68,9 @@ namespace NightHunt.Gameplay.Deployables
         /// Called by DeployablePlacementHandler when VisionRadius > 0 on the DeployableDefinition.
         /// </summary>
         [Server]
-        public void InitializeWithRadius(int teamId, int maxHP, float radius)
+        public void InitializeWithRadius(int teamId, int maxHP, float radius, int ownerNetworkObjectId = 0)
         {
-            base.Initialize(teamId, maxHP);
+            base.Initialize(teamId, maxHP, ownerNetworkObjectId);
             if (radius > 0f)
             {
                 visionRadius = radius;
@@ -179,12 +179,15 @@ namespace NightHunt.Gameplay.Deployables
 
             ApplyRevealerRadius();
 
-            bool shouldEnable = _isPlaced.Value && _isActive.Value && !IsEnemyForLocalClient();
+            var localPlayer = SpectateManager.Instance?.GetLocalPlayer();
+            bool hasLocalPlayer = localPlayer != null;
+            bool sameTeam = hasLocalPlayer && localPlayer.TeamId == _ownerTeamId.Value;
+            bool shouldEnable = _isPlaced.Value && _isActive.Value && sameTeam;
 
             Debug.Log($"[VisionWard] UpdateVisionState: isPlaced={_isPlaced.Value} isActive={_isActive.Value} " +
                       $"ownerTeam={_ownerTeamId.Value} " +
-                      $"localTeam={SpectateManager.Instance?.GetLocalPlayer()?.TeamId.ToString() ?? "null(no local player)"} " +
-                      $"isEnemy={IsEnemyForLocalClient()} radius={visionRadius:F1} → revealerEnabled={shouldEnable}");
+                      $"localTeam={(hasLocalPlayer ? localPlayer.TeamId.ToString() : "null(no local player)")} " +
+                      $"sameTeam={sameTeam} radius={visionRadius:F1} → revealerEnabled={shouldEnable}");
 
             // Ensure the revealer's own GameObject is active before toggling the component.
             // (FogOfWarRevealer3D only processes when both the GO and component are active.)
@@ -225,15 +228,6 @@ namespace NightHunt.Gameplay.Deployables
         {
             if (_revealer != null)
                 _revealer.ViewRadius = visionRadius;
-        }
-
-        private bool IsEnemyForLocalClient()
-        {
-            var localPlayer = SpectateManager.Instance?.GetLocalPlayer();
-            if (localPlayer == null)
-                return false;
-
-            return localPlayer.TeamId != _ownerTeamId.Value;
         }
 
 #if UNITY_EDITOR

@@ -11,6 +11,7 @@ using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using NightHunt.Utilities;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.UI
 {
@@ -88,6 +89,12 @@ namespace NightHunt.UI
             // HealthSystem: primary trigger for SHOW — carries the confirmed killer name from server.
             if (_healthSystem != null)
                 _healthSystem.OnPlayerDied += HandlePlayerHealthDied;
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "DeathScreenRegistered",
+                $"player={player.DisplayName} obj={player.ObjectId} lifecycle={(_lifecycle != null ? "ok" : "null")} health={(_healthSystem != null ? "ok" : "null")} respawnSystem={(_respawnSystem != null ? "ok" : "null")}",
+                this);
         }
 
         public void Show(string killerName = "")
@@ -108,6 +115,11 @@ namespace NightHunt.UI
 
             if (_countdownRoutine != null) StopCoroutine(_countdownRoutine);
             _countdownRoutine = StartCoroutine(RespawnCountdown());
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "DeathScreenShow",
+                $"player={_localPlayer?.DisplayName ?? "null"} killer={killerName ?? string.Empty} fallbackDelay={_respawnDelay:F2}",
+                this);
         }
 
         public void Hide()
@@ -118,6 +130,11 @@ namespace NightHunt.UI
                 StopCoroutine(_countdownRoutine);
                 _countdownRoutine = null;
             }
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "DeathScreenHide",
+                $"player={_localPlayer?.DisplayName ?? "null"}",
+                this);
         }
 
         // ── Unity lifecycle ───────────────────────────────────────────────────
@@ -186,6 +203,11 @@ namespace NightHunt.UI
 
             if (_countdownRoutine != null) StopCoroutine(_countdownRoutine);
             _countdownRoutine = StartCoroutine(RespawnCountdown(evt.DelaySeconds));
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "DeathScreenRespawnTimer",
+                $"player={_localPlayer?.DisplayName ?? "null"} delay={evt.DelaySeconds:F2}",
+                this);
         }
 
         private void OnRespawnCancelled(RespawnCancelledEvent evt)
@@ -210,6 +232,12 @@ namespace NightHunt.UI
             // Hide the respawn button entirely — only Spectate is available.
             if (_respawnButton != null)
                 _respawnButton.gameObject.SetActive(false);
+
+            PhaseTestLog.Warning(
+                PhaseTestLogCategory.Death,
+                "DeathScreenRespawnCancelled",
+                $"player={_localPlayer?.DisplayName ?? "null"} reason={evt.Reason}",
+                this);
         }
 
         // ── Coroutine ─────────────────────────────────────────────────────────
@@ -246,13 +274,25 @@ namespace NightHunt.UI
             if (sm == null) return;
 
             // Cycle to next living player
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Spectate,
+                "DeathScreenSpectateClicked",
+                $"player={_localPlayer?.DisplayName ?? "null"} current={sm.GetCurrentPlayer()?.DisplayName ?? "null"}",
+                this);
             sm.SwitchSpectatedPlayer(next: true);
         }
 
         private void OnRespawnClicked()
         {
             if (_localPlayer != null && _respawnSystem != null)
+            {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Death,
+                    "DeathScreenRespawnClicked",
+                    $"player={_localPlayer.DisplayName}",
+                    this);
                 _respawnSystem.RequestRespawn(_localPlayer);
+            }
             else
                 Debug.Log("[DeathScreen] Manual respawn requested — RespawnSystem or localPlayer not resolved.");
         }

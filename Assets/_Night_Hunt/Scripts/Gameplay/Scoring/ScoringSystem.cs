@@ -8,6 +8,7 @@ using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Utilities;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Scoring
 {
@@ -72,11 +73,12 @@ namespace NightHunt.Gameplay.Scoring
         /// </summary>
         [Server]
         public void AwardScore(uint playerId, string action, int baseScore, float multiplier = 1f)
+            => AwardScoreInternal(playerId, action, baseScore, multiplier, syncAfterAward: true);
+
+        [Server]
+        private void AwardScoreInternal(uint playerId, string action, int baseScore, float multiplier, bool syncAfterAward)
         {
-            if (!playerScores.ContainsKey(playerId))
-            {
-                playerScores[playerId] = new PlayerScore { PlayerId = playerId };
-            }
+            EnsurePlayerScore(playerId);
 
             // Get phase multiplier using ScoreMultiplier utility
             float phaseMultiplier = 1f;
@@ -111,10 +113,15 @@ namespace NightHunt.Gameplay.Scoring
                 teamScores[teamId].TotalScore += finalScore;
             }
 
-            // Sync scores
-            SyncScores();
+            if (syncAfterAward)
+                SyncScores();
 
             Debug.Log($"[ScoringSystem] Awarded {finalScore} points to player {playerId} for {action}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Score,
+                "AwardScore",
+                $"player={playerId} team={GetTeamId(playerId)} action={action} base={baseScore} multiplier={multiplier:F2} phaseMultiplier={phaseMultiplier:F2} final={finalScore} total={playerScores[playerId].TotalScore}",
+                this);
         }
 
         /// <summary>
@@ -124,15 +131,28 @@ namespace NightHunt.Gameplay.Scoring
         public void AwardKill(uint killerId, uint victimId)
         {
             var killConfig = GetScoreConfig("Kill");
-            AwardScore(killerId, "Kill", killConfig.BaseScore, killConfig.PhaseMultiplier);
+            AwardScoreInternal(killerId, "Kill", killConfig.BaseScore, killConfig.PhaseMultiplier, syncAfterAward: false);
 
             // Track Kills stat (AwardScore already initialized playerScores/teamScores entries)
             if (playerScores.ContainsKey(killerId))
                 playerScores[killerId].Kills++;
 
+            if (victimId != 0u)
+            {
+                EnsurePlayerScore(victimId);
+                playerScores[victimId].Deaths++;
+            }
+
             NetworkPlayer killer = GetPlayerById(killerId);
             if (killer != null && teamScores.ContainsKey(killer.TeamId))
                 teamScores[killer.TeamId].Kills++;
+
+            SyncScores();
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Score,
+                "AwardKill",
+                $"killer={killerId} victim={victimId} killerKills={(playerScores.ContainsKey(killerId) ? playerScores[killerId].Kills : 0)} victimDeaths={(playerScores.ContainsKey(victimId) ? playerScores[victimId].Deaths : 0)} killerScore={(playerScores.ContainsKey(killerId) ? playerScores[killerId].TotalScore : 0)}",
+                this);
         }
 
         /// <summary>
@@ -198,6 +218,12 @@ namespace NightHunt.Gameplay.Scoring
                 if (cfg != null) return cfg;
             }
             return GetFallbackScoreConfig(action);
+        }
+
+        private void EnsurePlayerScore(uint playerId)
+        {
+            if (!playerScores.ContainsKey(playerId))
+                playerScores[playerId] = new PlayerScore { PlayerId = playerId };
         }
 
         // Hardcoded fallback table — keeps gameplay functional when Inspector list is empty.

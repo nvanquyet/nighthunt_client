@@ -8,9 +8,9 @@ namespace NightHunt.Audio
     /// <summary>
     /// AudioManager — Production-grade centralized audio system.
     ///
-    /// ARCHITECTURE (mirrors ShiftUI QualityManager pattern):
+    /// ARCHITECTURE:
     ///   • Persistent singleton (DontDestroyOnLoad).
-    ///   • Reads/writes volume via PlayerPrefs (same dB formula as QualityManager).
+    ///   • Reads/writes volume via PlayerPrefs using the project mixer params.
     ///   • AudioMixer exposes: "MasterVol", "MusicVol", "SFXVol", "UIVol",
     ///     "WeaponVol", "FootstepVol", "ExplosionVol", "VoiceVol", "AmbienceVol".
     ///   • 2D sources: Music (×2 for crossfade), UI, Voice, Heartbeat (loop).
@@ -19,7 +19,7 @@ namespace NightHunt.Audio
     /// SETUP (scene: persistent "Systems" GO or AudioManager prefab):
     ///   1. Add AudioManager component → assign NH_Master.mixer + AudioLibrary asset.
     ///   2. AudioManager bootstraps AudioPool3D internally — no extra setup.
-    ///   3. Settings panel calls SetVolume(param, 0-1) — mirrors QualityManager.
+    ///   3. Settings panel calls SetVolume(param, 0-1). ShiftUI QualityManager is not used.
     ///
     /// USAGE:
     ///   AudioManager.Instance.PlayUI(clip);
@@ -131,13 +131,16 @@ namespace NightHunt.Audio
 
         protected override void OnSingletonAwake()
         {
+        #if !UNITY_SERVER
             BuildSources();
             _pool3D = new AudioPool3D(pool3DSize, transform);
             LoadAllVolumes();
+        #endif
         }
 
         private void BuildSources()
         {
+        #if !UNITY_SERVER
             _musicA          = CreateSource2D("MusicA",     groupMusic);
             _musicB          = CreateSource2D("MusicB",     groupMusic);
             _uiSource        = CreateSource2D("UI",         groupUI);
@@ -147,10 +150,12 @@ namespace NightHunt.Audio
             _musicA.loop         = true;
             _musicB.loop         = true;
             _heartbeatSource.loop = true;
+        #endif
         }
 
         private AudioSource CreateSource2D(string label, AudioMixerGroup group)
         {
+        #if !UNITY_SERVER
             var go = new GameObject(label) { hideFlags = HideFlags.HideInHierarchy };
             go.transform.SetParent(transform, false);
             var src = go.AddComponent<AudioSource>();
@@ -158,9 +163,14 @@ namespace NightHunt.Audio
             src.playOnAwake            = false;
             src.outputAudioMixerGroup  = group;
             return src;
+        #else
+            return null;
+        #endif
         }
 
-        // ── Volume (mirrors QualityManager dB formula exactly) ─────────────────
+        // ── Volume ─────────────────────────────────────────────────────────────
+
+        private const string PREFS_PREFIX = "NH_Audio_";
 
         /// <summary>
         /// Set a mixer exposed parameter from a 0–1 linear value.
@@ -168,17 +178,21 @@ namespace NightHunt.Audio
         /// </summary>
         public void SetVolume(string exposedParam, float value01)
         {
+        #if !UNITY_SERVER
+            if (mixer == null || string.IsNullOrWhiteSpace(exposedParam)) return;
             float clamped = Mathf.Clamp(value01, 0.001f, 1f);
             mixer.SetFloat(exposedParam, Mathf.Log10(clamped) * 20f);
-            PlayerPrefs.SetFloat("NH_Audio_" + exposedParam, value01);
+            PlayerPrefs.SetFloat(PREFS_PREFIX + exposedParam, value01);
+        #endif
         }
 
         /// <summary>Return saved 0–1 linear volume for a param.</summary>
         public float GetVolume(string exposedParam, float defaultValue)
-            => PlayerPrefs.GetFloat("NH_Audio_" + exposedParam, defaultValue);
+            => PlayerPrefs.GetFloat(PREFS_PREFIX + exposedParam, defaultValue);
 
         private void LoadAllVolumes()
         {
+        #if !UNITY_SERVER
             ApplyStored(ParamMaster,    DefaultMaster);
             ApplyStored(ParamMusic,     DefaultMusic);
             ApplyStored(ParamSFX,       DefaultSFX);
@@ -188,13 +202,17 @@ namespace NightHunt.Audio
             ApplyStored(ParamExplosion, DefaultExplosion);
             ApplyStored(ParamVoice,     DefaultVoice);
             ApplyStored(ParamAmbience,  DefaultAmbience);
+        #endif
         }
 
         private void ApplyStored(string param, float defaultVal)
         {
-            float stored = PlayerPrefs.GetFloat("NH_Audio_" + param, defaultVal);
+        #if !UNITY_SERVER
+            if (mixer == null || string.IsNullOrWhiteSpace(param)) return;
+            float stored = PlayerPrefs.GetFloat(PREFS_PREFIX + param, defaultVal);
             float clamped = Mathf.Clamp(stored, 0.001f, 1f);
             mixer.SetFloat(param, Mathf.Log10(clamped) * 20f);
+        #endif
         }
 
         // ── 2D Playback ────────────────────────────────────────────────────────
@@ -202,18 +220,22 @@ namespace NightHunt.Audio
         /// <summary>Play a one-shot UI sound (2D, non-interruptible).</summary>
         public void PlayUI(AudioClip clip, float volume = 1f)
         {
+        #if !UNITY_SERVER
             if (clip == null || _uiSource == null) return;
             _uiSource.PlayOneShot(clip, volume);
+        #endif
         }
 
         /// <summary>Play a voice/announcer clip (2D, interrupts previous).</summary>
         public void PlayAnnouncer(AudioClip clip, float volume = 1f)
         {
+        #if !UNITY_SERVER
             if (clip == null || _voiceSource == null) return;
             _voiceSource.Stop();
             _voiceSource.clip   = clip;
             _voiceSource.volume = volume;
             _voiceSource.Play();
+        #endif
         }
 
         // ── Music (crossfade dual-source) ──────────────────────────────────────
@@ -349,7 +371,10 @@ namespace NightHunt.Audio
         public void PlayHitMarker(bool isHeadshot = false)
         {
             if (library == null) return;
-            PlayUI(isHeadshot ? library.hitMarkerHeadshot : library.hitMarkerTick);
+            AudioClip clip = isHeadshot && library.hitMarkerHeadshot != null
+                ? library.hitMarkerHeadshot
+                : library.hitMarkerTick;
+            PlayUI(clip);
         }
 
         /// <summary>Play kill confirm stinger.</summary>
@@ -360,7 +385,7 @@ namespace NightHunt.Audio
 
         /// <summary>Play grenade explosion at world position.</summary>
         public void PlayExplosionGrenade(Vector3 pos)
-            => PlayExplosion3D(library?.explosionGrenade, pos);
+            => PlayExplosion3D(library?.explosionGrenade ?? library?.explosionRocket, pos);
 
         /// <summary>Play bullet impact at world position.</summary>
         public void PlayBulletImpact(Vector3 pos)

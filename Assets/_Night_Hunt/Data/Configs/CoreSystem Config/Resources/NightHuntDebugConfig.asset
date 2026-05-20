@@ -15,15 +15,30 @@ MonoBehaviour:
   EnableStatDebugLogs: 1
   EnableInventoryDebugLogs: 1
   EnableInteractionDebugLogs: 1
-  EnableWeaponDebugLogs: 0
+  EnableWeaponDebugLogs: 1
   EnableCoreDebugLogs: 0
   EnableNetworkDebugLogs: 0
   EnableMatchDebugLogs: 0
   ShowDebugGizmos: 0
   EnableConsumableDebugLogs: 0
-  EnableThrowableDebugLogs: 0
+  EnableThrowableDebugLogs: 1
   EnableDeployableDebugLogs: 1
   EnableDropDebugLogs: 0
   EnableSortDebugLogs: 0
   EnableProjectileDebugLogs: 1
   EnableHealthBarDebugLogs: 0
+  EnablePhaseTestLogs: 1
+  PhaseTestLogFilter: ReloadButton|MobileWeaponBind|MobileContextButtons|PromptShow|PromptHide|PickupPerformed|InteractPerformed|AimCursorVisibility|Projectile|OneShot|ShotFired|MeleeAttack|ReloadTrigger|ReloadTriggerDeferred|ReloadTriggerDeferredFire|Throw|Deploy|InteractTrigger|ItemUseStarted|Minimap|InputPushContext|InputPopContext|InputLayersApplied|WeaponEquip|WeaponAnimChanged|AnimatorStateChanged
+  PhaseTestLogInput: 1
+  PhaseTestLogWeapon: 1
+  PhaseTestLogAnimation: 1
+  PhaseTestLogIK: 1
+  PhaseTestLogInteraction: 1
+  PhaseTestLogItemUse: 1
+  PhaseTestLogDeploy: 1
+  PhaseTestLogThrowable: 1
+  PhaseTestLogDeath: 1
+  PhaseTestLogSpectate: 1
+  PhaseTestLogScore: 1
+  PhaseTestLogPhysics: 1
+  PhaseTestLogProjectile: 1

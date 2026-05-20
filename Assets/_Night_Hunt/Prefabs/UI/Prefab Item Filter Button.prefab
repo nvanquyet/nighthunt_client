@@ -750,6 +750,8 @@ GameObject:
   - component: {fileID: 831765162301472547}
   - component: {fileID: 8847959615182321755}
   - component: {fileID: 7645162120057472822}
+  - component: {fileID: 2170568292797222874}
+  - component: {fileID: 5628807536275065164}
   m_Layer: 5
   m_Name: Prefab Item Filter Button
   m_TagString: Untagged
@@ -854,6 +856,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _iconImage: {fileID: 8950489895355577683}
   _cooldownRing: {fileID: 0}
+  _scaleValue: 1
   _pressScaleDown: 0.88
   _pressScaleDur: 0.07
   _releaseScaleDur: 0.12
@@ -861,6 +864,35 @@ MonoBehaviour:
   _icon: {fileID: 8950489895355577683}
   _quantityText: {fileID: 1467755436424835763}
   _selectedMarker: {fileID: 2396575715940193565}
+--- !u!114 &2170568292797222874
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7535614071705865589}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b00fdafdb0f043b478fb83d2d57f29b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.UI.NH_Button
+--- !u!114 &5628807536275065164
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7535614071705865589}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 356e2b2eea1fd1747a7ddd282e2a64f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Audio.UIAudioTrigger
+  overrideClickClip: {fileID: 0}
+  overrideHoverClip: {fileID: 0}
+  playHover: 1
+  playClick: 1
+  volumeMultiplier: 1
 --- !u!1 &8688818488448040004
 GameObject:
   m_ObjectHideFlags: 0
@@ -964,6 +996,7 @@ MonoBehaviour:
   m_VerticalAlignment: 512
   m_textAlignment: 65535
   m_characterSpacing: 0
+  m_characterHorizontalScale: 1
   m_wordSpacing: 0
   m_lineSpacing: 0
   m_lineSpacingMax: 0

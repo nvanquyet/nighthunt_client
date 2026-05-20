@@ -80,6 +80,12 @@ namespace NightHunt.Audio
 
         // ── Background Music (2D) ───────────────────────────────────────────
         [Header("Background Music (2D)")]
+        [Tooltip("Played once when the game boots up or main menu loads.")]
+        public AudioClip gameIntro;
+
+        [Tooltip("Playlist of BGM tracks. The user can select the index in settings, or play random.")]
+        public AudioClip[] bgmPlaylist;
+
         [Tooltip("Home screen background music (lobby, menu).")]
         public AudioClip bgmHome;
 
@@ -167,6 +173,17 @@ namespace NightHunt.Audio
             if (multiKillClips == null || multiKillClips.Length == 0) return null;
             int idx = Mathf.Clamp(killStreak - 2, 0, multiKillClips.Length - 1);
             return multiKillClips[idx];
+        }
+
+        /// <summary>
+        /// Retrieves a BGM clip from the playlist by index. If index is invalid, returns a random BGM.
+        /// </summary>
+        public AudioClip GetBGMFromPlaylist(int index)
+        {
+            if (bgmPlaylist == null || bgmPlaylist.Length == 0) return null;
+            if (index < 0 || index >= bgmPlaylist.Length)
+                return bgmPlaylist[Random.Range(0, bgmPlaylist.Length)];
+            return bgmPlaylist[index];
         }
     }
 }

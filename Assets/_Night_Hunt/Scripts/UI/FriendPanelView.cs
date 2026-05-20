@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Services.Friend;
@@ -104,8 +105,11 @@ namespace NightHunt.UI
         // ── Runtime state ─────────────────────────────────────────────────────
         private FriendTab            _activeTab    = FriendTab.Friends;
         private int                  _pendingCount = 0;   // pending incoming requests
-        private bool                 _iAmPartyHost = false;
+        private bool                 _canInviteToParty = false;
         private FriendItemView       _activeContextItem;
+        private int                  _friendsLoadVersion;
+        private int                  _requestsLoadVersion;
+        private int                  _badgeLoadVersion;
 
         // Cached lists (online / offline split, kept in sync with WS events)
         private readonly List<FriendResponse>    _onlineFriends  = new();
@@ -151,34 +155,53 @@ namespace NightHunt.UI
         /// </summary>
         public void ShowForInvite()
         {
-            onOpenRequested?.Invoke();
+            if (!UIAnimationCallbackInvoker.InvokeOpen(onOpenRequested, this))
+                Debug.LogWarning("[FriendPanelView] Open animation callback is not wired and no WindowIn fallback was found.");
+
             SwitchTabData(FriendTab.Friends);
         }
 
+        public void OpenPanel() => ShowForInvite();
+
+        public void ClosePanel()
+        {
+            contextMenu?.Hide();
+            if (!UIAnimationCallbackInvoker.InvokeClose(null, this))
+                Debug.LogWarning("[FriendPanelView] Close animation fallback was not found.");
+        }
+
         /// <summary>Full reload of the friend list from the API.</summary>
-        public void RefreshFriendList() => LoadFriends();
+        public void RefreshFriendList() => _ = RefreshFriendListAsync();
+
+        public Task RefreshFriendListAsync(bool requireSuccess = false)
+            => LoadFriendsAsync(requireSuccess);
 
         /// <summary>
         /// Full reload of the friend list AND fetches incoming request count for the badge.
         /// Call this from HomeView on login/return-to-home so the badge is correct immediately.
         /// </summary>
-        public void RefreshFriendListAndBadge()
+        public void RefreshFriendListAndBadge() => _ = RefreshFriendListAndBadgeAsync();
+
+        public async Task RefreshFriendListAndBadgeAsync(bool requireSuccess = false)
         {
-            LoadFriends();
-            _ = RefreshIncomingBadge();
-            // Fallback: preload request rows at Home entry so data is available even if
-            // tab animation is wired but OnMoreFriendsTabClicked() was missed in Inspector.
-            LoadFriendRequests();
+            // Preload request rows at Home entry so data is available even if tab animation
+            // is wired but OnMoreFriendsTabClicked() was missed in Inspector.
+            await Task.WhenAll(
+                LoadFriendsAsync(requireSuccess),
+                LoadFriendRequestsAsync(updateBadge: true, requireSuccess: requireSuccess));
         }
 
         /// <summary>
         /// Refresh both friend list and pending requests.
         /// Safe to wire directly to a Refresh button's onClick in the Inspector.
         /// </summary>
-        public void RefreshAll()
+        public void RefreshAll() => _ = RefreshAllAsync();
+
+        public async Task RefreshAllAsync(bool requireSuccess = false)
         {
-            LoadFriends();
-            LoadFriendRequests(); // always reload regardless of active tab
+            await Task.WhenAll(
+                LoadFriendsAsync(requireSuccess),
+                LoadFriendRequestsAsync(updateBadge: true, requireSuccess: requireSuccess)); // always reload regardless of active tab
         }
 
         /// <summary>
@@ -189,29 +212,29 @@ namespace NightHunt.UI
         public void ForceRefreshFriendRequests()
         {
             _friendService?.InvalidatePendingRequestsCache();
-            LoadFriendRequests();
+            _ = LoadFriendRequestsAsync(updateBadge: _activeTab != FriendTab.MoreFriends);
         }
 
         /// <summary>Update a friend's status badge in-place (from WS friend_status_changed).</summary>
-        public void OnFriendStatusChanged(long userId, string newStatus, long newPartyId)
+        public void OnFriendStatusChanged(long userId, string newStatus, long newPartyId, long newRoomId)
         {
             bool wasOnline  = _onlineItems.ContainsKey(userId);
             bool isNowOnline = newStatus == "ONLINE" || newStatus == "IN_GAME";
 
             if (wasOnline && isNowOnline)
             {
-                _onlineItems[userId].UpdateStatus(newStatus, newPartyId);
-                UpdateCachedFriendStatus(_onlineFriends, userId, newStatus, newPartyId);
+                _onlineItems[userId].UpdateStatus(newStatus, newPartyId, newRoomId);
+                UpdateCachedFriendStatus(_onlineFriends, userId, newStatus, newPartyId, newRoomId);
                 return;
             }
             if (!wasOnline && !isNowOnline)
             {
                 if (_offlineItems.TryGetValue(userId, out var offlineItem))
-                    offlineItem.UpdateStatus(newStatus, newPartyId);
-                UpdateCachedFriendStatus(_offlineFriends, userId, newStatus, newPartyId);
+                    offlineItem.UpdateStatus(newStatus, newPartyId, newRoomId);
+                UpdateCachedFriendStatus(_offlineFriends, userId, newStatus, newPartyId, newRoomId);
                 return;
             }
-            MoveFriendBetweenLists(userId, newStatus, newPartyId, isNowOnline);
+            MoveFriendBetweenLists(userId, newStatus, newPartyId, newRoomId, isNowOnline);
         }
 
         /// <summary>Adjust the pending-request badge by delta (+1 received, -1 accepted/declined).</summary>
@@ -221,8 +244,11 @@ namespace NightHunt.UI
             RefreshBadge();
         }
 
-        /// <summary>Tell the panel whether the local player is the party host (affects context-menu Invite button).</summary>
-        public void SetPartyHostMode(bool iAmHost) => _iAmPartyHost = iAmHost;
+        /// <summary>Tell the panel whether the local player can invite friends to their party.</summary>
+        public void SetCanInviteToParty(bool canInvite) => _canInviteToParty = canInvite;
+
+        /// <summary>Compatibility wrapper for older PartyController wiring.</summary>
+        public void SetPartyHostMode(bool canInvite) => SetCanInviteToParty(canInvite);
 
         /// <summary>Show or hide the pending-invite spinner on a specific friend row.</summary>
         public void SetInvitePending(long userId, bool pending)
@@ -268,13 +294,28 @@ namespace NightHunt.UI
 
         // ── Load — Friends ────────────────────────────────────────────────────
 
-        private async void LoadFriends()
+        private void LoadFriends() => _ = LoadFriendsAsync();
+
+        private async Task LoadFriendsAsync(bool requireSuccess = false)
         {
-            if (_friendService == null) return;
+            EnsureFriendService();
+            if (_friendService == null)
+            {
+                const string message = "[FriendPanel] FriendService is not available.";
+                Debug.LogWarning(message);
+                if (requireSuccess)
+                    throw new InvalidOperationException(message);
+                return;
+            }
+
+            int version = ++_friendsLoadVersion;
             var result = await _friendService.GetFriends();
+            if (version != _friendsLoadVersion) return;
             if (!result.Success || result.Data == null)
             {
                 Debug.LogError($"[FriendPanel] Failed to load friends: {result.Message}");
+                if (requireSuccess)
+                    throw new InvalidOperationException($"Friend list preload failed: {result.Message}");
                 return;
             }
             _onlineFriends.Clear();
@@ -344,13 +385,28 @@ namespace NightHunt.UI
 
         // ── Load — Friend Requests ────────────────────────────────────────────
 
-        private async void LoadFriendRequests()
+        private void LoadFriendRequests() => _ = LoadFriendRequestsAsync(updateBadge: false);
+
+        private async Task LoadFriendRequestsAsync(bool updateBadge = false, bool requireSuccess = false)
         {
-            if (_friendService == null) return;
+            EnsureFriendService();
+            if (_friendService == null)
+            {
+                const string message = "[FriendPanel] FriendService is not available.";
+                Debug.LogWarning(message);
+                if (requireSuccess)
+                    throw new InvalidOperationException(message);
+                return;
+            }
+
+            int version = ++_requestsLoadVersion;
             var result = await _friendService.GetPendingRequests();
+            if (version != _requestsLoadVersion) return;
             if (!result.Success || result.Data == null)
             {
                 Debug.LogError($"[FriendPanel] Failed to load requests: {result.Message}");
+                if (requireSuccess)
+                    throw new InvalidOperationException($"Friend request preload failed: {result.Message}");
                 return;
             }
 
@@ -358,8 +414,20 @@ namespace NightHunt.UI
             int outgoing = result.Data.sent?.Count ?? 0;
             Debug.Log($"[FriendPanel] Requests loaded: incoming={incoming}, outgoing={outgoing}");
 
+            if (updateBadge)
+            {
+                _pendingCount = incoming;
+                RefreshBadge();
+            }
+
             PopulateRequests(incomingRequestContainer, result.Data.received, isIncoming: true);
             PopulateRequests(outgoingRequestContainer, result.Data.sent, isIncoming: false);
+        }
+
+        private void EnsureFriendService()
+        {
+            if (_friendService == null && GameManager.Instance != null)
+                _friendService = GameManager.Instance.FriendService;
         }
 
         /// <summary>
@@ -369,7 +437,9 @@ namespace NightHunt.UI
         private async System.Threading.Tasks.Task RefreshIncomingBadge()
         {
             if (_friendService == null) return;
+            int version = ++_badgeLoadVersion;
             var result = await _friendService.GetPendingRequests();
+            if (version != _badgeLoadVersion) return;
             if (result.Success && result.Data?.received != null)
             {
                 _pendingCount = result.Data.received.Count;
@@ -424,10 +494,10 @@ namespace NightHunt.UI
 
             _activeContextItem = item;
 
-            bool canInvite = _iAmPartyHost
+            bool canInvite = partyController != null
+                && _canInviteToParty
                 && item.Friend != null
-                && item.Friend.IsOnline
-                && !item.Friend.IsInParty;
+                && item.Friend.IsOnline;
 
             contextMenu?.Show(
                 anchorPoint:   item.ContextMenuAnchor,
@@ -505,7 +575,7 @@ namespace NightHunt.UI
         // ── Live Update Helpers ───────────────────────────────────────────────
 
         private static void UpdateCachedFriendStatus(List<FriendResponse> list, long userId,
-                                                     string newStatus, long newPartyId)
+                                                     string newStatus, long newPartyId, long newRoomId)
         {
             for (int i = 0; i < list.Count; i++)
             {
@@ -513,12 +583,13 @@ namespace NightHunt.UI
                 var f = list[i];
                 f.onlineStatus   = newStatus;
                 f.currentPartyId = newPartyId;
+                f.currentRoomId  = newRoomId;
                 list[i]          = f;
                 break;
             }
         }
 
-        private void MoveFriendBetweenLists(long userId, string newStatus, long newPartyId, bool nowOnline)
+        private void MoveFriendBetweenLists(long userId, string newStatus, long newPartyId, long newRoomId, bool nowOnline)
         {
             var source = nowOnline ? _offlineFriends : _onlineFriends;
             var target = nowOnline ? _onlineFriends  : _offlineFriends;
@@ -530,6 +601,7 @@ namespace NightHunt.UI
                 moved = source[i];
                 moved.onlineStatus   = newStatus;
                 moved.currentPartyId = newPartyId;
+                moved.currentRoomId  = newRoomId;
                 source.RemoveAt(i);
                 found = true;
                 break;

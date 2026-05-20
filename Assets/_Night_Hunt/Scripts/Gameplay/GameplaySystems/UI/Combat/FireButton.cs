@@ -36,6 +36,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private Coroutine _holdTimer;
         private bool _joystickStarted;
+        private bool _pressActive;
         private PointerEventData _pressEventData;
 
         protected override void Awake()
@@ -74,7 +75,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             base.OnPointerDown(eventData);
             _pressEventData = eventData;
             _joystickStarted = false;
+            _pressActive = true;
 
+            _combatInputHandler?.NotifyUIConsumedPress();
             _combatInputHandler?.SimulateFire(true);
             _pulseRing?.Play();
 
@@ -87,18 +90,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         public override void OnPointerUp(PointerEventData eventData)
         {
             base.OnPointerUp(eventData);
-            StopHoldTimer();
-
-            if (_joystickStarted && _joystick != null)
-            {
-                _joystick.OnPointerUp(eventData);
-                _joystick.gameObject.SetActive(false);
-            }
-
-            _joystickStarted = false;
-            _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
-            _combatInputHandler?.SimulateFire(false);
-            _rangeIndicator?.Hide();
+            FinishPress(eventData);
         }
 
         public void OnBeginDrag(PointerEventData eventData)
@@ -128,6 +120,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public void OnEndDrag(PointerEventData eventData)
         {
+            FinishPress(eventData);
+        }
+
+        private void FinishPress(PointerEventData eventData)
+        {
+            if (!_pressActive)
+                return;
+
+            _pressActive = false;
+            StopHoldTimer();
+
             if (_joystickStarted && _joystick != null)
             {
                 _joystick.OnPointerUp(eventData);
@@ -137,6 +140,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _joystickStarted = false;
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _combatInputHandler?.SimulateFire(false);
+            _rangeIndicator?.Hide();
         }
 
         public void TriggerAttackFeedback()

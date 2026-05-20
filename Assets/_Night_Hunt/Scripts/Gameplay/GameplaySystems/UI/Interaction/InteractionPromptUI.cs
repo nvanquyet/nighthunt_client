@@ -4,6 +4,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Interaction;
 using NightHunt.Gameplay.Input.Handlers.Interaction;
 using NightHunt.GameplaySystems.UI;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.UI.Interaction
 {
@@ -38,7 +39,9 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         private RaycastDetector          _detector;
         private PlayerInteractionSystem  _interactionSystem;
         private IInteractable            _lastTarget;
+        private IInteractable            _lastBlockedTarget;
         private bool                     _presentingHoldProgress;
+        private bool                     _loggedMissingDetector;
 
         // ── Public API ────────────────────────────────────────────────────────
 
@@ -49,6 +52,12 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         {
             _detector          = detector;
             _interactionSystem = interactionSystem;
+            _loggedMissingDetector = false;
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Interaction,
+                "PromptBound",
+                $"detector={(detector != null ? detector.name : "null")} interactionSystem={(interactionSystem != null ? interactionSystem.name : "null")}",
+                this);
         }
 
         public void Hide()
@@ -76,9 +85,21 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         {
             if (_detector == null)
             {
+                if (!_loggedMissingDetector)
+                {
+                    _loggedMissingDetector = true;
+                    PhaseTestLog.Warning(
+                        PhaseTestLogCategory.Interaction,
+                        "PromptUnbound",
+                        "reason=detector-null",
+                        this);
+                }
+
                 Hide();
                 return;
             }
+
+            _loggedMissingDetector = false;
 
             var target = _detector.CurrentInteractable;
             GameObject interactor = _interactionSystem != null ? _interactionSystem.gameObject : null;
@@ -86,19 +107,39 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             // ── No target ────────────────────────────────────────────────────
             if (target == null)
             {
-                if (_lastTarget != null) Hide();
+                if (_lastTarget != null)
+                {
+                    PhaseTestLog.Log(
+                        PhaseTestLogCategory.Interaction,
+                        "PromptHide",
+                        $"reason=no-target previous={DescribeTarget(_lastTarget)}",
+                        this);
+                    Hide();
+                }
                 _lastTarget = null;
+                _lastBlockedTarget = null;
                 HideSharedProgress();
                 return;
             }
 
             if (interactor != null && !target.CanInteract(interactor))
             {
+                if (target != _lastBlockedTarget)
+                {
+                    _lastBlockedTarget = target;
+                    PhaseTestLog.Log(
+                        PhaseTestLogCategory.Interaction,
+                        "PromptHide",
+                        $"reason=blocked target={DescribeTarget(target)} interactor={interactor.name}",
+                        this);
+                }
                 if (_lastTarget != null) Hide();
                 _lastTarget = null;
                 HideSharedProgress();
                 return;
             }
+
+            _lastBlockedTarget = null;
 
             // ── Target changed ───────────────────────────────────────────────
             if (target != _lastTarget)
@@ -144,6 +185,23 @@ namespace NightHunt.GameplaySystems.UI.Interaction
 
             if (_actionText != null)
                 _actionText.text = StripLeadingKeyHint(target.InteractLabel ?? (isPickup ? "Pick up" : "Interact"));
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Interaction,
+                "PromptShow",
+                $"target={DescribeTarget(target)} key={(_keyText != null ? _keyText.text : "null")} label={(_actionText != null ? _actionText.text : "null")} hold={isHold} pickup={isPickup}",
+                this);
+        }
+
+        private static string DescribeTarget(IInteractable target)
+        {
+            if (target == null)
+                return "null";
+
+            if (target is Component component)
+                return $"{target.GetType().Name} go={component.name} layer={PhaseTestLog.DescribeLayer(component.gameObject)} label='{target.InteractLabel ?? "null"}'";
+
+            return $"{target.GetType().Name} label='{target.InteractLabel ?? "null"}'";
         }
 
         private static string StripLeadingKeyHint(string label)

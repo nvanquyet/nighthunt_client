@@ -103,11 +103,12 @@ namespace NightHunt.UI
         /// Update status badge in-place when a WS friend_status_changed event arrives.
         /// Also updates the cached Friend data so later reads see the new state.
         /// </summary>
-        public void UpdateStatus(string newStatus, long newPartyId)
+        public void UpdateStatus(string newStatus, long newPartyId, long newRoomId)
         {
             if (Friend == null) return;
             Friend.onlineStatus   = newStatus;
             Friend.currentPartyId = newPartyId;
+            Friend.currentRoomId  = newRoomId;
             ApplyStatus(newStatus);
         }
 
@@ -123,20 +124,36 @@ namespace NightHunt.UI
         private void ApplyStatus(string status)
         {
             if (statusText == null) return;
-            statusText.text = status switch
-            {
-                "ONLINE"  => "Online",
-                "IN_GAME" => "In Game",
-                "AWAY"    => "Away",
-                _         => "Offline"
-            };
+
+            bool inParty = Friend != null && Friend.currentPartyId != 0;
+            bool inRoom = Friend != null && Friend.currentRoomId != 0;
+
+            if (status == "IN_GAME")
+                statusText.text = "In Game";
+            else if (inRoom)
+                statusText.text = "In Room";
+            else if (inParty)
+                statusText.text = "In Party";
+            else
+                statusText.text = status switch
+                {
+                    "ONLINE" => "Online",
+                    "AWAY" => "Away",
+                    _ => "Offline"
+                };
+
             statusText.color = status switch
             {
-                "ONLINE"  => new Color(0.2f, 0.9f, 0.2f),
+                "ONLINE"  => inRoom || inParty ? new Color(0.2f, 0.6f, 1f) : new Color(0.2f, 0.9f, 0.2f),
                 "IN_GAME" => new Color(0.2f, 0.6f, 1f),
                 "AWAY"    => new Color(1f,   0.8f, 0.2f),
                 _         => new Color(0.5f, 0.5f, 0.5f)
             };
+
+            if (status == "ONLINE" && inRoom)
+                statusText.color = new Color(0.2f, 0.6f, 1f);
+            else if (status == "ONLINE" && inParty)
+                statusText.color = new Color(1f, 0.8f, 0.2f);
         }
 
         private TextMeshProUGUI ResolveFallbackText(string keyword)

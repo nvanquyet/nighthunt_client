@@ -1,4 +1,5 @@
 using UnityEngine;
+using FishNet.Connection;
 using FishNet.Object;
 using System.Collections;
 using NightHunt.Data;
@@ -10,7 +11,9 @@ using NightHunt.Gameplay.Character.Combat.Weapons;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.Boss;
 using NightHunt.Gameplay.Deployables;
+using NightHunt.Gameplay.Feedback;
 using NightHunt.Gameplay.Objective;
+using NightHunt.Diagnostics;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Weapon
@@ -29,6 +32,7 @@ namespace NightHunt.GameplaySystems.Weapon
     public partial class WeaponSystem
     {
         private readonly RaycastHit[] _authoritativeRaycastHits = new RaycastHit[32];
+        private readonly RaycastHit[] _authoritativeSphereHits = new RaycastHit[16];
 
         // ── 1. Aim direction sync (20 Hz) ──────────────────────────────────────
         private float _aimSyncTimer;
@@ -107,13 +111,22 @@ namespace NightHunt.GameplaySystems.Weapon
             => ShowProjectileOnClientsRpc(origin, direction, config, hitscanEndpoint, hitAnIHittable, hitNormal);
 
         [ServerRpc(RequireOwnership = true)]
-        private void RequestAuthoritativeShotServerRpc(WeaponSlotType slot, Vector3 direction)
+        private void RequestAuthoritativeShotServerRpc(
+            WeaponSlotType slot,
+            Vector3 direction,
+            bool hasProjectileTargetPoint,
+            Vector3 projectileTargetPoint)
         {
-            ResolveAuthoritativeShotServer(slot, direction, consumeAmmo: true);
+            ResolveAuthoritativeShotServer(slot, direction, consumeAmmo: true, hasProjectileTargetPoint, projectileTargetPoint);
         }
 
         [Server]
-        private void ResolveAuthoritativeShotServer(WeaponSlotType slot, Vector3 direction, bool consumeAmmo)
+        private void ResolveAuthoritativeShotServer(
+            WeaponSlotType slot,
+            Vector3 direction,
+            bool consumeAmmo,
+            bool hasProjectileTargetPoint = false,
+            Vector3 projectileTargetPoint = default)
         {
             if (!IsUsableFireDirection(direction))
             {
@@ -169,12 +182,32 @@ namespace NightHunt.GameplaySystems.Weapon
             float serverSpread = ResolveServerSpread(config);
             Vector3 authoritativeFireDir = ApplyServerRecoil(fireDir, config, serverSpread);
 
+            if (config.BallisticType == "Projectile"
+                && hasProjectileTargetPoint
+                && IsAuthoritativeProjectileTargetUsable(origin, projectileTargetPoint, maxRange))
+            {
+                config.HasProjectileTargetPoint = true;
+                config.ProjectileTargetPoint = projectileTargetPoint;
+            }
+
             if (config.BallisticType == "Projectile")
             {
-                StartCoroutine(ServerProjectileFlight(origin, ApplyServerSpread(authoritativeFireDir, config), config, (int)ObjectId));
+                Vector3 projectileFireDir = ApplyServerSpread(authoritativeFireDir, config);
+                if (TryResolveProjectileTargetPoint(origin, authoritativeFireDir, maxRange, out Vector3 resolvedProjectileTargetPoint))
+                {
+                    config.HasProjectileTargetPoint = true;
+                    config.ProjectileTargetPoint = resolvedProjectileTargetPoint;
+                }
+
+                StartCoroutine(ServerProjectileFlight(origin, projectileFireDir, config, (int)ObjectId));
             }
             else
             {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Weapon,
+                    "ServerHitscanStart",
+                    $"owner={Owner?.ClientId} obj={ObjectId} slot={slot} weapon={config.WeaponId} origin={origin:F2} dir={authoritativeFireDir:F2} maxRange={maxRange:F1} speed={config.ProjectileSpeed:F1} mask={NightHunt.Core.NightHuntLayers.MaskHitscanFull.value}",
+                    this);
                 ResolveAuthoritativeHitscan(origin, authoritativeFireDir, config, maxRange, (int)ObjectId);
             }
 
@@ -193,6 +226,15 @@ namespace NightHunt.GameplaySystems.Weapon
                 && !float.IsInfinity(direction.x)
                 && !float.IsInfinity(direction.y)
                 && !float.IsInfinity(direction.z);
+        }
+
+        private static bool IsAuthoritativeProjectileTargetUsable(Vector3 origin, Vector3 targetPoint, float maxRange)
+        {
+            if (!IsFinite(origin) || !IsFinite(targetPoint))
+                return false;
+
+            float distance = Vector3.Distance(origin, targetPoint);
+            return distance > 0.1f && distance <= Mathf.Max(1f, maxRange) + 1f;
         }
 
         private void RejectAuthoritativeShot(WeaponSlotType slot, string reason, string details = null)
@@ -328,7 +370,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
             if (TryGetFirstAuthoritativeHit(origin, direction, maxRange, root, out RaycastHit hit))
             {
-                ApplyAuthoritativeHit(hit, config, shooterNetObjId);
+                ApplyAuthoritativeHitWithTravelDelay(origin, hit, config, shooterNetObjId);
                 return hit.point;
             }
 
@@ -371,7 +413,14 @@ namespace NightHunt.GameplaySystems.Weapon
                 WeaponId = config.WeaponId ?? string.Empty,
             };
 
-            ApplyAuthoritativeTargetHit(result.Target.HitTarget, info);
+            ApplyAuthoritativeRegisteredTargetWithTravelDelay(
+                origin,
+                result.Target.HitTarget,
+                result.Target.TargetType,
+                result.AngleDeg,
+                result.Distance,
+                info,
+                config);
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableProjectileDebugLogs)
             {
@@ -382,25 +431,179 @@ namespace NightHunt.GameplaySystems.Weapon
         }
 
         [Server]
-        private void ApplyAuthoritativeTargetHit(IHittable target, DamageInfo info)
+        private bool TryResolveProjectileTargetPoint(
+            Vector3 origin,
+            Vector3 direction,
+            float maxRange,
+            out Vector3 hitPoint)
+        {
+            hitPoint = default;
+
+            if (_bulletTargetConfig == null || BulletTargetRegistry.Instance == null)
+                return false;
+
+            var result = BulletTargetRegistry.FindBestTarget(origin, direction, maxRange, _bulletTargetConfig);
+            if (!result.HasTarget || result.Target.HitTarget == null)
+                return false;
+
+            var ownerHealth = ResolveOwnerHealthSystem();
+            if (ownerHealth != null && ReferenceEquals(result.Target.HitTarget, ownerHealth))
+                return false;
+
+            hitPoint = result.HitPoint;
+            return true;
+        }
+
+        [Server]
+        private void ApplyAuthoritativeHitWithTravelDelay(
+            Vector3 origin,
+            RaycastHit hit,
+            WeaponConfigData config,
+            int shooterNetObjId)
+        {
+            float delay = ResolveHitscanDamageDelay(origin, hit.point, config, out bool clamped);
+            string colliderName = hit.collider != null ? hit.collider.name : "null";
+            string layer = hit.collider != null ? PhaseTestLog.DescribeLayer(hit.collider.gameObject) : "null";
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "ServerHitscanHit",
+                $"owner={Owner?.ClientId} obj={ObjectId} weapon={config.WeaponId} collider={colliderName} layer={layer} point={hit.point:F2} dist={Vector3.Distance(origin, hit.point):F2} speed={config.ProjectileSpeed:F1} damageDelay={delay:F3} clamped={clamped}",
+                this);
+
+            if (delay <= 0.001f)
+            {
+                ApplyAuthoritativeHit(hit, config, shooterNetObjId);
+                return;
+            }
+
+            StartCoroutine(DelayedAuthoritativePhysicsHitRoutine(delay, hit, config, shooterNetObjId));
+        }
+
+        [Server]
+        private IEnumerator DelayedAuthoritativePhysicsHitRoutine(
+            float delay,
+            RaycastHit hit,
+            WeaponConfigData config,
+            int shooterNetObjId)
+        {
+            yield return new WaitForSeconds(delay);
+
+            if (hit.collider == null)
+            {
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Weapon,
+                    "ServerHitscanDamageSkipped",
+                    $"weapon={config.WeaponId} reason=collider-destroyed delay={delay:F3}",
+                    this);
+                yield break;
+            }
+
+            ApplyAuthoritativeHit(hit, config, shooterNetObjId);
+        }
+
+        [Server]
+        private void ApplyAuthoritativeRegisteredTargetWithTravelDelay(
+            Vector3 origin,
+            IHittable target,
+            HittableTargetType targetType,
+            float angleDeg,
+            float targetDistance,
+            DamageInfo info,
+            WeaponConfigData config)
+        {
+            float delay = ResolveHitscanDamageDelay(origin, info.HitPoint, config, out bool clamped);
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "ServerHitscanRegisteredTarget",
+                $"owner={Owner?.ClientId} obj={ObjectId} weapon={config.WeaponId} target={targetType} point={info.HitPoint:F2} dist={targetDistance:F2} angle={angleDeg:F1} speed={config.ProjectileSpeed:F1} damageDelay={delay:F3} clamped={clamped}",
+                this);
+
+            if (delay <= 0.001f)
+            {
+                var targetKind = ApplyAuthoritativeTargetHit(target, info);
+                SendLocalHitFeedback(info, targetKind);
+                return;
+            }
+
+            StartCoroutine(DelayedAuthoritativeRegisteredTargetRoutine(delay, target, info, config.WeaponId));
+        }
+
+        [Server]
+        private IEnumerator DelayedAuthoritativeRegisteredTargetRoutine(
+            float delay,
+            IHittable target,
+            DamageInfo info,
+            string weaponId)
+        {
+            yield return new WaitForSeconds(delay);
+
+            if (IsDestroyedHittable(target))
+            {
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Weapon,
+                    "ServerHitscanDamageSkipped",
+                    $"weapon={weaponId} reason=registered-target-destroyed delay={delay:F3}",
+                    this);
+                yield break;
+            }
+
+            var targetKind = ApplyAuthoritativeTargetHit(target, info);
+            SendLocalHitFeedback(info, targetKind);
+        }
+
+        [Server]
+        private float ResolveHitscanDamageDelay(Vector3 origin, Vector3 hitPoint, WeaponConfigData config, out bool clamped)
+        {
+            clamped = false;
+            if (!_delayHitscanDamageByProjectileSpeed || config == null)
+                return 0f;
+
+            float speed = Mathf.Max(0f, config.ProjectileSpeed);
+            if (speed <= 0.001f)
+                return 0f;
+
+            float distance = Vector3.Distance(origin, hitPoint);
+            float delay = distance / speed;
+            if (_maxHitscanDamageDelay > 0f && delay > _maxHitscanDamageDelay)
+            {
+                delay = _maxHitscanDamageDelay;
+                clamped = true;
+            }
+
+            return Mathf.Max(0f, delay);
+        }
+
+        private static bool IsDestroyedHittable(IHittable target)
+        {
+            if (target == null)
+                return true;
+
+            return target is UnityEngine.Object unityObject && unityObject == null;
+        }
+
+        [Server]
+        private CombatHitFeedbackTargetKind ApplyAuthoritativeTargetHit(IHittable target, DamageInfo info)
         {
             switch (target)
             {
                 case PlayerHealthSystem healthSystem:
+                    if (healthSystem.IsDead)
+                        return CombatHitFeedbackTargetKind.None;
                     healthSystem.ApplyDamageServer(info);
-                    break;
+                    return CombatHitFeedbackTargetKind.Player;
                 case BaseDeployable deployable:
-                    deployable.TakeDamage(Mathf.RoundToInt(info.Damage));
-                    break;
-                case BossController boss:
-                    boss.TakeDamage(info.Damage, NetworkObject);
-                    break;
+                    deployable.TakeDamage(info);
+                    return CombatHitFeedbackTargetKind.Deployable;
+                case TurretGun turret:
+                    turret.TakeDamageServer(info, NetworkObject);
+                    return CombatHitFeedbackTargetKind.Boss;
                 case EMPNodeObjective emp:
-                    emp.TakeDamage(info.Damage);
-                    break;
+                    emp.RequestDamage(info);
+                    return CombatHitFeedbackTargetKind.Objective;
                 default:
                     target.RequestDamage(info);
-                    break;
+                    return CombatHitFeedbackTargetKind.GenericHittable;
             }
         }
 
@@ -416,7 +619,7 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             hit = default;
 
-            int count = Physics.RaycastNonAlloc(origin, direction, _authoritativeRaycastHits, range, NightHunt.Core.NightHuntLayers.MaskHitscanBlock, QueryTriggerInteraction.Ignore);
+            int count = Physics.RaycastNonAlloc(origin, direction, _authoritativeRaycastHits, range, NightHunt.Core.NightHuntLayers.MaskHitscanFull, QueryTriggerInteraction.Ignore);
             if (count <= 0)
                 return false;
 
@@ -438,6 +641,18 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             Vector3 position = origin;
             Vector3 velocity = direction.normalized * Mathf.Max(1f, config.ProjectileSpeed);
+            if (config.HasProjectileTargetPoint
+                && config.GravityScale > 0f
+                && BallisticTrajectory.TrySolveLaunchVelocity(
+                    origin,
+                    config.ProjectileTargetPoint,
+                    Mathf.Max(1f, config.ProjectileSpeed),
+                    config.GravityScale,
+                    config.PreferHighArc,
+                    out Vector3 solvedVelocity))
+            {
+                velocity = solvedVelocity;
+            }
             float maxRange = Mathf.Max(1f, config.MaxRange);
             float traveled = 0f;
             Transform root = transform.root != null ? transform.root : transform;
@@ -455,9 +670,13 @@ namespace NightHunt.GameplaySystems.Weapon
                 if (distance > 0.001f)
                 {
                     Vector3 rayDir = move / distance;
-                    if (Physics.SphereCast(position, 0.08f, rayDir, out RaycastHit hit, distance, NightHunt.Core.NightHuntLayers.MaskHitscanBlock, QueryTriggerInteraction.Ignore)
-                        && !IsSelfHit(hit.collider, root))
+                    if (TryGetFirstAuthoritativeSphereHit(position, 0.08f, rayDir, distance, root, out RaycastHit hit))
                     {
+                        PhaseTestLog.Log(
+                            PhaseTestLogCategory.Weapon,
+                            "ServerProjectileHit",
+                            $"owner={Owner?.ClientId} obj={ObjectId} weapon={config.WeaponId} collider={hit.collider?.name ?? "null"} layer={(hit.collider != null ? PhaseTestLog.DescribeLayer(hit.collider.gameObject) : "null")} point={hit.point:F2} traveled={traveled + hit.distance:F2} speed={config.ProjectileSpeed:F1}",
+                            this);
                         ApplyAuthoritativeHit(hit, config, shooterNetObjId);
                         _lastFireEndpoint = hit.point;
                         yield break;
@@ -474,8 +693,53 @@ namespace NightHunt.GameplaySystems.Weapon
         }
 
         [Server]
+        private bool TryGetFirstAuthoritativeSphereHit(
+            Vector3 origin,
+            float radius,
+            Vector3 direction,
+            float distance,
+            Transform shooterRoot,
+            out RaycastHit hit)
+        {
+            hit = default;
+
+            int count = Physics.SphereCastNonAlloc(
+                origin,
+                radius,
+                direction,
+                _authoritativeSphereHits,
+                distance,
+                NightHunt.Core.NightHuntLayers.MaskHitscanFull,
+                QueryTriggerInteraction.Ignore);
+            if (count <= 0)
+                return false;
+
+            System.Array.Sort(_authoritativeSphereHits, 0, count, RaycastHitDistanceComparer.Instance);
+            for (int i = 0; i < count; i++)
+            {
+                if (_authoritativeSphereHits[i].collider == null ||
+                    IsSelfHit(_authoritativeSphereHits[i].collider, shooterRoot))
+                    continue;
+
+                hit = _authoritativeSphereHits[i];
+                return true;
+            }
+
+            return false;
+        }
+
+        [Server]
         private void ApplyAuthoritativeHit(RaycastHit hit, WeaponConfigData config, int shooterNetObjId)
         {
+            if (hit.collider == null)
+                return;
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "ServerHitscanDamageApply",
+                $"owner={Owner?.ClientId} obj={ObjectId} weapon={config.WeaponId} collider={hit.collider.name} layer={PhaseTestLog.DescribeLayer(hit.collider.gameObject)} point={hit.point:F2} normal={hit.normal:F2}",
+                this);
+
             var hitbox = ComponentResolver.Find<PlayerHitboxMarker>(hit.collider)
                 .OnSelf()
                 .InParent()
@@ -484,7 +748,10 @@ namespace NightHunt.GameplaySystems.Weapon
             if (hitbox != null && hitbox.HealthSystem != null)
             {
                 float damage = config.DamageBody * (hitbox.IsHeadshot ? Mathf.Max(1f, config.DamageHeadMul) : 1f);
-                hitbox.HealthSystem.ApplyDamageServer(new DamageInfo
+                if (hitbox.HealthSystem.IsDead)
+                    return;
+
+                var playerDamageInfo = new DamageInfo
                 {
                     Damage = damage,
                     IsHeadshot = hitbox.IsHeadshot,
@@ -492,7 +759,10 @@ namespace NightHunt.GameplaySystems.Weapon
                     HitNormal = hit.normal,
                     ShooterNetworkObjectId = shooterNetObjId,
                     WeaponId = config.WeaponId ?? string.Empty,
-                });
+                };
+
+                hitbox.HealthSystem.ApplyDamageServer(playerDamageInfo);
+                SendLocalHitFeedback(playerDamageInfo, CombatHitFeedbackTargetKind.Player);
                 return;
             }
 
@@ -508,24 +778,48 @@ namespace NightHunt.GameplaySystems.Weapon
 
             if (hit.collider.GetComponentInParent<BaseDeployable>() is { } deployable)
             {
-                deployable.TakeDamage(Mathf.RoundToInt(damageInfo.Damage));
+                deployable.TakeDamage(damageInfo);
+                SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Deployable);
                 return;
             }
 
-            if (hit.collider.GetComponentInParent<BossController>() is { } boss)
+            if (hit.collider.GetComponentInParent<TurretGun>() is { } turret)
             {
-                boss.TakeDamage(damageInfo.Damage, NetworkObject);
+                turret.TakeDamageServer(damageInfo, NetworkObject);
+                SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Boss);
                 return;
             }
 
             if (hit.collider.GetComponentInParent<EMPNodeObjective>() is { } emp)
             {
-                emp.TakeDamage(damageInfo.Damage);
+                emp.RequestDamage(damageInfo);
+                SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Objective);
                 return;
             }
 
             var hittable = hit.collider.GetComponentInParent<IHittable>();
-            hittable?.RequestDamage(damageInfo);
+            if (hittable != null)
+            {
+                hittable.RequestDamage(damageInfo);
+                SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.GenericHittable);
+            }
+        }
+
+        [Server]
+        private void SendLocalHitFeedback(DamageInfo info, CombatHitFeedbackTargetKind targetKind)
+        {
+            if (targetKind == CombatHitFeedbackTargetKind.None || Owner == null)
+                return;
+
+            TargetLocalHitFeedbackRpc(Owner, info, (byte)targetKind);
+        }
+
+        [TargetRpc]
+        private void TargetLocalHitFeedbackRpc(NetworkConnection conn, DamageInfo info, byte targetKind)
+        {
+            CombatFeedbackEvents.PublishLocalHitConfirmed(
+                info,
+                (CombatHitFeedbackTargetKind)targetKind);
         }
 
         private Vector3 ApplyServerSpread(Vector3 direction, WeaponConfigData config)

@@ -152,7 +152,7 @@ namespace NightHunt.Editor.Tools
                         log.Add($"MISSING NetworkDeployablePrefab: {def.ItemID}");
                         if (autoFix)
                         {
-                            deployable.NetworkDeployablePrefab = templates.GenericDeployable;
+                            deployable.NetworkDeployablePrefab = ResolveDeployableTemplate(deployable, templates);
                             changed = true;
                             fixes++;
                         }
@@ -162,6 +162,10 @@ namespace NightHunt.Editor.Tools
                     {
                         warnings++;
                         log.Add($"WARN NetworkDeployablePrefab must have NetworkObject + BaseDeployable: {def.ItemID} -> {deployable.NetworkDeployablePrefab.name}");
+                    }
+                    else
+                    {
+                        ValidateDeployablePrefabContract(deployable, log, ref warnings);
                     }
 
                     if (deployable.PlacementPreviewPrefab == null && autoFix)
@@ -226,6 +230,32 @@ namespace NightHunt.Editor.Tools
             }
         }
 
+        private static void ValidateDeployablePrefabContract(DeployableDefinition deployable, List<string> log, ref int warnings)
+        {
+            var prefab = deployable.NetworkDeployablePrefab;
+            if (prefab == null)
+                return;
+
+            if (RequiresVisionWard(deployable.DeployableKind) && !HasComponentInPrefab<VisionWard>(prefab))
+            {
+                warnings++;
+                log.Add($"WARN DeployableKind {deployable.DeployableKind} requires VisionWard: {deployable.ItemID} -> {prefab.name}");
+                return;
+            }
+
+            if (RequiresTrapDeployable(deployable.DeployableKind) && !HasComponentInPrefab<TrapDeployable>(prefab))
+            {
+                warnings++;
+                log.Add($"WARN DeployableKind {deployable.DeployableKind} requires TrapDeployable: {deployable.ItemID} -> {prefab.name}");
+            }
+        }
+
+        private static bool RequiresVisionWard(DeployableKind kind)
+            => kind == DeployableKind.VisionNode || kind == DeployableKind.LightPoint;
+
+        private static bool RequiresTrapDeployable(DeployableKind kind)
+            => kind == DeployableKind.ExplosiveMine || kind == DeployableKind.ShockField;
+
         private static List<ItemDefinition> LoadAllItemDefinitions()
         {
             var results = new List<ItemDefinition>();
@@ -266,11 +296,24 @@ namespace NightHunt.Editor.Tools
                 MeleeWeapon = LoadOrCreate($"{TemplateRoot}/Weapon_Melee_Template.prefab", BuildMeleeWeapon),
                 ThrowableProjectile = LoadOrCreate($"{TemplateRoot}/Projectile_ThrowableNetworked_Template.prefab", BuildThrowableProjectile),
                 RespawnBeacon = LoadOrCreate($"{TemplateRoot}/Deployable_RespawnBeacon_Template.prefab", BuildRespawnBeacon),
-                GenericDeployable = LoadOrCreate($"{TemplateRoot}/Deployable_GenericNetworked_Template.prefab", BuildGenericDeployable),
+                SimpleDeployable = LoadOrCreate($"{TemplateRoot}/Deployable_SimpleNetworked_Template.prefab", BuildSimpleDeployable),
+                TrapDeployable = LoadOrCreate($"{TemplateRoot}/Deployable_TrapNetworked_Template.prefab", BuildTrapDeployable),
+                VisionDeployable = LoadOrCreate($"{TemplateRoot}/Deployable_VisionWardNetworked_Template.prefab", BuildVisionDeployable),
                 BeaconPreview = LoadOrCreate($"{TemplateRoot}/Deployable_RespawnBeaconPreview_Template.prefab", BuildBeaconPreview),
                 WorldItem = LoadOrCreate($"{LootRoot}/Prefab_WorldItem.prefab", BuildWorldItemShell),
                 WorldContainer = LoadOrCreate($"{LootRoot}/Prefab_WorldContainer.prefab", BuildWorldContainerShell),
             };
+        }
+
+        private static GameObject ResolveDeployableTemplate(DeployableDefinition deployable, Templates templates)
+        {
+            if (RequiresVisionWard(deployable.DeployableKind))
+                return templates.VisionDeployable;
+
+            if (RequiresTrapDeployable(deployable.DeployableKind))
+                return templates.TrapDeployable;
+
+            return templates.SimpleDeployable;
         }
 
         private static GameObject BuildVisual()
@@ -356,12 +399,32 @@ namespace NightHunt.Editor.Tools
             return root;
         }
 
-        private static GameObject BuildGenericDeployable()
+        private static GameObject BuildSimpleDeployable()
         {
-            var root = new GameObject("Deployable_GenericNetworked_Template");
+            var root = new GameObject("Deployable_SimpleNetworked_Template");
             root.AddComponent<NetworkObject>();
             root.AddComponent<CapsuleCollider>().height = 1.0f;
-            root.AddComponent<GenericDeployable>();
+            root.AddComponent<SimpleDeployable>();
+            BuildChild(root, "[Visual]", true);
+            return root;
+        }
+
+        private static GameObject BuildTrapDeployable()
+        {
+            var root = new GameObject("Deployable_TrapNetworked_Template");
+            root.AddComponent<NetworkObject>();
+            root.AddComponent<SphereCollider>().radius = 0.45f;
+            root.AddComponent<TrapDeployable>();
+            BuildChild(root, "[Visual]", true);
+            return root;
+        }
+
+        private static GameObject BuildVisionDeployable()
+        {
+            var root = new GameObject("Deployable_VisionWardNetworked_Template");
+            root.AddComponent<NetworkObject>();
+            root.AddComponent<CapsuleCollider>().height = 1.0f;
+            root.AddComponent<VisionWard>();
             BuildChild(root, "[Visual]", true);
             return root;
         }
@@ -469,7 +532,9 @@ namespace NightHunt.Editor.Tools
             public GameObject MeleeWeapon;
             public GameObject ThrowableProjectile;
             public GameObject RespawnBeacon;
-            public GameObject GenericDeployable;
+            public GameObject SimpleDeployable;
+            public GameObject TrapDeployable;
+            public GameObject VisionDeployable;
             public GameObject BeaconPreview;
             public GameObject WorldItem;
             public GameObject WorldContainer;

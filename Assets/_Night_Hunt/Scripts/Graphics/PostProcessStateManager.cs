@@ -174,8 +174,7 @@ namespace NightHunt.Graphics
 
             if (dead)
             {
-                SetLowHealth(false);      // turn off heartbeat pulse on death
-                StopHeartbeat();
+                SetLowHealth(false);
             }
         }
 
@@ -244,9 +243,6 @@ namespace NightHunt.Graphics
         private void HandleLocalDied()
         {
             SetDead(true);
-            // Play death stinger via AudioManager
-            if (AudioManager.HasInstance && AudioManager.Instance.Library != null)
-                AudioManager.Instance.PlayAnnouncer(AudioManager.Instance.Library.playerDeathStinger);
         }
 
         private void HandleLocalRespawned()
@@ -270,11 +266,6 @@ namespace NightHunt.Graphics
 
             bool isLow = (health / maxHealth) < threshold;
             SetLowHealth(isLow);
-
-            if (isLow)
-                StartHeartbeat();
-            else
-                StopHeartbeat();
         }
 
         // ── UINavigator handler ────────────────────────────────────────────────
@@ -286,35 +277,14 @@ namespace NightHunt.Graphics
                 case PanelType.Home:
                 case PanelType.Login:
                 case PanelType.Lobby:
+                case PanelType.CustomLobby:
                     SetState(PostProcessState.Home);
-                    PlayBGM(AudioManager.HasInstance ? AudioManager.Instance.Library?.bgmHome : null);
                     break;
 
                 default: // PanelType.None = in-match
                     SetState(PostProcessState.Match);
-                    PlayBGM(AudioManager.HasInstance ? AudioManager.Instance.Library?.bgmMatch : null);
                     break;
             }
-        }
-
-        // ── Audio helpers ──────────────────────────────────────────────────────
-
-        private static void StartHeartbeat()
-        {
-            if (AudioManager.HasInstance)
-                AudioManager.Instance.StartHeartbeat();
-        }
-
-        private static void StopHeartbeat()
-        {
-            if (AudioManager.HasInstance)
-                AudioManager.Instance.StopHeartbeat();
-        }
-
-        private static void PlayBGM(AudioClip clip)
-        {
-            if (AudioManager.HasInstance)
-                AudioManager.Instance.PlayMusic(clip);
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────

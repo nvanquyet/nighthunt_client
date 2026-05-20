@@ -13,7 +13,11 @@ MonoBehaviour:
   m_Name: WAP_Melee
   m_EditorClassIdentifier: 
   weaponClass: 5
-  fireClips: []
+  fireClips:
+  - {fileID: 8300000, guid: ff4e84934f81d0e4b9938b21c65026b3, type: 3}
+  - {fileID: 8300000, guid: 1b1402ba92882b347a019f2b1289c4cc, type: 3}
+  - {fileID: 8300000, guid: ba47135bb8aa4344fb4d756ece864fea, type: 3}
+  - {fileID: 8300000, guid: 57618e29d0f525f4696579b3a0436b45, type: 3}
   fireSuppressedClips: []
   fireVolume: 1
   firePitch: 1
@@ -21,7 +25,8 @@ MonoBehaviour:
   reloadStartClip: {fileID: 0}
   reloadEndClip: {fileID: 0}
   reloadTacticalClip: {fileID: 0}
-  drawClip: {fileID: 0}
-  holsterClip: {fileID: 0}
+  drawClip: {fileID: 8300000, guid: df7cafdc3698aa34dabab912b5943d38, type: 3}
+  holsterClip: {fileID: 8300000, guid: 69d115d2efc3f634a85b089087b23376, type: 3}
   emptyClip: {fileID: 0}
-  bulletImpactOverride: {fileID: 0}
+  bulletImpactOverride: {fileID: 8300000, guid: 22b746f848e8e874eb22ed8ce642519d,
+    type: 3}

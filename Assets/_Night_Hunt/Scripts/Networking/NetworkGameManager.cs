@@ -71,6 +71,12 @@ namespace NightHunt.Networking
             return;
 #endif
             if (networkManager == null) return;
+            if (networkManager.SceneManager == null || networkManager.ClientManager == null)
+            {
+                Debug.LogError("[NetworkGameManager] NetworkManager did not finish initializing. Check earlier FishNet errors, especially DefaultPrefabObjects spawnable prefab registry errors.");
+                return;
+            }
+
             networkManager.SceneManager.OnLoadEnd               += OnSceneLoadEnd;
             networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
             if (GameWebSocketService.Instance != null)

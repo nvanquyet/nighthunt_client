@@ -65,6 +65,18 @@ namespace NightHunt.UI
             EnsureSlots();
         }
 
+        private void OnEnable()
+        {
+            // Subscribe canonical bus so keyboard 1/2/3 and mobile weapon buttons
+            // both update the same HUD highlight via one code path.
+            GameActionBus.OnWeaponSlotRequested += HandleWeaponSlotFromBus;
+        }
+
+        private void OnDisable()
+        {
+            GameActionBus.OnWeaponSlotRequested -= HandleWeaponSlotFromBus;
+        }
+
         /// <summary>
         /// Called by GameHUDController after the HUD is initialized.
         /// Injects the shared progress bar if it was not assigned in the Inspector.
@@ -76,6 +88,7 @@ namespace NightHunt.UI
 
         private void OnDestroy()
         {
+            GameActionBus.OnWeaponSlotRequested -= HandleWeaponSlotFromBus;
             UnbindAllButtons();
         }
 
@@ -296,7 +309,42 @@ namespace NightHunt.UI
         private void HandleActiveWeaponChanged(WeaponSlotType? oldSlot, WeaponSlotType? newSlot)
         {
             if (!newSlot.HasValue)
+            {
                 StopReloadProgress();
+                return;
+            }
+
+            // Mirror server-driven slot change to HUD highlight.
+            // Converts WeaponSlotType to the 0-based bus index (Primary=0, Secondary=1, Melee=2).
+            int idx = (int)newSlot.Value;
+            SyncHighlightToSlotIndex(idx);
+        }
+
+        // ── GameActionBus Handler ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Canonical handler raised by ALL weapon-slot input sources:
+        ///   Desktop  — Key 1/2/3 via CombatInputHandler
+        ///   Mobile   — WeaponSlotButton.onClick via GameActionBus.RequestWeaponSlot(idx)
+        /// Keeps button highlight in sync without duplicated code paths.
+        /// </summary>
+        private void HandleWeaponSlotFromBus(int zeroBasedIndex)
+        {
+            SyncHighlightToSlotIndex(zeroBasedIndex);
+        }
+
+        /// <summary>Set the correct button to selected state, deselect all others.</summary>
+        private void SyncHighlightToSlotIndex(int zeroBasedIndex)
+        {
+            // WeaponSlotButton drives its own highlight via IWeaponSystem.OnActiveWeaponChanged.
+            // We only need to tell the weapon system to switch — it raises the event
+            // and each button's HandleActiveWeaponChanged updates the border accordingly.
+            if (_weaponSystem == null) return;
+
+            // Map 0-based bus index to WeaponSlotType (Primary=0, Secondary=1, Melee=2).
+            if (zeroBasedIndex < 0 || zeroBasedIndex >= _spawnedTypes.Count) return;
+            var slotType = _spawnedTypes[zeroBasedIndex];
+            _weaponSystem.SelectWeapon(slotType);
         }
 
         private void StartReloadProgress()

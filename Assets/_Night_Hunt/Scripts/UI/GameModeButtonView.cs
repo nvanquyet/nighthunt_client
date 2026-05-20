@@ -19,6 +19,7 @@ namespace NightHunt.UI
     {
         [SerializeField] private TextMeshProUGUI modeNameText;
         [SerializeField] private TextMeshProUGUI statusBadgeText;
+        [SerializeField] private GameObject readyIcon;
         [SerializeField] private Button button;
         [SerializeField] private GameObject lockedOverlay;
 
@@ -31,13 +32,21 @@ namespace NightHunt.UI
             _onClick = onClick;
 
             if (modeNameText    != null) modeNameText.text = mode.displayName;
+            bool isEnabled = mode.active && mode.modeStatus == "AVAILABLE";
+
             if (statusBadgeText != null)
             {
-                statusBadgeText.text  = mode.modeStatus;
-                statusBadgeText.color = GetStatusColor(mode.modeStatus);
+                statusBadgeText.gameObject.SetActive(!isEnabled);
+                if (!isEnabled)
+                {
+                    statusBadgeText.text  = mode.modeStatus;
+                    statusBadgeText.color = GetStatusColor(mode.modeStatus);
+                }
             }
 
-            bool isEnabled = mode.active && mode.modeStatus == "AVAILABLE";
+            if (readyIcon != null)
+                readyIcon.SetActive(isEnabled);
+
             if (lockedOverlay != null) lockedOverlay.SetActive(!isEnabled);
 
             if (button != null)

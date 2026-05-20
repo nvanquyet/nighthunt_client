@@ -35,12 +35,7 @@ namespace NightHunt.UI
         /// dù useCustomText = true hay false.</summary>
         public void SetLabel(string text)
         {
-            if (mainButton == null) return;
-            mainButton.buttonText = text;
-            // Always write directly to TMP fields — MainButton.Start() is not reactive.
-            if (mainButton.normalText      != null) mainButton.normalText.text      = text;
-            if (mainButton.highlightedText != null) mainButton.highlightedText.text = text;
-            if (mainButton.pressedText     != null) mainButton.pressedText.text     = text;
+            ShiftUIBridge.SetMainButtonLabel(mainButton, text);
         }
 
         public void SetVisible(bool visible)
@@ -161,8 +156,8 @@ namespace NightHunt.UI
             Action onConfirm    = null,
             Action onExpire     = null,
             bool   showConfirm  = true,
-            string confirmText  = "X\u00e1c nh\u1eadn",
-            string cancelText   = "H\u1ee7y",
+            string confirmText  = "Confirm",
+            string cancelText   = "Cancel",
             long   invitationId = 0)
         {
             PrepareContent(title, desc, showInput: false, placeholder: null);
@@ -177,8 +172,8 @@ namespace NightHunt.UI
             _runtimeBtn3       = onExpire;
             _countdownBaseDesc = desc;
             _activeInvitationId = invitationId;
-            StartCountdown(seconds);
             DoOpen();
+            StartCountdown(seconds);
         }
 
         /// <summary>Close the modal only if it was opened for the given invitation ID.</summary>
@@ -270,7 +265,7 @@ namespace NightHunt.UI
             _isOpen = false;
             _activeInvitationId = 0;
             StopCountdown();
-            modalManager?.ModalWindowOut();
+            ShiftUIBridge.CloseModal(modalManager);
         }
 
         public bool IsOpen => _isOpen;
@@ -319,9 +314,9 @@ namespace NightHunt.UI
         private void DoOpen()
         {
             if (modalManager == null) return;
-            if (_isOpen) modalManager.ModalWindowOut(); // reset animation nếu đang mở
+            if (_isOpen) ShiftUIBridge.CloseModal(modalManager); // reset animation nếu đang mở
             _isOpen = true;
-            modalManager.ModalWindowIn();
+            ShiftUIBridge.OpenModal(modalManager);
         }
 
         // ── Click handlers ─────────────────────────────────────────────────────

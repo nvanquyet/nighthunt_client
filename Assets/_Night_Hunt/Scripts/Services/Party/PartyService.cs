@@ -385,7 +385,9 @@ namespace NightHunt.Services.Party
             {
                 var body   = new PartyMatchmakingRequest { gameMode = gameMode, allowFill = allowFill, mapId = mapId };
                 var result = await backendClient.PostAsync<object>(Constants.API_PARTY_QUEUE, body);
-                if (!result.Success)
+                if (result.Success)
+                    APICache.InvalidateParty();
+                else
                     LoadingOverlay.ShowError(result.Message ?? "Failed to join queue");
                 return result.Success ? ApiResult.Ok() : ApiResult.Error(result.Message);
             }
@@ -412,7 +414,9 @@ namespace NightHunt.Services.Party
             try
             {
                 var result = await backendClient.PostAsync<object>(Constants.API_PARTY_CANCEL_QUEUE);
-                if (!result.Success)
+                if (result.Success)
+                    APICache.InvalidateParty();
+                else
                     LoadingOverlay.ShowError(result.Message ?? "Failed to cancel queue");
                 return result.Success ? ApiResult.Ok() : ApiResult.Error(result.Message);
             }

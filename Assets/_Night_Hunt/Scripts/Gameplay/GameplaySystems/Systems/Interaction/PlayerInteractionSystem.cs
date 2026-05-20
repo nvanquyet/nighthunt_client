@@ -13,6 +13,8 @@ using UnityEngine;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.UI;
+using NightHunt.Gameplay.Character;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.Interaction
 {
@@ -58,6 +60,7 @@ namespace NightHunt.GameplaySystems.Interaction
 
         // Networking
         private NetworkPlayer _networkPlayer;
+        private CharacterAnimationController _animationController;
         private bool _inputSubscribed;
 
         private bool IsLocalPlayer
@@ -91,6 +94,13 @@ namespace NightHunt.GameplaySystems.Interaction
         .OnSelf()
         .InChildren()
         .OrLogWarning("[Auto] NetworkPlayer not found")
+        .Resolve();
+
+            _animationController = ComponentResolver.Find<CharacterAnimationController>(this)
+        .OnSelf()
+        .InChildren()
+        .InParent()
+        .OrDefault(null)
         .Resolve();
 
             // In case Network/ownership is not ready yet when this component enables,
@@ -141,6 +151,11 @@ namespace NightHunt.GameplaySystems.Interaction
         {
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] InteractPerformed received.");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Interaction,
+                "InteractPerformed",
+                $"target={DescribeInteractable(raycastDetector?.CurrentInteractable)} pickupAll={pickupAllMode} holding={_isHolding}",
+                this);
 
             // Primary path: use IInteractable from RaycastDetector
             var target = raycastDetector?.CurrentInteractable;
@@ -161,11 +176,22 @@ namespace NightHunt.GameplaySystems.Interaction
                 _holdTimer = 0f;
                 _holdingInteractable = holdTarget;
                 Debug.Log($"[PlayerInteractionSystem] Hold started ({holdTarget.HoldDuration:F1}s): {target.InteractLabel}");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Interaction,
+                    "HoldStart",
+                    $"target={DescribeInteractable(target)} duration={holdTarget.HoldDuration:F2}",
+                    this);
                 return;
             }
 
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log($"[Interact] {target.InteractLabel}");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Interaction,
+                    "InteractExecute",
+                    $"target={DescribeInteractable(target)} animationIndex=1",
+                    this);
+                TriggerInteractAnimation(1);
                 target.Interact(gameObject);
                 return;
             }
@@ -175,6 +201,11 @@ namespace NightHunt.GameplaySystems.Interaction
             {
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log("[Interact] InteractPerformed received but no interactable under crosshair.");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Interaction,
+                    "InteractMiss",
+                    "reason=no-current-interactable",
+                    this);
             }
             else
             {
@@ -222,6 +253,7 @@ namespace NightHunt.GameplaySystems.Interaction
                 _holdingInteractable = null;
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log("[Interact] Hold canceled.");
+                PhaseTestLog.Log(PhaseTestLogCategory.Interaction, "HoldCancel", "reason=input-released", this);
             }
         }
 
@@ -229,6 +261,11 @@ namespace NightHunt.GameplaySystems.Interaction
         {
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                 Debug.Log("[PlayerInteractionSystem] PickupPerformed received.");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Interaction,
+                "PickupPerformed",
+                $"mode={(pickupAllMode ? "all" : "single")} target={DescribeInteractable(raycastDetector?.CurrentInteractable)} nearby={proximityScanner?.NearbyInteractables.Count ?? -1}",
+                this);
 
             if (pickupAllMode && proximityScanner != null)
                 PickupAllNearby();
@@ -256,6 +293,23 @@ namespace NightHunt.GameplaySystems.Interaction
         }
 
         public bool IsPickupAllMode => pickupAllMode;
+
+        private static string DescribeInteractable(IInteractable target)
+        {
+            if (target == null)
+                return "null";
+
+            string label = target.InteractLabel ?? string.Empty;
+            if (target is Component component)
+            {
+                float dist = component.transform != null
+                    ? Vector3.Distance(component.transform.position, component.transform.root.position)
+                    : 0f;
+                return $"{target.GetType().Name} label='{label}' go={component.name} layer={PhaseTestLog.DescribeLayer(component.gameObject)} distRoot={dist:F2}";
+            }
+
+            return $"{target.GetType().Name} label='{label}'";
+        }
 
         /// <summary>
         /// Inventory-open flow: refresh proximity and open/show the closest lootable.
@@ -651,6 +705,7 @@ namespace NightHunt.GameplaySystems.Interaction
             {
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log($"[Interact] Hold complete: {_holdingInteractable.InteractLabel}");
+                TriggerInteractAnimation(1);
                 (_holdingInteractable as IInteractable)?.Interact(gameObject);
 
                 _isHolding = false;
@@ -672,12 +727,23 @@ namespace NightHunt.GameplaySystems.Interaction
                 {
                     if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                         Debug.Log($"[Pickup] {target.InteractLabel}");
+                    PhaseTestLog.Log(
+                        PhaseTestLogCategory.Interaction,
+                        "PickupExecute",
+                        $"source=raycast-pickupable target={DescribeInteractable(target)}",
+                        this);
+                    TriggerInteractAnimation(0);
                     target.Interact(gameObject);
                     return;
                 }
 
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log($"[Pickup] Ignored non-pickup target on F: {target.InteractLabel}. Use Interact/E.");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Interaction,
+                    "PickupIgnored",
+                    $"reason=not-pickupable target={DescribeInteractable(target)}",
+                    this);
             }
 
             if (target != null && !target.CanInteract(gameObject))
@@ -723,6 +789,12 @@ namespace NightHunt.GameplaySystems.Interaction
                 {
                     if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                         Debug.Log($"[Pickup] Legacy path: {pickup.ItemDefinitionID} x{pickup.Quantity}");
+                    PhaseTestLog.Log(
+                        PhaseTestLogCategory.Interaction,
+                        "PickupExecute",
+                        $"source=legacy-world-item item={pickup.ItemDefinitionID} quantity={pickup.Quantity} go={pickup.name}",
+                        this);
+                    TriggerInteractAnimation(0);
                     pickup.RequestPickup(playerNob);
                     return;
                 }
@@ -733,6 +805,12 @@ namespace NightHunt.GameplaySystems.Interaction
             {
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInteractionDebugLogs)
                     Debug.Log($"[Pickup] Proximity fallback: {nearbyPickup.InteractLabel}");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Interaction,
+                    "PickupExecute",
+                    $"source=proximity-fallback target={DescribeInteractable(nearbyPickup)}",
+                    this);
+                TriggerInteractAnimation(0);
                 nearbyPickup.Interact(gameObject);
             }
         }
@@ -760,6 +838,13 @@ namespace NightHunt.GameplaySystems.Interaction
             {
                 if (item is IPickupable pickupable && item.CanInteract(gameObject))
                 {
+                    if (count == 0)
+                        TriggerInteractAnimation(0);
+                    PhaseTestLog.Log(
+                        PhaseTestLogCategory.Interaction,
+                        "PickupExecute",
+                        $"source=pickup-all index={count} target={DescribeInteractable(item)}",
+                        this);
                     item.Interact(gameObject);
                     count++;
                 }
@@ -777,6 +862,22 @@ namespace NightHunt.GameplaySystems.Interaction
         .InChildren()
         .OrLogWarning("[Auto] NetworkObject not found")
         .Resolve();
+
+        private void TriggerInteractAnimation(int interactIndex)
+        {
+            if (!IsLocalPlayer)
+                return;
+
+            _animationController ??= ComponentResolver.Find<CharacterAnimationController>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .OrDefault(null)
+                .Resolve();
+
+            _animationController?.TriggerInteract(interactIndex);
+            _networkPlayer?.RequestInteractAnimation(interactIndex);
+        }
 
         private IInteractable GetClosestNearbyPickupable()
         {

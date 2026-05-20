@@ -15,6 +15,11 @@ namespace NightHunt.GameplaySystems.Core.Data
     /// Definition for placeable items. VisualPrefab is inherited from
     /// PhysicalItemDefinition and must stay pure visual; NetworkDeployablePrefab is
     /// the server-spawned network object used after placement is confirmed.
+    ///
+    /// Runtime prefab contract by kind:
+    /// - VisionNode / LightPoint require a VisionWard component.
+    /// - ExplosiveMine / ShockField require a TrapDeployable component.
+    /// - Generic requires any BaseDeployable, usually SimpleDeployable.
     /// </summary>
     [CreateAssetMenu(fileName = "Deployable_", menuName = "NightHunt/Items/Deployable Definition")]
     public sealed class DeployableDefinition : PhysicalItemDefinition
@@ -24,12 +29,17 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Header("Deployable")]
         public DeployableKind DeployableKind = DeployableKind.Generic;
 
-        [Tooltip("NetworkObject prefab spawned by the server when placement is confirmed.")]
+        [Tooltip("NetworkObject prefab spawned by the server when placement is confirmed. Must match DeployableKind: VisionWard for vision kinds, TrapDeployable for trap kinds, BaseDeployable/SimpleDeployable for Generic.")]
         public GameObject NetworkDeployablePrefab;
 
         [Tooltip("Optional placement preview. If empty, VisualPrefab is used.")]
         public GameObject PlacementPreviewPrefab;
 
+        [Header("Health")]
+        [Tooltip("Off by default so trap/deployable prefabs keep their own BaseDeployable HP. Enable only for data-driven variants.")]
+        public bool OverridePrefabHealth = false;
+
+        [Tooltip("Used only when OverridePrefabHealth is enabled.")]
         [Min(1)] public int MaxHP = 100;
 
         [Header("Placement")]

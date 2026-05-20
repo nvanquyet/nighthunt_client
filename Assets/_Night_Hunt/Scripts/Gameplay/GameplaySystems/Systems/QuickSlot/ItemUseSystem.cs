@@ -1,5 +1,7 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using FishNet;
 using UnityEngine;
 using FishNet.Connection;
 using FishNet.Object;
@@ -14,6 +16,9 @@ using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Core;
 using NightHunt.Utilities;
 using NightHunt.Gameplay.Beacon;
+using NightHunt.Networking;
+using NightHunt.Networking.Player;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.ItemUse
 {
@@ -78,7 +83,10 @@ namespace NightHunt.GameplaySystems.ItemUse
         public event Action<ItemInstance> OnItemUseCompleted;
         public event Action<ItemInstance> OnItemUseCancelled;
         public event Action<ItemInstance, float> OnItemUseProgress;
+        public event Action OnThrowPrepareStarted;
         public event Action OnThrowExecuted;
+        public event Action OnDeployStarted;
+        public event Action OnDeployCompleted;
 
         #endregion
 
@@ -209,6 +217,11 @@ namespace NightHunt.GameplaySystems.ItemUse
             }
 
             Debug.Log($"[ITEM_SELECT_FLOW] ItemUse.UseItem entry item={item.InstanceID} def={item.DefinitionID} qty={item.Quantity} isServer={IsServerInitialized} isOwner={IsOwner}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.ItemUse,
+                "UseItem",
+                $"item={item.InstanceID} def={item.DefinitionID} qty={item.Quantity} isServer={IsServerInitialized} isOwner={IsOwner} using={_isUsingItem}",
+                this);
 
             // Client in dedicated-server mode: route to server via RPC.
             if (!IsServerInitialized)
@@ -279,6 +292,11 @@ namespace NightHunt.GameplaySystems.ItemUse
             }
 
             Debug.Log($"[ITEM_FLOW] [07][UseServer.Route] item={item.InstanceID} def={item.DefinitionID} defType={def.GetType().Name} itemType={def.Type}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.ItemUse,
+                "UseServerRoute",
+                $"item={item.InstanceID} def={def.ItemID} defType={def.GetType().Name} itemType={def.Type} previousSlot={_previousWeaponSlot?.ToString() ?? "none"}",
+                this);
 
             if (def is ConsumableDefinition cd)
                 return BeginConsumable(item, cd);
@@ -326,6 +344,12 @@ namespace NightHunt.GameplaySystems.ItemUse
             Vector3 sanitizedTarget = SanitizeThrowableTarget(def, aimTarget);
             _pendingThrowTarget = sanitizedTarget;
             LogThrowable($"ExecuteThrow target requested={aimTarget:F2} sanitized={sanitizedTarget:F2} item={_currentItem.InstanceID} def={def.ItemID} prepare={def.PrepareTime:F2}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Throwable,
+                "ExecuteThrow",
+                $"item={_currentItem.InstanceID} def={def.ItemID} requested={aimTarget:F2} sanitized={sanitizedTarget:F2} prepare={def.PrepareTime:F2}",
+                this);
+            RpcThrowPrepareStarted();
             _useCoroutine = StartCoroutine(PrepareAndThrow(def, sanitizedTarget));
         }
 
@@ -341,9 +365,14 @@ namespace NightHunt.GameplaySystems.ItemUse
                 yield break;
 
             LogThrowable($"PrepareAndThrow spawning def={def.ItemID} target={aimTarget:F2} player={transform.position:F2}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Throwable,
+                "ThrowSpawn",
+                $"item={_currentItem.InstanceID} def={def.ItemID} target={aimTarget:F2} player={transform.position:F2}",
+                this);
             _throwableHandler.SpawnProjectile(def, transform, aimTarget);
             DetachItemFromHand();
-            OnThrowExecuted?.Invoke();
+            RpcThrowExecuted();
 
             var item = _currentItem;
             ConsumeItem(item);
@@ -415,6 +444,30 @@ namespace NightHunt.GameplaySystems.ItemUse
             CancelUse();
         }
 
+        [ObserversRpc]
+        private void RpcThrowPrepareStarted()
+        {
+            OnThrowPrepareStarted?.Invoke();
+        }
+
+        [ObserversRpc]
+        private void RpcThrowExecuted()
+        {
+            OnThrowExecuted?.Invoke();
+        }
+
+        [ObserversRpc]
+        private void RpcDeployStarted()
+        {
+            OnDeployStarted?.Invoke();
+        }
+
+        [ObserversRpc]
+        private void RpcDeployCompleted()
+        {
+            OnDeployCompleted?.Invoke();
+        }
+
         public bool TryConfirmDeploy()
         {
             _deployableHandler ??= ComponentResolver.Find<IDeployableHandler>(this)
@@ -433,6 +486,11 @@ namespace NightHunt.GameplaySystems.ItemUse
             string instanceId = _currentItem?.InstanceID;
             bool confirmed = _deployableHandler.TryCapturePlacement(out Vector3 position, out Quaternion rotation);
             LogDeploy($"TryConfirmDeploy capture={confirmed} item={instanceId ?? "null"} using={_isUsingItem} pos={position:F2} rot={rotation.eulerAngles:F1}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Deploy,
+                "TryConfirmDeploy",
+                $"capture={confirmed} item={instanceId ?? "null"} using={_isUsingItem} pos={position:F2} rot={rotation.eulerAngles:F1}",
+                this);
 
             if (confirmed && !string.IsNullOrEmpty(instanceId))
             {
@@ -473,6 +531,12 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             float duration = ResolveDeployDuration(def);
             LogDeploy($"BeginConfirmedDeploy accepted: item={instanceId} def={def.ItemID} duration={duration:F2} pos={position:F2} rot={rotation.eulerAngles:F1}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Deploy,
+                "BeginConfirmedDeploy",
+                $"item={instanceId} def={def.ItemID} duration={duration:F2} pos={position:F2} rot={rotation.eulerAngles:F1}",
+                this);
+            RpcDeployStarted();
             OnItemUseProgress?.Invoke(_currentItem, 0f);
             _useCoroutine = StartCoroutine(DeployAfterUseDuration(_currentItem, def, position, rotation, duration));
             return true;
@@ -505,10 +569,18 @@ namespace NightHunt.GameplaySystems.ItemUse
                           _deployableHandler.PlaceDeployableServer(position, rotation, def.ItemID, item.InstanceID);
 
             LogDeploy($"DeployAfterUseDuration result={placed} item={item.InstanceID} def={def.ItemID} pos={position:F2}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Deploy,
+                "DeployComplete",
+                $"result={placed} item={item.InstanceID} def={def.ItemID} pos={position:F2}",
+                this);
             _useCoroutine = null;
 
             if (placed)
+            {
+                RpcDeployCompleted();
                 CompleteUse(item);
+            }
             else
                 CancelUse();
         }
@@ -558,6 +630,11 @@ namespace NightHunt.GameplaySystems.ItemUse
             TargetEndItemUseVisual(Owner);
             DestroyItemInHand();
             RestoreWeapon();
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.ItemUse,
+                "CancelUse",
+                $"item={item?.InstanceID ?? "null"} def={item?.DefinitionID ?? "null"} restoreSlot={_previousWeaponSlot?.ToString() ?? "none"}",
+                this);
         }
 
         [TargetRpc]
@@ -585,6 +662,11 @@ namespace NightHunt.GameplaySystems.ItemUse
         private bool BeginConsumable(ItemInstance item, ConsumableDefinition def)
         {
             Debug.Log($"[ITEM_FLOW] [08][BeginConsumable] item={item.InstanceID} def={def.ItemID} duration={(def.UsageDuration > 0f ? def.UsageDuration : _defaultUseTime):F2}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.ItemUse,
+                "BeginConsumable",
+                $"item={item.InstanceID} def={def.ItemID} duration={(def.UsageDuration > 0f ? def.UsageDuration : _defaultUseTime):F2}",
+                this);
             HolsterAndSave();
             _currentItem = item;
             _isUsingItem = true;
@@ -617,10 +699,107 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             // Apply effects via handler
             _consumableHandler.ApplyEffects(def);
+            ApplyOwnerTargetedConsumableEffects(def);
 
             // Consume & complete
             ConsumeItem(item);
             CompleteUse(item);
+        }
+
+        [Server]
+        private void ApplyOwnerTargetedConsumableEffects(ConsumableDefinition def)
+        {
+            if (!TryResolveRadarRevealDuration(def, out float duration))
+                return;
+
+            var ownerPlayer = ResolveOwnerNetworkPlayer();
+            if (ownerPlayer == null)
+            {
+                Debug.LogWarning($"[ItemUseSystem] Radar reveal skipped for '{def.ItemID}': owner NetworkPlayer not found.");
+                return;
+            }
+
+            var targetIds = new List<int>(16);
+            CollectEnemyPlayerObjectIds(ownerPlayer, targetIds);
+
+            TargetRevealEnemyPlayers(Owner, targetIds.ToArray(), duration);
+            Debug.Log($"[ItemUseSystem] Radar reveal '{def.ItemID}' -> owner={ownerPlayer.DisplayName} targets={targetIds.Count} duration={duration:F1}s");
+        }
+
+        private static bool TryResolveRadarRevealDuration(ConsumableDefinition def, out float duration)
+        {
+            duration = 0f;
+            var effects = def.GetEffects();
+            if (effects == null)
+                return false;
+
+            for (int i = 0; i < effects.Length; i++)
+            {
+                var fx = effects[i];
+                if (fx.EffectType != ConsumableEffectType.RevealEnemyPlayers)
+                    continue;
+
+                float effectDuration = fx.Duration > 0f ? fx.Duration : (fx.Value > 0f ? fx.Value : 5f);
+                duration = Mathf.Max(duration, effectDuration);
+            }
+
+            return duration > 0f;
+        }
+
+        private NetworkPlayer ResolveOwnerNetworkPlayer()
+        {
+            var player = GetComponentInParent<NetworkPlayer>();
+            if (player != null)
+                return player;
+
+            return GetComponentInChildren<NetworkPlayer>();
+        }
+
+        private static void CollectEnemyPlayerObjectIds(NetworkPlayer ownerPlayer, List<int> targetIds)
+        {
+            targetIds.Clear();
+            int ownerTeamId = ownerPlayer.TeamId;
+            int ownerObjectId = (int)ownerPlayer.ObjectId;
+
+            var players = RegistryService.Instance?.GetAllPlayers();
+            if (players != null && players.Length > 0)
+            {
+                for (int i = 0; i < players.Length; i++)
+                    AddRevealTarget(ownerTeamId, ownerObjectId, players[i], targetIds);
+                return;
+            }
+
+            var serverManager = InstanceFinder.ServerManager;
+            if (serverManager?.Objects?.Spawned == null)
+                return;
+
+            foreach (var kvp in serverManager.Objects.Spawned)
+            {
+                var player = kvp.Value != null ? kvp.Value.GetComponent<NetworkPlayer>() : null;
+                AddRevealTarget(ownerTeamId, ownerObjectId, player, targetIds);
+            }
+        }
+
+        private static void AddRevealTarget(int ownerTeamId, int ownerObjectId, NetworkPlayer player, List<int> targetIds)
+        {
+            if (player == null || !player.IsAlive)
+                return;
+
+            int playerObjectId = (int)player.ObjectId;
+            if (playerObjectId == ownerObjectId || player.TeamId == ownerTeamId)
+                return;
+
+            targetIds.Add(playerObjectId);
+        }
+
+        [TargetRpc]
+        private void TargetRevealEnemyPlayers(NetworkConnection conn, int[] playerObjectIds, float duration)
+        {
+            var reveal = GetComponent<RadarSweepRevealClient>();
+            if (reveal == null)
+                reveal = gameObject.AddComponent<RadarSweepRevealClient>();
+
+            reveal.ShowTargets(playerObjectIds, duration);
         }
 
         #endregion
@@ -630,6 +809,11 @@ namespace NightHunt.GameplaySystems.ItemUse
         private bool BeginThrowable(ItemInstance item, ThrowableDefinition def)
         {
             Debug.Log($"[ITEM_FLOW] [08][BeginThrowable] item={item.InstanceID} def={def.ItemID} prepare={def.PrepareTime:F2}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Throwable,
+                "BeginThrowable",
+                $"item={item.InstanceID} def={def.ItemID} prepare={def.PrepareTime:F2}",
+                this);
             HolsterAndSave();
             _currentItem = item;
             _isUsingItem = true;
@@ -656,6 +840,11 @@ namespace NightHunt.GameplaySystems.ItemUse
         private bool BeginDeployable(ItemInstance item, ItemDefinition def)
         {
             LogDeploy($"BeginDeployable item={item.InstanceID} def={def.ItemID} handler={(_deployableHandler != null ? "ok" : "null")}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Deploy,
+                "BeginDeployable",
+                $"item={item.InstanceID} def={def.ItemID} handler={(_deployableHandler != null ? "ok" : "null")}",
+                this);
             if (_deployableHandler == null)
             {
                 Debug.LogWarning($"[ItemUseSystem] Deployable '{def.DisplayName}' selected but no IDeployableHandler is present on the player.");
@@ -760,6 +949,11 @@ namespace NightHunt.GameplaySystems.ItemUse
                 _itemInHandModel.transform.SetParent(parent, worldPositionStays: false);
             _itemInHandModel.transform.localPosition = Vector3.zero;
             _itemInHandModel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.IK,
+                "HeldItemSpawned",
+                $"def={def?.ItemID ?? "null"} prefab={(prefab != null ? prefab.name : "runtime-fallback")} parent={parent.name} path={BuildPath(parent)} localPos={_itemInHandModel.transform.localPosition:F3} localRot={_itemInHandModel.transform.localEulerAngles:F1}",
+                this);
         }
 
         /// <summary>
@@ -892,6 +1086,27 @@ namespace NightHunt.GameplaySystems.ItemUse
             TargetEndItemUseVisual(Owner);
             DestroyItemInHand();
             RestoreWeapon();
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.ItemUse,
+                "CompleteUse",
+                $"item={item?.InstanceID ?? "null"} def={item?.DefinitionID ?? "null"} restoreSlot={_previousWeaponSlot?.ToString() ?? "none"}",
+                this);
+        }
+
+        private static string BuildPath(Transform target)
+        {
+            if (target == null)
+                return "null";
+
+            string path = target.name;
+            Transform cursor = target.parent;
+            while (cursor != null)
+            {
+                path = cursor.name + "/" + path;
+                cursor = cursor.parent;
+            }
+
+            return path;
         }
 
         #endregion

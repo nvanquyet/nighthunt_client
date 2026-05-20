@@ -11,6 +11,7 @@ using NightHunt.Gameplay.StatSystem.Systems;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.Utilities;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Character.Combat
 {
@@ -61,6 +62,10 @@ namespace NightHunt.Gameplay.Character.Combat
         [Tooltip("When false, same-team player damage is rejected on the server.")]
         [SerializeField] private bool _allowFriendlyFire = false;
 
+        [Header("Passive Regeneration")]
+        [Tooltip("How often HealthRegenRate is applied on the server.")]
+        [SerializeField] private float _healthRegenTickInterval = 1f;
+
         // ── Instance events (fire on this player's instance on all clients) ─────
         /// <summary>Fired on every client when a hit is confirmed. Use for blood / hit marker VFX.</summary>
         public event Action<DamageInfo> OnHitReceived;
@@ -82,6 +87,7 @@ namespace NightHunt.Gameplay.Character.Combat
 
         private IPlayerStatSystem _statSystem;
         private NetworkPlayer _networkPlayer;
+        private float _nextHealthRegenTickTime;
 
         // ── FishNet Lifecycle ─────────────────────────────────────────────────
 
@@ -116,6 +122,19 @@ namespace NightHunt.Gameplay.Character.Combat
             ResolveReferences();
         }
 #endif
+
+        private void Update()
+        {
+            if (!IsServerInitialized || _statSystem == null)
+                return;
+
+            float interval = Mathf.Max(0.1f, _healthRegenTickInterval);
+            if (Time.time < _nextHealthRegenTickTime)
+                return;
+
+            _nextHealthRegenTickTime = Time.time + interval;
+            TickPassiveHealthRegen(interval);
+        }
 
         private void ResolveReferences()
         {
@@ -175,6 +194,21 @@ namespace NightHunt.Gameplay.Character.Combat
 
             if (type == PlayerStatType.MaxHealth)
                 HealthChanged?.Invoke(new HealthChangeEvent(CurrentHealth, CurrentHealth, MaxHealth));
+        }
+
+        [Server]
+        private void TickPassiveHealthRegen(float deltaTime)
+        {
+            float regenRate = _statSystem.GetStat(PlayerStatType.HealthRegenRate);
+            if (regenRate <= 0f || IsDead)
+                return;
+
+            float current = _statSystem.GetStat(PlayerStatType.Health);
+            float max = Mathf.Max(1f, _statSystem.GetStat(PlayerStatType.MaxHealth));
+            if (current >= max)
+                return;
+
+            _statSystem.SetCurrentStat(PlayerStatType.Health, Mathf.Min(max, current + regenRate * deltaTime));
         }
         // ── IHittable (owner-client call gateway) ─────────────────────────────
 
@@ -240,6 +274,7 @@ namespace NightHunt.Gameplay.Character.Combat
             if (_statSystem.GetStat(PlayerStatType.Health) <= 0f)
             {
                 Debug.Log($"[PlayerHealthSystem] ValidateHit rejected: {_networkPlayer?.DisplayName} is already dead.");
+                PhaseTestLog.Log(PhaseTestLogCategory.Death, "DamageRejected", $"reason=target-dead victim={_networkPlayer?.DisplayName ?? "null"} weapon={info.WeaponId}", this);
                 return false;
             }
 
@@ -248,6 +283,7 @@ namespace NightHunt.Gameplay.Character.Combat
                 if (!_allowClientDamageRequests)
                 {
                     Debug.LogWarning($"[PlayerHealthSystem] Client damage RPC rejected: legacy client damage is disabled. sender={sender.ClientId} weapon={info.WeaponId}");
+                    PhaseTestLog.Warning(PhaseTestLogCategory.Death, "DamageRejected", $"reason=client-rpc-disabled sender={sender.ClientId} weapon={info.WeaponId}", this);
                     return false;
                 }
 
@@ -289,6 +325,11 @@ namespace NightHunt.Gameplay.Character.Combat
                 shooterPlayer.TeamId == _networkPlayer.TeamId)
             {
                 Debug.LogWarning($"[PlayerHealthSystem] ValidateHit rejected: friendly fire {shooterPlayer.DisplayName} -> {_networkPlayer.DisplayName}.");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Death,
+                    "DamageRejected",
+                    $"reason=friendly-fire shooter={shooterPlayer.DisplayName} shooterTeam={shooterPlayer.TeamId} victim={_networkPlayer.DisplayName} victimTeam={_networkPlayer.TeamId} weapon={info.WeaponId}",
+                    this);
                 return false;
             }
 
@@ -340,12 +381,20 @@ namespace NightHunt.Gameplay.Character.Combat
         private void ApplyDamageServer(float damage, DamageInfo info)
         {
             float current = _statSystem.GetStat(PlayerStatType.Health);
+            if (current <= 0f)
+                return;
+
             float newHealth = Mathf.Max(0f, current - damage);
 
             Debug.Log($"[PlayerHealthSystem] {_networkPlayer?.DisplayName} hit — " +
                       $"damage: {damage:F1}, HP: {current:F1} → {newHealth:F1}" +
                       (info.IsHeadshot ? " [HEADSHOT]" : "") +
                       $" (weapon: {info.WeaponId})");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "DamageApplied",
+                $"victim={_networkPlayer?.DisplayName ?? "null"} victimObj={_networkPlayer?.ObjectId ?? 0} victimTeam={_networkPlayer?.TeamId ?? -1} shooterObj={info.ShooterNetworkObjectId} weapon={info.WeaponId} damage={damage:F1} hp={current:F1}->{newHealth:F1} headshot={info.IsHeadshot} hitPoint={info.HitPoint:F2}",
+                this);
 
             // Propagate killer info and broadcast kill event BEFORE health stat change so that
             // CharacterLifecycleController.OnDied fires after LastKillerName is already set.
@@ -365,6 +414,11 @@ namespace NightHunt.Gameplay.Character.Combat
 
             Debug.Log($"[PlayerHealthSystem] PLAYER KILLED — victim: {_networkPlayer?.DisplayName}" +
                       $", killer: {killerName}, weapon: {info.WeaponId}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "PlayerKilledServer",
+                $"victim={_networkPlayer?.DisplayName ?? "null"} victimObj={_networkPlayer?.ObjectId ?? 0} killer={killerName} killerObj={info.ShooterNetworkObjectId} killerTeam={ResolveKillerTeamId(info.ShooterNetworkObjectId)} weapon={info.WeaponId}",
+                this);
 
             // Tell CharacterLifecycleController who the killer is BEFORE health event fires.
             _lifecycle?.SetKillerInfo(killerName);
@@ -511,6 +565,11 @@ namespace NightHunt.Gameplay.Character.Combat
 
             Debug.Log($"[PlayerHealthSystem] DEATH event on client — victim: {victimName}" +
                       $", killed by: {killerName}, weapon: {weaponId}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "PlayerKilledClient",
+                $"victim={victimName} victimObj={victimNetObjId} victimTeam={victimTeam} killer={killerName} killerObj={killerNetObjId} killerTeam={killerTeamId} weapon={weaponId}",
+                this);
 
             OnPlayerDied?.Invoke(killerName);
             OnAnyPlayerDied?.Invoke(victimName, killerName, weaponId);

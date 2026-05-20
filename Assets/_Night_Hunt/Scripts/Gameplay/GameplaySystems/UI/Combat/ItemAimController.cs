@@ -104,6 +104,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (IsAimingPC) return;
             AimWorldTarget = worldPos;
+            AimDirection = Vector3.zero;
+        }
+
+        public static void ClearExternalAimTarget()
+        {
+            AimWorldTarget = Vector3.zero;
+            AimDirection = Vector3.zero;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -124,12 +131,45 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private void Awake()
         {
-#if UNITY_SERVER
+        #if UNITY_SERVER
             enabled = false;
             return;
-#endif
+        #endif
             _cam = Camera.main;
             HideCursor();
+        }
+
+        private void Start()
+        {
+        #if !UNITY_SERVER
+            var uiInput = FindFirstObjectByType<NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler>(FindObjectsInactive.Include);
+            if (uiInput != null)
+            {
+                uiInput.OnCancelPressed += HandleCancelInput;
+            }
+        #endif
+        }
+
+        private void OnDestroy()
+        {
+        #if !UNITY_SERVER
+            if (_itemUseSystem != null)
+            {
+                _itemUseSystem.OnItemUseStarted -= HandleItemUseStarted;
+                _itemUseSystem.OnItemUseCompleted -= HandleItemUseEnded;
+                _itemUseSystem.OnItemUseCancelled -= HandleItemUseEnded;
+            }
+
+            var uiInput = FindFirstObjectByType<NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler>(FindObjectsInactive.Include);
+            if (uiInput != null)
+                uiInput.OnCancelPressed -= HandleCancelInput;
+        #endif
+        }
+
+        private void HandleCancelInput()
+        {
+            if (_inAimMode) CancelAim();
+            if (_inDeployMode) CancelDeploy();
         }
 
         private void Update()
@@ -146,8 +186,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
                     return;
                 }
 
-                if (UnityEngine.Input.GetMouseButtonDown(1) ||
-                    UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+                // Removed manual Escape check (handled by HandleCancelInput via UIInputHandler)
+                if (UnityEngine.Input.GetMouseButtonDown(1))
                 {
                     CancelAim();
                 }
@@ -155,25 +195,22 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
 
             // ── Deployable PC placement ───────────────────────────────────────────
-            // Release-to-place: PointerDown on item button starts deploy mode (preview visible).
-            // Dragging moves the preview. Releasing the mouse button (PointerUp) confirms placement.
-            // Right-click or Escape cancels at any time.
             if (_inDeployMode)
             {
-                // Confirm on mouse RELEASE (not press) — this allows drag-to-place:
-                // hold LMB down → drag to position → release → place.
                 if (PrimaryPointerReleasedThisFrame())
                 {
+                    if (_deployConfirmInProgress)
+                        return;
+
                     if (_suppressNextDeployRelease)
                     {
-                        _suppressNextDeployRelease = false;
-                        IgnoreDeployRelease("initialArmRelease");
+                        IgnoreDeployRelease(IsMobile ? "mobileInitialUiReleaseSuppressed" : "initialUiReleaseSuppressed");
                         return;
                     }
 
-                    if (!IsMobile && IsPrimaryPointerOverUI())
+                    if (IsPrimaryPointerOverUI())
                     {
-                        IgnoreDeployRelease("pointerUpOverUI");
+                        IgnoreDeployRelease(IsMobile ? "mobilePointerUpOverUI" : "pointerUpOverUI");
                         return;
                     }
 
@@ -181,34 +218,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
                     return;
                 }
 
-                if (UnityEngine.Input.GetMouseButtonDown(1) ||
-                    UnityEngine.Input.GetKeyDown(KeyCode.Escape))
+                // Removed manual Escape check
+                if (UnityEngine.Input.GetMouseButtonDown(1))
                 {
                     CancelDeploy();
                     return;
                 }
 
                 bool pointerHeld = IsPrimaryPointerHeld();
-                if (_deployPointerWasHeld && !pointerHeld)
-                {
-                    if (_suppressNextDeployRelease)
-                    {
-                        _suppressNextDeployRelease = false;
-                        IgnoreDeployRelease("initialArmHeldFallback");
-                        return;
-                    }
-
-                    if (!IsMobile && IsPrimaryPointerOverUI())
-                    {
-                        IgnoreDeployRelease("heldFallbackOverUI");
-                        return;
-                    }
-
-                    TryConfirmDeployRelease("heldFallback");
-                    return;
-                }
-
-                _deployPointerWasHeld |= pointerHeld;
+                // ...
             }
         }
 
@@ -256,16 +274,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (_cam == null)
                 _cam = Camera.main;
-        }
 
-        private void OnDestroy()
-        {
-            if (_itemUseSystem != null)
-            {
-                _itemUseSystem.OnItemUseStarted -= HandleItemUseStarted;
-                _itemUseSystem.OnItemUseCompleted -= HandleItemUseEnded;
-                _itemUseSystem.OnItemUseCancelled -= HandleItemUseEnded;
-            }
+            ClearExternalAimTarget();
         }
 
         private void HandleItemUseStarted(ItemInstance item)
@@ -438,8 +448,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (_inDeployMode && joystickDir.magnitude >= _dragThreshold)
                     _suppressNextDeployRelease = false;
 
-                AimWorldTarget = _playerTransform.position + worldDir;
-                AimDirection   = worldDir.magnitude > 0.001f ? worldDir.normalized : Vector3.forward;
+                AimWorldTarget = FlattenTargetForPlayer(_playerTransform.position + worldDir);
+                AimDirection   = worldDir.sqrMagnitude > 0.001f ? worldDir.normalized : Vector3.forward;
                 MoveCursor(AimWorldTarget);
                 RotatePlayerTowards(AimDirection);
 
@@ -466,6 +476,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_inDeployMode)
             {
                 bool overUi = IsPrimaryPointerOverUI();
+                if (overUi)
+                {
+                    IgnoreDeployRelease($"mobileDragEndOverUI magnitude={joystickMagnitude:F2}");
+                    return;
+                }
+
                 if (joystickMagnitude < _dragThreshold)
                 {
                     IgnoreDeployRelease($"mobileDragEndIgnored magnitude={joystickMagnitude:F2} overUI={overUi}");
@@ -485,6 +501,20 @@ namespace NightHunt.GameplaySystems.UI.Combat
             {
                 if (_inAimMode) CancelAim();
             }
+        }
+
+        public void ConfirmDeployFromFireButtonRelease(float joystickMagnitude)
+        {
+            if (!_inDeployMode) return;
+
+            if (joystickMagnitude < _dragThreshold)
+            {
+                IgnoreDeployRelease($"fireButtonReleaseIgnored magnitude={joystickMagnitude:F2}");
+                return;
+            }
+
+            _suppressNextDeployRelease = false;
+            TryConfirmDeployRelease($"fireButtonRelease magnitude={joystickMagnitude:F2}");
         }
 
         /// <summary>
@@ -509,15 +539,20 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             if (!plane.Raycast(ray, out float dist)) return;
 
-            Vector3 hit    = ray.GetPoint(dist);
+            Vector3 hit    = FlattenTargetForPlayer(ray.GetPoint(dist));
             float   range  = GetThrowRange();
             Vector3 offset = hit - _playerTransform.position;
+            offset.y = 0f;
 
-            if (offset.magnitude > range)
-                hit = _playerTransform.position + offset.normalized * range;
+            if (offset.sqrMagnitude > range * range)
+                hit = FlattenTargetForPlayer(_playerTransform.position + offset.normalized * range);
 
             AimWorldTarget = hit;
-            AimDirection   = (hit - _playerTransform.position).normalized;
+            Vector3 aimOffset = hit - _playerTransform.position;
+            aimOffset.y = 0f;
+            AimDirection = aimOffset.sqrMagnitude > 0.001f
+                ? aimOffset.normalized
+                : Vector3.forward;
             MoveCursor(hit);
 
             Vector3 flatDir = new Vector3(AimDirection.x, 0f, AimDirection.z);
@@ -544,9 +579,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
             {
                 Vector3 aimGround = _aimSystem.FinalAimGroundPos;
                 if (aimGround.sqrMagnitude > 0.0001f)
-                    return aimGround;
+                    return FlattenTargetForPlayer(aimGround);
             }
-            return AimWorldTarget;
+            return FlattenTargetForPlayer(AimWorldTarget);
         }
 
         /// <summary>
@@ -574,6 +609,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _aimSystem?.SetCursorVisible(false);
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _combatInputHandler?.SetCameraLockOverride(active: false, forcedValue: false);
+            ClearExternalAimTarget();
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -664,6 +700,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _aimSystem?.SetCursorVisible(false);
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _combatInputHandler?.SetCameraLockOverride(active: false, forcedValue: false);
+            ClearExternalAimTarget();
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -714,7 +751,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (_aimCursor == null) return;
             _aimCursor.gameObject.SetActive(true);
-            _aimCursor.position = worldPos + Vector3.up * 0.1f;
+            _aimCursor.position = FlattenTargetForPlayer(worldPos) + Vector3.up * 0.1f;
+        }
+
+        private Vector3 FlattenTargetForPlayer(Vector3 worldPos)
+        {
+            float y = _playerTransform != null ? _playerTransform.position.y : worldPos.y;
+            return new Vector3(worldPos.x, y, worldPos.z);
         }
 
         private void RotatePlayerTowards(Vector3 worldDirection)

@@ -36,6 +36,13 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         [Tooltip("Left-hand IK anchor read by WeaponModelController after each weapon swap.")]
         [SerializeField] private Transform leftHandIKTarget;
 
+        [Header("Local Offset Override")]
+        [Tooltip("Local position offset relative to the hand bone. If zero, uses prefab root position.")]
+        [SerializeField] private Vector3 baseLocalPosition = Vector3.zero;
+
+        [Tooltip("Local rotation offset relative to the hand bone. (e.g. 90, 0, 0)")]
+        [SerializeField] private Vector3 baseLocalRotation = new Vector3(90f, 0f, 0f);
+
         [Header("Spread (Radial)")]
         [Tooltip("Starting spread cone half-angle in degrees. At rest the spread equals this value.")]
         [SerializeField, Min(0f)] protected float spreadBase = 1f;
@@ -88,6 +95,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
         public GameObject ProjectilePrefab => projectilePrefab;
         public Transform FirePoint => firePoint != null ? firePoint : transform;
         public Transform LeftHandIKTarget => leftHandIKTarget;
+        public Vector3 BaseLocalPosition => baseLocalPosition;
+        public Vector3 BaseLocalRotation => baseLocalRotation;
 
         /// <summary>
         /// Raised after each shot with the shot origin and resolved endpoint.
@@ -162,5 +171,84 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             OnFireResult?.Invoke(origin, endpoint);
             OnFireResultDetailed?.Invoke(new WeaponFireResult(origin, endpoint, hitAnIHittable, hitNormal));
         }
+    }
+
+    public static class BallisticTrajectory
+    {
+        public static bool TrySolveLaunchVelocity(
+            Vector3 from,
+            Vector3 to,
+            float speed,
+            float gravityScale,
+            bool preferHighArc,
+            out Vector3 velocity)
+        {
+            velocity = Vector3.zero;
+
+            if (!IsFinite(from) || !IsFinite(to))
+                return false;
+
+            speed = Mathf.Max(0f, speed);
+            float gravity = Mathf.Max(0f, gravityScale) * Mathf.Abs(Physics.gravity.y);
+            Vector3 delta = to - from;
+            Vector3 horizontal = Vector3.ProjectOnPlane(delta, Vector3.up);
+            float horizontalDistance = horizontal.magnitude;
+
+            if (speed <= 0.001f)
+                return false;
+
+            if (gravity <= 0.001f || horizontalDistance <= 0.01f)
+            {
+                if (delta.sqrMagnitude <= 0.0001f)
+                    return false;
+
+                velocity = delta.normalized * speed;
+                return true;
+            }
+
+            float speedSq = speed * speed;
+            float y = delta.y;
+            float root = speedSq * speedSq
+                       - gravity * (gravity * horizontalDistance * horizontalDistance + 2f * y * speedSq);
+            if (root < 0f)
+                return false;
+
+            float sqrtRoot = Mathf.Sqrt(root);
+            float tanTheta = (speedSq + (preferHighArc ? sqrtRoot : -sqrtRoot)) / (gravity * horizontalDistance);
+            float cosTheta = 1f / Mathf.Sqrt(1f + tanTheta * tanTheta);
+            float sinTheta = tanTheta * cosTheta;
+
+            Vector3 horizontalDir = horizontal / horizontalDistance;
+            velocity = horizontalDir * (speed * cosTheta) + Vector3.up * (speed * sinTheta);
+            return IsFinite(velocity) && velocity.sqrMagnitude > 0.0001f;
+        }
+
+        public static Vector3 ResolveLaunchDirection(Vector3 origin, Vector3 requestedDirection, WeaponConfigData config)
+        {
+            Vector3 fallback = requestedDirection.sqrMagnitude > 0.0001f
+                ? requestedDirection.normalized
+                : Vector3.forward;
+
+            if (config == null || !config.HasProjectileTargetPoint || config.GravityScale <= 0f)
+                return fallback;
+
+            return TrySolveLaunchVelocity(
+                origin,
+                config.ProjectileTargetPoint,
+                Mathf.Max(1f, config.ProjectileSpeed),
+                config.GravityScale,
+                config.PreferHighArc,
+                out Vector3 velocity)
+                ? velocity.normalized
+                : fallback;
+        }
+
+        private static bool IsFinite(Vector3 value)
+            => !float.IsNaN(value.x)
+            && !float.IsNaN(value.y)
+            && !float.IsNaN(value.z)
+            && !float.IsInfinity(value.x)
+            && !float.IsInfinity(value.y)
+            && !float.IsInfinity(value.z);
     }
 }

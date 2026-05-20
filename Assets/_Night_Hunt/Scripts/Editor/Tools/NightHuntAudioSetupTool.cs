@@ -25,7 +25,7 @@ namespace NightHunt.Editor.Tools
     ///   1. Create folder structure
     ///   2. Create NH_Master.mixer with 9 groups + expose 9 parameters
     ///   3. Create AudioLibrary.asset
-    ///   4. Create 7 WeaponAudioProfile assets (one per WeaponClass)
+    ///   4. Create WeaponAudioProfile assets for each WeaponClass (MachineGun shares Rifle by default)
     ///   5. Add AudioManager to Systems GO, auto-assign library
     ///   6. Add CombatAudioController to Systems GO
     ///   7. Add PostProcessStateManager to PostProcess GO, create 5 Global Volumes
@@ -45,7 +45,8 @@ namespace NightHunt.Editor.Tools
         {
             (WeaponClass.Pistol,   "WAP_Pistol"),
             (WeaponClass.SMG,      "WAP_SMG"),
-            (WeaponClass.Rifle,    "WAP_Rifle"),
+            (WeaponClass.Rifle,      "WAP_Rifle"),
+            (WeaponClass.MachineGun, "WAP_Rifle"),
             (WeaponClass.Shotgun,  "WAP_Shotgun"),
             (WeaponClass.Sniper,   "WAP_Sniper"),
             (WeaponClass.Melee,    "WAP_Melee"),

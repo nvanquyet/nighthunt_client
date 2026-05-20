@@ -5,6 +5,7 @@ using FishNet.Object;
 using NightHunt.Data;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Deployables;
+using NightHunt.Gameplay.Character.Combat;
 
 namespace NightHunt.Gameplay.Respawn
 {
@@ -25,6 +26,8 @@ namespace NightHunt.Gameplay.Respawn
         /// </summary>
         public static readonly HashSet<RespawnBeacon> All = new HashSet<RespawnBeacon>();
         private MatchPhaseManager _phaseManager;
+
+        public override HittableTargetType TargetType => HittableTargetType.Beacon;
 
         public override void OnStartNetwork()
         {

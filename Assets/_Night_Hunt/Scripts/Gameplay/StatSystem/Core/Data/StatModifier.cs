@@ -1,4 +1,5 @@
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using UnityEngine;
 
 namespace NightHunt.Gameplay.StatSystem.Core.Data
 {
@@ -82,10 +83,21 @@ namespace NightHunt.Gameplay.StatSystem.Core.Data
             {
                 SourceID = sourceID,
                 Type = ModifierType.Percentage,
-                Value = percentValue,
+                Value = NormalizePercentValue(percentValue),
                 Priority = priority,
                 Description = description
             };
+        }
+
+        /// <summary>
+        /// Accepts both authoring styles used in existing assets:
+        /// 15 = 15%, 0.15 = 15%. Values of exactly +/-1 stay as +/-1%.
+        /// </summary>
+        public static float NormalizePercentValue(float value)
+        {
+            return Mathf.Abs(value) > 0f && Mathf.Abs(value) < 1f
+                ? value * 100f
+                : value;
         }
         
         /// <summary>

@@ -6,6 +6,7 @@ using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
@@ -19,6 +20,11 @@ namespace NightHunt.GameplaySystems.Weapon
             if (_isFiring) return;
             _isFiring = true;
             Debug.Log($"[WEAPON_FLOW] [02][Fire.Start] slot={_activeSlot.Value?.ToString() ?? "none"} mode={GetCurrentFireMode()} aim={_aimDirection:F2}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "FireStart",
+                $"obj={ObjectId} owner={Owner?.ClientId} slot={_activeSlot.Value?.ToString() ?? "none"} mode={GetCurrentFireMode()} aim={_aimDirection:F2}",
+                this);
 
             if (GetCurrentFireMode() == FireMode.Auto)
             {
@@ -41,6 +47,11 @@ namespace NightHunt.GameplaySystems.Weapon
             _isFiring = false;
             if (DebugLogs)
                 Debug.Log("[FIRE_FLOW] WeaponSystem.StopFire");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "FireStop",
+                $"obj={ObjectId} owner={Owner?.ClientId} slot={_activeSlot.Value?.ToString() ?? "none"}",
+                this);
             if (_autoFireCoroutine != null)
             {
                 StopCoroutine(_autoFireCoroutine);
@@ -173,16 +184,19 @@ namespace NightHunt.GameplaySystems.Weapon
             if (slot == null)
             {
                 Debug.LogWarning("[FIRE_FLOW] TryFireOnce blocked: active slot is null.");
+                PhaseTestLog.Warning(PhaseTestLogCategory.Weapon, "FireBlocked", "reason=active-slot-null", this);
                 return;
             }
             if (_isReloading)
             {
                 Debug.Log($"[WEAPON_FLOW] [03][Fire.Blocked] reloading slot={slot.Value}");
+                PhaseTestLog.Log(PhaseTestLogCategory.Weapon, "FireBlocked", $"reason=reloading slot={slot.Value}", this);
                 return;
             }
             if (!_weaponCache.TryGetValue(slot.Value, out var inst))
             {
                 Debug.LogWarning($"[FIRE_FLOW] TryFireOnce blocked: no weapon cache for slot={slot.Value}.");
+                PhaseTestLog.Warning(PhaseTestLogCategory.Weapon, "FireBlocked", $"reason=weapon-cache-miss slot={slot.Value}", this);
                 return;
             }
 
@@ -208,6 +222,7 @@ namespace NightHunt.GameplaySystems.Weapon
             {
                 float reserve = inst.GetCurrentValue(ItemStatType.MaxAmmo);
                 Debug.Log($"[WEAPON_FLOW] [03][Fire.EmptyMag] slot={slot.Value} reserve={reserve}");
+                PhaseTestLog.Log(PhaseTestLogCategory.Weapon, "FireBlocked", $"reason=empty-mag slot={slot.Value} reserve={reserve:F0} weapon={inst.DefinitionID}", this);
                 if (reserve > 0f) RequestReload();
                 else              OnWeaponDepleted?.Invoke(slot.Value);
                 return;
@@ -231,12 +246,13 @@ namespace NightHunt.GameplaySystems.Weapon
             // 2. Default: fire horizontally in the aim direction (as before).
             Vector3 finalFireDir    = shotAimDir;
             float   elevationAngle  = 0f;
+            Vector3? projectileTargetPoint = null;
 
             // 3. Query the registry for the best target within the acquisition cone.
             //    _bulletTargetConfig == null means registry disabled, pure physics raycast fallback.
             if (_bulletTargetConfig != null && BulletTargetRegistry.Instance != null)
             {
-                float maxRange = ResolveEffectiveMaxRange();
+                float maxRange = ResolveEffectiveMaxRange(weaponDef);
 
                 var result = BulletTargetRegistry.FindBestTarget(
                     origin, shotAimDir, maxRange, _bulletTargetConfig);
@@ -245,6 +261,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 {
                     // Real 3D direction from muzzle to target centre, including Y.
                     finalFireDir = (result.HitPoint - origin).normalized;
+                    projectileTargetPoint = result.HitPoint;
 
                     // Elevation angle = angle between horizontal plane and the 3D fire direction.
                     // Mathf.Asin gives degrees from the XZ plane.
@@ -268,6 +285,7 @@ namespace NightHunt.GameplaySystems.Weapon
             // Fire events and ballistics.
             // Raise local fire event (drives VFX + animation on owner).
             OnShotFired?.Invoke(slot.Value, shotAimDir);
+            TriggerOwnerCameraShake(weaponDef);
 
             // Delegate ballistics to weapon prefab component.
             // finalFireDir has correct 3-D elevation; spread is applied inside WeaponBase.
@@ -279,13 +297,32 @@ namespace NightHunt.GameplaySystems.Weapon
                 _lastFireHitHittable = false;
                 _lastFireHitNormal = -visualFireDir.normalized;
                 _lastFireEndpoint = BuildFallbackProjectileEndpoint(origin, visualFireDir, config.MaxRange);
+                if (projectileTargetPoint.HasValue)
+                {
+                    config.HasProjectileTargetPoint = true;
+                    config.ProjectileTargetPoint = projectileTargetPoint.Value;
+                }
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Weapon,
+                    "FireLocal",
+                    $"obj={ObjectId} owner={Owner?.ClientId} slot={slot.Value} weapon={inst.DefinitionID} ballistic={config.BallisticType} origin={origin:F2} aimFlat={shotAimDir:F2} dir={visualFireDir:F2} target={(projectileTargetPoint.HasValue ? projectileTargetPoint.Value.ToString("F2") : "none")} speed={config.ProjectileSpeed:F1} range={config.MaxRange:F1} mag={(int)inst.GetCurrentValue(ItemStatType.MagazineSize)} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)}",
+                    this);
                 LogProjectile($"TryFireOnce local shot slot={slot.Value} weaponId='{inst.DefinitionID}' origin={origin:F2} aimFlat={shotAimDir:F2} dir={visualFireDir:F2} intentDir={ballisticFireDir:F2} ammoCost={ammoCost} mag={(int)inst.GetCurrentValue(ItemStatType.MagazineSize)} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)} speed={config.ProjectileSpeed:F1} maxRange={config.MaxRange:F1} vision={config.VisionRangeClamp:F1} endpointBefore={_lastFireEndpoint:F2}");
                 _currentWeaponBase.Fire(origin, visualFireDir, config, (int)ObjectId);
 
                 if (IsServerInitialized)
-                    ResolveAuthoritativeShotServer(slot.Value, ballisticFireDir, consumeAmmo: false);
+                    ResolveAuthoritativeShotServer(
+                        slot.Value,
+                        ballisticFireDir,
+                        consumeAmmo: false,
+                        config.HasProjectileTargetPoint,
+                        config.ProjectileTargetPoint);
                 else if (IsOwner)
-                    RequestAuthoritativeShotServerRpc(slot.Value, ballisticFireDir);
+                    RequestAuthoritativeShotServerRpc(
+                        slot.Value,
+                        ballisticFireDir,
+                        config.HasProjectileTargetPoint,
+                        config.ProjectileTargetPoint);
 
                 // Spawn projectile visual on remote clients using the clamped 3D direction.
                 // For hitscan weapons, _lastFireEndpoint is the raycast hit point or max range.
@@ -475,14 +512,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private int ResolveAmmoCostPerShot(ItemInstance inst, int currentMagazine)
         {
-            var weaponDef = ItemDatabase.GetDefinition(inst.DefinitionID) as WeaponDefinition;
-            bool shotgun = weaponDef != null && weaponDef.WeaponClass == WeaponClass.Shotgun;
-            int pelletCount = _currentWeaponBase is HitscanWeapon hitscanWeapon
-                ? Mathf.Max(1, hitscanWeapon.PelletCount)
-                : 1;
-
-            int cost = shotgun ? pelletCount : 1;
-            return Mathf.Clamp(cost, 1, Mathf.Max(1, currentMagazine));
+            return Mathf.Clamp(1, 1, Mathf.Max(1, currentMagazine));
         }
 
         private Vector3 BuildFallbackProjectileEndpoint(Vector3 origin, Vector3 direction, float maxRange)
@@ -526,9 +556,14 @@ namespace NightHunt.GameplaySystems.Weapon
         private void FireMelee(WeaponSlotType slot)
         {
             // Melee has no magazine/projectile path. This event drives:
-            // - CharacterAnimationController melee Attack/MeleeAttack trigger
+            // - CharacterAnimationController melee Attack trigger
             // - CharacterAnimationController melee fallback hit delay
             // - WeaponAudioController swing/attack sound through weapon profile
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "MeleeFire",
+                $"slot={slot} aim={_aimDirection:F2} owner={Owner?.ClientId} isOwner={IsOwner}",
+                this);
             OnShotFired?.Invoke(slot, _aimDirection);
 
             if (IsOwner)
@@ -549,7 +584,7 @@ namespace NightHunt.GameplaySystems.Weapon
             bool isHitscan = !isProjectileWeapon;
             float rawMaxRange = _currentWeaponBase?.MaxRange ?? 150f;
             float visionRangeClamp = ResolveVisionRangeClamp();
-            float effectiveMaxRange = ResolveEffectiveMaxRange(rawMaxRange, visionRangeClamp);
+            float effectiveMaxRange = ResolveEffectiveMaxRange(rawMaxRange, visionRangeClamp, weaponDef);
 
             return new WeaponConfigData
             {
@@ -579,13 +614,40 @@ namespace NightHunt.GameplaySystems.Weapon
         private float ResolveEffectiveMaxRange()
         {
             float rawMaxRange = _currentWeaponBase?.MaxRange ?? 150f;
-            return ResolveEffectiveMaxRange(rawMaxRange, ResolveVisionRangeClamp());
+            return ResolveEffectiveMaxRange(rawMaxRange, ResolveVisionRangeClamp(), ResolveActiveWeaponDefinition());
         }
 
-        private static float ResolveEffectiveMaxRange(float rawMaxRange, float visionRangeClamp)
+        private float ResolveEffectiveMaxRange(WeaponDefinition weaponDef)
+        {
+            float rawMaxRange = _currentWeaponBase?.MaxRange ?? 150f;
+            return ResolveEffectiveMaxRange(rawMaxRange, ResolveVisionRangeClamp(), weaponDef);
+        }
+
+        private WeaponDefinition ResolveActiveWeaponDefinition()
+        {
+            var slot = _activeSlot.Value;
+            if (slot.HasValue &&
+                _weaponCache.TryGetValue(slot.Value, out var inst))
+                return ItemDatabase.GetDefinition(inst.DefinitionID) as WeaponDefinition;
+
+            return null;
+        }
+
+        private float ResolveEffectiveMaxRange(float rawMaxRange, float visionRangeClamp, WeaponDefinition weaponDef)
         {
             float range = Mathf.Max(1f, rawMaxRange);
-            return visionRangeClamp > 0.1f ? Mathf.Min(range, visionRangeClamp) : range;
+            if (visionRangeClamp <= 0.1f)
+                return range;
+
+            if (_sniperCanExceedVisionRange &&
+                weaponDef != null &&
+                weaponDef.WeaponClass == WeaponClass.Sniper)
+            {
+                float sniperRange = visionRangeClamp * Mathf.Max(1f, _sniperVisionRangeMultiplier);
+                return Mathf.Min(range, sniperRange);
+            }
+
+            return Mathf.Min(range, visionRangeClamp);
         }
 
         private float ResolveVisionRangeClamp()
@@ -632,6 +694,47 @@ namespace NightHunt.GameplaySystems.Weapon
             return (flat * Mathf.Cos(radians) + Vector3.up * Mathf.Sin(radians)).normalized;
         }
 
+        private void TriggerOwnerCameraShake(WeaponDefinition weaponDef)
+        {
+            if (!_enableOwnerCameraShake || !IsOwner)
+                return;
+
+            WeaponClass weaponClass = weaponDef != null ? weaponDef.WeaponClass : WeaponClass.Rifle;
+            if (weaponClass == WeaponClass.Melee)
+                return;
+
+            ResolveCameraShakeTuning(weaponClass, out float amplitude, out float duration);
+            if (amplitude <= 0f || duration <= 0f)
+                return;
+
+            WeaponCameraShakeDriver.Shake(amplitude, duration, _cameraShakeFrequency);
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "CameraShake",
+                $"weapon={weaponDef?.ItemID ?? "unknown"} class={weaponClass} amplitude={amplitude:F3} duration={duration:F3} frequency={_cameraShakeFrequency:F1}",
+                this);
+        }
+
+        private void ResolveCameraShakeTuning(WeaponClass weaponClass, out float amplitude, out float duration)
+        {
+            duration = _cameraShakeShortDuration;
+            amplitude = weaponClass switch
+            {
+                WeaponClass.Pistol     => _pistolCameraShakeAmplitude,
+                WeaponClass.SMG        => _smgCameraShakeAmplitude,
+                WeaponClass.MachineGun => _machineGunCameraShakeAmplitude,
+                WeaponClass.Shotgun    => _shotgunCameraShakeAmplitude,
+                WeaponClass.Sniper     => _sniperCameraShakeAmplitude,
+                WeaponClass.Launcher   => _launcherCameraShakeAmplitude,
+                _                      => _rifleCameraShakeAmplitude,
+            };
+
+            if (weaponClass == WeaponClass.Shotgun ||
+                weaponClass == WeaponClass.Sniper ||
+                weaponClass == WeaponClass.Launcher)
+                duration = _cameraShakeHeavyDuration;
+        }
+
         private void HandleWeaponFireResult(WeaponBase.WeaponFireResult result)
         {
             // Cache the endpoint so TryFireOnce can pass it to BroadcastProjectileServerRpc
@@ -645,6 +748,90 @@ namespace NightHunt.GameplaySystems.Weapon
             _lastFireHitNormal = result.HitNormal;
             var slot = _activeSlot.Value;
             if (slot != null) OnHitscanResult?.Invoke(slot.Value, origin, endpoint);
+        }
+    }
+
+    internal sealed class WeaponCameraShakeDriver : MonoBehaviour
+    {
+        private float _endTime;
+        private float _duration;
+        private float _amplitude;
+        private float _frequency;
+        private float _seed;
+        private Vector3 _lastOffset;
+        private Quaternion _lastRotationOffset = Quaternion.identity;
+
+        public static void Shake(float amplitude, float duration, float frequency)
+        {
+            var camera = UnityEngine.Camera.main;
+            if (camera == null)
+                return;
+
+            var driver = camera.GetComponent<WeaponCameraShakeDriver>();
+            if (driver == null)
+                driver = camera.gameObject.AddComponent<WeaponCameraShakeDriver>();
+
+            driver.AddShake(amplitude, duration, frequency);
+        }
+
+        private void AddShake(float amplitude, float duration, float frequency)
+        {
+            _amplitude = Mathf.Max(_amplitude * 0.65f, amplitude);
+            _duration = Mathf.Max(0.01f, duration);
+            _frequency = Mathf.Max(1f, frequency);
+            _endTime = Time.unscaledTime + _duration;
+            _seed = Time.unscaledTime * 37.13f;
+            enabled = true;
+        }
+
+        private void OnPreCull()
+        {
+            RemoveLastOffset();
+
+            float remaining = _endTime - Time.unscaledTime;
+            if (remaining <= 0f)
+            {
+                enabled = false;
+                _amplitude = 0f;
+                return;
+            }
+
+            float strength = _amplitude * Mathf.Clamp01(remaining / Mathf.Max(0.01f, _duration));
+            float time = Time.unscaledTime * _frequency;
+            float x = Mathf.PerlinNoise(_seed, time) * 2f - 1f;
+            float y = Mathf.PerlinNoise(_seed + 11.3f, time + 7.1f) * 2f - 1f;
+            float z = Mathf.PerlinNoise(_seed + 23.7f, time + 3.9f) * 2f - 1f;
+
+            _lastOffset = new Vector3(x, y, 0f) * strength;
+            _lastRotationOffset = Quaternion.Euler(y * strength * 18f, -x * strength * 18f, z * strength * 10f);
+
+            transform.localPosition += _lastOffset;
+            transform.localRotation *= _lastRotationOffset;
+        }
+
+        private void OnPostRender()
+        {
+            RemoveLastOffset();
+        }
+
+        private void OnDisable()
+        {
+            RemoveLastOffset();
+        }
+
+        private void RemoveLastOffset()
+        {
+            if (_lastOffset.sqrMagnitude > 0f)
+            {
+                transform.localPosition -= _lastOffset;
+                _lastOffset = Vector3.zero;
+            }
+
+            if (_lastRotationOffset != Quaternion.identity)
+            {
+                transform.localRotation *= Quaternion.Inverse(_lastRotationOffset);
+                _lastRotationOffset = Quaternion.identity;
+            }
         }
     }
 }

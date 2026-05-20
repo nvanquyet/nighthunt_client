@@ -60,5 +60,26 @@ namespace NightHunt.GameplaySystems.Core.Configs
 
         [Tooltip("Enable debug logs for world health bar show/hide logic.")]
         public bool EnableHealthBarDebugLogs = false;
+
+        [Header("Phase Test Logging")]
+        [Tooltip("Enable copy-friendly [PHASE_TEST] logs for large multiplayer/system test passes.")]
+        public bool EnablePhaseTestLogs = false;
+
+        [Tooltip("Optional case-insensitive filter. Matches category, event name, or log body. Leave empty for all enabled phase-test categories.")]
+        public string PhaseTestLogFilter = string.Empty;
+
+        public bool PhaseTestLogInput = true;
+        public bool PhaseTestLogWeapon = true;
+        public bool PhaseTestLogAnimation = true;
+        public bool PhaseTestLogIK = true;
+        public bool PhaseTestLogInteraction = true;
+        public bool PhaseTestLogItemUse = true;
+        public bool PhaseTestLogDeploy = true;
+        public bool PhaseTestLogThrowable = true;
+        public bool PhaseTestLogDeath = true;
+        public bool PhaseTestLogSpectate = true;
+        public bool PhaseTestLogScore = true;
+        public bool PhaseTestLogPhysics = true;
+        public bool PhaseTestLogProjectile = true;
     }
 }

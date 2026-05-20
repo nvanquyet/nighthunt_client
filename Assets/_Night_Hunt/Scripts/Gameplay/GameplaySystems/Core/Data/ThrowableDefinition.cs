@@ -1,5 +1,6 @@
 using UnityEngine;
 using NightHunt.Gameplay.StatSystem.Configs;
+using NightHunt.Gameplay.StatSystem.Core.Data;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 
 namespace NightHunt.GameplaySystems.Core.Data
@@ -67,6 +68,25 @@ namespace NightHunt.GameplaySystems.Core.Data
 
         [Tooltip("Played on impact or detonation.")]
         public AudioClip ImpactSound;
+
+        [Header("Area Effects")]
+        [Tooltip("Off = affect enemies only. On = thrower/team/any player can trigger or be damaged.")]
+        public bool AllowFriendlyFire = false;
+
+        [Tooltip("Persistent area duration after detonation. 0 = only instant damage.")]
+        [Min(0f)] public float AreaEffectDuration = 0f;
+
+        [Tooltip("How often persistent area effects tick while active.")]
+        [Min(0.05f)] public float AreaEffectTickInterval = 0.25f;
+
+        [Tooltip("Stat modifiers applied while a player stands inside the persistent area.")]
+        public PlayerStatModifier[] AreaPlayerModifiers;
+
+        [Tooltip("Health delta per second while inside the persistent area. Negative damages, positive heals.")]
+        public float AreaHealthDeltaPerSecond = 0f;
+
+        [Tooltip("Stamina delta per second while inside the persistent area. Negative drains, positive restores.")]
+        public float AreaStaminaDeltaPerSecond = 0f;
 
         // ── Helpers ─────────────────────────────────────────────────────────────
 

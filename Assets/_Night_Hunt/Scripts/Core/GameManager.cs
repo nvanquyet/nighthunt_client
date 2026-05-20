@@ -295,6 +295,7 @@ namespace NightHunt.Core
                 switch (nav.CurrentPanel)
                 {
                     case PanelType.Lobby:
+                    case PanelType.CustomLobby:
                         await RefreshLobbyData();
                         break;
 

@@ -86,7 +86,8 @@ namespace NightHunt.Gameplay.Core.State
             if (_networkObject != null && !_networkObject.IsOwner)
                 return;
 
-            InputLayerManager.Instance?.TransitionToState(InputState.PlayerAlive);
+            InputLayerManager.Instance?.TransitionToState(
+                _lifecycle != null && _lifecycle.IsDead ? InputState.PlayerDead : InputState.PlayerAlive);
         }
 
         private void HandleSpectateStarted()

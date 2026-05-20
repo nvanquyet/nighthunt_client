@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.Diagnostics;
 using System;
 
 namespace NightHunt.Gameplay.Input.Handlers.UI
@@ -119,9 +120,12 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
 
         private void OnCancel(InputAction.CallbackContext ctx)
         {
+            var ilm = InputLayerManager.Instance;
+            InputState before = ilm != null ? ilm.CurrentState : InputState.None;
             OnCancelPressed?.Invoke();
             // Cancel tự động PopContext (Escape đóng inventory/map/menu)
-            InputLayerManager.Instance?.PopContext();
+            if (ilm != null && ilm.CurrentState == before && before != InputState.PlayerAlive && before != InputState.None)
+                ilm.PopContext();
         }
 
         private void OnOpenMenu(InputAction.CallbackContext ctx) => OnOpenMenuPressed?.Invoke();
@@ -130,11 +134,11 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
         {
             OnToggleMapPressed?.Invoke();
             // Toggle map: push MapOpen hoặc pop về context trước
-            if (InputLayerManager.Instance == null) return;
-            if (InputLayerManager.Instance.CurrentState == InputState.MapOpen)
-                InputLayerManager.Instance.PopContext();
-            else
-                InputLayerManager.Instance.PushContext(InputState.MapOpen);
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Input,
+                "ToggleMapPressed",
+                $"state={InputLayerManager.Instance?.CurrentState.ToString() ?? "null"}",
+                this);
         }
     }
 }

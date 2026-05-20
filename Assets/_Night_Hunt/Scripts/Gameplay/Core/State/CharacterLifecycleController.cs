@@ -10,6 +10,7 @@ using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.StatSystem.Systems;
 using UnityEngine;
 using NightHunt.Utilities;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Core.State
 {
@@ -55,6 +56,7 @@ namespace NightHunt.Gameplay.Core.State
         public void SetKillerInfo(string killerName)
         {
             LastKillerName = killerName ?? string.Empty;
+            PhaseTestLog.Log(PhaseTestLogCategory.Death, "KillerInfoSet", $"player={_networkPlayer?.DisplayName ?? "null"} killer={LastKillerName}", this);
         }
 
         private IPlayerStatSystem _statSystem;
@@ -210,6 +212,11 @@ namespace NightHunt.Gameplay.Core.State
         private void HandleDeath()
         {
             IsDead = true;
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "LifecycleDeath",
+                $"player={_networkPlayer?.DisplayName ?? "null"} obj={_networkPlayer?.ObjectId ?? 0} team={_networkPlayer?.TeamId ?? -1} killer={LastKillerName} autoRespawn={_autoRequestRespawnOnDeath}",
+                this);
 
             if (_stateMachine != null)
             {
@@ -242,6 +249,11 @@ namespace NightHunt.Gameplay.Core.State
         private void HandleRespawnedFromHealth()
         {
             IsDead = false;
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "LifecycleRespawned",
+                $"player={_networkPlayer?.DisplayName ?? "null"} obj={_networkPlayer?.ObjectId ?? 0} team={_networkPlayer?.TeamId ?? -1} pos={transform.position:F2}",
+                this);
 
             if (_stateMachine != null)
             {

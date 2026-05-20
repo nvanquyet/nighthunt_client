@@ -7,23 +7,12 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Character.Combat.Weapons;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
     /// <summary>
     /// Spawns / destroys weapon model GameObjects whenever the active weapon slot changes.
-    ///
-    /// PREFAB SETUP:
-    ///   Lives on the same child GO as WeaponSystem (e.g. "WeaponSystem" child).
-    ///   PlayerModelLoader is auto-found on the root via GetComponentInParent.
-    ///
-    /// RACE CONDITION FIX:
-    ///   On remote clients the SyncVar fires before the inventory cache is populated.
-    ///   HandleActiveWeaponChanged now retries for up to 5 frames before giving up.
-    ///
-    /// EVENTS:
-    ///   OnWeaponModelChanged(WeaponBase)      — fires after each swap (null = holstered).
-    ///   OnLeftHandIKTargetChanged(Transform)  — fires after each swap (null = holstered).
     /// </summary>
     public class WeaponModelController : MonoBehaviour
     {
@@ -34,14 +23,10 @@ namespace NightHunt.GameplaySystems.Weapon
         [SerializeField] private Vector3 _localRotationWeapon = new Vector3(90f, 0f, 0f);
 
         [Header("Elevation (Pitch)")]
-        [Tooltip("Local-space axis of the weapon model's parent (WeaponR bone) around which the gun " +
-                 "pitches up or down.\n" +
-                 "Default Vector3.right works when WeaponR local X = character world right.\n" +
-                 "Adjust per rig if the gun tilts in the wrong direction or wrong amount.")]
+        [Tooltip("Local-space axis of the weapon model's parent (WeaponR bone) around which the gun pitches up or down.")]
         [SerializeField] private Vector3 _pitchAxis = Vector3.right;
 
-        [Tooltip("Maximum pitch angle (degrees) the gun can tilt up (+) or down (−).\n" +
-                 "Prevents extreme poses that look wrong on the character rig.")]
+        [Tooltip("Maximum pitch angle (degrees) the gun can tilt up (+) or down (−).")]
         [Range(0f, 90f)]
         [SerializeField] private float _maxElevationAngle = 60f;
 
@@ -59,10 +44,16 @@ namespace NightHunt.GameplaySystems.Weapon
         private PrActorUtils      _actorUtils;
         private GameObject        _currentModel;
         private GameObject        _pendingModel;
+        private WeaponBase        _currentWeaponBase;
         private WeaponBase        _pendingWeaponBase;
         private Transform         _pendingLeftHandIKTarget;
         private Coroutine         _spawnRetryCoroutine;
         private Coroutine         _visualFallbackCoroutine;
+        private bool              _holsterPending;
+
+        // ── Local offsets cached from WeaponBase ───────────────────────────────
+        private Vector3 _baseLocalPosition = Vector3.zero;
+        private Vector3 _baseLocalRotation = new Vector3(90f, 0f, 0f);
 
         // ── Elevation state ────────────────────────────────────────────────────
         private float _currentElevationAngle = 0f;
@@ -73,37 +64,20 @@ namespace NightHunt.GameplaySystems.Weapon
         public event Action<WeaponBase>  OnWeaponModelChanged;
         public event Action<Transform>   OnLeftHandIKTargetChanged;
 
-        /// <summary>
-        /// Applies a vertical pitch to the current weapon model so it visually aims
-        /// up or down toward an acquired target at a different elevation.
-        ///
-        /// AXIS — In the parent bone's (WeaponR) local space:
-        ///   <see cref="_pitchAxis"/> defines which axis to rotate around.
-        ///   Default <c>Vector3.right</c> = character's lateral right axis.
-        ///   Positive angle  → gun tilts UP   (target is above shooter).
-        ///   Negative angle  → gun tilts DOWN  (target is below shooter).
-        ///
-        /// FORMULA applied to the weapon model's localRotation:
-        ///   localRot = Euler(_localRotationWeapon) * AngleAxis(elevationDeg, _pitchAxis)
-        ///
-        ///   The base Euler offset keeps the model aligned to the rig bone.
-        ///   The pitch is layered on top in the parent's local space, so character
-        ///   YAW rotation (handled by the bone hierarchy) is unaffected.
-        ///
-        /// Call with 0f to level the gun (no acquired target / fallback raycast).
-        /// Safe to call every frame — no allocation.
-        /// </summary>
         public void SetElevationAngle(float elevationDeg)
         {
             float clamped = Mathf.Clamp(elevationDeg, -_maxElevationAngle, _maxElevationAngle);
-            // Skip update if change is negligible (< 0.01°).
             if (Mathf.Abs(clamped - _currentElevationAngle) < 0.01f) return;
 
             _currentElevationAngle = clamped;
             ApplyWeaponRotation();
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.IK,
+                "WeaponElevation",
+                $"weapon={_currentModel?.name ?? "null"} elevation={_currentElevationAngle:F1} axis={_pitchAxis:F2}",
+                this);
         }
 
-        // ── Unity lifecycle ────────────────────────────────────────────────────
         private void Awake()
         {
             _weaponSystem ??= ComponentResolver.Find<IWeaponSystem>(this)
@@ -113,7 +87,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 .Resolve();
 
             _modelLoader ??= ComponentResolver.Find<PlayerModelLoader>(this)
-                .OnSelf().InParent().OnRoot()
+                .OnSelf().OnRoot().InRootChildren()
                 .OrLogWarning("[WeaponModelController] PlayerModelLoader not found")
                 .Resolve();
 
@@ -141,11 +115,9 @@ namespace NightHunt.GameplaySystems.Weapon
             StopSpawnRetry();
             StopVisualFallback();
             DestroyPendingModel();
+            _holsterPending = false;
         }
 
-        // ── Public API ─────────────────────────────────────────────────────────
-
-        /// <summary>Re-inject IWeaponSystem at runtime (e.g. from NetworkPlayer after late spawn).</summary>
         public void Initialize(IWeaponSystem weaponSystem)
         {
             if (_weaponSystem != null)
@@ -157,8 +129,6 @@ namespace NightHunt.GameplaySystems.Weapon
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
         }
 
-        // ── Model binding ──────────────────────────────────────────────────────
-
         private void OnModelReady(GameObject modelRoot)
         {
             _actorUtils = ComponentResolver.Find<PrActorUtils>(modelRoot)
@@ -167,16 +137,20 @@ namespace NightHunt.GameplaySystems.Weapon
                 .Resolve();
         }
 
-        // ── Active weapon changed ──────────────────────────────────────────────
-
         private void HandleActiveWeaponChanged(WeaponSlotType? prev, WeaponSlotType? next)
         {
             StopSpawnRetry();
             StopVisualFallback();
             DestroyPendingModel();
+            _holsterPending = false;
 
             if (next == null || _weaponSystem == null)
             {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.IK,
+                    "WeaponModelHolsterRequested",
+                    $"prev={prev?.ToString() ?? "none"} next=none current={_currentModel?.name ?? "null"} syncWithAnimator={_syncVisibilityWithAnimator}",
+                    this);
                 if (_syncVisibilityWithAnimator && _currentModel != null)
                     ScheduleHolsterFallback();
                 else
@@ -187,7 +161,11 @@ namespace NightHunt.GameplaySystems.Weapon
             var inst = _weaponSystem.GetWeapon(next.Value);
             if (inst == null)
             {
-                // Inventory cache not yet ready on this client — retry each frame.
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.IK,
+                    "WeaponModelSpawnRetry",
+                    $"slot={next.Value} reason=weapon-cache-null maxFrames={_maxSpawnRetryFrames}",
+                    this);
                 _spawnRetryCoroutine = StartCoroutine(RetrySpawnWeapon(next.Value));
                 return;
             }
@@ -195,11 +173,6 @@ namespace NightHunt.GameplaySystems.Weapon
             SpawnWeaponModel(next.Value, inst, _syncVisibilityWithAnimator);
         }
 
-        /// <summary>
-        /// Retries SpawnWeaponModel each frame until inventory cache is ready.
-        /// Covers the race where the SyncVar arrives before SyncDictionary is populated
-        /// on freshly-connected remote clients.
-        /// </summary>
         private IEnumerator RetrySpawnWeapon(WeaponSlotType slot)
         {
             for (int i = 0; i < _maxSpawnRetryFrames; i++)
@@ -238,46 +211,41 @@ namespace NightHunt.GameplaySystems.Weapon
             }
         }
 
-        // ── Spawn / Destroy ────────────────────────────────────────────────────
-
         private void SpawnWeaponModel(WeaponSlotType slot, ItemInstance inst, bool asPending)
         {
+            _holsterPending = false;
+
             var def = ItemDatabase.GetDefinition(inst.DefinitionID);
-            if (def == null)
-            {
-                Debug.LogWarning($"[WeaponModelController] No ItemDatabase entry for '{inst.DefinitionID}'.");
-                return;
-            }
+            if (def == null) return;
+
             var visualPrefab = ItemVisualResolver.ResolveVisualPrefab(def);
-            if (visualPrefab == null)
-            {
-                Debug.LogWarning($"[WeaponModelController] '{def.DisplayName}' has no VisualPrefab.");
-                return;
-            }
+            if (visualPrefab == null) return;
 
             Transform parent = (_actorUtils?.WeaponR != null) ? _actorUtils.WeaponR : transform;
 
             GameObject spawnedModel = Instantiate(visualPrefab, parent);
-            spawnedModel.transform.localPosition = Vector3.zero;
-            // Use ApplyWeaponRotation so elevation is included from the first frame
-            // (typically 0° on spawn, but preserves any elevation set before the model was ready).
-            ApplyWeaponRotation(spawnedModel);
-
-            if (asPending)
-                spawnedModel.SetActive(false);
 
             var wb = ComponentResolver.Find<WeaponBase>(spawnedModel)
                 .OnSelf().InChildren()
-                .Resolve(); // null is valid — weapon may not have WeaponBase
+                .Resolve();
 
-            // Wire WeaponSystem so it delegates fire/FX to the spawned prefab component.
+            Vector3 localPos = wb != null ? wb.BaseLocalPosition : Vector3.zero;
+            Vector3 localRot = wb != null ? wb.BaseLocalRotation : _localRotationWeapon;
+
+            spawnedModel.transform.localPosition = localPos;
+
             if (asPending)
             {
                 _pendingModel = spawnedModel;
                 _pendingWeaponBase = wb;
                 _pendingLeftHandIKTarget = wb?.LeftHandIKTarget;
+                _pendingModel.SetActive(false);
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.IK,
+                    "WeaponModelPending",
+                    $"slot={slot} def={def.ItemID} prefab={visualPrefab.name} parent={parent.name} parentPath={BuildPath(parent)} weaponBase={wb?.GetType().Name ?? "null"} firePoint={DescribeTransform(wb?.FirePoint)} leftIK={DescribeTransform(wb?.LeftHandIKTarget)} localPos={localPos:F3} localRot={localRot:F1}",
+                    this);
                 ScheduleDrawFallback();
-                Debug.Log($"[WeaponModelController] Pending '{def.DisplayName}' until Draw event | parent={parent.name} | WeaponBase={wb != null}");
                 return;
             }
 
@@ -285,37 +253,53 @@ namespace NightHunt.GameplaySystems.Weapon
             DestroyCurrentModel(notify: false);
             _currentElevationAngle = elevation;
             _currentModel = spawnedModel;
+            _currentWeaponBase = wb;
+
+            _baseLocalPosition = localPos;
+            _baseLocalRotation = localRot;
 
             _weaponSystem.SetFireOrigin(wb?.FirePoint);
             _weaponSystem.SetCurrentWeaponBase(wb);
 
-            // IK target — read from WeaponBase inspector field (no child-name search needed).
             LeftHandIKTarget = wb?.LeftHandIKTarget;
 
             OnWeaponModelChanged?.Invoke(wb);
             OnLeftHandIKTargetChanged?.Invoke(LeftHandIKTarget);
 
-            Debug.Log($"[WeaponModelController] Spawned '{def.DisplayName}' | parent={parent.name} " +
-                      $"| WeaponBase={wb != null} | FirePoint={wb?.FirePoint != null} | IK={LeftHandIKTarget != null}");
+            ApplyWeaponRotation(spawnedModel);
+
+            Debug.Log($"[WeaponModelController] Spawned '{def.DisplayName}' | parent={parent.name} | IK={LeftHandIKTarget != null}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.IK,
+                "WeaponModelSpawned",
+                $"slot={slot} def={def.ItemID} display='{def.DisplayName}' prefab={visualPrefab.name} parent={parent.name} parentPath={BuildPath(parent)} weaponBase={wb?.GetType().Name ?? "null"} firePoint={DescribeTransform(wb?.FirePoint)} leftIK={DescribeTransform(LeftHandIKTarget)} localPos={localPos:F3} localRot={localRot:F1}",
+                this);
         }
 
         public void ShowPendingWeaponModelFromAnimation()
         {
+            if (_pendingModel == null)
+                return;
+
             StopVisualFallback();
+            _holsterPending = false;
             ShowPendingWeaponModel("anim-event");
         }
 
         public void CompleteHolsterFromAnimation()
         {
+            if (!_holsterPending)
+                return;
+
             StopVisualFallback();
+            _holsterPending = false;
             CompleteHolster("anim-event");
         }
 
         private void ScheduleDrawFallback()
         {
-            if (!_syncVisibilityWithAnimator)
-                return;
-
+            if (!_syncVisibilityWithAnimator) return;
+            _holsterPending = false;
             _visualFallbackCoroutine = StartCoroutine(DrawVisualFallbackCoroutine());
         }
 
@@ -330,6 +314,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
         private void ScheduleHolsterFallback()
         {
+            _holsterPending = true;
             _visualFallbackCoroutine = StartCoroutine(HolsterVisualFallbackCoroutine());
         }
 
@@ -339,6 +324,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 yield return new WaitForSeconds(_holsterVisualFallbackDelay);
 
             _visualFallbackCoroutine = null;
+            _holsterPending = false;
             CompleteHolster("fallback");
         }
 
@@ -356,8 +342,11 @@ namespace NightHunt.GameplaySystems.Weapon
             _currentElevationAngle = elevation;
 
             _currentModel = _pendingModel;
-            var wb = _pendingWeaponBase;
+            _currentWeaponBase = _pendingWeaponBase;
             LeftHandIKTarget = _pendingLeftHandIKTarget;
+
+            _baseLocalPosition = _currentWeaponBase != null ? _currentWeaponBase.BaseLocalPosition : Vector3.zero;
+            _baseLocalRotation = _currentWeaponBase != null ? _currentWeaponBase.BaseLocalRotation : _localRotationWeapon;
 
             _pendingModel = null;
             _pendingWeaponBase = null;
@@ -366,19 +355,26 @@ namespace NightHunt.GameplaySystems.Weapon
             _currentModel.SetActive(true);
             ApplyWeaponRotation();
 
-            _weaponSystem?.SetFireOrigin(wb?.FirePoint);
-            _weaponSystem?.SetCurrentWeaponBase(wb);
+            _weaponSystem?.SetFireOrigin(_currentWeaponBase?.FirePoint);
+            _weaponSystem?.SetCurrentWeaponBase(_currentWeaponBase);
 
-            OnWeaponModelChanged?.Invoke(wb);
+            OnWeaponModelChanged?.Invoke(_currentWeaponBase);
             OnLeftHandIKTargetChanged?.Invoke(LeftHandIKTarget);
 
-            Debug.Log($"[WeaponModelController] Showing weapon model from {reason} | WeaponBase={wb != null} | IK={LeftHandIKTarget != null}");
+            Debug.Log($"[WeaponModelController] Showing weapon model from {reason} | IK={LeftHandIKTarget != null}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.IK,
+                "WeaponModelShown",
+                $"reason={reason} model={_currentModel?.name ?? "null"} weaponBase={_currentWeaponBase?.GetType().Name ?? "null"} firePoint={DescribeTransform(_currentWeaponBase?.FirePoint)} leftIK={DescribeTransform(LeftHandIKTarget)} localPos={_baseLocalPosition:F3} localRot={_baseLocalRotation:F1}",
+                this);
         }
 
         private void CompleteHolster(string reason)
         {
+            _holsterPending = false;
             DestroyCurrentModel();
             Debug.Log($"[WeaponModelController] Holster complete from {reason}.");
+            PhaseTestLog.Log(PhaseTestLogCategory.IK, "WeaponModelHolstered", $"reason={reason}", this);
         }
 
         private void DestroyCurrentModel(bool notify = true)
@@ -390,6 +386,7 @@ namespace NightHunt.GameplaySystems.Weapon
             }
 
             _currentElevationAngle = 0f;
+            _currentWeaponBase = null;
             LeftHandIKTarget = null;
             _weaponSystem?.SetCurrentWeaponBase(null);
             _weaponSystem?.SetFireOrigin(null);
@@ -413,23 +410,6 @@ namespace NightHunt.GameplaySystems.Weapon
             _pendingLeftHandIKTarget = null;
         }
 
-        // ── Weapon rotation ────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Rebuilds the weapon model's localRotation from the base alignment offset
-        /// and the current elevation angle.
-        ///
-        /// localRotation = Euler(_localRotationWeapon) * AngleAxis(_currentElevationAngle, _pitchAxis)
-        ///
-        /// Reading order (right-to-left in quaternion multiplication):
-        ///   1. AngleAxis pitch — rotates the model up/down around _pitchAxis
-        ///      (in the PARENT bone's local space, before the base alignment is applied).
-        ///   2. Euler base offset — aligns the model mesh to the bone convention (90°, 0°, 0°).
-        ///
-        /// Net result: the model sits at the correct bone-alignment AND is tilted by the
-        /// elevation angle, while the character's YAW (driven by the bone hierarchy above)
-        /// remains completely unaffected.
-        /// </summary>
         private void ApplyWeaponRotation()
         {
             ApplyWeaponRotation(_currentModel);
@@ -439,11 +419,35 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             if (model == null) return;
 
-            Quaternion baseRot  = Quaternion.Euler(_localRotationWeapon);
+            Quaternion baseRot  = Quaternion.Euler(_baseLocalRotation);
             Quaternion pitchRot = Quaternion.AngleAxis(_currentElevationAngle, _pitchAxis);
 
-            // Base × Pitch: pitch is applied first (in parent local space), then base aligns to rig.
             model.transform.localRotation = baseRot * pitchRot;
+            model.transform.localPosition = _baseLocalPosition;
+        }
+
+        private static string DescribeTransform(Transform target)
+        {
+            if (target == null)
+                return "null";
+
+            return $"{target.name} path={BuildPath(target)} localPos={target.localPosition:F3} localRot={target.localEulerAngles:F1} world={target.position:F2}";
+        }
+
+        private static string BuildPath(Transform target)
+        {
+            if (target == null)
+                return "null";
+
+            string path = target.name;
+            Transform cursor = target.parent;
+            while (cursor != null)
+            {
+                path = cursor.name + "/" + path;
+                cursor = cursor.parent;
+            }
+
+            return path;
         }
     }
 }

@@ -159,8 +159,9 @@ namespace NightHunt.Editor.Tools
         {
             var log = new List<string>();
             log.Add("\nâ”€â”€ UI Prefabs â”€â”€");
-            log.Add(SavePrefab(BuildDamageNumberPrefab(), UIPrefabPath, "DamageNumber_Template"));
-            log.Add(SavePrefab(BuildHitIndicatorPrefab(), UIPrefabPath, "HitIndicator_Template"));
+            log.Add(SavePrefab(BuildDamageNumberPrefab(), UIPrefabPath, "Prefab_DamageNumber"));
+            log.Add(SavePrefab(BuildHitIndicatorPrefab(), UIPrefabPath, "Prefab_HitIndicator"));
+            log.Add(SavePrefab(BuildHitConfirmPrefab(), UIPrefabPath, "Prefab_HitConfirm"));
             return log;
         }
 
@@ -179,7 +180,7 @@ namespace NightHunt.Editor.Tools
         private static GameObject BuildDamageNumberPrefab()
         {
             // --- root ---
-            var root = new GameObject("DamageNumber_Template");
+            var root = new GameObject("Prefab_DamageNumber");
             var rootRect = root.AddComponent<RectTransform>();
             rootRect.sizeDelta = new Vector2(200f, 60f);
             root.AddComponent<CanvasGroup>();  // enables group-level alpha fade if needed
@@ -220,7 +221,7 @@ namespace NightHunt.Editor.Tools
         /// </summary>
         private static GameObject BuildHitIndicatorPrefab()
         {
-            var root = new GameObject("HitIndicator_Template");
+            var root = new GameObject("Prefab_HitIndicator");
             var rootRect = root.AddComponent<RectTransform>();
             rootRect.sizeDelta = new Vector2(300f, 300f);
             var img = root.AddComponent<Image>();
@@ -236,6 +237,16 @@ namespace NightHunt.Editor.Tools
         }
 
         // â”€â”€ Projectile Prefabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+        private static GameObject BuildHitConfirmPrefab()
+        {
+            var root = new GameObject("Prefab_HitConfirm");
+            var rootRect = root.AddComponent<RectTransform>();
+            rootRect.sizeDelta = new Vector2(96f, 96f);
+            root.AddComponent<CanvasGroup>();
+            root.AddComponent<HitConfirmIndicator>();
+            return root;
+        }
 
         private static List<string> BuildProjectilePrefabs()
         {

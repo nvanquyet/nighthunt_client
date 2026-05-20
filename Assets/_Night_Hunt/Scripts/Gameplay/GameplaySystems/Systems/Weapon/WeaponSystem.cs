@@ -60,12 +60,39 @@ namespace NightHunt.GameplaySystems.Weapon
         [Tooltip("Maximum pitch angle allowed for bullet/projectile visuals. Keeps top-down shots from flying into the sky while preserving head/body elevation.")]
         [SerializeField, Range(0f, 75f)] private float _maxFireElevationAngle = 35f;
 
+        [Header("Range Overrides")]
+        [Tooltip("When enabled, sniper shots may travel past the player's vision radius. Other weapons remain clamped to vision.")]
+        [SerializeField] private bool _sniperCanExceedVisionRange = true;
+
+        [Tooltip("Sniper max range = min(weapon prefab maxRange, VisionRange x this multiplier). 2.5 means bullets can travel 2.5x beyond vision.")]
+        [SerializeField, Min(1f)] private float _sniperVisionRangeMultiplier = 2.5f;
+
+        [Header("Owner Camera Shake")]
+        [SerializeField] private bool _enableOwnerCameraShake = true;
+        [SerializeField, Range(1f, 90f)] private float _cameraShakeFrequency = 34f;
+        [SerializeField, Min(0f)] private float _pistolCameraShakeAmplitude = 0.025f;
+        [SerializeField, Min(0f)] private float _smgCameraShakeAmplitude = 0.022f;
+        [SerializeField, Min(0f)] private float _rifleCameraShakeAmplitude = 0.04f;
+        [SerializeField, Min(0f)] private float _machineGunCameraShakeAmplitude = 0.032f;
+        [SerializeField, Min(0f)] private float _shotgunCameraShakeAmplitude = 0.07f;
+        [SerializeField, Min(0f)] private float _sniperCameraShakeAmplitude = 0.11f;
+        [SerializeField, Min(0f)] private float _launcherCameraShakeAmplitude = 0.13f;
+        [SerializeField, Min(0.01f)] private float _cameraShakeShortDuration = 0.075f;
+        [SerializeField, Min(0.01f)] private float _cameraShakeHeavyDuration = 0.14f;
+
         [Header("Server Anti-Cheat")]
         [Tooltip("Maximum accepted aim direction turn rate between authoritative shots, in degrees per second.")]
         [SerializeField, Range(90f, 1440f)] private float _maxServerAimDeltaDegPerSecond = 720f;
 
         [Tooltip("Extra per-shot grace angle to avoid rejecting normal low-FPS or latency jitter.")]
         [SerializeField, Range(0f, 45f)] private float _serverAimDeltaGraceDegrees = 12f;
+
+        [Header("Server Hitscan Timing")]
+        [Tooltip("When enabled, server-authoritative hitscan damage lands after distance / ProjectileSpeed so damage timing matches the visible bullet trail.")]
+        [SerializeField] private bool _delayHitscanDamageByProjectileSpeed = true;
+
+        [Tooltip("Safety cap for hitscan damage delay in seconds. 0 = no cap.")]
+        [SerializeField, Min(0f)] private float _maxHitscanDamageDelay = 5f;
 
         // ── Private service refs ───────────────────────────────────────────────
         private IPlayerStatSystem  _statSystem;

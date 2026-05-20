@@ -12,6 +12,7 @@ using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.Loot
 {
@@ -60,6 +61,13 @@ namespace NightHunt.GameplaySystems.Loot
 
         /// <summary>Fired on the local client when any WorldItem exits hover.</summary>
         public static event System.Action<WorldItem> OnAnyHoverExit;
+
+        private static readonly WeaponSlotType[] AutoEquipWeaponSlots =
+        {
+            WeaponSlotType.Primary,
+            WeaponSlotType.Secondary,
+            WeaponSlotType.Melee
+        };
 
         [Header("Settings")]
         [Tooltip("Maximum distance to pickup — fallback when LootableConfig is not set.")]
@@ -612,6 +620,7 @@ namespace NightHunt.GameplaySystems.Loot
                 ? _itemData
                 : ItemInstanceFactory.CopyDataForQuantity(_itemData, acceptedQty, newInstanceId: true);
             inventory.AddItemFromData(acceptedData);
+            TryAutoEquipPickedWeapon(player, acceptedData);
 
             if (takingFullStack)
             {
@@ -632,6 +641,51 @@ namespace NightHunt.GameplaySystems.Loot
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableInventoryDebugLogs)
                     Debug.Log($"[WorldItem] Partial pickup by weight cap: '{_itemData.DefinitionID}' took={acceptedQty} remain={_itemData.Quantity} ClientId={conn.ClientId}");
             }
+        }
+
+        private void TryAutoEquipPickedWeapon(NetworkPlayer player, ItemInstanceData pickedData)
+        {
+            if (player == null || string.IsNullOrEmpty(pickedData.DefinitionID) || string.IsNullOrEmpty(pickedData.InstanceID))
+                return;
+
+            if (ItemDatabase.GetDefinition(pickedData.DefinitionID) is not WeaponDefinition)
+                return;
+
+            var weaponSystem = ComponentResolver.Find<IWeaponSystem>(player)
+                .OnSelf()
+                .InChildren()
+                .OrDefault(null)
+                .Resolve();
+
+            if (weaponSystem == null)
+            {
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Weapon,
+                    "PickupWeaponAutoEquip",
+                    $"result=no-weapon-system def={pickedData.DefinitionID} inst={pickedData.InstanceID} player={player.name}",
+                    this);
+                return;
+            }
+
+            foreach (WeaponSlotType slot in AutoEquipWeaponSlots)
+            {
+                if (weaponSystem.IsSlotOccupied(slot) || !weaponSystem.CanEquipInSlot(pickedData.DefinitionID, slot))
+                    continue;
+
+                weaponSystem.EquipWeaponToSlot(pickedData.InstanceID, slot);
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Weapon,
+                    "PickupWeaponAutoEquip",
+                    $"result=equipped slot={slot} def={pickedData.DefinitionID} inst={pickedData.InstanceID} active={weaponSystem.GetActiveWeaponSlot()?.ToString() ?? "none"}",
+                    this);
+                return;
+            }
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "PickupWeaponAutoEquip",
+                $"result=inventory-only reason=no-empty-compatible-slot def={pickedData.DefinitionID} inst={pickedData.InstanceID} active={weaponSystem.GetActiveWeaponSlot()?.ToString() ?? "none"}",
+                this);
         }
 
         private void OnSyncIsPickedUpChanged(bool oldValue, bool newValue, bool asServer)

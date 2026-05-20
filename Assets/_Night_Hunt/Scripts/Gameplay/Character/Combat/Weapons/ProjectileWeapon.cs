@@ -32,6 +32,8 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             RecordShot();   // accumulate spread before applying
 
             Vector3 fireDir = ApplyRadialSpread(direction);
+            if (config.HasProjectileTargetPoint && config.GravityScale > 0f)
+                fireDir = BallisticTrajectory.ResolveLaunchDirection(origin, fireDir, config);
 
             var pool = ProjectilePool.Instance;
             if (pool == null)
@@ -73,7 +75,11 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                       $"speed={config.ProjectileSpeed}  maxRange={config.MaxRange}");
 
             // Estimated endpoint for the aim-trail VFX on the firing client.
-            RaiseFireResult(origin, origin + fireDir * Mathf.Max(1f, config.MaxRange));
+            RaiseFireResult(
+                origin,
+                config.HasProjectileTargetPoint
+                    ? config.ProjectileTargetPoint
+                    : origin + fireDir * Mathf.Max(1f, config.MaxRange));
         }
     }
 }

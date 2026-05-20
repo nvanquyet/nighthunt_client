@@ -20,7 +20,8 @@ MonoBehaviour:
   IsStackable: 1
   MaxStackSize: 3
   Weight: 0.4
-  _visualPrefab: {fileID: 0}
+  _visualPrefab: {fileID: 7342610198373781452, guid: 459b2413f618a184c8cdfb930b4bae19,
+    type: 3}
   ValidSlots: 00000000
   UsageDuration: 0
   _canCancelUsage: 1

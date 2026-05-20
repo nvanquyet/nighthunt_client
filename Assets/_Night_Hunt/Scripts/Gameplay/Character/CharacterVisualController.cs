@@ -9,6 +9,7 @@ using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Gameplay.FogOfWar;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Character
 {
@@ -34,6 +35,10 @@ namespace NightHunt.Gameplay.Character
         [Tooltip("Speed (units/s) at which left-hand IK weight fades in/out on weapon swap.")]
         [SerializeField] private float _ikBlendSpeed = 8f;
 
+        [Header("Death Visuals")]
+        [Tooltip("Time to let the Animator play Die before switching to ragdoll. 0 = ragdoll immediately.")]
+        [SerializeField, Min(0f)] private float _deathAnimationToRagdollDelay = 1.2f;
+
         // ── Auto-resolved refs ─────────────────────────────────────────────────
         private CharacterLifecycleController _lifecycle;
         private NetworkPlayer                _networkPlayer;
@@ -52,6 +57,7 @@ namespace NightHunt.Gameplay.Character
         private Transform _pendingIKTarget;   // target set by weapon swap
         private float     _ikWeight;          // current lerped weight [0..1]
         private float     _ikTargetWeight;    // 0 = holstered, 1 = armed
+        private Coroutine _deathVisualCoroutine;
 
         // ── Unity lifecycle ────────────────────────────────────────────────────
 
@@ -134,16 +140,13 @@ namespace NightHunt.Gameplay.Character
             if (_charIK == null || !_charIK.ikActive) return;
 
             _ikWeight = Mathf.MoveTowards(_ikWeight, _ikTargetWeight, _ikBlendSpeed * Time.deltaTime);
+            _charIK.leftHandWeight = _ikWeight;
 
             // Apply IK target once weight is meaningful (avoids single-frame snap).
             if (_ikWeight > 0.01f)
                 _charIK.leftHandTarget = _pendingIKTarget;
             else
                 _charIK.leftHandTarget = null;
-
-            // Drive weight via a simple wrapper — PrCharacterIK uses full-weight (0 or 1).
-            // If you need per-frame partial weights, mirror PrCharacterIK.OnAnimatorIK here.
-            // For now we approximate by toggling IK and relying on the animator to blend.
         }
 
         // ── Event handlers ─────────────────────────────────────────────────────
@@ -195,22 +198,48 @@ namespace NightHunt.Gameplay.Character
 
             if (isAlive && isActiveAndEnabled)
                 StartCoroutine(ReapplyAliveVisualsAfterRagdollStart());
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.IK,
+                "VisualModelBound",
+                $"player={_networkPlayer?.DisplayName ?? "null"} model={modelRoot.name} charIK={(_charIK != null ? _charIK.name : "null")} ragdoll={(_ragdoll != null ? _ragdoll.name : "null")} animator={(_actorUtils?.charAnimator != null ? _actorUtils.charAnimator.name : "null")} alive={isAlive}",
+                this);
         }
 
         // ── Visual state ───────────────────────────────────────────────────────
 
         private void SetDeadVisuals()
         {
+            if (_deathVisualCoroutine != null)
+            {
+                StopCoroutine(_deathVisualCoroutine);
+                _deathVisualCoroutine = null;
+            }
+
             if (_charIK != null)     _charIK.ikActive = false;
-            if (_actorUtils?.charAnimator != null)
-                _actorUtils.charAnimator.enabled = false;
-            _ragdoll?.ActivateRagdoll();
             // Disable FOW revealer — dead player should not reveal the map.
             if (_fogVisionBinder != null) _fogVisionBinder.enabled = false;
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.IK,
+                "VisualDead",
+                $"player={_networkPlayer?.DisplayName ?? "null"} ikActive={(_charIK != null && _charIK.ikActive)} ragdollDelay={_deathAnimationToRagdollDelay:F2}",
+                this);
+
+            if (_deathAnimationToRagdollDelay <= 0f || _actorUtils?.charAnimator == null)
+                ApplyDeadRagdollVisuals();
+            else
+                _deathVisualCoroutine = StartCoroutine(ApplyDeadRagdollVisualsAfterDelay());
         }
 
         private void SetAliveVisuals()
         {
+            if (_deathVisualCoroutine != null)
+            {
+                StopCoroutine(_deathVisualCoroutine);
+                _deathVisualCoroutine = null;
+            }
+
             DeactivateRagdollSafely();
             ApplyAliveModelPhysicsAndHitboxes();
 
@@ -223,6 +252,30 @@ namespace NightHunt.Gameplay.Character
 
             // Re-apply whichever IK target the current weapon has (null if holstered).
             SetIKTargetSmooth(_weaponModelController?.LeftHandIKTarget);
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.IK,
+                "VisualAlive",
+                $"player={_networkPlayer?.DisplayName ?? "null"} ikActive={(_charIK != null && _charIK.ikActive)} target={_weaponModelController?.LeftHandIKTarget?.name ?? "null"}",
+                this);
+        }
+
+        private IEnumerator ApplyDeadRagdollVisualsAfterDelay()
+        {
+            yield return new WaitForSeconds(_deathAnimationToRagdollDelay);
+            _deathVisualCoroutine = null;
+
+            if (_networkPlayer != null && _networkPlayer.IsAlive)
+                yield break;
+
+            ApplyDeadRagdollVisuals();
+        }
+
+        private void ApplyDeadRagdollVisuals()
+        {
+            if (_actorUtils?.charAnimator != null)
+                _actorUtils.charAnimator.enabled = false;
+            _ragdoll?.ActivateRagdoll();
         }
 
         private IEnumerator ReapplyAliveVisualsAfterRagdollStart()
@@ -334,6 +387,12 @@ namespace NightHunt.Gameplay.Character
             // If we just holstered, begin fade-out immediately (don't wait for Update).
             if (target == null && _charIK != null)
                 _charIK.rightHandTarget = null;
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.IK,
+                "IKTargetBlend",
+                $"player={_networkPlayer?.DisplayName ?? "null"} target={(target != null ? target.name : "null")} world={(target != null ? target.position.ToString("F2") : "null")} local={(target != null ? target.localPosition.ToString("F2") : "null")} currentWeight={_ikWeight:F2} targetWeight={_ikTargetWeight:F2} charIK={(_charIK != null ? _charIK.name : "null")}",
+                this);
         }
     }
 }

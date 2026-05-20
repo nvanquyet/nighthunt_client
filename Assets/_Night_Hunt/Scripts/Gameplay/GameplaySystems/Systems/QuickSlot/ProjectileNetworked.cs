@@ -10,8 +10,13 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Character.Combat.Weapons;
+using NightHunt.Gameplay.Feedback;
+using NightHunt.Gameplay.StatSystem.Core.Data;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Networking.Player;
 using NightHunt.Audio;
+using NightHunt.GameplaySystems.Inventory;
 
 namespace NightHunt.GameplaySystems.ItemUse
 {
@@ -50,6 +55,12 @@ namespace NightHunt.GameplaySystems.ItemUse
             Channel  = FishNet.Transporting.Channel.Reliable,
         });
 
+        private readonly SyncVar<string> _definitionId = new SyncVar<string>(string.Empty, new SyncTypeSettings
+        {
+            SendRate = 0,
+            Channel = FishNet.Transporting.Channel.Reliable,
+        });
+
         /// <inheritdoc/>
         public int  FogOwnerTeamId  => _ownerTeamId.Value;
         /// <inheritdoc/>
@@ -72,6 +83,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         private bool _initialized;
         private bool _exploded;
+        private bool _areaEffectFinished = true;
 
         [Tooltip("Layers polled by ProximityDetection. Set to PlayerHitBox to skip terrain/props.")]
         [SerializeField] private LayerMask _proximityLayers = ~0;
@@ -82,6 +94,9 @@ namespace NightHunt.GameplaySystems.ItemUse
         // Pre-allocated overlap buffers — no GC alloc per frame/tick.
         private static readonly Collider[] s_proximityBuffer = new Collider[32];
         private static readonly Collider[] s_aoeBuffer       = new Collider[64];
+        private static readonly List<PlayerHealthSystem> s_areaRemoveList = new List<PlayerHealthSystem>(16);
+
+        private readonly Dictionary<PlayerHealthSystem, string> _activeAreaEffectSources = new Dictionary<PlayerHealthSystem, string>(16);
 
         #endregion
 
@@ -154,6 +169,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (_initialized) return;
             _initialized = true;
             _def = def;
+            _definitionId.Value = def != null ? def.ItemID : string.Empty;
 
             // Owner health system — identifies the thrower for collision/damage skip.
             _ownerHealthSystem = ownerRoot != null
@@ -209,19 +225,49 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (def.ThrowableType == ThrowableType.Proximity)
                 StartCoroutine(ProximityDetection());
 
-            RpcPlaySpawnVfx(transform.position, transform.rotation);
+            RpcPlaySpawnVfx(transform.position, transform.rotation, _definitionId.Value);
         }
 
         [ObserversRpc]
-        private void RpcPlaySpawnVfx(Vector3 position, Quaternion rotation)
+        private void RpcPlaySpawnVfx(Vector3 position, Quaternion rotation, string definitionId)
         {
             transform.SetPositionAndRotation(position, rotation);
+            var resolvedDef = ResolveDefinition(definitionId);
             _projectileBase ??= GetComponent<ProjectileBase>();
             if (_projectileBase == null)
                 Debug.LogWarning($"[PROJ_VFX] ProjectileBase missing on '{name}' — no spawn VFX.");
             _projectileBase?.PlayMainVisual();
             _projectileBase?.PlayMuzzleFlash();
+            PlayThrowableReleaseAudio(resolvedDef, position);
             LogThrowable($"Spawn VFX projectile='{name}' pos={position:F2}");
+        }
+
+        private ThrowableDefinition ResolveDefinition(string definitionId = null)
+        {
+            if (_def != null)
+                return _def;
+
+            string id = !string.IsNullOrEmpty(definitionId) ? definitionId : _definitionId.Value;
+            if (string.IsNullOrEmpty(id))
+                return null;
+
+            _def = ItemDatabase.GetDefinition(id) as ThrowableDefinition;
+            return _def;
+        }
+
+        private static void PlayThrowableReleaseAudio(ThrowableDefinition def, Vector3 position)
+        {
+            AudioClip clip = def != null ? def.ThrowSound : null;
+            if (clip == null && AudioManager.HasInstance)
+                clip = AudioManager.Instance.Library?.throwablePull;
+
+            if (clip == null)
+                return;
+
+            if (AudioManager.HasInstance)
+                AudioManager.Instance.PlayWeapon3D(clip, position);
+            else
+                AudioSource.PlayClipAtPoint(clip, position);
         }
 
         private IEnumerator FuseCountdown(float fuse)
@@ -254,14 +300,17 @@ namespace NightHunt.GameplaySystems.ItemUse
                     if (hit.transform.IsChildOf(transform) || hit.transform == transform)
                         continue;
 
-                    // Skip thrower hitboxes.
-                    if (_ownerHealthSystem != null
-                        && hit.TryGetComponent<PlayerHitboxMarker>(out var ownerCheck)
-                        && ownerCheck.HealthSystem == _ownerHealthSystem)
-                        continue;
+                    if (TryResolvePlayerHealth(hit, out var healthSystem))
+                    {
+                        if (!ShouldAffectPlayer(healthSystem))
+                            continue;
 
-                    if (hit.TryGetComponent<PlayerHitboxMarker>(out _) ||
-                        hit.TryGetComponent<IHittable>(out _))
+                        Explode();
+                        yield break;
+                    }
+
+                    var hittable = hit.GetComponentInParent<IHittable>();
+                    if (hittable != null && ShouldAffectHittable(hittable))
                     {
                         Explode();
                         yield break;
@@ -346,32 +395,192 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (_def != null && _def.ExplosionRadius > 0f)
                 DealAoeDamage();
 
-            RpcExplode(transform.position, transform.rotation);
+            RpcExplode(transform.position, transform.rotation, _definitionId.Value);
             OnExploded?.Invoke(this);
+            if (HasPersistentAreaEffect())
+                StartCoroutine(PersistentAreaEffect());
             StartCoroutine(DespawnAfterExplosion());
         }
 
         [ObserversRpc]
-        private void RpcExplode(Vector3 position, Quaternion rotation)
+        private void RpcExplode(Vector3 position, Quaternion rotation, string definitionId)
         {
             _projectileBase?.TriggerDetonation(position, rotation);
 
-            if (_def?.ImpactSound != null)
+            var resolvedDef = ResolveDefinition(definitionId);
+            AudioClip impactClip = resolvedDef?.ImpactSound;
+            if (impactClip == null && AudioManager.HasInstance)
+                impactClip = AudioManager.Instance.Library?.explosionGrenade
+                             ?? AudioManager.Instance.Library?.explosionRocket;
+
+            if (impactClip != null)
             {
                 if (AudioManager.HasInstance)
-                    AudioManager.Instance.PlayExplosion3D(_def.ImpactSound, position);
+                    AudioManager.Instance.PlayExplosion3D(impactClip, position);
                 else
-                    AudioSource.PlayClipAtPoint(_def.ImpactSound, position);
+                    AudioSource.PlayClipAtPoint(impactClip, position);
             }
         }
 
         [Server]
         private IEnumerator DespawnAfterExplosion()
         {
-            float delay = _projectileBase != null ? _projectileBase.lifetimeAfterImpact : 3f;
+            float delay = ResolvePostExplosionLifetime();
             yield return new WaitForSeconds(delay);
+            RemoveAllAreaEffectModifiers();
             if (NetworkObject != null)
                 ServerManager.Despawn(gameObject);
+        }
+
+        private float ResolvePostExplosionLifetime()
+        {
+            float visualLifetime = _projectileBase != null ? _projectileBase.lifetimeAfterImpact : 3f;
+            if (!HasPersistentAreaEffect())
+                return visualLifetime;
+
+            return Mathf.Max(visualLifetime, _def.AreaEffectDuration + 0.1f);
+        }
+
+        private bool HasPersistentAreaEffect()
+        {
+            return _def != null
+                   && _def.AreaEffectDuration > 0f
+                   && _def.ExplosionRadius > 0f
+                   && ((_def.AreaPlayerModifiers != null && _def.AreaPlayerModifiers.Length > 0)
+                       || !Mathf.Approximately(_def.AreaHealthDeltaPerSecond, 0f)
+                       || !Mathf.Approximately(_def.AreaStaminaDeltaPerSecond, 0f));
+        }
+
+        [Server]
+        private IEnumerator PersistentAreaEffect()
+        {
+            _areaEffectFinished = false;
+            float endTime = Time.time + _def.AreaEffectDuration;
+            float tickInterval = Mathf.Max(0.05f, _def.AreaEffectTickInterval);
+
+            while (!_areaEffectFinished && Time.time < endTime)
+            {
+                TickPersistentAreaEffect(tickInterval);
+                yield return new WaitForSeconds(tickInterval);
+            }
+
+            RemoveAllAreaEffectModifiers();
+            _areaEffectFinished = true;
+        }
+
+        [Server]
+        private void TickPersistentAreaEffect(float deltaTime)
+        {
+            s_areaPlayers.Clear();
+
+            int count = Physics.OverlapSphereNonAlloc(transform.position, _def.ExplosionRadius, s_aoeBuffer);
+            for (int i = 0; i < count; i++)
+            {
+                Collider hit = s_aoeBuffer[i];
+                if (!TryResolvePlayerHealth(hit, out var hs) || !ShouldAffectPlayer(hs))
+                    continue;
+
+                s_areaPlayers.Add(hs);
+                ApplyAreaModifiers(hs);
+                ApplyAreaTick(hs, deltaTime);
+            }
+
+            s_areaRemoveList.Clear();
+            foreach (var kv in _activeAreaEffectSources)
+            {
+                if (!s_areaPlayers.Contains(kv.Key))
+                    s_areaRemoveList.Add(kv.Key);
+            }
+
+            for (int i = 0; i < s_areaRemoveList.Count; i++)
+                RemoveAreaEffectModifiers(s_areaRemoveList[i]);
+        }
+
+        private static readonly HashSet<PlayerHealthSystem> s_areaPlayers = new HashSet<PlayerHealthSystem>();
+
+        [Server]
+        private void ApplyAreaModifiers(PlayerHealthSystem healthSystem)
+        {
+            if (_activeAreaEffectSources.ContainsKey(healthSystem)
+                || _def.AreaPlayerModifiers == null
+                || _def.AreaPlayerModifiers.Length == 0)
+                return;
+
+            var stats = ResolveStats(healthSystem);
+            if (stats == null)
+                return;
+
+            string sourceId = $"throwable:{ObjectId}:{_definitionId.Value}:{healthSystem.ObjectId}";
+            for (int i = 0; i < _def.AreaPlayerModifiers.Length; i++)
+            {
+                var mod = _def.AreaPlayerModifiers[i];
+                stats.AddModifier(mod.StatType, CreateRuntimeModifier(sourceId, mod));
+            }
+
+            _activeAreaEffectSources[healthSystem] = sourceId;
+        }
+
+        [Server]
+        private void ApplyAreaTick(PlayerHealthSystem healthSystem, float deltaTime)
+        {
+            var stats = ResolveStats(healthSystem);
+            if (stats == null)
+                return;
+
+            if (!Mathf.Approximately(_def.AreaHealthDeltaPerSecond, 0f))
+            {
+                float delta = _def.AreaHealthDeltaPerSecond * deltaTime;
+                if (delta < 0f)
+                {
+                    var damageInfo = new DamageInfo
+                    {
+                        Damage = -delta,
+                        IsHeadshot = false,
+                        HitPoint = healthSystem.transform.position,
+                        HitNormal = Vector3.up,
+                        ShooterNetworkObjectId = _ownerNetworkObjectId,
+                        WeaponId = _def?.ItemID ?? string.Empty,
+                    };
+                    healthSystem.ApplyDamageServer(damageInfo);
+                }
+                else
+                {
+                    float health = stats.GetStat(PlayerStatType.Health);
+                    float maxHealth = Mathf.Max(1f, stats.GetStat(PlayerStatType.MaxHealth));
+                    stats.SetCurrentStat(PlayerStatType.Health, Mathf.Min(maxHealth, health + delta));
+                }
+            }
+
+            if (!Mathf.Approximately(_def.AreaStaminaDeltaPerSecond, 0f))
+            {
+                float stamina = stats.GetStat(PlayerStatType.Stamina);
+                float maxStamina = Mathf.Max(1f, stats.GetStat(PlayerStatType.MaxStamina));
+                stats.SetCurrentStat(
+                    PlayerStatType.Stamina,
+                    Mathf.Clamp(stamina + _def.AreaStaminaDeltaPerSecond * deltaTime, 0f, maxStamina));
+            }
+        }
+
+        [Server]
+        private void RemoveAllAreaEffectModifiers()
+        {
+            _areaEffectFinished = true;
+            s_areaRemoveList.Clear();
+            foreach (var kv in _activeAreaEffectSources)
+                s_areaRemoveList.Add(kv.Key);
+
+            for (int i = 0; i < s_areaRemoveList.Count; i++)
+                RemoveAreaEffectModifiers(s_areaRemoveList[i]);
+        }
+
+        [Server]
+        private void RemoveAreaEffectModifiers(PlayerHealthSystem healthSystem)
+        {
+            if (healthSystem == null || !_activeAreaEffectSources.TryGetValue(healthSystem, out string sourceId))
+                return;
+
+            ResolveStats(healthSystem)?.RemoveAllModifiersFromSource(sourceId);
+            _activeAreaEffectSources.Remove(healthSystem);
         }
 
         #endregion
@@ -390,6 +599,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             float radius   = _def.ExplosionRadius;
 
             var hitSystems = new HashSet<PlayerHealthSystem>();
+            var hitHittables = new HashSet<IHittable>();
 
             for (int i = 0; i < count; i++)
             {
@@ -400,27 +610,12 @@ namespace NightHunt.GameplaySystems.ItemUse
                 float falloff = Mathf.Clamp01(1f - dist / radius);
 
                 // Path A: Player hitbox
-                if (hit.TryGetComponent<PlayerHitboxMarker>(out var marker))
+                if (TryResolvePlayerHealth(hit, out var hs))
                 {
-                    var hs = marker.HealthSystem;
-                    if (hs != null && hs == _ownerHealthSystem) continue;
-                    if (hs != null && hitSystems.Add(hs))
-                    {
-                        hs.ApplyDamageServer(new DamageInfo
-                        {
-                            Damage                 = _def.Damage * falloff,
-                            IsHeadshot             = false,
-                            HitPoint               = hit.transform.position,
-                            HitNormal              = (hit.transform.position - origin).normalized,
-                            ShooterNetworkObjectId = _ownerNetworkObjectId,
-                            WeaponId               = _def?.ItemID ?? string.Empty,
-                        });
-                    }
-                }
-                // Path B: Generic IHittable (boss, destructibles)
-                else if (hit.TryGetComponent<IHittable>(out var hittable))
-                {
-                    hittable.RequestDamage(new DamageInfo
+                    if (!ShouldAffectPlayer(hs) || !hitSystems.Add(hs) || hs.IsDead)
+                        continue;
+
+                    var damageInfo = new DamageInfo
                     {
                         Damage                 = _def.Damage * falloff,
                         IsHeadshot             = false,
@@ -428,13 +623,147 @@ namespace NightHunt.GameplaySystems.ItemUse
                         HitNormal              = (hit.transform.position - origin).normalized,
                         ShooterNetworkObjectId = _ownerNetworkObjectId,
                         WeaponId               = _def?.ItemID ?? string.Empty,
-                    });
+                    };
+
+                    hs.ApplyDamageServer(damageInfo);
+                    SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Player);
+                }
+                // Path B: Generic IHittable (boss, destructibles)
+                else if (hit.GetComponentInParent<IHittable>() is { } hittable)
+                {
+                    if (!ShouldAffectHittable(hittable) || !hitHittables.Add(hittable))
+                        continue;
+
+                    var damageInfo = new DamageInfo
+                    {
+                        Damage                 = _def.Damage * falloff,
+                        IsHeadshot             = false,
+                        HitPoint               = hit.transform.position,
+                        HitNormal              = (hit.transform.position - origin).normalized,
+                        ShooterNetworkObjectId = _ownerNetworkObjectId,
+                        WeaponId               = _def?.ItemID ?? string.Empty,
+                    };
+
+                    var targetKind = CombatHitFeedbackTargetKind.GenericHittable;
+                    if (hittable is NightHunt.Gameplay.Deployables.BaseDeployable deployable)
+                    {
+                        deployable.TakeDamage(damageInfo);
+                        targetKind = CombatHitFeedbackTargetKind.Deployable;
+                    }
+                    else
+                    {
+                        hittable.RequestDamage(damageInfo);
+                        if (hittable is NightHunt.Gameplay.Boss.TurretGun)
+                            targetKind = CombatHitFeedbackTargetKind.Boss;
+                    }
+
+                    SendLocalHitFeedback(damageInfo, targetKind);
                 }
 
                 // Rigidbody impulse for physics crates etc.
                 if (hit.TryGetComponent<Rigidbody>(out var rb) && !rb.isKinematic)
                     rb.AddForce((hit.transform.position - origin).normalized * (500f * falloff), ForceMode.Impulse);
             }
+        }
+
+        private bool ShouldAffectPlayer(PlayerHealthSystem healthSystem)
+        {
+            if (healthSystem == null || healthSystem.IsDead)
+                return false;
+
+            if (_def == null || _def.AllowFriendlyFire)
+                return true;
+
+            int ownerTeam = _ownerTeamId.Value;
+            int targetTeam = ResolveTeamId(healthSystem);
+            return targetTeam < 0 || ownerTeam < 0 || targetTeam != ownerTeam;
+        }
+
+        private bool ShouldAffectHittable(IHittable hittable)
+        {
+            if (hittable == null)
+                return false;
+
+            if (_def == null || _def.AllowFriendlyFire)
+                return true;
+
+            if (hittable is NightHunt.Gameplay.Deployables.BaseDeployable deployable)
+            {
+                int ownerTeam = _ownerTeamId.Value;
+                int targetTeam = deployable.OwnerTeamId;
+                return targetTeam < 0 || ownerTeam < 0 || targetTeam != ownerTeam;
+            }
+
+            return true;
+        }
+
+        private static int ResolveTeamId(PlayerHealthSystem healthSystem)
+        {
+            if (healthSystem == null)
+                return -1;
+
+            var player = healthSystem.GetComponentInParent<NetworkPlayer>();
+            return player != null ? player.TeamId : -1;
+        }
+
+        private static bool TryResolvePlayerHealth(Collider hit, out PlayerHealthSystem healthSystem)
+        {
+            healthSystem = null;
+            if (hit == null)
+                return false;
+
+            if (hit.TryGetComponent<PlayerHitboxMarker>(out var marker) && marker.HealthSystem != null)
+            {
+                healthSystem = marker.HealthSystem;
+                return true;
+            }
+
+            healthSystem = hit.GetComponentInParent<PlayerHealthSystem>();
+            return healthSystem != null;
+        }
+
+        private static IPlayerStatSystem ResolveStats(PlayerHealthSystem healthSystem)
+        {
+            if (healthSystem == null)
+                return null;
+
+            return healthSystem.GetComponent<IPlayerStatSystem>()
+                   ?? healthSystem.GetComponentInChildren<IPlayerStatSystem>(true)
+                   ?? healthSystem.GetComponentInParent<IPlayerStatSystem>();
+        }
+
+        private static StatModifier CreateRuntimeModifier(string sourceId, PlayerStatModifier mod)
+        {
+            return mod.ModifierType switch
+            {
+                ModifierType.Percentage => StatModifier.CreatePercentage(sourceId, mod.Value, -100, mod.Description),
+                ModifierType.Override => StatModifier.CreateOverride(sourceId, mod.Value, mod.Description),
+                _ => StatModifier.CreateFlat(sourceId, mod.Value, -100, mod.Description)
+            };
+        }
+
+        [Server]
+        private void SendLocalHitFeedback(DamageInfo info, CombatHitFeedbackTargetKind targetKind)
+        {
+            if (targetKind == CombatHitFeedbackTargetKind.None || _ownerNetworkObjectId <= 0)
+                return;
+
+            if (!FishNet.InstanceFinder.ServerManager.Objects.Spawned.TryGetValue(_ownerNetworkObjectId, out var ownerObject))
+                return;
+
+            NetworkConnection ownerConnection = ownerObject.Owner;
+            if (ownerConnection == null)
+                return;
+
+            TargetLocalHitFeedbackRpc(ownerConnection, info, (byte)targetKind);
+        }
+
+        [TargetRpc]
+        private void TargetLocalHitFeedbackRpc(NetworkConnection conn, DamageInfo info, byte targetKind)
+        {
+            CombatFeedbackEvents.PublishLocalHitConfirmed(
+                info,
+                (CombatHitFeedbackTargetKind)targetKind);
         }
 
         #endregion

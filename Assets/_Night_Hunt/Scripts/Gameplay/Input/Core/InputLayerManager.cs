@@ -4,6 +4,7 @@ using NightHunt.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Input.Core
 {
@@ -34,7 +35,6 @@ namespace NightHunt.Gameplay.Input.Core
     /// </code>
     /// </summary>
     // ──────────────────────────────────────────────────────────────────────────────
-    // ──────────────────────────────────────────────────────────────────────────────
     // Execution order: must Awake() BEFORE any IInputHandler so Instance is ready
     // when handlers call InitializeActions() in their own Awake().
     [UnityEngine.DefaultExecutionOrder(-100)]
@@ -53,7 +53,7 @@ namespace NightHunt.Gameplay.Input.Core
                 InputState.PlayerAlive,
                 InputLayer.Player | InputLayer.Combat | InputLayer.Camera |
                 InputLayer.Inventory | InputLayer.Team | InputLayer.Objectives | InputLayer.Devices
-            },  
+            },
             {
                 InputState.InventoryOpen,
                 // Player ON  → can still move / interact while browsing gear (MOBA style)
@@ -171,6 +171,13 @@ namespace NightHunt.Gameplay.Input.Core
             BuildLayerCache();
         }
 
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            // Clear canonical event bus to prevent stale references across scene reloads.
+            GameActionBus.Clear();
+        }
+
         #endregion
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -207,6 +214,10 @@ namespace NightHunt.Gameplay.Input.Core
                 if (!_layerToMap.ContainsKey(pair.Value))
                     Debug.LogWarning($"[InputLayerManager] ActionMap '{pair.Key}' not found in asset.");
 
+            // Load persisted key-rebind overrides BEFORE any handler calls EnableInput().
+            // This ensures player's custom bindings are active from the first frame.
+            InputBindingSaveSystem.LoadBindings(asset);
+
             Debug.Log("[InputLayerManager] Initialized success.");
         }
 
@@ -221,6 +232,7 @@ namespace NightHunt.Gameplay.Input.Core
         /// </summary>
         public void TransitionToState(InputState newState)
         {
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "InputTransition", $"from={CurrentState} to={newState} clearStack=True", this);
             _contextStack.Clear();
             ApplyContext(newState);
         }
@@ -231,6 +243,7 @@ namespace NightHunt.Gameplay.Input.Core
         /// </summary>
         public void PushContext(InputState newState)
         {
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "InputPushContext", $"from={CurrentState} to={newState} stackBefore={_contextStack.Count}", this);
             _contextStack.Push(CurrentState);
             ApplyContext(newState);
         }
@@ -243,10 +256,14 @@ namespace NightHunt.Gameplay.Input.Core
             if (_contextStack.Count == 0)
             {
                 Debug.LogWarning("[InputLayerManager] PopContext: stack empty → fallback PlayerAlive");
+                PhaseTestLog.Warning(PhaseTestLogCategory.Input, "InputPopContext", $"from={CurrentState} fallback=PlayerAlive reason=empty-stack", this);
                 ApplyContext(InputState.PlayerAlive);
                 return;
             }
-            ApplyContext(_contextStack.Pop());
+
+            InputState previous = _contextStack.Pop();
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "InputPopContext", $"from={CurrentState} to={previous} stackAfter={_contextStack.Count}", this);
+            ApplyContext(previous);
         }
 
         #endregion
@@ -261,6 +278,7 @@ namespace NightHunt.Gameplay.Input.Core
         /// </summary>
         public void SetLayerEnabled(InputLayer layer, bool enabled)
         {
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "InputSetLayer", $"layer={layer} enabled={enabled} before={ActiveLayers}", this);
             ApplyLayers(enabled ? (ActiveLayers | layer) : (ActiveLayers & ~layer));
         }
 
@@ -347,6 +365,7 @@ namespace NightHunt.Gameplay.Input.Core
             if (ActiveLayers == layers) return;
 
             ActiveLayers = layers;
+            PhaseTestLog.Log(PhaseTestLogCategory.Input, "InputLayersApplied", $"state={CurrentState} layers={ActiveLayers}", this);
 
             // 1️⃣ Enable/disable ActionMaps (Single Source of Truth)
             foreach (var kvp in _layerToMap)

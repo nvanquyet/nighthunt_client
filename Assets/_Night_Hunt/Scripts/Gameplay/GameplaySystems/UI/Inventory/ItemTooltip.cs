@@ -81,6 +81,9 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             PlayerStatType.WeightCapacity,
             PlayerStatType.Armor,
             PlayerStatType.VisionRange,
+            PlayerStatType.HealthRegenRate,
+            PlayerStatType.StaminaRegenRate,
+            PlayerStatType.StaminaDrainRate,
         };
 
         // ─────────────────────────────────────────────────────────────────────

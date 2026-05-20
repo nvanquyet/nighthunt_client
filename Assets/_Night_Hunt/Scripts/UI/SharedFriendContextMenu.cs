@@ -62,13 +62,7 @@ namespace NightHunt.UI
             if (backdrop != null)
             {
                 var rt = backdrop.GetComponent<RectTransform>();
-                if (rt != null)
-                {
-                    rt.anchorMin = Vector2.zero;
-                    rt.anchorMax = Vector2.one;
-                    rt.offsetMin = Vector2.zero;
-                    rt.offsetMax = Vector2.zero;
-                }
+                UIContextMenuPositioner.PrepareFullscreenBackdrop(rt);
                 // Needs a raycast-target Graphic; add invisible Image if none exists.
                 var img = backdrop.GetComponent<Image>();
                 if (img == null) img = backdrop.gameObject.AddComponent<Image>();
@@ -76,7 +70,18 @@ namespace NightHunt.UI
                 img.raycastTarget = true;
             }
 
+            UIContextMenuRegistry.Register(this, Hide);
             Hide();
+        }
+
+        private void OnDisable()
+        {
+            Hide();
+        }
+
+        private void OnDestroy()
+        {
+            UIContextMenuRegistry.Unregister(this);
         }
 
         // ── Public API ───────────────────────────────────────────────────────
@@ -104,6 +109,8 @@ namespace NightHunt.UI
             if (btn_ViewProfile   != null) btn_ViewProfile.gameObject.SetActive(true);
             if (btn_InviteToParty != null) btn_InviteToParty.gameObject.SetActive(canInvite);
 
+            UIContextMenuRegistry.CloseAllExcept(this);
+
             // Bring whole context-menu tree to top of parent siblings (renders above all rows).
             transform.SetAsLastSibling();
 
@@ -123,6 +130,7 @@ namespace NightHunt.UI
             _onViewProfile = null;
             _onInvite      = null;
             _onRemove      = null;
+            _userId        = 0;
         }
 
         public bool IsVisible => panel != null && panel.gameObject.activeSelf;
@@ -136,17 +144,10 @@ namespace NightHunt.UI
         /// </summary>
         private void RepositionNear(RectTransform anchorPoint)
         {
-            if (panel == null || anchorPoint == null) return;
-            var parentRT = panel.parent as RectTransform;
-            if (parentRT == null) return;
+            UIContextMenuPositioner.PlaceNearPivot(panel, anchorPoint);
 
             // Use the anchor's world pivot (not corners) — the designer controls the exact
             // placement by repositioning the contextMenuAnchor child Transform in the prefab.
-            Vector2 screenPos = RectTransformUtility.WorldToScreenPoint(null, anchorPoint.position);
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                parentRT, screenPos, null, out Vector2 local);
-
-            panel.anchoredPosition = local;
         }
 
         private void OnViewProfile() { var cb = _onViewProfile; Hide(); cb?.Invoke(); }

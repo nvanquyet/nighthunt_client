@@ -20,10 +20,26 @@ namespace NightHunt.Services.Profile
     /// </summary>
     public class ProfileManager : MonoBehaviour
     {
+        public static ProfileManager Instance { get; private set; }
+
         [SerializeField] private IBackendClient backendClient;
         [SerializeField] private SessionState   sessionState;
 
         private void Awake()
+        {
+            if (Instance == null)
+                Instance = this;
+
+            EnsureReferences();
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
+        }
+
+        private void EnsureReferences()
         {
             if (backendClient == null && GameManager.Instance != null)
                 backendClient = GameManager.Instance.BackendClient;
@@ -47,10 +63,14 @@ namespace NightHunt.Services.Profile
         /// </summary>
         public async Task<ApiResult<ProfileResponse>> FetchProfile()
         {
+            EnsureReferences();
+            if (backendClient == null)
+                return ApiResult<ProfileResponse>.Error("Backend client is not available");
+
             var result = await backendClient.GetAsync<ProfileResponse>(Constants.API_PROFILE_GET);
             if (result.Success && result.Data != null)
             {
-                sessionState.SetProfileData(
+                sessionState?.SetProfileData(
                     result.Data.coins,
                     result.Data.elo,
                     result.Data.tier,
@@ -71,7 +91,7 @@ namespace NightHunt.Services.Profile
         ///
         /// <para>Usage from a character-select UI button:</para>
         /// <code>
-        ///   await ProfileManager.Instance.SetCharacter(definition.CharacterId);
+        ///   await GameManager.Instance.ProfileManager.SetCharacter(definition.CharacterId);
         /// </code>
         /// </summary>
         /// <param name="characterId">
@@ -80,6 +100,10 @@ namespace NightHunt.Services.Profile
         /// </param>
         public async Task<ApiResult<ProfileResponse>> SetCharacter(string characterId)
         {
+            EnsureReferences();
+            if (backendClient == null)
+                return ApiResult<ProfileResponse>.Error("Backend client is not available");
+
             if (string.IsNullOrEmpty(characterId))
             {
                 Debug.LogError("[ProfileManager] SetCharacter called with null/empty characterId.");
@@ -92,7 +116,7 @@ namespace NightHunt.Services.Profile
 
             if (result.Success && result.Data != null)
             {
-                sessionState.SetSelectedCharacterId(result.Data.selectedCharacterId);
+                sessionState?.SetSelectedCharacterId(result.Data.selectedCharacterId);
                 Debug.Log($"[ProfileManager] Character updated → {result.Data.selectedCharacterId}");
             }
             else

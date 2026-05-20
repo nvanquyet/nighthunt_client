@@ -650,8 +650,23 @@ MonoBehaviour:
   _bulletTargetConfig: {fileID: 11400000, guid: d58dff5b6f5548f7a592fb5976a1a472,
     type: 2}
   _maxFireElevationAngle: 35
+  _sniperCanExceedVisionRange: 1
+  _sniperVisionRangeMultiplier: 2.5
+  _enableOwnerCameraShake: 1
+  _cameraShakeFrequency: 34
+  _pistolCameraShakeAmplitude: 0.025
+  _smgCameraShakeAmplitude: 0.022
+  _rifleCameraShakeAmplitude: 0.04
+  _machineGunCameraShakeAmplitude: 0.032
+  _shotgunCameraShakeAmplitude: 0.07
+  _sniperCameraShakeAmplitude: 0.11
+  _launcherCameraShakeAmplitude: 0.13
+  _cameraShakeShortDuration: 0.075
+  _cameraShakeHeavyDuration: 0.14
   _maxServerAimDeltaDegPerSecond: 720
   _serverAimDeltaGraceDegrees: 12
+  _delayHitscanDamageByProjectileSpeed: 1
+  _maxHitscanDamageDelay: 5
 --- !u!114 &5823837622919229875
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -904,6 +919,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 26b716c41e9b56b4baafaf13a523ba2e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  NetworkObserver: {fileID: 0}
+  _enablePrediction: 1
+  _predictionType: 1
+  _graphicalObject: {fileID: 636343447752430072}
+  _detachGraphicalObject: 0
+  _enableStateForwarding: 1
+  _networkTransform: {fileID: 0}
+  _ownerInterpolation: 1
+  _ownerSmoothedProperties: 4294967295
+  _adaptiveInterpolation: 6
+  _spectatorSmoothedProperties: 4294967295
+  _spectatorInterpolation: 2
+  _enableTeleport: 0
+  _teleportThreshold: 1
+  <PrefabId>k__BackingField: 0
+  <SpawnableCollectionId>k__BackingField: 0
+  <AssetPathHash>k__BackingField: 461856501702233449
+  <SceneId>k__BackingField: 0
+  SerializedTransformProperties:
+    Position: {x: 0, y: 0, z: 0}
+    Rotation: {x: 0, y: 0, z: 0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
   <IsNested>k__BackingField: 0
   WasActiveDuringEdit: 0
   WasActiveDuringEdit_Set1: 1
@@ -937,29 +975,6 @@ MonoBehaviour:
   _initializeOrder: 0
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
-  NetworkObserver: {fileID: 0}
-  _enablePrediction: 1
-  _predictionType: 1
-  _graphicalObject: {fileID: 636343447752430072}
-  _detachGraphicalObject: 0
-  _enableStateForwarding: 1
-  _networkTransform: {fileID: 0}
-  _ownerInterpolation: 1
-  _ownerSmoothedProperties: 4294967295
-  _adaptiveInterpolation: 6
-  _spectatorSmoothedProperties: 4294967295
-  _spectatorInterpolation: 2
-  _enableTeleport: 0
-  _teleportThreshold: 1
-  <PrefabId>k__BackingField: 0
-  <SpawnableCollectionId>k__BackingField: 0
-  <AssetPathHash>k__BackingField: 461856501702233449
-  <SceneId>k__BackingField: 0
-  SerializedTransformProperties:
-    Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: 0, y: 0, z: 0, w: 1}
-    Scale: {x: 1, y: 1, z: 1}
-    IsValid: 1
 --- !u!54 &1872049894194976993
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -967,10 +982,10 @@ Rigidbody:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6186874985291187823}
-  serializedVersion: 4
+  serializedVersion: 5
   m_Mass: 1
-  m_Drag: 0
-  m_AngularDrag: 0.05
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}
   m_InertiaTensor: {x: 1, y: 1, z: 1}
   m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
@@ -1167,7 +1182,11 @@ MonoBehaviour:
   _matchEndManager: {fileID: 0}
   _scoringSystem: {fileID: 0}
   _applyArmorReduction: 1
+  _allowClientDamageRequests: 0
   _maxHitDistance: 500
+  _maxClientRequestedDamage: 150
+  _allowFriendlyFire: 0
+  _healthRegenTickInterval: 1
 --- !u!114 &8370610283817252759
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1435,6 +1454,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _ikBlendSpeed: 8
+  _deathAnimationToRagdollDelay: 1.2
 --- !u!1 &7509033482836743272
 GameObject:
   m_ObjectHideFlags: 0
@@ -1497,13 +1517,14 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 30, y: 30, z: 30}
+  m_LocalScale: {x: 15, y: 15, z: 15}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 2571863470204811149}
   m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
 --- !u!212 &6624490440725025811
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -1522,6 +1543,8 @@ SpriteRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -1543,9 +1566,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 7d09c4919284bad459b5cbda2cbadf85, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -1555,7 +1580,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!1001 &2231948143849948081
 PrefabInstance:

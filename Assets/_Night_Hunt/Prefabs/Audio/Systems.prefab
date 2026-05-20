@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 3912158534857550329}
   - component: {fileID: 4606310073588452211}
   - component: {fileID: 3249941797308978467}
+  - component: {fileID: 7512951757175382776}
   m_Layer: 0
   m_Name: Systems
   m_TagString: Untagged
@@ -44,8 +45,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8f252eead8158314db10cfeb87d8b070, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   mixer: {fileID: 24100000, guid: e970f5d4c3c710942a91e484c5742506, type: 2}
   library: {fileID: 11400000, guid: 41b2a5fcde155954d97d7257065b033b, type: 2}
   groupUI: {fileID: -6001753506044191441, guid: e970f5d4c3c710942a91e484c5742506,
@@ -74,9 +75,21 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: db7beff0b5682d743ac1bf709b100c71, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   multiKillWindow: 4
+--- !u!114 &7512951757175382776
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4785169997576978298}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f86a23795063ffc42a3ad0186b18ef71, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!1001 &5548706123675684251
 PrefabInstance:
   m_ObjectHideFlags: 0

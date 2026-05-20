@@ -8,6 +8,7 @@ namespace NightHunt.Data.DTOs
     {
         public string mode;             // 2v2, 3v3, 5v5
         public bool   allowFill = true; // whether server may fill empty slots with solo players
+        public string mapId;            // optional map id; null/empty = server default
         public bool   isPublic = true;
         public bool   isLocked = false;
         public string password;         // Optional password for room
@@ -25,6 +26,7 @@ namespace NightHunt.Data.DTOs
     {
         public string mode;
         public bool   allowFill = true;
+        public string mapId;            // optional map id; null/empty = any/default map
     }
 
     [Serializable]
@@ -45,7 +47,8 @@ namespace NightHunt.Data.DTOs
     {
         public string accessToken;
         public string sessionId;
-        public long? roomId;
+        // JsonUtility does not serialize Nullable<T>; use 0 to let the server infer the active room.
+        public long roomId;
     }
 
     [Serializable]
@@ -89,6 +92,7 @@ namespace NightHunt.Data.DTOs
     public class SwapRequestDTO
     {
         public long requestId;
+        public long roomId;
         public long requesterId;
         public string requesterUsername;
         public int requesterTeam;

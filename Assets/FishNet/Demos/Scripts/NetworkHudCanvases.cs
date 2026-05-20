@@ -148,6 +148,12 @@ namespace FishNet.Example
             }
             else
             {
+                if (_networkManager.ServerManager == null || _networkManager.ClientManager == null)
+                {
+                    Debug.LogWarning("NetworkManager is missing ServerManager or ClientManager, HUD will not function.");
+                    return;
+                }
+
                 UpdateColor(LocalConnectionState.Stopped, ref _serverIndicator);
                 UpdateColor(LocalConnectionState.Stopped, ref _clientIndicator);
                 _networkManager.ServerManager.OnServerConnectionState += ServerManager_OnServerConnectionState;
@@ -165,8 +171,10 @@ namespace FishNet.Example
             if (_networkManager == null)
                 return;
 
-            _networkManager.ServerManager.OnServerConnectionState -= ServerManager_OnServerConnectionState;
-            _networkManager.ClientManager.OnClientConnectionState -= ClientManager_OnClientConnectionState;
+            if (_networkManager.ServerManager != null)
+                _networkManager.ServerManager.OnServerConnectionState -= ServerManager_OnServerConnectionState;
+            if (_networkManager.ClientManager != null)
+                _networkManager.ClientManager.OnClientConnectionState -= ClientManager_OnClientConnectionState;
         }
 
         /// <summary>
@@ -203,7 +211,7 @@ namespace FishNet.Example
 
         public void OnClick_Server()
         {
-            if (_networkManager == null)
+            if (!TryResolveNetworkManager())
                 return;
 
             if (_serverState != LocalConnectionState.Stopped)
@@ -216,7 +224,7 @@ namespace FishNet.Example
 
         public void OnClick_Client()
         {
-            if (_networkManager == null)
+            if (!TryResolveNetworkManager())
                 return;
 
             if (_clientState != LocalConnectionState.Stopped)
@@ -225,6 +233,26 @@ namespace FishNet.Example
                 _networkManager.ClientManager.StartConnection();
 
             DeselectButtons();
+        }
+
+        private bool TryResolveNetworkManager()
+        {
+            if (_networkManager == null)
+                _networkManager = FindObjectOfType<NetworkManager>();
+
+            if (_networkManager == null)
+            {
+                Debug.LogWarning("NetworkManager not found, HUD cannot start or stop connections.");
+                return false;
+            }
+
+            if (_networkManager.ServerManager == null || _networkManager.ClientManager == null)
+            {
+                Debug.LogWarning("NetworkManager is missing ServerManager or ClientManager, HUD cannot start or stop connections.");
+                return false;
+            }
+
+            return true;
         }
 
         private void SetEventSystem()

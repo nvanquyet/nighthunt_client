@@ -31,7 +31,7 @@ namespace NightHunt.GameplaySystems.Core.Data
         [Tooltip("Weapon class for UI slot grouping and attachment compatibility.")]
         public WeaponClass WeaponClass = WeaponClass.Rifle;
 
-        [Tooltip("Optional Animator WeaponType override. 0 = use WeaponClass mapping. Animator contract: 1=Rifle, 2=Pistol/SMG, 3=Launcher, 4=Melee, 5=Shotgun, 6=Sniper.")]
+        [Tooltip("Optional Animator WeaponType override. 0 = use WeaponClass mapping. Toon Soldier contract: 1=Handgun, 2=Infantry, 3=Heavy, 4=Knife, 5=Machinegun, 6=RocketLauncher.")]
         [Range(0, 6)]
         public int AnimatorWeaponTypeOverride = 0;
 
@@ -79,6 +79,7 @@ namespace NightHunt.GameplaySystems.Core.Data
         Sniper  = 4,
         Melee   = 5,
         Launcher = 6,  // Rocket launchers, grenade launchers
+        MachineGun = 7,
     }
 
     /// <summary>How projectiles deliver damage. Set on the weapon model component, not here.</summary>

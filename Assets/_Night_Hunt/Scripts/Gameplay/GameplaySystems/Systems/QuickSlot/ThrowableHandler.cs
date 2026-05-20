@@ -3,6 +3,7 @@ using NightHunt.GameplaySystems.Core.Configs;
 using UnityEngine;
 using NightHunt.Utilities;
 using FishNet;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.ItemUse
 {
@@ -88,6 +89,12 @@ namespace NightHunt.GameplaySystems.ItemUse
                       $"  horizDist  = {horizDist:F2} m   vertDelta = {toTarget.y:F2} m\n" +
                       $"  launchAngle= {def.LaunchAngleDeg:F1}°   usedFallback={usedFallback}\n" +
                       $"  velocity   = {velocity:F2}  speed={velocity.magnitude:F2} m/s");
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Throwable,
+                "SpawnProjectile",
+                $"def={def.ItemID} type={def.ThrowableType} spawn={pos:F2} target={aimWorldTarget:F2} horizDist={horizDist:F2} velocity={velocity:F2} speed={velocity.magnitude:F2} usedFallback={usedFallback}",
+                this);
 
             var go = Instantiate(def.ProjectilePrefab, pos, Quaternion.LookRotation(velocity.normalized));
 

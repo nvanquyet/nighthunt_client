@@ -1,5 +1,7 @@
 using NightHunt.Core;
+using NightHunt.Audio;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace NightHunt.Config
 {
@@ -29,17 +31,92 @@ namespace NightHunt.Config
         {
             currentSettings = new SettingsData
             {
-                // Graphics (non-resolution)
-                QualityLevel = PlayerPrefs.GetInt("QualityLevel", QualitySettings.GetQualityLevel()),
-                VSync        = PlayerPrefs.GetInt("VSync",        1) == 1,
-                Fullscreen   = PlayerPrefs.GetInt("Fullscreen",   1) == 1,
+                // Graphics
+                QualityLevel = PlayerPrefs.GetInt("NH_QualityLevel", QualitySettings.GetQualityLevel()),
+                VSync        = PlayerPrefs.GetInt("NH_VSync",        1) == 1,
+                Fullscreen   = PlayerPrefs.GetInt("NH_Fullscreen",   1) == 1,
+                ResolutionIndex = PlayerPrefs.GetInt("NH_ResolutionIndex", -1),
+
+                // Extended Graphics
+                AntiAliasing         = PlayerPrefs.GetInt("NH_AntiAliasing", 0),
+                AnisotropicFiltering = PlayerPrefs.GetInt("NH_AnisotropicFiltering", 0),
+                ShadowQuality        = PlayerPrefs.GetInt("NH_ShadowQuality", 2),
+                TextureQuality       = PlayerPrefs.GetInt("NH_TextureQuality", 0),
+                DrawDistance         = PlayerPrefs.GetFloat("NH_DrawDistance", 500f),
+                Bloom                = PlayerPrefs.GetInt("NH_Bloom", 1) == 1,
+                MotionBlur           = PlayerPrefs.GetInt("NH_MotionBlur", 1) == 1,
+
+                // Extended Gameplay
+                Language             = PlayerPrefs.GetString("NH_Language", "English"),
+                EnableTutorials      = PlayerPrefs.GetInt("NH_EnableTutorials", 1) == 1,
+                EnableDevConsole     = PlayerPrefs.GetInt("NH_EnableDevConsole", 0) == 1,
+                QuickSwap            = PlayerPrefs.GetInt("NH_QuickSwap", 1) == 1,
+
+                // Audio
+                MasterVol = PlayerPrefs.GetFloat("NH_Audio_MasterVol", 1f),
+                MusicVol  = PlayerPrefs.GetFloat("NH_Audio_MusicVol",  0.8f),
+                SFXVol    = PlayerPrefs.GetFloat("NH_Audio_SFXVol",    1f),
+                UIVol     = PlayerPrefs.GetFloat("NH_Audio_UIVol",     1f),
 
                 // Controls
-                MouseSensitivity = PlayerPrefs.GetFloat("MouseSensitivity", 1f),
-                InvertY          = PlayerPrefs.GetInt("InvertY", 0) == 1
+                MouseSensitivity = PlayerPrefs.GetFloat("NH_MouseSensitivity", 1f),
+                InvertY          = PlayerPrefs.GetInt("NH_InvertY", 0) == 1,
+
+                // Gameplay
+                FOV              = PlayerPrefs.GetFloat("NH_FOV",          70f),
+                UIScale          = PlayerPrefs.GetFloat("NH_UIScale",      1f),
+                CrosshairType    = PlayerPrefs.GetInt("NH_CrosshairType",  0)
             };
 
+            // If first run (no saved UIScale), apply platform defaults
+            if (!PlayerPrefs.HasKey("NH_UIScale"))
+                ApplyPlatformDefaults();
+
+            LoadInputBindings();
             ApplySettings();
+        }
+
+        private void ApplyPlatformDefaults()
+        {
+            if (UnityEngine.Application.isMobilePlatform)
+            {
+                UIScale = 1.2f; // Larger UI for mobile
+                FOV = 60f;      // Narrower FOV often better for small screens
+            }
+            else
+            {
+                UIScale = 1.0f;
+                FOV = 70f;
+            }
+        }
+
+        public void LoadInputBindings()
+        {
+            string rebinds = PlayerPrefs.GetString("NH_InputRebinds", string.Empty);
+            if (string.IsNullOrEmpty(rebinds)) return;
+
+            var inputManager = NightHunt.Gameplay.Input.Core.InputLayerManager.Instance;
+            var asset = inputManager != null ? inputManager.Config?.InputActionAsset : null;
+            
+            if (asset != null)
+            {
+                asset.LoadBindingOverridesFromJson(rebinds);
+                Debug.Log("[GameSettings] Input bindings loaded.");
+            }
+        }
+
+        public void SaveInputBindings()
+        {
+            var inputManager = NightHunt.Gameplay.Input.Core.InputLayerManager.Instance;
+            var asset = inputManager != null ? inputManager.Config?.InputActionAsset : null;
+
+            if (asset != null)
+            {
+                string rebinds = asset.SaveBindingOverridesAsJson();
+                PlayerPrefs.SetString("NH_InputRebinds", rebinds);
+                PlayerPrefs.Save();
+                Debug.Log("[GameSettings] Input bindings saved.");
+            }
         }
 
         /// <summary>Save settings to PlayerPrefs.</summary>
@@ -47,24 +124,77 @@ namespace NightHunt.Config
         {
             if (currentSettings == null) return;
 
-            PlayerPrefs.SetInt("QualityLevel", currentSettings.QualityLevel);
-            PlayerPrefs.SetInt("VSync",        currentSettings.VSync      ? 1 : 0);
-            PlayerPrefs.SetInt("Fullscreen",   currentSettings.Fullscreen ? 1 : 0);
+            PlayerPrefs.SetInt("NH_QualityLevel", currentSettings.QualityLevel);
+            PlayerPrefs.SetInt("NH_VSync",        currentSettings.VSync      ? 1 : 0);
+            PlayerPrefs.SetInt("NH_Fullscreen",   currentSettings.Fullscreen ? 1 : 0);
+            PlayerPrefs.SetInt("NH_ResolutionIndex", currentSettings.ResolutionIndex);
 
-            PlayerPrefs.SetFloat("MouseSensitivity", currentSettings.MouseSensitivity);
-            PlayerPrefs.SetInt("InvertY",            currentSettings.InvertY ? 1 : 0);
+            PlayerPrefs.SetInt("NH_AntiAliasing",         currentSettings.AntiAliasing);
+            PlayerPrefs.SetInt("NH_AnisotropicFiltering", currentSettings.AnisotropicFiltering);
+            PlayerPrefs.SetInt("NH_ShadowQuality",        currentSettings.ShadowQuality);
+            PlayerPrefs.SetInt("NH_TextureQuality",       currentSettings.TextureQuality);
+            PlayerPrefs.SetFloat("NH_DrawDistance",       currentSettings.DrawDistance);
+            PlayerPrefs.SetInt("NH_Bloom",                currentSettings.Bloom ? 1 : 0);
+            PlayerPrefs.SetInt("NH_MotionBlur",           currentSettings.MotionBlur ? 1 : 0);
 
+            PlayerPrefs.SetString("NH_Language",          currentSettings.Language);
+            PlayerPrefs.SetInt("NH_EnableTutorials",      currentSettings.EnableTutorials ? 1 : 0);
+            PlayerPrefs.SetInt("NH_EnableDevConsole",     currentSettings.EnableDevConsole ? 1 : 0);
+            PlayerPrefs.SetInt("NH_QuickSwap",            currentSettings.QuickSwap ? 1 : 0);
+
+            PlayerPrefs.SetFloat("NH_Audio_MasterVol", currentSettings.MasterVol);
+            PlayerPrefs.SetFloat("NH_Audio_MusicVol",  currentSettings.MusicVol);
+            PlayerPrefs.SetFloat("NH_Audio_SFXVol",    currentSettings.SFXVol);
+            PlayerPrefs.SetFloat("NH_Audio_UIVol",     currentSettings.UIVol);
+
+            PlayerPrefs.SetFloat("NH_MouseSensitivity", currentSettings.MouseSensitivity);
+            PlayerPrefs.SetInt("NH_InvertY",            currentSettings.InvertY ? 1 : 0);
+
+            PlayerPrefs.SetFloat("NH_FOV",              currentSettings.FOV);
+            PlayerPrefs.SetFloat("NH_UIScale",          currentSettings.UIScale);
+            PlayerPrefs.SetInt("NH_CrosshairType",      currentSettings.CrosshairType);
+
+            SaveInputBindings();
             PlayerPrefs.Save();
+            OnSettingsChanged?.Invoke();
         }
 
-        /// <summary>Apply current settings (quality, vsync, fullscreen). Resolution managed by GraphicsSettingsPanel.</summary>
+        public static event System.Action OnSettingsChanged;
+
+        /// <summary>Apply current settings (quality, vsync, fullscreen). </summary>
         public void ApplySettings()
         {
             if (currentSettings == null) return;
 
+        #if !UNITY_SERVER
             QualitySettings.SetQualityLevel(currentSettings.QualityLevel);
             QualitySettings.vSyncCount = currentSettings.VSync ? 1 : 0;
-            Screen.fullScreen          = currentSettings.Fullscreen;
+            
+            QualitySettings.antiAliasing = currentSettings.AntiAliasing;
+            QualitySettings.anisotropicFiltering = (AnisotropicFiltering)currentSettings.AnisotropicFiltering;
+            QualitySettings.shadows = (ShadowQuality)currentSettings.ShadowQuality;
+            QualitySettings.globalTextureMipmapLimit = currentSettings.TextureQuality;
+
+            // Apply resolution if valid
+            if (currentSettings.ResolutionIndex >= 0 && currentSettings.ResolutionIndex < Screen.resolutions.Length)
+            {
+                var res = Screen.resolutions[currentSettings.ResolutionIndex];
+                Screen.SetResolution(res.width, res.height, currentSettings.Fullscreen);
+            }
+            else
+            {
+                Screen.fullScreen = currentSettings.Fullscreen;
+            }
+
+            // Apply Audio
+            if (AudioManager.HasInstance)
+            {
+                AudioManager.Instance.SetVolume("MasterVol", currentSettings.MasterVol);
+                AudioManager.Instance.SetVolume("MusicVol",  currentSettings.MusicVol);
+                AudioManager.Instance.SetVolume("SFXVol",    currentSettings.SFXVol);
+                AudioManager.Instance.SetVolume("UIVol",     currentSettings.UIVol);
+            }
+        #endif
         }
 
         // ── Properties ─────────────────────────────────────────────────────────
@@ -87,6 +217,12 @@ namespace NightHunt.Config
             set { if (currentSettings != null) currentSettings.Fullscreen = value; }
         }
 
+        public int ResolutionIndex
+        {
+            get => currentSettings?.ResolutionIndex ?? -1;
+            set { if (currentSettings != null) currentSettings.ResolutionIndex = value; }
+        }
+
         public float MouseSensitivity
         {
             get => currentSettings?.MouseSensitivity ?? 1f;
@@ -99,18 +235,106 @@ namespace NightHunt.Config
             set { if (currentSettings != null) currentSettings.InvertY = value; }
         }
 
+        public float FOV
+        {
+            get => currentSettings?.FOV ?? 70f;
+            set { if (currentSettings != null) currentSettings.FOV = value; }
+        }
+
+        public float UIScale
+        {
+            get => currentSettings?.UIScale ?? 1f;
+            set { if (currentSettings != null) currentSettings.UIScale = value; }
+        }
+
+        public int CrosshairType
+        {
+            get => currentSettings?.CrosshairType ?? 0;
+            set { if (currentSettings != null) currentSettings.CrosshairType = value; }
+        }
+
+        public int AntiAliasing
+        {
+            get => currentSettings?.AntiAliasing ?? 0;
+            set { if (currentSettings != null) currentSettings.AntiAliasing = value; }
+        }
+
+        public int AnisotropicFiltering
+        {
+            get => currentSettings?.AnisotropicFiltering ?? 0;
+            set { if (currentSettings != null) currentSettings.AnisotropicFiltering = value; }
+        }
+
+        public int ShadowQuality
+        {
+            get => currentSettings?.ShadowQuality ?? 2;
+            set { if (currentSettings != null) currentSettings.ShadowQuality = value; }
+        }
+
+        public int TextureQuality
+        {
+            get => currentSettings?.TextureQuality ?? 0;
+            set { if (currentSettings != null) currentSettings.TextureQuality = value; }
+        }
+
+        public float DrawDistance
+        {
+            get => currentSettings?.DrawDistance ?? 500f;
+            set { if (currentSettings != null) currentSettings.DrawDistance = value; }
+        }
+
+        public bool Bloom
+        {
+            get => currentSettings?.Bloom ?? true;
+            set { if (currentSettings != null) currentSettings.Bloom = value; }
+        }
+
+        public bool MotionBlur
+        {
+            get => currentSettings?.MotionBlur ?? true;
+            set { if (currentSettings != null) currentSettings.MotionBlur = value; }
+        }
+
+        public string Language
+        {
+            get => currentSettings?.Language ?? "English";
+            set { if (currentSettings != null) currentSettings.Language = value; }
+        }
+
+        public bool EnableTutorials
+        {
+            get => currentSettings?.EnableTutorials ?? true;
+            set { if (currentSettings != null) currentSettings.EnableTutorials = value; }
+        }
+
+        public bool EnableDevConsole
+        {
+            get => currentSettings?.EnableDevConsole ?? false;
+            set { if (currentSettings != null) currentSettings.EnableDevConsole = value; }
+        }
+
+        public bool QuickSwap
+        {
+            get => currentSettings?.QuickSwap ?? true;
+            set { if (currentSettings != null) currentSettings.QuickSwap = value; }
+        }
+
+        public void SetVolume(string key, float value)
+        {
+            if (currentSettings == null) return;
+            switch (key)
+            {
+                case "MasterVol": currentSettings.MasterVol = value; break;
+                case "MusicVol":  currentSettings.MusicVol = value; break;
+                case "SFXVol":    currentSettings.SFXVol = value; break;
+                case "UIVol":     currentSettings.UIVol = value; break;
+            }
+        }
+
         /// <summary>Reset to default settings and save.</summary>
         public void ResetToDefaults()
         {
-            currentSettings = new SettingsData
-            {
-                QualityLevel     = 2,
-                VSync            = true,
-                Fullscreen       = true,
-                MouseSensitivity = 1f,
-                InvertY          = false
-            };
-
+            currentSettings = new SettingsData();
             ApplySettings();
             SaveSettings();
         }
@@ -122,8 +346,34 @@ namespace NightHunt.Config
         public int   QualityLevel     = 2;
         public bool  VSync            = true;
         public bool  Fullscreen       = true;
+        public int   ResolutionIndex  = -1;
+
+        // Extended Graphics
+        public int   AntiAliasing         = 0; // 0, 2, 4, 8
+        public int   AnisotropicFiltering = 0; // 0=Disable, 1=Enable, 2=Force
+        public int   ShadowQuality        = 2; // 0=Disable, 1=Hard, 2=All
+        public int   TextureQuality       = 0; // 0=Full, 1=Half, 2=Quarter
+        public float DrawDistance         = 500f;
+        public bool  Bloom                = true;
+        public bool  MotionBlur           = true;
+
+        // Extended Gameplay
+        public string Language            = "English";
+        public bool   EnableTutorials     = true;
+        public bool   EnableDevConsole    = false;
+        public bool   QuickSwap           = true;
+
+        public float MasterVol = 1f;
+        public float MusicVol  = 0.8f;
+        public float SFXVol    = 1f;
+        public float UIVol     = 1f;
+
         public float MouseSensitivity = 1f;
         public bool  InvertY          = false;
+
+        public float FOV              = 70f;
+        public float UIScale          = 1f;
+        public int   CrosshairType    = 0;
     }
 }
 

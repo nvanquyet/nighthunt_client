@@ -27,9 +27,11 @@ namespace NightHunt.Gameplay.Zone
     {
         // ── IZoneAreaInfo ─────────────────────────────────────────────────────────
         public string  ZoneId   => "lockdown_zone";
-        public Vector3 Center   => _zoneCenter != null ? _zoneCenter.position : transform.position;
-        public float   Radius   => _syncRadius.Value > 0f ? _syncRadius.Value : _initialRadius;
-        public bool    IsActive => IsSpawned;
+        public Vector3 Center   => (_syncIsActive.Value || _syncRadius.Value > 0f)
+            ? _syncCenter.Value
+            : (_zoneCenter != null ? _zoneCenter.position : transform.position);
+        public float   Radius   => _syncRadius.Value > 0f ? _syncRadius.Value : (_syncIsActive.Value ? _initialRadius : 0f);
+        public bool    IsActive => IsSpawned && _syncIsActive.Value;
 
         public bool ContainsPoint(Vector3 worldPos)
             => Vector3.SqrMagnitude(worldPos - Center) <= Radius * Radius;
@@ -40,8 +42,17 @@ namespace NightHunt.Gameplay.Zone
         [SerializeField] private float _closeTime        = 120f;   // seconds
         [SerializeField] private float _damagePerSecond  = 10f;
         [SerializeField] private float _damageTickInterval = 1f;   // how often to apply damage
+        [Tooltip("If true, living players are scattered inside the lockdown zone when Phase 3 starts.")]
         [SerializeField] private bool _teleportPlayersToCenterOnStart = true;
-        [SerializeField] private float _teleportSpreadRadius = 4f;
+        [Tooltip("Max scatter radius for each player on lockdown start. Clamped to the active zone radius.")]
+        [SerializeField] private float _teleportSpreadRadius = 16f;
+
+        [Header("Random Center")]
+        [SerializeField] private bool _randomizeCenterOnLockdownStart = true;
+        [Tooltip("Preferred lockdown centers. Server picks one randomly when Phase 3 starts.")]
+        [SerializeField] private Transform[] _centerCandidates;
+        [Tooltip("Fallback random rectangle around the design-time center when no candidates are assigned.")]
+        [SerializeField] private Vector2 _fallbackRandomCenterHalfExtents = new Vector2(60f, 60f);
 
         [Header("Zone Center")]
         [Tooltip("World-space center of the lockdown zone. Defaults to this object's position.")]
@@ -53,6 +64,8 @@ namespace NightHunt.Gameplay.Zone
         // ── Network Sync ────────────────────────────────────────────────────────
         private readonly SyncVar<float> _syncRadius   = new SyncVar<float>();
         private readonly SyncVar<float> _syncProgress = new SyncVar<float>();
+        private readonly SyncVar<Vector3> _syncCenter = new SyncVar<Vector3>();
+        private readonly SyncVar<bool> _syncIsActive = new SyncVar<bool>();
 
         // ── Server runtime ───────────────────────────────────────────────────────
         private float _damageTickTimer;
@@ -78,14 +91,30 @@ namespace NightHunt.Gameplay.Zone
         {
             base.OnStartNetwork();
             _syncRadius.OnChange += OnRadiusChanged;
-            // Initialise visual immediately for all clients
-            UpdateVisual(_initialRadius);
+            _syncCenter.OnChange += OnCenterChanged;
+            _syncIsActive.OnChange += OnActiveChanged;
+
+            ApplyCenter(Center);
+            UpdateVisual(Radius);
+            SetZonePresentation(_syncIsActive.Value);
         }
 
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
             _syncRadius.OnChange -= OnRadiusChanged;
+            _syncCenter.OnChange -= OnCenterChanged;
+            _syncIsActive.OnChange -= OnActiveChanged;
+        }
+
+        public override void OnStartServer()
+        {
+            base.OnStartServer();
+            _syncCenter.Value = ResolveDesignCenter();
+            _syncRadius.Value = 0f;
+            _syncProgress.Value = 0f;
+            _syncIsActive.Value = false;
+            SetZonePresentation(false);
         }
 
         private void Update()
@@ -94,6 +123,8 @@ namespace NightHunt.Gameplay.Zone
 
             // Only active during Phase 3
             if (_phaseManager == null || _phaseManager.CurrentPhase != MatchPhaseState.Lockdown)
+                return;
+            if (!_syncIsActive.Value)
                 return;
 
             UpdateZoneClosing();
@@ -106,11 +137,13 @@ namespace NightHunt.Gameplay.Zone
             if (_lockdownStarted) return;
             _lockdownStarted = true;
             _damageTickTimer = 0f;
+            _syncCenter.Value = ResolveLockdownCenter();
             _syncRadius.Value = _initialRadius;
             _syncProgress.Value = 0f;
+            _syncIsActive.Value = true;
 
             if (_teleportPlayersToCenterOnStart)
-                TeleportAlivePlayersToCenter();
+                ScatterAlivePlayersInsideZone();
         }
 
         // ── Server logic ─────────────────────────────────────────────────────────
@@ -134,9 +167,9 @@ namespace NightHunt.Gameplay.Zone
             _damageTickTimer = 0f;
 
             float radius = _syncRadius.Value;
-            Vector3 center = _zoneCenter.position;
+            Vector3 center = Center;
 
-            var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
+            var players = GetAuthoritativePlayers();
             if (players == null) return;
 
             foreach (var np in players)
@@ -168,9 +201,9 @@ namespace NightHunt.Gameplay.Zone
         }
 
         [Server]
-        private void TeleportAlivePlayersToCenter()
+        private void ScatterAlivePlayersInsideZone()
         {
-            var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
+            var players = GetAuthoritativePlayers();
             if (players == null) return;
 
             int index = 0;
@@ -178,9 +211,8 @@ namespace NightHunt.Gameplay.Zone
             {
                 if (np == null || !np.IsAlive) continue;
 
-                Vector2 offset2 = index == 0
-                    ? Vector2.zero
-                    : UnityEngine.Random.insideUnitCircle.normalized * Mathf.Min(_teleportSpreadRadius, _finalRadius * 0.5f);
+                float safeRadius = Mathf.Max(0f, Mathf.Min(_teleportSpreadRadius, Radius * 0.75f));
+                Vector2 offset2 = UnityEngine.Random.insideUnitCircle * safeRadius;
                 Vector3 target = Center + new Vector3(offset2.x, 0f, offset2.y);
 
                 var movement = ComponentResolver.Find<IMovementController>(np)
@@ -198,9 +230,29 @@ namespace NightHunt.Gameplay.Zone
 
         // ── Client visual ─────────────────────────────────────────────────────────
 
+        private static NetworkPlayer[] GetAuthoritativePlayers()
+        {
+            var serverPlayers = RegistryService.Instance?.GetAllPlayers();
+            if (serverPlayers != null && serverPlayers.Length > 0)
+                return serverPlayers;
+
+            return PlayerPublicRegistry.Instance?.GetAllPlayers();
+        }
+
         private void OnRadiusChanged(float prev, float next, bool asServer)
         {
             UpdateVisual(next);
+        }
+
+        private void OnCenterChanged(Vector3 prev, Vector3 next, bool asServer)
+        {
+            ApplyCenter(next);
+        }
+
+        private void OnActiveChanged(bool prev, bool next, bool asServer)
+        {
+            SetZonePresentation(next);
+            UpdateVisual(next ? Radius : 0f);
         }
 
         private void UpdateVisual(float radius)
@@ -208,6 +260,54 @@ namespace NightHunt.Gameplay.Zone
             // Scale a child sphere/cylinder mesh to represent the zone boundary.
             // If no visual child is set, scale this object's transform.
             transform.localScale = Vector3.one * radius * 2f;
+        }
+
+        private Vector3 ResolveDesignCenter()
+        {
+            return _zoneCenter != null ? _zoneCenter.position : transform.position;
+        }
+
+        private Vector3 ResolveLockdownCenter()
+        {
+            if (!_randomizeCenterOnLockdownStart)
+                return ResolveDesignCenter();
+
+            if (_centerCandidates != null && _centerCandidates.Length > 0)
+            {
+                for (int attempts = 0; attempts < _centerCandidates.Length; attempts++)
+                {
+                    var candidate = _centerCandidates[UnityEngine.Random.Range(0, _centerCandidates.Length)];
+                    if (candidate != null)
+                        return candidate.position;
+                }
+            }
+
+            Vector3 center = ResolveDesignCenter();
+            Vector2 offset = new Vector2(
+                UnityEngine.Random.Range(-_fallbackRandomCenterHalfExtents.x, _fallbackRandomCenterHalfExtents.x),
+                UnityEngine.Random.Range(-_fallbackRandomCenterHalfExtents.y, _fallbackRandomCenterHalfExtents.y));
+            return center + new Vector3(offset.x, 0f, offset.y);
+        }
+
+        private void ApplyCenter(Vector3 center)
+        {
+            if (_zoneCenter != null)
+                _zoneCenter.position = center;
+            else
+                transform.position = center;
+        }
+
+        private void SetZonePresentation(bool active)
+        {
+            var renderers = GetComponentsInChildren<Renderer>(includeInactive: true);
+            for (int i = 0; i < renderers.Length; i++)
+                if (renderers[i] != null)
+                    renderers[i].enabled = active;
+
+            var colliders = GetComponentsInChildren<Collider>(includeInactive: true);
+            for (int i = 0; i < colliders.Length; i++)
+                if (colliders[i] != null)
+                    colliders[i].enabled = active;
         }
 
         // ── Editor gizmos ─────────────────────────────────────────────────────────

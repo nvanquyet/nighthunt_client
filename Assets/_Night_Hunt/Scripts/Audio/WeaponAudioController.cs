@@ -26,11 +26,9 @@ namespace NightHunt.Audio
     ///   The AudioManager pool handles position update per call — no persistent AudioSource needed.
     ///
     /// REMOTE CLIENT SUPPORT:
-    ///   IWeaponSystem events fire on the LOCAL owner only for fire/reload.
-    ///   Remote-client gunshot sounds: WeaponSystem.ShowProjectileOnClientsRpc already
-    ///   handles remote visual — for remote gunshot AUDIO use a separate
-    ///   [ObserversRpc] "RpcPlayGunshot(pos, weaponClass)" added to WeaponSystem (Phase 2).
-    ///   For Phase 1 this controller covers owner-side audio perfectly.
+    ///   IWeaponSystem events (OnShotFired, OnReloadStateChanged) are broadcast via RPC
+    ///   and invoked on ALL clients. This controller listens to those events and uses
+    ///   the WeaponAudioProfile to play the correct 3D sound on the network replica.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class WeaponAudioController : MonoBehaviour
@@ -278,20 +276,23 @@ namespace NightHunt.Audio
             }
         }
 
-        // ── Model binding (adds WeaponAnimEventRelay to model root) ───────────────────
+        // ── Model binding (adds WeaponAnimEventRelay to Animator GO) ─────────────────
 
         private void BindModel(GameObject modelRoot)
         {
             // WeaponAudioController lives on the player prefab root.
-            // Reload animation events fire from the Animator on modelRoot (child GO).
-            // Unity SendMessage only targets the GO with the Animator — NOT parents.
-            // Solution: add a relay component to modelRoot that forwards the anim events up.
-            if (modelRoot.GetComponent<WeaponAnimEventRelay>() == null)
+            // Unity SendMessage only targets the GO with the Animator - not parents.
+            // Add the relay to the Animator GO so reload clip events have a receiver.
+            var animator = modelRoot.GetComponentInChildren<Animator>(true);
+            var relayTarget = animator != null ? animator.gameObject : modelRoot;
+            var relay = relayTarget.GetComponent<WeaponAnimEventRelay>();
+            if (relay == null)
             {
-                var relay = modelRoot.AddComponent<WeaponAnimEventRelay>();
-                relay.audioController = this;
-                Log($"WeaponAnimEventRelay added to '{modelRoot.name}'");
+                relay = relayTarget.AddComponent<WeaponAnimEventRelay>();
+                Log($"WeaponAnimEventRelay added to '{relayTarget.name}'");
             }
+
+            relay.audioController = this;
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────
@@ -307,6 +308,15 @@ namespace NightHunt.Audio
                 {
                     if (entry != null && entry.weaponClass == wc && entry.profile != null)
                         return entry.profile;
+                }
+
+                if (wc == WeaponClass.MachineGun)
+                {
+                    foreach (var entry in profiles)
+                    {
+                        if (entry != null && entry.weaponClass == WeaponClass.Rifle && entry.profile != null)
+                            return entry.profile;
+                    }
                 }
             }
             return defaultProfile;

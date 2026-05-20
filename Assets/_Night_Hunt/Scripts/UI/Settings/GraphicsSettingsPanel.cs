@@ -1,68 +1,49 @@
 using System.Collections.Generic;
+using NightHunt.Config;
+using Michsky.UI.Shift;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 using TMPro;
 
 namespace NightHunt.UI.Settings
 {
-    /// <summary>
-    /// GraphicsSettingsPanel — mirrors AudioSettingsPanel pattern exactly.
-    ///
-    /// SETUP in Canvas:
-    ///   1. Create "GraphicsSettings" panel with the UI elements below.
-    ///   2. Assign each field in the Inspector.
-    ///   3. Wire the "Apply" button onClick → GraphicsSettingsPanel.Apply()
-    ///   4. Wire the "Reset" button onClick → GraphicsSettingsPanel.ResetToDefaults()
-    ///
-    /// BEHAVIOUR:
-    ///   • Quality / VSync / Fullscreen take effect LIVE (preview as you change).
-    ///   • Resolution only applies when the player clicks "Apply" to avoid
-    ///     jarring resolution flips while scrolling the dropdown.
-    ///   • All values persist to PlayerPrefs (same keys as GameSettings.cs so
-    ///     they remain compatible).
-    ///
-    /// PLAYER PREFS KEYS:
-    ///   "QualityLevel", "VSync", "Fullscreen", "ResolutionIndex"
-    /// </summary>
     [DisallowMultipleComponent]
     public sealed class GraphicsSettingsPanel : MonoBehaviour
     {
-        // ── Inspector ──────────────────────────────────────────────────────────
-
         [Header("Quality Preset")]
-        [Tooltip("Dropdown populated at runtime with Unity Quality preset names (Low/Medium/High/Ultra).")]
         [SerializeField] private TMP_Dropdown qualityDropdown;
 
         [Header("Resolution")]
-        [Tooltip("Dropdown populated at runtime with available Screen.resolutions.")]
         [SerializeField] private TMP_Dropdown resolutionDropdown;
 
         [Header("Toggles")]
-        [Tooltip("VSync toggle. Changes take effect immediately (preview).")]
         [SerializeField] private Toggle vsyncToggle;
-
-        [Tooltip("Fullscreen toggle. Changes take effect immediately.")]
+        [SerializeField] private SwitchManager vsyncSwitch;
         [SerializeField] private Toggle fullscreenToggle;
+        [SerializeField] private SwitchManager fullscreenSwitch;
+        [SerializeField] private SwitchManager bloomSwitch;
+        [SerializeField] private SwitchManager motionBlurSwitch;
+
+        [Header("Selectors")]
+        [SerializeField] private HorizontalSelector antiAliasingSelector;
+        [SerializeField] private HorizontalSelector anisotropicSelector;
+        [SerializeField] private HorizontalSelector shadowQualitySelector;
+        [SerializeField] private HorizontalSelector textureQualitySelector;
+
+        [Header("Sliders")]
+        [SerializeField] private Slider fovSlider;
+        [SerializeField] private TextMeshProUGUI fovValueLabel;
+        [SerializeField] private Slider drawDistanceSlider;
+        [SerializeField] private TextMeshProUGUI drawDistanceValueLabel;
 
         [Header("Apply / Reset Buttons")]
-        [Tooltip("Apply button — commits pending resolution change and saves all settings.")]
         [SerializeField] private Button applyButton;
-
-        [Tooltip("Optional label shown when there are unapplied resolution changes.")]
         [SerializeField] private GameObject pendingLabel;
 
-        // ── Runtime ────────────────────────────────────────────────────────────
-
         private Resolution[] _availableResolutions;
-
-        // Pending resolution index — set when user changes the dropdown,
-        // committed to screen only when Apply() is called.
         private int _pendingResolutionIndex = -1;
-
-        // Applied / saved resolution index
         private int _appliedResolutionIndex;
-
-        // ── Lifecycle ──────────────────────────────────────────────────────────
 
         private void Start()
         {
@@ -73,189 +54,151 @@ namespace NightHunt.UI.Settings
             SetPendingLabel(false);
         }
 
-        private void OnDestroy()
+        public void RefreshFromPrefs()
         {
-            if (qualityDropdown    != null) qualityDropdown.onValueChanged.RemoveAllListeners();
-            if (resolutionDropdown != null) resolutionDropdown.onValueChanged.RemoveAllListeners();
-            if (vsyncToggle        != null) vsyncToggle.onValueChanged.RemoveAllListeners();
-            if (fullscreenToggle   != null) fullscreenToggle.onValueChanged.RemoveAllListeners();
-            if (applyButton        != null) applyButton.onClick.RemoveAllListeners();
+            BuildQualityDropdown();
+            BuildResolutionDropdown();
+            LoadAndApply();
+            SetPendingLabel(false);
         }
 
-        // ── Build Dropdowns ────────────────────────────────────────────────────
+        private void OnDestroy()
+        {
+            if (qualityDropdown != null) qualityDropdown.onValueChanged.RemoveListener(HandleQualityChanged);
+            if (resolutionDropdown != null) resolutionDropdown.onValueChanged.RemoveListener(HandleResolutionDropdownChanged);
+            if (vsyncToggle != null) vsyncToggle.onValueChanged.RemoveListener(HandleVSyncChanged);
+            if (fullscreenToggle != null) fullscreenToggle.onValueChanged.RemoveListener(HandleFullscreenChanged);
+            if (fovSlider != null) fovSlider.onValueChanged.RemoveListener(HandleFOVChanged);
+            if (drawDistanceSlider != null) drawDistanceSlider.onValueChanged.RemoveListener(HandleDrawDistanceChanged);
+            if (applyButton != null) applyButton.onClick.RemoveListener(Apply);
+        }
 
         private void BuildQualityDropdown()
         {
             if (qualityDropdown == null) return;
-
             qualityDropdown.ClearOptions();
-            var names = QualitySettings.names; // e.g. ["Low","Medium","High","Ultra"]
             var options = new List<TMP_Dropdown.OptionData>();
-            foreach (var n in names)
-                options.Add(new TMP_Dropdown.OptionData(n));
+            foreach (var n in QualitySettings.names) options.Add(new TMP_Dropdown.OptionData(n));
             qualityDropdown.AddOptions(options);
         }
 
         private void BuildResolutionDropdown()
         {
             if (resolutionDropdown == null) return;
-
             _availableResolutions = Screen.resolutions;
             resolutionDropdown.ClearOptions();
-
             var options = new List<TMP_Dropdown.OptionData>();
             foreach (var r in _availableResolutions)
                 options.Add(new TMP_Dropdown.OptionData($"{r.width} × {r.height} @ {r.refreshRateRatio.value:F0}Hz"));
             resolutionDropdown.AddOptions(options);
         }
 
-        // ── Load & Apply ───────────────────────────────────────────────────────
-
         private void LoadAndApply()
         {
-            // Quality
-            int quality = PlayerPrefs.GetInt("QualityLevel", QualitySettings.GetQualityLevel());
-            quality = Mathf.Clamp(quality, 0, QualitySettings.names.Length - 1);
-            if (qualityDropdown != null) qualityDropdown.SetValueWithoutNotify(quality);
-            QualitySettings.SetQualityLevel(quality, true);
+            var settings = GameSettings.Instance;
+            if (settings == null) return;
 
-            // VSync
-            bool vsync = PlayerPrefs.GetInt("VSync", 1) == 1;
-            if (vsyncToggle != null) vsyncToggle.SetIsOnWithoutNotify(vsync);
-            QualitySettings.vSyncCount = vsync ? 1 : 0;
+            if (qualityDropdown != null) qualityDropdown.SetValueWithoutNotify(settings.QualityLevel);
+            if (vsyncToggle != null) vsyncToggle.SetIsOnWithoutNotify(settings.VSync);
+            ShiftUIBridge.SetSwitchSilently(vsyncSwitch, settings.VSync);
+            if (fullscreenToggle != null) fullscreenToggle.SetIsOnWithoutNotify(settings.Fullscreen);
+            ShiftUIBridge.SetSwitchSilently(fullscreenSwitch, settings.Fullscreen);
 
-            // Fullscreen
-            bool fullscreen = PlayerPrefs.GetInt("Fullscreen", 1) == 1;
-            if (fullscreenToggle != null) fullscreenToggle.SetIsOnWithoutNotify(fullscreen);
-            Screen.fullScreen = fullscreen;
+            SetSelectorIndex(antiAliasingSelector, settings.AntiAliasing == 0 ? 0 : settings.AntiAliasing == 2 ? 1 : settings.AntiAliasing == 4 ? 2 : 3);
+            SetSelectorIndex(anisotropicSelector, settings.AnisotropicFiltering);
+            SetSelectorIndex(shadowQualitySelector, settings.ShadowQuality);
+            SetSelectorIndex(textureQualitySelector, settings.TextureQuality);
 
-            // Resolution — find best match for saved index in current list
-            int savedResIdx = PlayerPrefs.GetInt("ResolutionIndex", FindCurrentResolutionIndex());
-            savedResIdx = (_availableResolutions != null && savedResIdx < _availableResolutions.Length)
-                ? savedResIdx : FindCurrentResolutionIndex();
-            _appliedResolutionIndex  = savedResIdx;
-            _pendingResolutionIndex  = savedResIdx;
+            ShiftUIBridge.SetSwitchSilently(bloomSwitch, settings.Bloom);
+            ShiftUIBridge.SetSwitchSilently(motionBlurSwitch, settings.MotionBlur);
+
+            int savedResIdx = settings.ResolutionIndex;
+            if (savedResIdx == -1) savedResIdx = FindCurrentResolutionIndex();
+            _appliedResolutionIndex = _pendingResolutionIndex = savedResIdx;
             if (resolutionDropdown != null) resolutionDropdown.SetValueWithoutNotify(savedResIdx);
 
-            // Apply saved resolution immediately on load
-            ApplyResolution(savedResIdx, fullscreen);
+            if (fovSlider != null) fovSlider.SetValueWithoutNotify(settings.FOV);
+            UpdateFOVLabel(settings.FOV);
+            if (drawDistanceSlider != null) drawDistanceSlider.SetValueWithoutNotify(settings.DrawDistance);
+            UpdateDrawDistanceLabel(settings.DrawDistance);
+
+            settings.ApplySettings();
         }
 
-        // ── Wire UI Callbacks ──────────────────────────────────────────────────
+        private void SetSelectorIndex(HorizontalSelector selector, int index)
+        {
+            if (selector != null) { selector.index = index; selector.UpdateUI(); }
+        }
 
         private void WireCallbacks()
         {
-            if (qualityDropdown != null)
-                qualityDropdown.onValueChanged.AddListener(HandleQualityChanged);
+            if (qualityDropdown != null) qualityDropdown.onValueChanged.AddListener(HandleQualityChanged);
+            if (resolutionDropdown != null) resolutionDropdown.onValueChanged.AddListener(HandleResolutionDropdownChanged);
+            if (vsyncToggle != null) vsyncToggle.onValueChanged.AddListener(HandleVSyncChanged);
+            if (fullscreenToggle != null) fullscreenToggle.onValueChanged.AddListener(HandleFullscreenChanged);
+            if (fovSlider != null) fovSlider.onValueChanged.AddListener(HandleFOVChanged);
+            if (drawDistanceSlider != null) drawDistanceSlider.onValueChanged.AddListener(HandleDrawDistanceChanged);
 
-            if (resolutionDropdown != null)
-                resolutionDropdown.onValueChanged.AddListener(HandleResolutionDropdownChanged);
+            if (vsyncSwitch != null) { vsyncSwitch.OnEvents.AddListener(() => HandleVSyncChanged(true)); vsyncSwitch.OffEvents.AddListener(() => HandleVSyncChanged(false)); }
+            if (fullscreenSwitch != null) { fullscreenSwitch.OnEvents.AddListener(() => HandleFullscreenChanged(true)); fullscreenSwitch.OffEvents.AddListener(() => HandleFullscreenChanged(false)); }
+            if (bloomSwitch != null) { bloomSwitch.OnEvents.AddListener(() => HandleBloomChanged(true)); bloomSwitch.OffEvents.AddListener(() => HandleBloomChanged(false)); }
+            if (motionBlurSwitch != null) { motionBlurSwitch.OnEvents.AddListener(() => HandleMotionBlurChanged(true)); motionBlurSwitch.OffEvents.AddListener(() => HandleMotionBlurChanged(false)); }
 
-            if (vsyncToggle != null)
-                vsyncToggle.onValueChanged.AddListener(HandleVSyncChanged);
+            if (antiAliasingSelector != null) antiAliasingSelector.onValueChanged.AddListener(HandleAntiAliasingChanged);
+            if (anisotropicSelector != null) anisotropicSelector.onValueChanged.AddListener(HandleAnisotropicChanged);
+            if (shadowQualitySelector != null) shadowQualitySelector.onValueChanged.AddListener(HandleShadowQualityChanged);
+            if (textureQualitySelector != null) textureQualitySelector.onValueChanged.AddListener(HandleTextureQualityChanged);
 
-            if (fullscreenToggle != null)
-                fullscreenToggle.onValueChanged.AddListener(HandleFullscreenChanged);
-
-            if (applyButton != null)
-                applyButton.onClick.AddListener(Apply);
+            if (applyButton != null) applyButton.onClick.AddListener(Apply);
         }
 
-        // ── Handlers ──────────────────────────────────────────────────────────
+        private void HandleQualityChanged(int index) { if (GameSettings.Instance != null) { GameSettings.Instance.QualityLevel = index; GameSettings.Instance.ApplySettings(); GameSettings.Instance.SaveSettings(); } }
+        private void HandleResolutionDropdownChanged(int index) { _pendingResolutionIndex = index; SetPendingLabel(_pendingResolutionIndex != _appliedResolutionIndex); }
+        private void HandleVSyncChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.VSync = on; GameSettings.Instance.ApplySettings(); GameSettings.Instance.SaveSettings(); } if (vsyncToggle != null && vsyncToggle.isOn != on) vsyncToggle.SetIsOnWithoutNotify(on); ShiftUIBridge.SetSwitchSilently(vsyncSwitch, on); }
+        private void HandleFullscreenChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.Fullscreen = on; GameSettings.Instance.ApplySettings(); GameSettings.Instance.SaveSettings(); } if (fullscreenToggle != null && fullscreenToggle.isOn != on) fullscreenToggle.SetIsOnWithoutNotify(on); ShiftUIBridge.SetSwitchSilently(fullscreenSwitch, on); }
+        private void HandleFOVChanged(float value) { UpdateFOVLabel(value); if (GameSettings.Instance != null) { GameSettings.Instance.FOV = value; GameSettings.Instance.SaveSettings(); } }
+        private void UpdateFOVLabel(float value) { if (fovValueLabel != null) fovValueLabel.text = value.ToString("F0"); }
+        private void HandleDrawDistanceChanged(float value) { UpdateDrawDistanceLabel(value); if (GameSettings.Instance != null) { GameSettings.Instance.DrawDistance = value; GameSettings.Instance.SaveSettings(); } }
+        private void UpdateDrawDistanceLabel(float value) { if (drawDistanceValueLabel != null) drawDistanceValueLabel.text = value.ToString("F0"); }
+        private void HandleBloomChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.Bloom = on; GameSettings.Instance.SaveSettings(); } }
+        private void HandleMotionBlurChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.MotionBlur = on; GameSettings.Instance.SaveSettings(); } }
+        private void HandleAntiAliasingChanged(int index) { int val = index == 0 ? 0 : index == 1 ? 2 : index == 2 ? 4 : 8; if (GameSettings.Instance != null) { GameSettings.Instance.AntiAliasing = val; GameSettings.Instance.ApplySettings(); GameSettings.Instance.SaveSettings(); } }
+        private void HandleAnisotropicChanged(int index) { if (GameSettings.Instance != null) { GameSettings.Instance.AnisotropicFiltering = index; GameSettings.Instance.ApplySettings(); GameSettings.Instance.SaveSettings(); } }
+        private void HandleShadowQualityChanged(int index) { if (GameSettings.Instance != null) { GameSettings.Instance.ShadowQuality = index; GameSettings.Instance.ApplySettings(); GameSettings.Instance.SaveSettings(); } }
+        private void HandleTextureQualityChanged(int index) { if (GameSettings.Instance != null) { GameSettings.Instance.TextureQuality = index; GameSettings.Instance.ApplySettings(); GameSettings.Instance.SaveSettings(); } }
 
-        private void HandleQualityChanged(int index)
+        public void Apply() { if (GameSettings.Instance != null && _pendingResolutionIndex != _appliedResolutionIndex) { GameSettings.Instance.ResolutionIndex = _pendingResolutionIndex; GameSettings.Instance.ApplySettings(); GameSettings.Instance.SaveSettings(); _appliedResolutionIndex = _pendingResolutionIndex; SetPendingLabel(false); } }
+        public void ResetToDefaults() { if (GameSettings.Instance != null) { GameSettings.Instance.ResetToDefaults(); LoadAndApply(); } }
+
+        private void OnValidate()
         {
-            QualitySettings.SetQualityLevel(index, true);  // live preview
-            PlayerPrefs.SetInt("QualityLevel", index);
-        }
-
-        private void HandleResolutionDropdownChanged(int index)
-        {
-            // Mark as pending — don't apply yet; user must click Apply.
-            _pendingResolutionIndex = index;
-            bool hasPending = (_pendingResolutionIndex != _appliedResolutionIndex);
-            SetPendingLabel(hasPending);
-        }
-
-        private void HandleVSyncChanged(bool on)
-        {
-            QualitySettings.vSyncCount = on ? 1 : 0;       // live
-            PlayerPrefs.SetInt("VSync", on ? 1 : 0);
-        }
-
-        private void HandleFullscreenChanged(bool on)
-        {
-            Screen.fullScreen = on;                          // live
-            PlayerPrefs.SetInt("Fullscreen", on ? 1 : 0);
-        }
-
-        // ── Public API ─────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Commit pending resolution change and save all settings to PlayerPrefs.
-        /// Wire this to the "Apply" button onClick.
-        /// </summary>
-        public void Apply()
-        {
-            bool fullscreen = fullscreenToggle != null && fullscreenToggle.isOn;
-
-            if (_pendingResolutionIndex != _appliedResolutionIndex)
-            {
-                ApplyResolution(_pendingResolutionIndex, fullscreen);
-                _appliedResolutionIndex = _pendingResolutionIndex;
-                PlayerPrefs.SetInt("ResolutionIndex", _appliedResolutionIndex);
-                SetPendingLabel(false);
-            }
-
-            PlayerPrefs.Save();
-        }
-
-        /// <summary>
-        /// Reset all graphics settings to defaults and save.
-        /// Wire to "Reset to Defaults" button onClick.
-        /// </summary>
-        public void ResetToDefaults()
-        {
-            int defaultQuality = Mathf.Clamp(2, 0, QualitySettings.names.Length - 1);
-            int defaultResIdx  = FindCurrentResolutionIndex();
-
-            if (qualityDropdown    != null) qualityDropdown.value    = defaultQuality;
-            if (vsyncToggle        != null) vsyncToggle.isOn         = true;
-            if (fullscreenToggle   != null) fullscreenToggle.isOn    = true;
-            if (resolutionDropdown != null) resolutionDropdown.value = defaultResIdx;
-
-            Apply(); // commits resolution + saves
-        }
-
-        // ── Helpers ────────────────────────────────────────────────────────────
-
-        private void ApplyResolution(int index, bool fullscreen)
-        {
-            if (_availableResolutions == null || index < 0 || index >= _availableResolutions.Length)
-                return;
-
-            var r = _availableResolutions[index];
-            Screen.SetResolution(r.width, r.height, fullscreen ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed);
+            var content = transform.Find("Content/List/List Content");
+            if (content == null) return;
+            if (qualityDropdown == null) qualityDropdown = content.Find("Quality Preset")?.GetComponentInChildren<TMP_Dropdown>();
+            if (resolutionDropdown == null) resolutionDropdown = content.Find("Resolution")?.GetComponentInChildren<TMP_Dropdown>();
+            if (vsyncSwitch == null) vsyncSwitch = content.Find("V-Sync")?.GetComponentInChildren<SwitchManager>();
+            if (fullscreenSwitch == null) fullscreenSwitch = content.Find("Window mode")?.GetComponentInChildren<SwitchManager>();
+            if (bloomSwitch == null) bloomSwitch = content.Find("Bloom")?.GetComponentInChildren<SwitchManager>();
+            if (motionBlurSwitch == null) motionBlurSwitch = content.Find("Motion blur")?.GetComponentInChildren<SwitchManager>();
+            if (antiAliasingSelector == null) antiAliasingSelector = content.Find("Anti-Aliasing")?.GetComponentInChildren<HorizontalSelector>();
+            if (anisotropicSelector == null) anisotropicSelector = content.Find("Anisotropic filtering")?.GetComponentInChildren<HorizontalSelector>();
+            if (shadowQualitySelector == null) shadowQualitySelector = content.Find("Shadows")?.GetComponentInChildren<HorizontalSelector>();
+            if (textureQualitySelector == null) textureQualitySelector = content.Find("Textures")?.GetComponentInChildren<HorizontalSelector>();
+            if (fovSlider == null) fovSlider = content.Find("Field of view")?.GetComponentInChildren<Slider>();
+            if (fovValueLabel == null && fovSlider != null) fovValueLabel = fovSlider.transform.Find("Value")?.GetComponent<TextMeshProUGUI>();
+            if (drawDistanceSlider == null) drawDistanceSlider = content.Find("Draw distance")?.GetComponentInChildren<Slider>();
+            if (drawDistanceValueLabel == null && drawDistanceSlider != null) drawDistanceValueLabel = drawDistanceSlider.transform.Find("Value")?.GetComponent<TextMeshProUGUI>();
+            if (applyButton == null) applyButton = transform.Find("Content/Apply Button")?.GetComponent<Button>();
         }
 
         private int FindCurrentResolutionIndex()
         {
             if (_availableResolutions == null) return 0;
-
-            int w = Screen.width;
-            int h = Screen.height;
-            for (int i = 0; i < _availableResolutions.Length; i++)
-            {
-                if (_availableResolutions[i].width == w && _availableResolutions[i].height == h)
-                    return i;
-            }
-            return _availableResolutions.Length - 1; // default: highest
+            int w = Screen.width; int h = Screen.height;
+            for (int i = 0; i < _availableResolutions.Length; i++) { if (_availableResolutions[i].width == w && _availableResolutions[i].height == h) return i; }
+            return _availableResolutions.Length - 1;
         }
 
-        private void SetPendingLabel(bool active)
-        {
-            if (pendingLabel != null)
-                pendingLabel.SetActive(active);
-        }
+        private void SetPendingLabel(bool active) { if (pendingLabel != null) pendingLabel.SetActive(active); }
     }
 }

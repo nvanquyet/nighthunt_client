@@ -103,13 +103,13 @@ namespace NightHunt.UI
         {
             // Populate match info
             if (gameModeText != null) gameModeText.text = FormatMode(gameMode);
-            if (mapNameText  != null) mapNameText.text  = "Đang vào máy chủ...";
+            if (mapNameText  != null) mapNameText.text  = "Joining server...";
 
             // Populate player rows
             PopulatePlayers(playerIds, localUserId);
 
             // Status
-            if (statusText != null) statusText.text = "Đã ghép trận — đang khởi động server...";
+            if (statusText != null) statusText.text = "Match found. Starting server...";
 
             // Fade in
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);

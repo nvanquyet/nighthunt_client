@@ -206,7 +206,7 @@ namespace NightHunt.UI
         {
             GameModalWindow.Instance?.ShowConfirm(
                 "Leave Party?",
-                "Bạn có chắc muốn rời khỏi party?",
+                "Are you sure you want to leave the party?",
                 onConfirm: async () =>
                 {
                     if (_partyService == null) return;

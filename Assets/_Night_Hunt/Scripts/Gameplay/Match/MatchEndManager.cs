@@ -9,6 +9,7 @@ using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using UnityEngine;
 using NightHunt.Utilities;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Match
 {
@@ -181,7 +182,14 @@ namespace NightHunt.Gameplay.Match
         {
             if (!IsServerStarted) return;
             if (_teamObjectiveScore.ContainsKey(teamId))
+            {
                 _teamObjectiveScore[teamId] += deltaScore;
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Score,
+                    "ObjectiveScoreAdded",
+                    $"team={teamId} delta={deltaScore:F1} objectiveTotal={_teamObjectiveScore[teamId]:F1} total={GetTotalScore(teamId):F1}",
+                    this);
+            }
         }
 
         /// <summary>Called by CharacterCombat / ServerGameManager when a kill is confirmed.</summary>
@@ -189,7 +197,14 @@ namespace NightHunt.Gameplay.Match
         {
             if (!IsServerStarted) return;
             if (_teamKillScore.ContainsKey(killerTeamId))
+            {
                 _teamKillScore[killerTeamId]++;
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Score,
+                    "MatchKillAdded",
+                    $"team={killerTeamId} teamKills={_teamKillScore[killerTeamId]} total={GetTotalScore(killerTeamId):F1}",
+                    this);
+            }
         }
 
         /// <summary>
@@ -296,6 +311,15 @@ namespace NightHunt.Gameplay.Match
             }
 
             int teamId = np.TeamId;
+            int deathCount = 0;
+            if (!string.IsNullOrEmpty(pid))
+                _playerDeathCount.TryGetValue(pid, out deathCount);
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "MatchPlayerDied",
+                $"player={np.DisplayName} team={teamId} backend={pid} deaths={deathCount} aliveCount={RegistryService.Instance?.GetAliveCount(teamId) ?? -1}",
+                this);
             EvaluateTeamElimination(teamId);
         }
 
@@ -372,6 +396,11 @@ namespace NightHunt.Gameplay.Match
             MatchEndReason reason = MatchEndReason.TimerExpired;
             Debug.Log($"[MatchEndManager] Phase 3 timer expired — Winner: {(winnerTeamId >= 0 ? $"Team {winnerTeamId}" : "DRAW")} (scores: {string.Join(", ", System.Linq.Enumerable.Select(_teamIds, t => $"T{t}={GetTotalScore(t):.0}"))})");
 
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Score,
+                "MatchEnded",
+                $"reason={reason} winnerTeam={winnerTeamId} scores={BuildScoreSummary()}",
+                this);
             OnMatchEnded?.Invoke(winnerTeamId, reason);
             RpcNotifyMatchEnd(winnerTeamId, (int)reason);
 
@@ -399,6 +428,17 @@ namespace NightHunt.Gameplay.Match
 
             bool allDead = registry.GetAliveCount(teamId) == 0;
             bool noBeacons = GetActiveBeaconCount(teamId) == 0;
+            if (allDead || noBeacons)
+            {
+                bool pendingRespawn = _phaseManager != null &&
+                                      _phaseManager.CurrentPhase == MatchPhaseState.Lockdown &&
+                                      CanTeamRespawn(teamId);
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Death,
+                    "TeamEliminationCheck",
+                    $"team={teamId} phase={_phaseManager?.CurrentPhase.ToString() ?? "null"} allDead={allDead} noBeacons={noBeacons} pendingRespawn={pendingRespawn}",
+                    this);
+            }
 
             if (_phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
             {
@@ -429,6 +469,12 @@ namespace NightHunt.Gameplay.Match
 
             Debug.Log(
                 $"[MatchEndManager] Team {eliminatedTeamId} eliminated → Winner: {(winnerTeamId >= 0 ? $"Team {winnerTeamId}" : "DRAW")}");
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "MatchEnded",
+                $"reason={reason} eliminatedTeam={eliminatedTeamId} winnerTeam={winnerTeamId} scores={BuildScoreSummary()}",
+                this);
 
             // Publish server-local event
             OnMatchEnded?.Invoke(winnerTeamId, reason);
@@ -509,6 +555,14 @@ namespace NightHunt.Gameplay.Match
             float kills = _teamKillScore.TryGetValue(teamId, out int k) ? k : 0;
             float obj = _teamObjectiveScore.TryGetValue(teamId, out float o) ? o : 0f;
             return kills + obj;
+        }
+
+        private string BuildScoreSummary()
+        {
+            var parts = new List<string>();
+            foreach (int teamId in _teamIds)
+                parts.Add($"T{teamId}={GetTotalScore(teamId):F1}");
+            return string.Join(",", parts);
         }
 
         #endregion

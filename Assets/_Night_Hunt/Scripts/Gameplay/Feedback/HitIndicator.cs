@@ -43,10 +43,11 @@ namespace NightHunt.Gameplay.Feedback
             _lifetime   = lifeTime;
             _onComplete = onComplete;
 
-            if (hitDirection.sqrMagnitude > 0.001f)
+            Vector3 flatDirection = new Vector3(hitDirection.x, 0f, hitDirection.z);
+            if (flatDirection.sqrMagnitude > 0.001f)
             {
-                float angle = Mathf.Atan2(hitDirection.y, hitDirection.x) * Mathf.Rad2Deg;
-                transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
+                float angle = Mathf.Atan2(flatDirection.x, flatDirection.z) * Mathf.Rad2Deg;
+                transform.localRotation = Quaternion.Euler(0f, 0f, -angle);
             }
 
             if (_fadeRoutine != null) StopCoroutine(_fadeRoutine);

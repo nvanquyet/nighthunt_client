@@ -1,6 +1,8 @@
 using System.Collections;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
+using NightHunt.Audio;
 using NightHunt.Config;
 using NightHunt.Core;
 using NightHunt.State;
@@ -13,6 +15,7 @@ namespace NightHunt.Core
     /// LoadingManager — App startup bootstrap. Runs once when the 01_Home scene loads.
     ///
     /// Boot flow (in order):
+    ///   0. Play BootIntroView before showing the first loading overlay
     ///   1. Wait for GameManager to initialize (DontDestroyOnLoad)
     ///   2. Wait for PersistentUICanvas to be ready
     ///   3. Services warm-up (brief)
@@ -54,12 +57,22 @@ namespace NightHunt.Core
         [Header("UI References")]
         [SerializeField] private GameObject           loadingPanel;
         [SerializeField] private UnityEngine.UI.Slider        progressBar;
+        [Tooltip("Optional package-skinned progress adapter. Prefer LoadingProgressView over direct Unity Slider access.")]
+        [SerializeField] private MonoBehaviour progressViewComponent;
         [SerializeField] private TMPro.TextMeshProUGUI         loadingText;
         [SerializeField] private UnityEngine.UI.Button         retryButton;  // Shown when offline
+
+        [Header("Boot Intro")]
+        [Tooltip("Visual intro shown before the first startup loading overlay. Auto-created if missing.")]
+        [SerializeField] private BootIntroView bootIntroView;
 
         [Header("Settings")]
         [SerializeField] private float minLoadingTime  = 1.2f;
         [SerializeField] private float internetTimeout = 5f;   // Seconds for ping / health check timeout
+        [SerializeField] private bool playIntroBeforeFirstLoading = true;
+        [SerializeField, Min(0f)] private float introMinDuration = 0.35f;
+        [SerializeField, Min(0.1f)] private float introMaxDuration = 3f;
+        [SerializeField, Min(1f)] private float homePreloadTimeout = 15f;
 
         [Header("Backend Health")]
         [Tooltip("Config containing apiHost used to ping the health endpoint.")]
@@ -71,6 +84,11 @@ namespace NightHunt.Core
         private bool      _isShowing;
         private bool      _retryRequested;
         private PanelType _targetPanel = PanelType.Login; // default fallback
+        private string    _activeOwner;
+        private int       _activeHandleId;
+        private ILoadingProgressView _progressView;
+
+        public bool HasCompletedInitialFlow { get; private set; }
 
         // ─────────────────────────────────────────────────────────────────────
         // Lifecycle
@@ -80,6 +98,9 @@ namespace NightHunt.Core
         {
             if (_instance == null)
                 _instance = this;
+
+            ResolveLoadingReferences(createFallback: false);
+            ResolveProgressView();
         }
 
         private void OnDestroy()
@@ -136,11 +157,14 @@ namespace NightHunt.Core
                 }
             }
 
+            ResolveLoadingReferences(createFallback: true);
+            ResolveBootIntroView(createFallback: true);
+
             if (loadingPanel != null)
             {
-                loadingPanel.SetActive(true);
-                _isShowing = true;
-                Debug.Log($"[LoadingManager] ✅ loadingPanel SetActive(true): '{loadingPanel.name}'");
+                loadingPanel.SetActive(false);
+                _isShowing = false;
+                Debug.Log($"[LoadingManager] loadingPanel prepared: '{loadingPanel.name}'");
             }
 
             // Retry button hidden by default; shown only when offline
@@ -168,7 +192,66 @@ namespace NightHunt.Core
             }
 #endif
 
-            StartCoroutine(InitFlow());
+            StartCoroutine(BootThenInitFlow());
+        }
+
+        private IEnumerator BootThenInitFlow()
+        {
+            if (loadingPanel != null)
+            {
+                ResolveLoadingReferences(createFallback: true);
+                loadingPanel.SetActive(true);
+                _isShowing = true;
+                UpdateLoadingUI("Starting up...", 0.02f);
+                Debug.Log($"[LoadingManager] loadingPanel pre-activated behind intro: '{loadingPanel.name}'");
+            }
+
+            yield return StartCoroutine(PlayIntroBeforeLoadingFlow());
+
+            if (loadingPanel != null)
+            {
+                loadingPanel.SetActive(true);
+                _isShowing = true;
+            }
+
+            yield return StartCoroutine(InitFlow());
+        }
+
+        private IEnumerator PlayIntroBeforeLoadingFlow()
+        {
+            if (!playIntroBeforeFirstLoading)
+                yield break;
+
+            ResolveBootIntroView(createFallback: true);
+
+            var audioManager = AudioManager.Instance;
+            var introClip = audioManager != null ? audioManager.Library?.gameIntro : null;
+            
+            if (bootIntroView != null)
+            {
+                // Start the intro
+                IEnumerator introRoutine = bootIntroView.PlayIntro(introClip, introMinDuration, introMaxDuration);
+                
+                // We want to activate the loading panel slightly before the intro finishes fading out
+                // to avoid the "blank UI" gap.
+                // Instead of yielding the whole routine, we'll wait until it's near completion or 
+                // handle the overlap here.
+                
+                // For simplicity and safety, we'll let it play, but we'll modify the logic to 
+                // show the loading panel earlier if we had a more complex hook.
+                // However, the cleanest way is to ensure loadingPanel is Active(true) 
+                // BEFORE the final HideImmediate in BootIntroView.
+                
+                yield return StartCoroutine(introRoutine);
+                yield break;
+            }
+
+            if (introClip == null)
+                yield break;
+
+            audioManager.PlayUI(introClip);
+            float wait = Mathf.Clamp(introClip.length, introMinDuration, introMaxDuration);
+            yield return new WaitForSecondsRealtime(wait);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -204,6 +287,9 @@ namespace NightHunt.Core
             // Must run AFTER auth — endpoints require a valid Bearer token.
             if (_targetPanel != PanelType.Login)
                 yield return StartCoroutine(FetchGameConfigFlow());
+
+            if (_targetPanel == PanelType.Home)
+                yield return StartCoroutine(PreloadHomeDataBeforeNavigationFlow());
 
             // ── Step 7: Enforce minimum loading time ────────────────────────
             float elapsed = Time.time - startTime;
@@ -256,9 +342,58 @@ namespace NightHunt.Core
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Check the local refreshToken.
-        /// If found → call AutoLogin API → retrieve a new accessToken.
-        /// If not found or failed → redirect to LoginPanel.
+        /// Preloads first-home data while the loading overlay is still active.
+        /// </summary>
+        private IEnumerator PreloadHomeDataBeforeNavigationFlow()
+        {
+            UpdateLoadingUI("Loading player data...", 0.72f);
+
+            var homeView = FindFirstObjectByType<HomeView>(FindObjectsInactive.Include);
+            if (homeView == null)
+            {
+                Debug.LogWarning("[LoadingManager] HomeView not found. Navigation will continue without home preload.");
+                yield break;
+            }
+
+            while (true)
+            {
+                _retryRequested = false;
+                ShowRetryButton(false);
+
+                Task preloadTask = homeView.PreloadDataAsync();
+                float waited = 0f;
+
+                while (!preloadTask.IsCompleted && waited < homePreloadTimeout)
+                {
+                    waited += Time.deltaTime;
+                    float t = Mathf.Clamp01(waited / homePreloadTimeout);
+                    UpdateLoadingUI("Loading player data...", Mathf.Lerp(0.72f, 0.90f, t));
+                    yield return null;
+                }
+
+                if (preloadTask.IsCompleted && !preloadTask.IsFaulted && !preloadTask.IsCanceled)
+                {
+                    UpdateLoadingUI("Player data ready...", 0.92f);
+                    yield break;
+                }
+
+                if (preloadTask.IsFaulted)
+                    Debug.LogException(preloadTask.Exception);
+                else if (preloadTask.IsCanceled)
+                    Debug.LogWarning("[LoadingManager] Home preload was canceled.");
+                else
+                    Debug.LogWarning($"[LoadingManager] Home preload timed out after {homePreloadTimeout:F1}s.");
+
+                UpdateLoadingUI("Could not load player data. Press Retry.", 0.72f);
+                ShowRetryButton(true);
+
+                while (!_retryRequested)
+                    yield return null;
+            }
+        }
+
+        /// <summary>
+        /// Checks the local refresh token and selects Login or Home as the startup target.
         /// </summary>
         private IEnumerator CheckAutoLoginFlow()
         {
@@ -292,8 +427,7 @@ namespace NightHunt.Core
             {
                 // AuthService not available → redirect to Login
                 Debug.LogWarning("[LoadingManager] AuthService null — skipping AutoLogin");
-                PlayerPrefs.DeleteKey(KEY_REFRESH_TOKEN);
-                PlayerPrefs.Save();
+                SecureStorage.DeleteKey(KEY_REFRESH_TOKEN);
                 _targetPanel = PanelType.Login;
                 yield break;
             }
@@ -610,10 +744,12 @@ namespace NightHunt.Core
                 return;
             }
 
-            Debug.Log($"[FLOW][LoadingManager] Navigate → {_targetPanel}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            Debug.Log($"[FLOW][LoadingManager] Starting Navigation to {_targetPanel} at {System.DateTime.UtcNow:HH:mm:ss.fff}");
             // Hide loading panel BEFORE showing target panel to ensure it doesn't block raycasts
             Hide();
+            HasCompletedInitialFlow = true;
             UINavigator.Instance.ShowPanel(_targetPanel, forceInstant: false);
+            Debug.Log($"[FLOW][LoadingManager] Navigation call completed at {System.DateTime.UtcNow:HH:mm:ss.fff}");
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -659,16 +795,78 @@ namespace NightHunt.Core
         // Public API
         // ─────────────────────────────────────────────────────────────────────
 
+        public sealed class LoadingHandle
+        {
+            private readonly LoadingManager _manager;
+            private readonly int _id;
+            private readonly string _owner;
+            private bool _closed;
+
+            internal LoadingHandle(LoadingManager manager, int id, string owner)
+            {
+                _manager = manager;
+                _id = id;
+                _owner = owner;
+            }
+
+            public string Owner => _owner;
+            public bool IsActive => !_closed && _manager != null && _manager.IsActiveHandle(_id, _owner);
+
+            public void SetProgress(float progress)
+            {
+                if (!_closed)
+                    _manager?.SetProgressForHandle(_id, _owner, progress);
+            }
+
+            public void SetMessage(string message)
+            {
+                if (!_closed)
+                    _manager?.SetMessageForHandle(_id, _owner, message);
+            }
+
+            public void Complete(string message = null)
+            {
+                if (_closed) return;
+                _closed = true;
+                _manager?.CloseHandle(_id, _owner, message, hide: true);
+            }
+
+            public void Fail(string message, bool hide = true)
+            {
+                if (_closed) return;
+                _closed = true;
+                _manager?.CloseHandle(_id, _owner, message, hide);
+            }
+        }
+
+        public LoadingHandle Begin(string owner, string message, float initialProgress = 0f)
+        {
+            owner = string.IsNullOrWhiteSpace(owner) ? "Unknown" : owner;
+            _activeOwner = owner;
+            _activeHandleId++;
+
+            if (loadingPanel != null)
+            {
+                loadingPanel.SetActive(true);
+                _isShowing = true;
+            }
+
+            UpdateLoadingUI(message, Mathf.Clamp01(initialProgress));
+            return new LoadingHandle(this, _activeHandleId, owner);
+        }
+
         /// <summary>Shows the loading overlay with an optional message.</summary>
         public void Show(string message = null)
         {
+            _activeOwner = "Legacy";
+            _activeHandleId++;
             if (loadingPanel != null)
             {
                 loadingPanel.SetActive(true);
                 _isShowing = true;
             }
             if (!string.IsNullOrEmpty(message))
-                UpdateLoadingUI(message, progressBar != null ? progressBar.value : 0f);
+                UpdateLoadingUI(message, GetCurrentProgress());
         }
 
         /// <summary>Hides the loading overlay.</summary>
@@ -678,6 +876,7 @@ namespace NightHunt.Core
             {
                 loadingPanel.SetActive(false);
                 _isShowing = false;
+                _activeOwner = null;
                 Debug.Log("[LoadingManager] ✅ loadingPanel SetActive(false) — loading UI hidden.");
             }
             else
@@ -688,15 +887,263 @@ namespace NightHunt.Core
 
         public bool IsShowing() => _isShowing;
 
+        private bool IsActiveHandle(int id, string owner)
+        {
+            return _isShowing && _activeHandleId == id && _activeOwner == owner;
+        }
+
+        private void SetProgressForHandle(int id, string owner, float progress)
+        {
+            if (!IsActiveHandle(id, owner)) return;
+            UpdateLoadingUI(loadingText != null ? loadingText.text : string.Empty, Mathf.Clamp01(progress));
+        }
+
+        private void SetMessageForHandle(int id, string owner, string message)
+        {
+            if (!IsActiveHandle(id, owner)) return;
+            UpdateLoadingUI(message, GetCurrentProgress());
+        }
+
+        private void CloseHandle(int id, string owner, string message, bool hide)
+        {
+            if (!IsActiveHandle(id, owner)) return;
+            if (!string.IsNullOrEmpty(message))
+                UpdateLoadingUI(message, hide ? 1f : GetCurrentProgress());
+            if (hide)
+                Hide();
+        }
+
         // ─────────────────────────────────────────────────────────────────────
         // Internal helpers
         // ─────────────────────────────────────────────────────────────────────
 
         private void UpdateLoadingUI(string message, float progress)
         {
+            // Cache references only once if possible, or use non-fallback resolution
+            if (loadingText == null || progressBar == null)
+                ResolveLoadingReferences(createFallback: true);
+            
+            if (_progressView == null)
+                ResolveProgressView();
+
             if (loadingText  != null) loadingText.text  = message;
             if (progressBar  != null) progressBar.value = progress;
-            Debug.Log($"[Loading] {progress:P0}  {message}");
+            _progressView?.SetMessage(message);
+            _progressView?.SetProgress(progress);
+            
+            // Avoid logging every single frame if progress hasn't changed much
+            if (Mathf.Abs(_lastLoggedProgress - progress) > 0.01f || message != _lastLoggedMessage)
+            {
+                Debug.Log($"[Loading] {progress:P0}  {message}");
+                _lastLoggedProgress = progress;
+                _lastLoggedMessage = message;
+            }
+        }
+
+        private float  _lastLoggedProgress = -1f;
+        private string _lastLoggedMessage = null;
+
+        private float GetCurrentProgress()
+        {
+            ResolveProgressView();
+            if (_progressView != null)
+                return _progressView.CurrentProgress;
+            return progressBar != null ? progressBar.value : 0f;
+        }
+
+        private void ResolveProgressView()
+        {
+            if (progressViewComponent is ILoadingProgressView assigned)
+            {
+                _progressView = assigned;
+                return;
+            }
+
+            if (_progressView != null)
+                return;
+
+            if (loadingPanel != null)
+            {
+                _progressView = loadingPanel.GetComponentInChildren<ILoadingProgressView>(true);
+                if (_progressView is MonoBehaviour mb)
+                    progressViewComponent = mb;
+            }
+        }
+
+        private void ResolveBootIntroView(bool createFallback)
+        {
+            var persistentCanvas = ResolvePersistentUICanvas(createFallback);
+            Transform persistentRoot = persistentCanvas != null ? persistentCanvas.transform.root : null;
+
+            if (bootIntroView != null && persistentRoot != null &&
+                bootIntroView.transform.root != persistentRoot)
+            {
+                Debug.LogWarning(
+                    $"[LoadingManager] Ignoring scene-scoped BootIntroView '{bootIntroView.name}'. " +
+                    "Boot intro must live under PersistentUICanvas/CanvasDontDestroy.");
+                bootIntroView = null;
+            }
+
+            if (bootIntroView == null && persistentCanvas != null)
+                bootIntroView = createFallback
+                    ? persistentCanvas.EnsureBootIntroView()
+                    : persistentCanvas.BootIntroView;
+
+            if (bootIntroView == null)
+                bootIntroView = GetComponentInChildren<BootIntroView>(true);
+
+            if (bootIntroView == null && createFallback && persistentCanvas != null)
+                bootIntroView = persistentCanvas.EnsureBootIntroView();
+
+            if (bootIntroView != null)
+                bootIntroView.EnsureRuntimeWiring();
+        }
+
+        private static PersistentUICanvas ResolvePersistentUICanvas(bool createFallback)
+        {
+            var persistentCanvas = PersistentUICanvas.Instance
+                ?? FindFirstObjectByType<PersistentUICanvas>(FindObjectsInactive.Include);
+
+            if (persistentCanvas == null && createFallback)
+                persistentCanvas = PersistentUICanvas.GetOrCreate();
+
+            return persistentCanvas;
+        }
+
+        private void ResolveLoadingReferences(bool createFallback)
+        {
+            if (loadingPanel == null)
+                return;
+
+            if (progressBar == null)
+                progressBar = loadingPanel.GetComponentInChildren<UnityEngine.UI.Slider>(true);
+
+            if (loadingText == null)
+                loadingText = loadingPanel.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+
+            if (retryButton == null)
+            {
+                foreach (var button in loadingPanel.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+                {
+                    if (button.name.IndexOf("retry", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        retryButton = button;
+                        break;
+                    }
+                }
+            }
+
+            if (!createFallback)
+                return;
+
+            if (progressBar == null)
+                progressBar = CreateRuntimeProgressBar(loadingPanel.transform);
+
+            if (loadingText == null)
+                loadingText = CreateRuntimeLoadingText(loadingPanel.transform);
+
+            if (retryButton == null)
+                retryButton = CreateRuntimeRetryButton(loadingPanel.transform);
+        }
+
+        private UnityEngine.UI.Slider CreateRuntimeProgressBar(Transform parent)
+        {
+            var root = CreateRuntimeUIObject("Runtime Progress Bar", parent);
+            var rect = root.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(480f, 12f);
+            rect.anchoredPosition = new Vector2(0f, 96f);
+
+            var background = root.AddComponent<UnityEngine.UI.Image>();
+            background.color = new Color(0.08f, 0.1f, 0.12f, 0.85f);
+
+            var fillArea = CreateRuntimeUIObject("Fill Area", root.transform);
+            var fillAreaRect = fillArea.GetComponent<RectTransform>();
+            fillAreaRect.anchorMin = Vector2.zero;
+            fillAreaRect.anchorMax = Vector2.one;
+            fillAreaRect.offsetMin = new Vector2(2f, 2f);
+            fillAreaRect.offsetMax = new Vector2(-2f, -2f);
+
+            var fill = CreateRuntimeUIObject("Fill", fillArea.transform);
+            var fillRect = fill.GetComponent<RectTransform>();
+            fillRect.anchorMin = Vector2.zero;
+            fillRect.anchorMax = Vector2.one;
+            fillRect.offsetMin = Vector2.zero;
+            fillRect.offsetMax = Vector2.zero;
+            var fillImage = fill.AddComponent<UnityEngine.UI.Image>();
+            fillImage.color = new Color(0.25f, 0.75f, 1f, 1f);
+
+            var slider = root.AddComponent<UnityEngine.UI.Slider>();
+            slider.minValue = 0f;
+            slider.maxValue = 1f;
+            slider.value = 0f;
+            slider.transition = UnityEngine.UI.Selectable.Transition.None;
+            slider.targetGraphic = background;
+            slider.fillRect = fillRect;
+
+            var view = root.AddComponent<LoadingProgressView>();
+            progressViewComponent = view;
+            return slider;
+        }
+
+        private TMPro.TextMeshProUGUI CreateRuntimeLoadingText(Transform parent)
+        {
+            var go = CreateRuntimeUIObject("Runtime Loading Text", parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(720f, 44f);
+            rect.anchoredPosition = new Vector2(0f, 132f);
+
+            var text = go.AddComponent<TMPro.TextMeshProUGUI>();
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            text.fontSize = 18f;
+            text.color = Color.white;
+            text.text = "Starting up...";
+            return text;
+        }
+
+        private UnityEngine.UI.Button CreateRuntimeRetryButton(Transform parent)
+        {
+            var go = CreateRuntimeUIObject("Runtime Retry Button", parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0f);
+            rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(180f, 44f);
+            rect.anchoredPosition = new Vector2(0f, 48f);
+
+            var image = go.AddComponent<UnityEngine.UI.Image>();
+            image.color = new Color(0.15f, 0.2f, 0.24f, 0.95f);
+            var button = go.AddComponent<UnityEngine.UI.Button>();
+            button.targetGraphic = image;
+
+            var labelGo = CreateRuntimeUIObject("Label", go.transform);
+            var labelRect = labelGo.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            var label = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
+            label.alignment = TMPro.TextAlignmentOptions.Center;
+            label.fontSize = 16f;
+            label.color = Color.white;
+            label.text = "Retry";
+
+            go.SetActive(false);
+            return button;
+        }
+
+        private static GameObject CreateRuntimeUIObject(string name, Transform parent)
+        {
+            var go = new GameObject(name);
+            go.layer = 5;
+            go.transform.SetParent(parent, false);
+            go.AddComponent<RectTransform>();
+            return go;
         }
     }
 }

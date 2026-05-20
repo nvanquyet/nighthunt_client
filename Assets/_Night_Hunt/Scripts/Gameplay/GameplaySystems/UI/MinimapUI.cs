@@ -3,6 +3,9 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
+using NightHunt.Diagnostics;
+using NightHunt.Gameplay.Input;
+using NightHunt.Gameplay.Input.Core;
 
 namespace NightHunt.GameplaySystems.UI
 {
@@ -29,6 +32,8 @@ namespace NightHunt.GameplaySystems.UI
 
         private NetworkPlayer _localPlayer;
         private bool _fullMapVisible;
+        private bool _pushedInputContext;
+        private NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler _uiInput;
 
         public NetworkPlayer LocalPlayer => _localPlayer;
 
@@ -41,11 +46,31 @@ namespace NightHunt.GameplaySystems.UI
         private void Start()
         {
             ApplyTextures();
+            // Subscribe to UI input
+            _uiInput = FindFirstObjectByType<NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler>(FindObjectsInactive.Include);
+            if (_uiInput != null)
+            {
+                _uiInput.OnToggleMapPressed += ToggleFullMap;
+                _uiInput.OnCancelPressed    += HandleCancelPressed;
+            }
         }
 
-        private void Update()
+        private void OnDestroy()
         {
-            if (_fullMapVisible && Input.GetKeyDown(KeyCode.Escape))
+            if (_fullMapVisible || _pushedInputContext)
+                SetFullMapVisible(false);
+
+            if (_uiInput != null)
+            {
+                _uiInput.OnToggleMapPressed -= ToggleFullMap;
+                _uiInput.OnCancelPressed -= HandleCancelPressed;
+                _uiInput = null;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (_fullMapVisible || _pushedInputContext)
                 SetFullMapVisible(false);
         }
 
@@ -70,16 +95,75 @@ namespace NightHunt.GameplaySystems.UI
 
         public void SetFullMapVisible(bool visible)
         {
+            bool wasVisible = _fullMapVisible;
+            if (wasVisible == visible && !_pushedInputContext)
+            {
+                if (_fullMapRoot != null)
+                    _fullMapRoot.SetActive(visible);
+                return;
+            }
+
             _fullMapVisible = visible;
+            var inputLayers = InputLayerManager.Instance;
+            InputState beforeState = inputLayers != null ? inputLayers.CurrentState : InputState.None;
+            NightHunt.Gameplay.Input.InputLayer beforeLayers = inputLayers != null ? inputLayers.ActiveLayers : NightHunt.Gameplay.Input.InputLayer.None;
 
             if (visible)
             {
                 EnsureFullMapOverlay();
                 ApplyTextures();
+                if (inputLayers != null)
+                {
+                    if (inputLayers.CurrentState == InputState.None)
+                    {
+                        PhaseTestLog.Warning(
+                            PhaseTestLogCategory.Input,
+                            "MinimapInputRecoverBeforeOpen",
+                            $"reason=current-state-none layers={inputLayers.ActiveLayers}",
+                            this);
+                        inputLayers.TransitionToState(InputState.PlayerAlive);
+                    }
+
+                    if (inputLayers.CurrentState != InputState.MapOpen)
+                    {
+                        inputLayers.PushContext(InputState.MapOpen);
+                        _pushedInputContext = true;
+                    }
+                }
+            }
+            else
+            {
+                if (inputLayers != null && (_pushedInputContext || inputLayers.CurrentState == InputState.MapOpen))
+                    inputLayers.PopContext();
+
+                _pushedInputContext = false;
+
+                if (inputLayers != null &&
+                    (inputLayers.CurrentState == InputState.None || inputLayers.CurrentState == InputState.MapOpen))
+                {
+                    PhaseTestLog.Warning(
+                        PhaseTestLogCategory.Input,
+                        "MinimapInputRecoverAfterClose",
+                        $"reason=invalid-after-close state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers} beforeState={beforeState} beforeLayers={beforeLayers}",
+                        this);
+                    inputLayers.TransitionToState(InputState.PlayerAlive);
+                }
             }
 
             if (_fullMapRoot != null)
                 _fullMapRoot.SetActive(visible);
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Input,
+                visible ? "MinimapOpen" : "MinimapClose",
+                $"prevVisible={wasVisible} beforeState={beforeState} beforeLayers={beforeLayers} afterState={inputLayers?.CurrentState.ToString() ?? "null"} afterLayers={(inputLayers != null ? inputLayers.ActiveLayers.ToString() : "null")} pushed={_pushedInputContext}",
+                this);
+        }
+
+        private void HandleCancelPressed()
+        {
+            if (_fullMapVisible)
+                SetFullMapVisible(false);
         }
 
         private void ApplyTextures()

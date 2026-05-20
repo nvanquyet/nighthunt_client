@@ -1,20 +1,51 @@
+using System.Threading.Tasks;
 
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Implement on any panel MonoBehaviour that needs to react to
-    /// UINavigator show/hide transitions.
-    ///
-    /// UINavigator uses CanvasGroup for all transitions — it never calls
-    /// SetActive, so Unity's OnEnable/OnDisable do NOT fire on navigation.
-    /// Use these callbacks instead.
-    ///
-    ///   OnShow() — called right before the panel fades in.
-    ///   OnHide() — called right before the panel fades out.
+    /// Immutable navigation payload passed through the code-first home UI flow.
+    /// </summary>
+    public readonly struct NavigationContext
+    {
+        public NavigationContext(PanelType from, PanelType to, bool forceInstant, bool bypassCanLeave = false)
+            : this(from, to, forceInstant, bypassCanLeave, null, null)
+        {
+        }
+
+        public NavigationContext(
+            PanelType from,
+            PanelType to,
+            bool forceInstant,
+            bool bypassCanLeave,
+            string reason,
+            object payload = null)
+        {
+            From = from;
+            To = to;
+            ForceInstant = forceInstant;
+            BypassCanLeave = bypassCanLeave;
+            Reason = reason ?? string.Empty;
+            Payload = payload;
+        }
+
+        public PanelType From { get; }
+        public PanelType To { get; }
+        public bool ForceInstant { get; }
+        public bool BypassCanLeave { get; }
+        public string Reason { get; }
+        public object Payload { get; }
+        public bool IsRefresh => From == To;
+    }
+
+    /// <summary>
+    /// Implement on panels that need deterministic navigation lifecycle callbacks.
+    /// UINavigator owns the order: CanLeave -> OnHideAsync -> activate route root
+    /// -> OnShowAsync -> visible shell animation.
     /// </summary>
     public interface INavigableView
     {
-        void OnShow();
-        void OnHide();
+        bool CanLeave(NavigationContext context);
+        Task OnShowAsync(NavigationContext context);
+        Task OnHideAsync(NavigationContext context);
     }
 }

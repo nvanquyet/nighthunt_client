@@ -285,13 +285,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 return;
             }
 
-            // Not yet selected — select only (user must double-click to arm).
-            if (IsTrackedDeployable() && TryStartAimControllerFlow(_trackedInstanceId))
-            {
-                Debug.Log($"[DEPLOY_FLOW] [01][SingleClick.DeployArm] filters={FormatFilterTypes()} instance='{_trackedInstanceId}' action=ItemAimController");
-                return;
-            }
-
+            // Not yet selected — select only. Deployables are armed by an explicit use/fire gesture.
             Debug.Log($"[ITEM_FLOW] [01][SingleClick.NotSelected] action=selectOnly instance='{_trackedInstanceId}'");
             _selectionSystem.RequestSelectItem(_trackedInstanceId);
         }

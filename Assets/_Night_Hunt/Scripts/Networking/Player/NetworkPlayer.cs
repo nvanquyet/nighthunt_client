@@ -61,6 +61,7 @@ namespace NightHunt.Networking.Player
         private NightHunt.Gameplay.Input.Handlers.Movement.MovementInputHandler _cachedMovementHandler;
         private NightHunt.Gameplay.Input.Handlers.Camera.CameraInputHandler _cachedCameraHandler;
         private PlayerModelLoader _modelLoader;
+        private CharacterAnimationController _animationController;
         private bool _modelReady;
         private bool _clientRuntimeReadySent;
 
@@ -319,6 +320,33 @@ namespace NightHunt.Networking.Player
         private void NotifyClientRuntimeReadyServerRpc(NetworkConnection conn = null)
         {
             ServerGameManager.Instance?.OnPlayerClientRuntimeReady(conn ?? Owner, this);
+        }
+
+        public void RequestInteractAnimation(int interactIndex)
+        {
+            if (!IsOwner)
+                return;
+
+            RequestInteractAnimationServerRpc((byte)Mathf.Clamp(interactIndex, 0, byte.MaxValue));
+        }
+
+        [ServerRpc(RequireOwnership = true)]
+        private void RequestInteractAnimationServerRpc(byte interactIndex)
+        {
+            PlayInteractAnimationObserversRpc(interactIndex);
+        }
+
+        [ObserversRpc(ExcludeOwner = true)]
+        private void PlayInteractAnimationObserversRpc(byte interactIndex)
+        {
+            _animationController ??= ComponentResolver.Find<CharacterAnimationController>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .OrDefault(null)
+                .Resolve();
+
+            _animationController?.TriggerInteract(interactIndex);
         }
 
         /// <summary>

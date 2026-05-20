@@ -197,6 +197,35 @@ namespace NightHunt.Gameplay.StatSystem.Configs
                     MaxValue = 200f,
                     IsCurrentValue = false,
                     RelatedMaxStatType = PlayerStatType.VisionRange
+                },
+
+                // Passive regeneration / drain rates
+                new PlayerStatDefinition
+                {
+                    Type = PlayerStatType.HealthRegenRate,
+                    DefaultValue = 0f,
+                    MinValue = 0f,
+                    MaxValue = 50f,
+                    IsCurrentValue = false,
+                    RelatedMaxStatType = PlayerStatType.HealthRegenRate
+                },
+                new PlayerStatDefinition
+                {
+                    Type = PlayerStatType.StaminaRegenRate,
+                    DefaultValue = 15f,
+                    MinValue = 0f,
+                    MaxValue = 100f,
+                    IsCurrentValue = false,
+                    RelatedMaxStatType = PlayerStatType.StaminaRegenRate
+                },
+                new PlayerStatDefinition
+                {
+                    Type = PlayerStatType.StaminaDrainRate,
+                    DefaultValue = 20f,
+                    MinValue = 0f,
+                    MaxValue = 100f,
+                    IsCurrentValue = false,
+                    RelatedMaxStatType = PlayerStatType.StaminaDrainRate
                 }
             };
 

@@ -110,6 +110,13 @@ namespace NightHunt.Editor.Tools
                 armor: 0f, weight: 3.5f,
                 playerMods: new[]{ Mod(PlayerStatType.MovementSpeed, ModifierType.Percentage, -0.08f, "Rifle carry") });
 
+            count += MakeWeapon("weapon_machinegun_mg", "Machine Gun",
+                WeaponClass.MachineGun,
+                damage: 12f, fireRate: 900f, accuracy: 0.58f, spreadBase: 7.5f, spreadPenalty: 1.8f, spreadRecovery: 6f,
+                mag: 100, maxAmmo: 500, drawSpeed: 0.8f, reloadSpeed: 4.2f,
+                armor: 0f, weight: 7.2f,
+                playerMods: new[]{ Mod(PlayerStatType.MovementSpeed, ModifierType.Percentage, -0.18f, "Machine gun carry") });
+
             count += MakeWeapon("weapon_shotgun_870",   "M870 Shotgun",
                 WeaponClass.Shotgun,
                 damage: 120f, fireRate: 60f, accuracy: 0.40f, spreadBase: 15f, spreadPenalty: 3f, spreadRecovery: 4f,
@@ -174,6 +181,7 @@ namespace NightHunt.Editor.Tools
             ApplyItemDefinitionBase(def, id, displayName, weight, isStackable: false, maxStack: 1);
             def.StatConfig  = cfg;
             def.WeaponClass = weapClass;
+            def.AnimatorWeaponTypeOverride = 0;
             // Note: BallisticType and FireMode now live on WeaponBase (the prefab component),
             // not on WeaponDefinition. Assign them on the VisualPrefab WeaponBase component.
             EditorUtility.SetDirty(def);
@@ -276,6 +284,9 @@ namespace NightHunt.Editor.Tools
 
             count += MakeConsumable("cons_eyedrop",  "Eye Drop",     weight: 0.1f, useDuration: 1.5f,
                 effects: new[]{ Effect(ConsumableEffectType.ApplyBuff, PlayerStatType.VisionRange, 20f, 20f, false, "+20 vision 20s", buffId: "buff_vision_eyedrop") });
+
+            count += MakeConsumable("cons_radar_scanner", "Radar Scanner", weight: 0.3f, useDuration: 0.75f,
+                effects: new[]{ Effect(ConsumableEffectType.RevealEnemyPlayers, PlayerStatType.VisionRange, 1f, 5f, true, "Reveal enemy positions 5s", buffId: "radar_scanner") });
 
             return count;
         }

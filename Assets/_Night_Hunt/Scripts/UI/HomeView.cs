@@ -5,6 +5,7 @@ using NightHunt.Data.DTOs;
 using NightHunt.Utils;
 using NightHunt.Gameplay.Character.Data;
 using NightHunt.Services.Game;
+using NightHunt.Services.Profile;
 using NightHunt.Services.Room;
 using NightHunt.State;
 using TMPro;
@@ -67,7 +68,6 @@ namespace NightHunt.UI
         private SessionState         _sessionState;
         private RoomService          _roomService;
         private RoomState            _roomState;
-        private GameWebSocketService _ws;
 
         // ══════════════════════════════════════════════════════════════════════
         // LIFECYCLE
@@ -88,51 +88,29 @@ namespace NightHunt.UI
 
         private void Start()
         {
-            _ws = GameWebSocketService.Instance;
-            SubscribeWSEvents();
-            // Fallback: if UINavigator.Notify() doesn't reach this component (e.g. panelObject not
-            // wired in Inspector), OnShow() is triggered directly when the user logs in.
-            if (_sessionState != null)
-                _sessionState.OnUserLoggedIn += OnUserLoggedInFallback;
         }
 
         // ─────────────────────────────────────────────────────────────────────
         // INavigableView — called by UINavigator on panel transition
         // ─────────────────────────────────────────────────────────────────────
 
-        // Debounce: prevent double-invocation (UINavigator + OnUserLoggedInFallback can both
-        // fire within the same frame, causing 2× profile/friends/party API calls → 429).
+        // Debounce: prevent accidental repeated navigation calls from causing duplicate
+        // profile/friends/party API requests.
         private float _lastOnShowTime = float.MinValue;
-        private const float ON_SHOW_MIN_INTERVAL = 2f;
+        private const float ON_SHOW_MIN_INTERVAL = 0.1f;
 
         // Track whether the WS was ever connected so reconnect toasts only show after the first drop.
         private bool _wsWasConnected;
 
-        // Set by LoginView.SuppressNextLoginFallback() before AuthService.Login() so the
-        // OnUserLoggedInFallback does not start a redundant OnShow() burst while LoginView
-        // is orchestrating the post-login loading overlay flow.
-        private bool _suppressLoginFallback;
-
         // Set by PreloadDataAsync() after LoginView has already fetched all home data.
         // OnShow() checks this flag to skip the redundant network calls on the first show.
         private bool _homeDataPreloaded;
+        private bool _wsSubscribed;
 
         // Static flag that survives Unity scene loads (unlike instance fields).
         // Set by ResultsView.NavigatePostMatch() so the new HomeView instance spawned in
         // the next scene knows profile data was just refreshed — skips the second profile fetch.
         private static bool s_profileJustRefreshed;
-
-        // ── Login-flow suppression helpers (called by LoginView) ────────────────
-
-        /// <summary>
-        /// Called by LoginView before AuthService.Login() so the OnUserLoggedIn fallback does
-        /// not fire a premature OnShow() while the post-login loading overlay is still running.
-        /// LoginView must call <see cref="ClearSuppressLoginFallback"/> on any failure path.
-        /// </summary>
-        public void SuppressNextLoginFallback() => _suppressLoginFallback = true;
-
-        /// <summary>Release the suppression flag without completing the login flow (e.g. on error).</summary>
-        public void ClearSuppressLoginFallback() => _suppressLoginFallback = false;
 
         /// <summary>
         /// Called by ResultsView.NavigatePostMatch() after it has already awaited FetchProfile().
@@ -146,18 +124,22 @@ namespace NightHunt.UI
         /// Called by both <see cref="PreloadDataAsync"/> and <see cref="OnShow"/> so the logic
         /// lives in exactly one place.
         /// </summary>
-        private async System.Threading.Tasks.Task FetchHomeDataAsync(bool skipProfile = false)
+        private async System.Threading.Tasks.Task FetchHomeDataAsync(bool skipProfile = false, bool requireCritical = false)
         {
             // Profile
             System.Threading.Tasks.Task profileTask =
-                skipProfile ? System.Threading.Tasks.Task.CompletedTask : RefreshProfileFromServer();
+                skipProfile ? System.Threading.Tasks.Task.CompletedTask : RefreshProfileFromServer(requireSuccess: requireCritical);
 
             // Friends + party can run concurrently with the profile fetch.
-            friendPanelView?.RefreshFriendListAndBadge();
-            if (partyController != null) partyController.OnHomeShown();
+            Task friendTask = friendPanelView != null
+                ? friendPanelView.RefreshFriendListAndBadgeAsync(requireSuccess: requireCritical)
+                : Task.CompletedTask;
+            Task partyTask = partyController != null
+                ? partyController.OnHomeShownAsync()
+                : Task.CompletedTask;
 
             // Wait for profile to complete last (it was started first, already in-flight).
-            await profileTask;
+            await Task.WhenAll(profileTask, friendTask, partyTask);
         }
 
         /// <summary>
@@ -170,35 +152,26 @@ namespace NightHunt.UI
         {
             Debug.Log("[HomeView] PreloadDataAsync — fetching profile / friends / party before Home transition.");
             RefreshProfile(); // populate UI from cached session data immediately
-            await FetchHomeDataAsync();
+            await FetchHomeDataAsync(requireCritical: true);
             _homeDataPreloaded = true;
             Debug.Log("[HomeView] PreloadDataAsync complete.");
-        }
-
-        /// <summary>
-        /// Fallback called when UINavigator.Notify() cannot reach this component (panelObject
-        /// not wired in Inspector). OnShow() is effectively idempotent — safe to call twice.
-        /// </summary>
-        private void OnUserLoggedInFallback()
-        {
-            if (_suppressLoginFallback)
-            {
-                // LoginView is managing the post-login flow (loading overlay → config → preload).
-                // It will call UINavigator.GoHome() which triggers OnShow() at the right time.
-                _suppressLoginFallback = false;
-                Debug.Log("[HomeView] OnUserLoggedIn fallback suppressed — LoginView owns post-login flow.");
-                return;
-            }
-            Debug.Log("[HomeView] OnUserLoggedIn fired — calling OnShow() as UINavigator fallback");
-            if (gameObject.activeInHierarchy) OnShow();
         }
 
         /// <summary>
         /// Called by UINavigator right before the Home panel fades in.
         /// Safe to call multiple times (e.g. returning from Lobby).
         /// </summary>
-        public async void OnShow()
+        public bool CanLeave(NavigationContext context) => true;
+
+        public void OnShow() => _ = OnShowAsync(new NavigationContext(
+            UINavigator.Instance != null ? UINavigator.Instance.CurrentPanel : PanelType.None,
+            PanelType.Home,
+            false));
+
+        public async Task OnShowAsync(NavigationContext context)
         {
+            SubscribeWSEvents();
+
             float now = Time.unscaledTime;
             if (now - _lastOnShowTime < ON_SHOW_MIN_INTERVAL)
             {
@@ -218,8 +191,6 @@ namespace NightHunt.UI
                 Debug.Log("[FLOW][HomeView] OnShow — data preloaded by login flow, skipping network refetch.");
                 RefreshProfile();
                 await CheckAndShowReconnectPopup();
-                var loadingOverlay = PersistentUICanvas.Instance?.LoadingManager;
-                if (loadingOverlay != null && loadingOverlay.IsShowing()) loadingOverlay.Hide();
                 Debug.Log($"[FLOW][HomeView] ── OnShow COMPLETE (preloaded)  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                 onHomeShown?.Invoke();
                 UINavigator.Instance?.NotifyPlayerDataLoaded();
@@ -245,9 +216,6 @@ namespace NightHunt.UI
             Debug.Log("[FLOW][HomeView] [5/5] PartyController.OnHomeShown → GET /api/party/current");
             await FetchHomeDataAsync(skipProfile: skipProfile);
 
-            var loading = PersistentUICanvas.Instance?.LoadingManager;
-            if (loading != null && loading.IsShowing()) loading.Hide();
-
             Debug.Log($"[FLOW][HomeView] ── OnShow COMPLETE — all data fetched  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             onHomeShown?.Invoke();
 
@@ -256,13 +224,17 @@ namespace NightHunt.UI
         }
 
         /// <summary>Called by UINavigator right before the Home panel fades out.</summary>
-        public void OnHide() { /* WS stays active — party invite modal works from any panel */ }
+        public void OnHide() => _ = OnHideAsync(new NavigationContext(PanelType.Home, PanelType.None, false));
+
+        public Task OnHideAsync(NavigationContext context)
+        {
+            UnsubscribeWSEvents();
+            return Task.CompletedTask;
+        }
 
         private void OnDestroy()
         {
             UnsubscribeWSEvents();
-            if (_sessionState != null)
-                _sessionState.OnUserLoggedIn -= OnUserLoggedInFallback;
         }
 
         // ══════════════════════════════════════════════════════════════════════
@@ -272,13 +244,13 @@ namespace NightHunt.UI
         private void OnExitToggleClicked()
         {
             GameModalWindow.Instance?.ShowMulti(
-                title:           "Tho\u00e1t",
-                desc:            "B\u1ea1n mu\u1ed1n l\u00e0m g\u00ec?",
-                btn1Text:        "\u0110\u0103ng xu\u1ea5t",
+                title:           "Exit",
+                desc:            "Choose an action.",
+                btn1Text:        "Sign Out",
                 btn1Callback:    OnLogoutConfirmed,
-                btn2Text:        "Tho\u00e1t game",
+                btn2Text:        "Quit Game",
                 btn2Callback:    OnQuitGameConfirmed,
-                dismissText:     "H\u1ee7y",
+                dismissText:     "Cancel",
                 dismissCallback: null);
         }
 
@@ -310,11 +282,30 @@ namespace NightHunt.UI
             if (fallback?.Thumbnail != null) characterThumbnail.sprite = fallback.Thumbnail;
         }
 
-        private async Task RefreshProfileFromServer()
+        private async Task RefreshProfileFromServer(bool requireSuccess = false)
         {
             Debug.Log("[HomeView] RefreshProfileFromServer → GET /api/profile ...");
-            var result = await GameManager.Instance?.BackendClient
-                .GetAsync<ProfileResponse>(Constants.API_PROFILE_GET);
+            var profileManager = GameManager.Instance != null
+                ? GameManager.Instance.ProfileManager
+                : FindFirstObjectByType<ProfileManager>(FindObjectsInactive.Include);
+
+            ApiResult<ProfileResponse> result = null;
+            try
+            {
+                if (profileManager != null)
+                    result = await profileManager.FetchProfile();
+                else if (GameManager.Instance?.BackendClient != null)
+                    result = await GameManager.Instance.BackendClient.GetAsync<ProfileResponse>(Constants.API_PROFILE_GET);
+                else
+                    Debug.LogWarning("[HomeView] Profile fetch skipped: ProfileManager and BackendClient are not available.");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[HomeView] /api/profile exception: {ex}");
+                if (requireSuccess)
+                    throw;
+            }
+
             if (result?.Success == true && result.Data != null)
             {
                 Debug.Log($"[HomeView] /api/profile response — userId={result.Data.userId} username='{result.Data.username}' tier={result.Data.tier} elo={result.Data.elo} selectedCharacterId='{result.Data.selectedCharacterId}'");
@@ -332,6 +323,8 @@ namespace NightHunt.UI
             else
             {
                 Debug.LogWarning($"[HomeView] /api/profile failed — Success={result?.Success} msg='{result?.Message}'");
+                if (requireSuccess)
+                    throw new System.InvalidOperationException($"Profile preload failed: {result?.Message ?? "No profile response"}");
             }
         }
 
@@ -346,12 +339,12 @@ namespace NightHunt.UI
             if (result.Success && result.Data != null)
             {
                 GameModalWindow.Instance?.ShowConfirm(
-                    title:       "K\u1ebft n\u1ed1i l\u1ea1i",
-                    desc:        $"B\u1ea1n \u0111ang trong room <b>{result.Data.roomCode}</b>. K\u1ebft n\u1ed1i l\u1ea1i?",
+                    title:       "Reconnect",
+                    desc:        $"You are currently in room <b>{result.Data.roomCode}</b>. Reconnect?",
                     onConfirm:   () => UINavigator.Instance?.GoLobby(),
-                    onCancel:    _roomState.ClearRoom,
-                    confirmText: "K\u1ebft n\u1ed1i l\u1ea1i",
-                    cancelText:  "R\u1eddi ph\u00f2ng");
+                    onCancel:    () => _ = LeaveRecoveredRoomAsync(result.Data),
+                    confirmText: "Reconnect",
+                    cancelText:  "Leave Room");
             }
             else
             {
@@ -363,43 +356,85 @@ namespace NightHunt.UI
         // WS — SESSION EVENTS + FRIEND FORWARDING
         // ══════════════════════════════════════════════════════════════════════
 
+        private async Task LeaveRecoveredRoomAsync(RoomResponse room)
+        {
+            if (room == null)
+            {
+                _roomState?.ClearRoom();
+                return;
+            }
+
+            if (_roomService == null)
+            {
+                Debug.LogWarning("[HomeView] Cannot leave recovered room: RoomService is missing. Clearing local room state only.");
+                _roomState?.ClearRoom();
+                return;
+            }
+
+            bool isHost = room.ownerId == (_sessionState?.UserId ?? -1L);
+            var leaveResult = isHost
+                ? await _roomService.DisbandRoom(room.roomId)
+                : await _roomService.LeaveRoom(room.roomId);
+
+            if (!leaveResult.Success)
+            {
+                GameModalWindow.Instance?.ShowNotice(
+                    isHost ? "Disband Room Failed" : "Leave Room Failed",
+                    leaveResult.Message ?? "Please try again.");
+                return;
+            }
+
+            _roomState?.ClearRoom();
+        }
+
         private void SubscribeWSEvents()
         {
-            if (_ws == null) _ws = GameWebSocketService.Instance;
-            if (_ws == null) return;
+            if (_wsSubscribed) return;
+
+            var bus = GameEventBus.Instance;
+            if (bus == null) return;
 
             // Connection state
-            _ws.OnConnected        += HandleWsConnected;
-            _ws.OnDisconnected     += HandleWsDisconnected;
-            _ws.OnReconnectFailed  += HandleWsReconnectFailed;
+            bus.OnWebSocketConnected       += HandleWsConnected;
+            bus.OnWebSocketDisconnected    += HandleWsDisconnected;
+            bus.OnWebSocketReconnectFailed += HandleWsReconnectFailed;
 
             // Session lifecycle
-            _ws.OnForceLogout    += HandleForceLogout;
-            _ws.OnSessionExpired += HandleSessionExpired;
+            bus.OnForceLogout    += HandleForceLogout;
+            bus.OnSessionExpired += HandleSessionExpired;
 
             // Friend events — forward to FriendPanelView
-            _ws.OnFriendStatusChanged   += HandleFriendStatusChanged;
-            _ws.OnFriendRequestReceived += HandleFriendRequestReceived;
-            _ws.OnFriendRequestAccepted += HandleFriendRequestAccepted;
-            _ws.OnFriendRequestDeclined   += HandleFriendRequestDeclined;
-            _ws.OnFriendRequestCancelled += HandleFriendRequestCancelled;
-            _ws.OnFriendRemoved           += HandleFriendRemoved;
+            bus.OnFriendStatusChanged   += HandleFriendStatusChanged;
+            bus.OnFriendRequestReceived += HandleFriendRequestReceived;
+            bus.OnFriendRequestAccepted += HandleFriendRequestAccepted;
+            bus.OnFriendRequestDeclined += HandleFriendRequestDeclined;
+            bus.OnFriendRequestCancelled += HandleFriendRequestCancelled;
+            bus.OnFriendRemoved += HandleFriendRemoved;
+            _wsSubscribed = true;
         }
 
         private void UnsubscribeWSEvents()
         {
-            if (_ws == null) return;
-            _ws.OnConnected       -= HandleWsConnected;
-            _ws.OnDisconnected    -= HandleWsDisconnected;
-            _ws.OnReconnectFailed -= HandleWsReconnectFailed;
-            _ws.OnForceLogout    -= HandleForceLogout;
-            _ws.OnSessionExpired -= HandleSessionExpired;
-            _ws.OnFriendStatusChanged   -= HandleFriendStatusChanged;
-            _ws.OnFriendRequestReceived -= HandleFriendRequestReceived;
-            _ws.OnFriendRequestAccepted -= HandleFriendRequestAccepted;
-            _ws.OnFriendRequestDeclined   -= HandleFriendRequestDeclined;
-            _ws.OnFriendRequestCancelled -= HandleFriendRequestCancelled;
-            _ws.OnFriendRemoved           -= HandleFriendRemoved;
+            if (!_wsSubscribed) return;
+
+            var bus = GameEventBus.Instance;
+            if (bus == null)
+            {
+                _wsSubscribed = false;
+                return;
+            }
+            bus.OnWebSocketConnected       -= HandleWsConnected;
+            bus.OnWebSocketDisconnected    -= HandleWsDisconnected;
+            bus.OnWebSocketReconnectFailed -= HandleWsReconnectFailed;
+            bus.OnForceLogout    -= HandleForceLogout;
+            bus.OnSessionExpired -= HandleSessionExpired;
+            bus.OnFriendStatusChanged   -= HandleFriendStatusChanged;
+            bus.OnFriendRequestReceived -= HandleFriendRequestReceived;
+            bus.OnFriendRequestAccepted -= HandleFriendRequestAccepted;
+            bus.OnFriendRequestDeclined -= HandleFriendRequestDeclined;
+            bus.OnFriendRequestCancelled -= HandleFriendRequestCancelled;
+            bus.OnFriendRemoved -= HandleFriendRemoved;
+            _wsSubscribed = false;
         }
 
         // ── WS Connection ─────────────────────────────────────────────────
@@ -434,24 +469,20 @@ namespace NightHunt.UI
 
         private void HandleForceLogout()
         {
-            GameModalWindow.Instance?.ShowNotice(
+            SessionTerminationFlow.ShowAndLogout(
                 "Forced Logout",
-                "Your account has been logged in from another location.",
-                closeText: "OK",
-                onClose:   LoginView.Logout);
+                "Your account has been logged in from another location.");
         }
 
         private void HandleSessionExpired()
         {
-            GameModalWindow.Instance?.ShowNotice(
+            SessionTerminationFlow.ShowAndLogout(
                 "Session Expired",
-                "Your session has expired. Please log in again.",
-                closeText: "OK",
-                onClose:   LoginView.Logout);
+                "Your session has expired. Please log in again.");
         }
 
         private void HandleFriendStatusChanged(GameWebSocketService.FriendStatusChangedEvent e)
-            => friendPanelView?.OnFriendStatusChanged(e.userId, e.status, e.currentPartyId);
+            => friendPanelView?.OnFriendStatusChanged(e.userId, e.status, e.currentPartyId, e.currentRoomId);
 
         private void HandleFriendRequestReceived(GameWebSocketService.FriendRequestEvent e)
         {

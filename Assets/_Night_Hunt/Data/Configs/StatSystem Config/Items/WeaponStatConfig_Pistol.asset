@@ -14,11 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   Stats:
   - Type: 10
-    DefaultValue: 20
+    DefaultValue: 14
     MinValue: 0
     MaxValue: 100
   - Type: 11
-    DefaultValue: 300
+    DefaultValue: 420
     MinValue: 0
     MaxValue: 600
   - Type: 12
@@ -38,7 +38,7 @@ MonoBehaviour:
     MinValue: 0
     MaxValue: 10
   - Type: 20
-    DefaultValue: 12
+    DefaultValue: 15
     MinValue: 1
     MaxValue: 100
   - Type: 23
@@ -46,12 +46,12 @@ MonoBehaviour:
     MinValue: 0
     MaxValue: 600
   - Type: 22
-    DefaultValue: 1.8
+    DefaultValue: 1.4
     MinValue: 0.1
     MaxValue: 15
   PlayerModifiers:
   - StatType: 4
-    Value: -2
+    Value: -0.03
     ModifierType: 1
     Description: Pistol penalty
   ItemModifiers: []

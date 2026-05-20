@@ -220,11 +220,11 @@ namespace NightHunt.Core
             LayerMask.GetMask(Ground, Wall, MapStatic, MapObstacle);
 
         /// <summary>
-        /// Melee sweep hit detection — player hitboxes, dead bodies, and world surfaces.
-        /// Serialized m_Bits = 25206912.
+        /// Melee sweep hit detection — player hitboxes, deployables/objectives, dead bodies, and world surfaces.
+        /// Serialized m_Bits = 25207936.
         /// </summary>
         public static LayerMask MaskMeleeHit =>
-            LayerMask.GetMask(PlayerHitBox, DeadCharacter, Wall, Ground, MapObstacle);
+            LayerMask.GetMask(PlayerHitBox, Interactable, DeadCharacter, Wall, Ground, MapObstacle);
 
         /// <summary>
         /// Full hitscan weapon raycast mask — bullets stop on players, interactable objectives

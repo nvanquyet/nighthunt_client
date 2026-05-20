@@ -14,12 +14,13 @@ using NightHunt.GameplaySystems.UI.Combat;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Networking.Player;
 using NightHunt.Utilities;
+using NightHunt.Diagnostics;
 using UnityEngine;
 
 namespace NightHunt.Gameplay.Beacon
 {
     /// <summary>
-    /// Generic placement controller for deployable items. Beacon definitions keep their
+    /// Placement controller for deployable items. Beacon definitions keep their
     /// existing BeaconManager spawn path; other DeployableDefinition assets spawn their
     /// NetworkDeployablePrefab here.
     /// Attach to the player root.
@@ -124,16 +125,27 @@ namespace NightHunt.Gameplay.Beacon
             if (item == null)
             {
                 Debug.LogWarning("[DEPLOY_FLOW] BeginDeploy rejected: item is null.");
+                PhaseTestLog.Warning(PhaseTestLogCategory.Deploy, "BeginDeployRejected", "reason=item-null", this);
                 return false;
             }
 
             if (def is not BeaconDefinition && def is not DeployableDefinition)
             {
                 Debug.LogWarning($"[DEPLOY_FLOW] BeginDeploy rejected: unsupported definition type={def?.GetType().Name ?? "null"} item={item?.InstanceID ?? "null"}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Deploy,
+                    "BeginDeployRejected",
+                    $"reason=unsupported-def defType={def?.GetType().Name ?? "null"} item={item.InstanceID}",
+                    this);
                 return false;
             }
 
             LogDeploy($"BeginDeploy accepted: def={def.ItemID} item={item?.InstanceID ?? "null"} owner={IsOwner}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Deploy,
+                "BeginDeploy",
+                $"def={def.ItemID} defType={def.GetType().Name} item={item.InstanceID} owner={IsOwner}",
+                this);
             StartPlacement(def, item.InstanceID);
             return true;
         }
@@ -158,12 +170,22 @@ namespace NightHunt.Gameplay.Beacon
             if (!IsOwner || !_isInPlacementMode)
             {
                 LogDeploy($"TryCapturePlacement skipped: owner={IsOwner} active={_isInPlacementMode} def={_activeDefinition?.ItemID ?? "null"}");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Deploy,
+                    "TryCapturePlacementSkipped",
+                    $"owner={IsOwner} active={_isInPlacementMode} def={_activeDefinition?.ItemID ?? "null"}",
+                    this);
                 return false;
             }
 
             if (!TryGetPlacementPoint(out point, out rotation, out bool valid) || !valid)
             {
                 LogDeploy($"TryCapturePlacement rejected: refreshedValid={valid} cachedValid={_placementValid} def={_activeDefinition?.ItemID ?? "null"} point={point:F2} reason={_lastPlacementRejectReason ?? "unknown"}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Deploy,
+                    "TryCapturePlacementRejected",
+                    $"valid={valid} cachedValid={_placementValid} def={_activeDefinition?.ItemID ?? "null"} point={point:F2} reason={_lastPlacementRejectReason ?? "unknown"} blocker={(_lastBlockingCollider != null ? _lastBlockingCollider.name : "null")}",
+                    this);
                 return false;
             }
 
@@ -174,6 +196,11 @@ namespace NightHunt.Gameplay.Beacon
                 _previewInstance.transform.SetPositionAndRotation(point, rotation);
 
             LogDeploy($"TryCapturePlacement accepted: point={point:F2} rot={rotation.eulerAngles:F1} def={_activeDefinition?.ItemID ?? "null"} item={_activeItemInstanceId ?? "null"}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Deploy,
+                "TryCapturePlacementAccepted",
+                $"def={_activeDefinition?.ItemID ?? "null"} item={_activeItemInstanceId ?? "null"} point={point:F2} rot={rotation.eulerAngles:F1}",
+                this);
             return true;
         }
 
@@ -182,6 +209,11 @@ namespace NightHunt.Gameplay.Beacon
             if (!IsOwner || definition == null)
             {
                 Debug.LogWarning($"[DEPLOY_FLOW] StartPlacement skipped: IsOwner={IsOwner} definition={definition?.ItemID ?? "null"}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Deploy,
+                    "StartPlacementSkipped",
+                    $"owner={IsOwner} def={definition?.ItemID ?? "null"}",
+                    this);
                 return;
             }
 
@@ -204,17 +236,36 @@ namespace NightHunt.Gameplay.Beacon
                 _previewInstance = Instantiate(previewPrefab);
                 PreparePreviewInstance(definition, previewPrefab.name);
                 LogDeploy($"Preview spawned: def={definition.ItemID} preview={previewPrefab.name} range={ResolvePlacementDistance(definition):F2}");
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Deploy,
+                    "DeployPreviewSpawned",
+                    $"def={definition.ItemID} preview={previewPrefab.name} range={ResolvePlacementDistance(definition):F2}",
+                    this);
             }
             else
             {
                 _previewInstance = CreateRuntimePlacementPreview(definition);
                 PreparePreviewInstance(definition, _previewInstance != null ? _previewInstance.name : "null");
                 Debug.LogWarning($"[DEPLOY_FLOW] Preview missing: def={definition.ItemID}. Using runtime fallback placement preview.");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Deploy,
+                    "DeployPreviewFallback",
+                    $"def={definition.ItemID} preview={_previewInstance?.name ?? "null"}",
+                    this);
             }
         }
 
         private void StopPlacement()
         {
+            if (_isInPlacementMode)
+            {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Deploy,
+                    "StopPlacement",
+                    $"def={_activeDefinition?.ItemID ?? "null"} item={_activeItemInstanceId ?? "null"} locked={_placementLocked} valid={_placementValid}",
+                    this);
+            }
+
             _isInPlacementMode = false;
             _activeDefinition = null;
             _activeItemInstanceId = null;
@@ -473,6 +524,11 @@ namespace NightHunt.Gameplay.Beacon
 
             StopPlacement();
             LogDeploy($"Sending CmdRequestPlaceDeployable def={definitionId} item={instanceId} pos={position:F2} rot={rotation.eulerAngles:F1}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Deploy,
+                "RequestPlaceDeployable",
+                $"def={definitionId ?? "null"} item={instanceId ?? "null"} pos={position:F2} rot={rotation.eulerAngles:F1}",
+                this);
             CmdRequestPlaceDeployable(position, rotation, definitionId, instanceId);
         }
 
@@ -494,12 +550,22 @@ namespace NightHunt.Gameplay.Beacon
             if (_networkPlayer == null || string.IsNullOrEmpty(definitionId))
             {
                 Debug.LogWarning($"[DEPLOY_FLOW] Server reject: networkPlayer={(_networkPlayer != null ? "ok" : "null")} definitionId='{definitionId}'");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Deploy,
+                    "PlaceDeployableRejected",
+                    $"reason=missing-player-or-def player={(_networkPlayer != null ? _networkPlayer.DisplayName : "null")} def={definitionId ?? "null"} item={itemInstanceId ?? "null"}",
+                    this);
                 return false;
             }
 
             if (!ValidateHeldItem(itemInstanceId, definitionId))
             {
                 Debug.LogWarning($"[DEPLOY_FLOW] Server reject: held item validation failed def={definitionId} item={itemInstanceId}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Deploy,
+                    "PlaceDeployableRejected",
+                    $"reason=held-item-validation def={definitionId} item={itemInstanceId ?? "null"}",
+                    this);
                 return false;
             }
 
@@ -507,21 +573,38 @@ namespace NightHunt.Gameplay.Beacon
             if (!ValidateServerPlacement(def, position))
             {
                 Debug.LogWarning($"[DeployablePlacementHandler] Placement rejected by server validation. def={definitionId} pos={position:F2}");
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Deploy,
+                    "PlaceDeployableRejected",
+                    $"reason=server-placement def={definitionId} item={itemInstanceId ?? "null"} pos={position:F2}",
+                    this);
                 return false;
             }
 
             bool placed = def switch
             {
                 BeaconDefinition => TryPlaceBeacon(position, rotation, definitionId),
-                DeployableDefinition deployable => TryPlaceGenericDeployable(deployable, position, rotation, definitionId),
+                DeployableDefinition deployable => TryPlaceNetworkDeployable(deployable, position, rotation, definitionId),
                 _ => false
             };
 
             if (!placed || string.IsNullOrEmpty(itemInstanceId))
+            {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Deploy,
+                    "PlaceDeployableResult",
+                    $"result={placed} consume=false def={definitionId} item={itemInstanceId ?? "null"} pos={position:F2}",
+                    this);
                 return placed;
+            }
 
             ResolveInventory()?.RemoveItem(itemInstanceId, 1);
             LogDeploy($"Consumed deployable item {definitionId} instance={itemInstanceId} pos={position:F2}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Deploy,
+                "PlaceDeployableResult",
+                $"result=true consume=true def={definitionId} item={itemInstanceId} pos={position:F2}",
+                this);
             return true;
         }
 
@@ -561,7 +644,7 @@ namespace NightHunt.Gameplay.Beacon
             return manager.TryPlaceBeacon(_networkPlayer.TeamId, position, rotation, Owner, definitionId);
         }
 
-        private bool TryPlaceGenericDeployable(
+        private bool TryPlaceNetworkDeployable(
             DeployableDefinition def,
             Vector3 position,
             Quaternion rotation,
@@ -582,14 +665,12 @@ namespace NightHunt.Gameplay.Beacon
                 return false;
             }
 
-            // Route initialization: VisionWard supports optional radius override from definition.
-            if (deployable is VisionWard visionWard)
-                visionWard.InitializeWithRadius(_networkPlayer.TeamId, def.MaxHP,
-                    def.VisionRadius > 0f ? def.VisionRadius : 0f);
-            else if (deployable is GenericDeployable generic)
-                generic.Initialize(_networkPlayer.TeamId, def.MaxHP, def.DeployableKind, definitionId);
-            else
-                deployable.Initialize(_networkPlayer.TeamId, def.MaxHP);
+            int ownerNetworkObjectId = _networkPlayer != null ? (int)_networkPlayer.ObjectId : 0;
+            if (!InitializeNetworkDeployable(deployable, def, definitionId, ownerNetworkObjectId))
+            {
+                Destroy(go);
+                return false;
+            }
 
             InstanceFinder.ServerManager.Spawn(go, Owner);
             deployable.StartPlacement();
@@ -597,6 +678,56 @@ namespace NightHunt.Gameplay.Beacon
             LogDeploy($"Placed deployable {definitionId} kind={def.DeployableKind} at {position:F2} owner={Owner?.ClientId} lifecycle=Initialize>Spawn>StartPlacement");
             return true;
         }
+
+        [Server]
+        private bool InitializeNetworkDeployable(
+            BaseDeployable deployable,
+            DeployableDefinition def,
+            string definitionId,
+            int ownerNetworkObjectId)
+        {
+            int maxHpOverride = def.OverridePrefabHealth ? def.MaxHP : 0;
+
+            if (IsTrapKind(def.DeployableKind) && deployable is not TrapDeployable)
+            {
+                Debug.LogError($"[DeployablePlacementHandler] {definitionId} kind={def.DeployableKind} requires TrapDeployable on prefab '{deployable.name}'.");
+                return false;
+            }
+
+            if (IsVisionKind(def.DeployableKind) && deployable is not VisionWard)
+            {
+                Debug.LogError($"[DeployablePlacementHandler] {definitionId} kind={def.DeployableKind} requires VisionWard on prefab '{deployable.name}'.");
+                return false;
+            }
+
+            if (deployable is VisionWard visionWard)
+            {
+                visionWard.InitializeWithRadius(
+                    _networkPlayer.TeamId,
+                    maxHpOverride,
+                    def.VisionRadius > 0f ? def.VisionRadius : 0f,
+                    ownerNetworkObjectId);
+                return true;
+            }
+
+            if (deployable is TrapDeployable trap)
+            {
+                trap.Initialize(_networkPlayer.TeamId, maxHpOverride, def.DeployableKind, definitionId, ownerNetworkObjectId);
+                return true;
+            }
+
+            if (deployable is SimpleDeployable simple)
+                simple.SetDefinitionId(definitionId);
+
+            deployable.Initialize(_networkPlayer.TeamId, maxHpOverride, ownerNetworkObjectId);
+            return true;
+        }
+
+        private static bool IsTrapKind(DeployableKind kind)
+            => kind == DeployableKind.ExplosiveMine || kind == DeployableKind.ShockField;
+
+        private static bool IsVisionKind(DeployableKind kind)
+            => kind == DeployableKind.VisionNode || kind == DeployableKind.LightPoint;
 
         private static GameObject ResolvePlacementPreview(ItemDefinition def)
         {

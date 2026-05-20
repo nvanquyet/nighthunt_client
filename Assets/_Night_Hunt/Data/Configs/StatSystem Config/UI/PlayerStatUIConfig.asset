@@ -103,3 +103,33 @@ MonoBehaviour:
     DisplayType: 2
     RelatedMaxStatType: 8
     ShowMaxValue: 0
+  - Type: 9
+    DisplayName: Health Regen
+    ShowInUI: 0
+    Icon: {fileID: 21300000, guid: 789c0f7423c62ff43b9f22666c110738, type: 3}
+    DisplayColor: {r: 0.8, g: 0.2, b: 0.2, a: 1}
+    TextColor: {r: 1, g: 0.6, b: 0.6, a: 1}
+    DisplayFormat: 0.0/s
+    DisplayType: 2
+    RelatedMaxStatType: 9
+    ShowMaxValue: 0
+  - Type: 10
+    DisplayName: Stamina Regen
+    ShowInUI: 0
+    Icon: {fileID: 21300000, guid: 789c0f7423c62ff43b9f22666c110738, type: 3}
+    DisplayColor: {r: 0.2, g: 0.8, b: 0.2, a: 1}
+    TextColor: {r: 0.6, g: 1, b: 0.6, a: 1}
+    DisplayFormat: 0.0/s
+    DisplayType: 2
+    RelatedMaxStatType: 10
+    ShowMaxValue: 0
+  - Type: 11
+    DisplayName: Stamina Drain
+    ShowInUI: 0
+    Icon: {fileID: 21300000, guid: 494bfa845ece9d8489c88fea25002e95, type: 3}
+    DisplayColor: {r: 1, g: 0.8, b: 0.2, a: 1}
+    TextColor: {r: 1, g: 0.9, b: 0.55, a: 1}
+    DisplayFormat: 0.0/s
+    DisplayType: 2
+    RelatedMaxStatType: 11
+    ShowMaxValue: 0

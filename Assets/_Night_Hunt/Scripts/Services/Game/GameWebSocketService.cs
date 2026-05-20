@@ -162,13 +162,20 @@ namespace NightHunt.Services.Game
 
         protected override void OnDestroy()
         {
+            if (SessionState.Instance != null)
+                SessionState.Instance.OnSessionEnded -= HandleSessionEnded;
             Disconnect();
             base.OnDestroy();
         }
 
-        /// <summary>
-        /// Connect to Game WebSocket (called after login/auto-login)
-        /// </summary>
+        private void Start()
+        {
+            if (SessionState.Instance != null)
+                SessionState.Instance.OnSessionEnded += HandleSessionEnded;
+        }
+
+        private void HandleSessionEnded() => Disconnect(disableReconnect: true);
+
         public async Task<bool> Connect()
         {
             if (isConnecting || isConnected)
@@ -198,7 +205,7 @@ namespace NightHunt.Services.Game
                 string wsPath = ResolveWsPath();
                 wsUrl = $"{wsUrl}{(wsUrl.EndsWith(wsPath) ? "" : wsPath)}?token={Uri.EscapeDataString(accessToken)}";
                 ConditionalLogger.Log("GameWebSocketService", "Connecting to Game WebSocket...");
-                ConditionalLogger.Log("GameWebSocketService", $"WebSocket URL: {wsUrl}");
+                ConditionalLogger.Log("GameWebSocketService", $"WebSocket URL: {RedactToken(wsUrl)}");
 
                 await ConnectWebSocket(wsUrl, thisToken);
                 
@@ -442,6 +449,23 @@ namespace NightHunt.Services.Game
             return baseUrl;
         }
 
+        private static string RedactToken(string url)
+        {
+            if (string.IsNullOrEmpty(url))
+                return url;
+
+            int tokenIndex = url.IndexOf("token=", StringComparison.OrdinalIgnoreCase);
+            if (tokenIndex < 0)
+                return url;
+
+            int valueStart = tokenIndex + "token=".Length;
+            int valueEnd = url.IndexOf('&', valueStart);
+            if (valueEnd < 0)
+                valueEnd = url.Length;
+
+            return url.Substring(0, valueStart) + "<redacted>" + url.Substring(valueEnd);
+        }
+
         private string ResolveWsPath()
         {
             if (!string.IsNullOrEmpty(wsPathOverride))
@@ -459,6 +483,58 @@ namespace NightHunt.Services.Game
             }
 
             return "/api/ws/game"; // context-path /api + /ws/game
+        }
+
+        private static void SetRoomStateIfRelevant(RoomResponse room, string source)
+        {
+            if (room == null)
+                return;
+
+            if (room.roomId <= 0)
+            {
+                Debug.LogWarning($"[GameWebSocketService] Ignoring {source}: payload roomId is invalid ({room.roomId}).");
+                return;
+            }
+
+            var roomState = RoomState.Instance;
+            if (roomState == null)
+                return;
+
+            if (IsTerminalRoom(room))
+            {
+                if (roomState.IsInRoom && roomState.RoomId == room.roomId)
+                {
+                    Debug.Log($"[GameWebSocketService] Clearing local RoomState from {source}: roomId={room.roomId} status={room.status}.");
+                    roomState.ClearRoom();
+                }
+                else
+                {
+                    Debug.Log($"[GameWebSocketService] Ignoring terminal {source}: roomId={room.roomId} status={room.status}.");
+                }
+                return;
+            }
+
+            if (!roomState.IsInRoom || roomState.RoomId <= 0)
+            {
+                Debug.Log($"[GameWebSocketService] Recovering local RoomState from {source}: roomId={room.roomId}.");
+                roomState.SetRoom(room);
+                return;
+            }
+
+            if (room.roomId != roomState.RoomId)
+            {
+                Debug.LogWarning($"[GameWebSocketService] Ignoring {source}: roomId={room.roomId} does not match current roomId={roomState.RoomId}.");
+                return;
+            }
+
+            roomState.SetRoom(room);
+        }
+
+        private static bool IsTerminalRoom(RoomResponse room)
+        {
+            string status = room?.status;
+            return string.Equals(status, Constants.ROOM_STATUS_CLOSED, StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(status, "FINISHED", StringComparison.OrdinalIgnoreCase);
         }
 
         private void HandleMessage(string message)
@@ -496,12 +572,8 @@ namespace NightHunt.Services.Game
                         var roomUpdate = JsonUtility.FromJson<RoomResponse>(messageData.data);
                         if (roomUpdate != null)
                         {
+                            SetRoomStateIfRelevant(roomUpdate, "room_updated");
                             OnRoomUpdated?.Invoke(roomUpdate);
-                            // Update RoomState
-                            if (RoomState.Instance != null)
-                            {
-                                RoomState.Instance.SetRoom(roomUpdate);
-                            }
                         }
                         break;
 
@@ -562,6 +634,10 @@ namespace NightHunt.Services.Game
                             {
                                 swapRequest.fromUserId = swapRequest.requesterId;
                             }
+                            if (!string.IsNullOrEmpty(swapRequest.requesterUsername) && string.IsNullOrEmpty(swapRequest.fromUsername))
+                            {
+                                swapRequest.fromUsername = swapRequest.requesterUsername;
+                            }
                             OnSwapRequest?.Invoke(swapRequest);
                         }
                         break;
@@ -581,7 +657,7 @@ namespace NightHunt.Services.Game
                         var swapAcceptedRoom = JsonUtility.FromJson<RoomResponse>(messageData.data);
                         if (swapAcceptedRoom != null)
                         {
-                            if (RoomState.Instance != null) RoomState.Instance.SetRoom(swapAcceptedRoom);
+                            SetRoomStateIfRelevant(swapAcceptedRoom, "swap_accepted");
                             OnRoomUpdated?.Invoke(swapAcceptedRoom);
                             // Synthesize ACCEPTED status so requester can close its waiting modal.
                             // requestId=0 means "any pending swap was accepted".
@@ -1080,9 +1156,11 @@ namespace NightHunt.Services.Game
         public class SwapRequestEvent
         {
             public long requestId;
+            public long roomId;
             public long fromUserId; // For compatibility
             public string fromUsername; // For compatibility
             public long requesterId; // Alias for fromUserId
+            public string requesterUsername;
             public long targetUserId;
             public int targetTeam;
             public int targetSlot;

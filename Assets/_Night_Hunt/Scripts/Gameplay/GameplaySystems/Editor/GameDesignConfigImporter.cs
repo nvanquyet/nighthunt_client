@@ -162,6 +162,7 @@ namespace NightHunt.GameplaySystems.Editor
                 def.MaxStackSize = 1;
                 def.Weight       = w.Weight;
                 def.WeaponClass  = ParseWeaponClass(w.Category);
+                def.AnimatorWeaponTypeOverride = 0;
                 def.StatConfig   = stat;
                 def.ValidSlots   = new SlotLocationType[] { SlotLocationType.Inventory, SlotLocationType.Weapon };
                 def.AttachmentSlots = DefaultAttachmentSlots(w.Category);
@@ -378,6 +379,8 @@ namespace NightHunt.GameplaySystems.Editor
             "Rifle"   => WeaponClass.Rifle,
             "Shotgun" => WeaponClass.Shotgun,
             "Sniper"  => WeaponClass.Sniper,
+            "MachineGun" => WeaponClass.MachineGun,
+            "Machine Gun" => WeaponClass.MachineGun,
             "Heavy"   => WeaponClass.Launcher,
             _         => WeaponClass.Rifle
         };
@@ -399,6 +402,9 @@ namespace NightHunt.GameplaySystems.Editor
             "SpeedBuff"          => ConsumableEffectType.SpeedBoost,
             "NoiseReduce"        => ConsumableEffectType.NoiseReduce,
             "VisionIncrease"     => ConsumableEffectType.VisionIncrease,
+            "RevealEnemyPlayers" => ConsumableEffectType.RevealEnemyPlayers,
+            "RadarScanner"       => ConsumableEffectType.RevealEnemyPlayers,
+            "RadarReveal"        => ConsumableEffectType.RevealEnemyPlayers,
             "Cleanse"            => ConsumableEffectType.Cure,
             "UnlockObjective"    => ConsumableEffectType.UnlockObjective,
             "DeployBeacon"       => ConsumableEffectType.DeployBeacon,

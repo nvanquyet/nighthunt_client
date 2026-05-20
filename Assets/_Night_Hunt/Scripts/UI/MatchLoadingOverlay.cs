@@ -58,6 +58,7 @@ namespace NightHunt.UI
         [Header("Overall Status")]
         [SerializeField] private TextMeshProUGUI statusText;
         [SerializeField] private Slider          overallProgressBar;
+        [SerializeField] private MonoBehaviour   overallProgressViewComponent;
         [SerializeField] private TextMeshProUGUI overallPercentText;
         [SerializeField] private TextMeshProUGUI mapNameText;   // optional
 
@@ -78,7 +79,7 @@ namespace NightHunt.UI
 
         [Header("Settings")]
         [SerializeField] private float fadeDuration           = 0.3f;
-        [SerializeField] private float minimumDisplayDuration = 10f;
+        [SerializeField] private float minimumDisplayDuration = 2.5f;
         [SerializeField] private float delayAfterReady        = 1.5f;
         [SerializeField] private float connectionTimeout       = 45f;
         [SerializeField] private NightHunt.Config.SceneId targetMapId = NightHunt.Config.SceneId.GameMap_01;
@@ -107,6 +108,7 @@ namespace NightHunt.UI
         private readonly Dictionary<long, MatchPlayerCardView> _cards = new();
         private int _totalExpected;
         private int _spawnedCount;
+        private ILoadingProgressView _overallProgressView;
 
         // GameplayEventBus is scene-scoped (Singleton<T>) — it does not exist until the
         // map scene activates. SubscribeEvents() is called in ShowInternal() before the
@@ -133,6 +135,7 @@ namespace NightHunt.UI
             if (!_isVisible) return;
             _progressCurrent = Mathf.MoveTowards(_progressCurrent, _progressTarget, Time.deltaTime * 0.4f);
             if (overallProgressBar != null) overallProgressBar.value = _progressCurrent;
+            ResolveProgressView()?.SetProgress(_progressCurrent);
             if (overallPercentText != null) overallPercentText.text  = $"{Mathf.RoundToInt(_progressCurrent * 100f)}%";
 
             // GameplayEventBus is scene-scoped — it does not exist until the map scene
@@ -150,6 +153,27 @@ namespace NightHunt.UI
             bus.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
             _eventsSubscribed = true;
             Debug.Log($"[MatchLoadingOverlay] Late-subscribed to GameplayEventBus (stage={_stage})  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+        }
+
+        private ILoadingProgressView ResolveProgressView()
+        {
+            if (overallProgressViewComponent is ILoadingProgressView assigned)
+            {
+                _overallProgressView = assigned;
+                return _overallProgressView;
+            }
+
+            if (_overallProgressView != null)
+                return _overallProgressView;
+
+            if (panel != null)
+            {
+                _overallProgressView = panel.GetComponentInChildren<ILoadingProgressView>(true);
+                if (_overallProgressView is MonoBehaviour mb)
+                    overallProgressViewComponent = mb;
+            }
+
+            return _overallProgressView;
         }
 
         // ── Public API ─────────────────────────────────────────────────────────
@@ -308,31 +332,31 @@ namespace NightHunt.UI
             switch (stage)
             {
                 case MatchLoadStage.DsBooting:
-                    SetStatus("Starting game server\u2026");
+                    SetStatus("Starting game server...");
                     _progressTarget = 0.15f;
-                    foreach (var c in _cards.Values) c.SetProgress(0.1f, "Connecting\u2026");
+                    foreach (var c in _cards.Values) c.SetProgress(0.1f, "Connecting...");
                     break;
 
                 case MatchLoadStage.Connecting:
-                    SetStatus("Connecting to server\u2026");
+                    SetStatus("Connecting to server...");
                     _progressTarget = 0.3f;
                     break;
 
                 case MatchLoadStage.ServerReady:
-                    SetStatus("Connected. Loading match…");
+                    SetStatus("Connected. Loading match...");
                     _progressTarget = 0.5f;
                     // Advance all cards to "Connected" state
                     foreach (var c in _cards.Values) c.SetProgress(0.5f, "Connected");
                     break;
 
                 case MatchLoadStage.Spawning:
-                    SetStatus("Spawning players…");
+                    SetStatus("Spawning players...");
                     _progressTarget = 0.75f;
-                    foreach (var c in _cards.Values) c.SetProgress(0.6f, "Loading…");
+                    foreach (var c in _cards.Values) c.SetProgress(0.6f, "Loading...");
                     break;
 
                 case MatchLoadStage.AllReady:
-                    SetStatus("All players ready! Preparing match…");
+                    SetStatus("All players ready! Preparing match...");
                     _progressTarget = 1f;
                     foreach (var c in _cards.Values) c.MarkReady();
                     break;
@@ -421,6 +445,7 @@ namespace NightHunt.UI
         private void SetStatus(string msg)
         {
             if (statusText != null) statusText.text = msg;
+            ResolveProgressView()?.SetMessage(msg);
         }
 
         private void ShowRandomTip()
@@ -459,11 +484,36 @@ namespace NightHunt.UI
 
             yield return new WaitForSecondsRealtime(fadeDuration + 0.1f);
             NightHunt.State.RoomState.Instance?.ClearRoom();
-            GameModalWindow.Instance?.ShowNotice(
-                "Connection Failed",
-                "Unable to connect to the match server. Please try again.",
-                closeText: "Return to Home",
-                onClose:   () => NightHunt.UI.UINavigator.Instance?.GoHome());
+            var modal = GameModalWindow.Instance;
+            if (modal != null)
+            {
+                modal.ShowNotice(
+                    "Connection Failed",
+                    "Unable to connect to the match server. Please try again.",
+                    closeText: "Return to Home",
+                    onClose: ReturnToHomeAfterTimeout);
+            }
+            else
+            {
+                ReturnToHomeAfterTimeout();
+            }
+        }
+
+        private static void ReturnToHomeAfterTimeout()
+        {
+            if (NightHunt.Core.SceneLoader.HasPendingSceneLoad)
+            {
+                NightHunt.Core.SceneLoader.ReturnHomeFromGameplayFlow();
+                return;
+            }
+
+            if (UINavigator.Instance != null)
+            {
+                UINavigator.Instance.GoHome();
+                return;
+            }
+
+            NightHunt.Core.SceneLoader.ReturnHomeFromGameplayFlow();
         }
 
         // ── Event Subscription ─────────────────────────────────────────────────

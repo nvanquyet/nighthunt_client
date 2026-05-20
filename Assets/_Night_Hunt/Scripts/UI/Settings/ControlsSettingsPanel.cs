@@ -1,7 +1,10 @@
 using NightHunt.Config;
+using Michsky.UI.Shift;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 using TMPro;
+using NightHunt.Gameplay.Input.Core;
 
 namespace NightHunt.UI.Settings
 {
@@ -33,10 +36,18 @@ namespace NightHunt.UI.Settings
         [Header("Invert Y")]
         [Tooltip("Toggle for inverting vertical camera/aim axis.")]
         [SerializeField] private Toggle invertYToggle;
+        [Tooltip("Optional Shift UI switch used as the visual/input source for Invert Y.")]
+        [SerializeField] private SwitchManager invertYSwitch;
 
         [Header("Reset Button")]
         [Tooltip("Optional — wire onClick in Inspector to ResetToDefaults().")]
         [SerializeField] private Button resetButton;
+        [Tooltip("Optional — resets ALL key bindings to defaults. Wire onClick to ResetAllBindings().")]
+        [SerializeField] private Button _resetAllBindingsButton;
+        [SerializeField] private RebindActionUI[] rebindableActions;
+
+        private UnityAction _invertSwitchOnListener;
+        private UnityAction _invertSwitchOffListener;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -44,24 +55,56 @@ namespace NightHunt.UI.Settings
         {
             LoadAndApply();
             WireCallbacks();
+
+            if (rebindableActions != null)
+            {
+                foreach (var rebind in rebindableActions)
+                {
+                    if (rebind != null)
+                        rebind.OnBindingChanged += () => GameSettings.Instance?.SaveSettings();
+                }
+            }
+        }
+
+        private void OnValidate()
+        {
+            if (rebindableActions == null || rebindableActions.Length == 0)
+                rebindableActions = GetComponentsInChildren<RebindActionUI>(true);
+        }
+
+        public void RefreshFromPrefs()
+        {
+            LoadAndApply();
         }
 
         private void OnDestroy()
         {
             if (mouseSensitivitySlider != null)
-                mouseSensitivitySlider.onValueChanged.RemoveAllListeners();
+                mouseSensitivitySlider.onValueChanged.RemoveListener(HandleSensitivityChanged);
             if (invertYToggle != null)
-                invertYToggle.onValueChanged.RemoveAllListeners();
+                invertYToggle.onValueChanged.RemoveListener(HandleInvertYChanged);
+            if (invertYSwitch != null)
+            {
+                if (_invertSwitchOnListener != null)
+                    invertYSwitch.OnEvents.RemoveListener(_invertSwitchOnListener);
+                if (_invertSwitchOffListener != null)
+                    invertYSwitch.OffEvents.RemoveListener(_invertSwitchOffListener);
+            }
             if (resetButton != null)
                 resetButton.onClick.RemoveListener(ResetToDefaults);
+            if (_resetAllBindingsButton != null)
+                _resetAllBindingsButton.onClick.RemoveListener(ResetAllBindings);
         }
 
         // ── Load & Apply ───────────────────────────────────────────────────────
 
         private void LoadAndApply()
         {
-            float sensitivity = PlayerPrefs.GetFloat("MouseSensitivity", 1f);
-            bool  invertY     = PlayerPrefs.GetInt("InvertY", 0) == 1;
+            var settings = GameSettings.Instance;
+            if (settings == null) return;
+
+            float sensitivity = settings.MouseSensitivity;
+            bool  invertY     = settings.InvertY;
 
             if (mouseSensitivitySlider != null)
                 mouseSensitivitySlider.SetValueWithoutNotify(sensitivity);
@@ -69,13 +112,7 @@ namespace NightHunt.UI.Settings
 
             if (invertYToggle != null)
                 invertYToggle.SetIsOnWithoutNotify(invertY);
-
-            // Sync to GameSettings runtime state
-            if (GameSettings.Instance != null)
-            {
-                GameSettings.Instance.MouseSensitivity = sensitivity;
-                GameSettings.Instance.InvertY          = invertY;
-            }
+            ShiftUIBridge.SetSwitchSilently(invertYSwitch, invertY);
         }
 
         // ── Wire UI Callbacks ──────────────────────────────────────────────────
@@ -88,8 +125,20 @@ namespace NightHunt.UI.Settings
             if (invertYToggle != null)
                 invertYToggle.onValueChanged.AddListener(HandleInvertYChanged);
 
+            if (invertYSwitch != null)
+            {
+                _invertSwitchOnListener ??= () => HandleInvertYChanged(true);
+                _invertSwitchOffListener ??= () => HandleInvertYChanged(false);
+                invertYSwitch.OnEvents.RemoveListener(_invertSwitchOnListener);
+                invertYSwitch.OffEvents.RemoveListener(_invertSwitchOffListener);
+                invertYSwitch.OnEvents.AddListener(_invertSwitchOnListener);
+                invertYSwitch.OffEvents.AddListener(_invertSwitchOffListener);
+            }
+
             if (resetButton != null)
                 resetButton.onClick.AddListener(ResetToDefaults);
+            if (_resetAllBindingsButton != null)
+                _resetAllBindingsButton.onClick.AddListener(ResetAllBindings);
         }
 
         // ── Handlers ──────────────────────────────────────────────────────────
@@ -99,20 +148,24 @@ namespace NightHunt.UI.Settings
             value = Mathf.Clamp(value, 0.1f, 5f);
             UpdateSensitivityLabel(value);
 
-            PlayerPrefs.SetFloat("MouseSensitivity", value);
-            PlayerPrefs.Save();
-
             if (GameSettings.Instance != null)
+            {
                 GameSettings.Instance.MouseSensitivity = value;
+                GameSettings.Instance.SaveSettings();
+            }
         }
 
         private void HandleInvertYChanged(bool on)
         {
-            PlayerPrefs.SetInt("InvertY", on ? 1 : 0);
-            PlayerPrefs.Save();
-
             if (GameSettings.Instance != null)
+            {
                 GameSettings.Instance.InvertY = on;
+                GameSettings.Instance.SaveSettings();
+            }
+
+            if (invertYToggle != null && invertYToggle.isOn != on)
+                invertYToggle.SetIsOnWithoutNotify(on);
+            ShiftUIBridge.SetSwitchSilently(invertYSwitch, on);
         }
 
         // ── Public API ─────────────────────────────────────────────────────────
@@ -123,13 +176,35 @@ namespace NightHunt.UI.Settings
         /// </summary>
         public void ResetToDefaults()
         {
-            const float defaultSensitivity = 1f;
-            const bool  defaultInvertY     = false;
+            if (GameSettings.Instance != null)
+            {
+                GameSettings.Instance.ResetToDefaults();
+                LoadAndApply();
+            }
+        }
 
-            if (mouseSensitivitySlider != null) mouseSensitivitySlider.value = defaultSensitivity;
-            if (invertYToggle          != null) invertYToggle.isOn           = defaultInvertY;
+        /// <summary>
+        /// Reset all key/button bindings to defaults and refresh every RebindActionUI display.
+        /// Wire to a "Reset All Bindings" button onClick in Inspector.
+        /// </summary>
+        public void ResetAllBindings()
+        {
+            var asset = InputLayerManager.Instance?.Config?.InputActionAsset;
+            if (asset != null)
+            {
+                InputBindingSaveSystem.ResetAllBindings(asset);
+            }
+            else
+            {
+                Debug.LogWarning("[ControlsSettingsPanel] InputLayerManager not found — cannot reset bindings.");
+            }
 
-            // Callbacks above persist to PlayerPrefs + GameSettings automatically.
+            // Refresh every rebind entry label
+            if (rebindableActions != null)
+            {
+                foreach (var rebind in rebindableActions)
+                    rebind?.RefreshDisplay();
+            }
         }
 
         // ── Helpers ────────────────────────────────────────────────────────────
@@ -139,5 +214,6 @@ namespace NightHunt.UI.Settings
             if (sensitivityValueLabel != null)
                 sensitivityValueLabel.text = value.ToString("F1");
         }
+
     }
 }

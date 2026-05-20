@@ -29,6 +29,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
         // Raw look value polled every Update (works for both mouse delta and analog stick).
         private Vector2 _rawLookValue;
 
+        private float _sensitivityMultiplier = 1f;
+        private bool _invertY = false;
+
         // Events
         public event System.Action<float> OnRotate; // Rotation delta
         public event System.Action<float> OnZoom;   // Zoom delta
@@ -60,13 +63,25 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
             if (lookAction != null)
                 _rawLookValue = lookAction.ReadValue<Vector2>();
 
-            currentRotationY += _rawLookValue.x * _rotationSpeed * Time.deltaTime;
+            float rotationInput = _rawLookValue.x * _rotationSpeed * _sensitivityMultiplier * Time.deltaTime;
+            currentRotationY += rotationInput;
 
             if (currentRotationY != 0f)
             {
                 OnRotate?.Invoke(currentRotationY);
                 currentRotationY = 0f;
             }
+        }
+
+        #endregion
+
+        #region Public API
+
+        public void ApplySettings(float sensitivity, bool invertY)
+        {
+            _sensitivityMultiplier = sensitivity;
+            _invertY = invertY;
+            Debug.Log($"[CameraInputHandler] Applied settings: Sens={sensitivity}, InvertY={invertY}");
         }
 
         #endregion

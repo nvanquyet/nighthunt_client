@@ -1,8 +1,10 @@
 using System.Collections;
 using System.Threading.Tasks;
 using Michsky.UI.Shift;
+using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data;
+using NightHunt.Data.DTOs;
 using NightHunt.Services.Auth;
 using NightHunt.State;
 using NightHunt.Utils;
@@ -18,10 +20,10 @@ namespace NightHunt.UI
     /// Single-scene: dùng UINavigator instead of SceneLoader.
     /// Supports "Ghi nhớ log in" → lưu refreshToken vào PlayerPrefs.
     ///
-    /// KHÔNG implement INavigableView — dùng OnEnable() tự nhiên của Unity.
-    /// Shift UI dùng SetActive(true) để show panel → OnEnable tự fire.
+    /// Implements INavigableView so UINavigator owns show/hide sequencing.
+    /// OnEnable still prepares Shift UI visual state when the package activates the panel.
     /// </summary>
-    public class LoginView : MonoBehaviour
+    public class LoginView : MonoBehaviour, INavigableView
     {
         // ─── Login Form ─────────────────────────────────────────────
         [Header("Login Form")]
@@ -43,10 +45,11 @@ namespace NightHunt.UI
 
         // ─── Login Events ────────────────────────────────────────────────────
         [Header("Login Events")]
-        [Tooltip("Fired khi login success. Wire animation, sound, v.v. ở đây.")]
+        [Tooltip("Legacy visual-only hook. Disabled by default so scene callbacks cannot start loading/navigation.")]
         public UnityEvent onLoginSuccess;
         [Tooltip("Fired khi login failed (after Toast đã show).")]
         public UnityEvent onLoginFailed;
+        [SerializeField] private bool invokeLegacyLoginSuccessEvents = false;
 
         // ─── Register Events ─────────────────────────────────────────────────
         [Header("Register Events")]
@@ -68,6 +71,10 @@ namespace NightHunt.UI
         [Header("Panel References")]
         [Tooltip("HomeView on the same scene. Required for the post-login preload flow.")]
         [SerializeField] private HomeView homeView;
+        [Tooltip("Animator that owns the login/register visual states.")]
+        [SerializeField] private Animator authFlowAnimator;
+        [SerializeField] private string registerSuccessAnimatorState = "Sign Up to Login";
+        [SerializeField] private float postLoginPreloadTimeout = 15f;
         // ─── Internal ────────────────────────────────────────────────────────
         private AuthService AuthService
         {
@@ -106,13 +113,38 @@ namespace NightHunt.UI
 
         private void OnEnable()
         {
-            // Khi Shift UI / UINavigator.OnGoLogin fire SetActive(true) → OnEnable chạy.
-            // Hide stale loading screen nếu còn đang show.
+            PrepareForShow();
+            StartCoroutine(RestoreAfterFrame());
+        }
+
+        public bool CanLeave(NavigationContext context) => true;
+
+        public Task OnShowAsync(NavigationContext context)
+        {
+            PrepareForShow();
+            RestoreRememberMeToggle();
+            return Task.CompletedTask;
+        }
+
+        public Task OnHideAsync(NavigationContext context)
+        {
+            SetLoginLoading(false);
+            SetRegisterLoading(false);
+            SetButtonsInteractable(true);
+            return Task.CompletedTask;
+        }
+
+        private void PrepareForShow()
+        {
+            if (_loadingManager == null)
+            {
+                _loadingManager = PersistentUICanvas.Instance != null
+                    ? PersistentUICanvas.Instance.LoadingManager
+                    : LoadingManager.Instance;
+            }
+
             if (_loadingManager != null && _loadingManager.IsShowing())
                 _loadingManager.Hide();
-
-            // Restore RememberMe toggle sau 1 frame (chờ SwitchManager.OnEnable xong).
-            StartCoroutine(RestoreAfterFrame());
         }
 
         private IEnumerator RestoreAfterFrame()
@@ -129,9 +161,7 @@ namespace NightHunt.UI
         {
             if (rememberMeSwitch == null) return;
             bool remembered = PlayerPrefs.GetInt(LoadingManager.KEY_REMEMBER_ME, 0) == 1;
-            // AnimateSwitch() toggle trạng thái — chỉ gọi nếu khác với value cần restore
-            if (rememberMeSwitch.isOn != remembered)
-                rememberMeSwitch.AnimateSwitch();
+            ShiftUIBridge.SetSwitchSilently(rememberMeSwitch, remembered);
         }
 
         /// <summary>
@@ -178,67 +208,138 @@ namespace NightHunt.UI
 
             SetLoginLoading(true);
             SetButtonsInteractable(false);
+            Debug.Log(
+                $"[FLOW][AUTH] Login request start identifier='{identifier}' remember={(rememberMeSwitch != null && rememberMeSwitch.isOn)} " +
+                $"authService={(AuthService == null ? "null" : AuthService.GetType().Name)} homeView={(homeView == null ? "null" : homeView.name)}");
 
-            // Suppress HomeView's OnUserLoggedIn fallback — LoginView owns the entire post-login
-            // flow (loading overlay → config fetch → home data preload → GoHome).
-            // SessionState.OnUserLoggedIn fires synchronously inside AuthService.Login(), so
-            // suppression must be set BEFORE the await to prevent a premature OnShow() burst.
-            homeView?.SuppressNextLoginFallback();
+            ApiResult<AuthResponse> result;
+            try
+            {
+                result = await AuthService.Login(identifier, password);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[LoginView] Login request failed: {ex}");
+                SetLoginLoading(false);
+                SetButtonsInteractable(true);
+                ShowToast("Login Failed", "Could not connect to the server. Please try again.");
+                onLoginFailed?.Invoke();
+                return;
+            }
 
-            var result = await AuthService.Login(identifier, password);
+            if (result == null)
+            {
+                Debug.LogError("[FLOW][AUTH] Login returned null ApiResult.");
+                SetLoginLoading(false);
+                SetButtonsInteractable(true);
+                ShowToast("Login Failed", "Could not connect to the server. Please try again.");
+                onLoginFailed?.Invoke();
+                return;
+            }
 
             SetLoginLoading(false);
-            SetButtonsInteractable(true);
+            Debug.Log(
+                $"[FLOW][AUTH] Login result success={result.Success} errorCode={result.ErrorCode ?? "null"} " +
+                $"message='{result.Message ?? "null"}' hasData={result.Data != null}");
 
             if (result.Success)
             {
                 HandleRememberMe(result.data.refreshToken);
+                Debug.Log("[FLOW][AUTH] Login success; clearing stale room state and starting home preload.");
                 // Always reset stale room/network state on fresh login (unconditional)
                 RoomState.Instance?.ClearRoom();
-                onLoginSuccess?.Invoke();   // Inspector: wire animation/sound here
+                if (invokeLegacyLoginSuccessEvents)
+                    onLoginSuccess?.Invoke();
 
-                // Show loading overlay while pre-fetching home data before navigating.
-                var loading = PersistentUICanvas.Instance?.LoadingManager ?? LoadingManager.Instance;
-                loading?.Show("Loading...");
+                LoadingManager.LoadingHandle loadingHandle = null;
+                try
+                {
+                    // Show loading overlay while pre-fetching home data before navigating.
+                    var loading = PersistentUICanvas.Instance?.LoadingManager ?? LoadingManager.Instance;
+                    loadingHandle = loading?.Begin("LoginFlow", "Loading config...", 0.15f);
 
-                // Config must complete first — MatchFlowCoordinator.HandleMatchReady() uses
-                // MapConfig to resolve the correct game scene. FetchGameConfigFlow is skipped
-                // during fresh login (no refresh token yet), so this is the guaranteed load point.
-                // IMPORTANT: do NOT start PreloadDataAsync() before awaiting this; calling it
-                // first would burst 6+ requests simultaneously and hit the rate limit.
-                await (GameManager.Instance?.GameConfigService?.FetchAsync()
-                       ?? System.Threading.Tasks.Task.FromResult(false));
+                    // Config must complete first — MatchFlowCoordinator.HandleMatchReady() uses
+                    // MapConfig to resolve the correct game scene. FetchGameConfigFlow is skipped
+                    // during fresh login (no refresh token yet), so this is the guaranteed load point.
+                    // IMPORTANT: do NOT start PreloadDataAsync() before awaiting this; calling it
+                    // first would burst 6+ requests simultaneously and hit the rate limit.
+                    bool configLoaded = await (GameManager.Instance?.GameConfigService?.FetchAsync()
+                           ?? System.Threading.Tasks.Task.FromResult(false));
+                    Debug.Log($"[FLOW][AUTH] Game config preload result={configLoaded}");
+                    if (!configLoaded)
+                        Debug.LogWarning("[LoginView] Game config fetch failed; continuing with local defaults.");
+                    loadingHandle?.SetProgress(0.55f);
+                    loadingHandle?.SetMessage("Loading profile...");
 
-                // Config is now populated. Pre-fetch home panel data (profile, friends, party)
-                // while the overlay is still visible. Sets HomeView._homeDataPreloaded so
-                // OnShow() skips the redundant refetch on the first show after login.
-                if (homeView != null)
-                    await homeView.PreloadDataAsync();
+                    // Config is now populated. Pre-fetch home panel data (profile, friends, party)
+                    // while the overlay is still visible. Sets HomeView._homeDataPreloaded so
+                    // OnShow() skips the redundant refetch on the first show after login.
+                    if (homeView == null)
+                        throw new System.InvalidOperationException("[LoginView] HomeView is not assigned; cannot preload Home data.");
 
-                // Brief pause for a smooth UX transition before the panel swap.
-                await System.Threading.Tasks.Task.Delay(300);
+                    await AwaitWithTimeout(
+                        homeView.PreloadDataAsync(),
+                        postLoginPreloadTimeout,
+                        "home data preload");
+                    Debug.Log("[FLOW][AUTH] Home preload completed.");
 
-                loading?.Hide();
-                UINavigator.Instance?.GoHome();
-            }
-            else if (result.ErrorCode == ErrorCodes.AUTH_SESSION_CONFLICT)
-            {
-                // Release suppression — login flow did not complete.
-                homeView?.ClearSuppressLoginFallback();
+                    // Brief pause for a smooth UX transition before the panel swap.
+                    await System.Threading.Tasks.Task.Delay(300);
+
+                    loadingHandle?.SetProgress(0.95f);
+                    if (UINavigator.Instance != null)
+                        await UINavigator.Instance.ShowPanelAsync(PanelType.Home, reason: "LoginSuccess");
+
+                    loadingHandle?.Complete("Ready");
+                    Debug.Log("[FLOW][AUTH] Login flow completed; navigated to Home.");
+                    SetButtonsInteractable(true);
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[FLOW][AUTH] Post-login preload failed: {ex}");
+
+                    // Critical error in preload -> Clear token to avoid AUTH_SESSION_CONFLICT on next try
+                    // as the previous login was successful but the state is now broken.
+                    SecureStorage.DeleteKey(LoadingManager.KEY_REFRESH_TOKEN);
+                    if (GameManager.Instance != null && GameManager.Instance.SessionState != null)
+                        GameManager.Instance.SessionState.ClearSession();
+
+                    loadingHandle?.Fail("Login failed. Home data could not be loaded.", hide: true);
+
+                    // Brief delay to allow Loading panel to hide before showing toast
+                    Debug.Log("[FLOW][AUTH] Scheduling delayed login-failed toast after loading overlay hide.");
+                    _ = ShowErrorToastDelayed("Login Failed", "Could not load home data. Please try again.");
+
+                    SetButtonsInteractable(true);
+                    onLoginFailed?.Invoke();
+                }
+                }
+                else if (result.ErrorCode == ErrorCodes.AUTH_SESSION_CONFLICT)
+                {
+                // Clear token as it's definitely stale/conflicting
+                SecureStorage.DeleteKey(LoadingManager.KEY_REFRESH_TOKEN);
+
                 // Old session was terminated — user just needs to try again once.
-                Debug.Log("[LoginView] AUTH_SESSION_CONFLICT: previous session terminated, prompting retry");
-                ShowToast("Đăng xuất success", result.Message ?? "Phiên trước đã bị log out. Vui lòng log in lại.");
-                // Do NOT fire onLoginFailed — user can retry immediately without changing anything.
-            }
-            else
-            {
-                // Release suppression — login flow did not complete.
-                homeView?.ClearSuppressLoginFallback();
-                Debug.LogWarning($"[LoginView] Login failed: {result.Message}");
-                ShowToast("Login Failed", result.Message ?? "Please try again.");
+                Debug.Log("[FLOW][AUTH] AUTH_SESSION_CONFLICT: previous session terminated, prompting retry");
+                ShowToast("Authentication Conflict", result.Message ?? "Previous session was terminated. Please login again.");
+                SetButtonsInteractable(true);
+                }
+                else
+                {
+                Debug.LogWarning($"[FLOW][AUTH] Login failed errorCode={result.ErrorCode ?? "null"} message='{result.Message ?? "null"}'");
+                ShowToast("Login Failed", result.Message ?? "Please check credentials and try again.");
+                SetButtonsInteractable(true);
                 onLoginFailed?.Invoke();
-            }
-        }
+                }
+                }
+
+                private async Task ShowErrorToastDelayed(string title, string message)
+                {
+                Debug.Log($"[FLOW][AUTH] Delayed toast wait start title='{title}' message='{message}'");
+                await Task.Delay(500);
+                Debug.Log($"[FLOW][AUTH] Delayed toast show title='{title}'");
+                ShowToast(title, message);
+                }
 
         // ─────────────────────────────────────────────────────────────────────
         // Register
@@ -278,13 +379,27 @@ namespace NightHunt.UI
             SetRegisterLoading(true);
             SetButtonsInteractable(false);
 
-            var result = await AuthService.Register(username, email, password, confirmPassword);
+            ApiResult<AuthResponse> result;
+            try
+            {
+                result = await AuthService.Register(username, email, password, confirmPassword);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[LoginView] Register request failed: {ex}");
+                SetRegisterLoading(false);
+                SetButtonsInteractable(true);
+                ShowToast("Registration Failed", "Could not connect to the server. Please try again.");
+                onRegisterFailed?.Invoke();
+                return;
+            }
 
             SetRegisterLoading(false);
             SetButtonsInteractable(true);
 
             if (result.Success)
             {
+                PlayRegisterSuccessVisual();
                 onRegisterSuccess?.Invoke();
                 Debug.Log($"[LoginView] Register success — username='{username}'");
                 ShowToast("Success", "Registration complete! Please log in.", ClearRegisterFields);
@@ -303,9 +418,30 @@ namespace NightHunt.UI
             if (emailInput           != null) emailInput.text           = "";
             if (regPasswordInput     != null) regPasswordInput.text     = "";
             if (confirmPasswordInput != null) confirmPasswordInput.text = "";
-            // Reset switch điều khoản về Off after register success
-            if (agreeToTermsSwitch != null && agreeToTermsSwitch.isOn)
-                agreeToTermsSwitch.AnimateSwitch();
+            // Reset switch dieu khoan ve Off without firing Shift events.
+            ShiftUIBridge.SetSwitchSilently(agreeToTermsSwitch, false);
+        }
+
+        private void PlayRegisterSuccessVisual()
+        {
+            if (authFlowAnimator == null || string.IsNullOrWhiteSpace(registerSuccessAnimatorState))
+                return;
+
+            ShiftUIBridge.PlayAnimatorState(authFlowAnimator, registerSuccessAnimatorState);
+        }
+
+        private static async Task AwaitWithTimeout(Task task, float timeoutSeconds, string label)
+        {
+            if (task == null)
+                return;
+
+            float clampedTimeout = Mathf.Max(1f, timeoutSeconds);
+            Task timeoutTask = Task.Delay(System.TimeSpan.FromSeconds(clampedTimeout));
+            Task completed = await Task.WhenAny(task, timeoutTask);
+            if (completed != task)
+                throw new System.TimeoutException($"{label} timed out after {clampedTimeout:F1}s.");
+
+            await task;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -330,8 +466,16 @@ namespace NightHunt.UI
             RoomState.Instance?.ClearRoom();
             RoomState.Instance?.ClearNetworkSession();
 
-            // Navigate về Login panel — fire UINavigator.OnGoLogin event
-            UINavigator.Instance?.GoLogin();
+            // Navigate về Login panel through the code-first navigator when Home scene is alive.
+            // During gameplay there is no scene-scoped UINavigator, so return to 01_Home;
+            // LoadingManager will route to Login because the session has already been cleared.
+            if (SceneLoader.HasPendingSceneLoad)
+                SceneLoader.ReturnHomeFromGameplayFlow();
+            else if (UINavigator.Instance != null)
+                UINavigator.Instance.GoForce(PanelType.Login);
+            else
+                SceneLoader.ReturnHomeFromGameplayFlow();
+
             Debug.Log("[LoginView] Logged out — all tokens & state cleared.");
         }
 
@@ -353,11 +497,20 @@ namespace NightHunt.UI
 
         private void ShowToast(string title, string message, System.Action onConfirm = null)
         {
-            var toast = PersistentUICanvas.Instance != null
-                ? PersistentUICanvas.Instance.ToastService
-                : ToastService.Instance;
+            var persistent = PersistentUICanvas.Instance;
+            var toast = persistent?.ToastService ?? ToastService.Instance;
 
-            toast?.Show(title: title, message: message, onConfirm: onConfirm);
+            Debug.Log(
+                $"[FLOW][AUTH] ShowToast title='{title}' message='{message}' " +
+                $"persistent={(persistent == null ? "null" : persistent.name)} service={(toast == null ? "null" : toast.name)}");
+
+            if (toast == null)
+            {
+                Debug.LogError("[FLOW][AUTH] ShowToast aborted: ToastService not found.");
+                return;
+            }
+
+            toast.Show(title: title, message: message, onConfirm: onConfirm);
         }
 
         private void SetButtonsInteractable(bool interactable)

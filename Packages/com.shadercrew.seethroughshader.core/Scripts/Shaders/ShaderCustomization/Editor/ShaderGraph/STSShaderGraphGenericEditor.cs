@@ -26,7 +26,7 @@ namespace ShaderCrew.SeeThroughShader
                 //    materialEditor.ShaderProperty(materialProperty, materialProperty.displayName);
                 //}
 #endif
-                if ((materialProperty.flags & (MaterialProperty.PropFlags.HideInInspector | MaterialProperty.PropFlags.PerRendererData)) != 0)
+                if ((materialProperty.propertyFlags & (UnityEngine.Rendering.ShaderPropertyFlags.HideInInspector | UnityEngine.Rendering.ShaderPropertyFlags.PerRendererData)) != 0)
                     continue;
 
                 if (!GeneralUtils.STS_SYNC_PROPERTIES_LIST.Contains(materialProperty.name) && !GeneralUtils.STS_NONSYNC_PROPERTIES_LIST.Contains(materialProperty.name))

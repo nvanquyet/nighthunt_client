@@ -4,6 +4,7 @@ using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.Weapon
 {
@@ -17,6 +18,7 @@ namespace NightHunt.GameplaySystems.Weapon
         {
             var slot = _activeSlot.Value;
             Debug.Log($"[WEAPON_FLOW] [01][Reload.Request] slot={slot?.ToString() ?? "none"} reloading={_isReloading} isServer={IsServerInitialized} isOwner={IsOwner}");
+            PhaseTestLog.Log(PhaseTestLogCategory.Weapon, "ReloadRequest", $"slot={slot?.ToString() ?? "none"} reloading={_isReloading} isServer={IsServerInitialized} isOwner={IsOwner}", this);
             if (slot == null || _isReloading) return;
             if (!_weaponCache.TryGetValue(slot.Value, out var inst))
             {
@@ -141,6 +143,11 @@ namespace NightHunt.GameplaySystems.Weapon
             // -- Start reload --
             _isReloading = true;
             Debug.Log($"[WEAPON_FLOW] [03][Reload.Start] slot={slot} duration={reloadTime:F2} mag={(int)inst.GetCurrentValue(ItemStatType.MagazineSize)} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "ReloadStart",
+                $"slot={slot} item={inst.InstanceID} def={inst.DefinitionID} duration={reloadTime:F2} mag={(int)inst.GetCurrentValue(ItemStatType.MagazineSize)} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)} syncInventory={syncInventoryOnComplete} broadcastRemote={broadcastRemoteState}",
+                this);
             OnReloadStateChanged?.Invoke(true);
             if (broadcastRemoteState && IsServerInitialized)
                 BroadcastReloadStateObserversRpc(true);
@@ -169,6 +176,11 @@ namespace NightHunt.GameplaySystems.Weapon
             _isReloading = false;
             _reloadCoroutine = null;
             Debug.Log($"[WEAPON_FLOW] [04][Reload.Done] slot={slot} mag={newMag}/{(int)magCap} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)}");
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Weapon,
+                "ReloadDone",
+                $"slot={slot} item={inst.InstanceID} def={inst.DefinitionID} mag={newMag}/{(int)magCap} reserve={(int)inst.GetCurrentValue(ItemStatType.MaxAmmo)} actual={actual}",
+                this);
             OnReloadStateChanged?.Invoke(false);
             if (broadcastRemoteState && IsServerInitialized)
                 BroadcastReloadStateObserversRpc(false);
@@ -193,6 +205,7 @@ namespace NightHunt.GameplaySystems.Weapon
             if (wasReloading)
             {
                 Debug.Log($"[WEAPON_FLOW] [04][Reload.Cancel] reason={reason} active={_activeSlot.Value?.ToString() ?? "none"}");
+                PhaseTestLog.Log(PhaseTestLogCategory.Weapon, "ReloadCancel", $"reason={reason} active={_activeSlot.Value?.ToString() ?? "none"}", this);
                 OnReloadStateChanged?.Invoke(false);
                 if (IsServerInitialized)
                     BroadcastReloadStateObserversRpc(false);
@@ -215,6 +228,7 @@ namespace NightHunt.GameplaySystems.Weapon
             _isReloading = false;
             _reloadCoroutine = null;
             Debug.Log($"[WEAPON_FLOW] [04][Reload.Cancel] slot={slot} item={reloadInstanceId} reason={reason} active={_activeSlot.Value?.ToString() ?? "none"}");
+            PhaseTestLog.Log(PhaseTestLogCategory.Weapon, "ReloadCancel", $"slot={slot} item={reloadInstanceId} reason={reason} active={_activeSlot.Value?.ToString() ?? "none"}", this);
             OnReloadStateChanged?.Invoke(false);
             if (broadcastRemoteState && IsServerInitialized)
                 BroadcastReloadStateObserversRpc(false);

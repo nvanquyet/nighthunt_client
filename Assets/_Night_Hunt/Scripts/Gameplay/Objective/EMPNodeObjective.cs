@@ -14,12 +14,16 @@ namespace NightHunt.Gameplay.Objective
     /// Players destroy this node by dealing damage to it (IHittable).
     /// On completion: awards objective score to the destroying team.
     /// </summary>
-    public class EMPNodeObjective : NetworkBehaviour, IObjective, IHittable, IHealthSource
+    public class EMPNodeObjective : NetworkBehaviour, IObjective, IHittable, IHealthSource, IBulletTarget
     {
         [Header("EMP Node Settings")]
         [SerializeField] private string objectiveId = "EMP_NODE";
         [SerializeField] private string objectiveName = "Destroy EMP Node";
         [SerializeField] private float maxHealth = 100f;
+
+        [Header("Bullet Targeting")]
+        [SerializeField] private Vector3 _bulletAcquirePointOffset = Vector3.up;
+        [SerializeField, Min(0.1f)] private float _bulletAcquireRadius = 1.25f;
 
         [Header("Score")]
         [Tooltip("Score awarded to the destroying team via MatchEndManager.AddObjectiveScore.")]
@@ -39,6 +43,11 @@ namespace NightHunt.Gameplay.Objective
         public bool   IsDead => IsCompleted || CurrentHealth <= 0f;
         public event System.Action<float, float> OnHealthChanged;
         public event System.Action<HealthChangeEvent> HealthChanged;
+        public HittableTargetType TargetType => HittableTargetType.Structure;
+        public Vector3 AcquirePoint => transform.position + transform.TransformDirection(_bulletAcquirePointOffset);
+        public float AcquireRadius => Mathf.Max(0.1f, _bulletAcquireRadius);
+        public IHittable HitTarget => this;
+        public bool IsAcquirable => isActiveAndEnabled && !IsDead;
 
         public float Progress
         {
@@ -63,10 +72,22 @@ namespace NightHunt.Gameplay.Objective
             _syncHealth.OnChange += OnHealthSyncChanged;
         }
 
+        public override void OnStartNetwork()
+        {
+            base.OnStartNetwork();
+            BulletTargetRegistry.Register(this);
+        }
+
         public override void OnStopClient()
         {
             base.OnStopClient();
             _syncHealth.OnChange -= OnHealthSyncChanged;
+        }
+
+        public override void OnStopNetwork()
+        {
+            BulletTargetRegistry.Unregister(this);
+            base.OnStopNetwork();
         }
 
         public void OnUpdate()
@@ -112,31 +133,47 @@ namespace NightHunt.Gameplay.Objective
         [Server]
         public void TakeDamage(float damage)
         {
-            if (!_syncIsCompleted.Value)
-                _syncHealth.Value = Mathf.Max(0f, _syncHealth.Value - damage);
+            ApplyDamageServer(damage, -1);
         }
 
         // ── IHittable ──────────────────────────────────────────────────────────
 
-        public void RequestDamage(DamageInfo info) =>
+        public void RequestDamage(DamageInfo info)
+        {
+            if (IsServerStarted)
+            {
+                ApplyDamageServer(info.Damage, info.ShooterNetworkObjectId);
+                return;
+            }
+
             RequestDamageServerRpc(info.Damage, info.ShooterNetworkObjectId);
+        }
 
         [ServerRpc(RequireOwnership = false)]
         private void RequestDamageServerRpc(float damage, int shooterNetObjId)
+            => ApplyDamageServer(damage, shooterNetObjId);
+
+        [Server]
+        private void ApplyDamageServer(float damage, int shooterNetObjId)
         {
+            if (_syncIsCompleted.Value)
+                return;
+
             // Resolve attacker team before applying damage so the last attacker
             // that brings health to 0 is the one whose team gets the score.
             if (shooterNetObjId > 0)
             {
-                if (InstanceFinder.NetworkManager.ServerManager.Objects.Spawned
-                       .TryGetValue(shooterNetObjId, out var nob))
+                var serverManager = InstanceFinder.ServerManager;
+                if (serverManager != null &&
+                    serverManager.Objects.Spawned.TryGetValue(shooterNetObjId, out var nob))
                 {
                     var player = nob.GetComponent<NetworkPlayer>();
                     if (player != null)
                         _lastAttackerTeamId = player.TeamId;
                 }
             }
-            TakeDamage(damage);
+
+            _syncHealth.Value = Mathf.Max(0f, _syncHealth.Value - Mathf.Max(0f, damage));
         }
     }
 }

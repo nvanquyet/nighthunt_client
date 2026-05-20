@@ -19,16 +19,22 @@ namespace NightHunt.UI
         [SerializeField] private GraphicRaycaster graphicRaycaster;
 
         [Header("UI Components")]        [SerializeField] private LoadingManager     loadingManager;
+        [SerializeField] private BootIntroView bootIntroView;
         [SerializeField] private MatchLoadingOverlay matchLoadingOverlay;
         [SerializeField] private MatchFoundOverlay   matchFoundOverlay;
+        [SerializeField] private MatchFlowCoordinator matchFlowCoordinator;
+        [SerializeField] private SessionTerminationListener sessionTerminationListener;
         [SerializeField] private PingDisplay         pingDisplay;
         [SerializeField] private ToastService        toastService;
 
         // Public accessors (use Instance instead of needing type cast)
         public Canvas              Canvas               => canvas;
         public LoadingManager      LoadingManager       => loadingManager;
+        public BootIntroView       BootIntroView        => bootIntroView;
         public MatchLoadingOverlay MatchLoadingOverlay  => matchLoadingOverlay;
         public MatchFoundOverlay   MatchFoundOverlay    => matchFoundOverlay;
+        public MatchFlowCoordinator MatchFlowCoordinator => matchFlowCoordinator;
+        public SessionTerminationListener SessionTerminationListener => sessionTerminationListener;
         public PingDisplay         PingDisplay          => pingDisplay;
         public ToastService        ToastService         => toastService;
 
@@ -101,10 +107,48 @@ namespace NightHunt.UI
             if (loadingManager != null)
                 loadingManager.gameObject.SetActive(true);
 
+            EnsureBootIntroView();
+            EnsurePersistentFlowComponents();
+
             // MatchLoadingOverlay ẩn mặc định (tự ẩn trong Awake của nó)
             // Không cần làm gì thêm ở đây
 
             // PingDisplay tự start trong Start()
+        }
+
+        private void EnsurePersistentFlowComponents()
+        {
+            if (matchFlowCoordinator == null)
+            {
+                matchFlowCoordinator = GetComponentInChildren<MatchFlowCoordinator>(true);
+                if (matchFlowCoordinator == null)
+                    matchFlowCoordinator = FindFirstObjectByType<MatchFlowCoordinator>(FindObjectsInactive.Include);
+                if (matchFlowCoordinator == null)
+                    matchFlowCoordinator = gameObject.AddComponent<MatchFlowCoordinator>();
+            }
+
+            if (sessionTerminationListener == null)
+            {
+                sessionTerminationListener = GetComponentInChildren<SessionTerminationListener>(true);
+                if (sessionTerminationListener == null)
+                    sessionTerminationListener = FindFirstObjectByType<SessionTerminationListener>(FindObjectsInactive.Include);
+                if (sessionTerminationListener == null)
+                    sessionTerminationListener = gameObject.AddComponent<SessionTerminationListener>();
+            }
+        }
+
+        public BootIntroView EnsureBootIntroView()
+        {
+            if (bootIntroView == null)
+                bootIntroView = GetComponentInChildren<BootIntroView>(true);
+
+            if (bootIntroView == null)
+                bootIntroView = BootIntroView.CreateRuntime(canvas != null ? canvas.transform : transform);
+
+            if (bootIntroView != null)
+                bootIntroView.EnsureRuntimeWiring();
+
+            return bootIntroView;
         }
 
         /// <summary>
@@ -139,6 +183,8 @@ namespace NightHunt.UI
                 loadingManager = loadingGO.AddComponent<LoadingManager>();
             }
 
+            EnsureBootIntroView();
+
             if (matchLoadingOverlay == null)
             {
                 GameObject go = new GameObject("MatchLoadingOverlay");
@@ -152,6 +198,8 @@ namespace NightHunt.UI
                 pingGO.transform.SetParent(transform, false);
                 pingDisplay = pingGO.AddComponent<PingDisplay>();
             }
+
+            EnsurePersistentFlowComponents();
         }
 
 #if UNITY_EDITOR
@@ -198,6 +246,9 @@ namespace NightHunt.UI
                     .Resolve();
             }
 
+            if (bootIntroView == null)
+                bootIntroView = GetComponentInChildren<BootIntroView>(true);
+
             if (pingDisplay == null)
             {
                 pingDisplay = ComponentResolver.Find<PingDisplay>(this)
@@ -207,6 +258,12 @@ namespace NightHunt.UI
                     .OrLogWarning("[Auto] PingDisplay not found")
                     .Resolve();
             }
+
+            if (matchFlowCoordinator == null)
+                matchFlowCoordinator = GetComponentInChildren<MatchFlowCoordinator>(true);
+
+            if (sessionTerminationListener == null)
+                sessionTerminationListener = GetComponentInChildren<SessionTerminationListener>(true);
         }
 #endif
     }

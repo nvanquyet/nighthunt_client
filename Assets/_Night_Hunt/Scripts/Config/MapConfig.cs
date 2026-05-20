@@ -54,6 +54,28 @@ namespace NightHunt.Config
     [CreateAssetMenu(fileName = "MapConfig", menuName = "NightHunt/Config/Map Config")]
     public class MapConfig : ScriptableObjectSingleton<MapConfig>
     {
+        private static readonly MapEntry[] FallbackMaps =
+        {
+            new MapEntry
+            {
+                mapId          = "map_01",
+                displayName    = "Industrial Zone",
+                description    = "Urban combat in a derelict factory.",
+                sceneId        = SceneId.GameMap_01,
+                supportedModes = Array.Empty<string>(),
+                isLocked       = false
+            },
+            new MapEntry
+            {
+                mapId          = "map_02",
+                displayName    = "Arctic Base",
+                description    = "Close-quarters in a frozen research facility.",
+                sceneId        = SceneId.GameMap_02,
+                supportedModes = Array.Empty<string>(),
+                isLocked       = false
+            }
+        };
+
         [Header("Maps")]
         [Tooltip("All maps available in the game. Order determines display order in carousel.")]
         [SerializeField] private MapEntry[] maps = new MapEntry[]
@@ -79,6 +101,22 @@ namespace NightHunt.Config
         };
 
         // ── Public API ─────────────────────────────────────────────────────────
+
+        public static event System.Action OnConfigLoaded;
+
+        private static void SafeInvokeOnConfigLoaded()
+        {
+            if (OnConfigLoaded == null) return;
+            var invocationList = OnConfigLoaded.GetInvocationList();
+            foreach (var del in invocationList)
+            {
+                try { del.DynamicInvoke(); }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[MapConfig] Error in OnConfigLoaded listener '{del.Method.DeclaringType}.{del.Method.Name}': {ex}");
+                }
+            }
+        }
 
         /// <summary>
         /// Populate this config from server data (called by GameConfigService at startup).
@@ -132,6 +170,7 @@ namespace NightHunt.Config
             }
 
             Instance.maps = entries;
+            SafeInvokeOnConfigLoaded();
         }
 
         /// <summary>All map entries (locked and unlocked).</summary>
@@ -139,8 +178,13 @@ namespace NightHunt.Config
         {
             if (Instance == null)
             {
-                Debug.LogError("[MapConfig] Instance not found! Place MapConfig.asset in Resources/.");
-                return Array.Empty<MapEntry>();
+                Debug.LogWarning("[MapConfig] Instance not found. Using built-in fallback maps.");
+                return FallbackMaps;
+            }
+            if (Instance.maps == null || Instance.maps.Length == 0)
+            {
+                Debug.LogWarning("[MapConfig] No maps configured. Using built-in fallback maps.");
+                return FallbackMaps;
             }
             return Instance.maps;
         }
@@ -172,7 +216,7 @@ namespace NightHunt.Config
             int i = 0;
             foreach (var m in all)
                 if (!m.isLocked && SupportsMode(m, modeKey)) result[i++] = m;
-            return result;
+            return result.Length > 0 ? result : GetAvailable();
         }
 
         /// <summary>Find entry by mapId. Returns false if not found.</summary>

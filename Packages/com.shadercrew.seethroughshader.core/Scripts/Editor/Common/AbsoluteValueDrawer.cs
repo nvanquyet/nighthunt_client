@@ -12,7 +12,7 @@ namespace ShaderCrew.SeeThroughShader
 
         public override void OnGUI(Rect position, MaterialProperty property, string label, MaterialEditor editor)
         {
-            if (property.type == MaterialProperty.PropType.Float)
+            if (property.propertyType == UnityEngine.Rendering.ShaderPropertyType.Float)
             {
                 property.floatValue = Mathf.Max(EditorGUI.FloatField(position, label, property.floatValue), 0);
             }

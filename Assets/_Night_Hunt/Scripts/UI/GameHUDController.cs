@@ -6,11 +6,15 @@ using NightHunt.GameplaySystems.UI.Interaction;
 using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Core.State;
+using NightHunt.Gameplay.Feedback;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.Gameplay.Input.Handlers.Movement;
 using NightHunt.UI.Mobile;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Utilities;
+using NightHunt.Audio;
+using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 
 namespace NightHunt.UI
 {
@@ -114,6 +118,10 @@ namespace NightHunt.UI
         [Header("Mobile Input")]
         [Tooltip("Central panel for all on-screen mobile controls. Auto-found in children if unassigned.")]
         [SerializeField] private MobileHUDPanel _mobileHUDPanel;
+
+        [Tooltip("HUD indicator that shows current camera-lock (Strafe/Tank) state. " +
+                 "Auto-found in children if unassigned. Call Bind/Unbind automatically managed.")]
+        [SerializeField] private CameraLockIndicator _cameraLockIndicator;
 
         // ── Top-Left Team HUD ─────────────────────────────────────────────────
 
@@ -246,6 +254,8 @@ namespace NightHunt.UI
             _localPlayer          = localPlayer;
             _localNetObjId        = (int)localPlayer.ObjectId;
 
+            InitializeCombatAudio(localPlayer);
+
             // ① Bind UIPlayerContext — all UI events flow through this.
             _playerContext.Bind(localPlayer);
 
@@ -271,15 +281,15 @@ namespace NightHunt.UI
             _teamMemberPanel?.Initialize(localPlayer, _playerContext);
             _teamMemberPanel?.SetObservedPlayer(null);
 
-            // ⑤ Mobile input
-            BindMobileInput(_mobileHUDPanel, localPlayer);
-
             // ⑥ Global combat events (all players)
             SubscribeCombatEvents();
 
             // ⑦ Local player lifecycle — must come before WireInteractionPrompt because
             //    SubscribeLifecycle() calls UnsubscribeLifecycle() which resets _localInteractionSystem.
             SubscribeLifecycle(localPlayer);
+
+            // Mobile input must bind after SubscribeLifecycle, which clears stale player refs.
+            BindMobileInput(_mobileHUDPanel, localPlayer);
 
             // ⑧ Interaction prompt — after SubscribeLifecycle so _localInteractionSystem is not cleared.
             WireInteractionPrompt(localPlayer);
@@ -565,6 +575,7 @@ namespace NightHunt.UI
 
             PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;
             PlayerHealthSystem.OnAnyHitReceived += HandleAnyHitReceived;
+            CombatFeedbackEvents.LocalHitConfirmed += HandleLocalHitConfirmed;
             _combatEventsSubscribed = true;
         }
 
@@ -575,6 +586,7 @@ namespace NightHunt.UI
 
             PlayerHealthSystem.OnAnyPlayerDied  -= HandleAnyPlayerDied;
             PlayerHealthSystem.OnAnyHitReceived -= HandleAnyHitReceived;
+            CombatFeedbackEvents.LocalHitConfirmed -= HandleLocalHitConfirmed;
             _combatEventsSubscribed = false;
         }
 
@@ -583,14 +595,43 @@ namespace NightHunt.UI
             if (_localNetObjId < 0 || _damageFeedback == null) return;
 
             if (info.ShooterNetworkObjectId == _localNetObjId)
-            {
-                _damageFeedback.ShowDamageNumber(info.HitPoint, info.Damage, info.IsHeadshot);
-                _damageFeedback.ShowHitEffect(info.HitPoint, info.HitNormal);
                 return;
-            }
 
             if (IsHitOnObservedPlayer(info))
                 _damageFeedback.ShowHitIndicator(GetIncomingHitDirection(info));
+        }
+
+        private void HandleLocalHitConfirmed(CombatHitFeedbackInfo feedback)
+        {
+            if (_damageFeedback == null) return;
+
+            DamageInfo info = feedback.DamageInfo;
+            _damageFeedback.ShowHitConfirm(info.IsHeadshot);
+            _damageFeedback.ShowDamageNumber(info.HitPoint, info.Damage, info.IsHeadshot);
+            _damageFeedback.ShowHitEffect(info.HitPoint, info.HitNormal);
+        }
+
+        private void InitializeCombatAudio(NetworkPlayer localPlayer)
+        {
+            CombatAudioController audioController = null;
+            if (AudioManager.HasInstance)
+                audioController = AudioManager.Instance.GetComponent<CombatAudioController>();
+
+#if UNITY_2023_2_OR_NEWER
+            audioController ??= FindFirstObjectByType<CombatAudioController>();
+#else
+            audioController ??= FindObjectOfType<CombatAudioController>();
+#endif
+            if (audioController == null)
+                return;
+
+            var statSystem = ComponentResolver
+                .Find<IPlayerStatSystem>(localPlayer)
+                .OnSelf()
+                .InChildren()
+                .Resolve();
+
+            audioController.Initialize(statSystem, localPlayer.DisplayName, _localNetObjId);
         }
 
         private bool IsHitOnObservedPlayer(DamageInfo info)
@@ -669,11 +710,23 @@ namespace NightHunt.UI
                     .Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(localPlayer)
                     .OnSelf().InChildren()
                     .Resolve();
-                panel.BindPlayerContext(localPlayer.transform, statSys);
+                panel.BindPlayerContext(localPlayer.transform, statSys, localPlayer.GamePlaySystemBridge?.Weapon);
             }
             else
             {
                 Debug.LogWarning("[GameHUDController] MobileHUDPanel not found under HUD; mobile action buttons cannot bind.");
+            }
+
+            // Wire CameraLockIndicator to the local player's MovementInputHandler.
+            // GetComponentInChildren fallback ensures this works even if the field is not
+            // assigned in the Inspector.
+            if (_cameraLockIndicator == null)
+                _cameraLockIndicator = GetComponentInChildren<CameraLockIndicator>(true);
+            if (_cameraLockIndicator != null)
+            {
+                var movementHandler = InputManager.Instance?.MovementHandler;
+                _cameraLockIndicator.Bind(movementHandler);
+                Debug.Log($"[GameHUDController] CameraLockIndicator bound movement={(movementHandler != null ? "ok" : "null")}");
             }
         }
 
@@ -702,6 +755,8 @@ namespace NightHunt.UI
                 _playerStatsHUD = GetComponentInChildren<PlayerStatsHUD>(true);
             if (_mobileHUDPanel == null)
                 _mobileHUDPanel = GetComponentInChildren<MobileHUDPanel>(true);
+            if (_cameraLockIndicator == null)
+                _cameraLockIndicator = GetComponentInChildren<CameraLockIndicator>(true);
         }
 
         private void SubscribeLifecycle(NetworkPlayer player)
@@ -723,6 +778,7 @@ namespace NightHunt.UI
         private void UnsubscribeLifecycle()
         {
             _mobileHUDPanel?.Unbind();
+            _cameraLockIndicator?.Unbind();
 
             if (_localLifecycle != null)
             {
@@ -755,23 +811,24 @@ namespace NightHunt.UI
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            if (_weaponHUD == null)           _weaponHUD           = GetComponentInChildren<WeaponHUDPanel>(true);
-            if (_itemSelectionHUD == null)    _itemSelectionHUD    = GetComponentInChildren<ItemSelectionHUD>(true);
-            if (_playerStatsHUD == null)      _playerStatsHUD      = GetComponentInChildren<PlayerStatsHUD>(true);
-            if (_interactionPromptUI == null) _interactionPromptUI = GetComponentInChildren<InteractionPromptUI>(true);
-            if (_minimapUI == null)           _minimapUI           = GetComponentInChildren<MinimapUI>(true);
-            if (_inventoryScreen == null)     _inventoryScreen     = GetComponentInChildren<InventoryScreen>(true);
-            if (_matchUI == null)             _matchUI             = GetComponentInChildren<MatchUI>(true);
-            if (_killFeedUI == null)          _killFeedUI          = GetComponentInChildren<KillFeedUI>(true);
-            if (_objectiveCaptureHUD == null) _objectiveCaptureHUD = GetComponentInChildren<ObjectiveCaptureHUD>(true);
-            if (_bossHealthHUD == null)       _bossHealthHUD       = GetComponentInChildren<BossHealthHUD>(true);
-            if (_deathScreen == null)         _deathScreen         = GetComponentInChildren<DeathScreen>(true);
-            if (_spectatorHUD == null)        _spectatorHUD        = GetComponentInChildren<SpectatorHUD>(true);
-            if (_resultsView == null)         _resultsView         = GetComponentInChildren<ResultsView>(true);
+            if (_weaponHUD == null)              _weaponHUD              = GetComponentInChildren<WeaponHUDPanel>(true);
+            if (_itemSelectionHUD == null)       _itemSelectionHUD       = GetComponentInChildren<ItemSelectionHUD>(true);
+            if (_playerStatsHUD == null)         _playerStatsHUD         = GetComponentInChildren<PlayerStatsHUD>(true);
+            if (_interactionPromptUI == null)    _interactionPromptUI    = GetComponentInChildren<InteractionPromptUI>(true);
+            if (_minimapUI == null)              _minimapUI              = GetComponentInChildren<MinimapUI>(true);
+            if (_inventoryScreen == null)        _inventoryScreen        = GetComponentInChildren<InventoryScreen>(true);
+            if (_matchUI == null)                _matchUI                = GetComponentInChildren<MatchUI>(true);
+            if (_killFeedUI == null)             _killFeedUI             = GetComponentInChildren<KillFeedUI>(true);
+            if (_objectiveCaptureHUD == null)    _objectiveCaptureHUD    = GetComponentInChildren<ObjectiveCaptureHUD>(true);
+            if (_bossHealthHUD == null)          _bossHealthHUD          = GetComponentInChildren<BossHealthHUD>(true);
+            if (_deathScreen == null)            _deathScreen            = GetComponentInChildren<DeathScreen>(true);
+            if (_spectatorHUD == null)           _spectatorHUD           = GetComponentInChildren<SpectatorHUD>(true);
+            if (_resultsView == null)            _resultsView            = GetComponentInChildren<ResultsView>(true);
             if (_actionProgressPresenter == null) _actionProgressPresenter = GetComponentInChildren<ActionProgressPresenter>(true);
-            if (_lootContainerUI == null)   _lootContainerUI   = GetComponentInChildren<LootContainerUI>(true);
-            if (_mobileHUDPanel == null)    _mobileHUDPanel    = GetComponentInChildren<MobileHUDPanel>(true);
-            if (_teamMemberPanel == null)   _teamMemberPanel   = GetComponentInChildren<TeamMemberPanel>(true);
+            if (_lootContainerUI == null)        _lootContainerUI        = GetComponentInChildren<LootContainerUI>(true);
+            if (_mobileHUDPanel == null)         _mobileHUDPanel         = GetComponentInChildren<MobileHUDPanel>(true);
+            if (_teamMemberPanel == null)        _teamMemberPanel        = GetComponentInChildren<TeamMemberPanel>(true);
+            if (_cameraLockIndicator == null)    _cameraLockIndicator    = GetComponentInChildren<CameraLockIndicator>(true);
         }
 #endif
     }

@@ -54,6 +54,41 @@ namespace NightHunt.Config
     [CreateAssetMenu(fileName = "GameModeConfig", menuName = "NightHunt/Config/Game Mode Config")]
     public class GameModeConfig : ScriptableObjectSingleton<GameModeConfig>
     {
+        private static readonly GameModeEntry[] FallbackModes =
+        {
+            new GameModeEntry
+            {
+                modeKey        = "1v1",
+                displayName    = "1 vs 1",
+                description    = "Duel test mode",
+                playersPerTeam = 1,
+                allowFill      = false,
+                isEnabled      = true,
+                matchmakingEnabled = false,
+                isDevMode      = true
+            },
+            new GameModeEntry
+            {
+                modeKey        = "2v2",
+                displayName    = "2 vs 2",
+                description    = "Team of 2",
+                playersPerTeam = 2,
+                allowFill      = true,
+                isEnabled      = true,
+                matchmakingEnabled = true
+            },
+            new GameModeEntry
+            {
+                modeKey        = "4v4",
+                displayName    = "4 vs 4",
+                description    = "Team of 4",
+                playersPerTeam = 4,
+                allowFill      = true,
+                isEnabled      = true,
+                matchmakingEnabled = true
+            }
+        };
+
         [Header("Game Modes")]
         [Tooltip("Ordered list of game modes shown in the selector. Populated at runtime by GameConfigService.FetchAsync().")]
         [SerializeField] private GameModeEntry[] modes = new GameModeEntry[]
@@ -105,6 +140,22 @@ namespace NightHunt.Config
                 isDevMode      = true
             }
         };
+
+        public static event System.Action OnConfigLoaded;
+
+        private static void SafeInvokeOnConfigLoaded()
+        {
+            if (OnConfigLoaded == null) return;
+            var invocationList = OnConfigLoaded.GetInvocationList();
+            foreach (var del in invocationList)
+            {
+                try { del.DynamicInvoke(); }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[GameModeConfig] Error in OnConfigLoaded listener '{del.Method.DeclaringType}.{del.Method.Name}': {ex}");
+                }
+            }
+        }
 
         /// <summary>
         /// Populate this config from server data (called by GameConfigService at startup).
@@ -159,6 +210,8 @@ namespace NightHunt.Config
             foreach (var e in entries)
                 sb.AppendLine($"  > [{(e.isEnabled ? "ON " : "OFF")}] key={e.modeKey}  display=\"{e.displayName}\"  allowFill={e.allowFill}  mmEnabled={e.matchmakingEnabled}  isDevMode={e.isDevMode}");
             Debug.Log(sb.ToString());
+
+            SafeInvokeOnConfigLoaded();
         }
 
         /// <summary>All entries (enabled and disabled).</summary>
@@ -166,8 +219,13 @@ namespace NightHunt.Config
         {
             if (Instance == null)
             {
-                Debug.LogError("[GameModeConfig] Instance not found! Place GameModeConfig.asset in Resources/.");
-                return Array.Empty<GameModeEntry>();
+                Debug.LogWarning("[GameModeConfig] Instance not found. Using built-in fallback modes.");
+                return FallbackModes;
+            }
+            if (Instance.modes == null || Instance.modes.Length == 0)
+            {
+                Debug.LogWarning("[GameModeConfig] No modes configured. Using built-in fallback modes.");
+                return FallbackModes;
             }
             return Instance.modes;
         }

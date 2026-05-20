@@ -246,6 +246,44 @@ namespace NightHunt.Gameplay.StatSystem.Configs
                     DisplayType = StatDisplayType.Text,
                     RelatedMaxStatType = PlayerStatType.VisionRange,
                     ShowMaxValue = false
+                },
+
+                // Passive rates
+                new PlayerStatUIDefinition
+                {
+                    Type = PlayerStatType.HealthRegenRate,
+                    DisplayName = "Health Regen",
+                    ShowInUI = false,
+                    DisplayColor = new Color(0.8f, 0.2f, 0.2f),
+                    TextColor = new Color(1f, 0.6f, 0.6f),
+                    DisplayFormat = "0.0/s",
+                    DisplayType = StatDisplayType.Text,
+                    RelatedMaxStatType = PlayerStatType.HealthRegenRate,
+                    ShowMaxValue = false
+                },
+                new PlayerStatUIDefinition
+                {
+                    Type = PlayerStatType.StaminaRegenRate,
+                    DisplayName = "Stamina Regen",
+                    ShowInUI = false,
+                    DisplayColor = new Color(0.2f, 0.8f, 0.2f),
+                    TextColor = new Color(0.6f, 1f, 0.6f),
+                    DisplayFormat = "0.0/s",
+                    DisplayType = StatDisplayType.Text,
+                    RelatedMaxStatType = PlayerStatType.StaminaRegenRate,
+                    ShowMaxValue = false
+                },
+                new PlayerStatUIDefinition
+                {
+                    Type = PlayerStatType.StaminaDrainRate,
+                    DisplayName = "Stamina Drain",
+                    ShowInUI = false,
+                    DisplayColor = new Color(1f, 0.8f, 0.2f),
+                    TextColor = new Color(1f, 0.9f, 0.55f),
+                    DisplayFormat = "0.0/s",
+                    DisplayType = StatDisplayType.Text,
+                    RelatedMaxStatType = PlayerStatType.StaminaDrainRate,
+                    ShowMaxValue = false
                 }
             };
 

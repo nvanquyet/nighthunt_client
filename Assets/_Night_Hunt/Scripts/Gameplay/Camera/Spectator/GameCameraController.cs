@@ -82,6 +82,7 @@ namespace NightHunt.Gameplay.Camera.Spectator
             if (SpectateManager.Instance != null)
             {
                 _localPlayer = SpectateManager.Instance.GetLocalPlayer();
+                SpectateManager.Instance.OnLocalPlayerSet += HandleLocalPlayerSet;
                 SpectateManager.Instance.OnCurrentPlayerChanged += HandleCurrentPlayerChanged;
             }
 
@@ -114,6 +115,7 @@ namespace NightHunt.Gameplay.Camera.Spectator
         {
             if (SpectateManager.Instance != null)
             {
+                SpectateManager.Instance.OnLocalPlayerSet -= HandleLocalPlayerSet;
                 SpectateManager.Instance.OnCurrentPlayerChanged -= HandleCurrentPlayerChanged;
             }
 
@@ -156,6 +158,14 @@ namespace NightHunt.Gameplay.Camera.Spectator
         private void HandleCurrentPlayerChanged(NetworkPlayer player)
         {
             if (player != null)
+                SetCameraTarget(player.transform);
+        }
+
+        private void HandleLocalPlayerSet(NetworkPlayer player)
+        {
+            _localPlayer = player;
+
+            if (player != null && SpectateManager.Instance != null && !SpectateManager.Instance.IsSpectating())
                 SetCameraTarget(player.transform);
         }
 
@@ -218,25 +228,21 @@ namespace NightHunt.Gameplay.Camera.Spectator
             if (allPlayers == null || allPlayers.Length == 0)
                 return;
 
-            NetworkPlayer firstCandidate = null;
-
             for (int i = 0; i < allPlayers.Length; i++)
             {
                 var p = allPlayers[i];
-                if (p == null || p == _localPlayer)
+                if (p == null)
                     continue;
 
                 // Nếu muốn giới hạn cùng team, bật đoạn dưới:
                 // if (p.TeamId != _localPlayer.TeamId)
                 //     continue;
 
-                firstCandidate = p;
-                break;
-            }
-
-            if (firstCandidate != null)
-            {
-                SpectateManager.Instance.StartSpectating(firstCandidate);
+                if (SpectateManager.Instance.CanSpectate(p))
+                {
+                    SpectateManager.Instance.StartSpectating(p);
+                    return;
+                }
             }
         }
 

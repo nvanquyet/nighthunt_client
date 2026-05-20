@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
+using NightHunt.GameplaySystems.Core.Data;
 
 namespace NightHunt.Gameplay.Input.Handlers.Inventory
 {
@@ -104,11 +105,31 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
             if (_quickSlot4Action    != null) _quickSlot4Action.performed    -= OnQuickSlot4;
         }
 
+        // ── Slot → ItemType mapping ───────────────────────────────────────────────
+        // QuickSlot 1=Consumable, 2=Throwable, 3=Deployable, 4=Consumable(alt)
+        // Adjust this mapping to match your InventoryConfig filter panel order.
+        private static ItemType SlotToItemType(int oneBasedSlot) => oneBasedSlot switch
+        {
+            1 => ItemType.Consumable,
+            2 => ItemType.Throwable,
+            3 => ItemType.Deployable,
+            4 => ItemType.Consumable,
+            _ => ItemType.Consumable
+        };
+
+        /// <summary>
+        /// Returns the ItemType associated with a one-based quick slot index.
+        /// Used by <see cref="NightHunt.UI.ItemSelectionHUD"/> to map slot indices to panel types.
+        /// </summary>
+        public ItemType GetItemTypeForSlot(int oneBasedSlot) => SlotToItemType(oneBasedSlot);
+
         // ── Callbacks ─────────────────────────────────────────────────────────────
         private void OnOpenInventory(InputAction.CallbackContext ctx)
         {
             if (!ctx.performed) return;
             OpenInventoryPerformed?.Invoke();
+            // Route through canonical bus — mobile InventoryButton also calls this
+            GameActionBus.RequestInventoryToggle();
         }
 
         private void OnDropItem(InputAction.CallbackContext ctx)
@@ -121,6 +142,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
         {
             if (!ctx.performed) return;
             UseConsumablePerformed?.Invoke();
+            // UseConsumable (Z key) maps to Consumable slot — route canonically
+            GameActionBus.RequestItemSlot(ItemType.Consumable);
         }
 
         private void OnQuickSlot1(InputAction.CallbackContext ctx) => RaiseQuickSlot(ctx, 1);
@@ -131,14 +154,22 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
         private void RaiseQuickSlot(InputAction.CallbackContext ctx, int oneBasedSlot)
         {
             if (!ctx.performed) return;
+            // Raise legacy event for backward compatibility
             QuickSlotPerformed?.Invoke(oneBasedSlot);
+            // Route through canonical bus — UI buttons also call RequestItemSlot directly
+            GameActionBus.RequestItemSlot(SlotToItemType(oneBasedSlot));
         }
 
         // ── Mobile API ────────────────────────────────────────────────────────
         /// <summary>
-        /// Simulate pressing the OpenInventory button. Called by MobileInventoryButton
-        /// when the on-screen button is tapped, bypassing the InputSystem keyboard path.
+        /// Simulate pressing the OpenInventory button.
+        /// Routes through <see cref="GameActionBus"/> so all subscribers are notified
+        /// regardless of whether the trigger was keyboard (Tab) or mobile UI button.
         /// </summary>
-        public void SimulateToggle() => OpenInventoryPerformed?.Invoke();
+        public void SimulateToggle()
+        {
+            OpenInventoryPerformed?.Invoke();
+            GameActionBus.RequestInventoryToggle();
+        }
     }
 }

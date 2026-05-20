@@ -141,7 +141,7 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             _hasDetonated = false;
 
             _config     = config;
-            _direction  = dir.normalized;
+            _direction  = dir.sqrMagnitude > 0.0001f ? dir.normalized : transform.forward;
             _speed      = Mathf.Max(1f, config.ProjectileSpeed);
             // Ballistic projectiles still obey the visible-circle clamp. Hitscan
             // visuals already receive an authoritative endpoint, so clamping them
@@ -153,7 +153,23 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
             _useHitscan = useHitscan;
             _damage     = config.DamageBody;
             _weaponId   = config.WeaponId;
-            _velocity   = _direction * _speed;
+            if (!_useHitscan
+                && config.HasProjectileTargetPoint
+                && BallisticTrajectory.TrySolveLaunchVelocity(
+                    transform.position,
+                    config.ProjectileTargetPoint,
+                    _speed,
+                    config.GravityScale,
+                    config.PreferHighArc,
+                    out Vector3 solvedVelocity))
+            {
+                _velocity = solvedVelocity;
+                _direction = solvedVelocity.normalized;
+            }
+            else
+            {
+                _velocity = _direction * _speed;
+            }
             _lastPhysicsPosition = transform.position;
             ApplyRigidbodyVelocity();
             _nextMovementLogTime = Time.time;
@@ -163,10 +179,12 @@ namespace NightHunt.Gameplay.Character.Combat.Weapons
                       $"visionClamp={_visionRangeClamp:F2}  useHitscan={useHitscan}  isOwnerShot={_isOwnerShot}  dmg={_damage}  " +
                       $"endpoint={hitscanEndpoint?.ToString("F1") ?? "null"}");
 
-            // Muzzle flash plays on the projectile (spawned at the muzzle point).
-            PlayMuzzleFlash();
-
+            // Main visual must be activated before muzzle flash. Some imported prefabs
+            // keep muzzle/hit particle systems under MainVisual; ShowMainVisual filters
+            // those roots so launch stays muzzle -> projectile -> hit.
             PlayMainVisual();
+            PlayMuzzleFlash();
+            LogProjectile($"[PROJ_VFX] Launch visual state go='{gameObject.name}' main=playing muzzle=spawn-only hit=stopped");
 
             if (useHitscan && hitscanEndpoint.HasValue)
             {
