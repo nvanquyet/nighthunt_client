@@ -24,6 +24,18 @@ namespace NightHunt.Gameplay.Input.Core
             Touch,
         }
 
+        // ── Debug overrides (Inspector only — set false before production build) ──
+
+        [Header("Debug Overrides")]
+        [Tooltip("Force Touch/Mobile input mode regardless of actual platform. " +
+                 "Set FALSE before production build.")]
+        [SerializeField] private bool forceMobileInput;
+
+        [Tooltip("Force KeyboardMouse input mode regardless of actual platform. " +
+                 "Takes priority over forceMobileInput if both are true. " +
+                 "Set FALSE before production build.")]
+        [SerializeField] private bool forceDesktopInput;
+
         // ── State ──────────────────────────────────────────────────────────────
 
         public InputPlatform Current { get; private set; } = InputPlatform.KeyboardMouse;
@@ -54,6 +66,20 @@ namespace NightHunt.Gameplay.Input.Core
         private void DetectPlatform()
         {
             InputPlatform detected;
+
+            // Debug overrides — forceDesktopInput wins if both are set
+            if (forceDesktopInput)
+            {
+                detected = InputPlatform.KeyboardMouse;
+                ApplyPlatform(detected);
+                return;
+            }
+            if (forceMobileInput)
+            {
+                detected = InputPlatform.Touch;
+                ApplyPlatform(detected);
+                return;
+            }
 
 #if UNITY_IOS || UNITY_ANDROID
             detected = InputPlatform.Touch;

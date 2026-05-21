@@ -20,7 +20,6 @@ namespace NightHunt.UI.Settings
     /// PLAYER PREFS KEYS (shared with GameSettings.cs):
     ///   "MouseSensitivity"        — float 0.1–5.0
     ///   "InvertY"                 — int  0/1
-    ///   "ForceMobileMode"         — int  0/1
     ///   "MobileCameraDegreesPerPixel" — float 0.05–1.5
     /// </summary>
     [DisallowMultipleComponent]
@@ -42,10 +41,6 @@ namespace NightHunt.UI.Settings
         [SerializeField] private SwitchManager invertYSwitch;
 
         [Header("Mobile")]
-        [Tooltip("Toggle to force mobile HUD/input on desktop builds.")]
-        [SerializeField] private Toggle forceMobileModeToggle;
-        [Tooltip("Optional Shift UI switch used as the visual/input source for Force Mobile Mode.")]
-        [SerializeField] private SwitchManager forceMobileModeSwitch;
         [Tooltip("Mobile camera sensitivity in degrees per pixel.")]
         [SerializeField] private Slider mobileCameraSensitivitySlider;
         [Tooltip("Optional TMP label showing mobile camera sensitivity.")]
@@ -60,8 +55,6 @@ namespace NightHunt.UI.Settings
 
         private UnityAction _invertSwitchOnListener;
         private UnityAction _invertSwitchOffListener;
-        private UnityAction _forceMobileSwitchOnListener;
-        private UnityAction _forceMobileSwitchOffListener;
 
         // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -100,8 +93,6 @@ namespace NightHunt.UI.Settings
                 if (sensitivityValueLabel == null && mouseSensitivitySlider != null) sensitivityValueLabel = mouseSensitivitySlider.transform.Find("Value")?.GetComponent<TextMeshProUGUI>();
                 if (invertYToggle == null) invertYToggle = content.Find("Invert Y")?.GetComponentInChildren<Toggle>();
                 if (invertYSwitch == null) invertYSwitch = content.Find("Invert Y")?.GetComponentInChildren<SwitchManager>();
-                if (forceMobileModeToggle == null) forceMobileModeToggle = content.Find("Force Mobile Mode")?.GetComponentInChildren<Toggle>();
-                if (forceMobileModeSwitch == null) forceMobileModeSwitch = content.Find("Force Mobile Mode")?.GetComponentInChildren<SwitchManager>();
                 if (mobileCameraSensitivitySlider == null) mobileCameraSensitivitySlider = content.Find("Mobile Camera Sensitivity")?.GetComponentInChildren<Slider>();
                 if (mobileCameraSensitivityValueLabel == null && mobileCameraSensitivitySlider != null) mobileCameraSensitivityValueLabel = mobileCameraSensitivitySlider.transform.Find("Value")?.GetComponent<TextMeshProUGUI>();
                 if (resetButton == null) resetButton = transform.Find("Content/Reset Button")?.GetComponent<Button>();
@@ -130,15 +121,6 @@ namespace NightHunt.UI.Settings
                 if (_invertSwitchOffListener != null)
                     invertYSwitch.OffEvents.RemoveListener(_invertSwitchOffListener);
             }
-            if (forceMobileModeToggle != null)
-                forceMobileModeToggle.onValueChanged.RemoveListener(HandleForceMobileModeChanged);
-            if (forceMobileModeSwitch != null)
-            {
-                if (_forceMobileSwitchOnListener != null)
-                    forceMobileModeSwitch.OnEvents.RemoveListener(_forceMobileSwitchOnListener);
-                if (_forceMobileSwitchOffListener != null)
-                    forceMobileModeSwitch.OffEvents.RemoveListener(_forceMobileSwitchOffListener);
-            }
             if (mobileCameraSensitivitySlider != null)
                 mobileCameraSensitivitySlider.onValueChanged.RemoveListener(HandleMobileCameraSensitivityChanged);
             if (resetButton != null)
@@ -158,7 +140,6 @@ namespace NightHunt.UI.Settings
 
             float sensitivity = settings.MouseSensitivity;
             bool  invertY     = settings.InvertY;
-            bool  forceMobile = settings.ForceMobileMode;
             float mobileCameraSensitivity = settings.MobileCameraDegreesPerPixel;
 
             if (mouseSensitivitySlider != null)
@@ -168,10 +149,6 @@ namespace NightHunt.UI.Settings
             if (invertYToggle != null)
                 invertYToggle.SetIsOnWithoutNotify(invertY);
             ShiftUIBridge.SetSwitchSilently(invertYSwitch, invertY);
-
-            if (forceMobileModeToggle != null)
-                forceMobileModeToggle.SetIsOnWithoutNotify(forceMobile);
-            ShiftUIBridge.SetSwitchSilently(forceMobileModeSwitch, forceMobile);
 
             if (mobileCameraSensitivitySlider != null)
                 mobileCameraSensitivitySlider.SetValueWithoutNotify(mobileCameraSensitivity);
@@ -196,19 +173,6 @@ namespace NightHunt.UI.Settings
                 invertYSwitch.OffEvents.RemoveListener(_invertSwitchOffListener);
                 invertYSwitch.OnEvents.AddListener(_invertSwitchOnListener);
                 invertYSwitch.OffEvents.AddListener(_invertSwitchOffListener);
-            }
-
-            if (forceMobileModeToggle != null)
-                forceMobileModeToggle.onValueChanged.AddListener(HandleForceMobileModeChanged);
-
-            if (forceMobileModeSwitch != null)
-            {
-                _forceMobileSwitchOnListener ??= () => HandleForceMobileModeChanged(true);
-                _forceMobileSwitchOffListener ??= () => HandleForceMobileModeChanged(false);
-                forceMobileModeSwitch.OnEvents.RemoveListener(_forceMobileSwitchOnListener);
-                forceMobileModeSwitch.OffEvents.RemoveListener(_forceMobileSwitchOffListener);
-                forceMobileModeSwitch.OnEvents.AddListener(_forceMobileSwitchOnListener);
-                forceMobileModeSwitch.OffEvents.AddListener(_forceMobileSwitchOffListener);
             }
 
             if (mobileCameraSensitivitySlider != null)
@@ -245,19 +209,6 @@ namespace NightHunt.UI.Settings
             if (invertYToggle != null && invertYToggle.isOn != on)
                 invertYToggle.SetIsOnWithoutNotify(on);
             ShiftUIBridge.SetSwitchSilently(invertYSwitch, on);
-        }
-
-        private void HandleForceMobileModeChanged(bool on)
-        {
-            if (GameSettings.Instance != null)
-            {
-                GameSettings.Instance.ForceMobileMode = on;
-                GameSettings.Instance.SaveSettings();
-            }
-
-            if (forceMobileModeToggle != null && forceMobileModeToggle.isOn != on)
-                forceMobileModeToggle.SetIsOnWithoutNotify(on);
-            ShiftUIBridge.SetSwitchSilently(forceMobileModeSwitch, on);
         }
 
         private void HandleMobileCameraSensitivityChanged(float value)

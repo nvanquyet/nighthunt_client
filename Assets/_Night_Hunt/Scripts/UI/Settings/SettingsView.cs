@@ -258,13 +258,7 @@ namespace NightHunt.UI.Settings
         private void BuildMobileControlsContent(Transform parent)
         {
             CreateTitle(parent, "Mobile");
-            CreateToggle(parent, "Force Mobile Mode", GameSettings.Instance?.ForceMobileMode ?? false, on =>
-            {
-                if (GameSettings.Instance == null) return;
-                GameSettings.Instance.ForceMobileMode = on;
-                GameSettings.Instance.SaveSettings();
-            });
-            CreateSlider(parent, "Mobile Camera Sensitivity", 0.05f, 1.5f, GameSettings.Instance?.MobileCameraDegreesPerPixel ?? 0.25f, value =>
+            CreateSlider(parent, "Mobile Camera Sensitivity", 1f, 5f, GameSettings.Instance?.MobileCameraDegreesPerPixel ?? 3f, value =>
             {
                 if (GameSettings.Instance == null) return;
                 GameSettings.Instance.MobileCameraDegreesPerPixel = value;

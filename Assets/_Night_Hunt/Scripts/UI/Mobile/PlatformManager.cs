@@ -22,23 +22,19 @@ namespace NightHunt.UI.Mobile
         private static PlatformManager _instance;
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Inspector
-        // ─────────────────────────────────────────────────────────────────────
-
-        [Tooltip("Force mobile UI in the Editor for testing without a real mobile device.")]
-        [SerializeField] private bool _forceMobile;
-
-        // ─────────────────────────────────────────────────────────────────────
         //  Public API
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Returns true when running on a mobile platform or when
-        /// <see cref="_forceMobile"/> is set in the Inspector.
-        /// Safe to call before Awake (falls back to <c>Application.isMobilePlatform</c>).
+        /// Returns true when the active input platform is Touch.
+        /// Delegates to <see cref="NightHunt.Gameplay.Input.Core.PlatformInputDetector"/> which
+        /// handles both real platform detection and debug overrides (forceMobileInput / forceDesktopInput).
+        /// Falls back to <c>Application.isMobilePlatform</c> if the detector is not yet alive.
         /// </summary>
         public static bool IsMobile =>
-            Application.isMobilePlatform || (_instance != null && _instance._forceMobile);
+            NightHunt.Gameplay.Input.Core.PlatformInputDetector.Instance != null
+                ? NightHunt.Gameplay.Input.Core.PlatformInputDetector.Instance.IsMobile
+                : Application.isMobilePlatform;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle

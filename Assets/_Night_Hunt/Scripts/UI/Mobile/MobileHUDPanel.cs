@@ -119,8 +119,7 @@ namespace NightHunt.UI.Mobile
         // ── Runtime ───────────────────────────────────────────────────────────
 
         /// <summary>True when the panel is treating the current runtime as mobile.</summary>
-        public bool IsMobile => IsForceMobileModeEnabled || PlatformManager.IsMobile;
-        private bool IsForceMobileModeEnabled => GameSettings.Instance != null && GameSettings.Instance.ForceMobileMode;
+        public bool IsMobile => PlatformManager.IsMobile;
         private bool ShouldProcessMobileControls =>
             IsMobile ||
             (_mobileRoot != null && _mobileRoot.activeInHierarchy) ||
@@ -349,7 +348,7 @@ namespace NightHunt.UI.Mobile
             SetContextualButtonVisible(_pickupButton, false);
             SetContextualButtonVisible(_reloadButton, false);
 
-            Debug.Log($"[MOBILE_INPUT] MobileHUD refs root={(_mobileRoot != null ? _mobileRoot.name : "null")} rootActive={(_mobileRoot != null && _mobileRoot.activeInHierarchy)} forceMobile={IsForceMobileModeEnabled} isMobile={IsMobile} reload={(_reloadButton != null ? _reloadButton.name : "null")} interact={(_interactButton != null ? _interactButton.name : "null")} pickup={(_pickupButton != null ? _pickupButton.name : "null")} cameraDrag={(_cameraDragArea != null ? _cameraDragArea.name : "null")} pinch={(_pinchZoomBridge != null ? _pinchZoomBridge.name : "null")}");
+            Debug.Log($"[MOBILE_INPUT] MobileHUD refs root={(_mobileRoot != null ? _mobileRoot.name : "null")} rootActive={(_mobileRoot != null && _mobileRoot.activeInHierarchy)} isMobile={IsMobile} reload={(_reloadButton != null ? _reloadButton.name : "null")} interact={(_interactButton != null ? _interactButton.name : "null")} pickup={(_pickupButton != null ? _pickupButton.name : "null")} cameraDrag={(_cameraDragArea != null ? _cameraDragArea.name : "null")} pinch={(_pinchZoomBridge != null ? _pinchZoomBridge.name : "null")}");
         }
 
         private void HandleGameSettingsChanged()

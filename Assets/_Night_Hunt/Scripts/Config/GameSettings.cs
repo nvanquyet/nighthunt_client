@@ -61,8 +61,7 @@ namespace NightHunt.Config
                 // Controls
                 MouseSensitivity           = Mathf.Clamp(PlayerPrefs.GetFloat("NH_MouseSensitivity", 1f), 0.1f, 5f),
                 InvertY                    = PlayerPrefs.GetInt("NH_InvertY", 0) == 1,
-                ForceMobileMode            = PlayerPrefs.GetInt("NH_ForceMobileMode", 0) == 1,
-                MobileCameraDegreesPerPixel = Mathf.Clamp(PlayerPrefs.GetFloat("NH_MobileCameraDegreesPerPixel", 0.25f), 0.05f, 1.5f),
+                MobileCameraDegreesPerPixel = Mathf.Clamp(PlayerPrefs.GetFloat("NH_MobileCameraDegreesPerPixel", 3), 1, 5),
 
                 // Gameplay
                 FOV              = PlayerPrefs.GetFloat("NH_FOV",          70f),
@@ -151,7 +150,6 @@ namespace NightHunt.Config
 
             PlayerPrefs.SetFloat("NH_MouseSensitivity", currentSettings.MouseSensitivity);
             PlayerPrefs.SetInt("NH_InvertY",            currentSettings.InvertY ? 1 : 0);
-            PlayerPrefs.SetInt("NH_ForceMobileMode",    currentSettings.ForceMobileMode ? 1 : 0);
             PlayerPrefs.SetFloat("NH_MobileCameraDegreesPerPixel", currentSettings.MobileCameraDegreesPerPixel);
 
             PlayerPrefs.SetFloat("NH_FOV",              currentSettings.FOV);
@@ -239,16 +237,10 @@ namespace NightHunt.Config
             set { if (currentSettings != null) currentSettings.InvertY = value; }
         }
 
-        public bool ForceMobileMode
-        {
-            get => currentSettings?.ForceMobileMode ?? false;
-            set { if (currentSettings != null) currentSettings.ForceMobileMode = value; }
-        }
-
         public float MobileCameraDegreesPerPixel
         {
-            get => currentSettings?.MobileCameraDegreesPerPixel ?? 0.25f;
-            set { if (currentSettings != null) currentSettings.MobileCameraDegreesPerPixel = Mathf.Clamp(value, 0.05f, 1.5f); }
+            get => currentSettings?.MobileCameraDegreesPerPixel ?? 3f;
+            set { if (currentSettings != null) currentSettings.MobileCameraDegreesPerPixel = Mathf.Clamp(value, 1f, 5f); }
         }
 
         public float FOV
@@ -386,9 +378,7 @@ namespace NightHunt.Config
 
         public float MouseSensitivity            = 1f;
         public bool  InvertY                     = false;
-        public bool  ForceMobileMode             = false;
-        public float MobileCameraDegreesPerPixel = 0.25f;
-
+        public float MobileCameraDegreesPerPixel = 3f;
         public float FOV              = 70f;
         public float UIScale          = 1f;
         public int   CrosshairType    = 0;

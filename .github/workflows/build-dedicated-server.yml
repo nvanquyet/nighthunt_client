@@ -84,8 +84,11 @@ jobs:
   build-unity:
     name: "Unity Linux Server Build"
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     needs: validate-secrets
+    permissions:
+      contents: read
+      packages: write
     # ─────────────────────────────────────────────────────────────────────────
     # CHỈ BUILD KHI:
     #   A) Trigger thủ công (workflow_dispatch → không cần [build-ds])
@@ -280,60 +283,11 @@ jobs:
           (echo "❌ UnityPlayer.so missing — DS will crash. Check game-ci Unity image modules." && exit 1)
           echo "✅ Binary + UnityPlayer.so verified"
 
-      # Xóa toàn bộ artifact ds-build-* cũ trước khi upload mới
-      # (artifact tên dạng ds-build-YYYYMMDD-<sha>, dùng startswith để filter đúng)
-      - name: Delete old DS build artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "=== Listing ds-build-* artifacts ==="
-          IDS=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
-            --jq '[.artifacts[] | select(.name | startswith("ds-build-")) | select(.expired == false) | .id] | .[]')
-
-          if [ -z "$IDS" ]; then
-            echo "✅ No old artifacts found — storage is clean"
-          else
-            COUNT=$(echo "$IDS" | wc -l)
-            echo "Found ${COUNT} artifact(s) to delete:"
-            echo "$IDS" | while read -r id; do
-              NAME=$(gh api "repos/${{ github.repository }}/actions/artifacts/$id" --jq '.name' 2>/dev/null || echo "unknown")
-              gh api --method DELETE "repos/${{ github.repository }}/actions/artifacts/$id" \
-                && echo "  ✅ Deleted: $NAME (id=$id)" \
-                || echo "  ⚠️  Failed to delete id=$id (may already be gone)"
-            done
-            echo "=== Cleanup done ==="
-          fi
-
-      # Upload artifact để job build-docker dùng
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name:           ds-build-${{ steps.gen-version.outputs.version }}
-          path:           Build/Server/
-          retention-days: 1
-  build-docker:
-    name: "Docker Build & Push"
-    runs-on: ubuntu-latest
-    needs: build-unity
-    if: needs.build-unity.result == 'success'
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Download Unity build từ job trước vào Docker build context
-      - name: Download DS build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ds-build-${{ needs.build-unity.outputs.version }}
-          path: Build/Server/
-
+      # Docker build — trực tiếp trên cùng runner, không cần artifact upload/download.
+      # Không có inter-job artifact → không tốn quota lưu trữ.
       - name: Prepare Docker context
         run: |
-          echo "=== Artifact contents ==="
+          echo "=== Build/Server contents ==="
           ls -lah Build/Server/
           # Copy Unity build output INTO docker/dedicated-server/build/
           # Dockerfile does: COPY ./build/ /app/  (relative to context = docker/dedicated-server/)
@@ -364,9 +318,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
-            type=raw,value=${{ needs.build-unity.outputs.version }}
+            type=raw,value=${{ steps.gen-version.outputs.version }}
 
-      - name: Build and push image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context:     docker/dedicated-server
@@ -378,20 +332,21 @@ jobs:
           cache-from:  type=gha
           cache-to:    type=gha,mode=max
 
-      - name: Job Summary
+      - name: Docker Job Summary
         run: |
+          VERSION="${{ steps.gen-version.outputs.version }}"
           echo "## ✅ DS Image Published" >> $GITHUB_STEP_SUMMARY
           echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | \`${{ needs.build-unity.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${VERSION}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\` |" >> $GITHUB_STEP_SUMMARY
 
   # ── Job 3: Notify Backend + cập nhật .env.production trên VPS + push git tag ─
   notify-backend:
     name: "Notify Backend"
     runs-on: ubuntu-latest
-    needs: [ build-unity, build-docker ]
-    if: needs.build-docker.result == 'success'
+    needs: [ build-unity ]
+    if: needs.build-unity.result == 'success'
     environment: NightHunt   # Đọc vars.VPS_BACKEND_URL + secrets VPS_HOST/VPS_USER/VPS_SSH_KEY
     permissions:
       contents: write         # Cần để push git tag

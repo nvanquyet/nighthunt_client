@@ -9,6 +9,7 @@ using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.Input.Handlers.Combat;
 using NightHunt.Gameplay.Spectator;
+using NightHunt.UI.Mobile;
 
 namespace NightHunt.GameplaySystems.UI.Combat
 {
@@ -114,8 +115,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         //  Properties
         // ─────────────────────────────────────────────────────────────────────
 
-        private bool IsMobile => IsForceMobileModeEnabled || Application.isMobilePlatform;
-        private bool IsForceMobileModeEnabled => GameSettings.Instance != null && GameSettings.Instance.ForceMobileMode;
+        private bool IsMobile => PlatformManager.IsMobile;
 
         /// <summary>True while the controller is in throwable aim mode.</summary>
         public bool IsInAimMode => _inAimMode;
