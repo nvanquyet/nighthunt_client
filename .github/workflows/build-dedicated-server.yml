@@ -248,13 +248,24 @@ jobs:
           (echo "❌ UnityPlayer.so missing — DS will crash. Check game-ci Unity image modules." && exit 1)
           echo "✅ Binary + UnityPlayer.so verified"
 
+      # Xóa artifact ds-build-* cũ để tránh đầy storage quota trước khi upload mới
+      - name: Delete old DS build artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Deleting old ds-build-* artifacts ==="
+          gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100&name=ds-build" \
+            --jq '.artifacts[] | select(.expired == false) | .id' \
+          | xargs -I{} gh api --method DELETE "repos/${{ github.repository }}/actions/artifacts/{}" \
+          && echo "✅ Old artifacts deleted" || echo "⚠️ No old artifacts to delete (or already clean)"
+
       # Upload artifact để job build-docker dùng
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name:           ds-build-${{ steps.gen-version.outputs.version }}
           path:           Build/Server/
-          retention-days: 7
+          retention-days: 1
   build-docker:
     name: "Docker Build & Push"
     runs-on: ubuntu-latest
