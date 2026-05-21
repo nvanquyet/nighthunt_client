@@ -11,7 +11,7 @@ on:
         default: false
 
 env:
-  UNITY_VERSION: "6000.0.39f1"
+  UNITY_VERSION: "6000.3.14f1"
   REGISTRY:      ghcr.io
   IMAGE_NAME:    ${{ github.repository_owner }}/nighthunt-ds
 
