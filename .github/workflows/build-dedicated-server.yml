@@ -163,14 +163,30 @@ jobs:
       # Cache thư mục Library (Unity cache - tăng tốc build đáng kể)
       # KHÔNG dùng hashFiles('Assets/**') — 10k+ files → hash chậm + miss khi bất kỳ asset nào đổi
       # Chỉ hash Packages (dependencies) + ProjectSettings (build config) là đủ stable
-      - name: Cache Unity Library
+      #
+      # QUAN TRỌNG: GitHub Actions cache giới hạn 10 GB / entry.
+      # Với 31k assets, Library có thể vượt 10 GB → không lưu được.
+      # Giải pháp: cache 2 phần riêng biệt (scripts + artifacts) để không vượt giới hạn.
+      - name: Cache Unity Library — script assemblies (Bee)
         uses: actions/cache@v4
         with:
-          path: Library
-          key:  unity-lib-ds-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectSettings.asset') }}
+          path: |
+            Library/Bee
+            Library/ScriptAssemblies
+          key:  unity-bee-ds-${{ env.UNITY_VERSION }}-${{ hashFiles('Assets/_Night_Hunt/Scripts/**/*.cs', 'Packages/manifest.json') }}
           restore-keys: |
-            unity-lib-ds-${{ env.UNITY_VERSION }}-
-            unity-lib-${{ env.UNITY_VERSION }}-
+            unity-bee-ds-${{ env.UNITY_VERSION }}-
+
+      - name: Cache Unity Library — asset artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            Library/Artifacts
+            Library/ArtifactDB
+            Library/SourceAssetDB
+          key:  unity-artifacts-ds-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/manifest.json', 'ProjectSettings/ProjectSettings.asset') }}
+          restore-keys: |
+            unity-artifacts-ds-${{ env.UNITY_VERSION }}-
 
       # Build Unity DS bằng GameCI
       # Docs: https://game.ci/docs/github/builder
@@ -212,6 +228,22 @@ jobs:
             # Fallback: tìm log trong /github/workspace
             find /github/workspace -name "*.log" 2>/dev/null | head -5 || true
           fi
+
+      # Đo kích thước từng phần của Library để biết có vượt 10 GB giới hạn cache không
+      - name: Measure Library cache size
+        if: always()
+        run: |
+          echo "=== Library subfolder sizes (quyết định cache có hoạt động không) ==="
+          du -sh Library/Bee              2>/dev/null || echo "Library/Bee: not found"
+          du -sh Library/ScriptAssemblies 2>/dev/null || echo "Library/ScriptAssemblies: not found"
+          du -sh Library/Artifacts        2>/dev/null || echo "Library/Artifacts: not found"
+          du -sh Library/ArtifactDB       2>/dev/null || echo "Library/ArtifactDB: not found"
+          du -sh Library/SourceAssetDB    2>/dev/null || echo "Library/SourceAssetDB: not found"
+          echo "--- Total Library ---"
+          du -sh Library 2>/dev/null || echo "Library: not found"
+          echo ""
+          echo "GitHub Actions cache giới hạn 10 GB / entry."
+          echo "Nếu Bee+ScriptAssemblies > 10 GB hoặc Artifacts+ArtifactDB+SourceAssetDB > 10 GB → cần điều chỉnh cache path."
 
       - name: Locate and stage UnityPlayer.so
         run: |
