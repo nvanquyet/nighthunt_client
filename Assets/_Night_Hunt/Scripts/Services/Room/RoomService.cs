@@ -162,6 +162,14 @@ namespace NightHunt.Services.Room
 
                 if (payloadContainsLocalPlayer)
                 {
+                    // Never adopt a terminal room — it belongs to a past session.
+                    if (string.Equals(room.status, Constants.ROOM_STATUS_CLOSED, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(room.status, "FINISHED", StringComparison.OrdinalIgnoreCase))
+                    {
+                        RLog($"Ignoring {source}: terminal room payload (roomId={room.roomId} status={room.status}). Not adopting.");
+                        return;
+                    }
+
                     RLog($"Adopting {source} room payload as active room: roomId={room.roomId}");
                     roomState?.SetRoom(room);
                     return;
@@ -460,6 +468,14 @@ namespace NightHunt.Services.Room
             {
                 roomState.SetRoom(result.Data);
                 RLog($"Reconnect local state set. local={DescribeLocalRoom()}");
+            }
+            else if (!result.Success && roomState != null && roomState.IsInRoom)
+            {
+                // Reconnect failed — the room on the server is gone or inaccessible.
+                // Clear the stale local room state so the player is not stuck unable to
+                // join matchmaking or create a new room (server-side ROOM_014 guard).
+                RLog($"Reconnect failed ({result.ErrorCode ?? result.Message}) — clearing stale local room state. local={DescribeLocalRoom()}");
+                roomState.ClearRoom();
             }
 
             return result;
