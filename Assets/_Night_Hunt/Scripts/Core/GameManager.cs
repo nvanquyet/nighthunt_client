@@ -326,9 +326,22 @@ namespace NightHunt.Core
         {
             if (roomState == null || !roomState.IsInRoom || roomService == null) return;
 
+            // Snapshot the roomId so we can detect if state changed during the await.
+            long snapshotRoomId = roomState.RoomId;
+
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
-                Debug.Log($"[GameManager] Refreshing room data: {roomState.RoomId}");
-            var result = await roomService.GetRoom(roomState.RoomId);
+                Debug.Log($"[GameManager] Refreshing room data: {snapshotRoomId}");
+            var result = await roomService.GetRoom(snapshotRoomId);
+
+            // Discard response if the room state has changed since we issued the request.
+            // This prevents a delayed GET response from re-hydrating state that was
+            // intentionally cleared (e.g. after a disband).
+            if (!roomState.IsInRoom || roomState.RoomId != snapshotRoomId)
+            {
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
+                    Debug.Log($"[GameManager] Room state changed during refresh (snapshot={snapshotRoomId} now={roomState.RoomId} isInRoom={roomState.IsInRoom}) — discarding result.");
+                return;
+            }
 
             if (result.Success && result.Data != null)
             {

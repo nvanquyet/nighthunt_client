@@ -71,7 +71,7 @@ namespace NightHunt.UI
 
             if (isLocalUser && string.Equals(state, "ABANDONED", System.StringComparison.OrdinalIgnoreCase))
             {
-                ReconnectOverlay.Instance?.Hide();
+                GameModalWindow.Instance?.Close();
                 RoomState.Instance?.ClearRoom();
                 RoomState.Instance?.ClearNetworkSession();
                 GameModalWindow.Instance?.ShowNotice(title, message);
@@ -90,5 +90,52 @@ namespace NightHunt.UI
                 return isLocalUser ? "Removed From Match" : "Player Removed";
             return isLocalUser ? "Connection Lost" : "Player Disconnected";
         }
+
+#if UNITY_EDITOR
+        // ── Editor ───────────────────────────────────────────────────────────
+
+        [ContextMenu("NightHunt/Register with PersistentUICanvas")]
+        private void Editor_RegisterWithPersistentUI()
+        {
+            var canvas = FindFirstObjectByType<PersistentUICanvas>();
+            if (canvas == null)
+            {
+                Debug.LogWarning(
+                    "[MatchPresenceNoticeListener] PersistentUICanvas not found in scene. \n" +
+                    "Add it first, then re-run this menu.");
+                return;
+            }
+
+            var so = new UnityEditor.SerializedObject(canvas);
+            var prop = so.FindProperty("matchPresenceNoticeListener");
+            if (prop != null)
+            {
+                prop.objectReferenceValue = this;
+                so.ApplyModifiedProperties();
+                UnityEditor.EditorUtility.SetDirty(canvas);
+                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(canvas.gameObject.scene);
+                Debug.Log("[MatchPresenceNoticeListener] Registered in PersistentUICanvas.");
+            }
+            else
+            {
+                Debug.LogWarning("[MatchPresenceNoticeListener] 'matchPresenceNoticeListener' field not found on PersistentUICanvas.");
+            }
+        }
+
+        [ContextMenu("NightHunt/Move Under PersistentUICanvas")]
+        private void Editor_MoveUnderPersistentUI()
+        {
+            var canvas = FindFirstObjectByType<PersistentUICanvas>();
+            if (canvas == null)
+            {
+                Debug.LogWarning("[MatchPresenceNoticeListener] PersistentUICanvas not found in scene.");
+                return;
+            }
+
+            transform.SetParent(canvas.transform, false);
+            Editor_RegisterWithPersistentUI();
+            Debug.Log("[MatchPresenceNoticeListener] Moved under PersistentUICanvas.");
+        }
+#endif
     }
 }

@@ -67,6 +67,28 @@ namespace NightHunt.State
                 return;
             }
 
+            // Terminal rooms must never become the active room.
+            // If the payload is for our current room, clear local state (room is gone).
+            // Otherwise simply discard — stale GET responses for old rooms must not overwrite cleared state.
+            bool isTerminal = room.status != null && (
+                room.status.Equals("CLOSED",    StringComparison.OrdinalIgnoreCase) ||
+                room.status.Equals("FINISHED",  StringComparison.OrdinalIgnoreCase) ||
+                room.status.Equals("DISBANDED", StringComparison.OrdinalIgnoreCase));
+
+            if (isTerminal)
+            {
+                if (IsInRoom && CurrentRoom?.roomId == room.roomId)
+                {
+                    Debug.Log($"[RoomState] SetRoom: room {room.roomId} is terminal ({room.status}) — clearing local state.");
+                    ClearRoom();
+                }
+                else
+                {
+                    Debug.Log($"[RoomState] SetRoom: ignoring terminal room payload roomId={room.roomId} status={room.status} (not our current room or already cleared).");
+                }
+                return;
+            }
+
             bool wasInRoom = IsInRoom;
             bool isNewRoom = !wasInRoom || CurrentRoom?.roomId != room.roomId;
             

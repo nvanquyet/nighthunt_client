@@ -270,6 +270,18 @@ namespace NightHunt.UI
 
         public bool IsOpen => _isOpen;
 
+        /// <summary>
+        /// Update the description text while the modal is already open —
+        /// e.g. live reconnect-attempt progress without closing/reopening.
+        /// No-op if the modal is currently closed.
+        /// </summary>
+        public void UpdateDescription(string desc)
+        {
+            if (!_isOpen || modalManager == null) return;
+            if (modalManager.windowDescription != null)
+                modalManager.windowDescription.text = desc;
+        }
+
         // ══ Internal ═══════════════════════════════════════════════════════════
 
         private void PrepareContent(

@@ -51,6 +51,7 @@ namespace NightHunt.Networking
         private bool _intentionalDisconnect;
         private bool _dsReady;          // true after ds_ready WS received
         private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
+        private bool _reconnectModalOpen;
 
         /// <summary>Fired each reconnect attempt. Parameters: (currentAttempt, maxAttempts).</summary>
         public event System.Action<int, int> OnRetryAttempt;
@@ -307,9 +308,10 @@ namespace NightHunt.Networking
                 case LocalConnectionState.Started:
                     _intentionalDisconnect = false;
                     _connected = true;
+                    _retryCount = 0;
                     Debug.Log("[NetworkGameManager] ✅ Client connected to match server.");
                     MatchLoadingOverlay.Instance?.MarkConnected();
-                    ReconnectOverlay.Instance?.Hide();
+                    HideReconnectModal();
                     break;
 
                 case LocalConnectionState.Stopped:
@@ -318,7 +320,7 @@ namespace NightHunt.Networking
                         _connectionStarted = false;
                         _connected = false;
                         _intentionalDisconnect = false;
-                        ReconnectOverlay.Instance?.Hide();
+                        HideReconnectModal();
                         break;
                     }
 
@@ -330,7 +332,7 @@ namespace NightHunt.Networking
                         if (wasConnected)
                         {
                             Debug.LogWarning("[NetworkGameManager] Match server connection dropped. Attempting reconnect.");
-                            ReconnectOverlay.Instance?.Show();
+                            ShowReconnectModal();
                         }
                         else
                         {
@@ -423,12 +425,14 @@ namespace NightHunt.Networking
             {
                 Debug.LogError("[NetworkGameManager] Max retries reached — returning to home.");
                 OnRetryAttempt?.Invoke(_maxRetries + 1, _maxRetries);
+                HandleReconnectUI(_maxRetries + 1, _maxRetries);
                 Invoke(nameof(LoadHome), 1.5f);
                 return;
             }
-            Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
             _retryCount++;
+            Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
             OnRetryAttempt?.Invoke(_retryCount, _maxRetries);
+            HandleReconnectUI(_retryCount, _maxRetries);
             Invoke(nameof(RetryConnect), _retryDelay);
         }
 
@@ -444,7 +448,7 @@ namespace NightHunt.Networking
             _dsReady         = false;
             _gameSceneLoaded = false;
             RoomState.Instance?.ClearRoom();
-            ReconnectOverlay.Instance?.Hide();
+            HideReconnectModal();
             SceneLoader.LoadHome();
         }
 
@@ -503,6 +507,58 @@ namespace NightHunt.Networking
             _intentionalDisconnect = true;
             if (IsServer) networkManager.ServerManager.StopConnection(true);
             if (IsClient) networkManager.ClientManager.StopConnection();
+        }
+
+        // ── Reconnect UI ──────────────────────────────────────────────────────
+
+        private void ShowReconnectModal()
+        {
+            if (_reconnectModalOpen) return;
+            GameModalWindow.Instance?.ShowConfirm(
+                "Connection Lost",
+                "Reconnecting to game server...",
+                onConfirm: () => { _reconnectModalOpen = false; },
+                onCancel:  ReturnHomeFromReconnect,
+                confirmText: "Keep Waiting",
+                cancelText:  "Return Home");
+            _reconnectModalOpen = true;
+        }
+
+        private void HideReconnectModal()
+        {
+            if (!_reconnectModalOpen) return;
+            GameModalWindow.Instance?.Close();
+            _reconnectModalOpen = false;
+            PersistentUICanvas.Instance?.ToastService?.Show("Reconnected", "Game connection restored.");
+        }
+
+        private void HandleReconnectUI(int current, int max)
+        {
+            if (current > max)
+            {
+                _reconnectModalOpen = false;
+                GameModalWindow.Instance?.ShowNotice(
+                    "Connection Failed",
+                    "Could not reconnect to the game server.",
+                    "Return Home",
+                    ReturnHomeFromReconnect);
+                _reconnectModalOpen = true;
+                return;
+            }
+
+            string status = $"Reconnecting... (attempt {current}/{max})";
+            if (_reconnectModalOpen)
+                GameModalWindow.Instance?.UpdateDescription(status);
+            else
+                PersistentUICanvas.Instance?.ToastService?.Show("Reconnecting", status);
+        }
+
+        private void ReturnHomeFromReconnect()
+        {
+            _reconnectModalOpen = false;
+            RoomState.Instance?.ClearRoom();
+            RoomState.Instance?.ClearNetworkSession();
+            SceneLoader.LoadHome();
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

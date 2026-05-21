@@ -431,32 +431,11 @@ namespace NightHunt.UI
                 return true;
             }
 
-            if (_roomService == null)
-            {
-                NLog($"RecoverActiveRoom skipped from {source}: RoomService is null. local={DescribeLocalRoom()}");
-                return false;
-            }
-
-            NLog($"RecoverActiveRoom request from {source}. local={DescribeLocalRoom()} updateUi={updateUi}");
-            var result = await _roomService.Reconnect();
-            if (result.Success && result.Data != null)
-            {
-                _roomState = RoomState.Instance;
-                NLog($"Recovered active room from {source}: roomId={result.Data.roomId} code={result.Data.roomCode} local={DescribeLocalRoom()}");
-                if (updateUi)
-                {
-                    ResetCodeInput();
-                    ShowState(UIState.InRoom);
-                    RefreshRoomDisplay();
-                    SetStatus("Recovered active room.");
-                }
-                return true;
-            }
-
-            NLog($"RecoverActiveRoom result from {source}: success={result.Success} errorCode={result.ErrorCode ?? "null"} msg='{result.Message ?? "null"}'");
-            if (!string.Equals(result.ErrorCode, ErrorCodes.ROOM_NOT_FOUND, StringComparison.OrdinalIgnoreCase))
-                Debug.LogWarning($"[PartyCustomModeView] Active room recovery failed from {source}: {result.Message} ({result.ErrorCode})");
-
+            // No local room state — do NOT call the reconnect endpoint here.
+            // The authoritative room-recovery check is done in HomeView.CheckAndShowReconnectPopup
+            // right after login/app resume.  If that check cleared (or never set) room state,
+            // calling Reconnect() here would send roomId=0 and produce a server 500 error.
+            NLog($"RecoverActiveRoom skipped from {source}: not in room, nothing to recover. local={DescribeLocalRoom()}");
             return false;
         }
 

@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NightHunt.Common;
+using NightHunt.Data;
 using NightHunt.Data.DTOs;
 using NightHunt.Services.Backend;
 using NightHunt.Services.Game;
@@ -471,11 +473,22 @@ namespace NightHunt.Services.Room
             }
             else if (!result.Success && roomState != null && roomState.IsInRoom)
             {
-                // Reconnect failed — the room on the server is gone or inaccessible.
-                // Clear the stale local room state so the player is not stuck unable to
-                // join matchmaking or create a new room (server-side ROOM_014 guard).
-                RLog($"Reconnect failed ({result.ErrorCode ?? result.Message}) — clearing stale local room state. local={DescribeLocalRoom()}");
-                roomState.ClearRoom();
+                // Only clear local room state when the server definitively says the room is gone
+                // (ROOM_NOT_FOUND / 404).  Transient server errors (INTERNAL_ERROR / 500) and
+                // network failures do NOT confirm the room is absent — evicting state on those
+                // would cause race-condition bugs where a valid in-progress room is wiped.
+                bool isDefinitiveNotFound =
+                    string.Equals(result.ErrorCode, ErrorCodes.ROOM_NOT_FOUND, StringComparison.OrdinalIgnoreCase);
+
+                if (isDefinitiveNotFound)
+                {
+                    RLog($"Reconnect: room not found ({result.ErrorCode}) — clearing stale local room state. local={DescribeLocalRoom()}");
+                    roomState.ClearRoom();
+                }
+                else
+                {
+                    RLog($"Reconnect: transient failure ({result.ErrorCode ?? "null"} / '{result.Message ?? "null"}') — keeping local room state. local={DescribeLocalRoom()}");
+                }
             }
 
             return result;
