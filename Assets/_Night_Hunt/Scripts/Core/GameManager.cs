@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NightHunt.Networking;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;
@@ -170,14 +170,14 @@ namespace NightHunt.Core
 #if UNITY_ANDROID || UNITY_IOS
             if (pauseStatus)
             {
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] App paused → disconnect WS (keep room)");
                 DisconnectWebSocket();
                 OnAppPaused?.Invoke();
             }
             else
             {
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] App resumed");
                 HandleApplicationResumed();
                 OnAppResumed?.Invoke();
@@ -202,14 +202,14 @@ namespace NightHunt.Core
 #if UNITY_ANDROID || UNITY_IOS
             if (!hasFocus)
             {
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] App lost focus → disconnect WS (keep room)");
                 DisconnectWebSocket();
                 OnAppFocusLost?.Invoke();
             }
             else
             {
-                if (_debugConfig != null && _debugConfig.EnableCoreDebugLogs)
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] App regained focus");
                 HandleApplicationResumed();
                 OnAppFocusGained?.Invoke();
