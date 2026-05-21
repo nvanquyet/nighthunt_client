@@ -137,13 +137,19 @@ jobs:
       # Tạo 8 GB swap file từ disk đã freed ở bước trên để tránh OOM.
       - name: Configure swap (8 GB — prevent OOM during script compilation)
         run: |
+          # GitHub runner đã có /swapfile mặc định (thường 4 GB) đang active → fallocate bị "Text file busy"
+          # Giải pháp: tắt swap cũ, xóa, tạo lại 8 GB
+          echo "=== Swap trước khi thay đổi ==="
+          free -h
+          sudo swapoff -a
+          sudo rm -f /swapfile
           sudo fallocate -l 8G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
-          # Giảm swappiness: chỉ dùng swap khi RAM gần đầy (tránh thrashing)
+          # Chỉ dùng swap khi RAM gần đầy (tránh disk thrashing)
           sudo sysctl vm.swappiness=10
-          echo "=== Memory after swap ==="
+          echo "=== Memory sau khi thêm swap ==="
           free -h
 
       # Version tag: YYYYMMDD-<short-sha>
