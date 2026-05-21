@@ -161,10 +161,11 @@ jobs:
           unityVersion:     ${{ env.UNITY_VERSION }}
           targetPlatform:   StandaloneLinux64
           buildMethod:      NightHunt.Build.BuildScript.BuildDedicatedServer
-          # subtarget được set trong BuildScript.BuildDedicatedServer() qua BuildPlayerOptions.subtarget
-          # KHÔNG pass -standaloneBuildSubtarget ở đây — nếu pass, Unity compile với UNITY_SERVER trước
-          # rồi BuildScript set Player → recompile conflict → build fail
+          # -standaloneBuildSubtarget Server: định nghĩa UNITY_SERVER ngay từ lần compile đầu tiên
+          # → các guard #if !UNITY_SERVER (DOTween, UI code) hoạt động đúng
+          # → BuildScript cũng set subtarget = Server (nhất quán, không conflict)
           customParameters: >-
+            -standaloneBuildSubtarget Server
             -buildOutput Build/Server/NightHuntDS
             -disableBurstCompilation
 
