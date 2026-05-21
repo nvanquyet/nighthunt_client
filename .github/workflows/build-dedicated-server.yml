@@ -127,10 +127,24 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .git/lfs
-          key: lfs-${{ runner.os }}-${{ hashFiles('.gitattributes') }}-${{ github.sha }}
+          # Không dùng github.sha — SHA mỗi commit đều khác → key không bao giờ hit
+          key: lfs-${{ runner.os }}-${{ hashFiles('.gitattributes') }}
           restore-keys: |
-            lfs-${{ runner.os }}-${{ hashFiles('.gitattributes') }}-
             lfs-${{ runner.os }}-
+
+      # GitHub Actions Ubuntu runner chỉ có ~7 GB RAM.
+      # Unity Editor + ILPP gRPC server + bee_backend compile 4572 scripts vượt quá RAM → OOM kill (exit 137).
+      # Tạo 8 GB swap file từ disk đã freed ở bước trên để tránh OOM.
+      - name: Configure swap (8 GB — prevent OOM during script compilation)
+        run: |
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          # Giảm swappiness: chỉ dùng swap khi RAM gần đầy (tránh thrashing)
+          sudo sysctl vm.swappiness=10
+          echo "=== Memory after swap ==="
+          free -h
 
       # Version tag: YYYYMMDD-<short-sha>
       - name: Generate version
@@ -141,12 +155,15 @@ jobs:
           echo "Building version: ${VERSION}"
 
       # Cache thư mục Library (Unity cache - tăng tốc build đáng kể)
+      # KHÔNG dùng hashFiles('Assets/**') — 10k+ files → hash chậm + miss khi bất kỳ asset nào đổi
+      # Chỉ hash Packages (dependencies) + ProjectSettings (build config) là đủ stable
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
           path: Library
-          key:  unity-lib-${{ env.UNITY_VERSION }}-${{ hashFiles('Assets/**', 'Packages/manifest.json') }}
+          key:  unity-lib-ds-${{ env.UNITY_VERSION }}-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json', 'ProjectSettings/ProjectSettings.asset') }}
           restore-keys: |
+            unity-lib-ds-${{ env.UNITY_VERSION }}-
             unity-lib-${{ env.UNITY_VERSION }}-
 
       # Build Unity DS bằng GameCI
@@ -168,6 +185,27 @@ jobs:
             -standaloneBuildSubtarget Server
             -buildOutput Build/Server/NightHuntDS
             -disableBurstCompilation
+          # Ghi Unity log ra file riêng để không flood bước này → tránh truncation
+          logName: unity_build_ds.log
+
+      # In tail của Unity log ra step riêng — lỗi compile/build thường ở cuối log
+      - name: Show Unity build log (errors/warnings tail)
+        if: always()
+        run: |
+          LOG_FILE="unity_build_ds.log"
+          if [ -f "${LOG_FILE}" ]; then
+            LINES=$(wc -l < "${LOG_FILE}")
+            echo "=== Unity log: ${LINES} lines total ==="
+            echo "--- Last 200 lines (lỗi thường ở đây) ---"
+            tail -200 "${LOG_FILE}"
+            echo ""
+            echo "--- Compile errors ---"
+            grep -n "error CS\|Error\|FAILED\|exception\|Exception" "${LOG_FILE}" | tail -50 || echo "(không tìm thấy error pattern)"
+          else
+            echo "Log file not found: ${LOG_FILE}"
+            # Fallback: tìm log trong /github/workspace
+            find /github/workspace -name "*.log" 2>/dev/null | head -5 || true
+          fi
 
       - name: Locate and stage UnityPlayer.so
         run: |
