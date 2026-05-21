@@ -248,16 +248,29 @@ jobs:
           (echo "❌ UnityPlayer.so missing — DS will crash. Check game-ci Unity image modules." && exit 1)
           echo "✅ Binary + UnityPlayer.so verified"
 
-      # Xóa artifact ds-build-* cũ để tránh đầy storage quota trước khi upload mới
+      # Xóa toàn bộ artifact ds-build-* cũ trước khi upload mới
+      # (artifact tên dạng ds-build-YYYYMMDD-<sha>, dùng startswith để filter đúng)
       - name: Delete old DS build artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "=== Deleting old ds-build-* artifacts ==="
-          gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100&name=ds-build" \
-            --jq '.artifacts[] | select(.expired == false) | .id' \
-          | xargs -I{} gh api --method DELETE "repos/${{ github.repository }}/actions/artifacts/{}" \
-          && echo "✅ Old artifacts deleted" || echo "⚠️ No old artifacts to delete (or already clean)"
+          echo "=== Listing ds-build-* artifacts ==="
+          IDS=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name | startswith("ds-build-")) | select(.expired == false) | .id] | .[]')
+
+          if [ -z "$IDS" ]; then
+            echo "✅ No old artifacts found — storage is clean"
+          else
+            COUNT=$(echo "$IDS" | wc -l)
+            echo "Found ${COUNT} artifact(s) to delete:"
+            echo "$IDS" | while read -r id; do
+              NAME=$(gh api "repos/${{ github.repository }}/actions/artifacts/$id" --jq '.name' 2>/dev/null || echo "unknown")
+              gh api --method DELETE "repos/${{ github.repository }}/actions/artifacts/$id" \
+                && echo "  ✅ Deleted: $NAME (id=$id)" \
+                || echo "  ⚠️  Failed to delete id=$id (may already be gone)"
+            done
+            echo "=== Cleanup done ==="
+          fi
 
       # Upload artifact để job build-docker dùng
       - name: Upload build artifact
