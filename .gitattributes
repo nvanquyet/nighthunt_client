@@ -1,3 +1,4 @@
 *.unitypackage filter=lfs diff=lfs merge=lfs -text
 *.tga filter=lfs diff=lfs merge=lfs -text
 *.tif filter=lfs diff=lfs merge=lfs -text
+Assets/_Night_Hunt/Prefabs/Maps/Map[[:space:]]05.prefab filter=lfs diff=lfs merge=lfs -text
