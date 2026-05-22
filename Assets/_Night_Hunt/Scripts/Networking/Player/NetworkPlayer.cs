@@ -292,8 +292,16 @@ namespace NightHunt.Networking.Player
             PlayerPublicRegistry.Instance?.Register((int)this.ObjectId, PlayerData, this);
 
             Debug.Log($"[FLOW §10c] NetworkPlayer.FinishOwnerSetup: Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            SetupOwnerSide();
+
+            // FIX: Register with SpectateManager BEFORE firing SetupOwnerSide() / OnOwnerReady.
+            // CameraStateManager.HandleOwnerReady() calls SpectateManager.GetCurrentPlayer() to
+            // decide whether to activate the virtual camera.  If SetLocalPlayer() has not been
+            // called yet, GetCurrentPlayer() returns null → HandleCurrentPlayerChanged(null) →
+            // SetVirtualCameraActive(false) → camera is turned OFF right after SetOwnerCamera(true)
+            // turned it ON.  Calling SetLocalPlayer first ensures GetCurrentPlayer() returns this
+            // player and the camera stays active.
             SpectateManager.Instance?.SetLocalPlayer(this);
+            SetupOwnerSide();
             TryNotifyClientRuntimeReady();
         }
 

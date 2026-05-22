@@ -50,11 +50,6 @@ namespace NightHunt.UI
         [Tooltip("Idle state: 'PLAY'.  Searching state: '00:00  ✕' (updated every frame).")]
         [SerializeField] private TextMeshProUGUI btn_PlayLabel;
 
-        // ── Navigation ────────────────────────────────────────────────────────
-        [Header("Navigation")]
-        [Tooltip("Nút mở Party Custom Mode. Nếu đang ghép trận sẽ show modal xác nhận trước.")]
-        [SerializeField] private Button btn_PartyCustomMode;
-
         // ── Party Display Sub-Views ───────────────────────────────────────────
         [Header("Party Display")]
         [Tooltip("Bottom-left avatar row: one slot per party member + '+' for empty slots.")]
@@ -79,6 +74,10 @@ namespace NightHunt.UI
         // ══════════════════════════════════════════════════════════════════════
 
         private PartyResponse    _currentParty      = null;
+
+        // Set to true before we intentionally disband/leave so HandlePartyDisbanded
+        // suppresses the "party disbanded" toast on the PartyCustomMode panel.
+        private bool _suppressDisbandToast = false;
 
         // Queue
         private RankedQueueState _queueState        = RankedQueueState.Idle;
@@ -107,9 +106,8 @@ namespace NightHunt.UI
                 _sessionState = GameManager.Instance.SessionState;
             }
 
-            if (btn_Play        != null) btn_Play.onClick.AddListener(OnPlayClicked);
-            if (btn_PartyCustomMode != null) btn_PartyCustomMode.onClick.AddListener(OnPartyCustomModeClicked);
-            if (modeDropdown    != null) modeDropdown.onValueChanged.AddListener(OnModeDropdownChanged);
+            if (btn_Play     != null) btn_Play.onClick.AddListener(OnPlayClicked);
+            if (modeDropdown != null) modeDropdown.onValueChanged.AddListener(OnModeDropdownChanged);
             if (mapDropdown     != null) mapDropdown.onValueChanged.AddListener(OnMapDropdownChanged);
             NH_DropdownRuntime.NormalizeModeMapOrder(modeDropdown, mapDropdown);
         }
@@ -741,7 +739,11 @@ namespace NightHunt.UI
         // NAVIGATION — CUSTOM LOBBY
         // ══════════════════════════════════════════════════════════════════════
 
-        private async void OnPartyCustomModeClicked()
+        /// <summary>
+        /// Called by HomeUIActionRouter when the Custom Mode button is pressed.
+        /// Checks queue/party state before navigating to PartyCustomMode.
+        /// </summary>
+        public async void OnPartyCustomModeClicked()
         {
             HLog($"PartyCustomMode clicked queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()} mode={DescribeSelectedMode()}");
             if (_queueState == RankedQueueState.Searching)
@@ -814,12 +816,14 @@ namespace NightHunt.UI
 
             bool isHost = IsCurrentUserPartyHost();
             HLog($"LeaveOrDisbandPartyThenNavigatePartyCustomMode start isHost={isHost} party={DescribeCurrentParty()}");
+            _suppressDisbandToast = true;
             var result = isHost
                 ? await _partyService.DisbandParty()
                 : await _partyService.LeaveParty();
 
             if (!result.Success)
             {
+                _suppressDisbandToast = false;
                 ShowToast("Party", result.Message ?? "Failed to leave current party.");
                 await RefreshParty(true);
                 return;
@@ -1087,7 +1091,9 @@ namespace NightHunt.UI
             _currentParty = null;
             SetQueueState(RankedQueueState.Idle);
             RefreshPartyDisplay();
-            ShowToast("Party", "The party has been disbanded.");
+            if (!_suppressDisbandToast)
+                ShowToast("Party", "The party has been disbanded.");
+            _suppressDisbandToast = false;
             Debug.Log($"[PartyController] PartyDisbanded — partyId={e.partyId}");
         }
 

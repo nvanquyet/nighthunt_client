@@ -48,6 +48,10 @@ namespace NightHunt.UI
             for (int i = 0; i < maxVisible; i++)
             {
                 var item = Instantiate(prefab, container);
+                // MUIP NotificationManager.startBehaviour defaults to Disable, which means
+                // Start() will call SetActive(false) on the NEXT frame after first activation,
+                // cancelling the toast. Override to None so pooled items are managed by us.
+                item.startBehaviour = NotificationManager.StartBehaviour.None;
                 item.gameObject.SetActive(false);
                 var captured = item;
                 item.onClose.AddListener(() => HandleClose(captured));

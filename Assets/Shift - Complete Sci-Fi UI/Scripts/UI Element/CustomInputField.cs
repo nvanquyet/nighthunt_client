@@ -40,14 +40,19 @@ namespace Michsky.UI.Shift
 
         void Update()
         {
-            if (inputText.text.Length == 1 || inputText.text.Length >= 1)
+            bool hasText = inputText.text.Length > 0;
+
+            // Only change animator state when it actually transitions, not every frame.
+            if (hasText && isEmpty)
             {
                 isEmpty = false;
                 inputFieldAnimator.Play(inAnim);
             }
-
-            else if (isClicked == false)
+            else if (!hasText && !isEmpty && !isClicked)
+            {
+                isEmpty = true;
                 inputFieldAnimator.Play(outAnim);
+            }
         }
 
         public void Animate()
@@ -55,6 +60,10 @@ namespace Michsky.UI.Shift
             isClicked = true;
             inputFieldAnimator.Play(inAnim);
             fieldTrigger.SetActive(true);
+
+            // On mobile the fieldTrigger overlay intercepts touch events so
+            // TMP_InputField never receives focus on its own — force-activate it.
+            inputText.ActivateInputField();
         }
 
         public void FieldTrigger()

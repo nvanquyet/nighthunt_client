@@ -106,6 +106,16 @@ namespace NightHunt.UI.Mobile
         public void OnPointerUp(PointerEventData eventData)
         {
             _dragging = false;
+
+            // FIX: Move the virtual cursor off-screen so no UI element stays in a hovered
+            // (blue-highlighted) state after the finger is lifted.  Without this, the last
+            // drag position leaves hover events on whatever button/panel was under the finger,
+            // producing persistent blue highlight "traces" on the HUD.
+            if (_mouse != null)
+            {
+                InputSystem.QueueStateEvent(_mouse,
+                    new MouseState { position = new Vector2(-9999f, -9999f) });
+            }
         }
 
         public void OnDrag(PointerEventData eventData)

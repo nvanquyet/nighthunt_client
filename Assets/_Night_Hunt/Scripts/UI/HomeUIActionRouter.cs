@@ -8,6 +8,10 @@ namespace NightHunt.UI
         [SerializeField] private UINavigator navigator;
         [SerializeField] private FriendPanelView friendPanelView;
 
+        [Header("Party")]
+        [Tooltip("Required for party/queue check before entering Custom Mode. Auto-resolved at Reset().")]
+        [SerializeField] private PartyController partyController;
+
         private UINavigator Navigator
         {
             get
@@ -20,7 +24,20 @@ namespace NightHunt.UI
 
         public void ShowLogin() => Navigator?.ShowPanel(PanelType.Login, "Button");
         public void ShowHome() => Navigator?.ShowPanel(PanelType.Home, "Button");
-        public void ShowPartyCustomMode() => Navigator?.ShowPanel(PanelType.PartyCustomMode, "Button");
+        public void ShowPartyCustomMode()
+        {
+            // Delegate to PartyController so the party/queue check runs before navigation.
+            // PartyController.OnPartyCustomModeClicked() prompts to cancel queue / leave
+            // ranked party if needed, then calls UINavigator.ShowPanelAsync with mode+map payload.
+            if (partyController != null)
+            {
+                partyController.OnPartyCustomModeClicked();
+                return;
+            }
+
+            // Fallback: direct navigate if PartyController is not wired (no party check).
+            Navigator?.ShowPanel(PanelType.PartyCustomMode, "Button");
+        }
         public void ShowSettings() => Navigator?.ShowPanel(PanelType.Settings, "Button");
         public void ShowMultiplayer() => ShowHome();
         public void OpenFriendsPanel() => FriendPanel?.OpenPanel();
@@ -49,7 +66,6 @@ namespace NightHunt.UI
         private void Reset()
         {
             navigator = FindFirstObjectByType<UINavigator>(FindObjectsInactive.Include);
-            friendPanelView = FindFirstObjectByType<FriendPanelView>(FindObjectsInactive.Include);
-        }
+            friendPanelView = FindFirstObjectByType<FriendPanelView>(FindObjectsInactive.Include);            partyController = FindFirstObjectByType<PartyController>(FindObjectsInactive.Include);        }
     }
 }

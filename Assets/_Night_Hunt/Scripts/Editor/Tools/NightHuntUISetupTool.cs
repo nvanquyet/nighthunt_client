@@ -503,15 +503,13 @@ namespace NightHunt.Editor.Tools
             CreateLabel(loading.transform, "LoadingText", "Loading...", 24, Vector2.zero)
                 .alignment = TextAlignmentOptions.Center;
 
-            // Toast Notification
+            // Toast Notification container — must remain ACTIVE so pool items have activeInHierarchy = true.
+            // The individual pool items are managed by ToastService (hidden/shown via SetActive per-item).
             var toast = GetOrCreate("[ToastService]", go.transform);
             SetAnchors(toast, new Vector2(0.25f, 0), new Vector2(0.75f, 0));
             SetRectSize(toast, new Vector2(0, 60));
             SetRectOffset(toast, new Vector2(0, 100));
-            toast.SetActive(false);
-            AddImage(toast, new Color(0.15f, 0.15f, 0.15f, 0.95f));
-            CreateLabel(toast.transform, "ToastText", "Toast Message", 15, Vector2.zero)
-                .alignment = TextAlignmentOptions.Center;
+            // Do NOT SetActive(false) here — container must be active for toast pool items to show.
 
             // Modal Window
             var modal = GetOrCreate("[GameModalWindow]", go.transform);

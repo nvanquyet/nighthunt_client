@@ -504,6 +504,13 @@ namespace NightHunt.UI
             MapConfig.OnConfigLoaded -= HandleConfigLoaded;
             HideSlotContextMenu();
             UnsubscribeEvents();
+            // Safety net: fire-and-forget leave/disband when navigation bypasses CanLeave()
+            // (e.g. GoForce, force-logout, bypassCanLeave=true without prior leave).
+            // The normal confirm path (CanLeave → PromptLeaveBeforeNavigation) sets
+            // _hasAutoLeft=true before navigating, so AutoLeaveOrDisband returns early there.
+            // Settings is excluded — navigating to Settings preserves the room intentionally.
+            if (context.To != PanelType.Settings)
+                AutoLeaveOrDisband();
             return Task.CompletedTask;
         }
 
@@ -522,7 +529,12 @@ namespace NightHunt.UI
         private void ShowState(UIState state)
         {
             NLog($"ShowState({state})");
-            joinCreatePanel?.SetActive(state == UIState.JoinCreate);
+            // NOTE: Do NOT call joinCreatePanel.SetActive() here.
+            // joinCreatePanel IS the UINavigator route rootObject for PartyCustomMode.
+            // UINavigator owns its active state (ApplyRouteRootState / ApplyActiveRouteVisualState).
+            // Calling SetActive(false) on it resets the Animator (m_KeepAnimatorStateOnDisable=0),
+            // causing a 1-frame invisible flash when UINavigator re-enables it after OnShowAsync.
+            // Instead, control only the child sub-panels and individual buttons below.
             inRoomPanel?.SetActive(state == UIState.InRoom);
 
             if (state == UIState.JoinCreate)
@@ -536,6 +548,10 @@ namespace NightHunt.UI
                 btnStart?.gameObject.SetActive(false);
                 btnReady?.gameObject.SetActive(false);
                 btnLeaveOrDisband?.gameObject.SetActive(false);
+                // Re-enable mode/map dropdowns — they are disabled by ShowState(InRoom).
+                // Must be done BEFORE ClearRoomUI() repopulates them so Populate sees a live control.
+                if (modeDropdown != null) modeDropdown.Interactable(true);
+                if (mapDropdown != null) mapDropdown.Interactable(true);
                 ResetCodeInput();
                 SetJoinCreateInteractable(!_joinCreateRequestInFlight);
                 SetStatus("");
@@ -1071,7 +1087,7 @@ namespace NightHunt.UI
 
             // ── FIX: Remove slot views + toàn bộ children còn sót trong containers
             foreach (var sv in _slotViews.Values)
-                if (sv != null) DestroyImmediate(sv.gameObject);
+                if (sv != null) Destroy(sv.gameObject);
             _slotViews.Clear();
 
             // Remove sạch bất kỳ child nào còn sót (edge case khi sv == null)
@@ -1100,7 +1116,7 @@ namespace NightHunt.UI
         {
             if (container == null) return;
             for (int i = container.childCount - 1; i >= 0; i--)
-                DestroyImmediate(container.GetChild(i).gameObject);
+                Destroy(container.GetChild(i).gameObject);
         }
 
         // ══════════════════════════════════════════════════════════════════════

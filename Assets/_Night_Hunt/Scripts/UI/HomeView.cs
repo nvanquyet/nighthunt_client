@@ -228,7 +228,13 @@ namespace NightHunt.UI
 
         public Task OnHideAsync(NavigationContext context)
         {
-            UnsubscribeWSEvents();
+            // Keep WS subscriptions alive when navigating to sibling panels within the home
+            // flow (PartyCustomMode, Settings). Friend/connection events must still be
+            // delivered while the user is on those panels (toasts, badge updates).
+            // Only fully unsubscribe when leaving the home flow entirely (Login / scene change).
+            bool leavingHomeFlow = context.To == PanelType.Login || context.To == PanelType.None;
+            if (leavingHomeFlow)
+                UnsubscribeWSEvents();
             return Task.CompletedTask;
         }
 

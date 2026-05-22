@@ -403,6 +403,17 @@ namespace NightHunt.Networking
 
             Debug.Log($"[ServerGameManager] Client runtime ready ({_runtimeReadyClients.Count}/{_expectedPlayerCount}) - {player.DisplayName}");
             RpcOnPlayerRuntimeReady(player.DisplayName, _runtimeReadyClients.Count, _expectedPlayerCount);
+
+            // Late-joiner fix: if the match already started (e.g. timeout fired while waiting
+            // for this client), send the "all ready" signal directly to this connection so
+            // its MatchLoadingOverlay hides and the HUD shows correctly.
+            if (_matchStartTriggered)
+            {
+                Debug.Log($"[ServerGameManager] Match already started — sending AllPlayersReady directly to late-joiner {player.DisplayName}.");
+                RpcOnAllPlayersReadyTarget(conn);
+                return;
+            }
+
             if (_spawnedPlayerCount >= _expectedPlayerCount)
                 OnAllPlayersSpawned();
         }
@@ -500,6 +511,22 @@ namespace NightHunt.Networking
         {
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log("[ServerGameManager] CLIENT: All players ready — dismissing loading screen.");
+            GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
+        }
+
+        /// <summary>
+        /// Sent ONLY to a single late-joining client whose runtime-ready arrived after
+        /// _matchStartTriggered was set (the match had already started via timeout or
+        /// when all other players were ready before this client finished loading).
+        /// Without this, their MatchLoadingOverlay would never hide.
+        /// </summary>
+        [TargetRpc]
+        private void RpcOnAllPlayersReadyTarget(NetworkConnection conn)
+        {
+            Debug.Log("[ServerGameManager] CLIENT (late-joiner): received AllPlayersReady — dismissing loading screen.");
+            // Publish directly; MatchLoadingOverlay's TryLateSubscribe() has had enough
+            // time to subscribe since this fires after the client has fully spawned.
+            MatchLoadingOverlay.Instance?.Hide();
             GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
 
