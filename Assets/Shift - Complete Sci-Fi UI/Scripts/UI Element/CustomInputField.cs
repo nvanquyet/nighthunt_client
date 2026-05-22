@@ -59,11 +59,20 @@ namespace Michsky.UI.Shift
         {
             isClicked = true;
             inputFieldAnimator.Play(inAnim);
-            fieldTrigger.SetActive(true);
 
-            // On mobile the fieldTrigger overlay intercepts touch events so
-            // TMP_InputField never receives focus on its own — force-activate it.
+            // Force-activate so mobile keyboard opens regardless of the overlay.
             inputText.ActivateInputField();
+
+            // Delay enabling the overlay by one frame so the current tap's
+            // PointerEnter/PointerClick events cannot immediately fire FieldTrigger()
+            // and cancel the keyboard before it opens.
+            StartCoroutine(EnableTriggerNextFrame());
+        }
+
+        private IEnumerator EnableTriggerNextFrame()
+        {
+            yield return null;
+            fieldTrigger.SetActive(true);
         }
 
         public void FieldTrigger()
