@@ -900,9 +900,12 @@ namespace NightHunt.UI
             if (e == null || string.IsNullOrEmpty(e.lobbyToken)) return;
 
             _pendingLobbyToken = e.lobbyToken;
-            long localUserId = _sessionState?.UserId ?? 0L;
-            MatchFoundOverlay.Instance?.Show(e.gameMode, e.playerIds, localUserId);
 
+            // Hiện overlay "DS đang khởi động" — informational only, không có nút xác nhận.
+            // Overlay này ẩn đi khi nhận match_ready (HandleMatchReady) hoặc match_cancelled.
+            MatchFoundOverlay.Instance?.Show(e.gameMode, e.playerIds, _sessionState?.UserId ?? 0L);
+
+            // Auto-accept ngay lập tức — không cần user xác nhận.
             try
             {
                 var result = await GameManager.Instance.BackendClient.PostAsync<object>(
@@ -914,12 +917,9 @@ namespace NightHunt.UI
                     _pendingLobbyToken = null;
                     MatchFoundOverlay.Instance?.Hide();
                     SetQueueState(RankedQueueState.Idle);
-                    ShowToast("Matchmaking", result.Message ?? "Failed to accept match.");
+                    ShowToast("Matchmaking", result.Message ?? "Failed to join match.");
                 }
-                else if (_pendingLobbyToken == e.lobbyToken)
-                {
-                    MatchFoundOverlay.Instance?.MarkPlayerAccepted(localUserId);
-                }
+                // Success → chờ match_ready WS. MatchFlowCoordinator sẽ handle scene loading.
             }
             catch (Exception ex)
             {
@@ -929,7 +929,7 @@ namespace NightHunt.UI
                     MatchFoundOverlay.Instance?.Hide();
                     SetQueueState(RankedQueueState.Idle);
                 }
-                Debug.LogError($"[PartyController] Failed to accept match_found lobby={e.lobbyToken}: {ex.Message}");
+                Debug.LogError($"[PartyController] Auto-accept failed lobby={e.lobbyToken}: {ex.Message}");
             }
         }
 

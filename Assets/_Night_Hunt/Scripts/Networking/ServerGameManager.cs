@@ -524,9 +524,8 @@ namespace NightHunt.Networking
         private void RpcOnAllPlayersReadyTarget(NetworkConnection conn)
         {
             Debug.Log("[ServerGameManager] CLIENT (late-joiner): received AllPlayersReady — dismissing loading screen.");
-            // Publish directly; MatchLoadingOverlay's TryLateSubscribe() has had enough
-            // time to subscribe since this fires after the client has fully spawned.
-            MatchLoadingOverlay.Instance?.Hide();
+            // Publishing AllPlayersReadyEvent is sufficient: MatchLoadingOverlay subscribes
+            // via TryLateSubscribe() in Update() and will call Hide() on its own.
             GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
 
