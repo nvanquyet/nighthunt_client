@@ -126,8 +126,8 @@ namespace NightHunt.Gameplay.Scoring
         [Server]
         public void AwardKill(uint killerId, uint victimId)
         {
-            var killConfig = GetScoreConfig("Kill");
-            AwardScoreInternal(killerId, "Kill", killConfig.BaseScore, killConfig.PhaseMultiplier, syncAfterAward: false);
+            int killScore = _zoneConfig != null ? Mathf.RoundToInt(_zoneConfig.killScore) : GetScoreConfig("Kill").BaseScore;
+            AwardScoreInternal(killerId, "Kill", killScore, 1f, syncAfterAward: false);
 
             // Track Kills stat (AwardScore already initialized playerScores/teamScores entries)
             if (playerScores.ContainsKey(killerId))
@@ -167,8 +167,8 @@ namespace NightHunt.Gameplay.Scoring
         [Server]
         public void AwardBossKill(uint killerId)
         {
-            var bossKillConfig = GetScoreConfig("BossKill");
-            AwardScore(killerId, "BossKill", bossKillConfig.BaseScore, bossKillConfig.PhaseMultiplier);
+            int score = _zoneConfig != null ? Mathf.RoundToInt(_zoneConfig.bossKillScore) : GetScoreConfig("BossKill").BaseScore;
+            AwardScore(killerId, "BossKill", score, 1f);
         }
 
         /// <summary>
@@ -177,8 +177,7 @@ namespace NightHunt.Gameplay.Scoring
         [Server]
         public void AwardObjectiveCapture(int teamId, float captureTime)
         {
-            var objectiveConfig = GetScoreConfig("ObjectiveCapture");
-            int scorePerSecond = objectiveConfig.BaseScore;
+            float scorePerSecond = _zoneConfig != null ? _zoneConfig.captureZoneScorePerSecond : GetScoreConfig("ObjectiveCapture").BaseScore;
             int totalScore = Mathf.RoundToInt(captureTime * scorePerSecond);
 
             // Award to all team members — O(n) via registry, no FindObjectsOfType
