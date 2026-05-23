@@ -52,7 +52,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IItemSelectionSystem _selectionSystem;
         private IItemUseSystem       _itemUseSystem;
         private IInventorySystem     _inventorySystem;
-        private ItemAimController    _aimController;
+        private ThrowableAimController    _aimController;
         private Vector2 _dragStartScreenPosition;
         private float _lastDragMagnitude;
         private bool _dragAimStarted;
@@ -88,7 +88,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IItemSelectionSystem selectionSystem,
             IItemUseSystem       itemUseSystem   = null,
             IInventorySystem     inventorySystem = null,
-            ItemAimController    aimController   = null)
+            ThrowableAimController aimController  = null)
         {
             Initialize(new[] { filterType }, selectionSystem, itemUseSystem, inventorySystem, aimController);
         }
@@ -98,7 +98,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IItemSelectionSystem    selectionSystem,
             IItemUseSystem          itemUseSystem   = null,
             IInventorySystem        inventorySystem = null,
-            ItemAimController       aimController   = null)
+            ThrowableAimController  aimController   = null)
         {
             Unsubscribe();
 
@@ -555,12 +555,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
             return handled;
         }
 
-        private static ItemAimController ResolveAimController()
+        private static ThrowableAimController ResolveAimController()
         {
 #if UNITY_2023_1_OR_NEWER
-            return FindFirstObjectByType<ItemAimController>(FindObjectsInactive.Include);
+            return FindFirstObjectByType<ThrowableAimController>(FindObjectsInactive.Include);
 #else
-            return FindObjectOfType<ItemAimController>(true);
+            return FindObjectOfType<ThrowableAimController>(true);
 #endif
         }
 

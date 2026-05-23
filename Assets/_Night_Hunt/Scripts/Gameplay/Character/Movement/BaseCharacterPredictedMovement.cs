@@ -1061,6 +1061,7 @@ namespace NightHunt.Gameplay.Character
             }
         }
 
+        #if UNITY_EDITOR
         protected virtual void OnGUI()
         {
             if (!IsOwner || !Application.isPlaying || !enableDebugLogs) return;
@@ -1081,6 +1082,7 @@ namespace NightHunt.Gameplay.Character
 
             GUILayout.EndArea();
         }
+        #endif
 
         #endregion
     }

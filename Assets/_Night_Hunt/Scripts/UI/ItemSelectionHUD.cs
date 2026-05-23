@@ -52,9 +52,9 @@ namespace NightHunt.UI
         [Tooltip("One entry per selectable item type (Consumable, Throwable, etc.).")]
         [SerializeField] private ItemFilterEntry[] _filterPanels;
 
-        [Header("Item Aim Controller")]
-        [Tooltip("Assign the scene ItemAimController so throwable/deployable slots can enter aim and placement mode.")]
-        [SerializeField] private GameplaySystems.UI.Combat.ItemAimController _aimController;
+        [Header("Throwable Aim Controller")]
+        [Tooltip("Assign the scene ThrowableAimController so throwable/deployable slots can enter aim and placement mode.")]
+        [SerializeField] private GameplaySystems.UI.Combat.ThrowableAimController _aimController;
 
         // Injected at runtime by GameHUDController.BindProgress.
         private ActionProgressPresenter _progressPresenter;
@@ -216,20 +216,20 @@ namespace NightHunt.UI
             CombatInputHandler combatHandler)
         {
             if (_aimController == null)
-                _aimController = GetComponentInChildren<GameplaySystems.UI.Combat.ItemAimController>(true);
+                _aimController = GetComponentInChildren<GameplaySystems.UI.Combat.ThrowableAimController>(true);
             if (_aimController == null && transform.root != null)
-                _aimController = transform.root.GetComponentInChildren<GameplaySystems.UI.Combat.ItemAimController>(true);
+                _aimController = transform.root.GetComponentInChildren<GameplaySystems.UI.Combat.ThrowableAimController>(true);
             if (_aimController == null)
             {
 #if UNITY_2023_1_OR_NEWER
-                _aimController = FindFirstObjectByType<GameplaySystems.UI.Combat.ItemAimController>(FindObjectsInactive.Include);
+                _aimController = FindFirstObjectByType<GameplaySystems.UI.Combat.ThrowableAimController>(FindObjectsInactive.Include);
 #else
-                _aimController = FindObjectOfType<GameplaySystems.UI.Combat.ItemAimController>(true);
+                _aimController = FindObjectOfType<GameplaySystems.UI.Combat.ThrowableAimController>(true);
 #endif
             }
             if (_aimController == null)
             {
-                Debug.LogWarning("[DEPLOY_FLOW] ItemSelectionHUD could not resolve ItemAimController. Deploy/throw UI will fall back to server use without local preview.");
+                Debug.LogWarning("[DEPLOY_FLOW] ItemSelectionHUD could not resolve ThrowableAimController. Deploy/throw UI will fall back to server use without local preview.");
                 return;
             }
 
@@ -245,7 +245,7 @@ namespace NightHunt.UI
                 : null;
 
             _aimController.Initialize(context?.Bridge?.Stat, selectionSys, playerTransform, aimSystem, itemUseSys, combatHandler, inventorySys);
-            Debug.Log($"[DEPLOY_FLOW] ItemSelectionHUD bound ItemAimController='{_aimController.name}' player='{context?.Player?.name ?? "null"}' inventory={(inventorySys != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")}");
+            Debug.Log($"[DEPLOY_FLOW] ItemSelectionHUD bound ThrowableAimController='{_aimController.name}' player='{context?.Player?.name ?? "null"}' inventory={(inventorySys != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")}");
             Debug.Log($"[NH_FLOW][01][ItemSelectionHUD.BindAimController] aimController={_aimController.name} player={context?.Player?.name ?? "null"} aimSystem={(aimSystem != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")} combat={(combatHandler != null ? "ok" : "null")}");
         }
 

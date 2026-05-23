@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Zone;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.Networking;
@@ -12,7 +12,7 @@ using NightHunt.Networking.Player;
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Match HUD: phase name, countdown timer, score, two-team member lists.
+    /// Match HUD: zone index display, shrink countdown timer, score, two-team member lists.
     ///
     /// Team list populate DUY NHẤT 1 LẦN khi nhận AllPlayersReadyEvent.
     /// Source: PlayerPublicRegistry (dict sẵn có, không FindObjectsByType).
@@ -20,12 +20,18 @@ namespace NightHunt.UI
     /// </summary>
     public class MatchUI : MonoBehaviour
     {
-        // ── Phase ─────────────────────────────────────────────────────────────
-        [Header("Phase Display")]
+        // ── Zone Display ─────────────────────────────────────────────────────
+        [Header("Zone Display")]
+        [Tooltip("Shows 'ZONE 1', 'ZONE 2', etc. or 'FINAL ZONE'.")]
+        // Compact zone label in the main HUD bar (top area). Intentionally separate from
+        // SafeZoneHUD._zoneLabel which drives the dedicated zone-ring panel on its own canvas.
+        // Both subscribe to SafeZoneHUDProxy events but update DIFFERENT TMP components.
         [SerializeField] private TextMeshProUGUI phaseText;
 
         // ── Timer ─────────────────────────────────────────────────────────────
         [Header("Timer")]
+        // Compact countdown in the main HUD bar. Intentionally separate from
+        // SafeZoneHUD._countdownText which drives the zone-ring panel countdown.
         [SerializeField] private TextMeshProUGUI timerText;
 
         [Header("Team Score Display")]
@@ -61,16 +67,17 @@ namespace NightHunt.UI
         [SerializeField] private float           warningFadeDuration = 0.4f;
 
         // ── Runtime ───────────────────────────────────────────────────────────
-        private MatchPhaseManager _phaseManager;
         private float             _lastUpdateTime;
-        private const float       UpdateInterval            = 0.1f;
-        private float             _phaseManagerRetryTime;
-        private const float       PhaseManagerRetryInterval = 1f;
+        private const float       UpdateInterval = 0.1f;
         private Coroutine         _warningCoroutine;
         private Coroutine         _phaseStartCoroutine;
         private NetworkPlayer     _localPlayer;
         private int               _cachedTeamAScore;
         private int               _cachedTeamBScore;
+        // Zone HUD cache
+        private int               _cachedZoneIndex = -1;
+        private float             _cachedCountdown;
+        private bool              _cachedIsShrinking;
 
         // ── Unity Lifecycle ───────────────────────────────────────────────────
 
@@ -101,6 +108,9 @@ namespace NightHunt.UI
             GameplayEventBus.Instance?.Subscribe<PhaseStartedEvent>(OnPhaseStarted);
             GameplayEventBus.Instance?.Subscribe<MatchCountdownEvent>(OnMatchCountdown);
             GameplayEventBus.Instance?.Subscribe<ScoreDataSyncedEvent>(OnScoreDataSynced);
+            SafeZoneHUDProxy.OnZoneIndexChanged   += OnZoneIndexChanged;
+            SafeZoneHUDProxy.OnCountdownChanged   += OnCountdownChanged;
+            SafeZoneHUDProxy.OnShrinkStateChanged += OnShrinkStateChanged;
         }
 
         private void OnDisable()
@@ -109,12 +119,12 @@ namespace NightHunt.UI
             GameplayEventBus.Instance?.Unsubscribe<PhaseStartedEvent>(OnPhaseStarted);
             GameplayEventBus.Instance?.Unsubscribe<MatchCountdownEvent>(OnMatchCountdown);
             GameplayEventBus.Instance?.Unsubscribe<ScoreDataSyncedEvent>(OnScoreDataSynced);
+            SafeZoneHUDProxy.OnZoneIndexChanged   -= OnZoneIndexChanged;
+            SafeZoneHUDProxy.OnCountdownChanged   -= OnCountdownChanged;
+            SafeZoneHUDProxy.OnShrinkStateChanged -= OnShrinkStateChanged;
         }
 
-        private void Start()
-        {
-            _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
-        }
+        private void Start() { }
 
         private void Update()
         {
@@ -127,40 +137,51 @@ namespace NightHunt.UI
 
         private void UpdateDisplay()
         {
-            if (_phaseManager == null)
-            {
-                if (Time.time >= _phaseManagerRetryTime)
-                {
-                    _phaseManager          = FindFirstObjectByType<MatchPhaseManager>();
-                    _phaseManagerRetryTime = Time.time + PhaseManagerRetryInterval;
-                }
-                return;
-            }
-
-            UpdatePhase();
-            UpdateCountdown();
+            UpdateZone();
+            UpdateCountdownTimer();
             UpdateScore();
-        }
-
-        private void UpdatePhase()
-        {
-            if (phaseText != null)
-                phaseText.text = FormatPhaseName(_phaseManager.CurrentPhaseName);
-        }
-
-        private void UpdateCountdown()
-        {
-            if (timerText == null) return;
-            float remaining = Mathf.Max(0f, _phaseManager.PhaseRemainingTime);
-            int   minutes   = Mathf.FloorToInt(remaining / 60f);
-            int   seconds   = Mathf.FloorToInt(remaining % 60f);
-            timerText.text  = $"{minutes:00}:{seconds:00}";
         }
 
         private void UpdateScore()
         {
             if (_teamAScoreText != null) _teamAScoreText.text = _cachedTeamAScore.ToString();
             if (_teamBScoreText != null) _teamBScoreText.text = _cachedTeamBScore.ToString();
+        }
+
+        // ── SafeZone HUD handlers ─────────────────────────────────────────────
+
+        private void OnZoneIndexChanged(int zoneIndex)
+        {
+            _cachedZoneIndex = zoneIndex;
+            UpdateZone();
+        }
+
+        private void OnCountdownChanged(float t)
+        {
+            _cachedCountdown = t;
+            UpdateCountdownTimer();
+        }
+
+        private void OnShrinkStateChanged(bool shrinking)
+        {
+            _cachedIsShrinking = shrinking;
+        }
+
+        private void UpdateZone()
+        {
+            if (phaseText == null) return;
+            bool isFinal = SafeZoneManager.Instance?.IsInFinalZone ?? false;
+            phaseText.text = isFinal ? "FINAL ZONE" : $"ZONE {_cachedZoneIndex + 1}";
+        }
+
+        private void UpdateCountdownTimer()
+        {
+            if (timerText == null) return;
+            int mins = Mathf.FloorToInt(_cachedCountdown / 60f);
+            int secs = Mathf.FloorToInt(_cachedCountdown % 60f);
+            timerText.text = _cachedCountdown > 0f
+                ? (mins > 0 ? $"{mins}:{secs:D2}" : $"{secs}s")
+                : (_cachedIsShrinking ? "SHRINKING" : "--");
         }
 
         private void OnScoreDataSynced(ScoreDataSyncedEvent evt)
@@ -207,19 +228,7 @@ namespace NightHunt.UI
 
         private void OnPhaseStarted(PhaseStartedEvent evt)
         {
-            if (_phaseStartCoroutine != null) StopCoroutine(_phaseStartCoroutine);
-
-            if (_phaseStartPanel == null) return;
-
-            if (_phaseStartTitleText != null)
-                _phaseStartTitleText.text = FormatPhaseName(evt.Phase.ToString());
-
-            if (_phaseObjectivesText != null)
-                _phaseObjectivesText.text = string.IsNullOrEmpty(evt.ObjectivesSummary)
-                    ? string.Empty
-                    : evt.ObjectivesSummary;
-
-            _phaseStartCoroutine = StartCoroutine(ShowPhaseStartBanner(_phaseStartPanel));
+            // Legacy event — no-op now; zone transitions handled via SafeZoneHUDProxy.OnZoneIndexChanged
         }
 
         private IEnumerator ShowPhaseStartBanner(GameObject panel)
@@ -245,13 +254,9 @@ namespace NightHunt.UI
 
         private void OnPhaseWarning(PhaseWarningEvent evt)
         {
-            if (_warningCoroutine != null) StopCoroutine(_warningCoroutine);
-
-            string msg = $"{FormatPhaseName(evt.CurrentPhase.ToString())}\n" +
-                         $"ENDING IN {Mathf.CeilToInt(evt.SecondsRemaining)}s";
-
-            _warningCoroutine = StartCoroutine(ShowWarningBanner(msg));
+            // Legacy event kept for backward compat — no-op now; zone shrink warning handled via SafeZoneHUDProxy
         }
+
 
         private IEnumerator ShowWarningBanner(string message)
         {
@@ -291,20 +296,8 @@ namespace NightHunt.UI
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
-        private static string FormatPhaseName(string phase) => phase switch
-        {
-            "Phase1_Preparation"    => "PHASE 1: PREPARATION",
-            "Phase2_HuntObjectives" => "PHASE 2: HUNT & OBJECTIVES",
-            "Phase3_FinalLockdown"  => "PHASE 3: FINAL LOCKDOWN",
-            _                       => phase
-        };
+        private static string FormatZoneLabel(int zoneIndex, bool isFinal)
+            => isFinal ? "FINAL ZONE" : $"ZONE {zoneIndex + 1}";
 
-        private static string FormatPhaseName(MatchPhaseState phase) => phase switch
-        {
-            MatchPhaseState.Preparation => "PHASE 1: PREPARATION",
-            MatchPhaseState.Hunt        => "PHASE 2: HUNT & OBJECTIVES",
-            MatchPhaseState.Lockdown    => "PHASE 3: FINAL LOCKDOWN",
-            _                           => phase.ToString()
-        };
     }
 }

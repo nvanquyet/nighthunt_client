@@ -46,6 +46,7 @@ namespace NightHunt.Data.DTOs
         public string   description;
         public string   sceneName;         // Unity scene file name, e.g. "02_Map_01" — matched via SceneConfig reverse lookup
         public string[] supportedModes;    // null = all modes; non-null = ["2v2","3v3"]
+        public int[]    supportedPlayerCounts; // null = no restriction; [2,4] = only 2 or 4 players
         public bool     isLocked;          // @JsonProperty("isLocked") on backend → key "isLocked"
         public int      displayOrder;
     }

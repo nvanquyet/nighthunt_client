@@ -495,8 +495,8 @@ namespace NightHunt.Gameplay.Beacon
             if (_aimSystem == null)
                 return transform.position;
 
-            if (_aimSystem.IsThrowableMode && ItemAimController.AimWorldTarget.sqrMagnitude > 0.0001f)
-                return ItemAimController.AimWorldTarget;
+            if (_aimSystem.IsThrowableMode && ThrowableAimController.AimWorldTarget.sqrMagnitude > 0.0001f)
+                return ThrowableAimController.AimWorldTarget;
 
             return _aimSystem.FinalAimGroundPos;
         }

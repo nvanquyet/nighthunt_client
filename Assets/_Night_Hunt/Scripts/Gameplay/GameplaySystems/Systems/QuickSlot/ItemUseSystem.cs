@@ -430,14 +430,14 @@ namespace NightHunt.GameplaySystems.ItemUse
         }
 
         /// <summary>
-        /// Called by the owning client (CombatInputHandler.BeginFire / ItemAimController
+        /// Called by the owning client (CombatInputHandler.BeginFire / ThrowableAimController
         /// mobile ConfirmAim) to trigger ExecuteThrow on the server.
         /// FishNet ServerRpcs from the same client are ordered, so a prior
         /// item-selection RPC is guaranteed to complete
         /// before this one processes.
         /// </summary>
         // BUG 2 FIX: aimTarget is the client-side world position of the cursor.
-        // The server cannot read ItemAimController.AimWorldTarget (client-only static);
+        // The server cannot read ThrowableAimController.AimWorldTarget (client-only static);
         // passing it as a ServerRpc parameter sends the correct position to the server.
         [ServerRpc(RequireOwnership = true)]
         public void RequestExecuteThrow(Vector3 aimTarget)
@@ -1060,7 +1060,7 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             // Launch the hand model toward the confirmed throw target.
             // Use the instance field _pendingThrowTarget (set in ExecuteThrow) instead of
-            // reading ItemAimController.AimWorldTarget which is a client-only static and
+            // reading ThrowableAimController.AimWorldTarget which is a client-only static and
             // would be Vector3.zero on a dedicated server.
             if (_itemInHandModel.TryGetComponent<Rigidbody>(out var rb))
             {

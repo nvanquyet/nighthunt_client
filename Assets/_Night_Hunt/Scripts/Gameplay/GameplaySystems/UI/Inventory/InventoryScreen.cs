@@ -733,10 +733,10 @@ namespace NightHunt.GameplaySystems.UI.Inventory
             var player = _domainBridge?.Player;
             Vector3 origin = player != null ? player.transform.position : Vector3.zero;
 
-            Vector3 aimTarget = ItemAimController.AimWorldTarget;
+            Vector3 aimTarget = ThrowableAimController.AimWorldTarget;
             if (aimTarget != Vector3.zero)
             {
-                Debug.Log($"[ITEM_SELECT_FLOW] Inventory throwable/deployable target uses ItemAimController cursor: {aimTarget}.");
+                Debug.Log($"[ITEM_SELECT_FLOW] Inventory throwable/deployable target uses ThrowableAimController cursor: {aimTarget}.");
                 return aimTarget;
             }
 

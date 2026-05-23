@@ -102,12 +102,11 @@ namespace NightHunt.Editor.Tests
 
         // â”€â”€ Shared state (valid only within a single generation run) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         private static Gameplay.Spawn.SpawnSystem          s_SpawnSystem;
-        private static Gameplay.Match.MatchPhaseManager    s_PhaseManager;
+        private static Gameplay.Zone.SafeZoneManager      s_SafeZoneManager;
         private static Gameplay.Match.MatchEndManager      s_MatchEndManager;
         private static Gameplay.Scoring.ScoringSystem      s_ScoringSystem;
         private static Gameplay.Respawn.RespawnSystem      s_RespawnSystem;
         private static Gameplay.Boss.BossSpawnManager      s_BossSpawnManager;
-        private static Gameplay.Zone.LockdownZone          s_LockdownZone;
         private static RenderTexture                       s_MinimapRT;
         private static Camera                              s_MinimapCamera;
         private static Gameplay.Team.TeamAssignmentSystem s_TeamAssignmentSystem;
@@ -194,12 +193,11 @@ namespace NightHunt.Editor.Tests
         private static void ResetSharedState()
         {
             s_SpawnSystem     = null;
-            s_PhaseManager    = null;
+            s_SafeZoneManager = null;
             s_MatchEndManager = null;
             s_ScoringSystem   = null;
             s_RespawnSystem   = null;
             s_BossSpawnManager= null;
-            s_LockdownZone    = null;
             s_MinimapRT             = null;
             s_MinimapCamera         = null;
             s_TeamAssignmentSystem  = null;
@@ -480,16 +478,9 @@ namespace NightHunt.Editor.Tests
             var zsGo = new GameObject("ZoneSystem"); zsGo.transform.SetParent(parent.transform);
             zsGo.AddComponent<Gameplay.Zone.ZoneSystem>();
 
-            var ldGo = new GameObject("LockdownZone"); ldGo.transform.SetParent(parent.transform);
-            SetLayer(ldGo, "Zone");
-            s_LockdownZone = ldGo.AddComponent<Gameplay.Zone.LockdownZone>();
-            var ldVis = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            ldVis.name = "Visual"; ldVis.transform.SetParent(ldGo.transform);
-            ldVis.transform.localScale = new Vector3(200f, 0.02f, 200f);
-            if (ldVis.TryGetComponent<Renderer>(out var ldr))
-                ldr.sharedMaterial = MakeMat(new Color(1, 0.2f, 0.2f, 0.15f));
-            if (ldVis.TryGetComponent<Collider>(out var ldc)) Object.DestroyImmediate(ldc);
-            log.Add("  ZoneSystem + LockdownZone âœ…");
+            var ldGo = new GameObject("SafeZoneManager"); ldGo.transform.SetParent(parent.transform);
+            s_SafeZoneManager = ldGo.AddComponent<Gameplay.Zone.SafeZoneManager>();
+            log.Add("  ZoneSystem + SafeZoneManager added");
 
             CreateZoneBuff(parent, "SpeedBuffZone",  new Vector3( 0, 0.5f, -10), 8f,
                 Gameplay.StatSystem.Core.Types.PlayerStatType.MovementSpeed,
@@ -533,9 +524,9 @@ namespace NightHunt.Editor.Tests
             AddMgr<Gameplay.Core.Events.GameplayEventBus>(parent, "GameplayEventBus", log);
 
             // â”€â”€ Match â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            var pmGo  = AddMgr<Gameplay.Match.MatchPhaseManager>(parent, "MatchPhaseManager", log);
-            s_PhaseManager = pmGo.GetComponent<Gameplay.Match.MatchPhaseManager>();
-
+            // SafeZoneManager is self-managed -- add to scene, no serialized wiring needed
+            var szGo = AddMgr<Gameplay.Zone.SafeZoneManager>(parent, "SafeZoneManager", log);
+            s_SafeZoneManager = szGo.GetComponent<Gameplay.Zone.SafeZoneManager>();
             s_ScoringSystem = AddMgr<Gameplay.Scoring.ScoringSystem>(parent, "ScoringSystem", log)
                                   .GetComponent<Gameplay.Scoring.ScoringSystem>();
             // ScoreSync must live on the SAME GO as ScoringSystem so ComponentResolver.OnSelf() finds it
@@ -547,10 +538,10 @@ namespace NightHunt.Editor.Tests
             s_MatchEndManager = memGo.GetComponent<Gameplay.Match.MatchEndManager>();
             {
                 var so = new SerializedObject(s_MatchEndManager);
-                SetSOObj(so, "_phaseManager",  s_PhaseManager);
+                // no _phaseManager needed -- SafeZoneManager handles this
                 SetSOObj(so, "_scoringSystem", s_ScoringSystem);
                 so.ApplyModifiedProperties();
-                log.Add("    MatchEndManager âœ… _phaseManager + _scoringSystem wired");
+                log.Add("    MatchEndManager ✅ _scoringSystem wired");
             }
 
             // â”€â”€ Respawn â€” wire _spawnSystem + _matchEndManager + RespawnConfig SO â”€
@@ -601,9 +592,9 @@ namespace NightHunt.Editor.Tests
             {
                 var bmnSO = new SerializedObject(beaconGo.GetComponent<Gameplay.Beacon.BeaconManager>());
                 SetSOObj(bmnSO, "_matchEndManager", s_MatchEndManager);
-                SetSOObj(bmnSO, "_phaseManager",    s_PhaseManager);
+                // no _phaseManager needed
                 bmnSO.ApplyModifiedProperties();
-                log.Add("    BeaconManager ss _matchEndManager + _phaseManager wired");
+                log.Add("    BeaconManager ✅ _matchEndManager wired");
             }
 
             // -- ProjectilePool -- scene-level object pool for projectiles -----
@@ -637,7 +628,6 @@ namespace NightHunt.Editor.Tests
 
             if (pp  != null) SetSOObj(so, "playerPrefab", pp);
             if (s_SpawnSystem   != null) SetSOObj(so, "_spawnSystem",      s_SpawnSystem);
-            if (s_PhaseManager  != null) SetSOObj(so, "_matchPhaseManager",s_PhaseManager);
             if (dbgCfg          != null) SetSOObj(so, "_debugConfig",      dbgCfg);
             if (chh != null)
             {
@@ -649,7 +639,7 @@ namespace NightHunt.Editor.Tests
             log.Add($"  ServerGameManager âœ… " +
                     $"playerPrefab:{(pp     != null ? "âœ…" : "âš ï¸")} " +
                     $"spawnSystem:{( s_SpawnSystem  != null ? "âœ…" : "âš ï¸")} " +
-                    $"phaseManager:{(s_PhaseManager != null ? "âœ…" : "âš ï¸")} " +
+                    $"phaseManager: N/A (SafeZoneManager) " +
                     $"debugConfig:{( dbgCfg         != null ? "âœ…" : "âš ï¸")} " +
                     $"clientHandler:{(chh           != null ? "âœ…" : "âš ï¸")}");
         }
@@ -705,12 +695,12 @@ namespace NightHunt.Editor.Tests
             var go   = new GameObject("[ TestOrchestrator ]"); go.transform.SetParent(parent.transform);
             var comp = go.AddComponent<Gameplay.Core.GameplayTestOrchestrator>();
             var so   = new SerializedObject(comp);
-            SetSOObj(so, "_phaseManager",    s_PhaseManager);
+            SetSOObj(so, "_safeZoneManager", s_SafeZoneManager);
             SetSOObj(so, "_scoringSystem",   s_ScoringSystem);
             SetSOObj(so, "_bossSpawnManager",s_BossSpawnManager);
-            SetSOObj(so, "_lockdownZone",    s_LockdownZone);
+            // _lockdownZone removed -- SafeZoneManager handles zone logic
             so.ApplyModifiedProperties();
-            log.Add("  [ TestOrchestrator ] âœ… phaseManager + scoringSystem + bossSpawnManager + lockdownZone wired");
+            log.Add("  [ TestOrchestrator ] ✅ safeZoneManager + scoringSystem + bossSpawnManager wired");
         }
 
         // â”€â”€ â‘¨ Minimap Camera â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1166,18 +1156,18 @@ namespace NightHunt.Editor.Tests
             mjSO.FindProperty("background").objectReferenceValue = mjBgRT; mjSO.FindProperty("handle").objectReferenceValue = mjHandRT; mjSO.ApplyModifiedProperties();
             mjGo.AddComponent<Gameplay.Input.Handlers.Movement.MobileMovementBridge>();
             log.Add("    [MoveJoystick] FixedJoystick + MobileMovementBridge | MANUAL: wire FixedJoystick → MobileHUDPanel._joystick in Inspector");
-            // ── ItemAimController (fullscreen canvas overlay – throwable aim) ─
-            var iacGo = new GameObject("ItemAimController"); iacGo.transform.SetParent(cGo.transform, false);
+            // ── ThrowableAimController (fullscreen canvas overlay – throwable aim) ─
+            var iacGo = new GameObject("ThrowableAimController"); iacGo.transform.SetParent(cGo.transform, false);
             var iacRT = iacGo.AddComponent<RectTransform>(); iacRT.anchorMin = Vector2.zero; iacRT.anchorMax = Vector2.one; iacRT.offsetMin = iacRT.offsetMax = Vector2.zero;
             iacGo.AddComponent<Image>().color = new Color(0f,0f,0f,0f);
             var iacCG = iacGo.AddComponent<CanvasGroup>(); iacCG.alpha = 0f; iacCG.blocksRaycasts = false; iacCG.interactable = false;
             var aimCursorGo = new GameObject("AimCursor"); aimCursorGo.transform.SetParent(iacGo.transform, false);
             var aimCursorRT = aimCursorGo.AddComponent<RectTransform>(); aimCursorRT.anchorMin = aimCursorRT.anchorMax = new Vector2(0.5f,0.5f); aimCursorRT.pivot = new Vector2(0.5f,0.5f); aimCursorRT.sizeDelta = new Vector2(32f,32f);
             aimCursorGo.AddComponent<Image>().color = new Color(1f,0.85f,0.2f,0.9f);
-            var iacComp = iacGo.AddComponent<GameplaySystems.UI.Combat.ItemAimController>();
+            var iacComp = iacGo.AddComponent<GameplaySystems.UI.Combat.ThrowableAimController>();
             var iacSO   = new SerializedObject(iacComp); SetSOObj(iacSO, "_aimCursor", aimCursorGo.transform); iacSO.ApplyModifiedProperties();
             var chSOAim = new SerializedObject(chComp);  SetSOObj(chSOAim, "_aimController", iacComp);        chSOAim.ApplyModifiedProperties();
-            log.Add("    ItemAimController -- fullscreen overlay + AimCursor wired to CombatHUDPanel._aimController");
+            log.Add("    ThrowableAimController -- fullscreen overlay + AimCursor wired to CombatHUDPanel._aimController");
 
             // ── FilterPanels (Consumable + Throwable quick-select inside CombatHUDPanel) ─
             var fpRoot = new GameObject("FilterPanelsRoot"); fpRoot.transform.SetParent(chGo.transform, false);

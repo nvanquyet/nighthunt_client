@@ -5,6 +5,8 @@ using FishNet.Managing;
 using FishNet.Managing.Scened;
 using NightHunt.Gameplay.Core.Events;   // MatchEndReason
 using NightHunt.Gameplay.Match;          // MatchEndManager
+using NightHunt.Gameplay.Zone;
+using NightHunt.Data;
 using NightHunt.Common;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -488,6 +490,9 @@ namespace NightHunt.Server
 #endif
 
             yield return NotifyGameReady();
+
+            // Fetch zone config from backend and apply to SafeZoneManager
+            yield return FetchZoneConfig();
         }
 
         /// <summary>
@@ -525,6 +530,50 @@ namespace NightHunt.Server
         }
 
         // ─────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Fetch zone config from backend and push to SafeZoneManager.
+        /// GET /api/maps/{mapId}/zone-config
+        /// </summary>
+        private IEnumerator FetchZoneConfig()
+        {
+            if (string.IsNullOrEmpty(_mapId))
+            {
+                Debug.LogWarning("[DS-Boot] FetchZoneConfig: no mapId — using SafeZoneMatchConfig.Default().");
+                SafeZoneManager.Instance?.SetConfig(SafeZoneMatchConfig.ForMap(null));
+                yield break;
+            }
+
+            string url = $"{_backendUrl}/api/maps/{_mapId}/zone-config";
+            using var req = UnityWebRequest.Get(url);
+            req.SetRequestHeader("X-DS-Secret", _serverSecret);
+            req.timeout = 10;
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                try
+                {
+                    var config = JsonUtility.FromJson<SafeZoneMatchConfig>(req.downloadHandler.text);
+                    if (config != null && config.phases != null && config.phases.Count > 0)
+                    {
+                        SafeZoneManager.Instance?.SetConfig(config);
+                        Debug.Log($"[DS-Boot] Zone config fetched for map '{_mapId}' ({config.phases.Count} phases).");
+                        yield break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"[DS-Boot] FetchZoneConfig: parse error — {ex.Message}");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[DS-Boot] FetchZoneConfig HTTP {req.responseCode}: {req.error} — using default.");
+            }
+
+            SafeZoneManager.Instance?.SetConfig(SafeZoneMatchConfig.ForMap(_mapId));
+        }
 
         /// <summary>
         /// Send heartbeat mỗi 30s để backend biết server còn alive.

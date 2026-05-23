@@ -14,7 +14,8 @@ namespace NightHunt.Data
         public List<ItemConfigData> ItemConfig;
         public List<VisionModifierData> VisionModifiers;
         public List<RespawnConfigData> RespawnConfig;
-        public List<MatchPhaseConfigData> MatchPhaseConfig;
+        // MatchPhaseConfig removed — replaced by SafeZoneMatchConfig per-map
+        public SafeZoneMatchConfig SafeZoneConfig;
         public List<ZoneConfigData> ZoneConfig;
         public List<StaminaWeightConfigData> StaminaWeightConfig;
         public List<InventoryConfigData> InventoryConfig;
@@ -112,59 +113,7 @@ namespace NightHunt.Data
         public int DestroyScoreReward;
     }
 
-    [Serializable]
-    public class MatchPhaseConfigData
-    {
-        [Tooltip("Enum định danh Phase. Uses để lookup và so sánh trong code. Không cần đổi.")]
-        public NightHunt.Gameplay.Match.MatchPhaseState PhaseType;
-
-        [Tooltip("Tên display trên UI/Log. Tùy biến được, chỉ dùng để đọc, không dùng compare.")]
-        public string DisplayName;
-
-        [Tooltip("Thời lượng tối thiểu của Phase, tính bằng phút.\n" +
-                 "Default: Preparation=3, Hunt=5, Lockdown=3")]
-        public int DurationMin;
-
-        [Tooltip("Thời lượng tối đa của Phase, tính bằng phút.\n" +
-                 "Duration thực sẽ được Random.Range(DurationMin, DurationMax) * 60.\n" +
-                 "Default: Preparation=4, Hunt=8, Lockdown=3")]
-        public int DurationMax;
-
-        [Header("Respawn")]
-        [Tooltip("Allows hồi sinh trong Phase này không?\n" +
-                 "Default: true cho cả 3 Phase.")]
-        public bool RespawnEnabled;
-
-        [Tooltip("Thời gian chờ hồi sinh (giây).\n" +
-                 "Default: Preparation=5s, Hunt=7s, Lockdown=10s")]
-        public float RespawnDelay;
-
-        [Header("Multipliers")]
-        [Tooltip("Nhân score cho mọi action trong Phase này.\n" +
-                 "Default: Preparation=1.0×, Hunt=2.0×, Lockdown=3.0×")]
-        public float ScoreMultiplier;
-
-        [Tooltip("Nhân điểm Survival mỗi phút sống sót trong Phase này.\n" +
-                 "Default: Preparation=1.0×, Hunt=1.5×, Lockdown=2.0×")]
-        public float SurvivalMultiplier;
-
-        [Header("UI")]
-        [Tooltip("Số giây before Phase kết thúc để bắn PhaseWarningEvent.\n" +
-                 "Default: 30s cho tất cả Phase.")]
-        public float WarningTime;
-
-        [Tooltip("Short bullet-point objectives shown in the in-game phase banner. " +
-                 "One string per bullet. E.g. \"Loot weapons & armor\", \"Find beacons\".\n" +
-                 "Sent to all clients inside PhaseStartedEvent.ObjectivesSummary (newline-joined).")]
-        public string[] PhaseObjectives;
-
-        /// <summary>Joins PhaseObjectives into a single newline-separated string for network sync.</summary>
-        public string BuildObjectivesSummary()
-        {
-            if (PhaseObjectives == null || PhaseObjectives.Length == 0) return string.Empty;
-            return string.Join("\n", PhaseObjectives);
-        }
-    }
+    // MatchPhaseConfigData removed — replaced by SafeZonePhaseConfig / SafeZoneMatchConfig
 
     [Serializable]
     public class ZoneConfigData

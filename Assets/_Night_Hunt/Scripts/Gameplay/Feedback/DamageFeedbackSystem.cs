@@ -106,6 +106,8 @@ namespace NightHunt.Gameplay.Feedback
                     n.gameObject.SetActive(false);
                     _numberPool.Push(n);
                 }
+            else
+                Debug.LogWarning("[DAMAGE][FEEDBACK] damageNumberPrefab is NULL — floating damage numbers will not show. Assign prefab in DamageFeedbackSystem Inspector.");
 
             if (hitIndicatorPrefab != null)
                 for (int i = 0; i < _initialHitIndicatorPoolSize; i++)
@@ -115,6 +117,8 @@ namespace NightHunt.Gameplay.Feedback
                     h.gameObject.SetActive(false);
                     _indicatorPool.Push(h);
                 }
+            else
+                Debug.LogWarning("[DAMAGE][FEEDBACK] hitIndicatorPrefab is NULL — directional hit indicators will not show. Assign prefab in DamageFeedbackSystem Inspector.");
 
             for (int i = 0; i < _initialHitConfirmPoolSize; i++)
             {
@@ -123,6 +127,8 @@ namespace NightHunt.Gameplay.Feedback
                 h.gameObject.SetActive(false);
                 _hitConfirmPool.Push(h);
             }
+
+            Debug.Log($"[DAMAGE][FEEDBACK] WarmPools complete — numbers={_numberPool.Count} indicators={_indicatorPool.Count} confirms={_hitConfirmPool.Count}");
         }
 
         // -----------------------------------------------------------------

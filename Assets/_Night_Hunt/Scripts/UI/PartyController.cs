@@ -897,6 +897,7 @@ namespace NightHunt.UI
 
         private async void HandleMatchFound(GameWebSocketService.MatchFoundEvent e)
         {
+            Debug.Log($"[SPAWN][FLOW] MatchFound received — gameMode={e?.gameMode} playerCount={e?.playerIds?.Length ?? 0} lobbyToken={e?.lobbyToken ?? "null"}");
             if (e == null || string.IsNullOrEmpty(e.lobbyToken)) return;
 
             _pendingLobbyToken = e.lobbyToken;

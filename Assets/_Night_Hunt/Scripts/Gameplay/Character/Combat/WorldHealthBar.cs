@@ -105,6 +105,7 @@ namespace NightHunt.Gameplay.Character.Combat
         private void OnEnable()
         {
             Subscribe();
+            Debug.Log($"[DAMAGE][HEALTHBAR] '{name}' subscribed to IHealthSource: {(_healthSource as Component)?.name ?? (_healthSource?.GetType().Name ?? "NULL")}");
         }
 
         private void OnDisable()

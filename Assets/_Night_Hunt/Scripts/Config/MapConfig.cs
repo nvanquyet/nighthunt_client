@@ -17,6 +17,7 @@ namespace NightHunt.Config
         public Sprite   icon;           // baked into build; always null when loaded from server
         public SceneId  sceneId;
         public string[] supportedModes;
+        public int[]    supportedPlayerCounts; // e.g. [2], [4,6], [8,10,12]; empty = no restriction
         public bool     isLocked;
     }
 
@@ -82,13 +83,14 @@ namespace NightHunt.Config
 
                 entries[i] = new MapEntry
                 {
-                    mapId          = dto.mapId,
-                    displayName    = dto.displayName,
-                    description    = dto.description,
-                    icon           = null,
-                    sceneId        = sceneId,
-                    supportedModes = dto.supportedModes ?? Array.Empty<string>(),
-                    isLocked       = dto.isLocked
+                    mapId                 = dto.mapId,
+                    displayName           = dto.displayName,
+                    description           = dto.description,
+                    icon                  = null,
+                    sceneId               = sceneId,
+                    supportedModes        = dto.supportedModes        ?? Array.Empty<string>(),
+                    supportedPlayerCounts = dto.supportedPlayerCounts ?? Array.Empty<int>(),
+                    isLocked              = dto.isLocked
                 };
             }
 
@@ -142,6 +144,33 @@ namespace NightHunt.Config
             foreach (string m in entry.supportedModes)
                 if (m == modeKey) return true;
             return false;
+        }
+
+        private static bool SupportsPlayerCount(in MapEntry entry, int totalPlayers)
+        {
+            if (entry.supportedPlayerCounts == null || entry.supportedPlayerCounts.Length == 0)
+                return true;
+            foreach (int c in entry.supportedPlayerCounts)
+                if (c == totalPlayers) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Returns all maps that support a given mode key AND a given total player count.
+        /// Either filter is skipped when the entry's array is null or empty.
+        /// </summary>
+        public static MapEntry[] GetByModeAndPlayerCount(string modeKey, int totalPlayers)
+        {
+            int count = 0;
+            foreach (var m in _maps)
+                if (SupportsMode(in m, modeKey) && SupportsPlayerCount(in m, totalPlayers)) count++;
+
+            var result = new MapEntry[count];
+            int i = 0;
+            foreach (var m in _maps)
+                if (SupportsMode(in m, modeKey) && SupportsPlayerCount(in m, totalPlayers))
+                    result[i++] = m;
+            return result;
         }
     }
 }

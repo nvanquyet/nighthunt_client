@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Diagnostics;
 using System;
+using System.Collections;
 
 namespace NightHunt.Gameplay.Input.Handlers.UI
 {
@@ -43,7 +44,15 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
 
         private void Awake()
         {
-            Invoke(nameof(InitializeActions), 0.2f); // Delay để đảm bảo InputLayerManager đã Awake và tạo map
+            StartCoroutine(WaitForInputLayerManager());
+        }
+
+        private IEnumerator WaitForInputLayerManager()
+        {
+            // Wait until InputLayerManager is available instead of using a fixed-time Invoke
+            while (InputLayerManager.Instance == null)
+                yield return null;
+            InitializeActions();
         }
 
         private void OnEnable()

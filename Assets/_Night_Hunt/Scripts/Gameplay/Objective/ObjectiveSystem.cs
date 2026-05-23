@@ -5,37 +5,25 @@ using NightHunt.Data;
 using System.Collections.Generic;
 using FishNet;
 using NightHunt.Networking;
-using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Zone;
 
 namespace NightHunt.Gameplay.Objective
 {
     /// <summary>
-    /// Central authority for all in-match objectives and phase-scoped zone effects.
+    /// Central authority for all in-match objectives and zone-scoped effects.
     ///
-    /// Managed categories:
-    ///   Phase 2 (Hunt)    — CaptureZoneObjectives, ZoneBuffs (passive speed/effect zones)
-    ///   Phase 3 (Lockdown) — RadarStationObjectives, EMPNodeObjectives
-    ///
-    /// ZoneBuff is NOT an IObjective (no scoring/progress) but is phase-managed here
-    /// so everything activates and deactivates from a single place — no stray logic.
+    /// Activates CaptureZoneObjectives and ZoneBuff triggers when zone phase 0 starts.
+    /// Driven by SafeZoneManager.OnZonePhaseStarted(int zoneIndex).
     /// </summary>
     public class ObjectiveSystem : NetworkBehaviour
     {
-        [Header("Phase 2 — Hunt Objectives")]
+        [Header("Capture Objectives")]
         [SerializeField] private List<CaptureZoneObjective> captureZoneObjectives = new List<CaptureZoneObjective>();
 
-        [Header("Phase 2 — Passive Zone Effects")]
+        [Header("Zone Buffs")]
         [Tooltip("ZoneBuff triggers that grant stat modifiers (e.g. speed +20%). " +
-                 "Activated at Phase 2 start. Assign GameObjects that start INACTIVE in the scene.")]
+                 "Activated at zone phase 0 start. Assign GameObjects that start INACTIVE in the scene.")]
         [SerializeField] private List<ZoneBuff> zoneBuffObjects = new List<ZoneBuff>();
-
-        [Header("Phase 3 — Lockdown Objectives")]
-        [SerializeField] private List<RadarStationObjective> radarObjectives = new List<RadarStationObjective>();
-        [SerializeField] private List<EMPNodeObjective> empObjectives = new List<EMPNodeObjective>();
-
-        [Header("References")]
-        [SerializeField] private MatchPhaseManager _phaseManager;
 
         private List<IObjective> activeObjectives = new List<IObjective>();
 
@@ -45,94 +33,51 @@ namespace NightHunt.Gameplay.Objective
         public override void OnStartServer()
         {
             base.OnStartServer();
-
-            if (_phaseManager == null)
-            {
-                _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
-                if (_phaseManager == null)
-                    Debug.LogWarning("[ObjectiveSystem] MatchPhaseManager not found — assign it in the Inspector.");
-            }
-
-            if (_phaseManager != null)
-                _phaseManager.OnPhaseStarted += OnPhaseStarted;
-
+            if (SafeZoneManager.Instance != null)
+                SafeZoneManager.Instance.OnZonePhaseStarted += OnZonePhaseStarted;
             InitializeObjectives();
         }
 
         public override void OnStopServer()
         {
             base.OnStopServer();
-            if (_phaseManager != null)
-                _phaseManager.OnPhaseStarted -= OnPhaseStarted;
+            if (SafeZoneManager.Instance != null)
+                SafeZoneManager.Instance.OnZonePhaseStarted -= OnZonePhaseStarted;
         }
 
-        private void OnPhaseStarted(MatchPhaseState phase, string displayName)
+        private void OnZonePhaseStarted(int zoneIndex)
         {
-            // Enum comparison is type-safe — no string parsing needed.
-            ActivateObjectivesForPhase(phase);
+            if (!IsServerInitialized) return;
+            if (zoneIndex == 0)
+                ActivateCaptureObjectives();
         }
 
         private void Update()
         {
             if (!IsServerInitialized) return;
 
-            // Update all active objectives
-            foreach (var objective in activeObjectives)
-            {
-                if (objective != null && !objective.IsCompleted)
-                {
-                    objective.OnUpdate();
-                }
-            }
-
-            // Update network sync
             int completedCount = 0;
             foreach (var objective in activeObjectives)
             {
-                if (objective != null && objective.IsCompleted)
-                {
-                    completedCount++;
-                }
+                if (objective == null) continue;
+                if (!objective.IsCompleted) objective.OnUpdate();
+                else completedCount++;
             }
             networkActiveObjectiveCount.Value = activeObjectives.Count - completedCount;
         }
 
-        /// <summary>
-        /// Server: Initialize objectives based on phase
-        /// </summary>
         [Server]
         private void InitializeObjectives()
         {
             activeObjectives.Clear();
-            
-            // Collect all objectives
             activeObjectives.AddRange(captureZoneObjectives);
-            activeObjectives.AddRange(radarObjectives);
-            activeObjectives.AddRange(empObjectives);
         }
 
         /// <summary>
-        /// Server: Activate objectives for phase
+        /// Server: Activate capture objectives and passive zone buffs (called at phase 0).
         /// </summary>
         [Server]
-        public void ActivateObjectivesForPhase(MatchPhaseState phase)
-        {
-            switch (phase)
-            {
-                case MatchPhaseState.Hunt:
-                    ActivatePhase2Objectives();
-                    break;
-                case MatchPhaseState.Lockdown:
-                    ActivatePhase3Objectives();
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// Server: Activate Phase 2 (Hunt) objectives and passive zone effects.
-        /// </summary>
-        [Server]
-        private void ActivatePhase2Objectives()
+        private void ActivateCaptureObjectives()
         {
             // Activate scored capture zones
             foreach (var objective in captureZoneObjectives)
@@ -147,30 +92,6 @@ namespace NightHunt.Gameplay.Objective
             {
                 if (buff != null)
                     buff.gameObject.SetActive(true);
-            }
-        }
-
-        /// <summary>
-        /// Server: Activate Phase 3 (Lockdown) objectives.
-        /// CaptureZones are NOT re-activated here — they are phase-gated to Hunt and
-        /// calling OnStart() again would wastefully re-run FindFirstObjectByType lookups.
-        /// ZoneBuff areas remain active from Phase 2.
-        /// </summary>
-        [Server]
-        private void ActivatePhase3Objectives()
-        {
-            // Activate radar stations
-            foreach (var objective in radarObjectives)
-            {
-                if (objective != null)
-                    objective.OnStart();
-            }
-
-            // Activate EMP nodes
-            foreach (var objective in empObjectives)
-            {
-                if (objective != null)
-                    objective.OnStart();
             }
         }
 

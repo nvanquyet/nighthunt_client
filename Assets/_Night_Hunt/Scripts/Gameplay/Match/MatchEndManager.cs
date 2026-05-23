@@ -5,6 +5,7 @@ using FishNet.Object;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Scoring;
+using NightHunt.Gameplay.Zone;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using UnityEngine;
@@ -33,9 +34,7 @@ namespace NightHunt.Gameplay.Match
     {
         // ── Inspector ──────────────────────────────────────────────────────────
         [Header("References")] [SerializeField]
-        private MatchPhaseManager _phaseManager;
-
-        [SerializeField] private ScoringSystem _scoringSystem;
+        private ScoringSystem _scoringSystem;
 
         [Header("Settings")] [Tooltip("Team IDs present in the match (usually {0, 1}).")] [SerializeField]
         private int[] _teamIds = { 0, 1 };
@@ -70,9 +69,6 @@ namespace NightHunt.Gameplay.Match
 
         private void Awake()
         {
-            if (_phaseManager == null)
-                _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
-
             if (_scoringSystem == null)
                 _scoringSystem = FindFirstObjectByType<ScoringSystem>();
 
@@ -104,10 +100,11 @@ namespace NightHunt.Gameplay.Match
             // Listen for beacon destruction
             GameplayEventBus.Instance?.Subscribe<BeaconDestroyedEvent>(OnBeaconDestroyed);
 
-            // Listen for phase changes so we know which rules apply
-            _phaseManager.OnPhaseTransitioned += OnPhaseChanged;
-            // Listen for Phase 3 timer expiry → score-based win resolution
-            _phaseManager.OnLockdownTimerExpired += OnLockdownTimerExpired;
+            // Listen for SafeZoneManager: final zone expired → score-based win resolution
+            if (SafeZoneManager.Instance != null)
+                SafeZoneManager.Instance.OnFinalZoneExpired += OnFinalZoneExpired;
+            else
+                Debug.LogWarning("[MatchEndManager] SafeZoneManager.Instance is null — OnFinalZoneExpired won't fire. Ensure SafeZoneManager is in the scene.");
         }
 
         public override void OnStopServer()
@@ -123,11 +120,8 @@ namespace NightHunt.Gameplay.Match
             UnsubscribeAllPlayerDeaths();
 
             GameplayEventBus.Instance?.Unsubscribe<BeaconDestroyedEvent>(OnBeaconDestroyed);
-            if (_phaseManager != null)
-            {
-                _phaseManager.OnPhaseTransitioned -= OnPhaseChanged;
-                _phaseManager.OnLockdownTimerExpired -= OnLockdownTimerExpired;
-            }
+            if (SafeZoneManager.Instance != null)
+                SafeZoneManager.Instance.OnFinalZoneExpired -= OnFinalZoneExpired;
         }
 
         #endregion
@@ -340,20 +334,22 @@ namespace NightHunt.Gameplay.Match
 
         // ──────────────────────────────────────────────────────────────────────
 
-        #region Phase change
+        #region Final zone event
 
-        private void OnPhaseChanged(MatchPhaseState oldPhase, MatchPhaseState newPhase)
+        /// <summary>
+        /// Called when SafeZoneManager fires OnFinalZoneExpired.
+        /// Starts a periodic alive-check loop and resolves by score if no elimination.
+        /// </summary>
+        private void OnFinalZoneExpired()
         {
-            // When Lockdown starts, kick off periodic alive-count evaluation
-            // (Phase 3 has respawn → we must re-check often, not just on death)
-            if (newPhase == MatchPhaseState.Lockdown)
-                StartCoroutine(Phase3EliminationLoop());
+            if (_matchEnded) return;
+            StartCoroutine(FinalZoneEliminationLoop());
         }
 
-        /// <summary>Periodic loop during Phase 3: re-checks every second.</summary>
-        private IEnumerator Phase3EliminationLoop()
+        /// <summary>Periodic loop in final zone: re-checks every second (respawn may still happen).</summary>
+        private IEnumerator FinalZoneEliminationLoop()
         {
-            while (!_matchEnded && _phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
+            while (!_matchEnded && SafeZoneManager.Instance != null && SafeZoneManager.Instance.IsInFinalZone)
             {
                 foreach (int teamId in _teamIds)
                     EvaluateTeamElimination(teamId);
@@ -362,19 +358,17 @@ namespace NightHunt.Gameplay.Match
         }
 
         /// <summary>
-        /// Called when Lockdown phase timer expires.
-        /// Resolves the match by comparing scores (kills + objective) across both teams.
-        /// Win condition 2: Phase 3 timer runs out → compare scores, highest wins.
+        /// Score-based match resolution (called from FinalZoneEliminationLoop timeout or externally).
+        /// Uses ScoringSystem.GetTeamScore() for accurate accumulated scores.
         /// </summary>
-        private void OnLockdownTimerExpired()
+        private void OnFinalZoneTimerResolution()
         {
             if (_matchEnded) return;
             _matchEnded = true;
 
-            // Find the team with the highest combined score
-            int winnerTeamId = -1; // -1 = draw
-            float bestScore = -1f;
-            int tiedCount = 0;
+            int winnerTeamId = -1;
+            float bestScore  = -1f;
+            int tiedCount    = 0;
 
             foreach (int teamId in _teamIds)
             {
@@ -386,29 +380,24 @@ namespace NightHunt.Gameplay.Match
                     tiedCount    = 1;
                 }
                 else if (Mathf.Approximately(score, bestScore))
-                {
                     tiedCount++;
-                }
             }
 
-            if (tiedCount > 1) winnerTeamId = -1; // true draw
+            if (tiedCount > 1) winnerTeamId = -1;
 
             MatchEndReason reason = MatchEndReason.TimerExpired;
-            Debug.Log($"[MatchEndManager] Phase 3 timer expired — Winner: {(winnerTeamId >= 0 ? $"Team {winnerTeamId}" : "DRAW")} (scores: {string.Join(", ", System.Linq.Enumerable.Select(_teamIds, t => $"T{t}={GetTotalScore(t):.0}"))})");
+            Debug.Log($"[MatchEndManager] Final zone expired — Winner: {(winnerTeamId >= 0 ? $"Team {winnerTeamId}" : "DRAW")} scores={BuildScoreSummary()}");
 
-            PhaseTestLog.Log(
-                PhaseTestLogCategory.Score,
-                "MatchEnded",
-                $"reason={reason} winnerTeam={winnerTeamId} scores={BuildScoreSummary()}",
-                this);
+            PhaseTestLog.Log(PhaseTestLogCategory.Score, "MatchEnded",
+                $"reason={reason} winnerTeam={winnerTeamId} scores={BuildScoreSummary()}", this);
             OnMatchEnded?.Invoke(winnerTeamId, reason);
             RpcNotifyMatchEnd(winnerTeamId, (int)reason);
 
             MatchResult[] results = BuildResults(winnerTeamId, reason);
             GameplayEventBus.Instance?.Publish(new MatchEndedEvent
             {
-                WinnerTeamId = winnerTeamId,
-                Reason       = reason,
+                WinnerTeamId  = winnerTeamId,
+                Reason        = reason,
                 PlayerResults = results
             });
         }
@@ -426,34 +415,27 @@ namespace NightHunt.Gameplay.Match
             RegistryService registry = RegistryService.Instance;
             if (registry == null) return;
 
-            bool allDead = registry.GetAliveCount(teamId) == 0;
+            bool allDead   = registry.GetAliveCount(teamId) == 0;
             bool noBeacons = GetActiveBeaconCount(teamId) == 0;
-            if (allDead || noBeacons)
-            {
-                bool pendingRespawn = _phaseManager != null &&
-                                      _phaseManager.CurrentPhase == MatchPhaseState.Lockdown &&
-                                      CanTeamRespawn(teamId);
-                PhaseTestLog.Log(
-                    PhaseTestLogCategory.Death,
-                    "TeamEliminationCheck",
-                    $"team={teamId} phase={_phaseManager?.CurrentPhase.ToString() ?? "null"} allDead={allDead} noBeacons={noBeacons} pendingRespawn={pendingRespawn}",
-                    this);
-            }
 
-            if (_phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
+            bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "TeamEliminationCheck",
+                $"team={teamId} finalZone={isInFinalZone} allDead={allDead} noBeacons={noBeacons}",
+                this);
+
+            if (isInFinalZone)
             {
-                // Phase 3: respawn is possible → only eliminate when BOTH alive AND respawn queue empty
-                // RespawnSystem calls RecheckEliminationForTeam after each respawn attempt,
-                // so we detect the "truly eliminated" state here.
+                // Final zone: respawn may still be possible → only eliminate when respawn queue empty too
                 bool canRespawn = CanTeamRespawn(teamId);
                 if (allDead && noBeacons && !canRespawn)
-                {
                     TriggerElimination(teamId);
-                }
             }
             else
             {
-                // Phase 1 & 2: elimination is immediate
+                // All earlier zones: elimination is immediate (no final-zone respawn leniency)
                 if (allDead && noBeacons)
                     TriggerElimination(teamId);
             }
@@ -552,8 +534,12 @@ namespace NightHunt.Gameplay.Match
 
         private float GetTotalScore(int teamId)
         {
+            // Prefer ScoringSystem's accumulated value (includes survival + zone ticks)
+            if (_scoringSystem != null)
+                return _scoringSystem.GetTeamScore(teamId);
+            // Fallback: legacy kill + objective accumulators
             float kills = _teamKillScore.TryGetValue(teamId, out int k) ? k : 0;
-            float obj = _teamObjectiveScore.TryGetValue(teamId, out float o) ? o : 0f;
+            float obj   = _teamObjectiveScore.TryGetValue(teamId, out float o) ? o : 0f;
             return kills + obj;
         }
 

@@ -155,8 +155,7 @@ namespace NightHunt.State
             PlayerPrefs.Save();
             
             int instanceId = InstanceHelper.GetInstanceId();
-            var cfg = ResolveConfig();
-            bool isMultiInstance = cfg != null ? cfg.IsMultiInstanceEnabled() : Application.isEditor;
+            bool isMultiInstance = InstanceConfig.IsMultiInstanceEnabled();
             if (isMultiInstance)
             {
                 Debug.Log($"[SessionState] Session saved for instance {instanceId} (keys: {sessionIdKey}, {userIdKey}, {usernameKey})");
@@ -185,8 +184,7 @@ namespace NightHunt.State
             // Restore last-known character so UI can show avatar immediately (before profile API returns)
             SelectedCharacterId = PlayerPrefs.GetString(Common.Constants.PREFS_SELECTED_CHARACTER_ID, "");
             
-            var cfg = ResolveConfig();
-            bool isMultiInstance = cfg != null ? cfg.IsMultiInstanceEnabled() : Application.isEditor;
+            bool isMultiInstance = InstanceConfig.IsMultiInstanceEnabled();
             if (isMultiInstance)
             {
                 Debug.Log($"[SessionState] Session loaded for instance {instanceId} - IsAuthenticated: {IsAuthenticated} (keys: {sessionIdKey}, {userIdKey}, {usernameKey})");
@@ -221,8 +219,7 @@ namespace NightHunt.State
             PlayerPrefs.DeleteKey(Common.Constants.PREFS_SELECTED_CHARACTER_ID);
             PlayerPrefs.Save();
 
-            var  cfg             = ResolveConfig();
-            bool isMultiInstance = cfg != null ? cfg.IsMultiInstanceEnabled() : Application.isEditor;
+            bool isMultiInstance = InstanceConfig.IsMultiInstanceEnabled();
             if (isMultiInstance)
                 Debug.Log($"[SessionState] Session cleared for instance {instanceId}");
             else

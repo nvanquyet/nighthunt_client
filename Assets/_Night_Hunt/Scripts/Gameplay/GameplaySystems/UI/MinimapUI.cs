@@ -30,6 +30,9 @@ namespace NightHunt.GameplaySystems.UI
         [Tooltip("Optional RenderTexture from a full-area map camera. Falls back to the minimap texture.")]
         [SerializeField] private RenderTexture _fullMapRenderTexture;
 
+        [Tooltip("Optional close button on the full-map overlay panel.")]
+        [SerializeField] private Button _closeMapButton;
+
         private NetworkPlayer _localPlayer;
         private bool _fullMapVisible;
         private bool _pushedInputContext;
@@ -53,6 +56,9 @@ namespace NightHunt.GameplaySystems.UI
                 _uiInput.OnToggleMapPressed += ToggleFullMap;
                 _uiInput.OnCancelPressed    += HandleCancelPressed;
             }
+            // Wire close button if assigned in Inspector
+            if (_closeMapButton != null)
+                _closeMapButton.onClick.AddListener(() => SetFullMapVisible(false));
         }
 
         private void OnDestroy()

@@ -8,7 +8,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
-using NightHunt.GameplaySystems.UI.Combat;   // ItemAimController.IsAimingPC guard
+using NightHunt.GameplaySystems.UI.Combat;   // ThrowableAimController.IsAimingPC guard
 using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Input.Handlers.Combat
@@ -79,7 +79,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         // ── MOBA feedback refs (optional) ─────────────────────────────────────────
         private NightHunt.GameplaySystems.UI.Combat.RangeIndicator _rangeIndicator;
         private NightHunt.GameplaySystems.UI.Combat.FireButton      _fireButton;
-        private NightHunt.GameplaySystems.UI.Combat.ItemAimController _itemAimController;
+        private NightHunt.GameplaySystems.UI.Combat.ThrowableAimController _throwableAimController;
 
         // ── Combat system refs ────────────────────────────────────────────────────
         private MovementInputHandler _movementInputHandler;
@@ -330,18 +330,18 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                     Vector3 hitPoint = FlattenAimTarget(ray.GetPoint(distance));
 
                     // When a throwable/deployable is armed via the FilterPanel path
-                    // (not via ItemAimController.TryBeginAim), clamp the hit to the
+                    // (not via ThrowableAimController.TryBeginAim), clamp the hit to the
                     // throwable vision range so the actual throw target matches the
-                    // visual ring indicator. Also update ItemAimController's static
+                    // visual ring indicator. Also update ThrowableAimController's static
                     // AimWorldTarget so any aim cursor stays in sync.
-                    if (_itemUseSystem != null && _itemUseSystem.IsUsingItem && !ItemAimController.IsAimingPC)
+                    if (_itemUseSystem != null && _itemUseSystem.IsUsingItem && !ThrowableAimController.IsAimingPC)
                     {
                         Vector3 offset = hitPoint - groundOrigin;
                         offset.y = 0f;
                         float   maxRange = _aimSystem?.GetVisionRange() ?? 15f;
                         if (offset.sqrMagnitude > maxRange * maxRange)
                             hitPoint = FlattenAimTarget(groundOrigin + offset.normalized * maxRange);
-                        ItemAimController.SetExternalAimTarget(hitPoint);
+                        ThrowableAimController.SetExternalAimTarget(hitPoint);
                     }
 
                     _lastGroundHitPoint = hitPoint;
@@ -597,7 +597,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             {
                 float joystickMagnitude = GetMobileFireReleaseJoystickMagnitude();
                 Debug.Log($"[NH_FLOW][20][EndFire.DeployConfirm] joystickMagnitude={joystickMagnitude:F2} current={_mobileJoystick01.magnitude:F2} captured={_mobileFirePressReleaseMagnitude:F2} hadDrag={_mobileFirePressHadDrag} {DescribeCombatFlowState()}");
-                ResolveItemAimController()?.ConfirmDeployFromFireButtonRelease(joystickMagnitude);
+                ResolveThrowableAimController()?.ConfirmDeployFromFireButtonRelease(joystickMagnitude);
                 SetFireMobileJoystick(Vector2.zero, false);
                 ClearMobileFirePressReleaseState();
                 _rangeIndicator?.Hide();
@@ -624,7 +624,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             // Confirm an armed throwable on release. This intentionally wins over a stale
             // active weapon slot while weapon holster replication is still catching up.
             bool hasActiveWeapon = _weaponSystem != null && _weaponSystem.GetActiveWeaponSlot() != null;
-            if (_isFiring && IsCurrentItemThrowable() && !ItemAimController.IsAimingPC)
+            if (_isFiring && IsCurrentItemThrowable() && !ThrowableAimController.IsAimingPC)
             {
                 Vector3 throwTarget = GetCurrentThrowAimTarget();
                 Debug.Log($"[NH_FLOW][21][EndFire.ThrowConfirm] target={throwTarget:F2} {DescribeCombatFlowState()}");
@@ -676,10 +676,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             ClearMobileFirePressReleaseState();
             _aimSystem?.SetThrowableAim(Vector2.zero);  // exit throwable mode if joystick activated it
 
-            if (!ItemAimController.IsAimingPC && !ItemAimController.IsDeployingPC)
+            if (!ThrowableAimController.IsAimingPC && !ThrowableAimController.IsDeployingPC)
                 _aimSystem?.SetCursorVisible(false);
-            if (!ItemAimController.IsAimingPC && !ItemAimController.IsDeployingPC)
-                ItemAimController.ClearExternalAimTarget();
+            if (!ThrowableAimController.IsAimingPC && !ThrowableAimController.IsDeployingPC)
+                ThrowableAimController.ClearExternalAimTarget();
 
             OnFireStop?.Invoke();
             Debug.Log($"[NH_FLOW][23][EndFire.Exit] {DescribeCombatFlowState()}");
@@ -690,17 +690,17 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 this);
         }
 
-        private ItemAimController ResolveItemAimController()
+        private ThrowableAimController ResolveThrowableAimController()
         {
-            if (_itemAimController != null)
-                return _itemAimController;
+            if (_throwableAimController != null)
+                return _throwableAimController;
 
 #if UNITY_2023_1_OR_NEWER
-            _itemAimController = FindFirstObjectByType<ItemAimController>(FindObjectsInactive.Include);
+            _throwableAimController = FindFirstObjectByType<ThrowableAimController>(FindObjectsInactive.Include);
 #else
-            _itemAimController = FindObjectOfType<ItemAimController>(true);
+            _throwableAimController = FindObjectOfType<ThrowableAimController>(true);
 #endif
-            return _itemAimController;
+            return _throwableAimController;
         }
 
         private float GetMobileFireReleaseJoystickMagnitude()
@@ -1204,7 +1204,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         }
 
         /// <summary>
-        /// Expose MovementInputHandler.SetCameraLockOverride so ItemAimController can
+        /// Expose MovementInputHandler.SetCameraLockOverride so ThrowableAimController can
         /// force STRAFE mode while the player is in throwable aim mode (mirrors BeginFire).
         /// </summary>
         public void SetCameraLockOverride(bool active, bool forcedValue)

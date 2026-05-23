@@ -1,4 +1,3 @@
-using NightHunt.Gameplay.Match;
 using UnityEngine;
 
 namespace NightHunt.Gameplay.Core.Events
@@ -41,9 +40,9 @@ namespace NightHunt.Gameplay.Core.Events
     public struct PhaseStartedEvent : IGameplayEvent
     {
         public float          Timestamp   => Time.time;
-        /// <summary>The phase that just started.</summary>
-        public MatchPhaseState Phase;
-        /// <summary>Human-readable display name (e.g. "PHASE 2: HUNT &amp; OBJECTIVES").</summary>
+        /// <summary>The zone index that just started (0 = first shrink, etc.).</summary>
+        public int            ZoneIndex;
+        /// <summary>Human-readable display name (e.g. "Zone 1", "Final Zone").</summary>
         public string          DisplayName;
         /// <summary>Formatted objective bullet-points for this phase (newline-separated).</summary>
         public string          ObjectivesSummary;
@@ -56,9 +55,9 @@ namespace NightHunt.Gameplay.Core.Events
     public struct PhaseWarningEvent : IGameplayEvent
     {
         public float Timestamp => Time.time;
-        /// <summary>The phase that is about to end.</summary>
-        public MatchPhaseState CurrentPhase;
-        /// <summary>Seconds remaining until the phase transitions.</summary>
+        /// <summary>The zone index that is currently active.</summary>
+        public int   ZoneIndex;
+        /// <summary>Seconds remaining until the zone shrinks.</summary>
         public float SecondsRemaining;
     }
 
@@ -68,8 +67,8 @@ namespace NightHunt.Gameplay.Core.Events
         public float Timestamp => Time.time;
         public int EliminatedTeamId;
         public int WinnerTeamId;
-        /// <summary>Phase in which elimination happened.</summary>
-        public MatchPhaseState Phase;
+        /// <summary>Zone index at which elimination happened.</summary>
+        public int ZoneIndex;
     }
 
     /// <summary>Match has ended. Broadcast to all clients with final result.</summary>

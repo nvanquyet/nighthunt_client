@@ -705,6 +705,11 @@ namespace NightHunt.UI
             PlayerHealthSystem.OnAnyHitReceived += HandleAnyHitReceived;
             CombatFeedbackEvents.LocalHitConfirmed += HandleLocalHitConfirmed;
             _combatEventsSubscribed = true;
+
+            if (_damageFeedback == null)
+                Debug.LogWarning("[DAMAGE][HUD] _damageFeedback is NULL — damage numbers, hit indicators, and hit effects will NOT show. Drag DamageFeedbackSystem into GameHUDController._damageFeedback in Inspector.");
+            else
+                Debug.Log($"[DAMAGE][HUD] Combat events subscribed. DamageFeedbackSystem='{_damageFeedback.name}' OK.");
         }
 
         private void UnsubscribeCombatEvents()
@@ -720,6 +725,7 @@ namespace NightHunt.UI
 
         private void HandleAnyHitReceived(DamageInfo info)
         {
+            Debug.Log($"[DAMAGE][HUD] HitReceived: shooter={info.ShooterNetworkObjectId} localId={_localNetObjId} dmg={info.Damage:F1} weapon={info.WeaponId} feedbackNull={_damageFeedback == null}");
             if (_localNetObjId < 0 || _damageFeedback == null) return;
 
             if (info.ShooterNetworkObjectId == _localNetObjId)

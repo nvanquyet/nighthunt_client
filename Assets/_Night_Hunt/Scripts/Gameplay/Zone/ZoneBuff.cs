@@ -20,7 +20,7 @@ namespace NightHunt.Gameplay.Zone
     /// </summary>
     [RequireComponent(typeof(Collider))]
     [DisallowMultipleComponent]
-    public class ZoneBuff : MonoBehaviour, IZoneAreaInfo
+    public class ZoneBuff : MonoBehaviour
     {
         // ── Inspector ─────────────────────────────────────────────────────────────
         [Header("Zone Identity")]
@@ -34,15 +34,6 @@ namespace NightHunt.Gameplay.Zone
         [Header("Visual / Gizmo")]
         [SerializeField] private float _radius = 10f;
 
-        // ── IZoneAreaInfo ─────────────────────────────────────────────────────────
-        public string  ZoneId   => _zoneId;
-        public Vector3 Center   => transform.position;
-        public float   Radius   => _radius;
-        public bool    IsActive => enabled && gameObject.activeInHierarchy;
-
-        public bool ContainsPoint(Vector3 worldPos)
-            => Vector3.SqrMagnitude(worldPos - transform.position) <= _radius * _radius;
-
         // ── Unique source ID per instance (stable across OnEnable/Disable) ────────
         private string _sourceId;
 
@@ -52,9 +43,6 @@ namespace NightHunt.Gameplay.Zone
         {
             _sourceId = $"zonebuff_{_zoneId}_{gameObject.GetInstanceID()}";
         }
-
-        private void OnEnable()  => ZoneSystem.Instance?.RegisterZone(this);
-        private void OnDisable() => ZoneSystem.Instance?.UnregisterZone(this);
 
         // ── Trigger callbacks ─────────────────────────────────────────────────────
 

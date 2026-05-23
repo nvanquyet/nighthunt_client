@@ -22,7 +22,7 @@ namespace NightHunt.Editor.Tools
     ///              — must NOT have AudioListener or Camera (headless)
     ///   01_Home     — requires GameManager, MatchFlowCoordinator, MatchLoadingOverlay
     ///   02_Map_01   — requires GameBootstrap, ServerGameManager, ScoringSystem,
-    ///                  MatchPhaseManager, MatchEndManager, SpawnSystem, RespawnSystem
+    ///                  SafeZoneManager, MatchEndManager, SpawnSystem, RespawnSystem
     /// </summary>
     public static class NightHuntSceneValidator
     {
@@ -64,7 +64,7 @@ namespace NightHunt.Editor.Tools
                     "NightHunt.Gameplay.Core.GameBootstrap",
                     "NightHunt.Networking.ServerGameManager",       // was NightHunt.Gameplay.Match
                     "NightHunt.Gameplay.Scoring.ScoringSystem",
-                    "NightHunt.Gameplay.Match.MatchPhaseManager",
+                    "NightHunt.Gameplay.Zone.SafeZoneManager",
                     "NightHunt.Gameplay.Match.MatchEndManager",
                     "NightHunt.Gameplay.Spawn.SpawnSystem",         // was NightHunt.Gameplay.Spawning
                     "NightHunt.Gameplay.Respawn.RespawnSystem",     // was NightHunt.Gameplay.Spawning

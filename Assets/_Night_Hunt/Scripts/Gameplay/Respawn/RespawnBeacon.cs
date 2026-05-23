@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using FishNet.Object;
 using NightHunt.Data;
-using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Zone;
 using NightHunt.Gameplay.Deployables;
 using NightHunt.Gameplay.Character.Combat;
 
@@ -25,29 +25,22 @@ namespace NightHunt.Gameplay.Respawn
         /// RespawnSystem iterates this instead of FindObjectsByType every frame.
         /// </summary>
         public static readonly HashSet<RespawnBeacon> All = new HashSet<RespawnBeacon>();
-        private MatchPhaseManager _phaseManager;
 
         public override HittableTargetType TargetType => HittableTargetType.Beacon;
 
         public override void OnStartNetwork()
         {
-            // HP được Initialize từ Server before Spawn.
-            // Client chỉ cần quan tâm sync vars.
             base.OnStartNetwork();
-
-            _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
         }
 
         public override void OnStartServer()
         {
             base.OnStartServer();
-            All.Add(this); // Bug #28 fix: register so RespawnSystem avoids FindObjectsByType
-            // Check Phase hiện tại có cho phép xài Beacon hồi sinh hay không
-            // Beacons chỉ được phép ở Phase 1 và Phase 2.
-            if (_phaseManager != null && _phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
-            {
+            All.Add(this);
+            // Despawn beacon immediately if final zone is active and config disallows beacons
+            bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
+            if (isInFinalZone)
                 DespawnDeployable();
-            }
         }
 
         public override void OnStopServer()
@@ -71,12 +64,9 @@ namespace NightHunt.Gameplay.Respawn
         public bool CanRespawnHere(int teamId)
         {
             if (!_isActive.Value || !_isPlaced.Value) return false;
-            
-            if (teamId != _ownerTeamId.Value) return false; // Không chơi chung với địch
-            
-            // Ở Phase 3 (Lockdown) mọi Beacon bị vô hiệu hoá
-            if (_phaseManager != null && _phaseManager.CurrentPhase == MatchPhaseState.Lockdown) return false;
-            
+            if (teamId != _ownerTeamId.Value) return false;
+            // In the final zone, beacons are disallowed (SafeZoneMatchConfig.beaconAllowedInFinalZone = false)
+            if (SafeZoneManager.Instance?.IsInFinalZone ?? false) return false;
             return true;
         }
 

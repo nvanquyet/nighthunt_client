@@ -629,6 +629,7 @@ namespace NightHunt.Gameplay.Character
             Gizmos.DrawWireSphere(bottomSphereCenter, _capsule.radius + groundCheckDistance);
         }
 
+        #if UNITY_EDITOR
         protected override void OnGUI()
         {
             base.OnGUI();
@@ -661,6 +662,7 @@ namespace NightHunt.Gameplay.Character
 
             GUILayout.EndArea();
         }
+        #endif
 
         #endregion
 

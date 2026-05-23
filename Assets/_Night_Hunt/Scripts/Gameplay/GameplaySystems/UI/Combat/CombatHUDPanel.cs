@@ -64,9 +64,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
 
 
-        [Header("Item Aim Controller (optional)")]
-        [Tooltip("Assign the scene ItemAimController so throwable slots show range/aim UI.")]
-        [SerializeField] private ItemAimController _aimController;
+        [Header("Throwable Aim Controller (optional)")]
+        [Tooltip("Assign the scene ThrowableAimController so throwable slots show range/aim UI.")]
+        [SerializeField] private ThrowableAimController _aimController;
 
         [Header("Cancel Item Use Button (optional)")]
         [Tooltip("Single button shared by all 4 quick slots. " +

@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using FishNet;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
-using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Scoring;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Gameplay.Zone;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
+using NightHunt.Gameplay.Match;
 using NightHunt.GameplaySystems.Loot;
 using NightHunt.GameplaySystems.World;
 
@@ -30,16 +31,18 @@ namespace NightHunt.Gameplay.Objective
         [Tooltip("WorldSpawnConfig chứa SpawnTable thưởng khi chiếm xong Zone.")]
         [SerializeField] private WorldSpawnConfig _zoneRewardConfig;
 
-        [Header("Phase Gate")]
-        [Tooltip("Zone sẽ chỉ chạy logic chiếm đƳng khi Phase này đang active. Mặc định: Hunt.")]
-        [SerializeField] private MatchPhaseState _activePhase = MatchPhaseState.Hunt;
+        [Header("Zone Gate")]
+        [Tooltip("Zone only runs capture logic from this zone index onward.")]
+        [SerializeField] private int _activeFromZoneIndex = 0;
+        [Tooltip("Zone stops running at this index (-1 = always active).")]
+        [SerializeField] private int _activeUntilZoneIndex = -1;
 
         [Header("Scoring")]
         [SerializeField] private int _scorePerSecond = 20;
 
         [Header("Debug")]
         [Tooltip("Bật/tắt display vòng bo và text thông số ngay trong screen Scene Editor")]
-        [SerializeField] private bool _showDebug = true;
+        [SerializeField] private bool _showDebug = false;
 
         // ── SyncVars ──
         private readonly SyncVar<float> _syncProgress = new SyncVar<float>();
@@ -54,21 +57,19 @@ namespace NightHunt.Gameplay.Objective
         public int ControllingTeamId => _syncControllingTeam.Value;
         public bool IsContested => _syncControllingTeam.Value == -2;
         public float CaptureRadius => captureRadius;
-        public MatchPhaseState ActivePhase => _activePhase;
+        public int ActiveFromZoneIndex => _activeFromZoneIndex;
+        public int ActiveUntilZoneIndex => _activeUntilZoneIndex;
 
         // ── Server Runtime ──
         private float _scoreAccumulator = 0f;
         private readonly List<NetworkPlayer> _playersInZone = new();
         private MatchEndManager _matchEndManager;
-        private MatchPhaseManager _phaseManager;
         private ScoringSystem _scoringSystem;
 
         public void OnStart()
         {
             if (_matchEndManager == null)
                 _matchEndManager = FindFirstObjectByType<MatchEndManager>();
-            if (_phaseManager == null)
-                _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
             if (_scoringSystem == null)
                 _scoringSystem = FindFirstObjectByType<ScoringSystem>();
         }
@@ -77,8 +78,11 @@ namespace NightHunt.Gameplay.Objective
         {
             if (!IsServerStarted || IsCompleted) return;
 
-            // Issue #9: Phase Gate — only run when correct phase is active
-            if (_phaseManager != null && _phaseManager.CurrentPhase != _activePhase) return;
+            // Zone Gate — only run capture logic during configured zone range
+            int zoneIdx = SafeZoneManager.Instance?.ZoneIndex ?? 0;
+            bool gateOk = zoneIdx >= _activeFromZoneIndex &&
+                          (_activeUntilZoneIndex < 0 || zoneIdx <= _activeUntilZoneIndex);
+            if (!gateOk) return;
 
             UpdatePlayersInZone();
             UpdateCapture();
@@ -123,9 +127,7 @@ namespace NightHunt.Gameplay.Objective
             while (_scoreAccumulator >= 1f)
             {
                 _scoreAccumulator -= 1f;
-                // Issue #10: Apply Phase ScoreMultiplier
-                float multiplier = _phaseManager?.GetCurrentPhaseConfig()?.ScoreMultiplier ?? 1f;
-                int score = Mathf.RoundToInt(_scorePerSecond * multiplier);
+                int score = _scorePerSecond;
                 _matchEndManager.AddObjectiveScore(_syncControllingTeam.Value, score);
             }
         }
@@ -149,7 +151,7 @@ namespace NightHunt.Gameplay.Objective
             }
 
             // Award bonus score to capturing team
-            float multiplier = _phaseManager?.GetCurrentPhaseConfig()?.ScoreMultiplier ?? 1f;
+            float multiplier = 1f; // phase multiplier removed — SafeZone uses flat rates
             int   captureBonus = Mathf.RoundToInt(500f * multiplier);
             _matchEndManager?.AddObjectiveScore(team, captureBonus);
             // AwardObjectiveCapture signature: (int teamId, float captureTime)

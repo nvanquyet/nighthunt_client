@@ -62,7 +62,7 @@ namespace NightHunt.Gameplay.Boss
         [SerializeField] private bool _fogAlwaysVisible;
 
         [Header("Debug")]
-        [SerializeField] private bool _showDebug = true;
+        [SerializeField] private bool _showDebug = false;
 
         [Header("Death")]
         [SerializeField, Min(0f)] private float _despawnDelay = 3f;
@@ -75,7 +75,7 @@ namespace NightHunt.Gameplay.Boss
         private readonly int[] _turretVolleyVisualChannels = new int[16];
         private readonly Dictionary<NetworkObject, float> _threatTable = new();
         private MatchEndManager _matchEndManager;
-        private MatchPhaseManager _phaseManager;
+        // _phaseManager removed -- SafeZoneManager used for zone-aware logic
 
         public string BossId => _bossId;
         public float CurrentHp => _syncHp.Value;
@@ -117,7 +117,6 @@ namespace NightHunt.Gameplay.Boss
         {
             base.OnStartServer();
             _matchEndManager = FindFirstObjectByType<MatchEndManager>();
-            _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
 
             CollectTurrets();
             RegisterTurrets();
@@ -643,7 +642,7 @@ namespace NightHunt.Gameplay.Boss
             int killerTeam = ResolveKillerTeam();
             if (killerTeam >= 0 && _matchEndManager != null)
             {
-                float multiplier = _phaseManager?.GetCurrentPhaseConfig()?.ScoreMultiplier ?? 1f;
+                float multiplier = 1f; // SafeZoneMatchConfig zone bonus applied via ScoringSystem
                 int score = Mathf.RoundToInt(_bossKillScore * multiplier);
                 _matchEndManager.AddObjectiveScore(killerTeam, score);
                 Debug.Log($"[BossController] Boss '{_bossId}' awarded {score} pts (x{multiplier}) to Team {killerTeam}.");

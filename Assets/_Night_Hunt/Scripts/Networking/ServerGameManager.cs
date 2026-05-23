@@ -5,7 +5,8 @@ using FishNet.Connection;
 using FishNet.Transporting;
 using FishNet;
 using NightHunt.Gameplay.Spawn;
-using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Zone;
+using NightHunt.Gameplay.Scoring;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Character;
 using System.Collections;
@@ -32,7 +33,6 @@ namespace NightHunt.Networking
         private GameObject playerPrefab;
 
         [SerializeField] private SpawnSystem _spawnSystem;
-        [SerializeField] private MatchPhaseManager _matchPhaseManager;
         [SerializeField] private ClientNetworkHandler clientNetworkHandlerPrefab;
 
         [Header("Match Settings")]
@@ -439,11 +439,9 @@ namespace NightHunt.Networking
             // Notify all clients: hide loading screen, show game HUD
             RpcOnAllPlayersReady();
 
-            // Start first phase with countdown delay
-            if (_matchPhaseManager != null)
-                _matchPhaseManager.BeginMatch();
-            else
-                Debug.LogError("[ServerGameManager] MatchPhaseManager is null — BeginMatch not called!");
+            // Begin zone-based match
+            SafeZoneManager.Instance?.BeginMatch();
+            SurvivalScoreSystem.Instance?.StartTicking(SafeZoneManager.Instance?.Config);
         }
 
         [Server]
@@ -463,10 +461,9 @@ namespace NightHunt.Networking
             OnAllPlayersReady?.Invoke();
             RpcOnAllPlayersReady();
 
-            if (_matchPhaseManager != null)
-                _matchPhaseManager.BeginMatch();
-            else
-                Debug.LogError("[ServerGameManager] MatchPhaseManager is null - BeginMatch not called!");
+            // Begin zone-based match
+            SafeZoneManager.Instance?.BeginMatch();
+            SurvivalScoreSystem.Instance?.StartTicking(SafeZoneManager.Instance?.Config);
         }
 
         [ObserversRpc]

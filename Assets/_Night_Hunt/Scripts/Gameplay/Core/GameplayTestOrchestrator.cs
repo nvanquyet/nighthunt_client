@@ -51,7 +51,7 @@ namespace NightHunt.Gameplay.Core
     {
         // ── Inspector ─────────────────────────────────────────────────────────────
         [Header("Display")]
-        [SerializeField] private bool _showOnGUI      = true;
+        [SerializeField] private bool _showOnGUI      = false;
         [SerializeField] private bool _showGizmos     = true;
 #pragma warning disable CS0414
         [SerializeField] private bool _compactMode    = false;
@@ -60,14 +60,13 @@ namespace NightHunt.Gameplay.Core
         [SerializeField] private KeyCode _compactKey  = KeyCode.F2;
 
         [Header("References (auto-found if null)")]
-        [SerializeField] private Gameplay.Match.MatchPhaseManager _phaseManager;
+        [SerializeField] private Gameplay.Zone.SafeZoneManager    _safeZoneManager;
         [SerializeField] private Gameplay.Scoring.ScoringSystem   _scoringSystem;
         [SerializeField] private Gameplay.Boss.BossController     _bossController;
         [SerializeField] private Gameplay.Boss.BossSpawnManager   _bossSpawnManager;
-        [SerializeField] private LockdownZone                     _lockdownZone;
 
         // ── Internal state ────────────────────────────────────────────────────────
-        private int    _displayMode   = 1; // 0=off, 1=full, 2=compact
+        private int    _displayMode   = 0; // 0=off, 1=full, 2=compact
         private float  _fps;
         private float  _fpsTimer;
         private int    _frameCount;
@@ -95,11 +94,10 @@ namespace NightHunt.Gameplay.Core
 
         private void AutoFindReferences()
         {
-            if (_phaseManager    == null) _phaseManager    = FindFirstObjectByType<Gameplay.Match.MatchPhaseManager>();
+            if (_safeZoneManager   == null) _safeZoneManager   = Gameplay.Zone.SafeZoneManager.Instance;
             if (_scoringSystem   == null) _scoringSystem   = FindFirstObjectByType<Gameplay.Scoring.ScoringSystem>();
             if (_bossController  == null) _bossController  = FindFirstObjectByType<Gameplay.Boss.BossController>();
             if (_bossSpawnManager== null) _bossSpawnManager= FindFirstObjectByType<Gameplay.Boss.BossSpawnManager>();
-            if (_lockdownZone    == null) _lockdownZone    = FindFirstObjectByType<LockdownZone>();
         }
 
         private void Update()
@@ -217,7 +215,7 @@ namespace NightHunt.Gameplay.Core
         {
             float x = 10f, y = 10f, w = 250f;
             Box(x, y, w, 24f,
-                $"NightHunt  FPS:{_fps:F0}  Phase:{_phaseManager?.CurrentPhase}  [F1=full]",
+                $"NightHunt  FPS:{_fps:F0}  Zone:{Gameplay.Zone.SafeZoneManager.Instance?.ZoneIndex}  [F1=full]",
                 _normalStyle);
         }
 
@@ -290,44 +288,33 @@ namespace NightHunt.Gameplay.Core
 
         private void DrawZones(float x, ref float y, float w)
         {
-            var zs = ZoneSystem.Instance;
-            if (zs == null)
+            var safeZone = Gameplay.Zone.SafeZoneManager.Instance;
+            if (safeZone == null)
             {
-                y = Box(x, y, w, 24f, "<b>ZoneSystem</b>  ⚠ NOT FOUND", _errorStyle);
+                y = Box(x, y, w, 24f, "<b>SafeZone</b>  ⚠ SafeZoneManager NOT FOUND", _errorStyle);
                 return;
             }
 
-            var zones = zs.ActiveZones;
-            if (zones.Count == 0)
-            {
-                y = Box(x, y, w, 24f, "<b>Zones</b>  None active", _normalStyle);
-                return;
-            }
+            string state = safeZone.MatchActive
+                ? $"Zone {safeZone.ZoneIndex + 1}{(safeZone.IsInFinalZone ? " <color=#f88>(FINAL)</color>" : "")}  r={safeZone.CurrentRadius:F0}m  {(safeZone.IsShrinking ? "<color=#f84>SHRINKING</color>" : "waiting")}"
+                : "<color=#aaa>Waiting for match...</color>";
 
-            var sb = new StringBuilder();
-            sb.Append("<b>Zones</b>\n");
-            foreach (var z in zones)
-                sb.AppendLine($"  • {z.ZoneId}  r={z.Radius:F0}  {(z.IsActive ? "ACTIVE" : "off")}");
-
-            if (_lockdownZone != null)
-                sb.AppendLine($"  Lockdown: r={_lockdownZone.CurrentRadius:F0}  " +
-                              $"progress={_lockdownZone.CloseProgress:P0}");
-
-            y = Box(x, y, w, zones.Count * 18f + 32f, sb.ToString(), _normalStyle);
+            y = Box(x, y, w, 24f, $"<b>SafeZone</b>  {state}", _normalStyle);
         }
 
         // ── Match state ───────────────────────────────────────────────────────────
 
         private void DrawMatchState(float x, ref float y, float w)
         {
-            if (_phaseManager == null)
+            var mgr = _safeZoneManager ?? Gameplay.Zone.SafeZoneManager.Instance;
+            if (mgr == null)
             {
-                y = Box(x, y, w, 24f, "<b>Match</b>  ⚠ MatchPhaseManager NOT FOUND", _errorStyle);
+                y = Box(x, y, w, 24f, "<b>Match</b>  ⚠ SafeZoneManager NOT FOUND", _errorStyle);
                 return;
             }
 
-            string ph  = _phaseManager.CurrentPhase.ToString();
-            float  rem = _phaseManager.PhaseRemainingTime;
+            string ph  = mgr.MatchActive ? $"Zone {mgr.ZoneIndex + 1}{(mgr.IsInFinalZone ? " (FINAL)" : "")}" : "Waiting";
+            float  rem = mgr.IsInFinalZone ? 0f : 0f; // countdown handled by HUDProxy
 
             string scoreStr = "";
             if (_scoringSystem != null)
@@ -338,7 +325,7 @@ namespace NightHunt.Gameplay.Core
             }
 
             y = Box(x, y, w, 40f,
-                $"<b>Match Phase</b>: {ph}  Remaining: {Mathf.Max(0, rem):F0}s\n" +
+                $"<b>Zone</b>: {ph}  Radius: {mgr.CurrentRadius:F0}m  Shrinking: {mgr.IsShrinking}\n" +
                 $"Score{scoreStr}",
                 _normalStyle);
         }
@@ -405,10 +392,8 @@ namespace NightHunt.Gameplay.Core
 
             Check(sb, "InputLayerManager", InputLayerManager.Instance != null);
             Check(sb, "SpectateManager",   SpectateManager.Instance   != null);
-            Check(sb, "ZoneSystem",        ZoneSystem.Instance        != null);
-            Check(sb, "MatchPhaseManager", _phaseManager              != null);
+            Check(sb, "SafeZoneManager",   Gameplay.Zone.SafeZoneManager.Instance != null);
             Check(sb, "ScoringSystem",     _scoringSystem             != null);
-            Check(sb, "LockdownZone",      _lockdownZone              != null);
 
             var registry = PlayerPublicRegistry.Instance;
             if (registry != null)
@@ -470,16 +455,10 @@ namespace NightHunt.Gameplay.Core
                 Debug.Log("[TestOrchestrator] ] pressed: +25 HP");
             }
 
-            if (UnityEngine.Input.GetKeyDown(KeyCode.P) && _phaseManager != null && _phaseManager.IsServerStarted)
+            if (UnityEngine.Input.GetKeyDown(KeyCode.P) && Gameplay.Zone.SafeZoneManager.Instance != null && Gameplay.Zone.SafeZoneManager.Instance.IsServerStarted)
             {
-                var next = _phaseManager.CurrentPhase switch
-                {
-                    Gameplay.Match.MatchPhaseState.Preparation => Gameplay.Match.MatchPhaseState.Hunt,
-                    Gameplay.Match.MatchPhaseState.Hunt        => Gameplay.Match.MatchPhaseState.Lockdown,
-                    _                                           => Gameplay.Match.MatchPhaseState.Preparation,
-                };
-                _phaseManager.StartPhase(next);
-                Debug.Log($"[TestOrchestrator] P pressed: advance phase → {next}");
+                // Advance zone manually for testing
+                Debug.Log("[TestOrchestrator] P pressed: zone advance not directly available — use server console.");
             }
 
             if (UnityEngine.Input.GetKeyDown(KeyCode.B) && _bossSpawnManager != null)
@@ -550,35 +529,22 @@ namespace NightHunt.Gameplay.Core
 
         private void DrawZoneGizmos()
         {
-            // Lockdown zone
-            if (_lockdownZone != null)
+            // SafeZone gizmo
+            var safeZone = Gameplay.Zone.SafeZoneManager.Instance;
+            if (safeZone != null && Application.isPlaying)
             {
-                Vector3 center = _lockdownZone.Center;
-                float   radius = Application.isPlaying
-                    ? _lockdownZone.CurrentRadius
-                    : 100f; // initial radius for editor
+                Vector3 center = safeZone.CurrentCenter;
+                float   radius = safeZone.CurrentRadius;
 
                 Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.15f);
                 Gizmos.DrawSphere(center, radius);
                 Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.7f);
                 Gizmos.DrawWireSphere(center, radius);
                 Handles.color = Color.red;
-                Handles.Label(center + Vector3.up * (radius + 1f), $"Lockdown r={radius:F0}");
+                Handles.Label(center + Vector3.up * (radius + 1f), $"SafeZone z={safeZone.ZoneIndex} r={radius:F0}");
             }
 
-            // ZoneSystem-registered zones
-            if (ZoneSystem.Instance != null)
-            {
-                foreach (var z in ZoneSystem.Instance.ActiveZones)
-                {
-                    if (z == null) continue;
-                    Gizmos.color = new Color(0f, 1f, 0.5f, 0.15f);
-                    Gizmos.DrawSphere(z.Center, z.Radius);
-                    Gizmos.color = new Color(0f, 1f, 0.5f, 0.7f);
-                    Gizmos.DrawWireSphere(z.Center, z.Radius);
-                    Handles.Label(z.Center + Vector3.up * (z.Radius + 0.5f), z.ZoneId);
-                }
-            }
+
         }
 
         private void DrawSpawnGizmos()

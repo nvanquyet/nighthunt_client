@@ -3,7 +3,6 @@ using FishNet.Object;
 using FishNet.Managing;
 using FishNet;
 using System;
-using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.Team;
 using NightHunt.Gameplay.Boss;
@@ -35,8 +34,8 @@ namespace NightHunt.Gameplay.Core
     {
         #region Serialized Fields
 
-        [Header("Core Systems")] [SerializeField]
-        private MatchPhaseManager _matchPhaseManager;
+        [Header("Core Systems")]
+        // MatchPhaseManager removed — replaced by SafeZoneManager
 
         [Header("Server Systems")] [SerializeField]
         private SpawnSystem _spawnSystem;
@@ -70,7 +69,6 @@ namespace NightHunt.Gameplay.Core
         public bool IsInitialized => _isInitialized;
 
         // System accessors for ServerGameManager
-        public MatchPhaseManager MatchPhaseManager => _matchPhaseManager;
         public SpawnSystem SpawnSystem => _spawnSystem;
         public TeamAssignmentSystem TeamAssignmentSystem => _teamAssignmentSystem;
 
@@ -135,9 +133,9 @@ namespace NightHunt.Gameplay.Core
                 SpawnNetworkSystems();
             }
 
-            // Step 4: Subscribe phase events so activation methods fire at the right time
-            if (_matchPhaseManager != null)
-                _matchPhaseManager.OnPhaseStarted += HandlePhaseStarted;
+            // Step 4: Subscribe SafeZoneManager zone events
+            if (SafeZoneManager.Instance != null)
+                SafeZoneManager.Instance.OnZonePhaseStarted += HandleZonePhaseStarted;
 
             _isInitialized = true;
 
@@ -186,13 +184,6 @@ namespace NightHunt.Gameplay.Core
                 Debug.Log("[GameBootstrap] Validating system references...");
 
             // Auto-find systems if not assigned
-            if (_matchPhaseManager == null)
-            {
-                _matchPhaseManager = FindFirstObjectByType<MatchPhaseManager>();
-                if (_matchPhaseManager == null)
-                    Debug.LogError("[GameBootstrap] MatchPhaseManager not found!");
-            }
-
             if (_spawnSystem == null)
             {
                 _spawnSystem = FindFirstObjectByType<SpawnSystem>();
@@ -222,9 +213,6 @@ namespace NightHunt.Gameplay.Core
         {
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] Spawning network systems...");
-
-            // Spawn MatchPhaseManager
-            SpawnNetworkSystem(_matchPhaseManager, "MatchPhaseManager");
 
             // Spawn SpawnSystem
             SpawnNetworkSystem(_spawnSystem, "SpawnSystem");
@@ -290,17 +278,16 @@ namespace NightHunt.Gameplay.Core
 
         #region Phase System Activation
 
-        private void HandlePhaseStarted(MatchPhaseState phase, string phaseName)
+        private void HandleZonePhaseStarted(int zoneIndex)
         {
-            // Only activate on server — client-side systems self-manage via SyncVar changes.
             if (!_networkManager.IsServerStarted) return;
 
-            switch (phase)
-            {
-                case MatchPhaseState.Preparation: ActivatePhase1Systems(); break;
-                case MatchPhaseState.Hunt:        ActivatePhase2Systems(); break;
-                case MatchPhaseState.Lockdown:    ActivatePhase3Systems(); break;
-            }
+            if (zoneIndex == 0)
+                ActivatePhase1Systems();
+            else if (!SafeZoneManager.Instance.IsInFinalZone)
+                ActivatePhase2Systems();
+            else
+                ActivatePhase3Systems();
         }
 
         /// <summary>
@@ -356,12 +343,7 @@ namespace NightHunt.Gameplay.Core
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ===== Activating Phase 3 Systems =====");
 
-            // LockdownZone self-activates: checks CurrentPhase in Update().
-            var zone      = FindFirstObjectByType<LockdownZone>();
-            if (zone == null)
-                Debug.LogWarning("[GameBootstrap] Phase 3: LockdownZone not found in scene — zone damage will not apply.");
-            else
-                zone.ActivateForLockdown();
+            // SafeZoneManager handles final-zone logic natively — damage, events.
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log("[GameBootstrap] ✅ Phase 3 systems activated");
@@ -415,11 +397,8 @@ namespace NightHunt.Gameplay.Core
         {
             if (!_isInitialized) return;
 
-            if (_matchPhaseManager != null)
-                _matchPhaseManager.OnPhaseStarted -= HandlePhaseStarted;
-
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
-                Debug.Log("[GameBootstrap] Cleaning up gameplay systems...");
+                Debug.Log("[GameBootstrap] Cleaning up gameplay systems...");;
 
             // Clean up: clear event subscribers, reset state, unload resources
             _isInitialized = false;
@@ -453,7 +432,7 @@ namespace NightHunt.Gameplay.Core
         public string GetDebugInfo()
         {
             return $"Bootstrap Initialized: {_isInitialized}\n" +
-                   $"MatchPhaseManager: {(_matchPhaseManager != null ? "âœ…" : "âŒ")}\n" +
+
                    $"SpawnSystem: {(_spawnSystem != null ? "âœ…" : "âŒ")}\n" +
                    $"TeamAssignmentSystem: {(_teamAssignmentSystem != null ? "âœ…" : "âŒ")}\n" +
                    $"Network Manager: {(_networkManager != null ? "âœ…" : "âŒ")}";

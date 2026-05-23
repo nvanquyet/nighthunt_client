@@ -1,9 +1,10 @@
+using System.Collections;
 using System.Collections.Generic;
 using FishNet;
 using FishNet.Object;
 using NightHunt.Data;
 using NightHunt.Gameplay.Core.Events;
-using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Zone;
 using UnityEngine;
 using NightHunt.Utilities;
 
@@ -19,7 +20,7 @@ namespace NightHunt.Gameplay.Boss
     public sealed class BossSpawnManager : NetworkBehaviour
     {
         [Header("References")]
-        [SerializeField] private MatchPhaseManager _phaseManager;
+        // No direct phase manager reference — subscribes to SafeZoneManager.OnZonePhaseStarted
 
         [Header("Boss Spawns Configuration")]
         [Tooltip("Config data map for boss spawns. Map designers provide prefab and spawn points.")]
@@ -31,27 +32,20 @@ namespace NightHunt.Gameplay.Boss
         // ──────────────────────────────────────────────────────────────────────
         #region Lifecycle
 
-        private void Awake()
-        {
-            if (_phaseManager == null)
-            {
-                _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
-                if (_phaseManager == null)
-                    Debug.LogWarning("[BossSpawnManager] MatchPhaseManager not found — assign it in the Inspector.");
-            }
-        }
+        private void Awake() { }
 
         public override void OnStartServer()
         {
             base.OnStartServer();
-            _phaseManager.OnPhaseStarted += OnPhaseStarted;
+            if (SafeZoneManager.Instance != null)
+                SafeZoneManager.Instance.OnZonePhaseStarted += OnZonePhaseStarted;
         }
 
         public override void OnStopServer()
         {
             base.OnStopServer();
-            if (_phaseManager != null)
-                _phaseManager.OnPhaseStarted -= OnPhaseStarted;
+            if (SafeZoneManager.Instance != null)
+                SafeZoneManager.Instance.OnZonePhaseStarted -= OnZonePhaseStarted;
         }
 
         #endregion
@@ -59,9 +53,9 @@ namespace NightHunt.Gameplay.Boss
         // ──────────────────────────────────────────────────────────────────────
         #region Phase handler
 
-        private void OnPhaseStarted(MatchPhaseState phase, string phaseName)
+        private void OnZonePhaseStarted(int zoneIndex)
         {
-            SpawnBossesForPhase(phase);
+            SpawnBossesForZone(zoneIndex);
         }
 
         #endregion
@@ -70,13 +64,13 @@ namespace NightHunt.Gameplay.Boss
         #region Spawn
 
         [Server]
-        private void SpawnBossesForPhase(MatchPhaseState currentPhase)
+        private void SpawnBossesForZone(int zoneIndex)
         {
             if (_bossSpawns == null || _bossSpawns.Count == 0) return;
 
             foreach (var cfg in _bossSpawns)
             {
-                if (cfg.SpawnPhase == currentPhase)
+                if (cfg.SpawnAtZoneIndex == zoneIndex)
                 {
                     SpawnBoss(cfg);
                 }
@@ -166,7 +160,7 @@ namespace NightHunt.Gameplay.Boss
         public GameObject BossPrefab;
         [Tooltip("List of spawn points from which one will be selected at random.")]
         public List<BossSpawnPoint> SpawnPoints;
-        [Tooltip("Phase in which this boss spawns (typically Phase 2 - Hunt).")]
-        public MatchPhaseState SpawnPhase;
+        [Tooltip("Zone index at which this boss spawns (0-based).")]
+        public int SpawnAtZoneIndex;
     }
 }

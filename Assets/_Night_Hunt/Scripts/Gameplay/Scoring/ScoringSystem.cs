@@ -5,17 +5,20 @@ using FishNet.Object;
 using NightHunt.Data;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
-using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Gameplay.Zone;
 using NightHunt.Utilities;
 using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Scoring
 {
     /// <summary>
-    /// Manages scoring system for kills, assists, objectives, etc.
-    /// Server-authoritative scoring
-    /// Works with both host and dedicated server
+    /// Event-driven scoring: awards points for kills, assists, and objective captures.
+    /// Syncs score snapshots to clients via ScoreDataSyncedEvent.
+    ///
+    /// Responsibility boundary: handles discrete score events only (kill, capture, assist).
+    /// For continuous time-based survival ticking every N seconds, see <see cref="SurvivalScoreSystem"/>.
+    /// Both classes live on the same server GameObject and are activated by ServerGameManager.
     /// </summary>
     public class ScoringSystem : NetworkBehaviour
     {
@@ -27,16 +30,16 @@ namespace NightHunt.Gameplay.Scoring
         [Tooltip("Config cho từng action (Kill, Assist, BossKill, ...). Assign trong Inspector.")]
         [SerializeField] private List<ScoreSystemData> _scoreConfigList = new List<ScoreSystemData>();
 
-        private MatchPhaseManager phaseManager;
         private List<ScoreSystemData> scoreConfigs;
         private ScoreSync _scoreSync;
+        // Zone config injected by SurvivalScoreSystem after SafeZoneManager.BeginMatch
+        private SafeZoneMatchConfig _zoneConfig;
 
         public override void OnStartServer()
         {
             base.OnStartServer();
 
             scoreConfigs = _scoreConfigList.Count > 0 ? _scoreConfigList : null;
-            phaseManager = FindFirstObjectByType<MatchPhaseManager>();
             _scoreSync   = ComponentResolver.Find<ScoreSync>(this).OnSelf().InChildren().Resolve()
                            ?? FindFirstObjectByType<ScoreSync>();
 
@@ -80,15 +83,8 @@ namespace NightHunt.Gameplay.Scoring
         {
             EnsurePlayerScore(playerId);
 
-            // Get phase multiplier using ScoreMultiplier utility
-            float phaseMultiplier = 1f;
-            if (phaseManager != null)
-            {
-                phaseMultiplier = phaseManager.GetScoreMultiplier();
-            }
-
-            // Calculate final score
-            int finalScore = Mathf.RoundToInt(baseScore * multiplier * phaseMultiplier);
+            // Calculate final score (no phase multiplier — zone system uses flat rates)
+            int finalScore = Mathf.RoundToInt(baseScore * multiplier);
             playerScores[playerId].TotalScore += finalScore;
 
             // Publish lightweight hook event (analytics, audio cues) — NOT used by MatchUI.
@@ -120,7 +116,7 @@ namespace NightHunt.Gameplay.Scoring
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Score,
                 "AwardScore",
-                $"player={playerId} team={GetTeamId(playerId)} action={action} base={baseScore} multiplier={multiplier:F2} phaseMultiplier={phaseMultiplier:F2} final={finalScore} total={playerScores[playerId].TotalScore}",
+                $"player={playerId} team={GetTeamId(playerId)} action={action} base={baseScore} multiplier={multiplier:F2} final={finalScore} total={playerScores[playerId].TotalScore}",
                 this);
         }
 
@@ -191,6 +187,57 @@ namespace NightHunt.Gameplay.Scoring
                 foreach (var player in allPlayers)
                     if (player != null && player.TeamId == teamId)
                         AwardScore((uint)player.ObjectId, "ObjectiveCapture", totalScore);
+        }
+
+        /// <summary>
+        /// Inject zone config (called by SurvivalScoreSystem on BeginMatch).
+        /// </summary>
+        [Server]
+        public void SetZoneConfig(SafeZoneMatchConfig config) => _zoneConfig = config;
+
+        /// <summary>
+        /// Server: Award flat survival tick score (called every second by SurvivalScoreSystem).
+        /// </summary>
+        [Server]
+        public void AwardSurvivalTick(uint playerId, float dt)
+        {
+            float rate = _zoneConfig?.baseSurvivalPtsPerSecond ?? 1f;
+            int pts = Mathf.RoundToInt(rate * dt);
+            if (pts <= 0) return;
+            AwardScoreInternal(playerId, "SurvivalTick", pts, 1f, syncAfterAward: false);
+        }
+
+        /// <summary>
+        /// Server: Award zone bonus while player stands inside a bonus zone.
+        /// </summary>
+        [Server]
+        public void AwardZoneBonus(uint playerId, float dt, float bonusMultiplier)
+        {
+            float rate = (_zoneConfig?.baseSurvivalPtsPerSecond ?? 1f) * (bonusMultiplier - 1f);
+            int pts = Mathf.RoundToInt(rate * dt);
+            if (pts <= 0) return;
+            AwardScoreInternal(playerId, "ZoneBonus", pts, 1f, syncAfterAward: false);
+        }
+
+        /// <summary>
+        /// Server: Steal a fraction of victim's score and award to killer (final zone only).
+        /// </summary>
+        [Server]
+        public void AwardScoreSteal(uint killerId, uint victimId)
+        {
+            float pct = _zoneConfig?.killScoreStealPercent ?? 0.15f;
+            if (pct <= 0f) return;
+
+            EnsurePlayerScore(victimId);
+            int victimScore = playerScores[victimId].TotalScore;
+            int stolen = Mathf.RoundToInt(victimScore * pct);
+            if (stolen <= 0) return;
+
+            playerScores[victimId].TotalScore = Mathf.Max(0, victimScore - stolen);
+            AwardScoreInternal(killerId, "ScoreSteal", stolen, 1f, syncAfterAward: false);
+            SyncScores();
+
+            Debug.Log($"[ScoringSystem] ScoreSteal: killer={killerId} victim={victimId} stolen={stolen}");
         }
 
         /// <summary>
@@ -266,6 +313,12 @@ namespace NightHunt.Gameplay.Scoring
             }
             return null;
         }
+
+        /// <summary>
+        /// Force a score sync — called by SurvivalScoreSystem after batch tick.
+        /// </summary>
+        [Server]
+        public void ForceSyncScores() => SyncScores();
 
         /// <summary>
         /// Sync scores to clients

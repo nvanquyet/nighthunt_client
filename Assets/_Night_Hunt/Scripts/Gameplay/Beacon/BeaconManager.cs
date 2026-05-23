@@ -5,6 +5,7 @@ using FishNet.Object;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Match;
 using NightHunt.Gameplay.Respawn;
+using NightHunt.Gameplay.Zone;
 using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using UnityEngine;
@@ -42,8 +43,8 @@ namespace NightHunt.Gameplay.Beacon
         [Tooltip("Số beacon tối đa mỗi team. Khi đặt mới vượt limit → beacon cũ nhất bị destroy & thay thế.")]
         [SerializeField] private int _maxActivePerTeam = 1;
 
-        [Tooltip("Reference tới MatchPhaseManager để block đặt Beacon ở Phase Lockdown.")]
-        [SerializeField] private MatchPhaseManager _phaseManager;
+        [Tooltip("Reference tới SafeZoneManager để block đặt Beacon ở Final Zone.")]
+        // _phaseManager removed -- SafeZoneManager.Instance.IsInFinalZone used directly
 
         // ── Runtime (server) ──────────────────────────────────────────────────
         /// <summary>teamId → list of active beacon NOs.</summary>
@@ -68,9 +69,6 @@ namespace NightHunt.Gameplay.Beacon
         public override void OnStartServer()
         {
             base.OnStartServer();
-
-            if (_phaseManager == null)
-                _phaseManager = FindFirstObjectByType<MatchPhaseManager>();
 
             _matchEndManager?.RegisterBeaconProvider(this);
         }
@@ -114,10 +112,11 @@ namespace NightHunt.Gameplay.Beacon
             FishNet.Connection.NetworkConnection ownerConn,
             string            definitionId = null)
         {
-            // ── Phase Gate: Block placement in Lockdown ───────────────────────
-            if (_phaseManager != null && _phaseManager.CurrentPhase == MatchPhaseState.Lockdown)
+            // ── Phase Gate: Block placement in Final Zone ────────────────────
+            bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
+            if (isInFinalZone)
             {
-                Debug.Log($"[BeaconManager] Beacon placement blocked: Phase is Lockdown.");
+                Debug.Log($"[BeaconManager] Beacon placement blocked: Final zone active.");
                 return false;
             }
 

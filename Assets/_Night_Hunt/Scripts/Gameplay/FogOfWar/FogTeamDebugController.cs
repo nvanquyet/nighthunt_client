@@ -30,7 +30,7 @@ namespace NightHunt.Gameplay.FogOfWar
     {
         [Header("Debug")]
         [Tooltip("Hiện overlay tất cả player teams trên screen.")]
-        [SerializeField] private bool _showOnScreenOverlay = true;
+        [SerializeField] private bool _showOnScreenOverlay = false;
 
         // ── Server helpers ──────────────────────────────────────────────────────
 

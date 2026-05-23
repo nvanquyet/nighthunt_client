@@ -34,7 +34,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private IItemUseSystem       _itemUseSystem;
         private IInventorySystem     _inventorySystem;
         private CombatInputHandler   _combatInputHandler;
-        private ItemAimController    _aimController;
+        private ThrowableAimController    _aimController;
         private Coroutine            _pendingCollapseRoutine;
 
         public bool IsExpanded { get; private set; }
@@ -51,7 +51,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IInventorySystem     inventorySystem    = null,
             IItemUseSystem       itemUseSystem      = null,
             CombatInputHandler   combatInputHandler = null,
-            ItemAimController    aimController      = null)
+            ThrowableAimController aimController    = null)
         {
             Initialize(new[] { filterType }, selectionSystem, inventorySystem, itemUseSystem, combatInputHandler, aimController);
         }
@@ -62,7 +62,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             IInventorySystem     inventorySystem    = null,
             IItemUseSystem       itemUseSystem      = null,
             CombatInputHandler   combatInputHandler = null,
-            ItemAimController    aimController      = null)
+            ThrowableAimController aimController    = null)
         {
 
             Unsubscribe();
@@ -175,7 +175,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             {
                 if (TryStartAimControllerFlow(instanceId, def))
                 {
-                    Debug.Log($"[ITEM_FLOW] [03][FilterPanel.Use] instance='{instanceId}' action=ItemAimController defType={(def != null ? def.Type.ToString() : "null")}");
+                    Debug.Log($"[ITEM_FLOW] [03][FilterPanel.Use] instance='{instanceId}' action=ThrowableAimController defType={(def != null ? def.Type.ToString() : "null")}");
                     Debug.Log($"[NH_FLOW][06][ItemFilterPanel.UseViaAimController] panel={name} instance='{instanceId}' def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"}");
                     CollapseList();
                     return;
@@ -348,12 +348,12 @@ namespace NightHunt.GameplaySystems.UI.Combat
             return handled;
         }
 
-        private static ItemAimController ResolveAimController()
+        private static ThrowableAimController ResolveAimController()
         {
 #if UNITY_2023_1_OR_NEWER
-            return FindFirstObjectByType<ItemAimController>(FindObjectsInactive.Include);
+            return FindFirstObjectByType<ThrowableAimController>(FindObjectsInactive.Include);
 #else
-            return FindObjectOfType<ItemAimController>(true);
+            return FindObjectOfType<ThrowableAimController>(true);
 #endif
         }
 

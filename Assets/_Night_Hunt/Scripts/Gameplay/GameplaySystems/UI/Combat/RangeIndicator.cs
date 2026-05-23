@@ -10,7 +10,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
     /// World-space range indicator that follows the local player.
     ///
     /// Used by both <see cref="FireButton"/> (shown while finger/mouse is held)
-    /// and <see cref="ItemAimController"/> (shown while aiming a throwable).
+    /// and <see cref="ThrowableAimController"/> (shown while aiming a throwable).
     ///
     /// Visual is fully designer-controlled: place any child GO (mesh, decal, particle, etc.)
     /// under this GameObject. <see cref="SetRange"/> scales the root transform uniformly
@@ -20,7 +20,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
     ///   1. Create an empty GO in the world (NOT in Canvas).
     ///   2. Add this component.
     ///   3. Add your visual as a child (ring mesh / decal / VFX — anything).
-    ///   4. Assign this GO to FireButton._rangeIndicator and/or ItemAimController._rangeIndicator.
+    ///   4. Assign this GO to FireButton._rangeIndicator and/or ThrowableAimController._rangeIndicator.
     ///   5. Call SetFollowTarget(playerTransform) + SetRange(visionRange) after player spawns.
     /// </summary>
     public class RangeIndicator : MonoBehaviour
