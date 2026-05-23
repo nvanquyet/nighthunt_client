@@ -16,9 +16,6 @@ namespace NightHunt.Services.Backend
 {
     public class BackendHttpClient : MonoBehaviour, IBackendClient
     {
-        [SerializeField] private BackendConfig config;
-        public BackendConfig Config => config;
-
         // SEC-4: Use atomic int to prevent double-trigger of force logout coroutine
         private int _forceLogoutFlag = 0;
         private const string SessionHeader = "X-Session-Id";
@@ -38,10 +35,7 @@ namespace NightHunt.Services.Backend
         {
         }
 
-        public string GetBaseUrl()
-        {
-            return config != null ? config.GetApiBaseUrl() : "";
-        }
+        public string GetBaseUrl() => BackendConfig.GetApiBaseUrl();
 
         public async Task<ApiResult<T>> GetAsync<T>(string endpoint)
         {
@@ -65,13 +59,7 @@ namespace NightHunt.Services.Backend
 
         private async Task<ApiResult<T>> SendRequestAsync<T>(string method, string endpoint, object data)
         {
-            if (config == null)
-            {
-                Debug.LogError("BackendConfig is not assigned!");
-                return ApiResult<T>.Error("Backend configuration not found");
-            }
-
-            string baseUrl = config.GetApiBaseUrl();
+            string baseUrl = BackendConfig.GetApiBaseUrl();
             string url = baseUrl + endpoint;
             bool traceEndpoint = ShouldTraceEndpoint(endpoint);
 
@@ -119,10 +107,10 @@ namespace NightHunt.Services.Backend
                 request.SetRequestHeader(SessionHeader, SessionState.Instance.SessionId);
             }
 
-            request.timeout = config.requestTimeoutSeconds;
+            request.timeout = BackendConfig.RequestTimeoutSeconds;
 
             // Attach AcceptAllCertificatesHandler nếu server dùng self-signed cert (mkcert + IP)
-            if (config.ShouldBypassSslCertificateValidation())
+            if (BackendConfig.ShouldBypassSslCertificateValidation())
             {
                 request.certificateHandler = new NightHunt.Config.AcceptAllCertificatesHandler();
             }

@@ -75,8 +75,6 @@ namespace NightHunt.Core
         [SerializeField, Min(1f)] private float homePreloadTimeout = 15f;
 
         [Header("Backend Health")]
-        [Tooltip("Config containing apiHost used to ping the health endpoint.")]
-        [SerializeField] private BackendConfig _backendConfig;
         [Tooltip("Path of the health endpoint (full path with /api prefix).")]
         [SerializeField] private string        _healthPath = "/api/actuator/health"; // Spring Boot Actuator path with /api context
 
@@ -110,37 +108,6 @@ namespace NightHunt.Core
 
         private void Start()
         {
-            // Auto-load BackendConfig from Resources if not assigned in inspector
-            if (_backendConfig == null)
-            {
-                // Try to find in scene first
-                _backendConfig = FindFirstObjectByType<BackendConfig>();
-                
-                if (_backendConfig == null)
-                {
-                    // Try to load from Resources folder (must be in Assets/Resources/Configs/)
-                    _backendConfig = Resources.Load<BackendConfig>("Configs/BackendConfig");
-                }
-
-                if (_backendConfig == null)
-                {
-                    Debug.LogError("[LoadingManager] ❌ CRITICAL: BackendConfig not found!");
-                    Debug.LogError("[LoadingManager] Please either:");
-                    Debug.LogError("  1. Assign BackendConfig asset in LoadingManager inspector");
-                    Debug.LogError("  2. Place BackendConfig.asset in Assets/Resources/Configs/");
-                    Debug.LogError("  3. Place BackendConfig.asset in scene as a component");
-                    
-                    // Use hardcoded fallback for now
-                    Debug.LogWarning("[LoadingManager] ⚠️ Using fallback config (HTTPS localhost:8443)");
-                    // Will proceed with null and rely on fallback URL
-                }
-                else
-                {
-                    Debug.Log($"[LoadingManager] ✅ BackendConfig auto-loaded: {_backendConfig.apiHost}");
-                }
-            }
-
-            // Auto-find loadingPanel if not assigned in Inspector
             if (loadingPanel == null)
             {
                 // Search for a child named "LoadingPanel" (or "Loading Panel")
@@ -179,7 +146,7 @@ namespace NightHunt.Core
             // Only active when allowSelfSignedCert=true (local/staging dev against an IP with no trusted cert).
             // Production uses Let's Encrypt — no bypass needed.
 #if !UNITY_WEBGL || UNITY_EDITOR
-            if (_backendConfig != null && _backendConfig.ShouldBypassSslCertificateValidation())
+            if (BackendConfig.ShouldBypassSslCertificateValidation())
             {
                 System.Net.ServicePointManager.ServerCertificateValidationCallback =
                     (sender, certificate, chain, sslPolicyErrors) => true;
@@ -309,32 +276,70 @@ namespace NightHunt.Core
 
         /// <summary>
         /// Fetch game modes and maps from backend; populates GameModeConfig + MapConfig.
-        /// Non-fatal: if it fails the ScriptableObject defaults stay in place.
+        /// BLOCKING — retries until success. No local fallback data (server is source of truth).
+        /// Shows Retry button if all automatic attempts fail.
         /// </summary>
         private IEnumerator FetchGameConfigFlow()
         {
-            UpdateLoadingUI("Loading game config...", 0.50f);
-
             if (GameManager.Instance?.GameConfigService == null)
             {
-                Debug.LogWarning("[LoadingManager] GameConfigService not available — skipping.");
+                Debug.LogWarning("[LoadingManager] GameConfigService not available — skipping config fetch.");
                 yield break;
             }
 
-            bool completed = false;
-            GameManager.Instance.GameConfigService
-                .FetchAsync()
-                .ContinueWith(_ => completed = true);
+            const int   maxAutoRetries  = 3;
+            const float retryDelaySec   = 2f;
+            const float fetchTimeoutSec = 8f;
 
-            float waited = 0f;
-            while (!completed && waited < 8f)
+            while (true)
             {
-                waited += UnityEngine.Time.deltaTime;
-                yield return null;
-            }
+                // Auto-retry loop before surfacing the Retry button to the user
+                for (int attempt = 1; attempt <= maxAutoRetries; attempt++)
+                {
+                    UpdateLoadingUI($"Loading game config... ({attempt}/{maxAutoRetries})", 0.50f);
+                    ShowRetryButton(false);
 
-            if (!completed)
-                Debug.LogWarning("[LoadingManager] GameConfigService.FetchAsync() timed out — using defaults.");
+                    bool completed = false;
+                    bool success   = false;
+                    GameManager.Instance.GameConfigService
+                        .FetchAsync()
+                        .ContinueWith(t => { completed = true; success = t.Result; });
+
+                    float waited = 0f;
+                    while (!completed && waited < fetchTimeoutSec)
+                    {
+                        waited += UnityEngine.Time.deltaTime;
+                        yield return null;
+                    }
+
+                    if (completed && success)
+                    {
+                        ShowRetryButton(false);
+                        Debug.Log("[LoadingManager] GameConfigService.FetchAsync() succeeded.");
+                        yield break;
+                    }
+
+                    if (!completed)
+                        Debug.LogWarning($"[LoadingManager] GameConfig fetch attempt {attempt} timed out after {fetchTimeoutSec}s.");
+                    else
+                        Debug.LogWarning($"[LoadingManager] GameConfig fetch attempt {attempt} failed.");
+
+                    if (attempt < maxAutoRetries)
+                        yield return new WaitForSeconds(retryDelaySec);
+                }
+
+                // All auto-retries exhausted — surface the Retry button and wait for user
+                UpdateLoadingUI("⚠️ Failed to load game config. Check connection.", 0.50f);
+                ShowRetryButton(true);
+                Debug.LogError("[LoadingManager] GameConfig fetch failed after all retries — waiting for user retry.");
+
+                _retryRequested = false;
+                while (!_retryRequested)
+                    yield return null;
+
+                // User clicked Retry — loop back and try again
+                _retryRequested = false;
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -548,15 +553,13 @@ namespace NightHunt.Core
                     Debug.LogWarning($"[LoadingManager] ⚠️ Health path corrected: {_healthPath} → {healthPath}");
                 }
 
-                string url = _backendConfig != null
-                    ? $"{_backendConfig.GetApiBaseUrl()}{healthPath}"
-                    : "https://localhost:8443" + healthPath; // Fallback: HTTPS localhost (self-signed cert)
+                string url = $"{BackendConfig.GetApiBaseUrl()}{healthPath}";
 
                 using var req = UnityWebRequest.Get(url);
                 req.timeout = Mathf.Max(1, (int)internetTimeout);
 
                 // Attach AcceptAllCertificatesHandler if the server uses a self-signed cert (mkcert + IP)
-                if (_backendConfig != null && _backendConfig.ShouldBypassSslCertificateValidation())
+                if (BackendConfig.ShouldBypassSslCertificateValidation())
                 {
                     req.certificateHandler = new NightHunt.Config.AcceptAllCertificatesHandler();
                 }
@@ -565,15 +568,7 @@ namespace NightHunt.Core
                 Debug.Log($"[LoadingManager] 🔍 Health Check Request:");
                 Debug.Log($"  URL: {url}");
                 Debug.Log($"  Timeout: {req.timeout}s");
-                // HTTPS luon duoc su dung — khong co fallback HTTP
-                if (_backendConfig != null)
-                {
-                    Debug.Log($"  Host: {_backendConfig.apiHost} (HTTPS)");
-                }
-                else
-                {
-                    Debug.Log($"  Config: NULL (using fallback HTTPS localhost)");
-                }
+                Debug.Log($"  Host: {BackendConfig.ApiHost} (HTTPS)");
 
                 yield return req.SendWebRequest();
 
@@ -674,8 +669,8 @@ namespace NightHunt.Core
                         }
                         else if (isCnMismatch)
                         {
-                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (CN mismatch) — cert CN does not match host '{_backendConfig?.apiHost}'.");
-                            Debug.LogError($"  Fix: check 'prodApiHost' in BackendConfig matches the CN on the server cert.");
+                            Debug.LogError($"[LoadingManager] SSL CERT ERROR (CN mismatch) — cert CN does not match host '{BackendConfig.ApiHost}'.");
+                            Debug.LogError($"  Fix: check ProdApiHost in BackendConfig.cs matches the CN on the server cert.");
                         }
                         else
                         {
@@ -684,7 +679,7 @@ namespace NightHunt.Core
                     }
                     else
                     {
-                        Debug.LogError($"[LoadingManager] CONNECTION ERROR — cannot reach {_backendConfig?.apiHost ?? "localhost:8443"}.");
+                        Debug.LogError($"[LoadingManager] CONNECTION ERROR — cannot reach {BackendConfig.ApiHost}.");
                         Debug.LogError($"  1. Proxy/server not running.  2. Firewall blocking port.  3. SSL cert missing.");
                     }
                 }

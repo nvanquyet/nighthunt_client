@@ -1,4 +1,5 @@
 using System;
+using NightHunt.Config;
 using NightHunt.Networking;
 using NightHunt.Services.Auth;
 using NightHunt.Services.Backend;
@@ -34,9 +35,6 @@ namespace NightHunt.Core
         [SerializeField] private GameWebSocketService gameWebSocketService;
         [SerializeField] private ProfileManager       profileManager;
 
-        [Header("Config")]
-        [SerializeField] private Config.InstanceConfig instanceConfig;
-
         [Header("State")]
         [SerializeField] private SessionState sessionState;
         [SerializeField] private RoomState    roomState;
@@ -52,7 +50,6 @@ namespace NightHunt.Core
         public ProfileManager       ProfileManager => profileManager;
         public SessionState         SessionState   => sessionState;
         public RoomState            RoomState      => roomState;
-        public Config.InstanceConfig InstanceConfig => instanceConfig;
 
         // ── App lifecycle events ──────────────────────────────────────────
         public event Action OnAppFocusLost;
@@ -77,10 +74,7 @@ namespace NightHunt.Core
 
         private void ConfigureRunInBackground()
         {
-            bool runInBg = instanceConfig != null
-                ? instanceConfig.ShouldRunInBackground()
-                : Application.isEditor;
-
+            bool runInBg = InstanceConfig.ShouldRunInBackground();
             Application.runInBackground = runInBg;
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                 Debug.Log($"[GameManager] runInBackground = {runInBg}");
@@ -234,7 +228,7 @@ namespace NightHunt.Core
 
         private async void HandleApplicationResumed()
         {
-            bool shouldRefresh = instanceConfig == null || instanceConfig.ShouldRefreshOnFocusReturn();
+            bool shouldRefresh = InstanceConfig.ShouldRefreshOnFocusReturn();
 
             if (!shouldRefresh)
             {

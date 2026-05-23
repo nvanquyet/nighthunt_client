@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using NightHunt.Common;
+using NightHunt.Config;
 using NightHunt.Core;
 using NightHunt.Services.Backend;
 using NightHunt.Data.DTOs;
@@ -417,37 +418,15 @@ namespace NightHunt.Services.Game
 
         private string BuildWebSocketUrl()
         {
-            // Priority: override -> BackendConfig -> fallback
-            string baseUrl = null;
+            // Use BackendConfig static values directly — no SO instance needed
+            if (!string.IsNullOrEmpty(BackendConfig.OverrideWsBaseUrl))
+                return BackendConfig.OverrideWsBaseUrl.TrimEnd('/');
 
-            if (GameManager.Instance != null && GameManager.Instance.BackendClient is BackendHttpClient bhc && bhc.Config != null)
-            {
-                var cfg = bhc.Config;
-                if (!string.IsNullOrEmpty(cfg.overrideWsBaseUrl))
-                {
-                    baseUrl = cfg.overrideWsBaseUrl.TrimEnd('/');
-                }
-                else
-                {
-                    bool useSecure = cfg.ShouldUseSecureConnection();
+            string host   = BackendConfig.ApiHost.TrimEnd('/');
+            string scheme = BackendConfig.ShouldUseSecureConnection() ? "wss://" : "ws://";
+            string baseUrl = scheme + host;
 
-                    string host = cfg.apiHost.TrimEnd('/');
-                    string scheme = useSecure ? "wss://" : "ws://";
-                    baseUrl = scheme + host;
-
-                    Debug.Log($"[GameWebSocketService] Building WebSocket URL: {scheme}{host} (Environment: {cfg.environment}, Secure: {useSecure})");
-                }
-            }
-
-            if (string.IsNullOrEmpty(baseUrl))
-            {
-                // Fallback should stay secure by default. Production builds must not silently route to
-                // a dev-only insecure WebSocket endpoint.
-                baseUrl = "wss://localhost:8443";
-                Debug.LogWarning("[GameWebSocketService] Using fallback WebSocket URL: wss://localhost:8443");
-            }
-
-            baseUrl = baseUrl.TrimEnd('/');
+            Debug.Log($"[GameWebSocketService] Building WebSocket URL: {baseUrl}");
             return baseUrl;
         }
 
@@ -471,20 +450,9 @@ namespace NightHunt.Services.Game
         private string ResolveWsPath()
         {
             if (!string.IsNullOrEmpty(wsPathOverride))
-            {
                 return wsPathOverride;
-            }
 
-            if (GameManager.Instance != null && GameManager.Instance.BackendClient is BackendHttpClient bhc && bhc.Config != null)
-            {
-                var cfg = bhc.Config;
-                if (!string.IsNullOrEmpty(cfg.wsPath))
-                {
-                    return cfg.wsPath;
-                }
-            }
-
-            return "/api/ws/game"; // context-path /api + /ws/game
+            return BackendConfig.WsPath;
         }
 
         private static void SetRoomStateIfRelevant(RoomResponse room, string source)

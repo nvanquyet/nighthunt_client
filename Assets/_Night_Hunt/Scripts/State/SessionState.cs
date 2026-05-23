@@ -54,45 +54,8 @@ namespace NightHunt.State
         public event Action OnUserLoggedOut;
         
         // Instance-specific keys for PlayerPrefs (to support ParrelSync/multi-instance)
-        // Uses InstanceConfig to determine if multi-instance support is enabled
-        private InstanceConfig ResolveConfig()
-        {
-            if (GameManager.Instance != null && GameManager.Instance.InstanceConfig != null)
-            {
-                return GameManager.Instance.InstanceConfig;
-            }
-            return null;
-        }
-
-        private string GetInstanceKey(string baseKey)
-        {
-            var cfg = ResolveConfig();
-            if (cfg != null)
-            {
-                return cfg.GetInstanceKey(baseKey);
-            }
-            // Fallback: Auto-detect (enable in Editor, disable in Build)
-            if (Application.isEditor)
-            {
-                return InstanceHelper.GetInstanceKey(baseKey);
-            }
-            return baseKey; // Standard keys in Build
-        }
-        
-        private int GetInstanceId()
-        {
-            var cfg = ResolveConfig();
-            if (cfg != null)
-            {
-                return cfg.GetInstanceId();
-            }
-            // Fallback: Auto-detect
-            if (Application.isEditor)
-            {
-                return InstanceHelper.GetInstanceId();
-            }
-            return 0; // Always 0 in Build
-        }
+        private string GetInstanceKey(string baseKey) => InstanceConfig.GetInstanceKey(baseKey);
+        private int    GetInstanceId()                => InstanceConfig.GetInstanceId();
 
         protected override void OnSingletonAwake()
         {

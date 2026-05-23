@@ -2,115 +2,59 @@ using UnityEngine;
 
 namespace NightHunt.Config
 {
-    [CreateAssetMenu(fileName = "BackendConfig", menuName = "NightHunt/Config/Backend Config")]
-    public class BackendConfig : ScriptableObject
+    // ══════════════════════════════════════════════════════════════════════════
+    // BackendConfig — static class. No .asset file, no ScriptableObject.
+    // Connection endpoints baked at compile-time.
+    // To switch between dev/prod: change ForceProductionInEditor below.
+    // ══════════════════════════════════════════════════════════════════════════
+
+    public static class BackendConfig
     {
-        [Header("Environment")]
-        [Tooltip("Chỉ để display / debug — URL được quyết định bởi build target")]
-        public EnvironmentProfile environment = EnvironmentProfile.Development;
+        // ── Hosts ─────────────────────────────────────────────────────────────
+        private const string DevApiHost  = "localhost:8443";
+        private const string ProdApiHost = "vawnwuyest.me";
 
-        public enum EnvironmentProfile
-        {
-            Development,
-            Staging,
-            Production
-        }
+        // ── Toggle flags — change locally if needed; do NOT commit as true ───
+        // Set ForceProductionInEditor = true to connect to prod from Editor.
+        private const bool ForceProductionInEditor   = false;
+        // Set ForceProductionOnDevBuild = true for Dev Builds pointing to prod.
+        private const bool ForceProductionOnDevBuild = false;
 
-        // ── Dev settings (Editor / Development Build) ────────────────────────
-        [Header("Dev Settings (Editor / Development Build)")]
-        [Tooltip("Host khi chạy Editor hoặc Development build — localhost với mkcert cert")]
-        public string devApiHost = "localhost:8443";
+        // Allow self-signed cert on cloud dev/staging with IP-direct (no domain).
+        // Do NOT enable for Production. Do NOT commit as true.
+        public const bool AllowSelfSignedCert = false;
 
-#if UNITY_EDITOR
-        [Header("Editor Cloud Testing")]
-        [Tooltip("Bật để connect thẳng tới cloud từ Unity Editor (dùng prodApiHost). " +
-                 "Tắt để dùng localhost mkcert bình thường. KHÔNG commit flag này lên git ở trạng thái true.")]
-        public bool forceProductionInEditor = false;
-#endif
+        // ── WS / HTTP ─────────────────────────────────────────────────────────
+        public const string WsPath              = "/api/ws/game";
+        public const string OverrideWsBaseUrl   = ""; // Leave empty to use ApiHost
+        public const int    RequestTimeoutSeconds = 10;
 
-        [Header("Development Build Cloud Testing")]
-        [Tooltip("Bật khi build Development Build mà muốn connect tới cloud thật (dùng prodApiHost instead of localhost). " +
-                 "KHÔNG bật khi test local. KHÔNG commit ở trạng thái true.")]
-        public bool forceProductionOnDevBuild = false;
-
-        // ── Production settings ──────────────────────────────────────────────
-        [Header("Production Settings")]
-        [Tooltip("Host khi build Release — domain thật với Let's Encrypt cert")]
-        public string prodApiHost = "vawnwuyest.me";
-
-        // ── SSL / Security ───────────────────────────────────────────────────
-        [Header("SSL / Security")]
-        [Tooltip("Allows self-signed cert (mkcert) trên cloud dev/staging server.\n" +
-                 "Uses khi server dùng IP trực tiếp (vd: 20.2.235.140) not yet available domain + Let's Encrypt.\n" +
-                 "KHÔNG bật cho Production release. KHÔNG commit ở trạng thái true.")]
-        public bool allowSelfSignedCert = false;
-
-        // ── Common Settings ──────────────────────────────────────────────────
-        [Header("Common")]
-        [Tooltip("WS endpoint path — phải khớp với server config")]
-        public string wsPath = "/api/ws/game";
-
-        [Tooltip("(Optional) Override toàn bộ WebSocket base URL, ví dụ: wss://custom-host:9000. Để trống để dùng value tự động từ apiHost.")]
-        public string overrideWsBaseUrl = "";
-
-        [Tooltip("Timeout HTTP request (giây)")]
-        public int requestTimeoutSeconds = 10;
-
-        // ─────────────────────────────────────────────────────────────────────
-        // Runtime resolved properties
-        // ─────────────────────────────────────────────────────────────────────
-
+        // ── Resolved at runtime ───────────────────────────────────────────────
         /// <summary>
-        /// API host được resolve tự động theo build target:
-        ///   UNITY_EDITOR              → devApiHost  (trừ khi forceProductionInEditor = true)
-        ///   DEVELOPMENT_BUILD desktop → devApiHost  (trừ khi forceProductionOnDevBuild = true)
-        ///   Release Build             → prodApiHost (api.nighthunt.com Let's Encrypt)
-        /// KHÔNG cần đổi asset khi build. Tự động.
+        /// API host resolved by build target:
+        ///   UNITY_EDITOR              → DevApiHost  (unless ForceProductionInEditor)
+        ///   DEVELOPMENT_BUILD         → DevApiHost  (unless ForceProductionOnDevBuild)
+        ///   Release Build             → ProdApiHost
         /// </summary>
-        public string apiHost
+        public static string ApiHost
         {
             get
             {
 #if UNITY_EDITOR
-                return forceProductionInEditor ? prodApiHost : devApiHost;
+                return ForceProductionInEditor ? ProdApiHost : DevApiHost;
 #elif DEVELOPMENT_BUILD
-                return forceProductionOnDevBuild ? prodApiHost : devApiHost;
+                return ForceProductionOnDevBuild ? ProdApiHost : DevApiHost;
 #else
-                return prodApiHost;
+                return ProdApiHost;
 #endif
             }
         }
 
-        // Legacy compat — một số code cũ có thể đọc useHttps trực tiếp
-        public bool useHttps => true;
+        public static string GetApiBaseUrl()                        => $"https://{ApiHost}";
+        public static bool   ShouldUseSecureConnection()            => true;
+        public static bool   ShouldBypassSslCertificateValidation() => AllowSelfSignedCert;
 
-        /// <summary>
-        /// Full API base URL với protocol.
-        /// Luôn HTTPS — Dev dùng mkcert cert, Production dùng Let's Encrypt.
-        /// </summary>
-        public string GetApiBaseUrl() => $"https://{apiHost}";
-
-        /// <summary>Luôn dùng secure connection (HTTPS/WSS).</summary>
-        public bool ShouldUseSecureConnection() => true;
-
-        /// <summary>
-        /// Không bao giờ bypass SSL validation.
-        /// Dev:  mkcert -install đảm bảo cert được trust bởi Windows/macOS
-        /// Prod: Let's Encrypt cert được trust bởi tất cả OS
-        /// Cloud dev/staging với IP trực tiếp: bật allowSelfSignedCert
-        /// </summary>
-        public bool ShouldBypassSslCertificateValidation() => allowSelfSignedCert;
-
-#if UNITY_EDITOR
-        [ContextMenu("Log Current Config")]
-        private void LogCurrentConfig()
-        {
-            Debug.Log($"[BackendConfig] Environment: EDITOR");
-            Debug.Log($"[BackendConfig] Resolved apiHost: {apiHost}");
-            Debug.Log($"[BackendConfig] Resolved URL: {GetApiBaseUrl()}");
-            Debug.Log($"[BackendConfig] devApiHost: {devApiHost}");
-            Debug.Log($"[BackendConfig] prodApiHost: {prodApiHost}");
-        }
-#endif
+        // Legacy compat
+        public static bool useHttps => true;
     }
 }
