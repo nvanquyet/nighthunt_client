@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using TMPro;
 using NightHunt.Utilities;
@@ -10,6 +11,33 @@ namespace NightHunt.UI
     public class KillFeedItem : MonoBehaviour
     {
         [SerializeField] private TextMeshProUGUI _text;
+
+        /// <summary>
+        /// Fade out then destroy this item after <paramref name="delay"/> seconds.
+        /// Runs on this GameObject so it works regardless of parent panel active state.
+        /// </summary>
+        public void FadeOutAndDestroy(float delay, float fadeTime = 0.5f)
+        {
+            StartCoroutine(FadeCoroutine(delay, fadeTime));
+        }
+
+        private IEnumerator FadeCoroutine(float delay, float fadeTime)
+        {
+            yield return new WaitForSeconds(delay);
+
+            CanvasGroup cg = GetComponent<CanvasGroup>();
+            if (cg == null) cg = gameObject.AddComponent<CanvasGroup>();
+
+            float elapsed = 0f;
+            while (elapsed < fadeTime)
+            {
+                elapsed += Time.deltaTime;
+                cg.alpha = 1f - (elapsed / fadeTime);
+                yield return null;
+            }
+
+            Destroy(gameObject);
+        }
 
         public void Initialize(string actorName, string targetName, string weaponName, KillFeedType type, Color color)
         {

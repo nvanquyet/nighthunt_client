@@ -64,6 +64,10 @@ namespace NightHunt.UI
             if (killFeedItemPrefab == null || killFeedParent == null)
                 return;
 
+            // Ensure this panel is visible — kill events fire even while settings/overlay is open.
+            if (!gameObject.activeInHierarchy)
+                gameObject.SetActive(true);
+
             GameObject itemObj = Instantiate(killFeedItemPrefab, killFeedParent);
             KillFeedItem item = ComponentResolver.Find<KillFeedItem>(itemObj)
                 .OnSelf()
@@ -92,8 +96,8 @@ namespace NightHunt.UI
             //Activate the item gameobject after setup to avoid showing uninitialized values
             item.gameObject.SetActive(true);
 
-            // Auto remove after lifetime
-            StartCoroutine(RemoveItemAfterDelay(item, itemLifetime));
+            // Auto remove after lifetime — runs on the item itself so it survives panel hide/show.
+            item.FadeOutAndDestroy(itemLifetime);
         }
 
         /// <summary>
@@ -114,52 +118,7 @@ namespace NightHunt.UI
             }
         }
 
-        /// <summary>
-        /// Remove item after delay
-        /// </summary>
-        private IEnumerator RemoveItemAfterDelay(KillFeedItem item, float delay)
-        {
-            yield return new WaitForSeconds(delay);
-
-            if (item != null)
-            {
-                // Fade out
-                StartCoroutine(FadeOutItem(item));
-            }
-        }
-
-        /// <summary>
-        /// Fade out item
-        /// </summary>
-        private IEnumerator FadeOutItem(KillFeedItem item)
-        {
-            if (item == null) yield break;
-
-            CanvasGroup canvasGroup = ComponentResolver.Find<CanvasGroup>(item)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] CanvasGroup not found")
-                .Resolve();
-            if (canvasGroup == null)
-            {
-                canvasGroup = item.gameObject.AddComponent<CanvasGroup>();
-            }
-
-            float fadeTime = 0.5f;
-            float elapsed = 0f;
-
-            while (elapsed < fadeTime)
-            {
-                elapsed += Time.deltaTime;
-                canvasGroup.alpha = 1f - (elapsed / fadeTime);
-                yield return null;
-            }
-
-            if (item != null)
-            {
-                Destroy(item.gameObject);
-            }
-        }
+        // Fade-out and item lifetime are now handled by KillFeedItem.FadeOutAndDestroy().
 
 #if UNITY_EDITOR
         // ── Editor — Context Menu: Create KillFeedItem Template Prefab ────────
