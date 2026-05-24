@@ -64,6 +64,12 @@ namespace NightHunt.Core
             Debug.Log($"[SceneLoader] LoadGame (async) → {mapId} ({sceneName})");
             _returnHomeAfterPendingLoad = false;
             _pendingSceneOp = SceneManager.LoadSceneAsync(sceneName);
+            if (_pendingSceneOp == null)
+            {
+                Debug.LogError($"[SceneLoader] LoadGame FAILED — scene '{sceneName}' (SceneId.{mapId}) is not in the active build profile. " +
+                               "Add it via File → Build Profiles, then rebuild.");
+                return;
+            }
             _pendingSceneOp.allowSceneActivation = false;
         }
 

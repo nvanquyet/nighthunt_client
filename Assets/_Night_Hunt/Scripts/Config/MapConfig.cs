@@ -88,7 +88,7 @@ namespace NightHunt.Config
                     description           = dto.description,
                     icon                  = null,
                     sceneId               = sceneId,
-                    supportedModes        = dto.supportedModes        ?? Array.Empty<string>(),
+                    supportedModes        = NormalizeModes(dto.supportedModes),
                     supportedPlayerCounts = dto.supportedPlayerCounts ?? Array.Empty<int>(),
                     isLocked              = dto.isLocked
                 };
@@ -135,6 +135,19 @@ namespace NightHunt.Config
             }
             entry = default;
             return false;
+        }
+
+        /// <summary>
+        /// Trims whitespace from each mode key coming from the server.
+        /// Handles cases where the backend accidentally stores " 1v1" or "1v1 ".
+        /// </summary>
+        private static string[] NormalizeModes(string[] raw)
+        {
+            if (raw == null || raw.Length == 0) return Array.Empty<string>();
+            var result = new string[raw.Length];
+            for (int i = 0; i < raw.Length; i++)
+                result[i] = raw[i]?.Trim() ?? string.Empty;
+            return result;
         }
 
         private static bool SupportsMode(in MapEntry entry, string modeKey)
