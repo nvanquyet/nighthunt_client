@@ -79,16 +79,16 @@ namespace NightHunt.Data
         ///
         ///  Phase  start  end   wait  shrink  dmg/s   notes
         ///  ─────  ─────  ───   ────  ──────  ─────   ─────
-        ///  BASE0   100   50    60s    60s      8      midgame
-        ///  BASE1    50   25    45s    45s     15      bonus zone (score ×2)
+        ///  BASE0   100   50    60s    90s      8      midgame — bonus zone (score ×2)
+        ///  BASE1    50   25    45s    60s     15
         ///  BASE2    25   10    30s    30s     25      endgame / final zone
         /// </summary>
         public static List<SafeZonePhaseConfig> CoreInnerPhases(int startIndex = 0)
         {
             return new List<SafeZonePhaseConfig>
             {
-                new SafeZonePhaseConfig { zoneIndex = startIndex,     startRadius = 100f, endRadius = 50f, waitBeforeShrink = 60f, shrinkDuration = 60f, damagePerSecond = 8f  },
-                new SafeZonePhaseConfig { zoneIndex = startIndex + 1, startRadius = 50f,  endRadius = 25f, waitBeforeShrink = 45f, shrinkDuration = 45f, damagePerSecond = 15f, isScoreBonusZone = true, zoneBonusMultiplier = 2f },
+                new SafeZonePhaseConfig { zoneIndex = startIndex,     startRadius = 100f, endRadius = 50f, waitBeforeShrink = 60f, shrinkDuration = 90f, damagePerSecond = 8f,  isScoreBonusZone = true, zoneBonusMultiplier = 2f },
+                new SafeZonePhaseConfig { zoneIndex = startIndex + 1, startRadius = 50f,  endRadius = 25f, waitBeforeShrink = 45f, shrinkDuration = 60f, damagePerSecond = 15f },
                 new SafeZonePhaseConfig { zoneIndex = startIndex + 2, startRadius = 25f,  endRadius = 10f, waitBeforeShrink = 30f, shrinkDuration = 30f, damagePerSecond = 25f, minRadiusOverride = 10f },
             };
         }
@@ -99,16 +99,16 @@ namespace NightHunt.Data
         ///
         ///  Phase  start  end   wait   shrink  dmg/s   notes
         ///  ─────  ─────  ───   ────   ──────  ─────
-        ///    0    400    200   120s   90s      3       early game
-        ///    1    200    100    90s   75s      5
+        ///    0    400    200   120s   180s     0       early game — no damage
+        ///    1    200    100    90s   120s     3
         ///   [2-4] inner phases (CoreInnerPhases)
         /// </summary>
         public static SafeZoneMatchConfig Standard()
         {
             var phases = new List<SafeZonePhaseConfig>
             {
-                new SafeZonePhaseConfig { zoneIndex = 0, startRadius = 400f, endRadius = 200f, waitBeforeShrink = 120f, shrinkDuration = 90f, damagePerSecond = 3f },
-                new SafeZonePhaseConfig { zoneIndex = 1, startRadius = 200f, endRadius = 100f, waitBeforeShrink =  90f, shrinkDuration = 75f, damagePerSecond = 5f },
+                new SafeZonePhaseConfig { zoneIndex = 0, startRadius = 400f, endRadius = 200f, waitBeforeShrink = 120f, shrinkDuration = 180f, damagePerSecond = 0f },
+                new SafeZonePhaseConfig { zoneIndex = 1, startRadius = 200f, endRadius = 100f, waitBeforeShrink =  90f, shrinkDuration = 120f, damagePerSecond = 3f },
             };
             phases.AddRange(CoreInnerPhases(startIndex: 2));
             return new SafeZoneMatchConfig
@@ -135,8 +135,8 @@ namespace NightHunt.Data
         ///
         ///  Phase  start  end   wait   shrink  dmg/s   notes
         ///  ─────  ─────  ───   ────   ──────  ─────
-        ///    0    100    50    45s    45s      8
-        ///    1     50    25    30s    30s     15       bonus zone
+        ///    0    100    50    45s    45s      8       bonus zone (score ×2)
+        ///    1     50    25    30s    30s     15
         ///    2     25    10    20s    20s     25       endgame
         /// </summary>
         public static SafeZoneMatchConfig Small1v1()
@@ -156,8 +156,8 @@ namespace NightHunt.Data
                 killScoreStealPercent     = 0.15f,
                 phases = new List<SafeZonePhaseConfig>
                 {
-                    new SafeZonePhaseConfig { zoneIndex = 0, startRadius = 100f, endRadius = 50f, waitBeforeShrink = 45f, shrinkDuration = 45f, damagePerSecond = 8f  },
-                    new SafeZonePhaseConfig { zoneIndex = 1, startRadius = 50f,  endRadius = 25f, waitBeforeShrink = 30f, shrinkDuration = 30f, damagePerSecond = 15f, isScoreBonusZone = true, zoneBonusMultiplier = 2f },
+                    new SafeZonePhaseConfig { zoneIndex = 0, startRadius = 100f, endRadius = 50f, waitBeforeShrink = 45f, shrinkDuration = 45f, damagePerSecond = 8f, isScoreBonusZone = true, zoneBonusMultiplier = 2f },
+                    new SafeZonePhaseConfig { zoneIndex = 1, startRadius = 50f,  endRadius = 25f, waitBeforeShrink = 30f, shrinkDuration = 30f, damagePerSecond = 15f },
                     new SafeZonePhaseConfig { zoneIndex = 2, startRadius = 25f,  endRadius = 10f, waitBeforeShrink = 20f, shrinkDuration = 20f, damagePerSecond = 25f, minRadiusOverride = 10f },
                 },
             };
@@ -166,7 +166,7 @@ namespace NightHunt.Data
         /// <summary>
         /// Returns a preset SafeZoneMatchConfig based on mapId.
         /// Used as a client-side fallback when the backend is unreachable.
-        /// Mirrors the configs seeded in V30 migration.
+        /// Mirrors the configs seeded in V31 migration.
         /// </summary>
         public static SafeZoneMatchConfig ForMap(string mapId)
         {

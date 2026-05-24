@@ -13,7 +13,7 @@ namespace NightHunt.Gameplay.Input.Core
     /// SETUP: Place on a persistent GameObject in 00_DS_Boot or 01_Home (DontDestroyOnLoad).
     /// GameHUD and other HUDs subscribe to OnPlatformChanged to show/hide platform-specific UI.
     /// </summary>
-    public sealed class PlatformInputDetector : SingletonPersistent<PlatformInputDetector>
+    public sealed class PlatformInputDetector : Singleton<PlatformInputDetector>
     {
         // ── Types ──────────────────────────────────────────────────────────────
 

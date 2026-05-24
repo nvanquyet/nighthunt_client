@@ -83,7 +83,7 @@ namespace NightHunt.Gameplay.Respawn
             var playersToRespawn = new List<NetworkPlayer>();
             var playersFailed    = new List<NetworkPlayer>();
 
-            foreach (var kvp in respawnTimers)
+            foreach (var kvp in new List<KeyValuePair<NetworkPlayer, float>>(respawnTimers))
             {
                 var player = kvp.Key;
                 float timer = kvp.Value;

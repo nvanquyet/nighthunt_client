@@ -11,19 +11,22 @@ namespace NightHunt.Gameplay.Zone
     ///
     /// ── Prefab/Scene structure ──────────────────────────────────────────────
     ///
-    ///   SafeZoneVisual  (this component)   ← root, auto-moves to zone center
-    ///     ├─ ZoneWall   (child GO)
-    ///     │    MeshFilter + MeshRenderer  — Unity Cylinder primitive
-    ///     │    Material: URP Transparent, Cull Off, semi-transparent blue
+    ///   SafeZoneVisual  (this component)   ← root, stays at ORIGIN — does NOT move
+    ///     ├─ ZoneWall   (child GO)         ← world-position moves to current zone center
+    ///     │    MeshFilter  → Zone.FBX from Cool Battle Royale Zone package
+    ///     │    MeshRenderer → CurrentSafeZone.mat  (package material)
     ///     │    Scale X/Z = radius*2  (world diameter)
     ///     │    Scale Y   = wallHeight*0.5  (world height — FIXED, only XZ shrinks)
-    ///     └─ MinimapRing  (child GO)
-    ///          SpriteRenderer — ring/donut sprite (white or zone color)
-    ///          localRotation = Euler(90,0,0)  — face up for ortho top-down camera
-    ///          Layer = "Minimap"
-    ///          Scale X/Y = radius*2  (localY maps to world Z after 90° rotation)
+    ///     │    └─ ZoneWallOutline  (child GO)
+    ///     │         MeshFilter  → same Zone.FBX
+    ///     │         MeshRenderer → CurrentSafeZone Outline.mat  (package material)
+    ///     └─ NextZoneRing  (child GO)      ← world-position moves to next zone target center
+    ///          MeshFilter  → Zone.FBX
+    ///          MeshRenderer → NextSafeZone Outline.mat  (package material, outline only)
+    ///          Matches package's NextSafeZoneVisualizer pattern (no main body, outline only).
     ///
     /// ── Right-click component → "Build Children" to auto-create the hierarchy.
+    ///    Requires Cool Battle Royale Zone package to be imported.
     ///
     /// ── Outside-zone HUD overlay ───────────────────────────────────────────
     ///   Drag any screen-space GO (vignette Image, warning panel) into
@@ -46,16 +49,12 @@ namespace NightHunt.Gameplay.Zone
         [Tooltip("Material color when zone is actively closing — warning pulse.")]
         [SerializeField] private Color _shrinkingColor = new Color(1f, 0.2f, 0.1f, 0.45f);
 
-        // ── Minimap ring ──────────────────────────────────────────────────────
-        [Header("Minimap Ring")]
-        [Tooltip("Child GO: SpriteRenderer, layer = 'Minimap', localRotation = Euler(90,0,0).")]
-        [SerializeField] private Transform _minimapRing;
-        [Tooltip("Radius of the ring sprite in world units at scale (1,1,1) — same as RangeIndicator._baseRadius.\n" +
-                 "Determines: scale = currentRadius / baseRadius.\n" +
-                 "256px sprite @ PPU=256 → baseRadius=0.5  (diameter=1 world unit at scale 1)\n" +
-                 "256px sprite @ PPU=128 → baseRadius=1.0\n" +
-                 "Match this to whatever sprite you assign in the Inspector.")]
-        [SerializeField] [Min(0.01f)] private float _minimapRingBaseRadius = 0.5f;
+        // ── Next zone ring (package pattern: NextSafeZoneVisualizer) ──────────
+        [Header("Next Zone Ring")]
+        [Tooltip("Child GO: Zone.FBX outline showing where the zone will shrink TO. Shown once server computes next target.")]
+        [SerializeField] private Transform    _nextZoneRing;
+        [Tooltip("MeshRenderer on NextZoneRing — uses package NextSafeZone Outline.mat.")]
+        [SerializeField] private MeshRenderer _nextZoneRenderer;
 
         // ── Outside-zone HUD ──────────────────────────────────────────────────
         [Header("Outside Zone HUD")]
@@ -78,14 +77,15 @@ namespace NightHunt.Gameplay.Zone
         private bool    _outsideZone;
         private float   _nextCheckTime;
 
+        // Next zone target (from package's NextSafeZoneVisualizer pattern)
+        private float   _nextTargetRadius;   // 0 = not yet computed / cleared
+        private Vector3 _nextTargetCenter;
+
         // ─────────────────────────────────────────────────────────────────────
         #region Unity lifecycle
 
         private void Awake()
         {
-            if (_minimapRing != null && _minimapRing.gameObject.layer != LayerMask.NameToLayer("Minimap"))
-                Debug.LogWarning($"[SafeZoneWorldVisual] MinimapRing '{_minimapRing.name}' is NOT on layer 'Minimap' — won't show on minimap camera.");
-
             SetWallVisible(false);
         }
 
@@ -93,12 +93,16 @@ namespace NightHunt.Gameplay.Zone
         {
             SafeZoneHUDProxy.OnRadiusChanged      += HandleRadiusChanged;
             SafeZoneHUDProxy.OnShrinkStateChanged += HandleShrinkStateChanged;
+            SafeZoneHUDProxy.OnNextZoneChanged    += HandleNextZoneChanged;
+            SafeZoneHUDProxy.OnZoneIndexChanged   += HandleZoneIndexChanged;
         }
 
         private void OnDisable()
         {
             SafeZoneHUDProxy.OnRadiusChanged      -= HandleRadiusChanged;
             SafeZoneHUDProxy.OnShrinkStateChanged -= HandleShrinkStateChanged;
+            SafeZoneHUDProxy.OnNextZoneChanged    -= HandleNextZoneChanged;
+            SafeZoneHUDProxy.OnZoneIndexChanged   -= HandleZoneIndexChanged;
             SetOutsideZoneOverlay(false);
         }
 
@@ -150,10 +154,29 @@ namespace NightHunt.Gameplay.Zone
 
         private void HandleShrinkStateChanged(bool shrinking)
         {
-            if (_wallRenderer == null) return;
-
             // Tint the wall material — requires the material to use _BaseColor property (URP Lit/Unlit)
-            _wallRenderer.material.color = shrinking ? _shrinkingColor : _normalColor;
+            if (_wallRenderer != null)
+                _wallRenderer.material.color = shrinking ? _shrinkingColor : _normalColor;
+            // NextZoneRing stays visible during shrink — players need to see where to run.
+            // Ring is hidden when zone index advances (HandleZoneIndexChanged) or final zone.
+        }
+
+        // Inspired by package's NextSafeZoneVisualizer: show where zone will shrink TO.
+        // radius=0 means no next zone yet (server hasn't computed it).
+        private void HandleNextZoneChanged(float radius, Vector3 center)
+        {
+            _nextTargetRadius = radius;
+            _nextTargetCenter = center;
+            bool hasNext = radius > 0.1f;
+            SetNextZoneVisible(hasNext);
+            if (hasNext) ApplyNextZoneTransforms();
+        }
+
+        // Zone advanced → next ring cleared (current zone IS the new zone, no pending target)
+        private void HandleZoneIndexChanged(int index)
+        {
+            _nextTargetRadius = 0f;
+            SetNextZoneVisible(false);
         }
 
         #endregion
@@ -163,34 +186,39 @@ namespace NightHunt.Gameplay.Zone
 
         private void ApplyTransforms()
         {
-            // Move root to new zone center (XZ only — Y stays at scene ground level)
-            transform.position = new Vector3(_currentCenter.x, transform.position.y, _currentCenter.z);
+            if (_zoneWall == null) return;
 
-            // ── Zone wall (Unity Cylinder) ───────────────────────────────────
-            // Cylinder at scale(1,1,1): diameter = 1m on XZ, height = 2m on Y
-            //   scale.x/z = radius * 2   → world diameter = radius*2
-            //   scale.y   = height * 0.5 → world height   = _wallHeight  (fixed)
-            if (_zoneWall != null)
-                _zoneWall.localScale = new Vector3(
-                    _currentRadius * 2f,
-                    _wallHeight * 0.5f,
-                    _currentRadius * 2f);
-
-            // ── Minimap ring (SpriteRenderer rotated 90° to face up) ─────────
-            // Same pattern as RangeIndicator: scale = range / baseRadius
-            // baseRadius = world-space radius of the sprite at scale(1,1,1)
-            // localRotation = Euler(90,0,0) → sprite local XY maps to world XZ
-            if (_minimapRing != null)
-            {
-                float s = _currentRadius / _minimapRingBaseRadius;
-                _minimapRing.localScale = new Vector3(s, s, 1f);
-            }
+            // Root stays at ORIGIN — only ZoneWall moves (world position, not parent).
+            // This prevents NextZoneRing (sibling child) from being dragged by root movement.
+            // Zone.FBX: scale.x/z = radius*2 (world diameter), scale.y = _wallHeight*0.5
+            _zoneWall.position  = new Vector3(_currentCenter.x, _zoneWall.position.y, _currentCenter.z);
+            _zoneWall.localScale = new Vector3(
+                _currentRadius * 2f,
+                _wallHeight * 0.5f,
+                _currentRadius * 2f);
         }
 
         private void SetWallVisible(bool visible)
         {
-            if (_zoneWall != null)    _zoneWall.gameObject.SetActive(visible);
-            if (_minimapRing != null) _minimapRing.gameObject.SetActive(visible);
+            if (_zoneWall != null) _zoneWall.gameObject.SetActive(visible);
+        }
+
+        // Next zone ring is placed at its own world position (independent of root transform).
+        // Inspired by package's NextSafeZoneVisualizer.UpdateZone() pattern.
+        private void ApplyNextZoneTransforms()
+        {
+            if (_nextZoneRing == null) return;
+            float y = _nextZoneRing.position.y;
+            _nextZoneRing.position   = new Vector3(_nextTargetCenter.x, y, _nextTargetCenter.z);
+            _nextZoneRing.localScale = new Vector3(
+                _nextTargetRadius * 2f,
+                _wallHeight * 0.5f,
+                _nextTargetRadius * 2f);
+        }
+
+        private void SetNextZoneVisible(bool visible)
+        {
+            if (_nextZoneRing != null) _nextZoneRing.gameObject.SetActive(visible);
         }
 
         #endregion
@@ -229,50 +257,103 @@ namespace NightHunt.Gameplay.Zone
 
 #if UNITY_EDITOR
         /// <summary>
-        /// Right-click this component in Inspector → "Build Children"
-        /// Creates ZoneWall (Cylinder) and MinimapRing (SpriteRenderer) as children.
+        /// Right-click this component in Inspector → "Build Children".
+        /// Instantiates the Cool Battle Royale Zone package prefabs — no manual GO creation.
         /// Run once after adding this component to an empty GO.
         /// </summary>
         [ContextMenu("Build Children")]
         private void BuildChildren()
         {
-            // ── ZoneWall ─────────────────────────────────────────────────────
+            // ── Package prefab paths ──────────────────────────────────────────
+            // CurrentSafeZoneVisualizer.prefab — "zone đang co lại" (current shrinking wall):
+            //   root  ZoneWall                    Zone.FBX + CurrentSafeZone.mat       [enabled]
+            //   child DangerZoneVisualizerOutline  Zone.FBX + CurrentSafeZone Outline.mat [enabled]
+            //
+            // NextSafeZoneVisualizer.prefab — "zone trắng" / target players must run to:
+            //   root  NextZoneRing               Zone.FBX + CurrentSafeZone.mat        [DISABLED in prefab]
+            //   child DangerZoneVisualizerOutline Zone.FBX + NextSafeZone Outline.mat  [enabled]
+            //
+            // Package event wiring (Zone.cs inspector):
+            //   "Start Waiting For Shrinking" → BOTH CurrentSafeZoneVisualizer.UpdateZone
+            //                                        AND NextSafeZoneVisualizer.UpdateZone
+            //   "Area is Shrinking"           → CurrentSafeZoneVisualizer.UpdateZone only
+            // We replicate: OnNextZoneChanged shows NextZoneRing; OnZoneIndexChanged hides it.
+            const string k_PrefabCurrent = "Assets/Cool Battle Royale Zone/Demo/Prefabs/CurrentSafeZoneVisualizer.prefab";
+            const string k_PrefabNext    = "Assets/Cool Battle Royale Zone/Demo/Prefabs/NextSafeZoneVisualizer.prefab";
+
+            int zoneLayer = LayerMask.NameToLayer("Zone");
+
+            // ── ZoneWall — CurrentSafeZoneVisualizer.prefab ───────────────────
             if (_zoneWall == null)
             {
-                GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                wall.name = "ZoneWall";
-                wall.transform.SetParent(transform, false);
-                wall.transform.localPosition = Vector3.zero;
-                // Cylinder primitive adds CapsuleCollider — not needed for visual only
-                DestroyImmediate(wall.GetComponent<CapsuleCollider>());
-                // Layer "Zone" (11) is NOT in the minimap camera mask — cylinder visible in game view only
-                wall.layer   = LayerMask.NameToLayer("Zone");
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(k_PrefabCurrent);
+                if (prefab == null)
+                {
+                    Debug.LogError($"[SafeZoneWorldVisual] Prefab not found: '{k_PrefabCurrent}'. Is 'Cool Battle Royale Zone' imported?");
+                    return;
+                }
 
-                _zoneWall    = wall.transform;
-                _wallRenderer = wall.GetComponent<MeshRenderer>();
+                // Instantiate the real package prefab → correct Zone.FBX mesh + materials
+                var inst = PrefabUtility.InstantiatePrefab(prefab, transform) as GameObject;
+                inst.name = "ZoneWall";
+                inst.transform.localPosition = Vector3.zero;
+                inst.transform.localScale    = Vector3.one;
 
-                // Create a basic URP transparent material
-                _wallRenderer.sharedMaterial = CreateZoneWallMaterial();
-                Debug.Log("[SafeZoneWorldVisual] ZoneWall created. Assign or tweak zone_wall.mat in Assets.");
+                foreach (Transform t in inst.GetComponentsInChildren<Transform>(true))
+                    t.gameObject.layer = zoneLayer;
+
+                // Strip package's Zone-coupled script — SafeZoneHUDProxy drives us, Zone.Instance unused
+                var pkgScript = inst.GetComponent("CurrentSafeZoneVisualizer");
+                if (pkgScript != null) DestroyImmediate(pkgScript);
+
+                // Strip CapsuleColliders — damage is server-side (SafeZoneManager), visual only here
+                foreach (var col in inst.GetComponentsInChildren<CapsuleCollider>(true))
+                    DestroyImmediate(col);
+
+                _zoneWall     = inst.transform;
+                _wallRenderer = inst.GetComponent<MeshRenderer>(); // root renderer = CurrentSafeZone.mat
+
+                Debug.Log("[SafeZoneWorldVisual] ZoneWall: CurrentSafeZoneVisualizer.prefab instantiated.\n" +
+                          "  root  → CurrentSafeZone.mat\n" +
+                          "  child → CurrentSafeZone Outline.mat (DangerZoneVisualizerOutline)");
             }
 
-            // ── MinimapRing ───────────────────────────────────────────────────
-            if (_minimapRing == null)
+            // ── NextZoneRing — NextSafeZoneVisualizer.prefab ("zone trắng") ───
+            // Matches package pattern: shown during "Waiting For Shrinking" phase.
+            // Outline only (DangerZoneVisualizerOutline child, NextSafeZone Outline.mat).
+            // Placed as CHILD of SafeZoneWorldVisual — root stays at origin so world position
+            // set in ApplyNextZoneTransforms() is never disturbed by parent movement.
+            if (_nextZoneRing == null)
             {
-                GameObject ring = new GameObject("MinimapRing");
-                ring.transform.SetParent(transform, false);
-                ring.transform.localPosition = Vector3.zero;
-                // Rotate 90° so sprite face (local Z+) points up → visible by top-down ortho camera
-                ring.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-                ring.layer = LayerMask.NameToLayer("Minimap");
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(k_PrefabNext);
+                if (prefab == null)
+                {
+                    Debug.LogError($"[SafeZoneWorldVisual] Prefab not found: '{k_PrefabNext}'. Is 'Cool Battle Royale Zone' imported?");
+                    return;
+                }
 
-                var sr = ring.AddComponent<SpriteRenderer>();
-                sr.color = new Color(0.2f, 0.8f, 1f, 0.9f);
-                // Assign any ring/donut sprite from Inspector — no sprite generated here.
-                // Set _minimapRingBaseRadius to match your sprite's radius at scale(1,1,1).
+                // Instantiate as child of this GO (root stays at origin, so world pos = local pos)
+                var inst = PrefabUtility.InstantiatePrefab(prefab, transform) as GameObject;
+                inst.name = "NextZoneRing";
+                inst.transform.localPosition = Vector3.zero;
+                inst.transform.localScale    = Vector3.one;
 
-                _minimapRing = ring.transform;
-                Debug.Log("[SafeZoneWorldVisual] MinimapRing created on 'Minimap' layer. Assign a ring/donut sprite in Inspector.");
+                foreach (Transform t in inst.GetComponentsInChildren<Transform>(true))
+                    t.gameObject.layer = zoneLayer;
+
+                var pkgScript = inst.GetComponent("NextSafeZoneVisualizer");
+                if (pkgScript != null) DestroyImmediate(pkgScript);
+
+                foreach (var col in inst.GetComponentsInChildren<CapsuleCollider>(true))
+                    DestroyImmediate(col);
+
+                _nextZoneRing     = inst.transform;
+                _nextZoneRenderer = inst.GetComponent<MeshRenderer>();
+
+                inst.SetActive(false); // hidden until SafeZoneHUDProxy.OnNextZoneChanged fires
+                Debug.Log("[SafeZoneWorldVisual] NextZoneRing: NextSafeZoneVisualizer.prefab instantiated as CHILD.\n" +
+                          "  Outline only → NextSafeZone Outline.mat (DangerZoneVisualizerOutline child).\n" +
+                          "  Shown when server broadcasts next zone position (Waiting-For-Shrinking phase).");
             }
 
             EditorUtility.SetDirty(this);
@@ -299,8 +380,24 @@ namespace NightHunt.Gameplay.Zone
             HandleRadiusChanged(radius, center);
             Debug.Log($"[SafeZoneWorldVisual] DEBUG zone: radius={radius}  center={center}  " +
                       $"wall={(_zoneWall != null ? "OK" : "NULL")}  " +
-                      $"ring={(_minimapRing != null ? "OK" : "NULL")}  " +
-                      $"overlay={(_outsideZoneOverlay != null ? _outsideZoneOverlay.name : "NULL")}");
+                      $"overlay={(_outsideZoneOverlay != null ? _outsideZoneOverlay.name : "NULL")}  " +
+                      $"ZoneWall world pos={(_zoneWall != null ? _zoneWall.position.ToString() : "—")}");
+        }
+
+        [ContextMenu("Debug: Next Zone R=50  center=(20,0,15)")]
+        private void DbgNextZone50() => DbgSimulateNextZone(50f, new Vector3(20f, 0f, 15f));
+
+        [ContextMenu("Debug: Next Zone R=20  center=(35,0,25)")]
+        private void DbgNextZone20() => DbgSimulateNextZone(20f, new Vector3(35f, 0f, 25f));
+
+        [ContextMenu("Debug: Clear Next Zone")]
+        private void DbgClearNextZone() => HandleNextZoneChanged(0f, Vector3.zero);
+
+        private void DbgSimulateNextZone(float radius, Vector3 center)
+        {
+            HandleNextZoneChanged(radius, center);
+            string ringStatus = _nextZoneRing != null ? "OK" : "NULL — run Build Children first";
+            Debug.Log($"[SafeZoneWorldVisual] DEBUG next zone: radius={radius}  center={center}  nextRing={ringStatus}");
         }
 
         [ContextMenu("Debug: Toggle Outside-Zone Overlay")]
@@ -311,7 +408,7 @@ namespace NightHunt.Gameplay.Zone
                       $"GO={(  _outsideZoneOverlay != null ? _outsideZoneOverlay.name : "NOT ASSIGNED — drag a Canvas GO here")}");
         }
 
-        // Scene-view gizmos: cyan = current visual zone, orange = target (server) zone while lerping
+        // Scene-view gizmos: cyan = current visual zone, orange = lerp target, purple = next zone target
         private void OnDrawGizmos()
         {
             if (_currentRadius > 0f)
@@ -323,6 +420,13 @@ namespace NightHunt.Gameplay.Zone
             {
                 Gizmos.color = new Color(1f, 0.45f, 0.1f, 0.5f);
                 DrawGizmoCircle(new Vector3(_targetCenter.x, transform.position.y, _targetCenter.z), _targetRadius);
+            }
+            // Next zone target (package's NextSafeZoneVisualizer equivalent)
+            if (_nextTargetRadius > 0.1f)
+            {
+                Gizmos.color = new Color(1f, 0.85f, 0f, 0.6f);  // yellow = "move here"
+                float y = _nextZoneRing != null ? _nextZoneRing.position.y : transform.position.y;
+                DrawGizmoCircle(new Vector3(_nextTargetCenter.x, y, _nextTargetCenter.z), _nextTargetRadius);
             }
         }
 
@@ -337,35 +441,6 @@ namespace NightHunt.Gameplay.Zone
                 Gizmos.DrawLine(prev, next);
                 prev = next;
             }
-        }
-
-        private Material CreateZoneWallMaterial()
-        {
-            // Try URP Unlit (simpler, works without lighting)
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
-            if (shader == null) shader = Shader.Find("Unlit/Color");
-            if (shader == null) shader = Shader.Find("Standard");
-
-            var mat = new Material(shader);
-            mat.name = "zone_wall";
-
-            // URP Unlit transparent setup
-            mat.SetFloat("_Surface", 1);          // 0=Opaque, 1=Transparent
-            mat.SetFloat("_Blend", 0);            // Alpha blend
-            mat.SetFloat("_Cull", 0);             // Cull Off — visible inside AND outside
-            mat.SetFloat("_ZWrite", 0);
-            mat.color = new Color(0.1f, 0.5f, 1f, 0.25f);
-
-            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-
-            // Save to Assets folder
-            string path = "Assets/_Night_Hunt/Materials/zone_wall.mat";
-            System.IO.Directory.CreateDirectory("Assets/_Night_Hunt/Materials");
-            AssetDatabase.CreateAsset(mat, path);
-            AssetDatabase.SaveAssets();
-            Debug.Log($"[SafeZoneWorldVisual] Material saved to {path}");
-            return mat;
         }
 
 #endif

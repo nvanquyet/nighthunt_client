@@ -475,12 +475,9 @@ namespace NightHunt.Editor.Tests
         private static void BuildZones(GameObject parent, List<string> log)
         {
             log.Add("\n[Zones]");
-            var zsGo = new GameObject("ZoneSystem"); zsGo.transform.SetParent(parent.transform);
-            zsGo.AddComponent<Gameplay.Zone.ZoneSystem>();
-
             var ldGo = new GameObject("SafeZoneManager"); ldGo.transform.SetParent(parent.transform);
             s_SafeZoneManager = ldGo.AddComponent<Gameplay.Zone.SafeZoneManager>();
-            log.Add("  ZoneSystem + SafeZoneManager added");
+            log.Add("  SafeZoneManager added");
 
             CreateZoneBuff(parent, "SpeedBuffZone",  new Vector3( 0, 0.5f, -10), 8f,
                 Gameplay.StatSystem.Core.Types.PlayerStatType.MovementSpeed,
