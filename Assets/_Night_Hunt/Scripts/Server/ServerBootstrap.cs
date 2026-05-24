@@ -79,9 +79,8 @@ namespace NightHunt.Server
             }
             Instance = this;
 
-            // Survive scene changes: 00_DS_Boot gets unloaded when map scene loads (ReplaceScenes=All).
-            // HeartbeatLoop, SubscribeMatchEnd, and NotifyGameReady all live on this object →
-            // must persist across the scene transition.
+            if (transform.parent != null)
+                transform.SetParent(null);
             DontDestroyOnLoad(gameObject);
 
             // Disable tất cả MonoBehaviour không cần trong server

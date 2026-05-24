@@ -16,7 +16,7 @@ namespace NightHunt.Config
 
         // ── Toggle flags — change locally if needed; do NOT commit as true ───
         // Set ForceProductionInEditor = true to connect to prod from Editor.
-        private const bool ForceProductionInEditor   = false;
+        private const bool ForceProductionInEditor   = true;
         // Set ForceProductionOnDevBuild = true for Dev Builds pointing to prod.
         private const bool ForceProductionOnDevBuild = false;
 

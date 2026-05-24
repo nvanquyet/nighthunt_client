@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
 #define DEVELOPMENT
 #endif
 #if UNITY_EDITOR
@@ -466,7 +466,11 @@ namespace FishNet.Managing
         private void SetDontDestroyOnLoad()
         {
             if (_dontDestroyOnLoad)
-                DontDestroyOnLoad(this);
+            {
+                if (transform.parent != null)
+                    transform.SetParent(null);
+                DontDestroyOnLoad(gameObject);
+            }
         }
 
         /// <summary>

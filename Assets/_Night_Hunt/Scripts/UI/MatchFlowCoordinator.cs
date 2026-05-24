@@ -1,4 +1,4 @@
-﻿using NightHunt.Config;
+using NightHunt.Config;
 using NightHunt.Core;
 using NightHunt.Services.Game;
 using NightHunt.State;
@@ -73,6 +73,7 @@ namespace NightHunt.UI
             if (bus == null) return;
 
             bus.OnMatchReady     += HandleMatchReady;
+            bus.OnGameStarting   += HandleGameStarting;
             bus.OnDsReady        += HandleDsReady;
             bus.OnMatchCancelled += HandleMatchCancelled;
             bus.OnMatchEnded     += HandleMatchEnded;
@@ -89,6 +90,7 @@ namespace NightHunt.UI
             if (bus != null)
             {
                 bus.OnMatchReady     -= HandleMatchReady;
+                bus.OnGameStarting   -= HandleGameStarting;
                 bus.OnDsReady        -= HandleDsReady;
                 bus.OnMatchCancelled -= HandleMatchCancelled;
                 bus.OnMatchEnded     -= HandleMatchEnded;
@@ -210,6 +212,47 @@ namespace NightHunt.UI
             }
 
             SceneLoader.LoadGame(sceneId);
+        }
+
+        // ── game_starting ─────────────────────────────────────────────────────
+
+        private void HandleGameStarting(GameWebSocketService.GameStartingEvent e)
+        {
+            if (e == null || e.room == null) return;
+
+            var matchReady = new GameWebSocketService.MatchReadyEvent
+            {
+                matchId = e.room.matchId,
+                gameMode = e.room.mode,
+                mapId = e.room.mapId,
+                roomCode = e.room.roomCode,
+                dsIp = e.relayHost,
+                dsPort = e.relayPort,
+                players = MapRoomPlayersToMatchReadyPlayers(e.room.players)
+            };
+
+            Debug.Log($"[MFC] HandleGameStarting: synthesizing MatchReadyEvent from GameStartingEvent. matchId={matchReady.matchId}");
+            HandleMatchReady(matchReady);
+        }
+
+        private GameWebSocketService.MatchReadyPlayerEntry[] MapRoomPlayersToMatchReadyPlayers(System.Collections.Generic.List<NightHunt.Data.DTOs.RoomPlayerResponse> players)
+        {
+            if (players == null) return new GameWebSocketService.MatchReadyPlayerEntry[0];
+
+            var result = new GameWebSocketService.MatchReadyPlayerEntry[players.Count];
+            for (int i = 0; i < players.Count; i++)
+            {
+                var p = players[i];
+                result[i] = new GameWebSocketService.MatchReadyPlayerEntry
+                {
+                    userId = p.userId,
+                    username = p.username,
+                    team = p.team,
+                    elo = 0,
+                    tier = "---"
+                };
+            }
+            return result;
         }
 
         // ── ds_ready ──────────────────────────────────────────────────────────

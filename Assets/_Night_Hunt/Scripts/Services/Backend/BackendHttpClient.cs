@@ -68,96 +68,226 @@ namespace NightHunt.Services.Backend
                 Debug.Log($"[FLOW][HTTP] Request => {method} {endpoint} (userId={SessionState.Instance?.UserId ?? 0}, auth={(SessionState.Instance != null && SessionState.Instance.IsAuthenticated)})");
             }
 
-            UnityWebRequest request;
+            int maxRetries = 3;
+            int attempt = 0;
+            string lastError = null;
+            string lastErrorCode = null;
 
-            if (method == UnityWebRequest.kHttpVerbGET || method == UnityWebRequest.kHttpVerbDELETE)
+            while (attempt < maxRetries)
             {
-                request = UnityWebRequest.Get(url);
-                if (method == UnityWebRequest.kHttpVerbDELETE)
+                attempt++;
+                UnityWebRequest request = null;
+
+                if (method == UnityWebRequest.kHttpVerbGET || method == UnityWebRequest.kHttpVerbDELETE)
                 {
-                    request.method = UnityWebRequest.kHttpVerbDELETE;
-                }
-            }
-            else
-            {
-                string jsonData = data != null ? JsonUtility.ToJson(data) : "{}";
-                if (traceEndpoint)
-                {
-                    Debug.Log($"[FLOW][HTTP] Payload {endpoint}: {TruncateForLog(RedactForLog(jsonData), TraceBodyMaxLen)}");
-                }
-                request = new UnityWebRequest(url, method)
-                {
-                    uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonData)),
-                    downloadHandler = new DownloadHandlerBuffer()
-                };
-                request.SetRequestHeader("Content-Type", "application/json");
-            }
-
-            // ARCH-1: Read token directly from SessionState (single source of truth)
-            string token = SessionState.Instance?.AccessToken;
-            if (!string.IsNullOrEmpty(token))
-            {
-                request.SetRequestHeader("Authorization", $"Bearer {token}");
-            }
-
-            // Attach sessionId for server-side session validation
-            if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated &&
-                !string.IsNullOrEmpty(SessionState.Instance.SessionId))
-            {
-                request.SetRequestHeader(SessionHeader, SessionState.Instance.SessionId);
-            }
-
-            request.timeout = BackendConfig.RequestTimeoutSeconds;
-
-            // Attach AcceptAllCertificatesHandler nếu server dùng self-signed cert (mkcert + IP)
-            if (BackendConfig.ShouldBypassSslCertificateValidation())
-            {
-                request.certificateHandler = new NightHunt.Config.AcceptAllCertificatesHandler();
-            }
-
-            var operation = request.SendWebRequest();
-
-            while (!operation.isDone)
-            {
-                await Task.Yield();
-            }
-
-            try
-            {
-                if (traceEndpoint)
-                {
-                    Debug.Log($"[FLOW][HTTP] Response <= {method} {endpoint} status={request.responseCode} result={request.result}");
-                }
-
-                // SSL errors now handled at request level via CertificateHandler.
-
-                if (request.result == UnityWebRequest.Result.Success)
-                {
-                    string jsonResponse = request.downloadHandler.text;
-                    if (traceEndpoint)
+                    request = UnityWebRequest.Get(url);
+                    if (method == UnityWebRequest.kHttpVerbDELETE)
                     {
-                        Debug.Log($"[FLOW][HTTP] Body {endpoint}: {TruncateForLog(RedactForLog(jsonResponse), TraceBodyMaxLen)}");
+                        request.method = UnityWebRequest.kHttpVerbDELETE;
                     }
-
-                    // IMPORTANT: Check responseCode even if result is Success
-                    // Backend may return 401/403 with errorCode in response body
-                    // Unity may treat 401 as Success in some cases
-                    if (request.responseCode == 401 || request.responseCode == 403)
+                }
+                else
+                {
+                    string jsonData = data != null ? JsonUtility.ToJson(data) : "{}";
+                    if (attempt == 1 && traceEndpoint)
                     {
-                        // Parse error response to get errorCode and message
-                        string errorMessage = request.error;
-                        string errorCode = null;
+                        Debug.Log($"[FLOW][HTTP] Payload {endpoint}: {TruncateForLog(RedactForLog(jsonData), TraceBodyMaxLen)}");
+                    }
+                    request = new UnityWebRequest(url, method)
+                    {
+                        uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonData)),
+                        downloadHandler = new DownloadHandlerBuffer()
+                    };
+                    request.SetRequestHeader("Content-Type", "application/json");
+                }
 
-                        if (!string.IsNullOrEmpty(jsonResponse))
+                // ARCH-1: Read token directly from SessionState (single source of truth)
+                string token = SessionState.Instance?.AccessToken;
+                if (!string.IsNullOrEmpty(token))
+                {
+                    request.SetRequestHeader("Authorization", $"Bearer {token}");
+                }
+
+                // Attach sessionId for server-side session validation
+                if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated &&
+                    !string.IsNullOrEmpty(SessionState.Instance.SessionId))
+                {
+                    request.SetRequestHeader(SessionHeader, SessionState.Instance.SessionId);
+                }
+
+                request.timeout = BackendConfig.RequestTimeoutSeconds;
+
+                // Attach AcceptAllCertificatesHandler if using self-signed certs
+                if (BackendConfig.ShouldBypassSslCertificateValidation())
+                {
+                    request.certificateHandler = new NightHunt.Config.AcceptAllCertificatesHandler();
+                }
+
+                if (traceEndpoint && attempt > 1)
+                {
+                    Debug.Log($"[FLOW][HTTP] Sending {method} {endpoint} (Attempt {attempt}/{maxRetries})");
+                }
+
+                var operation = request.SendWebRequest();
+
+                while (!operation.isDone)
+                {
+                    await Task.Yield();
+                }
+
+                bool isSuccess = request.result == UnityWebRequest.Result.Success;
+                long responseCode = request.responseCode;
+                string errorMsg = request.error;
+                string responseText = "";
+
+                if (request.downloadHandler != null)
+                {
+                    try
+                    {
+                        responseText = request.downloadHandler.text;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"[BackendHttpClient] Failed to read response text: {ex.Message}");
+                    }
+                }
+
+                if (traceEndpoint)
+                {
+                    Debug.Log($"[FLOW][HTTP] Response <= {method} {endpoint} status={responseCode} result={request.result} (Attempt {attempt})");
+                }
+
+                // Determine if this is a transient connection error
+                bool isTransientError = request.result == UnityWebRequest.Result.ConnectionError ||
+                                       (request.result == UnityWebRequest.Result.ProtocolError && (responseCode == 502 || responseCode == 503 || responseCode == 504)) ||
+                                       (!string.IsNullOrEmpty(errorMsg) && (errorMsg.Contains("Curl error 55") || errorMsg.Contains("Curl error 56") || errorMsg.Contains("reset") || errorMsg.Contains("timeout")));
+
+                if (!isSuccess && isTransientError && attempt < maxRetries)
+                {
+                    Debug.LogWarning($"[BackendHttpClient] Transient error on {method} {endpoint}: {errorMsg} (Code: {responseCode}). Retrying in {attempt * 500}ms... (Attempt {attempt}/{maxRetries})");
+                    lastError = errorMsg;
+                    request.Dispose();
+                    await Task.Delay(attempt * 500);
+                    continue;
+                }
+
+                try
+                {
+                    if (isSuccess)
+                    {
+                        if (traceEndpoint)
+                        {
+                            Debug.Log($"[FLOW][HTTP] Body {endpoint}: {TruncateForLog(RedactForLog(responseText), TraceBodyMaxLen)}");
+                        }
+
+                        // IMPORTANT: Check responseCode even if result is Success
+                        if (responseCode == 401 || responseCode == 403)
+                        {
+                            string errorCode = null;
+                            if (!string.IsNullOrEmpty(responseText))
+                            {
+                                try
+                                {
+                                    var errorResult = JsonUtility.FromJson<ApiResult<object>>(responseText);
+                                    if (errorResult != null)
+                                    {
+                                        if (!string.IsNullOrEmpty(errorResult.message))
+                                        {
+                                            errorMsg = errorResult.message;
+                                        }
+                                        if (!string.IsNullOrEmpty(errorResult.errorCode))
+                                        {
+                                            errorCode = errorResult.errorCode;
+                                        }
+                                    }
+                                }
+                                catch (Exception parseEx)
+                                {
+                                    Debug.LogWarning($"[BackendHttpClient] Failed to parse 401/403 error response: {parseEx.Message}");
+                                }
+                            }
+
+                            HandleAuthError(responseCode, errorCode, errorMsg);
+                            request.Dispose();
+                            return ApiResult<T>.Error(errorMsg ?? "Unauthorized", errorCode);
+                        }
+
+                        // Try to parse as ApiResult<T> first
+                        try
+                        {
+                            var apiResult = JsonUtility.FromJson<ApiResult<T>>(responseText);
+                            if (apiResult != null)
+                            {
+                                if (traceEndpoint)
+                                {
+                                    bool dataNull = (object)apiResult.data == null;
+                                    Debug.Log($"[FLOW][HTTP] Parsed ApiResult<{typeof(T).Name}> success={apiResult.success}, dataNull={dataNull}, errorCode={apiResult.errorCode}, message={apiResult.message}");
+                                }
+
+                                if (apiResult.success)
+                                {
+                                    request.Dispose();
+                                    return apiResult;
+                                }
+                                else
+                                {
+                                    if (!string.IsNullOrEmpty(apiResult.errorCode) &&
+                                        (apiResult.errorCode == ErrorCodes.AUTH_FORCE_LOGOUT ||
+                                         apiResult.errorCode == ErrorCodes.AUTH_SESSION_EXPIRED))
+                                    {
+                                        HandleAuthError(401, apiResult.errorCode, apiResult.message);
+                                    }
+
+                                    Debug.LogWarning($"[BackendHttpClient] Backend error: {apiResult.message} (ErrorCode: {apiResult.errorCode})");
+                                    request.Dispose();
+                                    return ApiResult<T>.Error(apiResult.message ?? "Request failed", apiResult.errorCode);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogWarning($"[BackendHttpClient] Failed to parse as ApiResult: {ex.Message}");
+                        }
+
+                        // If not ApiResult format, try to parse directly as T
+                        try
+                        {
+                            T resultData = JsonUtility.FromJson<T>(responseText);
+                            if (traceEndpoint)
+                            {
+                                bool dataNull = (object)resultData == null;
+                                Debug.Log($"[FLOW][HTTP] Parsed direct<{typeof(T).Name}> dataNull={dataNull}");
+                            }
+                            request.Dispose();
+                            return ApiResult<T>.Ok(resultData);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[BackendHttpClient] Failed to parse response: {ex.Message}\nResponse: {responseText}");
+                            request.Dispose();
+                            return ApiResult<T>.Error($"Failed to parse response: {ex.Message}");
+                        }
+                    }
+                    else
+                    {
+                        string errorCode = null;
+                        Debug.LogWarning($"[BackendHttpClient] Error {responseCode}: {errorMsg}\nBody: {responseText}");
+
+                        if (traceEndpoint)
+                        {
+                            Debug.LogWarning($"[FLOW][HTTP] Error body {endpoint}: {TruncateForLog(RedactForLog(responseText), TraceBodyMaxLen)}");
+                        }
+
+                        if (!string.IsNullOrEmpty(responseText))
                         {
                             try
                             {
-                                var errorResult = JsonUtility.FromJson<ApiResult<object>>(jsonResponse);
+                                var errorResult = JsonUtility.FromJson<ApiResult<object>>(responseText);
                                 if (errorResult != null)
                                 {
                                     if (!string.IsNullOrEmpty(errorResult.message))
                                     {
-                                        errorMessage = errorResult.message;
+                                        errorMsg = errorResult.message;
                                     }
 
                                     if (!string.IsNullOrEmpty(errorResult.errorCode))
@@ -168,152 +298,46 @@ namespace NightHunt.Services.Backend
                             }
                             catch (Exception parseEx)
                             {
-                                Debug.LogWarning(
-                                    $"[BackendHttpClient] Failed to parse 401/403 error response: {parseEx.Message}");
+                                Debug.LogWarning($"[BackendHttpClient] Failed to parse error response body: {parseEx.Message}");
                             }
                         }
 
-                        // Handle auth errors (force logout, session expired) BEFORE returning error
-                        HandleAuthError(request.responseCode, errorCode, errorMessage);
+                        HandleAuthError(responseCode, errorCode, errorMsg);
 
-                        return ApiResult<T>.Error(errorMessage ?? "Unauthorized", errorCode);
-                    }
-
-                    // Try to parse as ApiResult<T> first (backend format: { "success": true/false, "data": {...}, "message": "..." })
-                    try
-                    {
-                        var apiResult = JsonUtility.FromJson<ApiResult<T>>(jsonResponse);
-                        if (apiResult != null)
+                        if (responseCode == 401)
                         {
-                            if (traceEndpoint)
-                            {
-                                bool dataNull = (object)apiResult.data == null;
-                                Debug.Log($"[FLOW][HTTP] Parsed ApiResult<{typeof(T).Name}> success={apiResult.success}, dataNull={dataNull}, errorCode={apiResult.errorCode}, message={apiResult.message}");
-                            }
-
-                            // Check if success field is set correctly
-                            if (apiResult.success)
-                            {
-                                return apiResult;
-                            }
-                            else
-                            {
-                                // Backend returned error in ApiResponse format
-                                // Check if this is an auth error (401/403) even though responseCode might not be set correctly
-                                if (!string.IsNullOrEmpty(apiResult.errorCode) &&
-                                    (apiResult.errorCode == ErrorCodes.AUTH_FORCE_LOGOUT ||
-                                     apiResult.errorCode == ErrorCodes.AUTH_SESSION_EXPIRED))
-                                {
-                                    HandleAuthError(401, apiResult.errorCode, apiResult.message);
-                                }
-
-                                Debug.LogWarning(
-                                    $"[BackendHttpClient] Backend error: {apiResult.message} (ErrorCode: {apiResult.errorCode})");
-                                return ApiResult<T>.Error(apiResult.message ?? "Request failed", apiResult.errorCode);
-                            }
+                            errorMsg = string.IsNullOrEmpty(errorMsg) ? "Unauthorized. Please login again." : errorMsg;
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogWarning($"[BackendHttpClient] Failed to parse as ApiResult: {ex.Message}");
-                    }
-
-                    // If not ApiResult format, try to parse directly as T
-                    try
-                    {
-                        T resultData = JsonUtility.FromJson<T>(jsonResponse);
-                        if (traceEndpoint)
+                        else if (responseCode == 403)
                         {
-                            bool dataNull = (object)resultData == null;
-                            Debug.Log($"[FLOW][HTTP] Parsed direct<{typeof(T).Name}> dataNull={dataNull}");
+                            errorMsg = string.IsNullOrEmpty(errorMsg) ? "Forbidden. Please re-login or check permissions." : errorMsg;
                         }
-                        return ApiResult<T>.Ok(resultData);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError(
-                            $"[BackendHttpClient] Failed to parse response: {ex.Message}\nResponse: {jsonResponse}");
-                        return ApiResult<T>.Error($"Failed to parse response: {ex.Message}");
+                        else if (responseCode == 400)
+                        {
+                            errorMsg = string.IsNullOrEmpty(errorMsg) ? "Bad request. Please check your input." : errorMsg;
+                        }
+                        else if (responseCode == 500)
+                        {
+                            errorMsg = string.IsNullOrEmpty(errorMsg) ? "Server error. Please try again later." : errorMsg;
+                        }
+
+                        lastError = errorMsg;
+                        lastErrorCode = errorCode;
+                        request.Dispose();
+                        // Exit the loop and return the error on non-transient failures
+                        break;
                     }
                 }
-                else
+                finally
                 {
-                    // Try to parse error response from backend
-                    string errorMessage = request.error;
-                    string responseText = request.downloadHandler.text;
-                    string errorCode = null;
-
-                    Debug.LogWarning(
-                        $"[BackendHttpClient] Error {request.responseCode}: {errorMessage}\nBody: {responseText}");
-
-                    if (traceEndpoint)
+                    if (request != null)
                     {
-                        Debug.LogWarning($"[FLOW][HTTP] Error body {endpoint}: {TruncateForLog(RedactForLog(responseText), TraceBodyMaxLen)}");
+                        request.Dispose();
                     }
-
-                    // Try to parse as ApiResult to get message and errorCode from backend
-                    if (!string.IsNullOrEmpty(responseText))
-                    {
-                        try
-                        {
-                            var errorResult = JsonUtility.FromJson<ApiResult<object>>(responseText);
-                            if (errorResult != null)
-                            {
-                                if (!string.IsNullOrEmpty(errorResult.message))
-                                {
-                                    errorMessage = errorResult.message;
-                                }
-
-                                if (!string.IsNullOrEmpty(errorResult.errorCode))
-                                {
-                                    errorCode = errorResult.errorCode;
-                                }
-                            }
-                        }
-                        catch (Exception parseEx)
-                        {
-                            Debug.LogWarning(
-                                $"[BackendHttpClient] Failed to parse error response body: {parseEx.Message}");
-                        }
-                    }
-
-                    // Handle auth errors (force logout, session expired) BEFORE returning error
-                    // This ensures popup is shown immediately
-                    HandleAuthError(request.responseCode, errorCode, errorMessage);
-
-                    // Map HTTP status codes to user-friendly messages
-                    if (request.responseCode == 401)
-                    {
-                        errorMessage = string.IsNullOrEmpty(errorMessage)
-                            ? "Unauthorized. Please login again."
-                            : errorMessage;
-                    }
-                    else if (request.responseCode == 403)
-                    {
-                        errorMessage = string.IsNullOrEmpty(errorMessage)
-                            ? "Forbidden. Please re-login or check permissions."
-                            : errorMessage;
-                    }
-                    else if (request.responseCode == 400)
-                    {
-                        errorMessage = string.IsNullOrEmpty(errorMessage)
-                            ? "Bad request. Please check your input."
-                            : errorMessage;
-                    }
-                    else if (request.responseCode == 500)
-                    {
-                        errorMessage = string.IsNullOrEmpty(errorMessage)
-                            ? "Server error. Please try again later."
-                            : errorMessage;
-                    }
-
-                    return ApiResult<T>.Error(errorMessage, errorCode);
                 }
             }
-            finally
-            {
-                request.Dispose();
-            }
+
+            return ApiResult<T>.Error(lastError ?? "HTTP request failed", lastErrorCode);
         }
 
         private static bool ShouldTraceEndpoint(string endpoint)

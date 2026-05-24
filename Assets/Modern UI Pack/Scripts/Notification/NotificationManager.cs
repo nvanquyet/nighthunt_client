@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Events;
@@ -86,12 +86,25 @@ namespace Michsky.MUIP
                 return;
 
             isOn = false;
-            notificationAnimator.Play("Out");
             onClose.Invoke();
 
             StopCoroutine("StartTimer");
             StopCoroutine("DisableNotification");
-            StartCoroutine("DisableNotification");
+
+            // Guard: StartCoroutine fails if the GameObject is inactive (e.g. notification
+            // was deactivated externally or is pooled). Apply CloseBehaviour immediately in
+            // that case so the object is still cleaned up correctly.
+            if (gameObject.activeInHierarchy)
+            {
+                notificationAnimator.Play("Out");
+                StartCoroutine("DisableNotification");
+            }
+            else
+            {
+                // GO already inactive — apply behaviour without animation / coroutine.
+                if (closeBehaviour == CloseBehaviour.Disable) { gameObject.SetActive(false); }
+                else if (closeBehaviour == CloseBehaviour.Destroy) { Destroy(gameObject); }
+            }
         }
 
         #region Obsolete

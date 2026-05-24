@@ -84,6 +84,21 @@ namespace NightHunt.UI
 
             if (btn_ExitToggle != null)
                 btn_ExitToggle.onClick.AddListener(OnExitToggleClicked);
+
+            // Disable static Welcome text next to username if present
+            if (profileNameText != null)
+            {
+                Transform parent = profileNameText.transform.parent;
+                if (parent != null)
+                {
+                    Transform welcome = parent.Find("Welcome");
+                    if (welcome != null)
+                    {
+                        welcome.gameObject.SetActive(false);
+                        Debug.Log("[HomeView] Disabled static 'Welcome' text GameObject next to username.");
+                    }
+                }
+            }
         }
 
         private void Start()
@@ -140,6 +155,7 @@ namespace NightHunt.UI
 
             // Wait for profile to complete last (it was started first, already in-flight).
             await Task.WhenAll(profileTask, friendTask, partyTask);
+            partyController?.RefreshPartyDisplay();
         }
 
         /// <summary>
@@ -190,6 +206,7 @@ namespace NightHunt.UI
                 _homeDataPreloaded = false;
                 Debug.Log("[FLOW][HomeView] OnShow — data preloaded by login flow, skipping network refetch.");
                 RefreshProfile();
+                partyController?.RefreshPartyDisplay();
                 await CheckAndShowReconnectPopup();
                 Debug.Log($"[FLOW][HomeView] ── OnShow COMPLETE (preloaded)  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                 onHomeShown?.Invoke();
@@ -416,6 +433,11 @@ namespace NightHunt.UI
             bus.OnFriendRequestDeclined += HandleFriendRequestDeclined;
             bus.OnFriendRequestCancelled += HandleFriendRequestCancelled;
             bus.OnFriendRemoved += HandleFriendRemoved;
+
+            // Session state character change
+            if (_sessionState == null) _sessionState = SessionState.Instance;
+            if (_sessionState != null) _sessionState.OnCharacterChanged += HandleCharacterChanged;
+
             _wsSubscribed = true;
         }
 
@@ -424,6 +446,11 @@ namespace NightHunt.UI
             if (!_wsSubscribed) return;
 
             var bus = GameEventBus.Instance;
+            if (_sessionState != null)
+            {
+                _sessionState.OnCharacterChanged -= HandleCharacterChanged;
+            }
+
             if (bus == null)
             {
                 _wsSubscribed = false;
@@ -537,6 +564,13 @@ namespace NightHunt.UI
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
             toast?.Show("Friends", "A friend was removed from your list.");
             Debug.Log($"[HomeView] FriendRemoved — userId={e.userId} friendUserId={e.friendUserId}");
+        }
+
+        private void HandleCharacterChanged(string characterId)
+        {
+            Debug.Log($"[HomeView] Character selection changed to '{characterId}', refreshing UI.");
+            RefreshCharacterThumbnail();
+            partyController?.RefreshPartyDisplay();
         }
     }
 }

@@ -28,6 +28,7 @@ namespace NightHunt.State
         public string Tier  { get; private set; }
 
         public event Action OnProfileUpdated;
+        public event Action<string> OnCharacterChanged;
 
         public bool IsAuthenticated
         {
@@ -94,6 +95,7 @@ namespace NightHunt.State
         {
             SelectedCharacterId = characterId;
             SyncCharacterIdToPrefs(characterId);
+            OnCharacterChanged?.Invoke(characterId);
         }
 
         /// <summary>

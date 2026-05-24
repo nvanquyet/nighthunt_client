@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -159,6 +159,11 @@ namespace NightHunt.UI
         public async Task OnHomeShownAsync()
         {
             HLog($"HomeShown start mode={DescribeSelectedMode()} queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()}");
+
+            // Immediately populate the model display with cached state (solo slot or
+            // last known party) so the preview is never blank while the API call is in-flight.
+            RefreshPartyDisplay();
+
             // Do NOT force-reset to Idle here — let RefreshParty resolve the actual
             // server-side queue state (solo player may still be SEARCHING on server
             // after an app-resume, or may have been auto-cancelled).
@@ -1133,7 +1138,10 @@ namespace NightHunt.UI
 
         private void HLog(string message)
         {
-            Debug.Log($"[FLOW][HOME_MODE] {message}");
+            if (Debug.isDebugBuild)
+            {
+                Debug.Log($"[FLOW][HOME_MODE] {message}");
+            }
         }
 
         private string DescribeSelectedMode()

@@ -85,12 +85,9 @@ namespace NightHunt.UI
                 iAmHost = true; // solo player is always "host"
                 Debug.Log($"[PartyModelListView] Solo mode — injecting local player slot: userId={selfSlot.userId} username={selfSlot.username} charId={selfSlot.selectedCharacterId}");
             }
-
-            Debug.Log($"[PartyModelListView] Refresh — slots={members.Count} party={(party == null ? "null" : party.partyId.ToString())}");
-
             // Grow / shrink to exactly members.Count — no empty slots
+            Debug.Log($"[PartyModelListView] EnsureSlotCount({members.Count}) _slots.Count={_slots.Count}");
             EnsureSlotCount(members.Count);
-
             for (int i = 0; i < _slots.Count; i++)
                 _slots[i].SetMember(members[i], iAmHost, OnModelSlotClicked);
         }
@@ -124,7 +121,14 @@ namespace NightHunt.UI
             {
                 if (slotPrefab == null || container == null) break;
 
-                var go   = Instantiate(slotPrefab, container);
+                // slotPrefab may be a scene object whose parent is inactive (used as a
+                // hidden template). Temporarily activate the parent chain so Unity can
+                // Instantiate it, then restore the original state afterwards.
+
+                var go = Instantiate(slotPrefab, container);
+                go.gameObject.SetActive(true); // ensure clone is always active regardless of template state
+
+
                 var slot = go.GetComponentInChildren<PartyModelSlotView>(includeInactive: true)
                            ?? go.GetComponent<PartyModelSlotView>();
 

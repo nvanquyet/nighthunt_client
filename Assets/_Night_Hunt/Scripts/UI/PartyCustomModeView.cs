@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -1237,7 +1237,7 @@ namespace NightHunt.UI
             }
 
             if (keys.Count == 0)
-                Debug.LogError("[PartyCustomModeView] GameModeConfig empty — ensure GameConfigService.FetchAsync() ran successfully.");
+                Debug.LogWarning("[PartyCustomModeView] GameModeConfig not yet loaded — waiting for GameConfigService.FetchAsync(). This is normal on first Awake.");
 
             _modeModeKeys = keys.ToArray();
             _modeDisplayNames = names.ToArray();

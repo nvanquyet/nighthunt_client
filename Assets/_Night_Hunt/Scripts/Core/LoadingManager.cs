@@ -648,13 +648,15 @@ namespace NightHunt.Core
                 }
                 else if (req.result == UnityWebRequest.Result.ConnectionError)
                 {
+                    // Note: avoid short substrings like "CA" that false-match "Cannot", "cache", etc.
                     bool isSslError = req.error != null &&
-                        (req.error.IndexOf("SSL",         System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         req.error.IndexOf("certificate", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         req.error.IndexOf("Cert",        System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         req.error.IndexOf("CA",          System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         req.error.IndexOf("TLS",         System.StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         req.error.IndexOf("UnityTls",    System.StringComparison.OrdinalIgnoreCase) >= 0);
+                        (req.error.IndexOf("SSL",          System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("certificate",  System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("Cert",         System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("CA cert",      System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("TLS",          System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("UnityTls",     System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         req.error.IndexOf("handshake",    System.StringComparison.OrdinalIgnoreCase) >= 0);
 
                     if (isSslError)
                     {

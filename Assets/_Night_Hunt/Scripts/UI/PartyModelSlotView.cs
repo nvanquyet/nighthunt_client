@@ -70,15 +70,13 @@ namespace NightHunt.UI
             MemberId       = member.userId;
             _onSlotClicked = onSlotClicked;
 
-            Debug.Log($"[PartyModelSlotView] SetMember — userId={member.userId} username='{member.username}' isLocal={IsLocalPlayer} isHost={member.isHost} charId='{member.selectedCharacterId}'");
-
             bool isLocal = IsLocalPlayer;
             if (nameText != null)
             {
                 string display = isLocal
                     ? (SessionState.Instance?.Username ?? member.username ?? "Me")
                     : (member.username ?? "Unknown");
-                nameText.text = $"Welcome,\n<b>{display}</b>";
+                nameText.text = display;
             }
 
             if (characterImage != null)
@@ -86,6 +84,9 @@ namespace NightHunt.UI
                 characterImage.sprite = ResolveThumbnail(member);
                 characterImage.gameObject.SetActive(true);
             }
+
+            // Ensure this slot GameObject is active (it might have been deactivated by EnsureSlotCount)
+            gameObject.SetActive(true);
         }
 
         /// <summary>Reset to unbound state (called on Awake before first SetMember).</summary>
@@ -112,14 +113,8 @@ namespace NightHunt.UI
                 var def = CharacterDatabase.Instance?.GetById(member.selectedCharacterId);
                 if (def?.Thumbnail != null)
                 {
-                    Debug.Log($"[PartyModelSlotView] userId={member.userId} — resolved thumbnail from member.selectedCharacterId='{member.selectedCharacterId}'");
                     return def.Thumbnail;
                 }
-                Debug.LogWarning($"[PartyModelSlotView] userId={member.userId} — selectedCharacterId='{member.selectedCharacterId}' not found in CharacterDatabase");
-            }
-            else
-            {
-                Debug.Log($"[PartyModelSlotView] userId={member.userId} — selectedCharacterId is null/empty (server Phase 2 not done yet)");
             }
 
             // 2. Local player fallback — use SessionState
@@ -127,16 +122,13 @@ namespace NightHunt.UI
             if (isLocal)
             {
                 string charId = SessionState.Instance?.SelectedCharacterId;
-                Debug.Log($"[PartyModelSlotView] Local player fallback — SessionState.SelectedCharacterId='{charId}'");
                 if (!string.IsNullOrEmpty(charId))
                 {
                     var def = CharacterDatabase.Instance?.GetById(charId);
                     if (def?.Thumbnail != null)
                     {
-                        Debug.Log($"[PartyModelSlotView] userId={member.userId} — resolved thumbnail from SessionState charId='{charId}'");
                         return def.Thumbnail;
                     }
-                    Debug.LogWarning($"[PartyModelSlotView] userId={member.userId} — SessionState charId='{charId}' not found in CharacterDatabase");
                 }
             }
 
@@ -144,11 +136,9 @@ namespace NightHunt.UI
             var indexFallback = CharacterDatabase.Instance?.GetByIndex(0);
             if (indexFallback?.Thumbnail != null)
             {
-                Debug.LogWarning($"[PartyModelSlotView] userId={member.userId} \u2014 falling back to CharacterDatabase index 0 (isLocal={isLocal})");
                 return indexFallback.Thumbnail;
             }
 
-            Debug.LogWarning($"[PartyModelSlotView] userId={member.userId} \u2014 using defaultThumbnail (isLocal={isLocal}, CharacterDatabase empty or no thumbnail)");
             return defaultThumbnail;
         }
     }
