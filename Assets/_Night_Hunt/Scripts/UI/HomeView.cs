@@ -289,7 +289,13 @@ namespace NightHunt.UI
             if (_sessionState == null) return;
             if (profileNameText != null) profileNameText.text = _sessionState.Username ?? "";
             RefreshCharacterThumbnail();
-            if (rankText != null) rankText.text = "---";
+            if (rankText != null)
+            {
+                if (!string.IsNullOrEmpty(_sessionState.Tier))
+                    rankText.text = $"{_sessionState.Tier} | {_sessionState.Elo} ELO";
+                else
+                    rankText.text = "---";
+            }
         }
 
         private void RefreshCharacterThumbnail()
@@ -332,6 +338,16 @@ namespace NightHunt.UI
             if (result?.Success == true && result.Data != null)
             {
                 Debug.Log($"[HomeView] /api/profile response — userId={result.Data.userId} username='{result.Data.username}' tier={result.Data.tier} elo={result.Data.elo} selectedCharacterId='{result.Data.selectedCharacterId}'");
+                
+                if (profileManager == null)
+                {
+                    _sessionState?.SetProfileData(
+                        result.Data.coins,
+                        result.Data.elo,
+                        result.Data.tier,
+                        result.Data.selectedCharacterId);
+                }
+
                 if (rankText != null)
                     rankText.text = $"{result.Data.tier} | {result.Data.elo} ELO";
                 if (!string.IsNullOrEmpty(result.Data.selectedCharacterId))
