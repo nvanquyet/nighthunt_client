@@ -218,8 +218,11 @@ namespace NightHunt.UI
         /// <summary>Update a friend's status badge in-place (from WS friend_status_changed).</summary>
         public void OnFriendStatusChanged(long userId, string newStatus, long newPartyId, long newRoomId)
         {
-            bool wasOnline  = _onlineItems.ContainsKey(userId);
-            bool isNowOnline = newStatus == "ONLINE" || newStatus == "IN_GAME";
+            bool wasOnline = _onlineItems.ContainsKey(userId);
+            // Treat ONLINE+inRoom / ONLINE+inParty / IN_GAME all as "online bucket"
+            // Server sends status="ONLINE" even when entering a room — use room/party context too.
+            bool isNowOnline = newStatus == "ONLINE" || newStatus == "IN_GAME"
+                               || newRoomId != 0 || newPartyId != 0;
 
             if (wasOnline && isNowOnline)
             {
@@ -322,7 +325,9 @@ namespace NightHunt.UI
             _offlineFriends.Clear();
             foreach (var f in result.Data)
             {
-                bool online = f.onlineStatus == "ONLINE" || f.onlineStatus == "IN_GAME";
+                // Mirror the same rule as OnFriendStatusChanged: room/party presence = online bucket
+                bool online = f.onlineStatus == "ONLINE" || f.onlineStatus == "IN_GAME"
+                              || f.currentRoomId != 0 || f.currentPartyId != 0;
                 if (online) _onlineFriends.Add(f);
                 else        _offlineFriends.Add(f);
             }

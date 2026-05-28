@@ -125,35 +125,40 @@ namespace NightHunt.UI
         {
             if (statusText == null) return;
 
-            bool inParty = Friend != null && Friend.currentPartyId != 0;
-            bool inRoom = Friend != null && Friend.currentRoomId != 0;
+            // Guard: treat null/empty as OFFLINE to avoid switch-default misfire
+            if (string.IsNullOrEmpty(status)) status = "OFFLINE";
 
+            bool inParty = Friend != null && Friend.currentPartyId != 0;
+            bool inRoom  = Friend != null && Friend.currentRoomId  != 0;
+
+            // ── Status text ─────────────────────────────────────────────────
+            // Priority: IN_GAME > In Room > In Party > ONLINE/AWAY/OFFLINE
             if (status == "IN_GAME")
                 statusText.text = "In Game";
             else if (inRoom)
-                statusText.text = "In Room";
+                statusText.text = "In Room";    // ONLINE + currentRoomId ≠ 0
             else if (inParty)
-                statusText.text = "In Party";
+                statusText.text = "In Party";   // ONLINE + currentPartyId ≠ 0
             else
                 statusText.text = status switch
                 {
-                    "ONLINE" => "Online",
-                    "AWAY" => "Away",
-                    _ => "Offline"
+                    "ONLINE"  => "Online",
+                    "AWAY"    => "Away",
+                    "OFFLINE" => "Offline",
+                    _         => "Offline"
                 };
 
+            // ── Status colour ────────────────────────────────────────────────
+            // Single source-of-truth — no duplicate override block below.
             statusText.color = status switch
             {
-                "ONLINE"  => inRoom || inParty ? new Color(0.2f, 0.6f, 1f) : new Color(0.2f, 0.9f, 0.2f),
-                "IN_GAME" => new Color(0.2f, 0.6f, 1f),
-                "AWAY"    => new Color(1f,   0.8f, 0.2f),
-                _         => new Color(0.5f, 0.5f, 0.5f)
+                "IN_GAME" => new Color(0.2f, 0.6f, 1f),                                          // blue
+                "ONLINE"  => inRoom  ? new Color(0.2f, 0.6f, 1f)                                  // blue  (In Room)
+                           : inParty ? new Color(1f,   0.8f, 0.2f)                                // gold  (In Party)
+                           :           new Color(0.2f, 0.9f, 0.2f),                               // green (plain Online)
+                "AWAY"    => new Color(1f, 0.8f, 0.2f),                                           // gold
+                _         => new Color(0.5f, 0.5f, 0.5f)                                          // grey  (Offline)
             };
-
-            if (status == "ONLINE" && inRoom)
-                statusText.color = new Color(0.2f, 0.6f, 1f);
-            else if (status == "ONLINE" && inParty)
-                statusText.color = new Color(1f, 0.8f, 0.2f);
         }
 
         private TextMeshProUGUI ResolveFallbackText(string keyword)
