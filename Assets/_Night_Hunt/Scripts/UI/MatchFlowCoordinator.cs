@@ -262,6 +262,16 @@ namespace NightHunt.UI
             var room = RoomState.Instance;
             Debug.Log($"[FLOW §4] MFC ds_ready ▶ dsIp={e.dsIp} dsPort={e.dsPort} matchId={e.matchId} mapId={e.mapId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             Debug.Log($"[FLOW §4] MFC ds_ready — RoomState.DsIp={room?.DsIp} RoomState.DsPort={room?.DsPort}");
+
+            // Always update RoomState with the authoritative DS address from ds_ready.
+            // This handles: (1) DS reallocation/failover with a different IP than match_ready,
+            // (2) reused READY server where ds_ready arrives BEFORE match_ready.
+            if (!string.IsNullOrEmpty(e.dsIp) && e.dsPort > 0)
+            {
+                Debug.Log($"[FLOW §4] Updating RoomState DS address → {e.dsIp}:{e.dsPort}");
+                RoomState.Instance?.SetDedicatedServer(e.dsIp, (ushort)e.dsPort, e.matchId, e.mapId);
+            }
+
             NightHunt.Networking.NetworkGameManager.SignalDsReady();
         }
 

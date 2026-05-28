@@ -73,12 +73,6 @@ namespace NightHunt.UI
         // RUNTIME STATE
         // ══════════════════════════════════════════════════════════════════════
 
-        private PartyResponse    _currentParty      = null;
-
-        // Set to true before we intentionally disband/leave so HandlePartyDisbanded
-        // suppresses the "party disbanded" toast on the PartyCustomMode panel.
-        private bool _suppressDisbandToast = false;
-
         // Queue
         private RankedQueueState _queueState        = RankedQueueState.Idle;
         private float            _searchElapsed     = 0f;
@@ -115,6 +109,11 @@ namespace NightHunt.UI
         private void Start()
         {
             SubscribeWSEvents();
+            if (PartyState.Instance != null)
+            {
+                PartyState.Instance.OnPartyUpdated += HandlePartyStateUpdated;
+                PartyState.Instance.OnPartyCleared += HandlePartyStateCleared;
+            }
             SetQueueState(RankedQueueState.Idle);
             RefreshGameModeSelector();
             GameModeConfig.OnConfigLoaded += RefreshGameModeSelector;
@@ -140,6 +139,11 @@ namespace NightHunt.UI
         private void OnDestroy()
         {
             UnsubscribeWSEvents();
+            if (PartyState.Instance != null)
+            {
+                PartyState.Instance.OnPartyUpdated -= HandlePartyStateUpdated;
+                PartyState.Instance.OnPartyCleared -= HandlePartyStateCleared;
+            }
             GameModeConfig.OnConfigLoaded -= RefreshGameModeSelector;
             MapConfig.OnConfigLoaded -= HandleMapConfigLoaded;
             if (modeDropdown != null) modeDropdown.onValueChanged.RemoveListener(OnModeDropdownChanged);
@@ -160,14 +164,33 @@ namespace NightHunt.UI
         {
             HLog($"HomeShown start mode={DescribeSelectedMode()} queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()}");
 
-            // Immediately populate the model display with cached state (solo slot or
-            // last known party) so the preview is never blank while the API call is in-flight.
+            // Show cached state immediately so display is never blank while refresh is in-flight.
             RefreshPartyDisplay();
 
-            // Do NOT force-reset to Idle here — let RefreshParty resolve the actual
-            // server-side queue state (solo player may still be SEARCHING on server
-            // after an app-resume, or may have been auto-cancelled).
-            await RefreshParty(forceServer: true);
+            if (PartyState.Instance == null)
+            {
+                Debug.LogWarning("[PartyController] OnHomeShownAsync: PartyState.Instance is null — skipping party refresh.");
+                return;
+            }
+
+            // RefreshAsync(forceNetwork:true) fetches fresh data, updates PartyState (fires
+            // OnPartyUpdated → RefreshPartyDisplay) then resolves queue sync.
+            await PartyState.Instance.RefreshAsync(forceNetwork: true);
+
+            // Reconcile solo-player server queue state (detects state drift after reconnect).
+            var party = PartyState.Instance?.CurrentParty;
+            if (party != null)
+            {
+                if (party.IsInQueue)
+                    SetQueueState(RankedQueueState.Searching);
+                else if (_queueState == RankedQueueState.Searching && string.IsNullOrEmpty(_pendingLobbyToken))
+                    SetQueueState(RankedQueueState.Idle);
+            }
+            else
+            {
+                await SyncSoloQueueStateAsync();
+            }
+
             HLog($"HomeShown done mode={DescribeSelectedMode()} queue={_queueState} party={DescribeCurrentParty()} room={DescribeRoomState()}");
         }
 
@@ -179,7 +202,7 @@ namespace NightHunt.UI
         {
             if (_partyService == null || friend == null) return;
 
-            if (_currentParty == null)
+            if (PartyState.Instance == null || !PartyState.Instance.IsInParty)
             {
                 var createResult = await _partyService.CreateParty();
                 if (!createResult.Success)
@@ -188,7 +211,7 @@ namespace NightHunt.UI
                     ShowToast("Party", "Failed to create party.");
                     return;
                 }
-                _currentParty = createResult.Data;
+                // PartyService.CreateParty now updates PartyState — no local assignment needed.
                 RefreshPartyDisplay();
             }
 
@@ -230,11 +253,12 @@ namespace NightHunt.UI
         private async void OnModeDropdownChanged(int index)
         {
             if (this == null || gameObject == null) return;
+            if (PartyState.Instance == null) return;
             if (_enabledModes == null || index < 0 || index >= _enabledModes.Length) return;
             if (index == _selectedModeIndex) return;
 
             HLog($"ModeDropdown requested oldIndex={_selectedModeIndex} newIndex={index} oldMode={DescribeSelectedMode()} requestedMode={DescribeMode(_enabledModes[index])} queue={_queueState} partyBeforeRefresh={DescribeCurrentParty()} room={DescribeRoomState()}");
-            await RefreshParty(forceServer: true);
+            await PartyState.Instance.RefreshAsync(forceNetwork: true);
 
             var newMode   = _enabledModes[index];
             int partySize = GetCurrentPartySize();
@@ -244,14 +268,14 @@ namespace NightHunt.UI
             {
                 ShiftUIBridge.SetDropdownIndexSilently(modeDropdown, _selectedModeIndex);
                 HLog($"ModeDropdown blocked by active queue. requestedMode={DescribeMode(newMode)} party={DescribeCurrentParty()}");
-                if (_currentParty != null && IsSoloMode(newMode))
+                if (PartyState.Instance.IsInParty && IsSoloMode(newMode))
                     PromptLeavePartyForSoloMode(index, newMode);
                 else
                     PromptCancelQueueForModeChange(index, newMode);
                 return;
             }
 
-            if (_currentParty != null && IsSoloMode(newMode))
+            if (PartyState.Instance.IsInParty && IsSoloMode(newMode))
             {
                 ShiftUIBridge.SetDropdownIndexSilently(modeDropdown, _selectedModeIndex);
                 HLog($"ModeDropdown solo requested while in party. Prompting leave/disband. requestedMode={DescribeMode(newMode)} party={DescribeCurrentParty()}");
@@ -289,13 +313,14 @@ namespace NightHunt.UI
 
         private void PromptLeavePartyForSoloMode(int targetIndex, GameModeEntry targetMode)
         {
-            if (_currentParty == null)
+            var party = PartyState.Instance.CurrentParty;
+            if (party == null)
             {
                 ApplyModeSelection(targetIndex);
                 return;
             }
 
-            string status = _currentParty.partyStatus ?? string.Empty;
+            string status = party.partyStatus ?? string.Empty;
             if (status != "IDLE" && status != "IN_QUEUE")
             {
                 ShowToast("Mode Change", "Leave the current party room or match before switching to solo.");
@@ -303,7 +328,7 @@ namespace NightHunt.UI
             }
 
             bool isHost = IsCurrentUserPartyHost();
-            bool willCancelQueue = _currentParty.IsInQueue;
+            bool willCancelQueue = party.IsInQueue;
             string modeName = string.IsNullOrWhiteSpace(targetMode.displayName) ? "Solo 1v1" : targetMode.displayName;
             string actionText = isHost ? "disband your ranked party" : "leave your ranked party";
             string queueText = willCancelQueue ? "cancel the party queue and " : string.Empty;
@@ -362,7 +387,8 @@ namespace NightHunt.UI
                 return;
             }
 
-            if (_currentParty == null)
+            var party = PartyState.Instance.CurrentParty;
+            if (party == null)
             {
                 HLog($"LeavePartyThenApplyMode no party; applying targetIndex={targetIndex}");
                 ApplyModeSelection(targetIndex);
@@ -372,7 +398,7 @@ namespace NightHunt.UI
             bool isHost = IsCurrentUserPartyHost();
             HLog($"LeavePartyThenApplyMode start targetIndex={targetIndex} isHost={isHost} party={DescribeCurrentParty()}");
 
-            if (_currentParty.IsInQueue)
+            if (party.IsInQueue)
             {
                 var cancel = await _partyService.CancelQueue();
                 HLog($"LeavePartyThenApplyMode cancel queue result success={cancel.Success} errorCode={cancel.ErrorCode ?? "null"} msg='{cancel.Message ?? "null"}'");
@@ -380,7 +406,7 @@ namespace NightHunt.UI
                 {
                     ShowToast("Mode Change", cancel.Message ?? "Could not cancel party queue.");
                     ShiftUIBridge.SetDropdownIndexSilently(modeDropdown, _selectedModeIndex);
-                    await RefreshParty();
+                    await PartyState.Instance.RefreshAsync(forceNetwork: true);
                     return;
                 }
             }
@@ -394,13 +420,12 @@ namespace NightHunt.UI
             {
                 ShowToast("Mode Change", result.Message ?? "Could not leave party.");
                 ShiftUIBridge.SetDropdownIndexSilently(modeDropdown, _selectedModeIndex);
-                await RefreshParty();
+                await PartyState.Instance.RefreshAsync(forceNetwork: true);
                 return;
             }
 
-            _currentParty = null;
+            // PartyService.LeaveParty/DisbandParty already calls PartyState.ClearParty()
             ApplyModeSelection(targetIndex);
-            await RefreshParty();
             HLog($"LeavePartyThenApplyMode done targetIndex={targetIndex} selected={DescribeSelectedMode()} party={DescribeCurrentParty()}");
         }
 
@@ -441,45 +466,24 @@ namespace NightHunt.UI
         private async Task RefreshParty(bool forceServer = false)
         {
             HLog($"RefreshParty start forceServer={forceServer} current={DescribeCurrentParty()}");
-            if (_partyService == null) { Debug.LogWarning("[FLOW][HOME_MODE] _partyService is null - skipping GetParty"); RefreshPartyDisplay(); return; }
-            if (forceServer)
-                APICache.Invalidate(APICache.KEY_PARTY_STATE);
-            var result = await _partyService.GetParty();
-            if (result.Success && result.Data != null)
-            {
-                _currentParty = result.Data;
-                HLog($"RefreshParty response OK party={DescribeCurrentParty()}");
-                if (_currentParty.members != null)
-                {
-                    for (int i = 0; i < _currentParty.members.Count; i++)
-                    {
-                        var m = _currentParty.members[i];
-                        HLog($"RefreshParty member[{i}] userId={m.userId} username='{m.username}' isHost={m.isHost} joinOrder={m.joinOrder} onlineStatus={m.onlineStatus} selectedCharacterId='{m.selectedCharacterId}'");
-                    }
-                }
-            }
-            else
-            {
-                _currentParty = null;
-                HLog($"RefreshParty response no active party success={result.Success} errorCode={result.ErrorCode ?? "null"} msg='{result.Message ?? "null"}'");
-            }
+            if (PartyState.Instance == null) { HLog("RefreshParty skipped: PartyState.Instance is null."); return; }
+            await PartyState.Instance.RefreshAsync(forceNetwork: forceServer);
 
-            if (_currentParty != null)
+            var party = PartyState.Instance.CurrentParty;
+            if (party != null)
             {
-                // Party player: trust the party's queue state
-                if (_currentParty.IsInQueue)
+                if (party.IsInQueue)
                     SetQueueState(RankedQueueState.Searching);
                 else if (_queueState == RankedQueueState.Searching && string.IsNullOrEmpty(_pendingLobbyToken))
                     SetQueueState(RankedQueueState.Idle);
             }
             else
             {
-                // Solo player: check server-side queue entry to detect state drift
-                // (e.g. client reconnected after crash — server already cancelled the entry
-                // via WS disconnect dequeue, but client UI still shows 'Searching').
                 await SyncSoloQueueStateAsync();
             }
 
+            // RefreshPartyDisplay is called from HandlePartyStateUpdated / HandlePartyStateCleared
+            // which fire from PartyState events. Call here too for callers who need immediate UI.
             RefreshPartyDisplay();
             HLog($"RefreshParty done queue={_queueState} party={DescribeCurrentParty()} selectedMode={DescribeSelectedMode()}");
         }
@@ -535,13 +539,14 @@ namespace NightHunt.UI
 
         public void RefreshPartyDisplay()
         {
+            var currentParty = PartyState.Instance?.CurrentParty;
             int maxSlots = SelectedMode.modeKey != null ? SelectedMode.playersPerTeam : 3;
             if (maxSlots <= 0) maxSlots = 3;
 
-            bool iAmHost = _currentParty != null &&
-                           _currentParty.hostUserId == (_sessionState?.UserId ?? -1L);
+            bool iAmHost = currentParty != null &&
+                           currentParty.hostUserId == (_sessionState?.UserId ?? -1L);
 
-            memberListView?.Refresh(_currentParty, maxSlots,
+            memberListView?.Refresh(currentParty, maxSlots,
                 iAmHost:         iAmHost,
                 onInviteClicked: OnInviteSlotClicked,
                 onKick: uid => GameModalWindow.Instance?.ShowConfirm(
@@ -553,7 +558,7 @@ namespace NightHunt.UI
                     onConfirm: async () => { if (_partyService != null) await _partyService.LeaveParty(); },
                     confirmText: "Leave Party", cancelText: "Cancel"));
 
-            modelListView?.Refresh(_currentParty,
+            modelListView?.Refresh(currentParty,
                 iAmHost: iAmHost,
                 onKick: uid => GameModalWindow.Instance?.ShowConfirm(
                     "Kick Member?", "Are you sure you want to kick this member?",
@@ -564,7 +569,7 @@ namespace NightHunt.UI
                     onConfirm: async () => { if (_partyService != null) await _partyService.LeaveParty(); },
                     confirmText: "Leave Party", cancelText: "Cancel"));
 
-            bool canInviteFriends = _currentParty == null || IsPartyIdle(_currentParty);
+            bool canInviteFriends = currentParty == null || IsPartyIdle(currentParty);
             friendPanelView?.SetCanInviteToParty(canInviteFriends);
         }
 
@@ -594,7 +599,7 @@ namespace NightHunt.UI
                 return;
             }
 
-            await RefreshParty(forceServer: true);
+            if (PartyState.Instance != null) await PartyState.Instance.RefreshAsync(forceNetwork: true);
 
             if (string.IsNullOrWhiteSpace(SelectedMode.modeKey))
             {
@@ -606,12 +611,13 @@ namespace NightHunt.UI
 
             bool isPartyHost = IsCurrentUserPartyHost();
             int partySize = GetCurrentPartySize();
-            bool hasParty = _currentParty != null;
+            bool hasParty = PartyState.Instance.IsInParty;
+            var party = PartyState.Instance.CurrentParty;
             HLog($"StartQueue after party refresh mode={DescribeSelectedMode()} hasParty={hasParty} isPartyHost={isPartyHost} partySize={partySize} party={DescribeCurrentParty()}");
 
             // Server-authoritative check: party is in a CUSTOM lobby room
             // (partyMode=CUSTOM). Must leave before starting ranked matchmaking.
-            if (hasParty && _currentParty.IsCustom)
+            if (hasParty && party.IsCustom)
             {
                 HLog($"StartQueue blocked: party is in CUSTOM mode (in a room). party={DescribeCurrentParty()}");
                 ShowToast("Matchmaking", "Leave the party custom mode before starting ranked matchmaking.");
@@ -619,7 +625,7 @@ namespace NightHunt.UI
                 return;
             }
 
-            if (hasParty && _currentParty.IsInQueue)
+            if (hasParty && party.IsInQueue)
             {
                 HLog($"StartQueue blocked: party already in queue. party={DescribeCurrentParty()}");
                 SetQueueState(RankedQueueState.Searching);
@@ -704,7 +710,8 @@ namespace NightHunt.UI
 
         private async Task CancelQueue()
         {
-            bool isPartyHost = _currentParty != null && _currentParty.IsInQueue && _partyService != null;
+            var party = PartyState.Instance?.CurrentParty;
+            bool isPartyHost = party != null && party.IsInQueue && _partyService != null;
             HLog($"CancelQueue requested isPartyHost={isPartyHost} queue={_queueState} party={DescribeCurrentParty()}");
             if (isPartyHost)
             {
@@ -719,8 +726,8 @@ namespace NightHunt.UI
 
             _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
-            if (_currentParty != null)
-                await RefreshParty();
+            if (PartyState.Instance != null && PartyState.Instance.IsInParty)
+                await PartyState.Instance.RefreshAsync(forceNetwork: true);
             HLog($"CancelQueue done queue={_queueState} party={DescribeCurrentParty()}");
         }
 
@@ -761,14 +768,13 @@ namespace NightHunt.UI
                 return;
             }
 
-            await RefreshParty(true);
-            if (_currentParty != null)
+            await PartyState.Instance.RefreshAsync(forceNetwork: true);
+            var party = PartyState.Instance.CurrentParty;
+            if (party != null)
             {
-                string status = string.IsNullOrWhiteSpace(_currentParty.partyStatus) ? "IDLE" : _currentParty.partyStatus;
-                // Use server-authoritative partyMode field when available;
-                // fall back to partyStatus string for older server versions.
-                bool isRankedQueued = _currentParty.IsRanked ||
-                    string.Equals(_currentParty.partyStatus, "IN_QUEUE", StringComparison.OrdinalIgnoreCase);
+                string status = string.IsNullOrWhiteSpace(party.partyStatus) ? "IDLE" : party.partyStatus;
+                bool isRankedQueued = party.IsRanked ||
+                    string.Equals(party.partyStatus, "IN_QUEUE", StringComparison.OrdinalIgnoreCase);
 
                 if (isRankedQueued)
                 {
@@ -821,20 +827,23 @@ namespace NightHunt.UI
 
             bool isHost = IsCurrentUserPartyHost();
             HLog($"LeaveOrDisbandPartyThenNavigatePartyCustomMode start isHost={isHost} party={DescribeCurrentParty()}");
-            _suppressDisbandToast = true;
+            // Suppress the "party disbanded" toast that arrives via WS after we disband.
+            if (isHost) PartyState.Instance?.SuppressNextDisbandToast();
             var result = isHost
                 ? await _partyService.DisbandParty()
                 : await _partyService.LeaveParty();
 
             if (!result.Success)
             {
-                _suppressDisbandToast = false;
+                // Undo the suppress flag so future disbands still show the toast.
+                // (ConsumeSuppressDisbandToast wasn't called yet, so we need to clear it.)
+                PartyState.Instance?.ConsumeSuppressDisbandToast();
                 ShowToast("Party", result.Message ?? "Failed to leave current party.");
-                await RefreshParty(true);
+                await (PartyState.Instance?.RefreshAsync(forceNetwork: true) ?? Task.CompletedTask);
                 return;
             }
 
-            _currentParty = null;
+            // PartyService.DisbandParty/LeaveParty already calls PartyState.ClearParty()
             RefreshPartyDisplay();
             NavigatePartyCustomMode();
         }
@@ -1014,10 +1023,9 @@ namespace NightHunt.UI
         {
             if (_partyService == null) return;
 
-            var partyResult = await _partyService.GetParty();
-            if (partyResult.Success && partyResult.Data != null)
+            if (PartyState.Instance != null) await PartyState.Instance.RefreshAsync(forceNetwork: true);
+            if (PartyState.Instance != null && PartyState.Instance.IsInParty)
             {
-                _currentParty = partyResult.Data;
                 string confirmTitle = "Switch Party?";
                 string confirmMessage = "Accepting this invite will leave your current party and join the inviter's party.";
                 string confirmText = "Leave & Join";
@@ -1046,7 +1054,7 @@ namespace NightHunt.UI
             var result = await _partyService.AcceptInvitation(invitationId);
             if (result.Success)
             {
-                _currentParty = result.Data;
+                // PartyService.AcceptInvitation already calls PartyState.SetParty(result.Data)
                 RefreshPartyDisplay();
                 HLog($"AcceptPartyInvitation success party={DescribeCurrentParty()} invitationId={invitationId}");
             }
@@ -1069,37 +1077,31 @@ namespace NightHunt.UI
             string name = string.IsNullOrEmpty(e.username) ? "A player" : e.username;
             ShowToast("Party", $"{name} joined the party.");
             Debug.Log($"[PartyController] PartyMemberJoined — userId={e.userId} username='{e.username}'");
-            _ = RefreshParty();
+            // PartyState refresh handled by GameEventBus
         }
 
         private void HandlePartyMemberLeft(GameWebSocketService.PartyMemberLeftEvent e)
         {
             bool isSelf = e.userId == (_sessionState?.UserId ?? -1L);
-            if (isSelf) _currentParty = null;
             ShowToast("Party", isSelf ? "You left the party." : "A party member left.");
             Debug.Log($"[PartyController] PartyMemberLeft — userId={e.userId} isSelf={isSelf}");
-            _ = RefreshParty();
+            // PartyState refresh/clear handled by GameEventBus
         }
 
         private void HandlePartyMemberKicked(GameWebSocketService.PartyMemberKickedEvent e)
         {
             if (e.kickedUserId == (_sessionState?.UserId ?? -1L))
-            {
-                _currentParty = null;
                 ShowToast("Party", "You were kicked from the party.");
-            }
             Debug.Log($"[PartyController] PartyMemberKicked — kickedUserId={e.kickedUserId} kickerUserId={e.kickerUserId}");
-            _ = RefreshParty();
+            // PartyState clear/refresh handled by GameEventBus
         }
 
         private void HandlePartyDisbanded(GameWebSocketService.PartyDisbandedEvent e)
         {
-            _currentParty = null;
             SetQueueState(RankedQueueState.Idle);
             RefreshPartyDisplay();
-            if (!_suppressDisbandToast)
+            if (PartyState.Instance == null || !PartyState.Instance.ConsumeSuppressDisbandToast())
                 ShowToast("Party", "The party has been disbanded.");
-            _suppressDisbandToast = false;
             Debug.Log($"[PartyController] PartyDisbanded — partyId={e.partyId}");
         }
 
@@ -1108,11 +1110,33 @@ namespace NightHunt.UI
             if (e.newHostUserId == (_sessionState?.UserId ?? -1L))
                 ShowToast("Party", "You are now the party host.");
             Debug.Log($"[PartyController] PartyHostChanged — new hostUserId={e.newHostUserId}");
-            _ = RefreshParty();
+            // PartyState refresh handled by GameEventBus
         }
 
         private void HandlePartyStatusChanged(GameWebSocketService.PartyStatusChangedEvent e)
-            => _ = RefreshParty();
+        {
+            // PartyState refresh handled by GameEventBus; nothing extra needed here.
+        }
+
+        // Called when PartyState updates after a WS event + server refresh
+        private void HandlePartyStateUpdated(PartyResponse party)
+        {
+            HLog($"HandlePartyStateUpdated party={DescribeCurrentParty()} queue={_queueState}");
+            if (party != null && party.IsInQueue && _queueState != RankedQueueState.Searching)
+                SetQueueState(RankedQueueState.Searching);
+            else if (party != null && !party.IsInQueue && _queueState == RankedQueueState.Searching && string.IsNullOrEmpty(_pendingLobbyToken))
+                SetQueueState(RankedQueueState.Idle);
+            RefreshPartyDisplay();
+        }
+
+        // Called when PartyState is cleared (left / kicked / disbanded)
+        private void HandlePartyStateCleared()
+        {
+            HLog($"HandlePartyStateCleared queue={_queueState}");
+            if (_queueState != RankedQueueState.Idle)
+                SetQueueState(RankedQueueState.Idle);
+            RefreshPartyDisplay();
+        }
 
         // ══════════════════════════════════════════════════════════════════════
         // HELPERS
@@ -1160,12 +1184,13 @@ namespace NightHunt.UI
 
         private string DescribeCurrentParty()
         {
-            if (_currentParty == null)
+            var p = PartyState.Instance?.CurrentParty;
+            if (p == null)
                 return "none";
 
-            int members = _currentParty.members != null ? _currentParty.members.Count : _currentParty.currentMemberCount;
+            int members = p.members != null ? p.members.Count : p.currentMemberCount;
             return
-                $"id={_currentParty.partyId},host={_currentParty.hostUserId},status={_currentParty.partyStatus},members={members}/{_currentParty.maxMembers}";
+                $"id={p.partyId},host={p.hostUserId},status={p.partyStatus},members={members}/{p.maxMembers}";
         }
 
         private static string DescribeRoomState()
@@ -1180,19 +1205,12 @@ namespace NightHunt.UI
 
         private bool IsCurrentUserPartyHost()
         {
-            return _currentParty != null &&
-                   _currentParty.hostUserId == (_sessionState?.UserId ?? -1L);
+            return PartyState.Instance != null && PartyState.Instance.IsHost(_sessionState?.UserId ?? -1L);
         }
 
         private int GetCurrentPartySize()
         {
-            if (_currentParty == null)
-                return 0;
-
-            if (_currentParty.members != null)
-                return _currentParty.members.Count;
-
-            return _currentParty.currentMemberCount;
+            return PartyState.Instance?.MemberCount ?? 0;
         }
 
         private static bool IsPartyIdle(PartyResponse party)

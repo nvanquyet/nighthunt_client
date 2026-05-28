@@ -69,7 +69,11 @@ namespace NightHunt.Services.Party
             {
                 var result = await backendClient.PostAsync<PartyResponse>(Constants.API_PARTY_CREATE);
                 if (result.Success)
+                {
                     APICache.Invalidate(APICache.KEY_PARTY_STATE);
+                    if (result.Data != null)
+                        PartyState.Instance?.SetParty(result.Data);
+                }
                 else
                     LoadingOverlay.ShowError(result.Message ?? "Failed to create party");
                 return result;
@@ -102,7 +106,14 @@ namespace NightHunt.Services.Party
 
             var result = await backendClient.GetAsync<PartyResponse>(Constants.API_PARTY);
             if (result.Success && result.Data != null)
+            {
                 APICache.Set(APICache.KEY_PARTY_STATE, result.Data, 15f);
+                PartyState.Instance?.SetParty(result.Data);
+            }
+            else if (result.Success)
+            {
+                PartyState.Instance?.ClearParty();
+            }
 
             return result;
         }
@@ -124,6 +135,7 @@ namespace NightHunt.Services.Party
                 if (result.Success)
                 {
                     APICache.InvalidateParty();
+                    PartyState.Instance?.ClearParty();
                     return ApiResult.Ok();
                 }
                 LoadingOverlay.ShowError(result.Message ?? "Failed to leave party");
@@ -158,6 +170,7 @@ namespace NightHunt.Services.Party
                 if (result.Success)
                 {
                     APICache.InvalidateParty();
+                    PartyState.Instance?.ClearParty();
                     return ApiResult.Ok();
                 }
                 LoadingOverlay.ShowError(result.Message ?? "Failed to disband party");
@@ -235,7 +248,11 @@ namespace NightHunt.Services.Party
                 string endpoint = string.Format(Constants.API_PARTY_ACCEPT_INVITATION, invitationId);
                 var result = await backendClient.PostAsync<PartyResponse>(endpoint);
                 if (result.Success)
+                {
                     APICache.InvalidateParty();
+                    if (result.Data != null)
+                        PartyState.Instance?.SetParty(result.Data);
+                }
                 else
                     LoadingOverlay.ShowError(result.Message ?? "Failed to join party");
                 return result;

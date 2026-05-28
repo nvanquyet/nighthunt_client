@@ -802,31 +802,25 @@ namespace NightHunt.UI
         private async System.Threading.Tasks.Task CheckPartyThenRun(
             Func<System.Threading.Tasks.Task> action)
         {
-            if (_partyService == null)
-            {
-                NLog($"CheckPartyThenRun: PartyService null, continue to room check. local={DescribeLocalRoom()}");
-                await CheckRoomThenRun(action);
-                return;
-            }
+            // Ensure party state is fresh before acting.
+            await PartyState.Instance.RefreshAsync(forceNetwork: true);
+            var party = PartyState.Instance.CurrentParty;
+            bool inParty = party != null;
 
-            var partyResult = await _partyService.GetParty();
-            bool inParty = partyResult.Success && partyResult.Data != null;
-            NLog(
-                $"CheckPartyThenRun: getParty success={partyResult.Success} errorCode={partyResult.ErrorCode ?? "null"} " +
-                $"msg='{partyResult.Message ?? "null"}' inParty={inParty} party={DescribeParty(partyResult.Data)} local={DescribeLocalRoom()}");
+            NLog($"CheckPartyThenRun: inParty={inParty} party={DescribeParty(party)} local={DescribeLocalRoom()}");
             if (!inParty)
             {
                 await CheckRoomThenRun(action);
                 return;
             }
 
-            bool isHost = partyResult.Data.hostUserId == (_sessionState?.UserId ?? -1L);
-            string partyStatus = partyResult.Data.partyStatus ?? "";
+            bool isHost = PartyState.Instance.IsHost(_sessionState?.UserId ?? -1L);
+            string partyStatus = party.partyStatus ?? "";
 
             // Party in ranked matchmaking queue — block entirely, must cancel queue first.
             if (partyStatus == "IN_QUEUE")
             {
-                NLog($"CreateRoom blocked: party is IN_QUEUE for ranked matchmaking. party={DescribeParty(partyResult.Data)} local={DescribeLocalRoom()}");
+                NLog($"CreateRoom blocked: party is IN_QUEUE for ranked matchmaking. party={DescribeParty(party)} local={DescribeLocalRoom()}");
                 GameModalWindow.Instance?.ShowNotice(
                     "Cannot Create Custom Room",
                     "Your party is currently in a matchmaking queue. Cancel the queue first before creating a party custom mode.");
@@ -843,7 +837,7 @@ namespace NightHunt.UI
                 onConfirm: async () =>
                 {
                     SetStatus(isHost ? "Disbanding party..." : "Leaving party...");
-                    NLog($"Party leave/disband confirmed before custom room. isHost={isHost} party={DescribeParty(partyResult.Data)}");
+                    NLog($"Party leave/disband confirmed before custom room. isHost={isHost} party={DescribeParty(party)}");
 
                     var r = isHost
                         ? await _partyService.DisbandParty()
