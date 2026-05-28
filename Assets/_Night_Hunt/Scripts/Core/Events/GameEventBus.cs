@@ -285,12 +285,49 @@ namespace NightHunt.Core
         private void HandlePartyInvitationDeclined(GameWebSocketService.PartyInvitationResponseEvent evt) => OnPartyInvitationDeclined?.Invoke(evt);
         private void HandlePartyInvitationCancelled(GameWebSocketService.PartyInvitationResponseEvent evt) => OnPartyInvitationCancelled?.Invoke(evt);
         private void HandlePartyInvitationExpired(GameWebSocketService.PartyInvitationResponseEvent evt) => OnPartyInvitationExpired?.Invoke(evt);
-        private void HandlePartyMemberJoined(GameWebSocketService.PartyMemberJoinedEvent evt) => OnPartyMemberJoined?.Invoke(evt);
-        private void HandlePartyMemberLeft(GameWebSocketService.PartyMemberLeftEvent evt) => OnPartyMemberLeft?.Invoke(evt);
-        private void HandlePartyMemberKicked(GameWebSocketService.PartyMemberKickedEvent evt) => OnPartyMemberKicked?.Invoke(evt);
-        private void HandlePartyDisbanded(GameWebSocketService.PartyDisbandedEvent evt) => OnPartyDisbanded?.Invoke(evt);
-        private void HandlePartyHostChanged(GameWebSocketService.PartyHostChangedEvent evt) => OnPartyHostChanged?.Invoke(evt);
-        private void HandlePartyStatusChanged(GameWebSocketService.PartyStatusChangedEvent evt) => OnPartyStatusChanged?.Invoke(evt);
+        private void HandlePartyMemberJoined(GameWebSocketService.PartyMemberJoinedEvent evt)
+        {
+            OnPartyMemberJoined?.Invoke(evt);
+            NightHunt.State.PartyState.Instance?.InvalidateAndScheduleRefresh();
+        }
+
+        private void HandlePartyMemberLeft(GameWebSocketService.PartyMemberLeftEvent evt)
+        {
+            OnPartyMemberLeft?.Invoke(evt);
+            long selfId = NightHunt.State.SessionState.Instance?.UserId ?? 0L;
+            if (evt.userId == selfId)
+                NightHunt.State.PartyState.Instance?.ClearParty();
+            else
+                NightHunt.State.PartyState.Instance?.InvalidateAndScheduleRefresh();
+        }
+
+        private void HandlePartyMemberKicked(GameWebSocketService.PartyMemberKickedEvent evt)
+        {
+            OnPartyMemberKicked?.Invoke(evt);
+            long selfId = NightHunt.State.SessionState.Instance?.UserId ?? 0L;
+            if (evt.kickedUserId == selfId)
+                NightHunt.State.PartyState.Instance?.ClearParty();
+            else
+                NightHunt.State.PartyState.Instance?.InvalidateAndScheduleRefresh();
+        }
+
+        private void HandlePartyDisbanded(GameWebSocketService.PartyDisbandedEvent evt)
+        {
+            OnPartyDisbanded?.Invoke(evt);
+            NightHunt.State.PartyState.Instance?.ClearParty();
+        }
+
+        private void HandlePartyHostChanged(GameWebSocketService.PartyHostChangedEvent evt)
+        {
+            OnPartyHostChanged?.Invoke(evt);
+            NightHunt.State.PartyState.Instance?.InvalidateAndScheduleRefresh();
+        }
+
+        private void HandlePartyStatusChanged(GameWebSocketService.PartyStatusChangedEvent evt)
+        {
+            OnPartyStatusChanged?.Invoke(evt);
+            NightHunt.State.PartyState.Instance?.InvalidateAndScheduleRefresh();
+        }
 
         // Lifecycle Event Handlers
         private void HandleAppFocusLost() => OnAppFocusLost?.Invoke();
