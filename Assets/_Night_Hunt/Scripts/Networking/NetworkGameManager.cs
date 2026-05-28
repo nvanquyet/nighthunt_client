@@ -95,6 +95,14 @@ namespace NightHunt.Networking
                 _gameSceneLoaded = true;
             }
 
+            // ── Fix C: catch Unity-native scene loads ────────────────────────
+            // SceneLoader.LoadGame() calls Unity's SceneManager.LoadSceneAsync which
+            // DOES NOT fire FishNet's SceneManager.OnLoadEnd. The DontDestroyOnLoad
+            // instance started in Home so Fix A above never triggers for it.
+            // Subscribing here ensures _gameSceneLoaded is set when the map scene
+            // activates regardless of how it was loaded.
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnUnitySceneLoaded;
+
             // ── Fix B: ds_ready may have arrived before this instance subscribed ─
             // GameWebSocketService broadcasts ds_ready once. If the previous scene's
             // NetworkGameManager was destroyed before receiving it (or it arrived during
@@ -123,7 +131,25 @@ namespace NightHunt.Networking
             }
             if (GameWebSocketService.Instance != null)
                 GameWebSocketService.Instance.OnDsReady -= OnDsReadyReceived;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnUnitySceneLoaded;
             base.OnDestroy();
+        }
+
+        /// <summary>
+        /// Unity-native scene-loaded callback. Catches map scenes loaded via
+        /// SceneLoader.LoadGame() (which uses LoadSceneAsync, not FishNet's loader)
+        /// so the DontDestroyOnLoad singleton can set _gameSceneLoaded and
+        /// trigger TryConnectIfReady() even in the normal Home→Game flow.
+        /// </summary>
+        private void OnUnitySceneLoaded(UnityEngine.SceneManagement.Scene scene,
+                                        UnityEngine.SceneManagement.LoadSceneMode mode)
+        {
+            if (scene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.Log($"[NetworkGameManager] Unity scene loaded: '{scene.name}' — setting _gameSceneLoaded = true.");
+                _gameSceneLoaded = true;
+                TryConnectIfReady();
+            }
         }
 
         // ── Dedicated Server (Ranked mode) ────────────────────────────────────
@@ -165,36 +191,42 @@ namespace NightHunt.Networking
         /// Start FishNet HOST through the relay – used by the room owner (Custom mode).
         ///
         /// How it works:
-        ///   1. FishNet Server binds locally (loopback only – not internet-exposed).
-        ///   2. FishNet Client connects outbound to relay:sessionPort
-        ///      (relay registered this connection as "host" via POST /api/relay/create).
-        ///   3. Relay forwards all subsequent packets between host and clients.
+        ///   1. FishNet Server binds to 0.0.0.0 (all interfaces).
+        ///      MUST NOT bind to 127.0.0.1: the relay forwards packets from its own IP,
+        ///      not from loopback, so a loopback-bound server drops all relay traffic.
+        ///   2. FishNet Client connects outbound to relay:sessionPort.
+        ///   3. Relay forwards all subsequent packets between host and non-host clients.
         ///
-        /// NOTE: This requires the Tugboat transport to be configured so the *server*
-        /// bind address is 127.0.0.1 (localhost) and the *client* address is the relay.
-        /// A custom RelayTransport shim (future work) will handle the packet header.
+        /// Security: session isolation is enforced by the relay via session-token; binding
+        /// 0.0.0.0 does not expose the server to arbitrary internet connections.
         /// </summary>
         public void StartHostWithRelay(string relayIp, ushort relayPort, string sessionId)
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
-            Debug.Log($"[NetworkGameManager] Starting HOST via Relay {relayIp}:{relayPort} session={sessionId}");
+            Debug.Log($"[FLOW §5] NetworkGameManager.StartHostWithRelay: relay={relayIp}:{relayPort} session={sessionId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
-            // Bind server to loopback so it never accepts direct internet connections
-            SetTransportServerBindAddress("127.0.0.1");
+            // ⚠️  MUST bind 0.0.0.0, NOT 127.0.0.1.
+            // The relay server forwards packets originating from its own public IP.
+            // A loopback-only bind rejects those packets, causing:
+            //   • Client packets never reaching the host server → no FishNet server ack
+            //   • Host's own client-side prediction never reconciled  → frozen movement
+            SetTransportServerBindAddress("0.0.0.0");
+            Debug.Log("[FLOW §5] Host server bind address set to 0.0.0.0 (all interfaces — required for relay forwarding).");
 
-            // Start server (loopback only)
+            // Start FishNet server
             if (!networkManager.ServerManager.StartConnection())
             {
                 Debug.LogError("[NetworkGameManager] Failed to start relay host server!");
                 return;
             }
+            Debug.Log("[FLOW §5] FishNet server started.");
 
-            // Connect client side to relay (host traffic is proxied by relay to all clients)
+            // Connect host's client side outbound to relay
             SetTransportAddress(relayIp, relayPort);
             if (!networkManager.ClientManager.StartConnection())
                 Debug.LogError("[NetworkGameManager] Failed to start relay host client!");
             else
-                Debug.Log("[NetworkGameManager] Relay Host started.");
+                Debug.Log($"[FLOW §5] Relay Host client connecting → {relayIp}:{relayPort}");
         }
 
         /// <summary>
@@ -383,14 +415,14 @@ namespace NightHunt.Networking
 
             if (room.IsHostPlayer)
             {
-                Debug.Log($"[NetworkGameManager] Starting HOST via relay {room.RelayIp}:{room.RelayPort} session={room.RelaySessionId}");
+                Debug.Log($"[FLOW §5] AutoConnectRelay: IsHostPlayer=true → StartHostWithRelay {room.RelayIp}:{room.RelayPort}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                 StartHostWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
 
                 int expected = room.PlayerCount > 0 ? room.PlayerCount : 2;
                 if (ServerGameManager.Instance != null)
                 {
                     ServerGameManager.Instance.SetExpectedPlayerCount(expected);
-                    Debug.Log($"[NetworkGameManager] Host: expectedPlayerCount set to {expected}");
+                    Debug.Log($"[FLOW §5] Host: expectedPlayerCount set to {expected}");
                 }
                 else
                 {
@@ -399,7 +431,7 @@ namespace NightHunt.Networking
             }
             else
             {
-                Debug.Log($"[NetworkGameManager] Connecting CLIENT via relay {room.RelayIp}:{room.RelayPort}");
+                Debug.Log($"[FLOW §5] AutoConnectRelay: IsHostPlayer=false → StartClientWithRelay {room.RelayIp}:{room.RelayPort}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                 StartClientWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
             }
         }
@@ -608,14 +640,16 @@ namespace NightHunt.Networking
         /// Tell backend to release the relay session.
         /// Fire-and-forget; failures are logged but not fatal.
         /// </summary>
-        private async Task NotifyRelayCleanup(string sessionId)
+        private async Task NotifyRelayCleanup(string sessionToken)
         {
             try
             {
                 var backend = NightHunt.Core.GameManager.Instance?.BackendClient;
                 if (backend == null) return;
-                await backend.DeleteAsync<object>($"/api/relay/{sessionId}");
-                Debug.Log($"[NetworkGameManager] Relay session {sessionId} cleaned up.");
+                // Backend: POST /api/relay/leave  { sessionToken: "..." }
+                var body = new { sessionToken };
+                await backend.PostAsync<object>("/api/relay/leave", body);
+                Debug.Log($"[NetworkGameManager] Relay session {sessionToken} cleaned up.");
             }
             catch (System.Exception e)
             {

@@ -1,10 +1,12 @@
 using FishNet.Object;
 using FishNet.Connection;
 using FishNet.Object.Synchronizing;
+using FishNet.Observing;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
+using NightHunt.Gameplay.StatSystem.Core.Types;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Gameplay.FogOfWar;
@@ -92,6 +94,10 @@ namespace NightHunt.Networking.Player
         public void SetPublicData(PlayerPublicData data)
         {
             _playerData.Value = data;
+            // Propagate team change to server-side FoW visibility map.
+            if (IsServerStarted)
+                ServerFogVisibilityService.Instance?.UpdatePlayerData(
+                    ObjectId, data.TeamId, ResolveServerVisionRange());
         }
 
         /// <summary>Server: Mark player as dead or alive.</summary>
@@ -178,6 +184,33 @@ namespace NightHunt.Networking.Player
             // In HOST mode (IsClientInitialized == true) the client-side setup (SetupCamera)
             // will enable the camera for the owning player — do NOT disable it here.
             bool isDedicatedServer = !IsClientInitialized;
+
+            // ── Server-side FoW Net-Culling ────────────────────────────────────
+            // Register this player with the visibility service so ConditionMet() can
+            // query whether any other player has LoS to this one.
+            var svc = ServerFogVisibilityService.Instance;
+            if (svc != null)
+                svc.RegisterPlayer(ObjectId, transform, TeamId, ResolveServerVisionRange());
+
+            // NOTE: FogOfWarObserverCondition must be added to the player prefab via the Inspector:
+            // → NetworkObserver component → Observer Conditions → drag FogOfWarObserverCondition asset.
+            // (NetworkObserver.ObserverConditionsInternal is internal and not accessible at runtime.)
+        }
+
+        public override void OnStopServer()
+        {
+            base.OnStopServer();
+            ServerFogVisibilityService.Instance?.UnregisterPlayer(ObjectId);
+        }
+
+        /// <summary>
+        /// Reads VisionRange from this player's stat system (server-side access).
+        /// Falls back to 20 f when stat system is not yet initialised.
+        /// </summary>
+        private float ResolveServerVisionRange()
+        {
+            float v = GamePlaySystemBridge?.Stat?.GetStat(PlayerStatType.VisionRange) ?? 0f;
+            return v > 0.1f ? v : 20f;
         }
 
         public override void OnStartClient()
@@ -401,7 +434,18 @@ namespace NightHunt.Networking.Player
         private void SetupOwnerSide()
         {
             // Owner only: Enable camera and input.
-            EnableInput();
+            // In FishNet Host mode the player prefab can be spawned (OnStartClient) in the same
+            // frame as Awake(), before InputManager.Start() has run. Check Instance first and
+            // defer to a coroutine if not yet available to avoid silently losing input.
+            if (InputManager.Instance != null)
+            {
+                EnableInput();
+            }
+            else
+            {
+                Debug.LogWarning("[FLOW §11] NetworkPlayer.SetupOwnerSide: InputManager not ready yet — deferring EnableInput().");
+                StartCoroutine(RetryEnableInputWhenReady());
+            }
 
             // Directly activate the local player's virtual camera on the same prefab.
             // CameraStateManager.HandleOwnerReady() cannot be used here because it subscribes
@@ -419,16 +463,46 @@ namespace NightHunt.Networking.Player
             OnOwnerReady?.Invoke(this);
         }
 
+        /// <summary>
+        /// Fallback: retry EnableInput() each frame until InputManager.Instance is available.
+        /// Guards against FishNet Host race where OnStartClient fires before InputManager.Start().
+        /// </summary>
+        private System.Collections.IEnumerator RetryEnableInputWhenReady()
+        {
+            const float timeoutSeconds = 5f;
+            float elapsed = 0f;
+            while (InputManager.Instance == null && elapsed < timeoutSeconds)
+            {
+                yield return null;
+                elapsed += Time.deltaTime;
+            }
+
+            if (InputManager.Instance != null)
+            {
+                Debug.Log($"[FLOW §11b] NetworkPlayer: InputManager ready after {elapsed:F2}s — calling EnableInput().");
+                EnableInput();
+            }
+            else
+            {
+                Debug.LogError($"[NetworkPlayer] InputManager never became available after {timeoutSeconds}s! " +
+                               "Player input will not work. Ensure InputManager is in the game scene.");
+            }
+        }
+
 
         private void EnableInput()
         {
             var inputManager = FindFirstObjectByType<InputManager>();
             if (inputManager == null)
             {
-                Debug.LogWarning("[NetworkPlayer] EnableInput: InputManager not found!");
+                Debug.LogError("[NetworkPlayer] EnableInput: InputManager NOT FOUND in scene! " +
+                               "This will prevent all player input. Ensure InputManager GameObject " +
+                               "is present in the game scene with correct execution order. " +
+                               $"ObjectId={ObjectId} Name='{PlayerData.DisplayName}'");
                 return;
             }
 
+            Debug.Log($"[FLOW §11c] NetworkPlayer.EnableInput: ObjectId={ObjectId} Name='{PlayerData.DisplayName}'  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             inputManager.EnableAllInput();
 
             // Lấy các refs cần thiết cho BindCombatSystems
