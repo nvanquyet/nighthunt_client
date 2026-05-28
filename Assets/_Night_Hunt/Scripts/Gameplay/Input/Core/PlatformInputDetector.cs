@@ -10,10 +10,11 @@ namespace NightHunt.Gameplay.Input.Core
     /// Detects the active input platform (KeyboardMouse, Gamepad, Touch) at runtime and
     /// fires <see cref="OnPlatformChanged"/> whenever the user switches devices.
     ///
-    /// SETUP: Place on a persistent GameObject in 00_DS_Boot or 01_Home (DontDestroyOnLoad).
+    /// SETUP: Place on a dedicated GO in 00_DS_Boot or 01_Home — survives all scene loads
+    /// via DontDestroyOnLoad. Do NOT place a second copy in the game scene.
     /// GameHUD and other HUDs subscribe to OnPlatformChanged to show/hide platform-specific UI.
     /// </summary>
-    public sealed class PlatformInputDetector : Singleton<PlatformInputDetector>
+    public sealed class PlatformInputDetector : SingletonPersistent<PlatformInputDetector>
     {
         // ── Types ──────────────────────────────────────────────────────────────
 
