@@ -881,6 +881,8 @@ GameObject:
   - component: {fileID: 8491396184485047296}
   - component: {fileID: 7302019368834571142}
   - component: {fileID: 4503128307412239911}
+  - component: {fileID: 2814150154248338204}
+  - component: {fileID: 4760216488133052642}
   m_Layer: 6
   m_Name: PlayerPrefab
   m_TagString: Untagged
@@ -1276,6 +1278,40 @@ MonoBehaviour:
   _acquireRadius: 0.75
   _hitTargetRef: {fileID: 5379918314552202696}
   _acquirePointLocalOffset: {x: 0, y: 0, z: 0}
+--- !u!114 &2814150154248338204
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6186874985291187823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c71fd7f855ec523429999fc4e14a1928, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FishNet.Runtime::FishNet.Observing.NetworkObserver
+  _overrideType: 3
+  _updateHostVisibility: 1
+  _observerConditions:
+  - {fileID: 11400000, guid: 033fc71dc3443e740bd147f581cbf121, type: 2}
+--- !u!114 &4760216488133052642
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6186874985291187823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c60f4c9147e5fe44a5dbe23966412e6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Gameplay.Character.Combat.HitboxRollbackRegistrar
+  _componentIndexCache: 255
+  _addedNetworkObject: {fileID: 2932638389700231956}
+  _networkObjectCache: {fileID: 0}
+  _hitboxRoots:
+  - {fileID: 6927907726633053832}
+  _autoAddColliderRollback: 1
 --- !u!1 &6529247948932358281
 GameObject:
   m_ObjectHideFlags: 0
@@ -1424,6 +1460,10 @@ MonoBehaviour:
   _deathLayerIndex: 2
   _enableMeleeHitFallback: 1
   _meleeHitFallbackDelay: 0.28
+  _defaultWeaponDrawSeconds: 0.4
+  _swapHolsterDelayScale: 0.5
+  _minWeaponTransitionSeconds: 0.05
+  _maxWeaponTransitionSeconds: 1.5
 --- !u!114 &9001051205302328292
 MonoBehaviour:
   m_ObjectHideFlags: 0
