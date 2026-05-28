@@ -1,4 +1,5 @@
 using System.Collections;
+using FishNet.Managing.Timing;
 using NightHunt.Data;
 using UnityEngine;
 using NightHunt.GameplaySystems.Core.Data;
@@ -322,7 +323,8 @@ namespace NightHunt.GameplaySystems.Weapon
                         slot.Value,
                         ballisticFireDir,
                         config.HasProjectileTargetPoint,
-                        config.ProjectileTargetPoint);
+                        config.ProjectileTargetPoint,
+                        TimeManager.GetPreciseTick(TickType.Tick));
 
                 // Spawn projectile visual on remote clients using the clamped 3D direction.
                 // For hitscan weapons, _lastFireEndpoint is the raycast hit point or max range.

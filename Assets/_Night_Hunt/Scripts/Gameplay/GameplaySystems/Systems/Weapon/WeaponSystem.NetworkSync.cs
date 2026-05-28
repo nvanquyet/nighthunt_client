@@ -1,6 +1,8 @@
 using UnityEngine;
 using FishNet.Connection;
 using FishNet.Object;
+using FishNet.Managing.Timing;
+using FishNet.Component.ColliderRollback;
 using System.Collections;
 using NightHunt.Data;
 using NightHunt.GameplaySystems.Core.Data;
@@ -115,9 +117,10 @@ namespace NightHunt.GameplaySystems.Weapon
             WeaponSlotType slot,
             Vector3 direction,
             bool hasProjectileTargetPoint,
-            Vector3 projectileTargetPoint)
+            Vector3 projectileTargetPoint,
+            PreciseTick shotTick)
         {
-            ResolveAuthoritativeShotServer(slot, direction, consumeAmmo: true, hasProjectileTargetPoint, projectileTargetPoint);
+            ResolveAuthoritativeShotServer(slot, direction, consumeAmmo: true, hasProjectileTargetPoint, projectileTargetPoint, shotTick);
         }
 
         [Server]
@@ -126,7 +129,8 @@ namespace NightHunt.GameplaySystems.Weapon
             Vector3 direction,
             bool consumeAmmo,
             bool hasProjectileTargetPoint = false,
-            Vector3 projectileTargetPoint = default)
+            Vector3 projectileTargetPoint = default,
+            PreciseTick shotTick = default)
         {
             if (!IsUsableFireDirection(direction))
             {
@@ -157,6 +161,9 @@ namespace NightHunt.GameplaySystems.Weapon
                 return;
             }
 
+            if (!ValidateServerFireRate(slot, inst))
+                return;
+
             Vector3 fireDir = direction.sqrMagnitude > 0.001f ? direction.normalized : transform.forward;
             if (!ValidateServerAimDelta(slot, fireDir))
                 return;
@@ -173,6 +180,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 int ammoCost = ResolveAmmoCostPerShot(inst, mag);
                 inst.AdjustCurrentValue(ItemStatType.MagazineSize, -ammoCost);
             }
+
+            _lastAuthoritativeShotTimePerSlot[slot] = Time.time;
 
             var config = BuildWeaponConfigData(inst);
             config.ApplyDamage = true;
@@ -208,7 +217,16 @@ namespace NightHunt.GameplaySystems.Weapon
                     "ServerHitscanStart",
                     $"owner={Owner?.ClientId} obj={ObjectId} slot={slot} weapon={config.WeaponId} origin={origin:F2} dir={authoritativeFireDir:F2} maxRange={maxRange:F1} speed={config.ProjectileSpeed:F1} mask={NightHunt.Core.NightHuntLayers.MaskHitscanFull.value}",
                     this);
+                // Rewind all ColliderRollback objects to the tick the client reported firing
+                // so hitscan validates against hitbox positions that were accurate client-side.
+                var rbm = NetworkObject?.RollbackManager;
+                if (rbm != null)
+                    rbm.Rollback(shotTick, RollbackPhysicsType.Physics);
+
                 ResolveAuthoritativeHitscan(origin, authoritativeFireDir, config, maxRange, (int)ObjectId);
+
+                if (rbm != null)
+                    rbm.Return();
             }
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableProjectileDebugLogs)
@@ -243,6 +261,30 @@ namespace NightHunt.GameplaySystems.Weapon
             Debug.LogWarning(
                 $"[SHOOT.SERVER.REJECT] owner={Owner?.ClientId} obj={ObjectId} slot={slot} reason={reason}{suffix}",
                 this);
+        }
+
+        [Server]
+        private bool ValidateServerFireRate(WeaponSlotType slot, ItemInstance inst)
+        {
+            float rpm = inst.GetComputedStat(ItemStatType.FireRate);
+            if (rpm <= 0f)
+                return true;
+
+            // Allow up to 2× the weapon's fire rate to absorb network variance and tick bunching.
+            float minInterval = (60f / rpm) * 0.5f;
+            if (_lastAuthoritativeShotTimePerSlot.TryGetValue(slot, out float lastTime))
+            {
+                float elapsed = Time.time - lastTime;
+                if (elapsed < minInterval)
+                {
+                    RejectAuthoritativeShot(
+                        slot,
+                        "fire-rate-exceeded",
+                        $"elapsed={elapsed:F3}s minGrace={minInterval:F3}s rpm={rpm:F0}");
+                    return false;
+                }
+            }
+            return true;
         }
 
         [Server]

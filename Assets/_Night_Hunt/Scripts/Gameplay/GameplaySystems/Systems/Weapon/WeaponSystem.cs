@@ -142,6 +142,7 @@ namespace NightHunt.GameplaySystems.Weapon
         private Vector3 _lastFireHitNormal = Vector3.up;
         private Vector3 _lastServerShotDirection = Vector3.zero;
         private float _lastServerShotTime = -1f;
+        private readonly Dictionary<WeaponSlotType, float> _lastAuthoritativeShotTimePerSlot = new();
 
         // ── Events (IWeaponSystem) ─────────────────────────────────────────────
         public event Action<WeaponSlotType, ItemInstance>      OnWeaponEquipped;
@@ -175,6 +176,7 @@ namespace NightHunt.GameplaySystems.Weapon
             _weaponCache.Clear();
             _lastServerShotDirection = Vector3.zero;
             _lastServerShotTime = -1f;
+            _lastAuthoritativeShotTimePerSlot.Clear();
         }
 
         public void Dispose()
@@ -184,6 +186,7 @@ namespace NightHunt.GameplaySystems.Weapon
             _weaponCache.Clear();
             _lastServerShotDirection = Vector3.zero;
             _lastServerShotTime = -1f;
+            _lastAuthoritativeShotTimePerSlot.Clear();
         }
 
         // ── IWeaponSystem — simple getters ─────────────────────────────────────

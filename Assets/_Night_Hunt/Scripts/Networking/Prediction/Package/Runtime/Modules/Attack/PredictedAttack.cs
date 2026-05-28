@@ -7,7 +7,12 @@ namespace NightHunt.Networking.Prediction.Modules.Attack
 {
     public class PredictedAttack : FishNetPredictedBehaviour<AttackReplicateData, AttackReconcileData>
     {
-        [SerializeField] private bool autoHitOnServer = true;
+        // NOTE: This class is a STUB / base template.
+        // autoHitOnServer defaults to false (fail-safe). Derived classes must override
+        // CreateReconcileData() with real server-side raycast/validation logic.
+        // The production weapon system uses WeaponSystem.NetworkSync.cs (ServerRpc pattern)
+        // instead of this prediction package module.
+        [SerializeField] private bool autoHitOnServer = false;
         [SerializeField] private float defaultDamage = 10f;
 
         private AttackReplicateData _pendingAttack;
@@ -63,7 +68,7 @@ namespace NightHunt.Networking.Prediction.Modules.Attack
 
         protected virtual void OnReplicate(AttackReplicateData data, bool asServer, bool replaying)
         {
-            // Server-side hit validation should be placed here.
+            // Override in derived class: run server-side hit validation here (e.g. Physics.Raycast).
         }
 
         protected virtual void OnReconcile(AttackReconcileData data, bool asServer)
@@ -79,7 +84,9 @@ namespace NightHunt.Networking.Prediction.Modules.Attack
 
         protected override AttackReconcileData CreateReconcileData()
         {
-            bool success = autoHitOnServer;
+            // STUB: returns false (miss) by default. Derived classes MUST override this
+            // with a real server-side raycast to avoid auto-confirming phantom hits.
+            bool success = autoHitOnServer; // Inspector override only — production code must override CreateReconcileData()
             int hitTargetId = success ? 1 : -1;
             float damage = success ? defaultDamage : 0f;
             Vector3 hitPos = _pendingAttack.FireOrigin + _pendingAttack.FireDirection * 5f;
