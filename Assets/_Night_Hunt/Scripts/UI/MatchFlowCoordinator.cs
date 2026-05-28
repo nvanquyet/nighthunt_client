@@ -78,6 +78,7 @@ namespace NightHunt.UI
             bus.OnMatchCancelled += HandleMatchCancelled;
             bus.OnMatchEnded     += HandleMatchEnded;
             bus.OnRoomDisbanded  += HandleRoomDisbandedDuringGame;
+            bus.OnServerTerminated += HandleServerTerminated;
             _eventBusSubscribed = true;
             _subscribeRoutine = null;
         }
@@ -95,6 +96,7 @@ namespace NightHunt.UI
                 bus.OnMatchCancelled -= HandleMatchCancelled;
                 bus.OnMatchEnded     -= HandleMatchEnded;
                 bus.OnRoomDisbanded  -= HandleRoomDisbandedDuringGame;
+                bus.OnServerTerminated -= HandleServerTerminated;
             }
             _eventBusSubscribed = false;
         }
@@ -388,6 +390,33 @@ namespace NightHunt.UI
                 toast?.Show("Match", $"Room was disbanded ({reason}). Returning to Home...");
                 NightHunt.Core.SceneLoader.LoadHome();
             }
+        }
+
+        // ── server_terminated (admin force-kills DS) ─────────────────────────
+
+        private void HandleServerTerminated(GameWebSocketService.ServerTerminatedEvent evt)
+        {
+            Debug.LogWarning($"[MFC] server_terminated ▶ serverId={evt.serverId} matchId={evt.matchId} reason={evt.reason}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            _lastHandledMatchId = null;
+
+            MatchLoadingOverlay.Instance?.Hide();
+
+            // Disconnect FishNet if connected
+            if (NightHunt.Networking.NetworkGameManager.Instance != null)
+                NightHunt.Networking.NetworkGameManager.Instance.Disconnect();
+
+            RoomState.Instance?.ClearNetworkSession();
+
+            string message = !string.IsNullOrEmpty(evt.reason)
+                ? evt.reason
+                : "The server was shut down by the administrator.";
+
+            // Show modal with single "Return to Home" button — reuse existing GameModalWindow
+            GameModalWindow.Instance?.ShowNotice(
+                "Server Terminated",
+                $"{message}\n\nYou will be returned to the home screen.",
+                closeText: "Return to Home",
+                onClose: () => NightHunt.Core.SceneLoader.LoadHome());
         }
 
         // ── Public: reset (called by RoomState.ClearRoom via NetworkGameManager) ──

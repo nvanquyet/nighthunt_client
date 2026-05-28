@@ -77,6 +77,9 @@ namespace NightHunt.Services.Game
         public event Action<RoomDisbandedEvent> OnRoomDisbanded;
         /// <summary>Fired only to the player who was kicked.</summary>
         public event Action<YouWereKickedEvent> OnYouWereKicked;
+        /// <summary>Fired when an admin force-terminates the DS hosting the current match.
+        /// Subscribe in MatchFlowCoordinator/GameHUD to show modal and return to home.</summary>
+        public event Action<ServerTerminatedEvent> OnServerTerminated;
         /// <summary>Fired when backend reports in-match reconnect/disconnect/abandon state.</summary>
         public event Action<MatchPresenceNoticeEvent> OnMatchPresenceNotice;
 
@@ -934,6 +937,14 @@ namespace NightHunt.Services.Game
                             OnYouWereKicked?.Invoke(youWereKicked);
                         break;
 
+                    // server_terminated: admin force-killed the DS hosting this match.
+                    // Show modal → return player to home.
+                    case "server_terminated":
+                        var serverTerminated = JsonUtility.FromJson<ServerTerminatedEvent>(messageData.data);
+                        if (serverTerminated != null)
+                            OnServerTerminated?.Invoke(serverTerminated);
+                        break;
+
                     case "match_presence_notice":
                         var presenceNotice = JsonUtility.FromJson<MatchPresenceNoticeEvent>(messageData.data);
                         if (presenceNotice != null)
@@ -1134,6 +1145,18 @@ namespace NightHunt.Services.Game
             public string reason;
             public string message;
             public int graceSeconds;
+        }
+
+        /// <summary>
+        /// Fired when an admin force-terminates the dedicated server hosting the current match.
+        /// Client should show a modal and return the player to home screen.
+        /// </summary>
+        [Serializable]
+        public class ServerTerminatedEvent
+        {
+            public string matchId;
+            public string serverId;
+            public string reason;
         }
 
         [Serializable]

@@ -28,6 +28,8 @@ namespace NightHunt.Core
         public event Action<GameWebSocketService.GameStartingEvent> OnGameStarting;
         public event Action<GameWebSocketService.RoomDisbandedEvent> OnRoomDisbanded;
         public event Action<GameWebSocketService.YouWereKickedEvent> OnYouWereKicked;
+        /// <summary>Admin force-terminated the DS. Players should see a modal and return to home.</summary>
+        public event Action<GameWebSocketService.ServerTerminatedEvent> OnServerTerminated;
         public event Action<GameWebSocketService.MatchPresenceNoticeEvent> OnMatchPresenceNotice;
         public event Action OnForceLogout;
         public event Action OnSessionExpired;
@@ -121,6 +123,7 @@ namespace NightHunt.Core
                 ws.OnGameStarting += HandleGameStarting;
                 ws.OnRoomDisbanded += HandleRoomDisbanded;
                 ws.OnYouWereKicked += HandleYouWereKicked;
+                ws.OnServerTerminated += HandleServerTerminated;
                 ws.OnMatchPresenceNotice += HandleMatchPresenceNotice;
                 ws.OnForceLogout += HandleForceLogout;
                 ws.OnSessionExpired += HandleSessionExpired;
@@ -197,6 +200,7 @@ namespace NightHunt.Core
                 ws.OnGameStarting -= HandleGameStarting;
                 ws.OnRoomDisbanded -= HandleRoomDisbanded;
                 ws.OnYouWereKicked -= HandleYouWereKicked;
+                ws.OnServerTerminated -= HandleServerTerminated;
                 ws.OnMatchPresenceNotice -= HandleMatchPresenceNotice;
                 ws.OnForceLogout -= HandleForceLogout;
                 ws.OnSessionExpired -= HandleSessionExpired;
@@ -263,6 +267,7 @@ namespace NightHunt.Core
         private void HandleGameStarting(GameWebSocketService.GameStartingEvent evt) => OnGameStarting?.Invoke(evt);
         private void HandleRoomDisbanded(GameWebSocketService.RoomDisbandedEvent evt) => OnRoomDisbanded?.Invoke(evt);
         private void HandleYouWereKicked(GameWebSocketService.YouWereKickedEvent evt) => OnYouWereKicked?.Invoke(evt);
+        private void HandleServerTerminated(GameWebSocketService.ServerTerminatedEvent evt) => OnServerTerminated?.Invoke(evt);
         private void HandleMatchPresenceNotice(GameWebSocketService.MatchPresenceNoticeEvent evt) => OnMatchPresenceNotice?.Invoke(evt);
         private void HandleForceLogout() => OnForceLogout?.Invoke();
         private void HandleSessionExpired() => OnSessionExpired?.Invoke();
