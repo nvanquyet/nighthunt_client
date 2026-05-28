@@ -3,16 +3,41 @@ using UnityEngine;
 namespace NightHunt.Core
 {
     /// <summary>
+    /// Controls what happens when a second instance of a singleton is found.
+    /// </summary>
+    public enum SingletonDuplicatePolicy
+    {
+        /// <summary>
+        /// Destroy the NEW (incoming) duplicate — keep the existing instance.
+        /// Default behavior. Use for most scene-scoped singletons.
+        /// </summary>
+        DestroyNew,
+
+        /// <summary>
+        /// Destroy the OLD (existing) instance and promote the new one.
+        /// Use when the new scene's version should always win
+        /// (e.g. a persistent singleton that needs fresh scene-specific state).
+        /// </summary>
+        DestroyOld,
+    }
+
+    /// <summary>
     /// Abstract base for generic singleton patterns.
     /// 
     /// Handles all common singleton logic:
-    /// - Duplicate instance detection
+    /// - Duplicate instance detection (configurable: DestroyNew vs DestroyOld)
     /// - Static instance storage
     /// - Instance getter with lazy loading
     /// - OnDestroy cleanup
     /// 
-    /// Subclasses (Singleton<T>, SingletonPersistent<T>) only override MakePersistent()
+    /// Subclasses (Singleton&lt;T&gt;, SingletonPersistent&lt;T&gt;) only override MakePersistent()
     /// to define whether DontDestroyOnLoad is called.
+    ///
+    /// To change policy, override <see cref="DuplicatePolicy"/> in your subclass:
+    /// <code>
+    /// protected override SingletonDuplicatePolicy DuplicatePolicy
+    ///     => SingletonDuplicatePolicy.DestroyOld;
+    /// </code>
     /// </summary>
     public abstract class SingletonBase<T> : MonoBehaviour where T : MonoBehaviour
     {
@@ -31,6 +56,13 @@ namespace NightHunt.Core
         /// <summary>Returns true if a live instance exists.</summary>
         public static bool HasInstance => _instance != null;
 
+        /// <summary>
+        /// Defines what to do when a duplicate instance is detected.
+        /// Default: <see cref="SingletonDuplicatePolicy.DestroyNew"/>.
+        /// Override in subclass to change per-type behaviour.
+        /// </summary>
+        protected virtual SingletonDuplicatePolicy DuplicatePolicy => SingletonDuplicatePolicy.DestroyNew;
+
         protected virtual void Awake()
         {
             // Duplicate detection — use Unity's == null which properly detects
@@ -40,9 +72,25 @@ namespace NightHunt.Core
             bool instanceIsDestroyedOrNull = _instance == null || !_instance;
             if (!instanceIsDestroyedOrNull && _instance != this)
             {
-                Debug.LogWarning($"[{typeof(T).Name}] Duplicate instance found — destroying {gameObject.name}.");
-                Destroy(gameObject);
-                return;
+                if (DuplicatePolicy == SingletonDuplicatePolicy.DestroyOld)
+                {
+                    // Keep the newest instance — destroy the old one.
+                    Debug.LogWarning(
+                        $"[{typeof(T).Name}] Duplicate found — destroying OLD '{_instance.gameObject.name}', " +
+                        $"keeping NEW '{gameObject.name}'.");
+                    var old = _instance.gameObject;
+                    _instance = null;
+                    Destroy(old);
+                    // fall through to register this instance below
+                }
+                else // DestroyNew (default)
+                {
+                    Debug.LogWarning(
+                        $"[{typeof(T).Name}] Duplicate found — destroying NEW '{gameObject.name}', " +
+                        $"keeping existing '{_instance.gameObject.name}'.");
+                    Destroy(gameObject);
+                    return;
+                }
             }
 
             // Set as instance
@@ -64,7 +112,7 @@ namespace NightHunt.Core
         /// <summary>
         /// Override to implement persistence logic.
         /// Default does nothing (scene-scoped).
-        /// SingletonPersistent<T> overrides to call DontDestroyOnLoad.
+        /// SingletonPersistent&lt;T&gt; overrides to call DontDestroyOnLoad.
         /// </summary>
         protected virtual void MakePersistent() { }
 
