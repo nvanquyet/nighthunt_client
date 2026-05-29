@@ -7,6 +7,7 @@ using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Feedback;
+using NightHunt.Gameplay.Deployables;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
@@ -704,6 +705,7 @@ namespace NightHunt.UI
             PlayerHealthSystem.OnAnyPlayerDied  += HandleAnyPlayerDied;
             PlayerHealthSystem.OnAnyHitReceived += HandleAnyHitReceived;
             CombatFeedbackEvents.LocalHitConfirmed += HandleLocalHitConfirmed;
+            BaseDeployable.OnAnyDeployableHit += HandleAnyDeployableHit;
             _combatEventsSubscribed = true;
 
             if (_damageFeedback == null)
@@ -720,6 +722,7 @@ namespace NightHunt.UI
             PlayerHealthSystem.OnAnyPlayerDied  -= HandleAnyPlayerDied;
             PlayerHealthSystem.OnAnyHitReceived -= HandleAnyHitReceived;
             CombatFeedbackEvents.LocalHitConfirmed -= HandleLocalHitConfirmed;
+            BaseDeployable.OnAnyDeployableHit -= HandleAnyDeployableHit;
             _combatEventsSubscribed = false;
         }
 
@@ -728,10 +731,28 @@ namespace NightHunt.UI
             Debug.Log($"[DAMAGE][HUD] HitReceived: shooter={info.ShooterNetworkObjectId} localId={_localNetObjId} dmg={info.Damage:F1} weapon={info.WeaponId} feedbackNull={_damageFeedback == null}");
             if (_localNetObjId < 0 || _damageFeedback == null) return;
 
+            // Don't show indicator for hits the local player caused (handled by HandleLocalHitConfirmed)
             if (info.ShooterNetworkObjectId == _localNetObjId)
                 return;
 
             if (IsHitOnObservedPlayer(info))
+                _damageFeedback.ShowHitIndicator(GetIncomingHitDirection(info));
+        }
+
+        /// <summary>
+        /// Deployable hit broadcast from BaseDeployable.NotifyHitObserversRpc.
+        /// Show hit indicator only when the observed player is nearby the hit deployable.
+        /// Damage number / HitConfirm is already handled by HandleLocalHitConfirmed (TargetRpc).
+        /// </summary>
+        private void HandleAnyDeployableHit(DamageInfo info)
+        {
+            if (_localNetObjId < 0 || _damageFeedback == null) return;
+
+            // Only show incoming-fire indicator if the local (or spectated) player is nearby.
+            if (info.ShooterNetworkObjectId == _localNetObjId)
+                return; // local shooter already gets feedback via HandleLocalHitConfirmed
+
+            if (IsHitNearObservedPlayer(info.HitPoint, 36f)) // 6m radius
                 _damageFeedback.ShowHitIndicator(GetIncomingHitDirection(info));
         }
 
@@ -774,6 +795,13 @@ namespace NightHunt.UI
             if (observed == null) return false;
 
             return Vector3.SqrMagnitude(observed.transform.position - info.HitPoint) <= 9f;
+        }
+
+        private bool IsHitNearObservedPlayer(Vector3 hitPoint, float sqrRadiusThreshold)
+        {
+            var observed = SpectateManager.Instance?.GetCurrentPlayer() ?? _localPlayer;
+            if (observed == null) return false;
+            return Vector3.SqrMagnitude(observed.transform.position - hitPoint) <= sqrRadiusThreshold;
         }
 
         private Vector3 GetIncomingHitDirection(DamageInfo info)

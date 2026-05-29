@@ -5,6 +5,7 @@ using UnityEngine;
 using NightHunt.Core;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.FogOfWar;
+using NightHunt.Gameplay.Feedback;
 
 namespace NightHunt.Gameplay.Deployables
 {
@@ -57,6 +58,9 @@ namespace NightHunt.Gameplay.Deployables
         public event Action Destroyed;
         public event Action<HealthChangeEvent> HealthChanged;
 
+        /// <summary>Raised on all clients when any deployable takes a hit. Use for hit indicators.</summary>
+        public static event Action<DamageInfo> OnAnyDeployableHit;
+
         public virtual HittableTargetType TargetType => HittableTargetType.Deployable;
         public Vector3 AcquirePoint => transform.position + transform.TransformDirection(_bulletAcquirePointOffset);
         public float AcquireRadius => Mathf.Max(0.1f, _bulletAcquireRadius);
@@ -79,6 +83,9 @@ namespace NightHunt.Gameplay.Deployables
             ApplyPlacedVisual(_isPlaced.Value);
             RefreshFogVisibility("OnStartNetwork");
 
+#if !UNITY_SERVER
+            EnsureWorldHealthBar();
+#endif
         }
 
         public override void OnStopNetwork()
@@ -164,6 +171,18 @@ namespace NightHunt.Gameplay.Deployables
 
             _lastDamageInstigatorNetworkObjectId.Value = Mathf.Max(0, instigatorNetworkObjectId);
             _currentHP.Value = Mathf.Max(0, _currentHP.Value - finalDamage);
+
+            // Broadcast hit info to all clients so they can show VFX, hit indicators, etc.
+            NotifyHitObserversRpc(new DamageInfo
+            {
+                Damage = finalDamage,
+                IsHeadshot = false,
+                HitPoint = transform.position,
+                HitNormal = Vector3.up,
+                ShooterNetworkObjectId = instigatorNetworkObjectId,
+                WeaponId = string.Empty,
+            });
+
             if (_currentHP.Value <= 0)
                 OnDeployableDestroyed();
         }
@@ -203,6 +222,36 @@ namespace NightHunt.Gameplay.Deployables
                     _lastDamageInstigatorNetworkObjectId.Value,
                     forceReveal: newHP < oldHP));
         }
+
+        /// <summary>Broadcast hit data from server to all clients (blood/spark VFX, hit indicators).</summary>
+        [ObserversRpc]
+        private void NotifyHitObserversRpc(DamageInfo info)
+        {
+            OnAnyDeployableHit?.Invoke(info);
+        }
+
+#if !UNITY_SERVER
+        /// <summary>
+        /// Auto-inject WorldHealthBar on the client if the prefab doesn't have one.
+        /// Creates a dedicated child GameObject so we can configure policy BEFORE Awake fires.
+        /// </summary>
+        private void EnsureWorldHealthBar()
+        {
+            if (GetComponentInChildren<WorldHealthBar>(includeInactive: true) != null)
+                return; // already has one
+
+            // Create an inactive child so AddComponent + InitForDeployable runs BEFORE Awake.
+            var child = new GameObject("[WorldHealthBar]");
+            child.SetActive(false);
+            child.transform.SetParent(transform, false);
+
+            var bar = child.AddComponent<WorldHealthBar>(); // Awake deferred while inactive
+            bar.InitForDeployable(1.8f);                   // configure: AnyDamage + offset
+
+            child.SetActive(true);                         // Awake + OnEnable now fire with correct config
+            Debug.Log($"[BaseDeployable] WorldHealthBar auto-injected on '{name}'");
+        }
+#endif
 
         protected virtual void OnIsPlacedChanged(bool oldVal, bool newVal, bool asServer)
         {

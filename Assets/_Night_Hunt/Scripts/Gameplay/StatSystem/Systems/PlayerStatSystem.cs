@@ -662,7 +662,8 @@ namespace NightHunt.Gameplay.StatSystem.Systems
         #endregion
         
         #region Debug UI
-        
+
+#if UNITY_EDITOR
         private void OnGUI()
         {
             if (!_showDebugUI || !IsOwner)
@@ -703,6 +704,7 @@ namespace NightHunt.Gameplay.StatSystem.Systems
             
             GUILayout.EndArea();
         }
+#endif
         
         #endregion
         

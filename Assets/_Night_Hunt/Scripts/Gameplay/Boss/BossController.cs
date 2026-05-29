@@ -722,6 +722,7 @@ namespace NightHunt.Gameplay.Boss
         }
 #endif
 
+#if UNITY_EDITOR
         private void OnGUI()
         {
             if (!_showDebug || !Application.isPlaying)
@@ -755,6 +756,7 @@ namespace NightHunt.Gameplay.Boss
             GUI.DrawTexture(new Rect(gx, gy + 58f, 160f * Mathf.Clamp01(hpPct), 4f), Texture2D.whiteTexture);
             GUI.color = Color.white;
         }
+#endif
 
         public enum BossState
         {

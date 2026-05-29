@@ -19,6 +19,8 @@ namespace NightHunt.UI.Settings
         [SerializeField] private SwitchManager hudSwitch;
         [SerializeField] private HorizontalSelector uiScaleSelector;
         [SerializeField] private HorizontalSelector crosshairSelector;
+        [SerializeField] private SwitchManager fpsSwitch;
+        [SerializeField] private SwitchManager pingSwitch;
 
         [Header("Reset")]
         [SerializeField] private Button resetButton;
@@ -38,6 +40,8 @@ namespace NightHunt.UI.Settings
             ShiftUIBridge.SetSwitchSilently(tutorialsSwitch, settings.EnableTutorials);
             ShiftUIBridge.SetSwitchSilently(devConsoleSwitch, settings.EnableDevConsole);
             ShiftUIBridge.SetSwitchSilently(quickSwapSwitch, settings.QuickSwap);
+            ShiftUIBridge.SetSwitchSilently(fpsSwitch, settings.ShowFPS);
+            ShiftUIBridge.SetSwitchSilently(pingSwitch, settings.ShowPing);
             
             if (languageSelector != null) { languageSelector.index = settings.Language == "English" ? 0 : 1; languageSelector.UpdateUI(); }
         }
@@ -49,6 +53,8 @@ namespace NightHunt.UI.Settings
             if (tutorialsSwitch != null) { tutorialsSwitch.OnEvents.AddListener(() => HandleTutorialsChanged(true)); tutorialsSwitch.OffEvents.AddListener(() => HandleTutorialsChanged(false)); }
             if (devConsoleSwitch != null) { devConsoleSwitch.OnEvents.AddListener(() => HandleDevConsoleChanged(true)); devConsoleSwitch.OffEvents.AddListener(() => HandleDevConsoleChanged(false)); }
             if (quickSwapSwitch != null) { quickSwapSwitch.OnEvents.AddListener(() => HandleQuickSwapChanged(true)); quickSwapSwitch.OffEvents.AddListener(() => HandleQuickSwapChanged(false)); }
+            if (fpsSwitch != null) { fpsSwitch.OnEvents.AddListener(() => HandleFPSChanged(true)); fpsSwitch.OffEvents.AddListener(() => HandleFPSChanged(false)); }
+            if (pingSwitch != null) { pingSwitch.OnEvents.AddListener(() => HandlePingChanged(true)); pingSwitch.OffEvents.AddListener(() => HandlePingChanged(false)); }
             if (languageSelector != null) languageSelector.onValueChanged.AddListener(HandleLanguageChanged);
             if (resetButton != null) resetButton.onClick.AddListener(ResetToDefaults);
         }
@@ -58,6 +64,8 @@ namespace NightHunt.UI.Settings
         private void HandleTutorialsChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.EnableTutorials = on; GameSettings.Instance.SaveSettings(); } }
         private void HandleDevConsoleChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.EnableDevConsole = on; GameSettings.Instance.SaveSettings(); } }
         private void HandleQuickSwapChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.QuickSwap = on; GameSettings.Instance.SaveSettings(); } }
+        private void HandleFPSChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.ShowFPS = on; GameSettings.Instance.SaveSettings(); } }
+        private void HandlePingChanged(bool on) { if (GameSettings.Instance != null) { GameSettings.Instance.ShowPing = on; GameSettings.Instance.SaveSettings(); } }
         private void HandleLanguageChanged(int index) { string lang = index == 0 ? "English" : "Vietnamese"; if (GameSettings.Instance != null) { GameSettings.Instance.Language = lang; GameSettings.Instance.SaveSettings(); } }
 
         public void ResetToDefaults() { if (GameSettings.Instance != null) { GameSettings.Instance.ResetToDefaults(); LoadAndApply(); GlobalUIController.Instance?.ApplyAll(); } }
@@ -73,6 +81,8 @@ namespace NightHunt.UI.Settings
             if (devConsoleSwitch == null) devConsoleSwitch = content.Find("Enable dev console")?.GetComponentInChildren<SwitchManager>();
             if (quickSwapSwitch == null) quickSwapSwitch = content.Find("Quick swap")?.GetComponentInChildren<SwitchManager>();
             if (hudSwitch == null) hudSwitch = content.Find("Enable HUD")?.GetComponentInChildren<SwitchManager>();
+            if (fpsSwitch == null) fpsSwitch = content.Find("Show FPS")?.GetComponentInChildren<SwitchManager>();
+            if (pingSwitch == null) pingSwitch = content.Find("Show Ping")?.GetComponentInChildren<SwitchManager>();
             if (resetButton == null) resetButton = transform.Find("Content/Reset Button")?.GetComponent<Button>();
         }
     }

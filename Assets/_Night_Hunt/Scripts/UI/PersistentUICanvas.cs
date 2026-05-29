@@ -26,6 +26,7 @@ namespace NightHunt.UI
         [SerializeField] private SessionTerminationListener sessionTerminationListener;
         [SerializeField] private MatchPresenceNoticeListener matchPresenceNoticeListener;
         [SerializeField] private PingDisplay         pingDisplay;
+        [SerializeField] private PerformanceHUD      performanceHUD;
         [SerializeField] private ToastService        toastService;
 
         // Public accessors (use Instance instead of needing type cast)
@@ -38,6 +39,7 @@ namespace NightHunt.UI
         public SessionTerminationListener SessionTerminationListener => sessionTerminationListener;
         public MatchPresenceNoticeListener MatchPresenceNoticeListener => matchPresenceNoticeListener;
         public PingDisplay         PingDisplay          => pingDisplay;
+        public PerformanceHUD      PerformanceHUD       => performanceHUD;
         public ToastService        ToastService         => toastService;
 
         protected override void OnSingletonAwake()
@@ -210,6 +212,13 @@ namespace NightHunt.UI
                 pingDisplay = pingGO.AddComponent<PingDisplay>();
             }
 
+            if (performanceHUD == null)
+            {
+                GameObject hudGO = new GameObject("PerformanceHUD");
+                hudGO.transform.SetParent(transform, false);
+                performanceHUD = hudGO.AddComponent<PerformanceHUD>();
+            }
+
             EnsurePersistentFlowComponents();
         }
 
@@ -267,6 +276,16 @@ namespace NightHunt.UI
                     .InChildren()
                     .InParent()
                     .OrLogWarning("[Auto] PingDisplay not found")
+                    .Resolve();
+            }
+
+            if (performanceHUD == null)
+            {
+                performanceHUD = ComponentResolver.Find<PerformanceHUD>(this)
+                    .OnSelf()
+                    .InChildren()
+                    .InParent()
+                    .OrLogWarning("[Auto] PerformanceHUD not found")
                     .Resolve();
             }
 

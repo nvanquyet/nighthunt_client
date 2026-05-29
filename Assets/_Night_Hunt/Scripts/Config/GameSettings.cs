@@ -51,6 +51,8 @@ namespace NightHunt.Config
                 EnableTutorials      = PlayerPrefs.GetInt("NH_EnableTutorials", 1) == 1,
                 EnableDevConsole     = PlayerPrefs.GetInt("NH_EnableDevConsole", 0) == 1,
                 QuickSwap            = PlayerPrefs.GetInt("NH_QuickSwap", 1) == 1,
+                ShowFPS              = PlayerPrefs.GetInt("NH_ShowFPS", 1) == 1,
+                ShowPing             = PlayerPrefs.GetInt("NH_ShowPing", 1) == 1,
 
                 // Audio
                 MasterVol = PlayerPrefs.GetFloat("NH_Audio_MasterVol", 1f),
@@ -142,6 +144,8 @@ namespace NightHunt.Config
             PlayerPrefs.SetInt("NH_EnableTutorials",      currentSettings.EnableTutorials ? 1 : 0);
             PlayerPrefs.SetInt("NH_EnableDevConsole",     currentSettings.EnableDevConsole ? 1 : 0);
             PlayerPrefs.SetInt("NH_QuickSwap",            currentSettings.QuickSwap ? 1 : 0);
+            PlayerPrefs.SetInt("NH_ShowFPS",              currentSettings.ShowFPS ? 1 : 0);
+            PlayerPrefs.SetInt("NH_ShowPing",             currentSettings.ShowPing ? 1 : 0);
 
             PlayerPrefs.SetFloat("NH_Audio_MasterVol", currentSettings.MasterVol);
             PlayerPrefs.SetFloat("NH_Audio_MusicVol",  currentSettings.MusicVol);
@@ -327,6 +331,18 @@ namespace NightHunt.Config
             set { if (currentSettings != null) currentSettings.QuickSwap = value; }
         }
 
+        public bool ShowFPS
+        {
+            get => currentSettings?.ShowFPS ?? true;
+            set { if (currentSettings != null) currentSettings.ShowFPS = value; }
+        }
+
+        public bool ShowPing
+        {
+            get => currentSettings?.ShowPing ?? true;
+            set { if (currentSettings != null) currentSettings.ShowPing = value; }
+        }
+
         public void SetVolume(string key, float value)
         {
             if (currentSettings == null) return;
@@ -370,6 +386,8 @@ namespace NightHunt.Config
         public bool   EnableTutorials     = true;
         public bool   EnableDevConsole    = false;
         public bool   QuickSwap           = true;
+        public bool   ShowFPS             = true;
+        public bool   ShowPing            = true;
 
         public float MasterVol = 1f;
         public float MusicVol  = 0.8f;

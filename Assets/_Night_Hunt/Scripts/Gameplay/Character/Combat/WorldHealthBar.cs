@@ -73,6 +73,18 @@ namespace NightHunt.Gameplay.Character.Combat
             ResolveViewReferences();
         }
 
+        /// <summary>
+        /// Configure this WorldHealthBar for a runtime-injected deployable context.
+        /// Call immediately after AddComponent&lt;WorldHealthBar&gt;() before the object is enabled.
+        /// </summary>
+        public void InitForDeployable(float verticalOffset = 1.8f)
+        {
+            _visibilityPolicy = VisibilityPolicy.AnyDamage;
+            _offset = new Vector3(0f, verticalOffset, 0f);
+            _buildViewIfMissing = true;
+            _hideDelay = 4f;
+        }
+
         private void Awake()
         {
 #if UNITY_SERVER

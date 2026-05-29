@@ -369,6 +369,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
             return sb.Length > 0 ? sb.ToString() : "none";
         }
 
+#if UNITY_EDITOR
         private void OnGUI()
         {
             if (!showDebugUI || !Application.isPlaying)
@@ -424,6 +425,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Interaction
                 }
             }
         }
+#endif
 
         private void OnDrawGizmosSelected()
         {
