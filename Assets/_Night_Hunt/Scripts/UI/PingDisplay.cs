@@ -141,17 +141,21 @@ namespace NightHunt.UI
             {
                 yield return new WaitForSeconds(updateInterval);
 
+                // Re-resolve each tick — NetworkManager is not available at Awake on game-scene load
+                var nm = InstanceFinder.NetworkManager;
+
                 // Check if FishNet is connected
-                bool isFishNetConnected = networkManager != null && 
-                                        networkManager.ClientManager != null &&
-                                        networkManager.ClientManager.Started &&
-                                        networkManager.ClientManager.Connection.IsValid;
+                bool isFishNetConnected = nm != null && 
+                                        nm.ClientManager != null &&
+                                        nm.ClientManager.Started &&
+                                        nm.ClientManager.Connection.IsValid;
 
                 if (headlessPingEnabled && isFishNetConnected)
                 {
-                    // Measure headless server ping
+                    // Measure DS ping
+                    networkManager = nm;
                     currentPing = GetHeadlessServerPing();
-                    UpdatePingDisplay("Headless", currentPing);
+                    UpdatePingDisplay("DS", currentPing);
                 }
                 else if (showBackendPingWhenDisconnected || !headlessPingEnabled)
                 {

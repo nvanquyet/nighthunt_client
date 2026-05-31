@@ -2,6 +2,7 @@ using System.Collections;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
+using Michsky.MUIP;
 using NightHunt.Audio;
 using NightHunt.Config;
 using NightHunt.Core;
@@ -60,7 +61,9 @@ namespace NightHunt.Core
         [Tooltip("Optional package-skinned progress adapter. Prefer LoadingProgressView over direct Unity Slider access.")]
         [SerializeField] private MonoBehaviour progressViewComponent;
         [SerializeField] private TMPro.TextMeshProUGUI         loadingText;
-        [SerializeField] private UnityEngine.UI.Button         retryButton;  // Shown when offline
+        [Tooltip("Modal window shown when a connection/config error requires user action. " +
+                 "Wire a ModalWindowManager prefab here. Confirm button = Retry.")]
+        [SerializeField] private ModalWindowManager            _errorModal;  // Replaces retryButton
 
         [Header("Boot Intro")]
         [Tooltip("Visual intro shown before the first startup loading overlay. Auto-created if missing.")]
@@ -134,11 +137,11 @@ namespace NightHunt.Core
                 Debug.Log($"[LoadingManager] loadingPanel prepared: '{loadingPanel.name}'");
             }
 
-            // Retry button hidden by default; shown only when offline
-            if (retryButton != null)
+            // Wire error modal confirm → OnRetryClicked
+            if (_errorModal != null)
             {
-                retryButton.gameObject.SetActive(false);
-                retryButton.onClick.AddListener(OnRetryClicked);
+                _errorModal.onConfirm.AddListener(OnRetryClicked);
+                _errorModal.gameObject.SetActive(false);
             }
 
             
@@ -724,8 +727,11 @@ namespace NightHunt.Core
 
         private void ShowRetryButton(bool show)
         {
-            if (retryButton != null)
-                retryButton.gameObject.SetActive(show);
+            if (_errorModal == null) return;
+            if (show)
+                _errorModal.OpenWindow();
+            else
+                _errorModal.CloseWindow();
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -1018,18 +1024,6 @@ namespace NightHunt.Core
             if (loadingText == null)
                 loadingText = loadingPanel.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
 
-            if (retryButton == null)
-            {
-                foreach (var button in loadingPanel.GetComponentsInChildren<UnityEngine.UI.Button>(true))
-                {
-                    if (button.name.IndexOf("retry", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        retryButton = button;
-                        break;
-                    }
-                }
-            }
-
             if (!createFallback)
                 return;
 
@@ -1038,9 +1032,6 @@ namespace NightHunt.Core
 
             if (loadingText == null)
                 loadingText = CreateRuntimeLoadingText(loadingPanel.transform);
-
-            if (retryButton == null)
-                retryButton = CreateRuntimeRetryButton(loadingPanel.transform);
         }
 
         private UnityEngine.UI.Slider CreateRuntimeProgressBar(Transform parent)
@@ -1101,37 +1092,6 @@ namespace NightHunt.Core
             text.color = Color.white;
             text.text = "Starting up...";
             return text;
-        }
-
-        private UnityEngine.UI.Button CreateRuntimeRetryButton(Transform parent)
-        {
-            var go = CreateRuntimeUIObject("Runtime Retry Button", parent);
-            var rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0f);
-            rect.anchorMax = new Vector2(0.5f, 0f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(180f, 44f);
-            rect.anchoredPosition = new Vector2(0f, 48f);
-
-            var image = go.AddComponent<UnityEngine.UI.Image>();
-            image.color = new Color(0.15f, 0.2f, 0.24f, 0.95f);
-            var button = go.AddComponent<UnityEngine.UI.Button>();
-            button.targetGraphic = image;
-
-            var labelGo = CreateRuntimeUIObject("Label", go.transform);
-            var labelRect = labelGo.GetComponent<RectTransform>();
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = Vector2.zero;
-            labelRect.offsetMax = Vector2.zero;
-            var label = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
-            label.alignment = TMPro.TextAlignmentOptions.Center;
-            label.fontSize = 16f;
-            label.color = Color.white;
-            label.text = "Retry";
-
-            go.SetActive(false);
-            return button;
         }
 
         private static GameObject CreateRuntimeUIObject(string name, Transform parent)

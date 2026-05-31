@@ -38,7 +38,7 @@ namespace NightHunt.Gameplay.Input.Core
     // Execution order: must Awake() BEFORE any IInputHandler so Instance is ready
     // when handlers call InitializeActions() in their own Awake().
     [UnityEngine.DefaultExecutionOrder(-100)]
-    public class InputLayerManager : Singleton<InputLayerManager>
+    public class InputLayerManager : SingletonPersistent<InputLayerManager>
     {
 
         // ── Inspector ─────────────────────────────────────────────────────────────

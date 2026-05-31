@@ -478,6 +478,18 @@ namespace NightHunt.UI
             yield return new WaitForSecondsRealtime(connectionTimeout);
             if (!_isVisible) yield break;
 
+            // If FishNet is already connected the match is running normally.
+            // AllPlayersReady was probably missed due to subscribe-timing on scene load.
+            // Just hide the overlay; do not interrupt the running match.
+            bool matchRunning = NightHunt.Networking.NetworkGameManager.Instance?.IsClient ?? false;
+            if (matchRunning)
+            {
+                Debug.LogWarning($"[MatchLoadingOverlay] Timeout ({connectionTimeout}s) but FishNet IsClient=true — hiding overlay, match continues.");
+                UnsubscribeEvents();
+                Hide();
+                yield break;
+            }
+
             Debug.LogWarning("[MatchLoadingOverlay] Connection timeout — returning to Home.");
             UnsubscribeEvents();
             Hide();

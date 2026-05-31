@@ -694,6 +694,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 13810b16d9369694d98dc5e13cd5803e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
 --- !u!4 &20579052
 Transform:
   m_ObjectHideFlags: 0
@@ -964,6 +965,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ff74a3d3a60361244a38112d8640535f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   backendHttpClient: {fileID: 422229215}
   authService: {fileID: 315842765}
   gameConfigService: {fileID: 1524270184}
@@ -986,6 +988,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 765edabb64ebcb645869671034ca5825, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
 --- !u!114 &30491759
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -998,6 +1001,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c400ea023563be346a0147e398b9c8b6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
 --- !u!4 &30491760
 Transform:
   m_ObjectHideFlags: 0
@@ -1030,6 +1034,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6509464c96ad9f1418d96deebafcb4bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NightHunt.State.PartyState
+  _duplicatePolicy: 0
 --- !u!115 &39105303
 MonoScript:
   m_ObjectHideFlags: 0
@@ -12144,7 +12149,7 @@ MonoBehaviour:
   progressBar: {fileID: 0}
   progressViewComponent: {fileID: 0}
   loadingText: {fileID: 825714863}
-  retryButton: {fileID: 0}
+  _errorModal: {fileID: 0}
   bootIntroView: {fileID: 195571545}
   minLoadingTime: 1
   internetTimeout: 5
@@ -20711,6 +20716,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 156df93aa8c02554484e537f6ca00451, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   wsPathOverride: 
 --- !u!4 &560328737
 Transform:
@@ -31463,6 +31469,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: effe44e9ff3134c49ae8bd078afe4628, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   forceMobileInput: 0
   forceDesktopInput: 0
 --- !u!4 &1002129885
@@ -48162,6 +48169,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 577e0342d48940aeb90335e74dafde22, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   routes:
   - panel: 1
     rootObject: {fileID: 967428185}
@@ -56837,6 +56845,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6cc99777cbe8b634aa81199bd15bcbc7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   container: {fileID: 1747226549}
   prefab: {fileID: 1824466548}
   maxVisible: 3
@@ -65465,6 +65474,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 27e7f779806827c4a81b91413b6b4f88, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   canvas: {fileID: 1668209817}
   canvasScaler: {fileID: 1668209816}
   graphicRaycaster: {fileID: 1668209815}
@@ -65476,6 +65486,7 @@ MonoBehaviour:
   sessionTerminationListener: {fileID: 1668209819}
   matchPresenceNoticeListener: {fileID: 1462652314}
   pingDisplay: {fileID: 1778403814}
+  performanceHUD: {fileID: 0}
   toastService: {fileID: 1555534717}
 --- !u!114 &1668209815
 MonoBehaviour:
@@ -65580,6 +65591,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b6eca1a4edf34815a1b14cd79b98c04e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
 --- !u!1001 &1669528761
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -73842,6 +73854,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 99e7b249c1574e54a8044f9c01eebb77, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   networkManager: {fileID: 1776139695}
   port: 7777
   defaultServerAddress: localhost
@@ -75618,7 +75631,7 @@ PrefabInstance:
     - target: {fileID: 224910126168764974, guid: 532be6a4fe92da84781b0746078bbd33,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: -5.550293
+      value: -5.550232
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -92983,6 +92996,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 92f67bdd807527c418d7e7457d235e68, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   modalManager: {fileID: 1467878103431818759}
   btn1Slot:
     mainButton: {fileID: 1468029127884189291}

@@ -56,9 +56,54 @@ namespace NightHunt.GameplaySystems.UI
                 _uiInput.OnToggleMapPressed += ToggleFullMap;
                 _uiInput.OnCancelPressed    += HandleCancelPressed;
             }
-            // Wire close button if assigned in Inspector
+            // Wire close button if assigned in Inspector, or auto-discover one.
             if (_closeMapButton != null)
                 _closeMapButton.onClick.AddListener(() => SetFullMapVisible(false));
+            else
+                EnsureCloseButton();
+        }
+
+        /// <summary>
+        /// Close the full-map overlay. Safe to call from a Button.onClick UnityEvent
+        /// in the Inspector without needing a direct reference to this component.
+        /// </summary>
+        public void CloseFullMap() => SetFullMapVisible(false);
+
+        /// <summary>
+        /// Attempt to wire a close handler once <see cref="_fullMapRoot"/> is available.
+        /// Priority order:
+        ///   1. <see cref="_closeMapButton"/> already set — skip.
+        ///   2. Find a Button whose name contains "close", "exit", or "back" inside <see cref="_fullMapRoot"/>.
+        ///   3. Fall back: add a Button (Transition.None) to <see cref="_fullMapRoot"/> itself so
+        ///      tapping anywhere on the background closes the map.
+        /// </summary>
+        private void EnsureCloseButton()
+        {
+            if (_closeMapButton != null) return;
+            if (_fullMapRoot == null) return;
+
+            // 1. Look for a named close button inside the overlay.
+            foreach (var btn in _fullMapRoot.GetComponentsInChildren<Button>(includeInactive: true))
+            {
+                var n = btn.name.ToLowerInvariant();
+                if (n.Contains("close") || n.Contains("exit") || n.Contains("back"))
+                {
+                    _closeMapButton = btn;
+                    _closeMapButton.onClick.AddListener(() => SetFullMapVisible(false));
+                    Debug.Log($"[Minimap] Auto-wired close button: '{btn.name}'");
+                    return;
+                }
+            }
+
+            // 2. No named button found — add a transparent background button so a tap
+            //    anywhere on the overlay (not covered by a child element) closes the map.
+            if (!_fullMapRoot.TryGetComponent<Button>(out var bg))
+                bg = _fullMapRoot.AddComponent<Button>();
+
+            bg.transition = Selectable.Transition.None;
+            bg.onClick.AddListener(() => SetFullMapVisible(false));
+            _closeMapButton = bg;
+            Debug.Log("[Minimap] Auto-added background close button to full-map root.");
         }
 
         private void OnDestroy()
@@ -142,6 +187,7 @@ namespace NightHunt.GameplaySystems.UI
             {
                 EnsureFullMapOverlay();
                 ApplyTextures();
+                EnsureCloseButton();
                 if (inputLayers != null)
                 {
                     if (inputLayers.CurrentState == InputState.None)
@@ -205,6 +251,11 @@ namespace NightHunt.GameplaySystems.UI
             }
 
             _pushedInputContext = false;
+
+            // Clear EventSystem selection so WASD keyboard input is not consumed by
+            // UI Navigation on the previously-focused minimap toggle / close button.
+            if (EventSystem.current != null)
+                EventSystem.current.SetSelectedGameObject(null);
 
             if (inputLayers.CurrentState == InputState.None || inputLayers.CurrentState == InputState.MapOpen)
             {

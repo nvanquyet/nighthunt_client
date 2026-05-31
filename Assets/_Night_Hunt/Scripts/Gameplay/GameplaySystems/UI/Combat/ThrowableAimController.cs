@@ -192,6 +192,10 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 return;
             }
 
+            // ── Deployable Mobile: track any active world touch → update aim ─────
+            if (_inDeployMode && IsMobile)
+                UpdateMobileDeployAim();
+
             // ── Deployable PC placement ───────────────────────────────────────────
             if (_inDeployMode)
             {
@@ -287,6 +291,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
             {
                 bool releaseQueued = _deployReleaseQueued;
                 bool pointerWasHeld = _deployPointerWasHeld;
+                // Preserve the current aim position so a queued release targets the right spot.
+                Vector3 savedAimTarget = AimWorldTarget;
                 if (_inDeployMode) ResetDeployState();
                 if (_inAimMode)    ResetAimState();
 
@@ -295,11 +301,25 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _deployAwaitingServerUse = _itemUseSystem?.IsDeploying != true;
                 _deployReleaseQueued = releaseQueued;
                 _deployPointerWasHeld = pointerWasHeld || IsPrimaryPointerHeld();
-                _suppressNextDeployRelease = true;
+                // Only suppress the release if the pointer is still held; if the finger has
+                // already lifted off the button we do not want to swallow the very next tap.
+                _suppressNextDeployRelease = IsPrimaryPointerHeld();
                 _deployConfirmInProgress = false;
                 IsDeployingPC = !IsMobile;
                 _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
                 _aimSystem?.SetCursorVisible(true);
+                // Restore the aim position (cleared by ResetDeployState) and seed the cursor.
+                if (savedAimTarget.sqrMagnitude > 0.001f)
+                {
+                    AimWorldTarget = savedAimTarget;
+                    MoveCursor(AimWorldTarget);
+                }
+                else if (IsMobile && _playerTransform != null)
+                {
+                    AimWorldTarget = FlattenTargetForPlayer(_playerTransform.position + _playerTransform.forward * 3f);
+                    AimDirection   = _playerTransform.forward;
+                    MoveCursor(AimWorldTarget);
+                }
                 LogDeploy($"[01][ServerUseActive] item={item.InstanceID} mouseHeld={UnityEngine.Input.GetMouseButton(0)} deployHandlerActive={_itemUseSystem?.IsDeploying.ToString() ?? "null"}");
 
                 Debug.Log($"[ThrowableAimController] HandleItemUseStarted: deployable '{item.InstanceID}' → deploy mode");
@@ -394,6 +414,15 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 IsDeployingPC = !IsMobile;
                 _combatInputHandler?.SetCameraLockOverride(active: true, forcedValue: true);
                 _aimSystem?.SetCursorVisible(true);
+
+                // Mobile: seed the aim target in front of the player so the cursor and
+                // placement preview are immediately visible at a reasonable position.
+                if (IsMobile && _playerTransform != null)
+                {
+                    AimWorldTarget = FlattenTargetForPlayer(_playerTransform.position + _playerTransform.forward * 3f);
+                    AimDirection   = _playerTransform.forward;
+                    MoveCursor(AimWorldTarget);
+                }
 
                 Debug.Log($"[ThrowableAimController] TryBeginAim: deployable '{instanceID}' → deploy mode");
                 Debug.Log($"[NH_FLOW][06][ItemAim.BeginDeployAim] item={instanceID} def={def.ItemID} mobile={IsMobile} mouseHeld={UnityEngine.Input.GetMouseButton(0)} {DescribeAimFlowState()}");
@@ -883,6 +912,55 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (DeployDebugEnabled())
                 Debug.Log($"[DEPLOY_FLOW] {message}");
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Mobile deploy aim tracking
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// On mobile in deploy mode, project any active non-UI touch to the ground
+        /// plane and update <see cref="AimWorldTarget"/> so the cursor / placement
+        /// preview follows the finger even without going through the drag-on-button path.
+        /// </summary>
+        private void UpdateMobileDeployAim()
+        {
+            if (_cam == null || _playerTransform == null) return;
+
+            for (int i = 0; i < UnityEngine.Input.touchCount; i++)
+            {
+                var touch = UnityEngine.Input.GetTouch(i);
+                if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+                    continue;
+
+                // Skip touches over UI elements (joystick, buttons, etc.).
+                if (EventSystem.current != null &&
+                    EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+                    continue;
+
+                Ray   ray   = _cam.ScreenPointToRay(touch.position);
+                Plane plane = new Plane(Vector3.up, _playerTransform.position);
+                if (!plane.Raycast(ray, out float dist))
+                    continue;
+
+                Vector3 hit    = ray.GetPoint(dist);
+                float   range  = GetThrowRange();
+                Vector3 offset = hit - _playerTransform.position;
+                offset.y = 0f;
+                if (offset.sqrMagnitude > range * range)
+                    hit = _playerTransform.position + offset.normalized * range;
+
+                AimWorldTarget = FlattenTargetForPlayer(hit);
+                Vector3 aimOffset = hit - _playerTransform.position;
+                aimOffset.y = 0f;
+                AimDirection = aimOffset.sqrMagnitude > 0.001f ? aimOffset.normalized : Vector3.forward;
+                MoveCursor(AimWorldTarget);
+                RotatePlayerTowards(AimDirection);
+
+                // Feed AimSystem so _worldAimCursor is positioned via ResolveThrowableAim.
+                _aimSystem?.SetThrowableAim(new Vector2(AimDirection.x, AimDirection.z));
+                break; // process the first valid world touch only
+            }
         }
     }
 }

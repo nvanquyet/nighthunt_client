@@ -101,6 +101,11 @@ namespace NightHunt.UI
         /// </summary>
         public void Show(string gameMode, long[] playerIds, long localUserId)
         {
+            // Activate panel at alpha=0 immediately so PopulatePlayers runs with live layout,
+            // preventing the hitch that occurs when the panel activates mid-fade.
+            if (panel != null) panel.SetActive(true);
+            if (canvasGroup != null) { canvasGroup.alpha = 0f; canvasGroup.blocksRaycasts = false; }
+
             // Populate match info
             if (gameModeText != null) gameModeText.text = FormatMode(gameMode);
             if (mapNameText  != null) mapNameText.text  = "Joining server...";

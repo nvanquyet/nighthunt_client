@@ -43,6 +43,12 @@ namespace NightHunt.Core
     {
         private static T _instance;
 
+        [Header("Singleton")]
+        [Tooltip("How to resolve a duplicate instance at runtime.\n" +
+                 "DestroyNew (default): keep the existing instance, destroy this one.\n" +
+                 "DestroyOld: destroy the existing instance and promote this one.")]
+        [SerializeField] private SingletonDuplicatePolicy _duplicatePolicy = SingletonDuplicatePolicy.DestroyNew;
+
         public static T Instance
         {
             get
@@ -58,10 +64,10 @@ namespace NightHunt.Core
 
         /// <summary>
         /// Defines what to do when a duplicate instance is detected.
-        /// Default: <see cref="SingletonDuplicatePolicy.DestroyNew"/>.
-        /// Override in subclass to change per-type behaviour.
+        /// Reads from the [SerializeField] _duplicatePolicy set in the Inspector (default: DestroyNew).
+        /// Can still be overridden in a subclass to hard-code policy regardless of Inspector value.
         /// </summary>
-        protected virtual SingletonDuplicatePolicy DuplicatePolicy => SingletonDuplicatePolicy.DestroyNew;
+        protected virtual SingletonDuplicatePolicy DuplicatePolicy => _duplicatePolicy;
 
         protected virtual void Awake()
         {
@@ -86,9 +92,10 @@ namespace NightHunt.Core
                 else // DestroyNew (default)
                 {
                     Debug.LogWarning(
-                        $"[{typeof(T).Name}] Duplicate found — destroying NEW '{gameObject.name}', " +
-                        $"keeping existing '{_instance.gameObject.name}'.");
-                    Destroy(gameObject);
+                        $"[{typeof(T).Name}] Duplicate found — destroying NEW component on '{gameObject.name}', " +
+                        $"keeping existing '{_instance.gameObject.name}'. " +
+                        "(Only the component is destroyed to avoid collateral damage on shared GameObjects.)");
+                    Destroy(this);
                     return;
                 }
             }
