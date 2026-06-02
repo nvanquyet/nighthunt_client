@@ -74,6 +74,18 @@ namespace NightHunt.Data.DTOs
         public string selectedCharacterId;
     }
 
+    /// <summary>
+    /// Short-lived one-time credential returned by POST /api/realtime/tickets.
+    /// It replaces long-lived JWT credentials in WebSocket query strings.
+    /// </summary>
+    [Serializable]
+    public class RealtimeTicketResponse
+    {
+        public string ticket;
+        public int expiresInSeconds;
+        public string wsPath;
+    }
+
     // ── Profile DTOs ─────────────────────────────────────────────────────────
 
     /// <summary>Response from GET /api/profile.</summary>

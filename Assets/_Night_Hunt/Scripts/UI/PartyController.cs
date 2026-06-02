@@ -49,6 +49,10 @@ namespace NightHunt.UI
         [SerializeField] private Button          btn_Play;
         [Tooltip("Idle state: 'PLAY'.  Searching state: '00:00  ✕' (updated every frame).")]
         [SerializeField] private TextMeshProUGUI btn_PlayLabel;
+        [Tooltip("Shown only when a ranked party is smaller than the selected team size.")]
+        [SerializeField] private GameObject      allowFillContainer;
+        [Tooltip("On = allow temporary teammates to fill this match. Off = keep the premade team locked.")]
+        [SerializeField] private Toggle          allowFillToggle;
 
         // ── Party Display Sub-Views ───────────────────────────────────────────
         [Header("Party Display")]
@@ -77,6 +81,7 @@ namespace NightHunt.UI
         private RankedQueueState _queueState        = RankedQueueState.Idle;
         private float            _searchElapsed     = 0f;
         private string           _pendingLobbyToken;
+        private string           _allowFillContext;
 
         // Mode
         private GameModeEntry[] _enabledModes      = Array.Empty<GameModeEntry>();
@@ -103,6 +108,8 @@ namespace NightHunt.UI
             if (btn_Play     != null) btn_Play.onClick.AddListener(OnPlayClicked);
             if (modeDropdown != null) modeDropdown.onValueChanged.AddListener(OnModeDropdownChanged);
             if (mapDropdown     != null) mapDropdown.onValueChanged.AddListener(OnMapDropdownChanged);
+            EnsureAllowFillToggle();
+            if (allowFillToggle != null) allowFillToggle.onValueChanged.AddListener(OnAllowFillToggleChanged);
             NH_DropdownRuntime.NormalizeModeMapOrder(modeDropdown, mapDropdown);
         }
 
@@ -148,6 +155,7 @@ namespace NightHunt.UI
             MapConfig.OnConfigLoaded -= HandleMapConfigLoaded;
             if (modeDropdown != null) modeDropdown.onValueChanged.RemoveListener(OnModeDropdownChanged);
             if (mapDropdown  != null) mapDropdown.onValueChanged.RemoveListener(OnMapDropdownChanged);
+            if (allowFillToggle != null) allowFillToggle.onValueChanged.RemoveListener(OnAllowFillToggleChanged);
         }
 
         // ══════════════════════════════════════════════════════════════════════
@@ -571,9 +579,144 @@ namespace NightHunt.UI
 
             bool canInviteFriends = currentParty == null || IsPartyIdle(currentParty);
             friendPanelView?.SetCanInviteToParty(canInviteFriends);
+            UpdateAllowFillUI();
         }
 
         private void OnInviteSlotClicked() => friendPanelView?.ShowForInvite();
+
+        private void EnsureAllowFillToggle()
+        {
+            if (allowFillToggle != null)
+                return;
+
+            Transform parent = btn_Play != null ? btn_Play.transform.parent : transform;
+            if (parent == null)
+                return;
+
+            if (allowFillContainer == null)
+            {
+                allowFillContainer = new GameObject(
+                    "AllowFillPartyOption",
+                    typeof(RectTransform),
+                    typeof(CanvasRenderer),
+                    typeof(Image));
+                allowFillContainer.transform.SetParent(parent, false);
+
+                var containerRect = (RectTransform)allowFillContainer.transform;
+                if (btn_Play != null && btn_Play.transform is RectTransform playRect)
+                {
+                    containerRect.anchorMin = playRect.anchorMin;
+                    containerRect.anchorMax = playRect.anchorMax;
+                    containerRect.pivot = playRect.pivot;
+                    containerRect.anchoredPosition = playRect.anchoredPosition +
+                                                     new Vector2(0f, playRect.rect.height + 12f);
+                    containerRect.sizeDelta = new Vector2(Mathf.Max(playRect.rect.width, 300f), 40f);
+                }
+                else
+                {
+                    containerRect.anchorMin = new Vector2(0.5f, 0.5f);
+                    containerRect.anchorMax = new Vector2(0.5f, 0.5f);
+                    containerRect.sizeDelta = new Vector2(300f, 40f);
+                }
+
+                var containerImage = allowFillContainer.GetComponent<Image>();
+                containerImage.color = new Color(0f, 0f, 0f, 0.62f);
+                containerImage.raycastTarget = false;
+            }
+
+            var toggleObject = new GameObject("AllowFillToggle", typeof(RectTransform), typeof(Toggle));
+            toggleObject.transform.SetParent(allowFillContainer.transform, false);
+            var toggleRect = (RectTransform)toggleObject.transform;
+            toggleRect.anchorMin = new Vector2(0f, 0.5f);
+            toggleRect.anchorMax = new Vector2(0f, 0.5f);
+            toggleRect.anchoredPosition = new Vector2(18f, 0f);
+            toggleRect.sizeDelta = new Vector2(26f, 26f);
+
+            var backgroundObject = new GameObject("Background", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            backgroundObject.transform.SetParent(toggleObject.transform, false);
+            var backgroundRect = (RectTransform)backgroundObject.transform;
+            backgroundRect.anchorMin = Vector2.zero;
+            backgroundRect.anchorMax = Vector2.one;
+            backgroundRect.offsetMin = Vector2.zero;
+            backgroundRect.offsetMax = Vector2.zero;
+            var backgroundImage = backgroundObject.GetComponent<Image>();
+            backgroundImage.color = new Color(1f, 1f, 1f, 0.78f);
+
+            var checkmarkObject = new GameObject("Checkmark", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            checkmarkObject.transform.SetParent(backgroundObject.transform, false);
+            var checkmarkRect = (RectTransform)checkmarkObject.transform;
+            checkmarkRect.anchorMin = Vector2.zero;
+            checkmarkRect.anchorMax = Vector2.one;
+            checkmarkRect.offsetMin = new Vector2(5f, 5f);
+            checkmarkRect.offsetMax = new Vector2(-5f, -5f);
+            var checkmarkImage = checkmarkObject.GetComponent<Image>();
+            checkmarkImage.color = new Color(0.17f, 0.82f, 0.45f, 1f);
+            checkmarkImage.raycastTarget = false;
+
+            var labelObject = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+            labelObject.transform.SetParent(allowFillContainer.transform, false);
+            var labelRect = (RectTransform)labelObject.transform;
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = new Vector2(42f, 0f);
+            labelRect.offsetMax = new Vector2(-8f, 0f);
+            var label = labelObject.GetComponent<TextMeshProUGUI>();
+            label.text = "Fill party with temporary teammates";
+            label.fontSize = 16f;
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+            label.color = Color.white;
+            label.raycastTarget = false;
+
+            allowFillToggle = toggleObject.GetComponent<Toggle>();
+            allowFillToggle.targetGraphic = backgroundImage;
+            allowFillToggle.graphic = checkmarkImage;
+            allowFillToggle.isOn = true;
+            allowFillContainer.SetActive(false);
+        }
+
+        private void UpdateAllowFillUI()
+        {
+            var party = PartyState.Instance?.CurrentParty;
+            int partySize = GetCurrentPartySize();
+            bool show = party != null &&
+                        !IsSoloMode(SelectedMode) &&
+                        partySize > 0 &&
+                        partySize < SelectedMode.playersPerTeam;
+
+            if (allowFillContainer != null)
+                allowFillContainer.SetActive(show);
+            else if (allowFillToggle != null)
+                allowFillToggle.gameObject.SetActive(show);
+
+            if (!show || allowFillToggle == null)
+            {
+                if (!show) _allowFillContext = null;
+                return;
+            }
+
+            string context = $"{SelectedMode.modeKey}:{party.partyId}:{partySize}";
+            if (!string.Equals(_allowFillContext, context, StringComparison.Ordinal))
+            {
+                _allowFillContext = context;
+                allowFillToggle.SetIsOnWithoutNotify(SelectedMode.allowFill);
+            }
+        }
+
+        private bool ResolveAllowFill(bool hasParty, int partySize)
+        {
+            if (!hasParty)
+                return true;
+
+            if (partySize >= SelectedMode.playersPerTeam)
+                return false;
+
+            return allowFillToggle != null ? allowFillToggle.isOn : SelectedMode.allowFill;
+        }
+
+        private void OnAllowFillToggleChanged(bool value)
+        {
+            HLog($"AllowFillToggle changed value={value} mode={DescribeSelectedMode()} party={DescribeCurrentParty()}");
+        }
 
         // ══════════════════════════════════════════════════════════════════════
         // RANKED QUEUE — PLAY BUTTON
@@ -658,18 +801,9 @@ namespace NightHunt.UI
                 return;
             }
 
-            if (hasParty && !SelectedMode.allowFill && partySize < SelectedMode.playersPerTeam)
-            {
-                HLog($"StartQueue blocked: partySize={partySize} < required={SelectedMode.playersPerTeam} and allowFill=false. party={DescribeCurrentParty()} mode={DescribeSelectedMode()}");
-                ShowToast("Matchmaking",
-                    $"This mode requires {SelectedMode.playersPerTeam} party members.");
-                SetQueueState(RankedQueueState.Idle);
-                return;
-            }
-
             string modeKey   = SelectedMode.modeKey;
             string mapId     = _currentMaps.Length > 0 ? _currentMaps[_selectedMapIdx].mapId : null;
-            bool   allowFill = SelectedMode.allowFill;
+            bool   allowFill = ResolveAllowFill(hasParty, partySize);
 
             SetQueueState(RankedQueueState.Searching);
             _searchElapsed = 0f;
@@ -680,7 +814,7 @@ namespace NightHunt.UI
             string failureCode = null;
             if (isPartyHost)
             {
-                var r = await _partyService.QueueParty(modeKey, allowFill, mapId);
+                var r = await _partyService.QueueParty(modeKey, allowFill, mapId, GetClientPlatform());
                 success = r.Success;
                 failureMessage = r.Message;
                 failureCode = r.ErrorCode;

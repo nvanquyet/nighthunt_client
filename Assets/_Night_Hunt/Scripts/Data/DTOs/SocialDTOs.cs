@@ -124,6 +124,7 @@ namespace NightHunt.Data.DTOs
         public string gameMode;        // "2v2" | "3v3" | "4v4" | "5v5"
         public bool   allowFill = true;
         public string mapId;           // optional — null = any map
+        public string platform;        // "MOBILE" | "PC" — auto-detected by client
     }
 
     [Serializable]

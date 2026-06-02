@@ -207,11 +207,9 @@ namespace NightHunt.Services.Game
 
             try
             {
-                string wsUrl = BuildWebSocketUrl();
-                string wsPath = ResolveWsPath();
-                wsUrl = $"{wsUrl}{(wsUrl.EndsWith(wsPath) ? "" : wsPath)}?token={Uri.EscapeDataString(accessToken)}";
+                string wsUrl = await BuildWebSocketUrlWithTicket();
                 ConditionalLogger.Log("GameWebSocketService", "Connecting to Game WebSocket...");
-                ConditionalLogger.Log("GameWebSocketService", $"WebSocket URL: {RedactToken(wsUrl)}");
+                ConditionalLogger.Log("GameWebSocketService", $"WebSocket URL: {RedactCredential(wsUrl)}");
 
                 await ConnectWebSocket(wsUrl, thisToken);
                 
@@ -433,16 +431,50 @@ namespace NightHunt.Services.Game
             return baseUrl;
         }
 
-        private static string RedactToken(string url)
+        private async Task<string> BuildWebSocketUrlWithTicket()
+        {
+            RealtimeTicketResponse ticket = await RequestRealtimeTicket();
+            if (ticket == null || string.IsNullOrEmpty(ticket.ticket))
+                throw new InvalidOperationException("Realtime ticket endpoint returned an empty ticket.");
+
+            string baseUrl = BuildWebSocketUrl();
+            string wsPath = !string.IsNullOrEmpty(ticket.wsPath) ? ticket.wsPath : ResolveWsPath();
+            return $"{baseUrl}{(baseUrl.EndsWith(wsPath) ? "" : wsPath)}?ticket={Uri.EscapeDataString(ticket.ticket)}";
+        }
+
+        private async Task<RealtimeTicketResponse> RequestRealtimeTicket()
+        {
+            BackendHttpClient client = GameManager.Instance != null ? GameManager.Instance.BackendClient : null;
+            if (client == null)
+                client = FindFirstObjectByType<BackendHttpClient>();
+            if (client == null)
+                throw new InvalidOperationException("BackendHttpClient is required before WebSocket connect.");
+
+            var result = await client.PostAsync<RealtimeTicketResponse>(Constants.API_REALTIME_TICKETS);
+            if (result == null || !result.Success || result.Data == null)
+            {
+                string message = result != null && !string.IsNullOrEmpty(result.Message)
+                    ? result.Message
+                    : "Realtime ticket request failed.";
+                throw new InvalidOperationException(message);
+            }
+
+            return result.Data;
+        }
+
+        private static string RedactCredential(string url)
         {
             if (string.IsNullOrEmpty(url))
                 return url;
 
             int tokenIndex = url.IndexOf("token=", StringComparison.OrdinalIgnoreCase);
-            if (tokenIndex < 0)
+            int ticketIndex = url.IndexOf("ticket=", StringComparison.OrdinalIgnoreCase);
+            int credentialIndex = tokenIndex >= 0 ? tokenIndex : ticketIndex;
+            string key = tokenIndex >= 0 ? "token=" : "ticket=";
+            if (credentialIndex < 0)
                 return url;
 
-            int valueStart = tokenIndex + "token=".Length;
+            int valueStart = credentialIndex + key.Length;
             int valueEnd = url.IndexOf('&', valueStart);
             if (valueEnd < 0)
                 valueEnd = url.Length;

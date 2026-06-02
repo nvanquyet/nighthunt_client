@@ -26,7 +26,7 @@ namespace NightHunt.Services.Party
     ///   POST   /api/party/invitations/{id}/decline        → decline invite
     ///   DELETE /api/party/invite/{inviteId}               → cancel a sent invite
     ///   POST   /api/party/kick/{kickedUserId}             → kick member (path param)
-    ///   POST   /api/party/queue                           → queue party {gameMode, allowFill}
+    ///   POST   /api/party/queue                           → queue party {gameMode, allowFill, mapId, platform}
     ///   POST   /api/party/cancel-queue                    → cancel queue
     ///   POST   /api/party/join-room                       → join custom room with party {roomCode, password}
     ///
@@ -390,9 +390,9 @@ namespace NightHunt.Services.Party
         /// <summary>
         /// POST /api/party/queue — queue party for ranked (host only).
         /// allowFill=true → fill empty slots with solo players.
-        /// allowFill=false → only match against full party of same size.
+        /// allowFill=false → keep the premade team locked; do not add temporary teammates.
         /// </summary>
-        public async Task<ApiResult> QueueParty(string gameMode, bool allowFill = true, string mapId = null)
+        public async Task<ApiResult> QueueParty(string gameMode, bool allowFill = true, string mapId = null, string platform = null)
         {
             if (sessionState == null || !sessionState.IsAuthenticated)
                 return ApiResult.Error("Not authenticated");
@@ -400,7 +400,13 @@ namespace NightHunt.Services.Party
             LoadingOverlay.Show("Joining queue...");
             try
             {
-                var body   = new PartyRankedQueueRequest { gameMode = gameMode, allowFill = allowFill, mapId = mapId };
+                var body   = new PartyRankedQueueRequest
+                {
+                    gameMode = gameMode,
+                    allowFill = allowFill,
+                    mapId = mapId,
+                    platform = string.IsNullOrEmpty(platform) ? GetClientPlatform() : platform
+                };
                 var result = await backendClient.PostAsync<object>(Constants.API_PARTY_RANKED_QUEUE, body);
                 if (result.Success)
                     APICache.InvalidateParty();
@@ -419,6 +425,11 @@ namespace NightHunt.Services.Party
                 await Task.Delay(1000);
                 LoadingOverlay.Hide();
             }
+        }
+
+        private static string GetClientPlatform()
+        {
+            return Application.isMobilePlatform ? "MOBILE" : "PC";
         }
 
         /// <summary>POST /api/party/cancel-queue — any party member can cancel.</summary>

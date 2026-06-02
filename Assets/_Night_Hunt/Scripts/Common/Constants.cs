@@ -14,6 +14,7 @@ namespace NightHunt.Common
         public const string API_AUTH_AUTO_LOGIN       = "/api/auth/auto-login";
         public const string API_AUTH_LOGOUT           = "/api/auth/logout";
         public const string API_AUTH_CHANGE_PASSWORD  = "/api/auth/change-password";
+        public const string API_REALTIME_TICKETS      = "/api/realtime/tickets";
 
         // Profile endpoints — ProfileController @RequestMapping("/profile") + context-path /api → /api/profile/...
         public const string API_PROFILE_GET           = "/api/profile";
