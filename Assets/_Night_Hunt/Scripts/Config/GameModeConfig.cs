@@ -15,6 +15,7 @@ namespace NightHunt.Config
         public string displayName;
         public string description;
         public int    playersPerTeam;
+        public int    totalPlayers;
         public bool   allowFill;
         public bool   isEnabled;
         public bool   matchmakingEnabled;
@@ -74,6 +75,7 @@ namespace NightHunt.Config
                     displayName        = dto.displayName,
                     description        = dto.description,
                     playersPerTeam     = dto.playersPerTeam,
+                    totalPlayers       = dto.totalPlayers,
                     allowFill          = dto.allowFill,
                     isEnabled          = dto.modeStatus == "AVAILABLE",
                     matchmakingEnabled = dto.matchmakingEnabled,

@@ -443,9 +443,13 @@ namespace NightHunt.UI
 
         private void RefreshMapDropdown(string modeKey)
         {
-            _currentMaps    = MapConfig.GetByMode(modeKey);
-            if (_currentMaps == null || _currentMaps.Length == 0)
+            int totalPlayers = SelectedMode.totalPlayers;
+            _currentMaps = totalPlayers > 0
+                ? MapConfig.GetByModeAndPlayerCount(modeKey, totalPlayers)
+                : MapConfig.GetByMode(modeKey);
+            if ((_currentMaps == null || _currentMaps.Length == 0) && totalPlayers <= 0)
                 _currentMaps = MapConfig.GetAvailable();
+            _currentMaps ??= Array.Empty<MapEntry>();
             _selectedMapIdx = 0;
             if (mapDropdown == null) return;
             var names = new List<string>(_currentMaps.Length);
@@ -751,6 +755,13 @@ namespace NightHunt.UI
                 SetQueueState(RankedQueueState.Idle);
                 return;
             }
+            if (_currentMaps == null || _currentMaps.Length == 0)
+            {
+                HLog($"StartQueue blocked: no compatible map for mode={DescribeSelectedMode()}.");
+                ShowToast("Matchmaking", "No compatible map is available for the selected mode.");
+                SetQueueState(RankedQueueState.Idle);
+                return;
+            }
 
             bool isPartyHost = IsCurrentUserPartyHost();
             int partySize = GetCurrentPartySize();
@@ -802,7 +813,7 @@ namespace NightHunt.UI
             }
 
             string modeKey   = SelectedMode.modeKey;
-            string mapId     = _currentMaps.Length > 0 ? _currentMaps[_selectedMapIdx].mapId : null;
+            string mapId     = _currentMaps[_selectedMapIdx].mapId;
             bool   allowFill = ResolveAllowFill(hasParty, partySize);
 
             SetQueueState(RankedQueueState.Searching);
@@ -1313,7 +1324,7 @@ namespace NightHunt.UI
         private static string DescribeMode(GameModeEntry mode)
         {
             return
-                $"key={mode.modeKey ?? "null"},name={mode.displayName ?? "null"},playersPerTeam={mode.playersPerTeam},allowFill={mode.allowFill}";
+                $"key={mode.modeKey ?? "null"},name={mode.displayName ?? "null"},playersPerTeam={mode.playersPerTeam},totalPlayers={mode.totalPlayers},allowFill={mode.allowFill}";
         }
 
         private string DescribeCurrentParty()
