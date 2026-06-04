@@ -65,18 +65,6 @@ namespace NightHunt.UI
             EnsureSlots();
         }
 
-        private void OnEnable()
-        {
-            // Subscribe canonical bus so keyboard 1/2/3 and mobile weapon buttons
-            // both update the same HUD highlight via one code path.
-            GameActionBus.OnWeaponSlotRequested += HandleWeaponSlotFromBus;
-        }
-
-        private void OnDisable()
-        {
-            GameActionBus.OnWeaponSlotRequested -= HandleWeaponSlotFromBus;
-        }
-
         /// <summary>
         /// Called by GameHUDController after the HUD is initialized.
         /// Injects the shared progress bar if it was not assigned in the Inspector.
@@ -88,7 +76,6 @@ namespace NightHunt.UI
 
         private void OnDestroy()
         {
-            GameActionBus.OnWeaponSlotRequested -= HandleWeaponSlotFromBus;
             UnbindAllButtons();
         }
 
@@ -253,21 +240,11 @@ namespace NightHunt.UI
         {
             var combatHandler = InputManager.Instance?.CombatHandler;
 
-            // Retrieve item systems from the bound UIPlayerContext so buttons can cancel armed items.
-            IItemSelectionSystem itemSelectionSys = null;
-            IItemUseSystem       itemUseSys       = null;
-            if (_playerContext?.Bridge != null)
-            {
-                itemSelectionSys = _playerContext.Bridge.ItemSelection;
-                itemUseSys       = _playerContext.Bridge.ItemUse;
-            }
-
             for (int i = 0; i < _spawnedButtons.Count; i++)
             {
                 if (_spawnedButtons[i] == null) continue;
                 _spawnedButtons[i].Bind(_spawnedTypes[i], weaponSys);
                 _spawnedButtons[i].BindCombatHandler(combatHandler);
-                _spawnedButtons[i].BindItemSystems(itemSelectionSys, itemUseSys);
             }
         }
 
@@ -317,33 +294,6 @@ namespace NightHunt.UI
 
             // WeaponSlotButton instances already mirror highlight from IWeaponSystem.OnActiveWeaponChanged.
             // Do not call SelectWeapon here or the server will receive a redundant selection and toggle holster.
-        }
-
-        // ── GameActionBus Handler ─────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Canonical handler raised by ALL weapon-slot input sources:
-        ///   Desktop  — Key 1/2/3 via CombatInputHandler
-        ///   Mobile   — WeaponSlotButton.onClick via GameActionBus.RequestWeaponSlot(idx)
-        /// Keeps button highlight in sync without duplicated code paths.
-        /// </summary>
-        private void HandleWeaponSlotFromBus(int zeroBasedIndex)
-        {
-            SyncHighlightToSlotIndex(zeroBasedIndex);
-        }
-
-        /// <summary>Set the correct button to selected state, deselect all others.</summary>
-        private void SyncHighlightToSlotIndex(int zeroBasedIndex)
-        {
-            // WeaponSlotButton drives its own highlight via IWeaponSystem.OnActiveWeaponChanged.
-            // We only need to tell the weapon system to switch — it raises the event
-            // and each button's HandleActiveWeaponChanged updates the border accordingly.
-            if (_weaponSystem == null) return;
-
-            // Map 0-based bus index to WeaponSlotType (Primary=0, Secondary=1, Melee=2).
-            if (zeroBasedIndex < 0 || zeroBasedIndex >= _spawnedTypes.Count) return;
-            var slotType = _spawnedTypes[zeroBasedIndex];
-            _weaponSystem.SelectWeapon(slotType);
         }
 
         private void StartReloadProgress()

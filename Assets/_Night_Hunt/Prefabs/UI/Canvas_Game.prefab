@@ -16138,7 +16138,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 0
+  m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -16171,6 +16171,7 @@ MonoBehaviour:
   _fullMapRoot: {fileID: 0}
   _fullMapRawImage: {fileID: 0}
   _fullMapRenderTexture: {fileID: 0}
+  _closeMapButton: {fileID: 0}
 --- !u!1 &4014762332811202191
 GameObject:
   m_ObjectHideFlags: 0
@@ -21797,6 +21798,7 @@ MonoBehaviour:
   _promptPanel: {fileID: 1588871285796708699}
   _keyText: {fileID: 3057256349017063575}
   _actionText: {fileID: 8654073266549577791}
+  _mobileHUDPanel: {fileID: 0}
 --- !u!1 &5378718284040183915
 GameObject:
   m_ObjectHideFlags: 0
@@ -36828,7 +36830,6 @@ GameObject:
   - component: {fileID: 6575484568053657546}
   - component: {fileID: 1443237840066162281}
   - component: {fileID: 7067759871322018143}
-  - component: {fileID: 2921057939866498342}
   m_Layer: 0
   m_Name: Canvas_Game
   m_TagString: Untagged
@@ -36922,19 +36923,6 @@ MonoBehaviour:
   m_BlockingMask:
     serializedVersion: 2
     m_Bits: 4294967295
---- !u!114 &2921057939866498342
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8517050586722795803}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 09b638c8b979c634f92c93bd2738a97d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _forceMobile: 0
 --- !u!1 &8528806256470608626
 GameObject:
   m_ObjectHideFlags: 0

@@ -1452,7 +1452,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1898743788076950, guid: 2c8d1949404e6c74f97f2d65cebd687d, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 114404788642818498, guid: 2c8d1949404e6c74f97f2d65cebd687d,
         type: 3}
@@ -5278,6 +5278,8 @@ MonoBehaviour:
   mapDropdown: {fileID: 90156784}
   btn_Play: {fileID: 1191296117}
   btn_PlayLabel: {fileID: 2137025257}
+  allowFillContainer: {fileID: 0}
+  allowFillToggle: {fileID: 0}
   memberListView: {fileID: 157468053}
   modelListView: {fileID: 157468056}
   friendPanelView: {fileID: 157468052}
@@ -15543,7 +15545,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1898743788076950, guid: 2c8d1949404e6c74f97f2d65cebd687d, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 114045031172512476, guid: 2c8d1949404e6c74f97f2d65cebd687d,
         type: 3}
@@ -26056,7 +26058,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1898743788076950, guid: 2c8d1949404e6c74f97f2d65cebd687d, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 114045031172512476, guid: 2c8d1949404e6c74f97f2d65cebd687d,
         type: 3}
@@ -29362,7 +29364,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1898743788076950, guid: 2c8d1949404e6c74f97f2d65cebd687d, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 114404788642818498, guid: 2c8d1949404e6c74f97f2d65cebd687d,
         type: 3}
@@ -44908,7 +44910,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1898743788076950, guid: 2c8d1949404e6c74f97f2d65cebd687d, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 114404788642818498, guid: 2c8d1949404e6c74f97f2d65cebd687d,
         type: 3}
@@ -44939,6 +44941,11 @@ PrefabInstance:
         type: 3}
       propertyPath: 'm_ActiveFontFeatures.Array.data[0]'
       value: 1801810542
+      objectReference: {fileID: 0}
+    - target: {fileID: 114852774518329048, guid: 2c8d1949404e6c74f97f2d65cebd687d,
+        type: 3}
+      propertyPath: m_RaycastTarget
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 224862068371750312, guid: 2c8d1949404e6c74f97f2d65cebd687d,
         type: 3}
@@ -76042,7 +76049,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1898743788076950, guid: 2c8d1949404e6c74f97f2d65cebd687d, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 114045031172512476, guid: 2c8d1949404e6c74f97f2d65cebd687d,
         type: 3}

@@ -4747,6 +4747,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3ba91407b3a3f304abd1c2f0c0514c87, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   _ghostPrefab: {fileID: 5654895687894523820, guid: 2d289378ff70fcb44b494be27dc94f91,
     type: 3}
   _dragCanvas: {fileID: 4933887075596930845}
@@ -5759,7 +5760,6 @@ RectTransform:
   - {fileID: 4456607869629765527}
   - {fileID: 5592539128428353997}
   - {fileID: 1181919871543267108}
-  - {fileID: 1925949775983799094}
   - {fileID: 1245513809368474103}
   - {fileID: 6630821005499682763}
   - {fileID: 5199128758318621551}
@@ -5855,6 +5855,7 @@ MonoBehaviour:
   _promptPanel: {fileID: 9088442309985032695}
   _keyText: {fileID: 3621826118046066452}
   _actionText: {fileID: 5597202588740253207}
+  _mobileHUDPanel: {fileID: 2473546432649401917}
 --- !u!114 &2473546432649401917
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6954,8 +6955,8 @@ RectTransform:
   m_Children: []
   m_Father: {fileID: 3052791782241397087}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 1, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -7012,7 +7013,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &3438385115144457914
 RectTransform:
   m_ObjectHideFlags: 0
@@ -7029,6 +7030,7 @@ RectTransform:
   - {fileID: 2765856017379317912}
   - {fileID: 7466194449679634600}
   - {fileID: 6488973892666295820}
+  - {fileID: 1925949775983799094}
   m_Father: {fileID: 7737107879058571751}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -11794,6 +11796,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e3af5ea1189706a4e992fe8c0c44ab5e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _duplicatePolicy: 0
   _playerNameText: {fileID: 0}
   _teamColorBadge: {fileID: 0}
   _teamColors:
@@ -18605,7 +18608,7 @@ RectTransform:
   m_Father: {fileID: 4484739553941276299}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 10, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -26451,22 +26454,10 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1704640982692427756}
-        m_TargetAssemblyTypeName: UnityEngine.CanvasGroup, UnityEngine
-        m_MethodName: set_alpha
-        m_Mode: 4
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-      - m_Target: {fileID: 1704640982692427756}
-        m_TargetAssemblyTypeName: UnityEngine.CanvasGroup, UnityEngine
-        m_MethodName: set_blocksRaycasts
-        m_Mode: 6
+      - m_Target: {fileID: 6197058719239292020}
+        m_TargetAssemblyTypeName: NightHunt.GameplaySystems.UI.MinimapUI, Assembly-CSharp
+        m_MethodName: CloseFullMap
+        m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
@@ -27936,7 +27927,6 @@ GameObject:
   - component: {fileID: 4933887075596930845}
   - component: {fileID: 4116048917465134846}
   - component: {fileID: 4817619207669239812}
-  - component: {fileID: 4666642878524240921}
   - component: {fileID: 195803273868114728}
   m_Layer: 0
   m_Name: GameplayMainCanvas
@@ -28033,18 +28023,6 @@ MonoBehaviour:
   m_BlockingMask:
     serializedVersion: 2
     m_Bits: 4294967295
---- !u!114 &4666642878524240921
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6333370502774347232}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 09b638c8b979c634f92c93bd2738a97d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &195803273868114728
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -30034,7 +30012,7 @@ RectTransform:
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 5624743446809668657}
-  m_Father: {fileID: 7737107879058571751}
+  m_Father: {fileID: 3438385115144457914}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0.5}
   m_AnchorMax: {x: 0, y: 0.5}
@@ -43849,29 +43827,17 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1704640982692427756}
-        m_TargetAssemblyTypeName: UnityEngine.CanvasGroup, UnityEngine
-        m_MethodName: set_alpha
-        m_Mode: 4
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 1
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-      - m_Target: {fileID: 1704640982692427756}
-        m_TargetAssemblyTypeName: UnityEngine.CanvasGroup, UnityEngine
-        m_MethodName: set_blocksRaycasts
-        m_Mode: 6
+      - m_Target: {fileID: 6197058719239292020}
+        m_TargetAssemblyTypeName: NightHunt.GameplaySystems.UI.MinimapUI, Assembly-CSharp
+        m_MethodName: ToggleFullMap
+        m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
           m_StringArgument: 
-          m_BoolArgument: 1
+          m_BoolArgument: 0
         m_CallState: 2
 --- !u!1001 &5038966397423392056
 PrefabInstance:

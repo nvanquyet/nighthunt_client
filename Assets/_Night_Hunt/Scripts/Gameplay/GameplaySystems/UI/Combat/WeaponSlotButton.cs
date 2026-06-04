@@ -32,8 +32,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [SerializeField] private WeaponSlotType _slotType;
 
         private IWeaponSystem _weaponSystem;
-        private IItemSelectionSystem _itemSelectionSystem;
-        private IItemUseSystem _itemUseSystem;
         private bool _isBound;
 
         protected override void Awake()
@@ -49,12 +47,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (_iconImage == null)
                     Debug.LogWarning($"{LogPrefix} Icon image is not wired on '{name}'. HUD icon cannot update.");
             }
-        }
-
-        public void BindItemSystems(IItemSelectionSystem itemSelectionSystem, IItemUseSystem itemUseSystem)
-        {
-            _itemSelectionSystem = itemSelectionSystem;
-            _itemUseSystem = itemUseSystem;
         }
 
         public void Bind(WeaponSlotType slotType, IWeaponSystem weaponSystem)
@@ -113,6 +105,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             base.OnPointerDown(eventData);
 
+            bool isDoubleClick = ConsumeDoubleClick();
+            if (_combatInputHandler != null)
+            {
+                _combatInputHandler.SimulateWeaponSlotPressed(_slotType, isDoubleClick);
+                return;
+            }
+
+            Debug.LogWarning($"{LogPrefix} CombatInputHandler is not bound on '{name}'. Weapon slot input ignored.");
+            return;
+
+#if false
             if (_weaponSystem == null)
                 return;
 
@@ -124,7 +127,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             var activeSlot = _weaponSystem.GetActiveWeaponSlot();
             bool isActiveSlot = activeSlot.HasValue && activeSlot.Value == _slotType;
 
-            if (ConsumeDoubleClick())
+            if (isDoubleClick)
             {
                 // Double click: reload when slot is active, select otherwise.
                 if (isActiveSlot)
@@ -139,6 +142,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 _weaponSystem.HolsterWeapon();
             else
                 _weaponSystem.SelectWeapon(_slotType);
+#endif
         }
 
         private void HandleWeaponEquipped(WeaponSlotType slot, ItemInstance weapon)

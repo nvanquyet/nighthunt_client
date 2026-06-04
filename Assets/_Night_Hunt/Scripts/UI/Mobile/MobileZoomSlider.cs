@@ -63,7 +63,7 @@ namespace NightHunt.UI.Mobile
         private void Awake()
         {
             // This slider is only needed on mobile; hide the entire control on desktop.
-            if (!Application.isMobilePlatform && !PlatformManager.IsMobile)
+            if (!IsMobileMode())
             {
                 gameObject.SetActive(false);
                 return;
@@ -128,6 +128,12 @@ namespace NightHunt.UI.Mobile
         {
             if (_iconWhenCollapsed != null) _iconWhenCollapsed.SetActive(!_expanded);
             if (_iconWhenExpanded  != null) _iconWhenExpanded.SetActive(_expanded);
+        }
+
+        private static bool IsMobileMode()
+        {
+            var platform = PlatformInputDetector.Instance;
+            return platform != null ? platform.IsMobile : Application.isMobilePlatform;
         }
     }
 }

@@ -140,8 +140,7 @@ namespace NightHunt.GameplaySystems.UI
             }
 
             var inputLayers = InputLayerManager.Instance;
-            if (!_fullMapVisible && _pushedInputContext && inputLayers != null &&
-                inputLayers.CurrentState == InputState.MapOpen)
+            if (!_fullMapVisible && _pushedInputContext && inputLayers != null)
             {
                 Debug.Log($"[NH_FLOW][50][Minimap.WatchdogMapOpenLeak] visible={_fullMapVisible} pushed={_pushedInputContext} state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers}");
                 ReleaseMapInputContext(inputLayers, inputLayers.CurrentState, inputLayers.ActiveLayers, "watchdog-hidden-map");
@@ -190,21 +189,19 @@ namespace NightHunt.GameplaySystems.UI
                 EnsureCloseButton();
                 if (inputLayers != null)
                 {
-                    if (inputLayers.CurrentState == InputState.None)
-                    {
-                        PhaseTestLog.Warning(
-                            PhaseTestLogCategory.Input,
-                            "MinimapInputRecoverBeforeOpen",
-                            $"reason=current-state-none layers={inputLayers.ActiveLayers}",
-                            this);
-                        inputLayers.TransitionToState(InputState.PlayerAlive);
-                    }
-
-                    if (inputLayers.CurrentState != InputState.MapOpen)
+                    if (!_pushedInputContext && inputLayers.CurrentState != InputState.MapOpen)
                     {
                         Debug.Log($"[NH_FLOW][51][Minimap.PushMapOpen] beforeState={inputLayers.CurrentState} beforeLayers={inputLayers.ActiveLayers}");
                         inputLayers.PushContext(InputState.MapOpen);
                         _pushedInputContext = true;
+                    }
+                    else if (inputLayers.CurrentState == InputState.MapOpen && !_pushedInputContext)
+                    {
+                        PhaseTestLog.Warning(
+                            PhaseTestLogCategory.Input,
+                            "MinimapOpenWithoutOwnedContext",
+                            $"state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers}",
+                            this);
                     }
                 }
             }
@@ -242,12 +239,20 @@ namespace NightHunt.GameplaySystems.UI
                 return;
             }
 
-            int popCount = 0;
-            while (inputLayers.CurrentState == InputState.MapOpen && popCount < 4)
+            bool popped = false;
+            if (_pushedInputContext && inputLayers.CurrentState == InputState.MapOpen)
             {
-                Debug.Log($"[NH_FLOW][53][Minimap.PopMapOpen] reason={reason} popIndex={popCount} state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers}");
+                Debug.Log($"[NH_FLOW][53][Minimap.PopMapOpen] reason={reason} state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers}");
                 inputLayers.PopContext();
-                popCount++;
+                popped = true;
+            }
+            else if (_pushedInputContext)
+            {
+                PhaseTestLog.Warning(
+                    PhaseTestLogCategory.Input,
+                    "MinimapOwnedContextOutOfSync",
+                    $"reason={reason} state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers} beforeState={beforeState} beforeLayers={beforeLayers}",
+                    this);
             }
 
             _pushedInputContext = false;
@@ -257,17 +262,7 @@ namespace NightHunt.GameplaySystems.UI
             if (EventSystem.current != null)
                 EventSystem.current.SetSelectedGameObject(null);
 
-            if (inputLayers.CurrentState == InputState.None || inputLayers.CurrentState == InputState.MapOpen)
-            {
-                Debug.LogWarning($"[NH_FLOW][54][Minimap.RecoverInputState] reason={reason} invalidState={inputLayers.CurrentState} layers={inputLayers.ActiveLayers} beforeState={beforeState} beforeLayers={beforeLayers} popCount={popCount}");
-                PhaseTestLog.Warning(
-                    PhaseTestLogCategory.Input,
-                    "MinimapInputRecoverAfterClose",
-                    $"reason={reason} invalidState={inputLayers.CurrentState} layers={inputLayers.ActiveLayers} beforeState={beforeState} beforeLayers={beforeLayers} popCount={popCount}",
-                    this);
-                inputLayers.TransitionToState(InputState.PlayerAlive);
-            }
-            Debug.Log($"[NH_FLOW][55][Minimap.ReleaseDone] reason={reason} beforeState={beforeState} beforeLayers={beforeLayers} afterState={inputLayers.CurrentState} afterLayers={inputLayers.ActiveLayers} popCount={popCount}");
+            Debug.Log($"[NH_FLOW][55][Minimap.ReleaseDone] reason={reason} beforeState={beforeState} beforeLayers={beforeLayers} afterState={inputLayers.CurrentState} afterLayers={inputLayers.ActiveLayers} popped={popped}");
         }
 
         private void ApplyTextures()

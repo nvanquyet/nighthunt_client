@@ -11,7 +11,6 @@ using NightHunt.Gameplay.Deployables;
 using NightHunt.Gameplay.Input;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
-using NightHunt.Gameplay.Input.Handlers.Inventory;
 using NightHunt.Gameplay.Input.Handlers.UI;
 using NightHunt.UI.Mobile;
 using NightHunt.Gameplay.Spectator;
@@ -154,7 +153,6 @@ namespace NightHunt.UI
         private bool _initializedForPlayer;
         private Coroutine _inventoryProximityRefreshCoroutine;
         private InputManager _subscribedInputManager;
-        private InventoryInputHandler _subscribedInventoryHandler;
         private UIInputHandler _subscribedUIHandler;
         private SettingsView _subscribedSettingsView;
         private bool _combatEventsSubscribed;
@@ -190,6 +188,7 @@ namespace NightHunt.UI
         {
             // Primary init trigger: fires when the local player is ready.
             NetworkPlayer.OnOwnerReady += Initialize;
+            GameActionBus.OnInventoryToggleRequested += HandleInventoryToggle;
 
             TrySubscribeInputHandlers();
             if (_initializedForPlayer)
@@ -207,6 +206,7 @@ namespace NightHunt.UI
         private void OnDisable()
         {
             NetworkPlayer.OnOwnerReady -= Initialize;
+            GameActionBus.OnInventoryToggleRequested -= HandleInventoryToggle;
 
             CloseSettingsOverlay(true);
             UnsubscribeInputHandlers();
@@ -551,15 +551,6 @@ namespace NightHunt.UI
             if (input == null)
                 return;
 
-            if (input.InventoryHandler != null && _subscribedInventoryHandler != input.InventoryHandler)
-            {
-                if (_subscribedInventoryHandler != null)
-                    _subscribedInventoryHandler.OpenInventoryPerformed -= HandleInventoryToggle;
-
-                _subscribedInventoryHandler = input.InventoryHandler;
-                _subscribedInventoryHandler.OpenInventoryPerformed += HandleInventoryToggle;
-            }
-
             if (input.UIHandler != null && _subscribedUIHandler != input.UIHandler)
             {
                 if (_subscribedUIHandler != null)
@@ -575,12 +566,6 @@ namespace NightHunt.UI
 
         private void UnsubscribeInputHandlers()
         {
-            if (_subscribedInventoryHandler != null)
-            {
-                _subscribedInventoryHandler.OpenInventoryPerformed -= HandleInventoryToggle;
-                _subscribedInventoryHandler = null;
-            }
-
             if (_subscribedUIHandler != null)
             {
                 _subscribedUIHandler.OnOpenMenuPressed -= HandleOpenMenuPressed;

@@ -161,12 +161,14 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnEnable()
         {
+            GameActionBus.OnWeaponSlotRequested += HandleWeaponSlotRequested;
             if (InputLayerManager.Instance != null)
                 InputLayerManager.Instance.RegisterHandler(this);
         }
 
         private void OnDisable()
         {
+            GameActionBus.OnWeaponSlotRequested -= HandleWeaponSlotRequested;
             DisableInput();
             InputLayerManager.Instance?.UnregisterHandler(this);
         }
@@ -738,17 +740,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         public void SwitchToWeaponSlot(int slot)
         {
             Debug.Log($"[NH_FLOW][31][WeaponSlot.Request] slot={slot} {DescribeCombatFlowState()}");
-            // Cancel any armed throwable/consumable/deployable when switching to a weapon slot.
-            bool hasItemIntent = _itemSelectionSystem != null && _itemSelectionSystem.HasSelection;
-            bool isUsingItem = _itemUseSystem != null && _itemUseSystem.IsUsingItem;
-            if (isUsingItem || hasItemIntent)
-            {
-                Debug.Log($"[CombatInputHandler] SwitchToWeaponSlot({slot}): cancelling item intent before switching. isUsing={isUsingItem} hasSelection={hasItemIntent}");
-                Debug.Log($"[NH_FLOW][31][WeaponSlot.CancelItemIntent] slot={slot} isUsing={isUsingItem} hasSelection={hasItemIntent} {DescribeCombatFlowState()}");
-                _itemSelectionSystem?.RequestCancelSelection();
-            }
+            CancelItemIntentForWeaponSlot(slot);
 
-            if (_currentWeaponSlot != slot)
+            if (_currentWeaponSlot != slot || !IsWeaponSlotActive(slot))
             {
                 _currentWeaponSlot = slot;
                 PhaseTestLog.Log(
@@ -768,6 +762,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnThrowGrenadePerformed(InputAction.CallbackContext ctx) => OnThrowGrenade?.Invoke();
         private void OnConsumablePanelPerformed(InputAction.CallbackContext ctx) => OnConsumablePanel?.Invoke();
+        private void HandleWeaponSlotRequested(int zeroBasedIndex) => SwitchToWeaponSlot(zeroBasedIndex);
 
         // ── Public API ────────────────────────────────────────────────────────────
 
@@ -776,6 +771,43 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         public bool IsReloading()         => _isReloading;
         public int  GetCurrentWeaponSlot() => _currentWeaponSlot;
         public void SetReloading(bool v)  => _isReloading = v;
+
+        public void SimulateWeaponSlotPressed(WeaponSlotType slotType, bool isDoubleClick)
+        {
+            if (!_inputEnabled)
+            {
+                Debug.Log($"[NH_FLOW][31][WeaponSlot.Blocked] slot={slotType} reason=input-disabled {DescribeCombatFlowState()}");
+                return;
+            }
+
+            int slot = SlotTypeToIndex(slotType);
+            bool isActiveSlot = IsWeaponSlotActive(slot);
+            CancelItemIntentForWeaponSlot(slot);
+
+            if (isDoubleClick)
+            {
+                if (isActiveSlot)
+                    SimulateReload();
+                else
+                    SwitchToWeaponSlot(slot);
+                return;
+            }
+
+            if (isActiveSlot)
+            {
+                Debug.Log($"[NH_FLOW][31][WeaponSlot.Holster] slot={slot} type={slotType} {DescribeCombatFlowState()}");
+                _weaponSystem?.HolsterWeapon();
+                _currentWeaponSlot = -1;
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Input,
+                    "WeaponSlotHolster",
+                    $"slotIndex={slot} slotType={slotType}",
+                    this);
+                return;
+            }
+
+            SwitchToWeaponSlot(slot);
+        }
 
         /// <summary>
         /// Returns the aim direction ONLY while firing (LMB held or mobile button held).
@@ -860,6 +892,34 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             Debug.Log("[CombatInputHandler] SimulateReload -> OnReload");
             OnReload?.Invoke();
         }
+
+        private void CancelItemIntentForWeaponSlot(int slot)
+        {
+            bool hasItemIntent = _itemSelectionSystem != null && _itemSelectionSystem.HasSelection;
+            bool isUsingItem = _itemUseSystem != null && _itemUseSystem.IsUsingItem;
+            if (!isUsingItem && !hasItemIntent)
+                return;
+
+            Debug.Log($"[CombatInputHandler] Weapon slot {slot}: cancelling item intent before switching. isUsing={isUsingItem} hasSelection={hasItemIntent}");
+            Debug.Log($"[NH_FLOW][31][WeaponSlot.CancelItemIntent] slot={slot} isUsing={isUsingItem} hasSelection={hasItemIntent} {DescribeCombatFlowState()}");
+            _itemSelectionSystem?.RequestCancelSelection();
+        }
+
+        private bool IsWeaponSlotActive(int slot)
+        {
+            var activeSlot = _weaponSystem?.GetActiveWeaponSlot();
+            return activeSlot.HasValue && SlotTypeToIndex(activeSlot.Value) == slot;
+        }
+
+        private static int SlotTypeToIndex(WeaponSlotType slotType) => slotType switch
+        {
+            WeaponSlotType.Primary => 0,
+            WeaponSlotType.Secondary => 1,
+            WeaponSlotType.Melee => 2,
+            WeaponSlotType.Slot3 => 3,
+            WeaponSlotType.Slot4 => 4,
+            _ => 0
+        };
 
         /// <summary>
         /// Override aim direction from mobile drag (FireButton.OnDrag).
