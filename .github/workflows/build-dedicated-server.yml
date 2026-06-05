@@ -448,6 +448,14 @@ jobs:
 
             echo "=== Pruning dangling images ==="
             docker image prune -f
+            echo "=== Keeping latest DS image plus one fallback ==="
+            docker images "ghcr.io/nvanquyet/nighthunt-ds" --format "{{.CreatedAt}}\t{{.ID}}\t{{.Repository}}:{{.Tag}}" \
+              | sort -rk1 \
+              | awk '!seen[$2]++ {count++; if (count > 2) print $2}' \
+              | sort -u \
+              | xargs -r docker rmi -f 2>/dev/null && echo "Old DS image IDs pruned" || true
+            echo "=== DS image cache after prune ==="
+            docker images "ghcr.io/nvanquyet/nighthunt-ds" --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}\t{{.Size}}"
             echo "✅ Dangling images pruned"
 
       # Bước 5: Push git tag để tracking phiên bản DS chính xác trên GHCR

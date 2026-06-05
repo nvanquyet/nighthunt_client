@@ -117,9 +117,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 return;
 
             _joystick.OnDrag(eventData);
-            Vector2 joystickDir = CamRelativeXZ(_joystick.Direction);
-            Debug.Log($"[NH_FLOW][16][FireButton.Drag] button={name} raw={_joystick.Direction:F2} camRelative={joystickDir:F2}");
-            _combatInputHandler?.SetFireMobileJoystick(joystickDir, active: true);
+            PushJoystickToCombat(eventData, "Drag");
         }
 
         public void OnEndDrag(PointerEventData eventData)
@@ -201,6 +199,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _joystickStarted = true;
             _joystick.gameObject.SetActive(true);
             _joystick.OnPointerDown(eventData);
+            PushJoystickToCombat(eventData, "StartJoystick");
             Debug.Log($"[NH_FLOW][15][FireButton.StartJoystick] button={name} pointer={eventData.pointerId} pos={eventData.position}");
         }
 
@@ -217,7 +216,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             var cam = Camera.main;
             if (cam == null)
-                return Vector2.zero;
+                return dir;
 
             Vector3 right = cam.transform.right;
             right.y = 0f;
@@ -229,6 +228,40 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             Vector3 world = right * dir.x + forward * dir.y;
             return new Vector2(world.x, world.z);
+        }
+
+        private void PushJoystickToCombat(PointerEventData eventData, string source)
+        {
+            if (_joystick == null)
+                return;
+
+            Vector2 raw = ResolveJoystickDirectionForFirstFrame(eventData);
+            Vector2 joystickDir = CamRelativeXZ(raw);
+            Debug.Log($"[NH_FLOW][16][FireButton.{source}] button={name} raw={raw:F2} camRelative={joystickDir:F2}");
+            _combatInputHandler?.SetFireMobileJoystick(joystickDir, active: true);
+        }
+
+        private Vector2 ResolveJoystickDirectionForFirstFrame(PointerEventData eventData)
+        {
+            Vector2 raw = _joystick != null ? _joystick.Direction : Vector2.zero;
+            if (raw.sqrMagnitude > 0.001f)
+                return raw;
+
+            if (eventData != null && _joystick != null && _joystick.transform is RectTransform rectTransform)
+            {
+                Camera eventCamera = eventData.pressEventCamera != null
+                    ? eventData.pressEventCamera
+                    : eventData.enterEventCamera;
+                Vector2 center = RectTransformUtility.WorldToScreenPoint(eventCamera, rectTransform.position);
+                Vector2 delta = eventData.position - center;
+                float radius = Mathf.Max(1f, Mathf.Min(rectTransform.rect.width, rectTransform.rect.height) * 0.5f);
+                if (delta.sqrMagnitude > 4f)
+                    return Vector2.ClampMagnitude(delta / radius, 1f);
+            }
+
+            // Floating joystick centres under the finger on pointer down, so its raw
+            // direction is zero in the first frame. Seed forward aim immediately.
+            return Vector2.up;
         }
     }
 }

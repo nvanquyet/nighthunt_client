@@ -4,6 +4,7 @@ using NightHunt.Config;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Gameplay.Spectator;
 using NightHunt.State;
 using TMPro;
 using UnityEngine;
@@ -101,6 +102,7 @@ namespace NightHunt.UI
         private float          _progressCurrent;
         private Coroutine      _fadeCoroutine;
         private Coroutine      _timeoutCoroutine;
+        private Coroutine      _connectedFallbackCoroutine;
         private bool           _isVisible;
         private float          _showTime;
 
@@ -193,6 +195,7 @@ namespace NightHunt.UI
         public void Hide()
         {
             StopTimeout();
+            StopConnectedFallback();
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeOut());
         }
@@ -224,6 +227,7 @@ namespace NightHunt.UI
 
             SubscribeEvents();
             StartTimeout();
+            StartConnectedFallback();
 
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeIn());
@@ -398,6 +402,7 @@ namespace NightHunt.UI
         private void OnAllPlayersReady(AllPlayersReadyEvent _)
         {
             StopTimeout();
+            StopConnectedFallback();
             SetStage(MatchLoadStage.AllReady);
 
             float elapsed    = Time.realtimeSinceStartup - _showTime;
@@ -484,7 +489,7 @@ namespace NightHunt.UI
             bool matchRunning = NightHunt.Networking.NetworkGameManager.Instance?.IsClient ?? false;
             if (matchRunning)
             {
-                Debug.LogWarning($"[MatchLoadingOverlay] Timeout ({connectionTimeout}s) but FishNet IsClient=true — hiding overlay, match continues.");
+                Debug.Log($"[MatchLoadingOverlay] Timeout ({connectionTimeout}s) but FishNet IsClient=true - hiding overlay, match continues.");
                 UnsubscribeEvents();
                 Hide();
                 yield break;
@@ -509,6 +514,81 @@ namespace NightHunt.UI
             {
                 ReturnToHomeAfterTimeout();
             }
+        }
+
+        private void StartConnectedFallback()
+        {
+            StopConnectedFallback();
+            _connectedFallbackCoroutine = StartCoroutine(ConnectedFallbackRoutine());
+        }
+
+        private void StopConnectedFallback()
+        {
+            if (_connectedFallbackCoroutine != null)
+            {
+                StopCoroutine(_connectedFallbackCoroutine);
+                _connectedFallbackCoroutine = null;
+            }
+        }
+
+        private IEnumerator ConnectedFallbackRoutine()
+        {
+            while (_isVisible)
+            {
+                yield return new WaitForSecondsRealtime(0.25f);
+
+                if (!_isVisible || _stage == MatchLoadStage.AllReady)
+                    yield break;
+
+                if (!IsConnectedEnoughForFallback(out string reason))
+                    continue;
+
+                float visibleFor = Time.realtimeSinceStartup - _showTime;
+                if (visibleFor < minimumDisplayDuration)
+                    continue;
+
+                Debug.Log($"[MatchLoadingOverlay] FishNet client is ready ({reason}), but AllPlayersReadyEvent was not observed. Hiding overlay via connected fallback.");
+                OnAllPlayersReady(new AllPlayersReadyEvent());
+                yield break;
+            }
+        }
+
+        private bool IsConnectedEnoughForFallback(out string reason)
+        {
+            reason = "not-connected";
+
+            bool fishNetConnected = NightHunt.Networking.NetworkGameManager.Instance?.IsClient ?? false;
+            if (!fishNetConnected)
+                return false;
+
+            bool hasLocalPlayer = SpectateManager.Instance?.GetLocalPlayer() != null;
+            if (hasLocalPlayer)
+            {
+                reason = "local-player-ready";
+                return true;
+            }
+
+            if (_spawnedCount > 0 || _stage == MatchLoadStage.Spawning)
+            {
+                reason = $"spawn-progress stage={_stage} spawned={_spawnedCount}";
+                return true;
+            }
+
+            bool eventBusReady = GameplayEventBus.Instance != null;
+            bool sceneLoadIdle = !NightHunt.Core.SceneLoader.HasPendingSceneLoad;
+            if (eventBusReady && sceneLoadIdle)
+            {
+                reason = "gameplay-event-bus-ready";
+                return true;
+            }
+
+            if (_stage == MatchLoadStage.ServerReady && sceneLoadIdle)
+            {
+                reason = "server-ready-scene-idle";
+                return true;
+            }
+
+            return false;
         }
 
         private static void ReturnToHomeAfterTimeout()

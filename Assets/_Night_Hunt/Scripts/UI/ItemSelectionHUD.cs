@@ -315,6 +315,7 @@ namespace NightHunt.UI
             {
                 _combatHandler.OnThrowGrenade -= HandleThrowGrenadeShortcut;
                 _combatHandler.OnConsumablePanel -= HandleConsumablePanelShortcut;
+                _combatHandler.OnDeployablePanel -= HandleDeployablePanelShortcut;
             }
 
             _combatHandler = combatHandler;
@@ -323,6 +324,7 @@ namespace NightHunt.UI
             {
                 _combatHandler.OnThrowGrenade += HandleThrowGrenadeShortcut;
                 _combatHandler.OnConsumablePanel += HandleConsumablePanelShortcut;
+                _combatHandler.OnDeployablePanel += HandleDeployablePanelShortcut;
             }
         }
 
@@ -337,6 +339,12 @@ namespace NightHunt.UI
         {
             Debug.Log("[NH_FLOW][02][ItemSelectionHUD.ConsumableShortcut]");
             GameActionBus.RequestItemSlot(ItemType.Consumable);
+        }
+
+        private void HandleDeployablePanelShortcut()
+        {
+            Debug.Log("[NH_FLOW][02][ItemSelectionHUD.DeployableShortcut]");
+            GameActionBus.RequestItemSlot(ItemType.Deployable);
         }
 
         private GameplaySystems.UI.Combat.ItemFilterPanel FindPanel(ItemType type)

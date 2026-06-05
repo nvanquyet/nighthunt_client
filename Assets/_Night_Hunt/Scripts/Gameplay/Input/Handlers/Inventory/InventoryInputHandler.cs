@@ -154,6 +154,16 @@ namespace NightHunt.Gameplay.Input.Handlers.Inventory
         private void RaiseQuickSlot(InputAction.CallbackContext ctx, int oneBasedSlot)
         {
             if (!ctx.performed) return;
+
+            var inputLayers = InputLayerManager.Instance;
+            if (inputLayers != null &&
+                inputLayers.CurrentState == NightHunt.Gameplay.Input.InputState.PlayerAlive &&
+                inputLayers.IsLayerActive(NightHunt.Gameplay.Input.InputLayer.Combat))
+            {
+                Debug.Log($"[NH_FLOW][02][InventoryQuickSlot.Ignored] slot={oneBasedSlot} reason=combat-layer-owns-gameplay-number-row state={inputLayers.CurrentState} layers={inputLayers.ActiveLayers}");
+                return;
+            }
+
             // Raise legacy event for backward compatibility
             QuickSlotPerformed?.Invoke(oneBasedSlot);
             // Route through canonical bus — UI buttons also call RequestItemSlot directly

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 using NightHunt.Config;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Core.Configs;
@@ -546,12 +547,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
             Debug.Log($"[NH_FLOW][20][ItemAim.FireButtonDeployRelease] magnitude={joystickMagnitude:F2} {DescribeAimFlowState()}");
             if (!_inDeployMode) return;
 
-            if (joystickMagnitude < _dragThreshold)
-            {
-                IgnoreDeployRelease($"fireButtonReleaseIgnored magnitude={joystickMagnitude:F2}");
-                return;
-            }
-
             _suppressNextDeployRelease = false;
             TryConfirmDeployRelease($"fireButtonRelease magnitude={joystickMagnitude:F2}");
         }
@@ -880,13 +875,76 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (EventSystem.current == null)
                 return false;
 
-            if (EventSystem.current.IsPointerOverGameObject())
+            if (IsPointerOverBlockingUI(UnityEngine.Input.mousePosition))
                 return true;
 
             for (int i = 0; i < UnityEngine.Input.touchCount; i++)
             {
                 var touch = UnityEngine.Input.GetTouch(i);
-                if (EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+                if (IsPointerOverBlockingUI(touch.position))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsPointerOverBlockingUI(Vector2 screenPosition)
+        {
+            if (EventSystem.current == null)
+                return false;
+
+            var pointer = new PointerEventData(EventSystem.current)
+            {
+                position = screenPosition
+            };
+
+            var results = new System.Collections.Generic.List<RaycastResult>();
+            EventSystem.current.RaycastAll(pointer, results);
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (IsBlockingUiTarget(results[i].gameObject))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsBlockingUiTarget(GameObject go)
+        {
+            if (go == null)
+                return false;
+
+            if (IsNonBlockingWorldInputUi(go))
+                return false;
+
+            if (go.GetComponentInParent<Selectable>() != null)
+                return true;
+
+            if (go.GetComponentInParent<ActionButton>() != null)
+                return true;
+
+            if (go.GetComponentInParent<ItemFilterButton>() != null)
+                return true;
+
+            if (go.GetComponentInParent<SelectableItemButton>() != null)
+                return true;
+
+            if (go.GetComponentInParent<WeaponSlotButton>() != null)
+                return true;
+
+            return false;
+        }
+
+        private static bool IsNonBlockingWorldInputUi(GameObject go)
+        {
+            if (go.GetComponentInParent<NightHunt.UI.Mobile.MobileCameraDragArea>() != null)
+                return true;
+
+            for (Transform t = go.transform; t != null; t = t.parent)
+            {
+                string n = t.name;
+                if (!string.IsNullOrEmpty(n) &&
+                    n.IndexOf("CameraDragArea", System.StringComparison.OrdinalIgnoreCase) >= 0)
                     return true;
             }
 
@@ -936,9 +994,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
                     continue;
 
-                // Skip touches over UI elements (joystick, buttons, etc.).
-                if (EventSystem.current != null &&
-                    EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+                // Skip only blocking controls; camera drag/fullscreen world-input
+                // surfaces must still update the deploy target.
+                if (IsPointerOverBlockingUI(touch.position))
                     continue;
 
                 Ray   ray   = _cam.ScreenPointToRay(touch.position);

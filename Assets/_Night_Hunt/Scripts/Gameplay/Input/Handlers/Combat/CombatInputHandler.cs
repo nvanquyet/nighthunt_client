@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Gameplay.Input.Handlers.Movement;
@@ -51,6 +52,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private InputAction _weaponSlot3Action;
         private InputAction _throwGrenadeAction;
         private InputAction _consumablePanelAction;  // optional — maps to "ConsumablePanel" action if defined
+        private InputAction _deployablePanelAction;  // maps to "UseAbility" action (key 5 / Alt)
         private InputAction _switchWeaponAction;
         private InputAction _mousePositionAction; // Track mouse position via Input System
 
@@ -118,6 +120,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         public event System.Action       OnThrowGrenade;
         /// <summary>Fired when the ConsumablePanel shortcut key is pressed.</summary>
         public event System.Action       OnConsumablePanel;
+        /// <summary>Fired when the deployable shortcut key is pressed.</summary>
+        public event System.Action       OnDeployablePanel;
 
         // ── IInputHandler ─────────────────────────────────────────────────────────
         public bool IsInputEnabled => _inputEnabled;
@@ -203,8 +207,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
                 _weaponSlot2Action   = _combatActionMap.FindAction("WeaponSlot2");
                 _weaponSlot3Action   = _combatActionMap.FindAction("WeaponSlot3");
                 _throwGrenadeAction  = _combatActionMap.FindAction("ThrowGrenade");
-                _consumablePanelAction = _combatActionMap.FindAction("ConsumablePanel")
-                    ?? _combatActionMap.FindAction("UseAbility");
+                _consumablePanelAction = _combatActionMap.FindAction("ConsumablePanel");
+                _deployablePanelAction = _combatActionMap.FindAction("UseAbility");
                 _switchWeaponAction  = _combatActionMap.FindAction("SwitchWeapon");
                 // MousePosition action added to .inputactions
                 _mousePositionAction = _combatActionMap.FindAction("MousePosition");
@@ -247,6 +251,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_weaponSlot3Action  != null) _weaponSlot3Action.performed  += _onSlot3;
             if (_throwGrenadeAction != null) _throwGrenadeAction.performed += OnThrowGrenadePerformed;
             if (_consumablePanelAction != null) _consumablePanelAction.performed += OnConsumablePanelPerformed;
+            if (_deployablePanelAction != null) _deployablePanelAction.performed += OnDeployablePanelPerformed;
             if (_switchWeaponAction != null) _switchWeaponAction.performed += OnSwitchWeaponPerformed;
             // MousePosition: no event subscription needed — polling in UpdateAimDirection() is sufficient.
             // The action only needs to be enabled (handled by InputLayerManager).
@@ -275,6 +280,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (_weaponSlot3Action  != null) _weaponSlot3Action.performed  -= _onSlot3;
             if (_throwGrenadeAction != null) _throwGrenadeAction.performed -= OnThrowGrenadePerformed;
             if (_consumablePanelAction != null) _consumablePanelAction.performed -= OnConsumablePanelPerformed;
+            if (_deployablePanelAction != null) _deployablePanelAction.performed -= OnDeployablePanelPerformed;
             if (_switchWeaponAction != null) _switchWeaponAction.performed -= OnSwitchWeaponPerformed;
 
             // If firing when disabled (e.g., opening inventory), force EndFire to restore state.
@@ -762,6 +768,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnThrowGrenadePerformed(InputAction.CallbackContext ctx) => OnThrowGrenade?.Invoke();
         private void OnConsumablePanelPerformed(InputAction.CallbackContext ctx) => OnConsumablePanel?.Invoke();
+        private void OnDeployablePanelPerformed(InputAction.CallbackContext ctx) => OnDeployablePanel?.Invoke();
         private void HandleWeaponSlotRequested(int zeroBasedIndex) => SwitchToWeaponSlot(zeroBasedIndex);
 
         // ── Public API ────────────────────────────────────────────────────────────
@@ -1039,16 +1046,10 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             if (EventSystem.current == null)
                 return false;
 
-            var pointer = new PointerEventData(EventSystem.current)
-            {
-                position = Mouse.current != null
-                    ? Mouse.current.position.ReadValue()
-                    : (Vector2)UnityEngine.Input.mousePosition
-            };
-
+            var pointer = BuildCurrentPointerEventData();
             var results = new List<RaycastResult>();
             EventSystem.current.RaycastAll(pointer, results);
-            return results.Count > 0;
+            return HasBlockingUiTarget(results);
         }
 
         private bool TryRouteFirePressToCombatUi()
@@ -1115,6 +1116,59 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             for (int i = 0; i < count; i++)
                 parts[i] = results[i].gameObject != null ? results[i].gameObject.name : "null";
             return string.Join(" > ", parts);
+        }
+
+        private static bool HasBlockingUiTarget(List<RaycastResult> results)
+        {
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (IsBlockingUiTarget(results[i].gameObject))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsBlockingUiTarget(GameObject go)
+        {
+            if (go == null)
+                return false;
+
+            if (IsNonBlockingWorldInputUi(go))
+                return false;
+
+            if (go.GetComponentInParent<Selectable>() != null)
+                return true;
+
+            if (go.GetComponentInParent<ActionButton>() != null)
+                return true;
+
+            if (go.GetComponentInParent<ItemFilterButton>() != null)
+                return true;
+
+            if (go.GetComponentInParent<SelectableItemButton>() != null)
+                return true;
+
+            if (go.GetComponentInParent<WeaponSlotButton>() != null)
+                return true;
+
+            return false;
+        }
+
+        private static bool IsNonBlockingWorldInputUi(GameObject go)
+        {
+            if (go.GetComponentInParent<NightHunt.UI.Mobile.MobileCameraDragArea>() != null)
+                return true;
+
+            for (Transform t = go.transform; t != null; t = t.parent)
+            {
+                string n = t.name;
+                if (!string.IsNullOrEmpty(n) &&
+                    n.IndexOf("CameraDragArea", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>
