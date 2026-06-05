@@ -213,12 +213,12 @@ namespace NightHunt.Networking
             // A loopback-only bind rejects those packets, causing:
             //   • Client packets never reaching the host server → no FishNet server ack
             //   • Host's own client-side prediction never reconciled  → frozen movement
-            SetTransportAddress(relayIp, relayPort);
             SetTransportServerBindAddress("0.0.0.0");
+            SetTransportPort(port);
             Debug.Log("[FLOW §5] Host server bind address set to 0.0.0.0 (all interfaces — required for relay forwarding).");
 
             // Start FishNet server
-            if (!networkManager.ServerManager.StartConnection())
+            if (!networkManager.IsServerStarted && !networkManager.ServerManager.StartConnection())
             {
                 Debug.LogError("[NetworkGameManager] Failed to start relay host server!");
                 return;
@@ -240,6 +240,12 @@ namespace NightHunt.Networking
                 bool sent = TrySendRelayHostRegistration(relayIp, relayPort);
                 Debug.Log($"[FLOW 5] Relay host registration packet #{i + 1} sent={sent} relay={relayIp}:{relayPort}");
                 yield return new WaitForSecondsRealtime(0.1f);
+            }
+
+            if (networkManager.IsClientStarted)
+            {
+                Debug.Log("[FLOW 5] Relay host client already started; registration refresh complete.");
+                yield break;
             }
 
             SetTransportAddress(relayIp, relayPort);
@@ -399,7 +405,7 @@ namespace NightHunt.Networking
                         _connectionStarted = false;
                         _connected = false;
                         _intentionalDisconnect = false;
-                        HideReconnectModal();
+                        HideReconnectModal(showToast: false);
                         break;
                     }
 
@@ -523,11 +529,11 @@ namespace NightHunt.Networking
 
         private void LoadHome()
         {
-            _intentionalDisconnect = true;
+            Disconnect();
             _dsReady         = false;
             _gameSceneLoaded = false;
             RoomState.Instance?.ClearRoom();
-            HideReconnectModal();
+            HideReconnectModal(showToast: false);
             SceneLoader.LoadHome();
         }
 
@@ -540,16 +546,19 @@ namespace NightHunt.Networking
         public async Task DisconnectWithCleanup()
         {
             var roomState = RoomState.Instance;
-
-            if (roomState != null && roomState.CurrentGameMode == GameMode.Custom_Relay
-                && !string.IsNullOrEmpty(roomState.RelaySessionId))
-            {
-                // Notify backend to clean up relay session
-                await NotifyRelayCleanup(roomState.RelaySessionId);
-            }
+            string relaySessionId = roomState?.RelaySessionId;
+            bool cleanupRelay = roomState != null
+                && roomState.CurrentGameMode == GameMode.Custom_Relay
+                && !string.IsNullOrEmpty(relaySessionId);
 
             Disconnect();
             roomState?.ClearNetworkSession();
+
+            if (cleanupRelay)
+            {
+                // Notify backend to clean up relay session
+                await NotifyRelayCleanup(relaySessionId);
+            }
         }
 
         /// <summary>
@@ -571,11 +580,14 @@ namespace NightHunt.Networking
 
         private void ResetFlags()
         {
+            CancelInvoke(nameof(RetryConnect));
+            CancelInvoke(nameof(LoadHome));
             _connectionStarted = false;
             _connected         = false;
             _dsReady           = false;
             _gameSceneLoaded   = false;
             _retryCount        = 0;
+            HideReconnectModal(showToast: false);
         }
 
         /// <summary>Immediately stop all FishNet connections.</summary>
@@ -603,12 +615,13 @@ namespace NightHunt.Networking
             _reconnectModalOpen = true;
         }
 
-        private void HideReconnectModal()
+        private void HideReconnectModal(bool showToast = true)
         {
             if (!_reconnectModalOpen) return;
             GameModalWindow.Instance?.Close();
             _reconnectModalOpen = false;
-            PersistentUICanvas.Instance?.ToastService?.Show("Reconnected", "Game connection restored.");
+            if (showToast)
+                PersistentUICanvas.Instance?.ToastService?.Show("Reconnected", "Game connection restored.");
         }
 
         private void HandleReconnectUI(int current, int max)
@@ -635,6 +648,7 @@ namespace NightHunt.Networking
         private void ReturnHomeFromReconnect()
         {
             _reconnectModalOpen = false;
+            Disconnect();
             RoomState.Instance?.ClearRoom();
             RoomState.Instance?.ClearNetworkSession();
             SceneLoader.LoadHome();
@@ -650,6 +664,13 @@ namespace NightHunt.Networking
             var transport = networkManager.TransportManager.Transport;
             if (transport == null) { Debug.LogWarning("[NetworkGameManager] Transport is null!"); return; }
             transport.SetClientAddress(address);
+            transport.SetPort(targetPort);
+        }
+
+        private void SetTransportPort(ushort targetPort)
+        {
+            var transport = networkManager.TransportManager.Transport;
+            if (transport == null) { Debug.LogWarning("[NetworkGameManager] Transport is null!"); return; }
             transport.SetPort(targetPort);
         }
 

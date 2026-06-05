@@ -682,6 +682,7 @@ namespace NightHunt.Services.Game
                         var gameStarting = JsonUtility.FromJson<GameStartingEvent>(messageData.data);
                         if (gameStarting != null)
                         {
+                            SetRoomStateIfRelevant(gameStarting.room, "game_starting");
                             if (!string.IsNullOrEmpty(gameStarting.relayHost) && gameStarting.relayPort > 0
                                 && RoomState.Instance != null)
                             {

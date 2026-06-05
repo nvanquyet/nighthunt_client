@@ -84,7 +84,11 @@ namespace NightHunt.UI
             if (!isEmpty)
             {
                 if (usernameText   != null) usernameText.text    = player.username;
-                if (readyIndicator != null) readyIndicator.color = player.isReady ? Color.green : Color.red;
+                ApplyReadyIndicator(player.isReady);
+            }
+            else
+            {
+                ApplyReadyIndicator(false);
             }
 
             // Kick button: visible only to the host, only on OTHER players' occupied slots.
@@ -100,8 +104,14 @@ namespace NightHunt.UI
         {
             if (_player == null) return;
             _player.isReady = isReady;
-            if (readyIndicator != null)
-                readyIndicator.color = isReady ? Color.green : Color.red;
+            ApplyReadyIndicator(isReady);
+        }
+
+        private void ApplyReadyIndicator(bool isReady)
+        {
+            if (readyIndicator == null) return;
+            readyIndicator.gameObject.SetActive(isReady);
+            readyIndicator.color = Color.green;
         }
 
         private void OnSlotClicked() => _onSlotClicked?.Invoke(_team, _slot);

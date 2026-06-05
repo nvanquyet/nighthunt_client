@@ -1654,7 +1654,6 @@ namespace NightHunt.UI
 
             bool isHost = IsLocalPlayerHost();
             List<RoomPlayerResponse> players = room?.players;
-            long ownerId = room?.ownerId ?? 0L;
 
             // 1. Create standard slots for the current mode
             for (int team = 1; team <= 2; team++)
@@ -1664,7 +1663,7 @@ namespace NightHunt.UI
 
                 for (int slotIdx = 0; slotIdx < _maxSlotsPerTeam; slotIdx++)
                 {
-                    CreateSlot(container, team, slotIdx, players, isHost, ownerId);
+                    CreateSlot(container, team, slotIdx, players, isHost);
                 }
             }
 
@@ -1682,14 +1681,14 @@ namespace NightHunt.UI
                         if (container != null)
                         {
                             Debug.LogWarning($"[PartyCustomMode] Player {p.username} is in invalid slot {p.slot} for mode. Force-rendering.");
-                            CreateSlot(container, p.team, p.slot, players, isHost, ownerId);
+                            CreateSlot(container, p.team, p.slot, players, isHost);
                         }
                     }
                 }
             }
         }
 
-        private void CreateSlot(Transform container, int team, int slotIdx, List<RoomPlayerResponse> players, bool isHost, long ownerId)
+        private void CreateSlot(Transform container, int team, int slotIdx, List<RoomPlayerResponse> players, bool isHost)
         {
             var player = players?.FirstOrDefault(p => p.team == team && p.slot == slotIdx);
             var go = Instantiate(playerSlotPrefab, container);
@@ -1699,7 +1698,7 @@ namespace NightHunt.UI
             if (sv == null) return;
 
             var capturedPlayer = player;
-            sv.SetSlot(team, slotIdx, GetDisplayPlayer(player, ownerId), isHost,
+            sv.SetSlot(team, slotIdx, player, isHost,
                         onSlotClicked: OnSlotClicked,
                         onKickClicked: isHost ? uid => OnKickWithConfirm(uid, capturedPlayer?.username) : (System.Action<long>)null);
 
@@ -2100,25 +2099,7 @@ namespace NightHunt.UI
             long uid = _sessionState.UserId;
             var room = _roomState.CurrentRoom;
             var player = room?.players?.FirstOrDefault(p => p.userId == uid);
-            return IsReadyForStart(room, player);
-        }
-
-        private static RoomPlayerResponse GetDisplayPlayer(RoomPlayerResponse player, long ownerId)
-        {
-            if (player == null)
-                return null;
-
-            if (player.userId != ownerId || player.isReady)
-                return player;
-
-            return new RoomPlayerResponse
-            {
-                userId = player.userId,
-                username = player.username,
-                team = player.team,
-                slot = player.slot,
-                isReady = true
-            };
+            return player?.isReady ?? false;
         }
 
         private static bool IsReadyForStart(RoomResponse room, RoomPlayerResponse player)

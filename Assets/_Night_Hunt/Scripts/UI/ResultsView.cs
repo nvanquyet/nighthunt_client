@@ -299,6 +299,15 @@ namespace NightHunt.UI
             // Fire-and-forget: don't block navigation on network latency.
             _ = PostMatchResultAsync();
 
+            var network = NetworkGameManager.Instance;
+            if (network != null)
+            {
+                if (mode == NightHunt.Networking.GameMode.Custom_Relay)
+                    _ = network.DisconnectWithCleanup();
+                else
+                    network.Disconnect();
+            }
+
             RoomState.Instance?.ClearRoom();
 
             // Đang ở gameplay scene → luôn dùng SceneLoader.LoadHome() để về 01_Home.
