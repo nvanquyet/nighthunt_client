@@ -214,8 +214,12 @@ namespace NightHunt.Networking
             //   • Client packets never reaching the host server → no FishNet server ack
             //   • Host's own client-side prediction never reconciled  → frozen movement
             SetTransportServerBindAddress("0.0.0.0");
-            SetTransportPort(port);
-            Debug.Log("[FLOW §5] Host server bind address set to 0.0.0.0 (all interfaces — required for relay forwarding).");
+            // FIX: use relayPort (dynamic, from backend) — NOT the inspector `port` field (hardcoded 7777).
+            // The relay server allocates a unique UDP port per session (e.g. 7779).
+            // Both the server bind AND the host-client connect MUST use this same port
+            // so the relay can forward packets to the correct session.
+            SetTransportPort(relayPort);
+            Debug.Log($"[FLOW §5] Host server binding 0.0.0.0:{relayPort} (relay session={sessionId}) — required for relay forwarding.");
 
             // Start FishNet server
             if (!networkManager.IsServerStarted && !networkManager.ServerManager.StartConnection())

@@ -186,6 +186,22 @@ namespace NightHunt.Gameplay.Spectator
             if (!player.IsAlive) return false;
             return player.TeamId == localPlayer.TeamId;
         }
+
+        /// <summary>
+        /// Returns true when at least one alive same-team player exists to spectate.
+        /// Used by DeathScreen to decide whether to auto-start spectating on death.
+        /// </summary>
+        public bool HasLivingSpectateTargets()
+        {
+            if (localPlayer == null || PlayerPublicRegistry.Instance == null) return false;
+            var all = PlayerPublicRegistry.Instance.GetAllPlayers();
+            if (all == null) return false;
+            foreach (var p in all)
+            {
+                if (CanSpectate(p)) return true;
+            }
+            return false;
+        }
         
         private void Log(string message)
         {

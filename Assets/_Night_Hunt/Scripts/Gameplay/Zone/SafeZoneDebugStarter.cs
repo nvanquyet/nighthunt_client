@@ -151,6 +151,135 @@ namespace NightHunt.Gameplay.Zone
             UnityEditor.EditorUtility.SetDirty(this);
             Debug.Log("[SafeZoneDebugStarter] Filled Small 1v1 config.");
         }
+
+        [Header("Gizmos (Editor Only)")]
+        [Tooltip("Toggle gizmo drawing on/off. Right-click → 'Draw: Toggle Zone Gizmos'.")]
+        [SerializeField] private bool _drawGizmos = true;
+
+        [Tooltip("Show labels for each phase ring (radius value, phase index).")]
+        [SerializeField] private bool _drawLabels = true;
+
+        [Tooltip("Opacity of the filled circle overlay (0 = wire only, 1 = fully opaque).")]
+        [SerializeField] [Range(0f, 1f)] private float _gizmoFillAlpha = 0.08f;
+
+        // Color palette: one color per phase, auto-cycled if phases > palette size
+        private static readonly Color[] PhaseColors = new Color[]
+        {
+            new Color(0.2f, 1f, 0.4f),   // phase 0 — green  (start radius)
+            new Color(1f, 0.85f, 0.1f),  // phase 1 — yellow
+            new Color(1f, 0.5f, 0.1f),   // phase 2 — orange
+            new Color(1f, 0.2f, 0.2f),   // phase 3 — red
+            new Color(0.4f, 0.6f, 1f),   // phase 4 — blue
+            new Color(0.9f, 0.3f, 1f),   // phase 5 — purple
+        };
+
+        private void OnDrawGizmos()
+        {
+            if (!_drawGizmos) return;
+            if (_config == null || _config.phases == null || _config.phases.Count == 0) return;
+
+            // Center point: use this GameObject's position as the zone center origin
+            // (matches how SafeZoneManager resolves centerMode == Fixed / this transform)
+            Vector3 center = transform.position;
+
+            // ── Draw initialRadius (the very first "safe" circle players start inside) ──
+            DrawCircle(center, _config.initialRadius, Color.cyan, _gizmoFillAlpha, "Initial\nr=" + _config.initialRadius.ToString("F1"));
+
+            // ── Draw each phase's endRadius ──
+            for (int i = 0; i < _config.phases.Count; i++)
+            {
+                var phase = _config.phases[i];
+                Color col = PhaseColors[i % PhaseColors.Length];
+
+                DrawCircle(center, phase.endRadius, col, _gizmoFillAlpha,
+                    _drawLabels ? $"Phase {i}\nr={phase.endRadius:F1}" : null);
+            }
+
+            // ── Highlight: make sure initialRadius ≥ phase[0].endRadius connection obvious ──
+            if (_config.phases.Count > 0)
+            {
+                float p0End = _config.phases[0].endRadius;
+                bool mismatch = _config.initialRadius < p0End;
+
+                // Draw a bright dashed-style thick wire between the two radii to spot gaps
+                Color warnCol = mismatch ? new Color(1f, 0.2f, 0.2f, 0.9f) : new Color(0.2f, 1f, 0.4f, 0.6f);
+                DrawRadiusBand(center, p0End, _config.initialRadius, warnCol);
+
+                if (_drawLabels && mismatch)
+                {
+                    UnityEditor.Handles.color = Color.red;
+                    UnityEditor.Handles.Label(
+                        center + Vector3.right * _config.initialRadius + Vector3.up * 0.5f,
+                        "⚠ initialRadius < phase[0].endRadius!\nPlayers start OUTSIDE safe zone.");
+                }
+            }
+        }
+
+        /// <summary>Draws a wire circle + translucent filled disc on the XZ plane.</summary>
+        private void DrawCircle(Vector3 center, float radius, Color col, float fillAlpha, string label)
+        {
+            if (radius <= 0f) return;
+
+            // Wire ring
+            UnityEditor.Handles.color = col;
+            UnityEditor.Handles.DrawWireDisc(center, Vector3.up, radius);
+
+            // Filled disc
+            Color fill = col;
+            fill.a = fillAlpha;
+            UnityEditor.Handles.color = fill;
+            UnityEditor.Handles.DrawSolidDisc(center, Vector3.up, radius);
+
+            // Label at right edge
+            if (_drawLabels && !string.IsNullOrEmpty(label))
+            {
+                UnityEditor.Handles.color = Color.white;
+                UnityEditor.Handles.Label(center + Vector3.right * radius + Vector3.up * 0.3f, label);
+            }
+        }
+
+        /// <summary>Draws a coloured band (annulus) between two radii to visualise the gap/overlap.</summary>
+        private void DrawRadiusBand(Vector3 center, float innerR, float outerR, Color col)
+        {
+            if (innerR <= 0f || outerR <= innerR) return;
+
+            int segments = 64;
+            float angleStep = 360f / segments;
+            Color bandCol = col;
+            bandCol.a = 0.15f;
+            UnityEditor.Handles.color = bandCol;
+
+            // Fill the band with quads
+            for (int i = 0; i < segments; i++)
+            {
+                float a0 = Mathf.Deg2Rad * (i * angleStep);
+                float a1 = Mathf.Deg2Rad * ((i + 1) * angleStep);
+                Vector3 i0 = center + new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)) * innerR;
+                Vector3 i1 = center + new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1)) * innerR;
+                Vector3 o0 = center + new Vector3(Mathf.Cos(a0), 0, Mathf.Sin(a0)) * outerR;
+                Vector3 o1 = center + new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1)) * outerR;
+                UnityEditor.Handles.DrawAAConvexPolygon(i0, i1, o1, o0);
+            }
+        }
+
+        [ContextMenu("Draw: Toggle Zone Gizmos")]
+        private void DbgToggleGizmos()
+        {
+            UnityEditor.Undo.RecordObject(this, "Toggle Zone Gizmos");
+            _drawGizmos = !_drawGizmos;
+            UnityEditor.EditorUtility.SetDirty(this);
+            Debug.Log($"[SafeZoneDebugStarter] Gizmos → {(_drawGizmos ? "ON" : "OFF")}");
+        }
+
+        [ContextMenu("Draw: Toggle Labels")]
+        private void DbgToggleLabels()
+        {
+            UnityEditor.Undo.RecordObject(this, "Toggle Zone Labels");
+            _drawLabels = !_drawLabels;
+            UnityEditor.EditorUtility.SetDirty(this);
+            Debug.Log($"[SafeZoneDebugStarter] Labels → {(_drawLabels ? "ON" : "OFF")}");
+        }
+
 #endif
     }
 }

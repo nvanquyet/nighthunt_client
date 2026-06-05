@@ -115,8 +115,12 @@ namespace NightHunt.GameplaySystems.Aim
             if (_camera == null)
                 _camera = UnityEngine.Camera.main;
 
-            if (_playerRoot == null)
-                _playerRoot = transform;
+            // NOTE: Do NOT fallback _playerRoot = transform here.
+            // AimSystem is a scene-level object, not the player prefab.
+            // Falling back to own transform gives wrong aim origin (AimSystem GO position)
+            // and breaks cursor placement for all players — including spectating.
+            // Initialize(playerRoot, statSystem) MUST be called by NetworkPlayer before
+            // any aim calculation runs. Log an error during Update if it was missed.
 
             // Save the mesh's designed tilt (X, Z) so we only rotate Y at runtime.
             if (_worldAimCursor != null)
@@ -180,9 +184,22 @@ namespace NightHunt.GameplaySystems.Aim
             return range > 0f ? range : _fallbackVisionRange;
         }
 
+        private float _warnThrottle;
+
         private void Update()
         {
-            if (_playerRoot == null) return; // guard: _playerRoot destroyed (player despawned)
+            if (_playerRoot == null)
+            {
+                // Warn once per 3 s so log isn't flooded before Initialize() is called.
+                _warnThrottle -= Time.deltaTime;
+                if (_warnThrottle <= 0f)
+                {
+                    _warnThrottle = 3f;
+                    Debug.LogWarning("[AimSystem] Update: _playerRoot is null — Initialize(playerRoot, stats) has not been called yet. " +
+                                     "Ensure NetworkPlayer.EnableInput() fires before AimSystem starts processing.");
+                }
+                return;
+            }
             if (_isThrowableMode)
                 ResolveThrowableAim();
             else

@@ -191,9 +191,32 @@ namespace NightHunt.UI
         // ── Event handlers ────────────────────────────────────────────────────
 
         // Killer name comes from the server-authoritative kill RPC — always populated correctly.
-        private void HandlePlayerHealthDied(string killerName) => Show(killerName);
+        private void HandlePlayerHealthDied(string killerName)
+        {
+            Show(killerName);
 
-        private void HandleRespawned() => Hide();
+            // Auto-start spectating the first alive teammate so the player
+            // immediately sees action instead of staring at a corpse.
+            // SwitchSpectatedPlayer() is a no-op when no valid targets exist.
+            var sm = SpectateManager.Instance;
+            if (sm != null && sm.HasLivingSpectateTargets())
+            {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Spectate,
+                    "DeathAutoSpectate",
+                    $"player={_localPlayer?.DisplayName ?? "null"}",
+                    this);
+                sm.SwitchSpectatedPlayer(next: true);
+            }
+        }
+
+        private void HandleRespawned()
+        {
+            // Stop spectating so CameraStateManager on spectated player's prefab
+            // fires OnCurrentPlayerChanged back to localPlayer — restoring local cam.
+            SpectateManager.Instance?.StopSpectating();
+            Hide();
+        }
 
         // RespawnSystem syncs the actual server delay via SyncVar → GameplayEventBus on clients.
         // Restart our countdown with the authoritative value instead of the local fallback.
