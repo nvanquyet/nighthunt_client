@@ -162,7 +162,41 @@ namespace NightHunt.Core
             }
 #endif
 
+            if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
+            {
+                StartCoroutine(ResumeRuntimeSessionFlow());
+                return;
+            }
+
             StartCoroutine(BootThenInitFlow());
+        }
+
+        private IEnumerator ResumeRuntimeSessionFlow()
+        {
+            if (loadingPanel != null)
+            {
+                loadingPanel.SetActive(false);
+                _isShowing = false;
+            }
+
+            _targetPanel = PanelType.Home;
+            float timeout = 2f;
+            float elapsed = 0f;
+            while (UINavigator.Instance == null && elapsed < timeout)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            HasCompletedInitialFlow = true;
+            if (UINavigator.Instance == null)
+            {
+                Debug.LogError("[LoadingManager] Runtime session resume failed: UINavigator.Instance is null.");
+                yield break;
+            }
+
+            Debug.Log("[LoadingManager] Runtime session is already authenticated - routing directly to Home.");
+            UINavigator.Instance.ShowPanel(PanelType.Home, forceInstant: true);
         }
 
         private IEnumerator BootThenInitFlow()
@@ -405,6 +439,13 @@ namespace NightHunt.Core
         /// </summary>
         private IEnumerator CheckAutoLoginFlow()
         {
+            if (SessionState.Instance != null && SessionState.Instance.IsAuthenticated)
+            {
+                UpdateLoadingUI("Session ready...", 0.85f);
+                _targetPanel = PanelType.Home;
+                yield break;
+            }
+
             // ── Read token local ──────────────────────────────────────────────
             string refreshToken = SecureStorage.GetString(KEY_REFRESH_TOKEN, "");
 

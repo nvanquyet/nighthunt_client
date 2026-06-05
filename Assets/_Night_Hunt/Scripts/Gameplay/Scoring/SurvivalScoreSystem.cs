@@ -76,7 +76,6 @@ namespace NightHunt.Gameplay.Scoring
 
             SafeZoneManager zone = SafeZoneManager.Instance;
             int phaseIdx         = zone?.ZoneIndex ?? -1;
-            SafeZoneMatchConfig cfg = null;
             bool isBonusZone        = false;
             float bonusMul          = 1f;
 

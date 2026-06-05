@@ -19,7 +19,8 @@ namespace NightHunt.Gameplay.Input.Core
     /// </summary>
     public static class InputBindingSaveSystem
     {
-        private const string PrefsKey = "NH_InputBindings_v1";
+        private const string PrefsKey = "NH_InputBindings_v2";
+        private const string LegacyPrefsKey = "NH_InputBindings_v1";
 
         // ── Save ───────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,13 @@ namespace NightHunt.Gameplay.Input.Core
             string json = PlayerPrefs.GetString(PrefsKey, string.Empty);
             if (string.IsNullOrEmpty(json))
             {
+                if (PlayerPrefs.HasKey(LegacyPrefsKey))
+                {
+                    PlayerPrefs.DeleteKey(LegacyPrefsKey);
+                    PlayerPrefs.Save();
+                    Debug.Log("[InputBindings] Removed legacy v1 binding overrides so updated defaults can apply.");
+                }
+
                 Debug.Log("[InputBindings] No saved bindings found — using defaults.");
                 return;
             }
@@ -90,6 +98,7 @@ namespace NightHunt.Gameplay.Input.Core
 
             asset.RemoveAllBindingOverrides();
             PlayerPrefs.DeleteKey(PrefsKey);
+            PlayerPrefs.DeleteKey(LegacyPrefsKey);
             PlayerPrefs.Save();
             Debug.Log("[InputBindings] All binding overrides removed and PlayerPrefs cleared.");
         }

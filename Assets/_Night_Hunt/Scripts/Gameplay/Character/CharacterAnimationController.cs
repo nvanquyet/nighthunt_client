@@ -83,6 +83,7 @@ namespace NightHunt.Gameplay.Character
 
         [SerializeField, Min(0.01f)] private float _minWeaponTransitionSeconds = 0.05f;
         [SerializeField, Min(0.05f)] private float _maxWeaponTransitionSeconds = 1.5f;
+        [SerializeField, Min(0f)] private float _reloadEndUpperBodyBlendSeconds = 0.05f;
 
         // ── Parameter hashes (computed once) ──────────────────────────────────
         private static readonly int SpeedHash            = Animator.StringToHash("Speed");
@@ -790,6 +791,7 @@ namespace NightHunt.Gameplay.Character
                 }
                 else
                 {
+                    PrepareRangedShotVisual(anim);
                     SafeSetBool(anim, ShootLoopHash, _activeWeaponClass == WeaponClass.MachineGun);
                     SafeSetBool(anim, ShootBoltHash, _activeWeaponClass == WeaponClass.Sniper);
                     SafeSetBool(anim, ShootShotgunHash, _activeWeaponClass == WeaponClass.Shotgun);
@@ -858,7 +860,7 @@ namespace NightHunt.Gameplay.Character
 
                 var anim = _actorUtils?.charAnimator;
                 if (anim != null && anim.enabled)
-                    LogAnimEvent("ReloadStateEnded", anim, $"reloading={reloading}");
+                    FinishReloadVisual(anim, "ReloadStateEnded");
             }
         }
 
@@ -987,6 +989,70 @@ namespace NightHunt.Gameplay.Character
             bool setReload = SafeSetTrigger(anim, ReloadTrigHash);
             LogAnimEvent(eventName, anim, $"reloading=True trigger=Reload setReload={setReload} {details}");
             ScheduleAnimPostFrameLog($"{eventName}Post", $"reloading=True trigger=Reload setReload={setReload} {details}");
+        }
+
+        private void PrepareRangedShotVisual(Animator anim)
+        {
+            if (anim == null || !anim.enabled || _isReloading)
+                return;
+
+            SafeSetBool(anim, ReloadingHash, false);
+            SafeResetTrigger(anim, ReloadTrigHash);
+
+            if (!IsAnimatorReadyForWeaponAction(anim, out string reason)
+                && reason.StartsWith("upperbody-wrong-state", System.StringComparison.Ordinal))
+            {
+                TryReturnUpperBodyToWeaponIdle(anim, $"ShotFiredPrep {reason}");
+            }
+        }
+
+        private void FinishReloadVisual(Animator anim, string reason)
+        {
+            if (anim == null || !anim.enabled)
+                return;
+
+            PrimeWeaponActionParams(anim);
+            SafeSetBool(anim, ReloadingHash, false);
+            SafeResetTrigger(anim, ReloadTrigHash);
+            SafeSetBool(anim, ShootLoopHash, false);
+            TryReturnUpperBodyToWeaponIdle(anim, reason);
+            LogAnimEvent("ReloadStateEnded", anim, "reloading=False");
+        }
+
+        private void TryReturnUpperBodyToWeaponIdle(Animator anim, string reason)
+        {
+            if (anim == null || !anim.enabled)
+                return;
+
+            if (_upperBodyLayer < 0 || _upperBodyLayer >= anim.layerCount)
+                return;
+
+            if (_activeWeaponType <= 0 || anim.IsInTransition(_upperBodyLayer))
+                return;
+
+            string machineName = GetUpperBodyMachineName(_activeWeaponType);
+            if (string.IsNullOrEmpty(machineName))
+                return;
+
+            string idleState = $"UpperBody.{machineName}.UB_Empty";
+            int idleHash = Animator.StringToHash(idleState);
+            if (!anim.HasState(_upperBodyLayer, idleHash))
+            {
+                LogAnimEvent("ReloadUpperBodyReturnSkipped", anim, $"reason={reason} missingState={idleState}");
+                return;
+            }
+
+            var info = anim.GetCurrentAnimatorStateInfo(_upperBodyLayer);
+            if (info.IsName(idleState))
+                return;
+
+            float blend = Mathf.Max(0f, _reloadEndUpperBodyBlendSeconds);
+            if (blend <= 0f)
+                anim.Play(idleHash, _upperBodyLayer, 0f);
+            else
+                anim.CrossFadeInFixedTime(idleHash, blend, _upperBodyLayer, 0f);
+
+            LogAnimEvent("ReloadUpperBodyReturn", anim, $"reason={reason} state={idleState} blend={blend:F2}");
         }
 
         private void PrimeWeaponActionParams(Animator anim)

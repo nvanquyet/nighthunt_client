@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using UnityEngine;
 using TMPro;
 using UnityEngine.EventSystems;
@@ -29,8 +29,14 @@ namespace Michsky.UI.Shift
 
         void OnEnable()
         {
+            // Reset click state so keyboard can be re-opened after panel hide/show.
+            isClicked = false;
             SanitizeFieldTrigger();
             DisableFieldTrigger();
+
+            // Deactivate any stale focus so the field resets cleanly on mobile.
+            if (inputText != null && inputText.isFocused)
+                inputText.DeactivateInputField();
         }
 
         void Start()
@@ -103,20 +109,38 @@ namespace Michsky.UI.Shift
 
             inputText.Select();
             inputText.ActivateInputField();
+
+#if UNITY_ANDROID || UNITY_IOS
             StartCoroutine(ReinforceMobileFocus());
+#endif
         }
 
         private IEnumerator ReinforceMobileFocus()
         {
 #if UNITY_ANDROID || UNITY_IOS
+            // Wait one frame for Unity's EventSystem to settle after Select().
             yield return null;
 
             if (inputText == null || !inputText.isActiveAndEnabled || !inputText.interactable)
                 yield break;
 
-            if (EventSystem.current == null || EventSystem.current.currentSelectedGameObject == gameObject)
+            // FIX: compare against inputText.gameObject, not this gameObject.
+            // Previously used 'gameObject' which is CustomInputField's GO — these may differ
+            // from TMP_InputField's GO causing the condition to always be false → keyboard never shown.
+            if (EventSystem.current != null &&
+                EventSystem.current.currentSelectedGameObject != inputText.gameObject)
             {
                 inputText.Select();
+            }
+
+            inputText.ActivateInputField();
+
+            // Extra frame retry — some Android devices need a second pulse to open keyboard.
+            yield return null;
+
+            if (inputText != null && inputText.isActiveAndEnabled && inputText.interactable
+                && !TouchScreenKeyboard.visible)
+            {
                 inputText.ActivateInputField();
             }
 #else

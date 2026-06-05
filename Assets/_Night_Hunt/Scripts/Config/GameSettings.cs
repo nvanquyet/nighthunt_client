@@ -18,6 +18,9 @@ namespace NightHunt.Config
     /// </summary>
     public class GameSettings : SingletonPersistent<GameSettings>
     {
+        private const string InputRebindPrefsKey = "NH_InputRebinds_v2";
+        private const string LegacyInputRebindPrefsKey = "NH_InputRebinds";
+
         // Settings data
         private SettingsData currentSettings;
 
@@ -95,7 +98,14 @@ namespace NightHunt.Config
 
         public void LoadInputBindings()
         {
-            string rebinds = PlayerPrefs.GetString("NH_InputRebinds", string.Empty);
+            if (PlayerPrefs.HasKey(LegacyInputRebindPrefsKey))
+            {
+                PlayerPrefs.DeleteKey(LegacyInputRebindPrefsKey);
+                PlayerPrefs.Save();
+                Debug.Log("[GameSettings] Removed legacy input rebind overrides so updated defaults can apply.");
+            }
+
+            string rebinds = PlayerPrefs.GetString(InputRebindPrefsKey, string.Empty);
             if (string.IsNullOrEmpty(rebinds)) return;
 
             var inputManager = NightHunt.Gameplay.Input.Core.InputLayerManager.Instance;
@@ -116,7 +126,8 @@ namespace NightHunt.Config
             if (asset != null)
             {
                 string rebinds = asset.SaveBindingOverridesAsJson();
-                PlayerPrefs.SetString("NH_InputRebinds", rebinds);
+                PlayerPrefs.SetString(InputRebindPrefsKey, rebinds);
+                PlayerPrefs.DeleteKey(LegacyInputRebindPrefsKey);
                 PlayerPrefs.Save();
                 Debug.Log("[GameSettings] Input bindings saved.");
             }
