@@ -5,6 +5,7 @@ using NightHunt.Core;
 using NightHunt.State;
 using NightHunt.UI;
 using NightHunt.Services.Game;
+using System.Collections;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -52,6 +53,8 @@ namespace NightHunt.Networking
         private bool _dsReady;          // true after ds_ready WS received
         private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
         private bool _reconnectModalOpen;
+        private static readonly byte[] RelayHostRegistrationPayload =
+            { 78, 72, 95, 82, 69, 76, 65, 89, 95, 72, 79, 83, 84 };
 
         /// <summary>Fired each reconnect attempt. Parameters: (currentAttempt, maxAttempts).</summary>
         public event System.Action<int, int> OnRetryAttempt;
@@ -210,6 +213,7 @@ namespace NightHunt.Networking
             // A loopback-only bind rejects those packets, causing:
             //   • Client packets never reaching the host server → no FishNet server ack
             //   • Host's own client-side prediction never reconciled  → frozen movement
+            SetTransportAddress(relayIp, relayPort);
             SetTransportServerBindAddress("0.0.0.0");
             Debug.Log("[FLOW §5] Host server bind address set to 0.0.0.0 (all interfaces — required for relay forwarding).");
 
@@ -221,12 +225,55 @@ namespace NightHunt.Networking
             }
             Debug.Log("[FLOW §5] FishNet server started.");
 
-            // Connect host's client side outbound to relay
+            StartCoroutine(StartRelayHostClientAfterRegistration(relayIp, relayPort));
+
+        }
+
+        private IEnumerator StartRelayHostClientAfterRegistration(string relayIp, ushort relayPort)
+        {
+            float deadline = Time.realtimeSinceStartup + 2f;
+            while (!networkManager.IsServerStarted && Time.realtimeSinceStartup < deadline)
+                yield return null;
+
+            for (int i = 0; i < 5; i++)
+            {
+                bool sent = TrySendRelayHostRegistration(relayIp, relayPort);
+                Debug.Log($"[FLOW 5] Relay host registration packet #{i + 1} sent={sent} relay={relayIp}:{relayPort}");
+                yield return new WaitForSecondsRealtime(0.1f);
+            }
+
             SetTransportAddress(relayIp, relayPort);
             if (!networkManager.ClientManager.StartConnection())
                 Debug.LogError("[NetworkGameManager] Failed to start relay host client!");
             else
-                Debug.Log($"[FLOW §5] Relay Host client connecting → {relayIp}:{relayPort}");
+                Debug.Log($"[FLOW 5] Relay Host client connecting -> {relayIp}:{relayPort}");
+        }
+
+        private bool TrySendRelayHostRegistration(string relayIp, ushort relayPort)
+        {
+            var transport = networkManager?.TransportManager?.Transport;
+            if (transport == null)
+                return false;
+
+            var method = transport.GetType().GetMethod(
+                "SendServerUnconnectedMessage",
+                new[] { typeof(byte[]), typeof(string), typeof(ushort) });
+
+            if (method == null)
+            {
+                Debug.LogWarning($"[NetworkGameManager] Transport {transport.GetType().Name} cannot send relay host registration.");
+                return false;
+            }
+
+            try
+            {
+                return method.Invoke(transport, new object[] { RelayHostRegistrationPayload, relayIp, relayPort }) is bool ok && ok;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[NetworkGameManager] Relay host registration failed: {e.Message}");
+                return false;
+            }
         }
 
         /// <summary>
@@ -602,18 +649,15 @@ namespace NightHunt.Networking
         {
             var transport = networkManager.TransportManager.Transport;
             if (transport == null) { Debug.LogWarning("[NetworkGameManager] Transport is null!"); return; }
-            var t = transport.GetType();
-            TrySetProperty(transport, t, "ClientAddress", address);
-            TrySetProperty(transport, t, "Port", targetPort);
+            transport.SetClientAddress(address);
+            transport.SetPort(targetPort);
         }
 
         private void SetTransportServerBindAddress(string bindAddress)
         {
             var transport = networkManager.TransportManager.Transport;
             if (transport == null) return;
-            // Tugboat exposes IPv4BindAddress; fall back silently if not found
-            TrySetProperty(transport, transport.GetType(), "IPv4BindAddress", bindAddress,
-                logMissing: false);
+            transport.SetServerBindAddress(bindAddress, IPAddressType.IPv4);
         }
 
         private static void TrySetProperty(object target, System.Type type, string propName,

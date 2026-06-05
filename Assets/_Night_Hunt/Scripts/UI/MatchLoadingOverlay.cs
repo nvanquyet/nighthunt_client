@@ -203,6 +203,7 @@ namespace NightHunt.UI
         public void MarkDsReady()    => SetStage(MatchLoadStage.Connecting);
         public void MarkConnected()  => SetStage(MatchLoadStage.ServerReady);
         public void MarkSpawning()   => SetStage(MatchLoadStage.Spawning);
+        public void MarkAllPlayersReady() => OnAllPlayersReady(new AllPlayersReadyEvent());
 
         public void SetTargetMap(NightHunt.Config.SceneId mapId) => targetMapId = mapId;
 
@@ -401,6 +402,9 @@ namespace NightHunt.UI
 
         private void OnAllPlayersReady(AllPlayersReadyEvent _)
         {
+            if (!_isVisible || _stage == MatchLoadStage.AllReady)
+                return;
+
             StopTimeout();
             StopConnectedFallback();
             SetStage(MatchLoadStage.AllReady);

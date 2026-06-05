@@ -81,6 +81,7 @@ namespace NightHunt.Networking
 
             if (session != null && session.IsAuthenticated)
             {
+                int requestedTeamId = ResolveRequestedGameplayTeamId(session.UserId);
                 return new PlayerRegistryData
                 {
                     BackendPlayerId     = session.UserId.ToString(),
@@ -90,7 +91,7 @@ namespace NightHunt.Networking
                     // TeamId = -1: yêu cầu server tự gán team qua load-balancing (GetSmallestTeam).
                     // Không được hardcode 0 vì ResolveTeam chấp nhận 0 là valid → load-balancing bị bỏ qua.
                     // Khi có matchmaking / team-select screen, backend sẽ truyền teamId thực qua SessionState.
-                    TeamId              = -1,
+                    TeamId              = requestedTeamId,
                     Status              = PlayerConnectionStatus.Connected,
                     CharacterModelIndex = characterModelIndex
                 };
@@ -105,6 +106,22 @@ namespace NightHunt.Networking
                 Status              = PlayerConnectionStatus.Connected,
                 CharacterModelIndex = characterModelIndex
             };
+        }
+
+        private static int ResolveRequestedGameplayTeamId(long userId)
+        {
+            var players = RoomState.Instance?.CurrentRoom?.players;
+            var player = players?.Find(p => p.userId == userId);
+            if (player == null)
+                return -1;
+
+            // Lobby/backend teams are 1/2; gameplay teams are 0/1.
+            if (player.team == Constants.TEAM_1)
+                return 0;
+            if (player.team == Constants.TEAM_2)
+                return 1;
+
+            return player.team >= 0 ? player.team : -1;
         }
     }
 }

@@ -131,6 +131,18 @@ namespace NightHunt.Gameplay.Zone
             _syncCenter.Value = center;
         }
 
+        public void ReplayCurrentHudState()
+        {
+            if (_syncZoneIndex.Value < 0 && _syncRadius.Value <= 0f && _syncCountdownSeconds.Value < 0f)
+                return;
+
+            SafeZoneHUDProxy.NotifyRadiusChanged(_syncRadius.Value, _syncCenter.Value);
+            SafeZoneHUDProxy.NotifyZoneIndexChanged(_syncZoneIndex.Value);
+            SafeZoneHUDProxy.NotifyShrinkStateChanged(_syncIsShrinking.Value);
+            SafeZoneHUDProxy.NotifyCountdownChanged(_syncCountdownSeconds.Value);
+            SafeZoneHUDProxy.NotifyNextZoneChanged(_syncTargetRadius.Value, _syncNextCenter.Value);
+        }
+
         public bool IsInsideSafeZone(Vector3 worldPos)
         {
             Vector3 delta = worldPos - _syncCenter.Value;

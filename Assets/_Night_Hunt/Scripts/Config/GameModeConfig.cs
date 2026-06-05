@@ -151,5 +151,21 @@ namespace NightHunt.Config
             entry = default;
             return false;
         }
+
+        /// <summary>Get any entry by key, including disabled/dev entries.</summary>
+        public static bool TryGetAnyByKey(string modeKey, out GameModeEntry entry)
+        {
+            foreach (var m in _modes)
+            {
+                if (m.modeKey == modeKey)
+                {
+                    entry = m;
+                    return true;
+                }
+            }
+
+            entry = default;
+            return false;
+        }
     }
 }

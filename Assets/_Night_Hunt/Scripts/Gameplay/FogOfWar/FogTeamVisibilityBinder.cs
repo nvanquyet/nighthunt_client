@@ -55,6 +55,7 @@ namespace NightHunt.Gameplay.FogOfWar
 
         // Tracks local player subscription for team-change callbacks.
         private NetworkPlayer _subscribedLocalPlayer;
+        private bool _subscribedToLocalPlayerSet;
 
         public bool IsEnemyToLocal { get; private set; }
         public event System.Action<bool> OnEnemyStateChanged;
@@ -108,8 +109,8 @@ namespace NightHunt.Gameplay.FogOfWar
                 _networkPlayer.OnPublicDataChanged += OnNetworkPlayerDataChanged;
 
             // Subscribe to local player availability (late-join / spectate changes).
-            if (SpectateManager.Instance != null)
-                SpectateManager.Instance.OnLocalPlayerSet += OnLocalPlayerAvailable;
+            if (!TrySubscribeLocalPlayerAvailability())
+                StartCoroutine(WaitForSpectateManager());
 
             // Initial refresh.
             RefreshVisibilityForLocalTeam();
@@ -166,8 +167,9 @@ namespace NightHunt.Gameplay.FogOfWar
             if (_networkPlayer != null)
                 _networkPlayer.OnPublicDataChanged -= OnNetworkPlayerDataChanged;
 
-            if (SpectateManager.Instance != null)
+            if (_subscribedToLocalPlayerSet && SpectateManager.Instance != null)
                 SpectateManager.Instance.OnLocalPlayerSet -= OnLocalPlayerAvailable;
+            _subscribedToLocalPlayerSet = false;
 
             if (_subscribedLocalPlayer != null)
                 _subscribedLocalPlayer.OnPublicDataChanged -= OnLocalTeamChanged;
@@ -188,11 +190,44 @@ namespace NightHunt.Gameplay.FogOfWar
 
         private void OnLocalPlayerAvailable(NetworkPlayer localPlayer)
         {
-            if (SpectateManager.Instance != null)
+            if (_subscribedToLocalPlayerSet && SpectateManager.Instance != null)
                 SpectateManager.Instance.OnLocalPlayerSet -= OnLocalPlayerAvailable;
+            _subscribedToLocalPlayerSet = false;
 
             SubscribeLocalPlayerTeamChange(localPlayer);
             RefreshVisibilityForLocalTeam();
+        }
+
+        private bool TrySubscribeLocalPlayerAvailability()
+        {
+            var spectate = SpectateManager.Instance;
+            if (spectate == null)
+                return false;
+
+            if (!_subscribedToLocalPlayerSet)
+            {
+                spectate.OnLocalPlayerSet += OnLocalPlayerAvailable;
+                _subscribedToLocalPlayerSet = true;
+            }
+
+            var local = spectate.GetLocalPlayer();
+            if (local != null)
+                OnLocalPlayerAvailable(local);
+
+            return true;
+        }
+
+        private System.Collections.IEnumerator WaitForSpectateManager()
+        {
+            const int maxFrames = 600;
+            for (int i = 0; i < maxFrames; i++)
+            {
+                yield return null;
+                if (TrySubscribeLocalPlayerAvailability())
+                    yield break;
+            }
+
+            Log("SpectateManager not found after waiting; FOW will refresh when another team event fires.");
         }
 
         private void SubscribeLocalPlayerTeamChange(NetworkPlayer local)

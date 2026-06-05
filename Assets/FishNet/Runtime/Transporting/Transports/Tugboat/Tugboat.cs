@@ -323,6 +323,28 @@ namespace FishNet.Transporting.Tugboat
 
             return nm.Statistics.PacketLossPercent;
         }
+
+        /// <summary>
+        /// Sends an unconnected UDP message from the server socket.
+        /// Used by external UDP relays to learn the host server endpoint before
+        /// normal clients connect through the relay.
+        /// </summary>
+        public bool SendServerUnconnectedMessage(byte[] message, string address, ushort targetPort)
+        {
+            NetManager nm = ServerSocket?.NetManager;
+            if (nm == null || !nm.IsRunning || message == null || message.Length == 0)
+                return false;
+
+            try
+            {
+                return nm.SendUnconnectedMessage(message, NetUtils.MakeEndPoint(address, targetPort));
+            }
+            catch (Exception e)
+            {
+                NetworkManager?.LogWarning($"[Tugboat] SendServerUnconnectedMessage failed: {e.Message}");
+                return false;
+            }
+        }
         #endregion
 
         #region Configuration.

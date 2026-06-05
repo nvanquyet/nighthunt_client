@@ -19,6 +19,7 @@ using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
 using NightHunt.State;
+using NightHunt.UI;
 
 namespace NightHunt.Networking
 {
@@ -508,6 +509,7 @@ namespace NightHunt.Networking
         {
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log("[ServerGameManager] CLIENT: All players ready — dismissing loading screen.");
+            MatchLoadingOverlay.Instance?.MarkAllPlayersReady();
             GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
 
@@ -521,8 +523,7 @@ namespace NightHunt.Networking
         private void RpcOnAllPlayersReadyTarget(NetworkConnection conn)
         {
             Debug.Log("[ServerGameManager] CLIENT (late-joiner): received AllPlayersReady — dismissing loading screen.");
-            // Publishing AllPlayersReadyEvent is sufficient: MatchLoadingOverlay subscribes
-            // via TryLateSubscribe() in Update() and will call Hide() on its own.
+            MatchLoadingOverlay.Instance?.MarkAllPlayersReady();
             GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
         }
 

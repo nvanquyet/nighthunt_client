@@ -57,6 +57,7 @@ namespace NightHunt.UI
             SafeZoneHUDProxy.OnZoneIndexChanged  += OnZoneIndexChanged;
             SafeZoneHUDProxy.OnShrinkStateChanged += OnShrinkStateChanged;
             SafeZoneHUDProxy.OnCountdownChanged  += OnCountdownChanged;
+            SafeZoneManager.Instance?.ReplayCurrentHudState();
         }
 
         private void OnDisable()

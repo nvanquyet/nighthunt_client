@@ -69,8 +69,6 @@ namespace NightHunt.UI
         // ── Runtime ───────────────────────────────────────────────────────────
         private float             _lastUpdateTime;
         private const float       UpdateInterval = 0.1f;
-        private Coroutine         _warningCoroutine;
-        private Coroutine         _phaseStartCoroutine;
         private NetworkPlayer     _localPlayer;
         private int               _cachedTeamAScore;
         private int               _cachedTeamBScore;
@@ -111,6 +109,7 @@ namespace NightHunt.UI
             SafeZoneHUDProxy.OnZoneIndexChanged   += OnZoneIndexChanged;
             SafeZoneHUDProxy.OnCountdownChanged   += OnCountdownChanged;
             SafeZoneHUDProxy.OnShrinkStateChanged += OnShrinkStateChanged;
+            SafeZoneManager.Instance?.ReplayCurrentHudState();
         }
 
         private void OnDisable()
@@ -247,7 +246,6 @@ namespace NightHunt.UI
                 yield return new WaitForSeconds(_phaseStartHoldDuration);
             }
             panel.SetActive(false);
-            _phaseStartCoroutine = null;
         }
 
         // ── Phase Warning ─────────────────────────────────────────────────────
@@ -270,7 +268,6 @@ namespace NightHunt.UI
             yield return StartCoroutine(FadeWarning(1f, 0f, warningFadeDuration));
 
             warningPanel.SetActive(false);
-            _warningCoroutine = null;
         }
 
         private IEnumerator FadeWarning(float from, float to, float duration)

@@ -414,7 +414,7 @@ namespace NightHunt.UI
             }
         }
 
-        private async Task<bool> TryRecoverActiveRoomFromServer(string source, bool updateUi)
+        private Task<bool> TryRecoverActiveRoomFromServer(string source, bool updateUi)
         {
             if (_roomState == null)
                 _roomState = RoomState.Instance;
@@ -428,7 +428,7 @@ namespace NightHunt.UI
                     ShowState(UIState.InRoom);
                     RefreshRoomDisplay();
                 }
-                return true;
+                return Task.FromResult(true);
             }
 
             // No local room state — do NOT call the reconnect endpoint here.
@@ -436,7 +436,7 @@ namespace NightHunt.UI
             // right after login/app resume.  If that check cleared (or never set) room state,
             // calling Reconnect() here would send roomId=0 and produce a server 500 error.
             NLog($"RecoverActiveRoom skipped from {source}: not in room, nothing to recover. local={DescribeLocalRoom()}");
-            return false;
+            return Task.FromResult(false);
         }
 
         private void HandleConfigLoaded()
@@ -1170,7 +1170,7 @@ namespace NightHunt.UI
         private void InitPendingSettings(RoomResponse room)
         {
             int modeIdx = FindModeIndex(room.mode);
-            _currentModeIdx = modeIdx >= 0 ? modeIdx : 0;
+            _currentModeIdx = modeIdx >= 0 ? modeIdx : (_modeModeKeys.Length > 0 ? Mathf.Clamp(_currentModeIdx, 0, _modeModeKeys.Length - 1) : -1);
             _pendingMode = room.mode ?? (_modeModeKeys.Length > 0 ? _modeModeKeys[0] : "2v2");
             _pendingMapId = NormalizeMapId(_pendingMode, room.mapId);
             _pendingIsPublic = room.isPublic;
@@ -1194,6 +1194,13 @@ namespace NightHunt.UI
         private async System.Threading.Tasks.Task SaveSettingsAsync()
         {
             if (!IsLocalPlayerHost() || !_settingsDirty) return;
+            if (FindModeIndex(_pendingMode) < 0)
+            {
+                SetStatus("");
+                SetSettingsDirty(false);
+                RefreshRoomDisplay();
+                return;
+            }
 
             string passwordPayload = null; // password input removed
 
@@ -1218,6 +1225,7 @@ namespace NightHunt.UI
 
         private void BuildModeList()
         {
+            string previousMode = _pendingMode;
             var enabled = GameModeConfig.GetEnabled();
             var keys = new List<string>();
             var names = new List<string>();
@@ -1235,7 +1243,9 @@ namespace NightHunt.UI
 
             _modeModeKeys = keys.ToArray();
             _modeDisplayNames = names.ToArray();
-            _pendingMode = _modeModeKeys.Length > 0 ? _modeModeKeys[0] : string.Empty;
+            _pendingMode = !string.IsNullOrWhiteSpace(previousMode) && keys.Contains(previousMode)
+                ? previousMode
+                : (_modeModeKeys.Length > 0 ? _modeModeKeys[0] : string.Empty);
         }
 
         private int FindModeIndex(string modeKey)
@@ -1292,9 +1302,33 @@ namespace NightHunt.UI
 
         private static int GetSlotsForMode(string modeKey)
         {
-            foreach (var m in GameModeConfig.GetEnabled())
-                if (m.modeKey == modeKey) return m.playersPerTeam;
+            if (!string.IsNullOrWhiteSpace(modeKey)
+                && GameModeConfig.TryGetAnyByKey(modeKey, out GameModeEntry entry)
+                && entry.playersPerTeam > 0)
+            {
+                return entry.playersPerTeam;
+            }
+
+            int parsed = ParseSlotsPerTeam(modeKey);
+            if (parsed > 0)
+                return parsed;
+
             return 2;
+        }
+
+        private static int ParseSlotsPerTeam(string modeKey)
+        {
+            if (string.IsNullOrWhiteSpace(modeKey))
+                return 0;
+
+            int vIndex = modeKey.IndexOf('v');
+            if (vIndex < 0)
+                vIndex = modeKey.IndexOf('V');
+            if (vIndex <= 0)
+                return 0;
+
+            string left = modeKey.Substring(0, vIndex);
+            return int.TryParse(left, out int slots) ? Mathf.Max(1, slots) : 0;
         }
 
         // ══════════════════════════════════════════════════════════════════════
@@ -1553,7 +1587,6 @@ namespace NightHunt.UI
             bool isHost = IsLocalPlayerHost();
             bool waiting = room.status == Constants.ROOM_STATUS_WAITING;
             bool usePendingSettings = isHost && waiting && _settingsDirty;
-            EnsureOwnerReadyForDisplay(room);
 
             // ── Room code ──────────────────────────────────────────────────────
             if (roomCodeText != null) roomCodeText.text = room.roomCode;
@@ -1564,23 +1597,27 @@ namespace NightHunt.UI
             string activeMode = usePendingSettings ? _pendingMode : room.mode;
             string activeMapId = usePendingSettings ? _pendingMapId : NormalizeMapId(room.mode, room.mapId);
 
-            // ... rest of method remains unchanged but I'll add the closing braces and checks carefully
             int modeIdx = FindModeIndex(activeMode);
-            if (modeIdx >= 0) _currentModeIdx = modeIdx;
+            bool activeModeVisible = modeIdx >= 0;
+            if (activeModeVisible)
+                _currentModeIdx = modeIdx;
+            else
+                _currentModeIdx = _modeModeKeys.Length > 0 ? Mathf.Clamp(_currentModeIdx, 0, _modeModeKeys.Length - 1) : -1;
+
             BuildMapList(activeMode, activeMapId);
 
             _updatingDropdown = true;
             if (modeDropdown != null)
             {
                 PopulateDropdown(modeDropdown, new List<string>(_modeDisplayNames), _currentModeIdx);
-                modeDropdown.Interactable(isHost && waiting);
+                modeDropdown.Interactable(isHost && waiting && activeModeVisible);
             }
-            SyncMapDropdown(isHost && waiting);
+            SyncMapDropdown(isHost && waiting && activeModeVisible);
             _updatingDropdown = false;
 
-            if (btnSave != null) btnSave.interactable = isHost && waiting && _settingsDirty;
+            if (btnSave != null) btnSave.interactable = isHost && waiting && _settingsDirty && activeModeVisible;
 
-            _maxSlotsPerTeam = GetSlotsForMode(room.mode);
+            _maxSlotsPerTeam = GetSlotsForMode(activeMode);
 
             int currentPlayers = room.players?.Count ?? 0;
             bool hasPlayers = currentPlayers > 0;
@@ -1604,11 +1641,11 @@ namespace NightHunt.UI
             if (leaveOrDisbandText != null)
                 leaveOrDisbandText.text = isHost ? "Disband Room" : "Leave Room";
 
-            UpdatePlayerSlots(room.players);
+            UpdatePlayerSlots(room);
             _lastStatus = room.status;
         }
 
-        private void UpdatePlayerSlots(List<RoomPlayerResponse> players)
+        private void UpdatePlayerSlots(RoomResponse room)
         {
             // Use immediate destroy so containers are clean before we add new slots
             _slotViews.Clear();
@@ -1616,6 +1653,8 @@ namespace NightHunt.UI
             ClearContainer(team2Container);
 
             bool isHost = IsLocalPlayerHost();
+            List<RoomPlayerResponse> players = room?.players;
+            long ownerId = room?.ownerId ?? 0L;
 
             // 1. Create standard slots for the current mode
             for (int team = 1; team <= 2; team++)
@@ -1625,7 +1664,7 @@ namespace NightHunt.UI
 
                 for (int slotIdx = 0; slotIdx < _maxSlotsPerTeam; slotIdx++)
                 {
-                    CreateSlot(container, team, slotIdx, players, isHost);
+                    CreateSlot(container, team, slotIdx, players, isHost, ownerId);
                 }
             }
 
@@ -1643,14 +1682,14 @@ namespace NightHunt.UI
                         if (container != null)
                         {
                             Debug.LogWarning($"[PartyCustomMode] Player {p.username} is in invalid slot {p.slot} for mode. Force-rendering.");
-                            CreateSlot(container, p.team, p.slot, players, isHost);
+                            CreateSlot(container, p.team, p.slot, players, isHost, ownerId);
                         }
                     }
                 }
             }
         }
 
-        private void CreateSlot(Transform container, int team, int slotIdx, List<RoomPlayerResponse> players, bool isHost)
+        private void CreateSlot(Transform container, int team, int slotIdx, List<RoomPlayerResponse> players, bool isHost, long ownerId)
         {
             var player = players?.FirstOrDefault(p => p.team == team && p.slot == slotIdx);
             var go = Instantiate(playerSlotPrefab, container);
@@ -1660,7 +1699,7 @@ namespace NightHunt.UI
             if (sv == null) return;
 
             var capturedPlayer = player;
-            sv.SetSlot(team, slotIdx, player, isHost,
+            sv.SetSlot(team, slotIdx, GetDisplayPlayer(player, ownerId), isHost,
                         onSlotClicked: OnSlotClicked,
                         onKickClicked: isHost ? uid => OnKickWithConfirm(uid, capturedPlayer?.username) : (System.Action<long>)null);
 
@@ -2064,16 +2103,22 @@ namespace NightHunt.UI
             return IsReadyForStart(room, player);
         }
 
-        private static void EnsureOwnerReadyForDisplay(RoomResponse room)
+        private static RoomPlayerResponse GetDisplayPlayer(RoomPlayerResponse player, long ownerId)
         {
-            if (room?.players == null)
-                return;
+            if (player == null)
+                return null;
 
-            foreach (var player in room.players)
+            if (player.userId != ownerId || player.isReady)
+                return player;
+
+            return new RoomPlayerResponse
             {
-                if (player != null && player.userId == room.ownerId)
-                    player.isReady = true;
-            }
+                userId = player.userId,
+                username = player.username,
+                team = player.team,
+                slot = player.slot,
+                isReady = true
+            };
         }
 
         private static bool IsReadyForStart(RoomResponse room, RoomPlayerResponse player)
