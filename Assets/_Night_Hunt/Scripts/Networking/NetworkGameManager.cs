@@ -253,11 +253,17 @@ namespace NightHunt.Networking
                 yield break;
             }
 
-            SetTransportAddress(relayIp, relayPort);
+            // The host's own client runs in the same process/device as the server.
+            // Do not route that local loopback connection through the public relay:
+            // many NATs only allow replies from the exact relay session port, while
+            // the relay may use separate upstream sockets for forwarded clients.
+            // The server still advertises/registers with the relay for remote players.
+            const string hostLoopbackAddress = "127.0.0.1";
+            SetTransportAddress(hostLoopbackAddress, relayPort);
             if (!networkManager.ClientManager.StartConnection())
-                Debug.LogError("[NetworkGameManager] Failed to start relay host client!");
+                Debug.LogError("[NetworkGameManager] Failed to start relay host local client!");
             else
-                Debug.Log($"[FLOW 5] Relay Host client connecting -> {relayIp}:{relayPort}");
+                Debug.Log($"[FLOW 5] Relay Host local client connecting -> {hostLoopbackAddress}:{relayPort} (relay advertised {relayIp}:{relayPort})");
         }
 
         private bool TrySendRelayHostRegistration(string relayIp, ushort relayPort)
