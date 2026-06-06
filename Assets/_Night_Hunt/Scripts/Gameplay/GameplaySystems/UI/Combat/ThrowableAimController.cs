@@ -642,8 +642,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             if (_rangeIndicator != null) _rangeIndicator.Hide();
             HideCursor();
             _aimSystem?.SetThrowableAim(Vector2.zero);
-            if (IsMobile)
-                _aimSystem?.SetCursorVisible(false);
+            _aimSystem?.SetCursorVisible(true);
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _combatInputHandler?.SetCameraLockOverride(active: false, forcedValue: false);
             ClearExternalAimTarget();
@@ -743,8 +742,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _deployConfirmInProgress = false;
 
             HideCursor();
-            if (IsMobile)
-                _aimSystem?.SetCursorVisible(false);
+            _aimSystem?.SetCursorVisible(true);
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _combatInputHandler?.SetCameraLockOverride(active: false, forcedValue: false);
             ClearExternalAimTarget();

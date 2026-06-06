@@ -420,8 +420,7 @@ namespace NightHunt.Networking.Player
                 _cachedCombatHandler?.EnableInput();
                 _cachedMovementHandler?.EnableInput();
                 _cachedCameraHandler?.EnableInput();
-                if (!Application.isMobilePlatform)
-                    _cachedAimSystem?.SetCursorVisible(true);
+                _cachedAimSystem?.SetCursorVisible(true);
                 // Re-enable AimSystem after respawn.
                 if (_cachedAimSystem is MonoBehaviour aimMB) aimMB.enabled = true;
             }
@@ -547,8 +546,7 @@ namespace NightHunt.Networking.Player
                 else
                     Debug.Log($"[NetworkPlayer] AimSystem bound with statSystem: {statSystem.GetType().Name}");
                 aimSystem.Initialize(transform, statSystem);
-                if (!Application.isMobilePlatform)
-                    aimSystem.SetCursorVisible(true);
+                aimSystem.SetCursorVisible(true);
                 inputManager.CombatHandler?.BindAimSystem(aimSystem);
                 _cachedAimSystem = aimSystem; // cache for alive-state gating
 

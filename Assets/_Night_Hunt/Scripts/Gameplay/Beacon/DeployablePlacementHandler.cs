@@ -280,8 +280,7 @@ namespace NightHunt.Gameplay.Beacon
                 _previewInstance = null;
             }
 
-            if (Application.isMobilePlatform)
-                _aimSystem?.SetCursorVisible(false);
+            _aimSystem?.SetCursorVisible(true);
         }
 
         private void ResolveCamera()

@@ -664,6 +664,40 @@ namespace NightHunt.GameplaySystems.ItemUse
                 if (hit.TryGetComponent<Rigidbody>(out var rb) && !rb.isKinematic)
                     rb.AddForce((hit.transform.position - origin).normalized * (500f * falloff), ForceMode.Impulse);
             }
+
+            DealAoeDamageToRegisteredPlayers(origin, radius, hitSystems);
+        }
+
+        [Server]
+        private void DealAoeDamageToRegisteredPlayers(Vector3 origin, float radius, HashSet<PlayerHealthSystem> hitSystems)
+        {
+            var allHealthSystems = UnityEngine.Object.FindObjectsByType<PlayerHealthSystem>(FindObjectsSortMode.None);
+            float safeRadius = Mathf.Max(radius, 0.01f);
+
+            foreach (var hs in allHealthSystems)
+            {
+                if (hs == null || hs.IsDead || !ShouldAffectPlayer(hs))
+                    continue;
+
+                Vector3 targetPos = hs.transform.position;
+                float dist = Vector3.Distance(origin, targetPos);
+                if (dist > radius || !hitSystems.Add(hs))
+                    continue;
+
+                float falloff = Mathf.Clamp01(1f - dist / safeRadius);
+                var damageInfo = new DamageInfo
+                {
+                    Damage                 = _def.Damage * falloff,
+                    IsHeadshot             = false,
+                    HitPoint               = targetPos,
+                    HitNormal              = (targetPos - origin).normalized,
+                    ShooterNetworkObjectId = _ownerNetworkObjectId,
+                    WeaponId               = _def?.ItemID ?? string.Empty,
+                };
+
+                hs.ApplyDamageServer(damageInfo);
+                SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Player);
+            }
         }
 
         private bool ShouldAffectPlayer(PlayerHealthSystem healthSystem)

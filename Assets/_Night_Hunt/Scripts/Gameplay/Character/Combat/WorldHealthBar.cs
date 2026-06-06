@@ -157,6 +157,9 @@ namespace NightHunt.Gameplay.Character.Combat
 
         private bool ShouldShow(HealthChangeEvent evt)
         {
+            if (evt.ForceReveal)
+                return true;
+
             if (_visibilityPolicy == VisibilityPolicy.AnyDamage)
                 return true;
 
@@ -176,11 +179,11 @@ namespace NightHunt.Gameplay.Character.Combat
                 return false;
 
             var spectate = SpectateManager.Instance;
-            var localPlayer = spectate?.GetLocalPlayer();
+            var localPlayer = ResolveLocalPlayer();
             if (localPlayer == null)
                 return false;
 
-            var currentObserved = spectate.GetCurrentPlayer();
+            var currentObserved = spectate != null ? spectate.GetCurrentPlayer() : null;
             if (currentObserved != null && _networkPlayer == currentObserved)
                 return true;
 
@@ -207,6 +210,34 @@ namespace NightHunt.Gameplay.Character.Combat
             }
 
             return false;
+        }
+
+        private static NetworkPlayer ResolveLocalPlayer()
+        {
+            var spectate = SpectateManager.Instance;
+            var localPlayer = spectate?.GetLocalPlayer();
+            if (localPlayer != null)
+                return localPlayer;
+
+            var registry = PlayerPublicRegistry.Instance;
+            var allPlayers = registry?.GetAllPlayers();
+            if (allPlayers != null)
+            {
+                foreach (var player in allPlayers)
+                {
+                    if (player != null && player.IsOwner)
+                        return player;
+                }
+            }
+
+            var scenePlayers = UnityEngine.Object.FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None);
+            foreach (var player in scenePlayers)
+            {
+                if (player != null && player.IsOwner)
+                    return player;
+            }
+
+            return null;
         }
 
         private void ResolveSource()

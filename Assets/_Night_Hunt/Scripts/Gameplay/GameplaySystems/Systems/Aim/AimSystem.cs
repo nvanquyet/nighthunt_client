@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using NightHunt.Core;
 using NightHunt.Gameplay.StatSystem.Core.Types;
@@ -123,6 +124,7 @@ namespace NightHunt.GameplaySystems.Aim
             // any aim calculation runs. Log an error during Update if it was missed.
 
             // Save the mesh's designed tilt (X, Z) so we only rotate Y at runtime.
+            ResolveWorldAimCursor();
             if (_worldAimCursor != null)
             {
                 _cursorInitialEuler = _worldAimCursor.eulerAngles;
@@ -151,7 +153,8 @@ namespace NightHunt.GameplaySystems.Aim
             if (_camera == null)
                 _camera = UnityEngine.Camera.main;
 
-            SetCursorVisible(false);
+            ResolveWorldAimCursor();
+            SetCursorVisible(true);
         }
 
         /// <inheritdoc/>
@@ -173,6 +176,53 @@ namespace NightHunt.GameplaySystems.Aim
                     $"visible={visible} cursor={(_worldAimCursor != null ? _worldAimCursor.name : "null")} throwableMode={_isThrowableMode}",
                     this);
             }
+        }
+
+        private void ResolveWorldAimCursor()
+        {
+            if (_worldAimCursor != null)
+                return;
+
+            foreach (Transform child in GetComponentsInChildren<Transform>(includeInactive: true))
+            {
+                if (child == transform)
+                    continue;
+
+                string childName = child.name;
+                if (childName.IndexOf("AimCursor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    childName.IndexOf("Aim Cursor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    childName.IndexOf("AimTarget", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    _worldAimCursor = child;
+                    _cursorInitialEuler = _worldAimCursor.eulerAngles;
+                    break;
+                }
+            }
+
+            if (_worldAimCursor == null)
+            {
+                var sceneTransforms = UnityEngine.Object.FindObjectsByType<Transform>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None);
+                foreach (var candidate in sceneTransforms)
+                {
+                    if (candidate == null || candidate == transform)
+                        continue;
+
+                    string candidateName = candidate.name;
+                    if (candidateName.IndexOf("AimCursor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        candidateName.IndexOf("Aim Cursor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        candidateName.IndexOf("AimTarget", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        _worldAimCursor = candidate;
+                        _cursorInitialEuler = _worldAimCursor.eulerAngles;
+                        break;
+                    }
+                }
+            }
+
+            if (_worldAimCursor == null)
+                Debug.LogWarning("[AimSystem] _worldAimCursor is not assigned and no scene cursor was found.");
         }
 
         /// <inheritdoc/>

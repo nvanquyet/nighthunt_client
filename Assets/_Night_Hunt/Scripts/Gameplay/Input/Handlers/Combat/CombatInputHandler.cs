@@ -685,7 +685,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             _aimSystem?.SetThrowableAim(Vector2.zero);  // exit throwable mode if joystick activated it
 
             if (!ThrowableAimController.IsAimingPC && !ThrowableAimController.IsDeployingPC)
-                _aimSystem?.SetCursorVisible(false);
+                _aimSystem?.SetCursorVisible(true);
             if (!ThrowableAimController.IsAimingPC && !ThrowableAimController.IsDeployingPC)
                 ThrowableAimController.ClearExternalAimTarget();
 

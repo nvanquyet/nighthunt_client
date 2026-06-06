@@ -985,6 +985,7 @@ namespace NightHunt.GameplaySystems.ItemUse
                 : ItemVisualResolver.CreateRuntimeFallback(def, ItemVisualPurpose.Held);
             if (_itemInHandModel.transform.parent != parent)
                 _itemInHandModel.transform.SetParent(parent, worldPositionStays: false);
+            PrepareHeldItemModel(_itemInHandModel);
             _itemInHandModel.transform.localPosition = Vector3.zero;
             _itemInHandModel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             PhaseTestLog.Log(
@@ -992,6 +993,39 @@ namespace NightHunt.GameplaySystems.ItemUse
                 "HeldItemSpawned",
                 $"def={def?.ItemID ?? "null"} prefab={(prefab != null ? prefab.name : "runtime-fallback")} parent={parent.name} path={BuildPath(parent)} localPos={_itemInHandModel.transform.localPosition:F3} localRot={_itemInHandModel.transform.localEulerAngles:F1}",
                 this);
+        }
+
+        private static void PrepareHeldItemModel(GameObject model)
+        {
+            if (model == null)
+                return;
+
+            foreach (var rb in model.GetComponentsInChildren<Rigidbody>(includeInactive: true))
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.useGravity = false;
+                rb.isKinematic = true;
+            }
+
+            foreach (var col in model.GetComponentsInChildren<Collider>(includeInactive: true))
+                col.enabled = false;
+
+            foreach (var behaviour in model.GetComponentsInChildren<MonoBehaviour>(includeInactive: true))
+            {
+                if (behaviour == null)
+                    continue;
+
+                string typeName = behaviour.GetType().Name;
+                if (typeName.IndexOf("WorldItem", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    typeName.IndexOf("Pickup", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    typeName.IndexOf("Spin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    typeName.IndexOf("Rotate", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    typeName.IndexOf("Rotator", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    behaviour.enabled = false;
+                }
+            }
         }
 
         /// <summary>
@@ -1062,9 +1096,12 @@ namespace NightHunt.GameplaySystems.ItemUse
             // Use the instance field _pendingThrowTarget (set in ExecuteThrow) instead of
             // reading ThrowableAimController.AimWorldTarget which is a client-only static and
             // would be Vector3.zero on a dedicated server.
-            if (_itemInHandModel.TryGetComponent<Rigidbody>(out var rb))
+            var rb = _itemInHandModel.GetComponent<Rigidbody>() ??
+                     _itemInHandModel.GetComponentInChildren<Rigidbody>(includeInactive: true);
+            if (rb != null)
             {
                 Vector3 toTarget = _pendingThrowTarget - _itemInHandModel.transform.position;
+                rb.isKinematic = false;
                 rb.linearVelocity = toTarget.normalized * 8f;
                 rb.useGravity     = true;
             }
