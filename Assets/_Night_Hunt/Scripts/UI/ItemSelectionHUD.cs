@@ -193,6 +193,7 @@ namespace NightHunt.UI
             var combatHandler = InputManager.Instance?.CombatHandler;
             Debug.Log($"[NH_FLOW][01][ItemSelectionHUD.InitialisePanels] panels={_filterPanels.Length} selection={(selectionSys != null ? "ok" : "null")} inventory={(inventorySys != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")} combat={(combatHandler != null ? "ok" : "null")}");
             combatHandler?.BindItemSelectionSystem(selectionSys);
+            combatHandler?.BindItemUseSystem(itemUseSys);
             BindCombatShortcuts(combatHandler);
             BindAimController(context, selectionSys, inventorySys, itemUseSys, combatHandler);
 

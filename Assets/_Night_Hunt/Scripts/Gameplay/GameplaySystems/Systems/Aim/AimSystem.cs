@@ -222,6 +222,11 @@ namespace NightHunt.GameplaySystems.Aim
             {
                 _isThrowableMode   = true;
                 _throwableJoystick = joystickInput;
+                // Joystick/deploy aim is an explicit world-targeting mode. If a
+                // previous reset hid the cursor, turn it back on as soon as aim
+                // input resumes so the visual always follows the active target.
+                if (_worldAimCursor != null && !_cursorVisible)
+                    SetCursorVisible(true);
             }
         }
 

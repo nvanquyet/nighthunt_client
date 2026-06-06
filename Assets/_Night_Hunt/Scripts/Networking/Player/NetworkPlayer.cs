@@ -547,6 +547,8 @@ namespace NightHunt.Networking.Player
                 else
                     Debug.Log($"[NetworkPlayer] AimSystem bound with statSystem: {statSystem.GetType().Name}");
                 aimSystem.Initialize(transform, statSystem);
+                if (!Application.isMobilePlatform)
+                    aimSystem.SetCursorVisible(true);
                 inputManager.CombatHandler?.BindAimSystem(aimSystem);
                 _cachedAimSystem = aimSystem; // cache for alive-state gating
 
@@ -580,12 +582,21 @@ namespace NightHunt.Networking.Player
                 Debug.LogWarning("[NetworkPlayer] RangeIndicator not found in scene — vision ring will not appear.");
             }
 
-            // Bind ItemUseSystem so fire button calls ExecuteThrow during throwable mode.
-            var cachedItemUse = ComponentResolver.Find<IItemUseSystem>(this)
-                .OnSelf().InChildren().InParent()
-                .OrLogWarning("[NetworkPlayer] IItemUseSystem not found for CombatHandler binding")
-                .Resolve();
+            // Bind item systems directly from the player bridge. UI panels also bind
+            // these later, but combat input must not depend on HUD initialization order.
+            var cachedItemSelection = GamePlaySystemBridge?.ItemSelection
+                ?? ComponentResolver.Find<IItemSelectionSystem>(this)
+                    .OnSelf().InChildren().InParent()
+                    .OrLogWarning("[NetworkPlayer] IItemSelectionSystem not found for CombatHandler binding")
+                    .Resolve();
+            var cachedItemUse = GamePlaySystemBridge?.ItemUse
+                ?? ComponentResolver.Find<IItemUseSystem>(this)
+                    .OnSelf().InChildren().InParent()
+                    .OrLogWarning("[NetworkPlayer] IItemUseSystem not found for CombatHandler binding")
+                    .Resolve();
+            inputManager.CombatHandler?.BindItemSelectionSystem(cachedItemSelection);
             inputManager.CombatHandler?.BindItemUseSystem(cachedItemUse);
+            Debug.Log($"[NH_FLOW][01][NetworkPlayer.BindCombatItems] selection={(cachedItemSelection != null ? "ok" : "null")} itemUse={(cachedItemUse != null ? "ok" : "null")}");
         }
 
         #endregion

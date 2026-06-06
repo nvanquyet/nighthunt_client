@@ -53,6 +53,7 @@ namespace NightHunt.Networking
         private bool _dsReady;          // true after ds_ready WS received
         private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
         private bool _reconnectModalOpen;
+        private bool _returningHome;
         private static readonly byte[] RelayHostRegistrationPayload =
             { 78, 72, 95, 82, 69, 76, 65, 89, 95, 72, 79, 83, 84 };
 
@@ -396,6 +397,7 @@ namespace NightHunt.Networking
             {
                 case LocalConnectionState.Started:
                     _intentionalDisconnect = false;
+                    _returningHome = false;
                     _connected = true;
                     _retryCount = 0;
                     Debug.Log("[NetworkGameManager] ✅ Client connected to match server.");
@@ -467,6 +469,7 @@ namespace NightHunt.Networking
                 return;
             }
 
+            _returningHome = false;
             _connectionStarted = true;
             _connected         = false;
 
@@ -501,6 +504,7 @@ namespace NightHunt.Networking
                 return;
             }
 
+            _returningHome = false;
             _connectionStarted = true;
             _connected         = false;
 
@@ -533,11 +537,22 @@ namespace NightHunt.Networking
 
         private void LoadHome()
         {
+            if (_returningHome)
+                return;
+
+            _returningHome = true;
+            CancelInvoke(nameof(RetryConnect));
+            CancelInvoke(nameof(LoadHome));
             Disconnect();
             _dsReady         = false;
             _gameSceneLoaded = false;
             RoomState.Instance?.ClearRoom();
             HideReconnectModal(showToast: false);
+            if (SceneLoader.IsInHomeScene)
+            {
+                UINavigator.Instance?.GoHome();
+                return;
+            }
             SceneLoader.LoadHome();
         }
 
@@ -651,10 +666,21 @@ namespace NightHunt.Networking
 
         private void ReturnHomeFromReconnect()
         {
+            if (_returningHome)
+                return;
+
+            _returningHome = true;
+            CancelInvoke(nameof(RetryConnect));
+            CancelInvoke(nameof(LoadHome));
             _reconnectModalOpen = false;
             Disconnect();
             RoomState.Instance?.ClearRoom();
             RoomState.Instance?.ClearNetworkSession();
+            if (SceneLoader.IsInHomeScene)
+            {
+                UINavigator.Instance?.GoHome();
+                return;
+            }
             SceneLoader.LoadHome();
         }
 

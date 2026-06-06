@@ -110,6 +110,7 @@ namespace NightHunt.UI
         private int                  _friendsLoadVersion;
         private int                  _requestsLoadVersion;
         private int                  _badgeLoadVersion;
+        private bool                 _missingFriendItemPrefabWarned;
 
         // Cached lists (online / offline split, kept in sync with WS events)
         private readonly List<FriendResponse>    _onlineFriends  = new();
@@ -122,6 +123,12 @@ namespace NightHunt.UI
         private enum FriendTab { Friends, MoreFriends }
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
+
+        private void Awake()
+        {
+            ResolveFriendItemPrefab();
+            HideSceneFriendItemTemplate();
+        }
 
         private void Start()
         {
@@ -142,6 +149,8 @@ namespace NightHunt.UI
             if (_friendService == null && GameManager.Instance != null)
                 _friendService = GameManager.Instance.FriendService;
 
+            ResolveFriendItemPrefab();
+            HideSceneFriendItemTemplate();
             SwitchTabData(FriendTab.Friends);
             if (NightHunt.State.SessionState.Instance != null && NightHunt.State.SessionState.Instance.IsAuthenticated)
                 LoadFriends();
@@ -359,9 +368,14 @@ namespace NightHunt.UI
 
         private FriendItemView SpawnFriendItem(FriendResponse friend, Transform container)
         {
-            if (friendItemPrefab == null)
+            GameObject prefab = ResolveFriendItemPrefab();
+            if (prefab == null)
             {
-                Debug.LogError("[FriendPanel] friendItemPrefab is not assigned.");
+                if (!_missingFriendItemPrefabWarned)
+                {
+                    _missingFriendItemPrefabWarned = true;
+                    Debug.LogError("[FriendPanel] friendItemPrefab is not assigned and no FriendItemView template was found.");
+                }
                 return null;
             }
             if (container == null)
@@ -370,11 +384,13 @@ namespace NightHunt.UI
                 return null;
             }
 
-            var go   = Instantiate(friendItemPrefab, container);
+            var go   = Instantiate(prefab, container);
+            go.SetActive(true);
             var view = go.GetComponent<FriendItemView>();
             if (view == null)
             {
                 Debug.LogError("[FriendPanel] friendItemPrefab is missing FriendItemView component.");
+                Destroy(go);
                 return null;
             }
             view?.Setup(friend, OnRowClicked);
@@ -385,7 +401,68 @@ namespace NightHunt.UI
         {
             items.Clear();
             if (container == null) return;
-            foreach (Transform child in container) Destroy(child.gameObject);
+            foreach (Transform child in container)
+            {
+                if (friendItemPrefab != null && child == friendItemPrefab.transform)
+                    continue;
+
+                Destroy(child.gameObject);
+            }
+        }
+
+        private GameObject ResolveFriendItemPrefab()
+        {
+            if (friendItemPrefab != null)
+                return friendItemPrefab;
+
+            FriendItemView template = null;
+            if (onlineListContainer != null)
+                template = onlineListContainer.GetComponentInChildren<FriendItemView>(true);
+            if (template == null && offlineListContainer != null)
+                template = offlineListContainer.GetComponentInChildren<FriendItemView>(true);
+            if (template == null)
+                template = GetComponentInChildren<FriendItemView>(true);
+
+            if (template == null)
+            {
+#if UNITY_2023_1_OR_NEWER
+                var all = FindObjectsByType<FriendItemView>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+#else
+                var all = FindObjectsOfType<FriendItemView>(true);
+#endif
+                foreach (var candidate in all)
+                {
+                    if (candidate == null)
+                        continue;
+
+                    if (candidate.transform.IsChildOf(transform))
+                    {
+                        template = candidate;
+                        break;
+                    }
+
+                    if (template == null)
+                        template = candidate;
+                }
+            }
+
+            if (template == null)
+                return null;
+
+            friendItemPrefab = template.gameObject;
+            _missingFriendItemPrefabWarned = false;
+            Debug.LogWarning($"[FriendPanel] friendItemPrefab was missing; using runtime template '{friendItemPrefab.name}'.");
+            HideSceneFriendItemTemplate();
+            return friendItemPrefab;
+        }
+
+        private void HideSceneFriendItemTemplate()
+        {
+            if (friendItemPrefab == null)
+                return;
+
+            if (friendItemPrefab.scene.IsValid())
+                friendItemPrefab.SetActive(false);
         }
 
         // ── Load — Friend Requests ────────────────────────────────────────────

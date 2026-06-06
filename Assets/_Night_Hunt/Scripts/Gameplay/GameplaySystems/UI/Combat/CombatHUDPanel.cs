@@ -188,6 +188,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
             // Let CombatInputHandler call UseSelectedItem on fire when a throwable is armed.
             combatInputHandler?.BindItemSelectionSystem(itemSelectionSystem);
+            combatInputHandler?.BindItemUseSystem(itemUseSystem);
 
             RefreshItemPanels();
 
