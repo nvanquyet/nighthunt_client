@@ -112,36 +112,53 @@ namespace NightHunt.GameplaySystems.UI.Minimap
         /// </summary>
         public void SetTarget(NetworkPlayer player)
         {
-            var resolved = player;
+            var requested = IsLivePlayer(player) ? player : null;
+            if (!IsLivePlayer(_localPlayer))
+                _localPlayer = null;
+
+            var resolved = requested;
             if (resolved == null && SpectateManager.Instance != null && !SpectateManager.Instance.IsSpectating())
                 resolved = _localPlayer;
             if (resolved == null)
                 resolved = _localPlayer;
 
             _target = resolved != null ? resolved.transform : null;
-            Debug.Log($"[MINIMAP_FLOW] SetTarget requested='{player?.name ?? "null"}' resolved='{resolved?.name ?? "null"}' local='{_localPlayer?.name ?? "null"}'.");
+            Debug.Log($"[MINIMAP_FLOW] SetTarget requested='{DescribePlayer(player)}' resolved='{DescribePlayer(resolved)}' local='{DescribePlayer(_localPlayer)}'.");
         }
 
         public void SetLocalPlayer(NetworkPlayer player)
         {
-            if (player == null)
+            if (!IsLivePlayer(player))
                 return;
 
             _localPlayer = player;
-            Debug.Log($"[MINIMAP_FLOW] SetLocalPlayer '{player.name}' netId={player.ObjectId}.");
+            Debug.Log($"[MINIMAP_FLOW] SetLocalPlayer '{DescribePlayer(player)}'.");
             RefreshTargetFromSpectate();
         }
 
         private void RefreshTargetFromSpectate()
         {
             var current = SpectateManager.Instance != null ? SpectateManager.Instance.GetCurrentPlayer() : null;
-            SetTarget(current != null ? current : _localPlayer);
+            SetTarget(IsLivePlayer(current) ? current : _localPlayer);
         }
 
         private void HandleOwnerReady(NetworkPlayer player)
         {
-            if (_localPlayer == null || player == _localPlayer)
+            if (!IsLivePlayer(player))
+                return;
+
+            if (!IsLivePlayer(_localPlayer) || player == _localPlayer)
                 SetLocalPlayer(player);
+        }
+
+        private static bool IsLivePlayer(NetworkPlayer player) => player != null;
+
+        private static string DescribePlayer(NetworkPlayer player)
+        {
+            if (!IsLivePlayer(player))
+                return "null";
+
+            return $"{player.name}#{player.ObjectId}";
         }
     }
 }

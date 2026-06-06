@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using NightHunt.Gameplay.Input.Core;
 using NightHunt.Diagnostics;
+using NightHunt.GameplaySystems.UI.Combat;
 using System;
 using System.Collections;
 
@@ -25,6 +26,7 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
         private InputAction _toggleMapAction;
 
         private bool _inputEnabled = false;
+        private int _suppressOpenMenuFrame = -1;
 
         // ── Events ────────────────────────────────────────────────────────────────
         public event Action      OnCancelPressed;
@@ -129,6 +131,11 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
 
         private void OnCancel(InputAction.CallbackContext ctx)
         {
+            if (!ctx.performed) return;
+
+            if (HasGameplayCancelTarget())
+                _suppressOpenMenuFrame = Time.frameCount;
+
             var ilm = InputLayerManager.Instance;
             InputState before = ilm != null ? ilm.CurrentState : InputState.None;
             OnCancelPressed?.Invoke();
@@ -137,10 +144,24 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
                 ilm.PopContext();
         }
 
-        private void OnOpenMenu(InputAction.CallbackContext ctx) => OnOpenMenuPressed?.Invoke();
+        private void OnOpenMenu(InputAction.CallbackContext ctx)
+        {
+            if (!ctx.performed) return;
+
+            if (_suppressOpenMenuFrame == Time.frameCount || HasGameplayCancelTarget())
+            {
+                _suppressOpenMenuFrame = Time.frameCount;
+                OnCancelPressed?.Invoke();
+                return;
+            }
+
+            OnOpenMenuPressed?.Invoke();
+        }
 
         private void OnToggleMap(InputAction.CallbackContext ctx)
         {
+            if (!ctx.performed) return;
+
             OnToggleMapPressed?.Invoke();
             // Toggle map: push MapOpen hoặc pop về context trước
             PhaseTestLog.Log(
@@ -148,6 +169,11 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
                 "ToggleMapPressed",
                 $"state={InputLayerManager.Instance?.CurrentState.ToString() ?? "null"}",
                 this);
+        }
+
+        private static bool HasGameplayCancelTarget()
+        {
+            return ThrowableAimController.IsAimingPC || ThrowableAimController.IsDeployingPC;
         }
     }
 }

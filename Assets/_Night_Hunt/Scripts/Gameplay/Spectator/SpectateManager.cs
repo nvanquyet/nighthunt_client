@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using NightHunt.Core;
 using UnityEngine;
@@ -21,45 +22,55 @@ namespace NightHunt.Gameplay.Spectator
         private NetworkPlayer currentSpectatedPlayer;
         private bool isSpectating = false;
 
-        public event System.Action<NetworkPlayer> OnCurrentPlayerChanged;
+        public event Action<NetworkPlayer> OnCurrentPlayerChanged;
 
         /// <summary>Fired when spectate mode begins (player died and chose to spectate).</summary>
-        public event System.Action OnSpectateStarted;
+        public event Action OnSpectateStarted;
 
         /// <summary>Fired when spectate mode ends (player respawned).</summary>
-        public event System.Action OnSpectateStopped;
+        public event Action OnSpectateStopped;
 
         /// <summary>
         /// Fired once when the local player is registered for the first time.
         /// FogTeamVisibilityBinder (and any other component that needs the local
         /// player's team) subscribes here and refreshes its state on this callback.
         /// </summary>
-        public event System.Action<NetworkPlayer> OnLocalPlayerSet;
+        public event Action<NetworkPlayer> OnLocalPlayerSet;
 
 
 
         public NetworkPlayer GetCurrentPlayer()
         {
-            if (isSpectating && currentSpectatedPlayer != null)
+            if (isSpectating && IsLivePlayer(currentSpectatedPlayer))
                 return currentSpectatedPlayer;
-            return localPlayer;
+
+            if (isSpectating)
+                currentSpectatedPlayer = null;
+
+            return GetLocalPlayer();
         }
 
-        public bool IsSpectating() => isSpectating && currentSpectatedPlayer != null;
+        public bool IsSpectating() => isSpectating && IsLivePlayer(currentSpectatedPlayer);
 
         public bool IsCurrentPlayerLocal()
         {
             if (!isSpectating)
                 return true;
 
-            return currentSpectatedPlayer != null && currentSpectatedPlayer.IsLocalPlayer;
+            return IsLivePlayer(currentSpectatedPlayer) && currentSpectatedPlayer.IsLocalPlayer;
         }
 
-        public NetworkPlayer GetLocalPlayer() => localPlayer;
+        public NetworkPlayer GetLocalPlayer()
+        {
+            if (!IsLivePlayer(localPlayer))
+                localPlayer = null;
+
+            return localPlayer;
+        }
 
         public void SetLocalPlayer(NetworkPlayer player)
         {
-            if (player == null || !player.IsLocalPlayer)
+            if (!IsLivePlayer(player) || !player.IsLocalPlayer)
             {
                 LogWarning("Attempted to set non-local player");
                 return;
@@ -68,24 +79,24 @@ namespace NightHunt.Gameplay.Spectator
             localPlayer = player;
 
             // Notify fog and any other late-init systems that need the local team.
-            OnLocalPlayerSet?.Invoke(localPlayer);
+            RaiseLocalPlayerSet(localPlayer);
 
             if (!isSpectating)
             {
-                OnCurrentPlayerChanged?.Invoke(localPlayer);
+                RaiseCurrentPlayerChanged(localPlayer);
             }
 
-            Log($"Local player set: {player.DisplayName}");
+            Log($"Local player set: {DescribePlayer(player)}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Spectate,
                 "LocalPlayerSet",
-                $"player={player.DisplayName} obj={player.ObjectId} team={player.TeamId} alive={player.IsAlive}",
+                $"player={DescribePlayer(player)}",
                 this);
         }
 
         public void StartSpectating(NetworkPlayer player)
         {
-            if (player == null)
+            if (!IsLivePlayer(player))
             {
                 StopSpectating();
                 return;
@@ -99,20 +110,20 @@ namespace NightHunt.Gameplay.Spectator
 
             if (!CanSpectate(player))
             {
-                LogWarning($"Rejected spectate target '{player.DisplayName}'");
+                LogWarning($"Rejected spectate target '{DescribePlayer(player)}'");
                 return;
             }
 
             currentSpectatedPlayer = player;
             isSpectating = true;
-            OnCurrentPlayerChanged?.Invoke(player);
-            OnSpectateStarted?.Invoke();
+            RaiseCurrentPlayerChanged(player);
+            Raise(OnSpectateStarted);
 
-            Log($"Started spectating {player.DisplayName}");
+            Log($"Started spectating {DescribePlayer(player)}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Spectate,
                 "SpectateStart",
-                $"local={localPlayer?.DisplayName ?? "null"} localTeam={localPlayer?.TeamId ?? -1} target={player.DisplayName} targetObj={player.ObjectId} targetTeam={player.TeamId} targetAlive={player.IsAlive}",
+                $"local={DescribePlayer(localPlayer)} target={DescribePlayer(player)}",
                 this);
         }
 
@@ -124,14 +135,14 @@ namespace NightHunt.Gameplay.Spectator
             var previousSpectated = currentSpectatedPlayer;
             currentSpectatedPlayer = null;
 
-            OnCurrentPlayerChanged?.Invoke(localPlayer);
-            OnSpectateStopped?.Invoke();
+            RaiseCurrentPlayerChanged(GetLocalPlayer());
+            Raise(OnSpectateStopped);
 
-            Log($"Stopped spectating {previousSpectated?.DisplayName}");
+            Log($"Stopped spectating {DescribePlayer(previousSpectated)}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Spectate,
                 "SpectateStop",
-                $"local={localPlayer?.DisplayName ?? "null"} previous={previousSpectated?.DisplayName ?? "null"}",
+                $"local={DescribePlayer(localPlayer)} previous={DescribePlayer(previousSpectated)}",
                 this);
         }
 
@@ -140,7 +151,7 @@ namespace NightHunt.Gameplay.Spectator
         /// </summary>
         public void SwitchSpectatedPlayer(bool next = true)
         {
-            if (localPlayer == null) return;
+            if (GetLocalPlayer() == null) return;
 
             // ✅ Get from Registry (O(1) access to list)
             if (PlayerPublicRegistry.Instance == null)
@@ -154,7 +165,7 @@ namespace NightHunt.Gameplay.Spectator
             allPlayers = System.Array.FindAll(allPlayers, CanSpectate);
             if (allPlayers.Length == 0)
             {
-                PhaseTestLog.Log(PhaseTestLogCategory.Spectate, "SpectateSwitchNoTargets", $"local={localPlayer.DisplayName} team={localPlayer.TeamId}", this);
+                PhaseTestLog.Log(PhaseTestLogCategory.Spectate, "SpectateSwitchNoTargets", $"local={DescribePlayer(localPlayer)}", this);
                 StopSpectating();
                 return;
             }
@@ -181,7 +192,7 @@ namespace NightHunt.Gameplay.Spectator
 
         public bool CanSpectate(NetworkPlayer player)
         {
-            if (player == null || localPlayer == null) return false;
+            if (!IsLivePlayer(player) || GetLocalPlayer() == null) return false;
             if (player == localPlayer || player.IsLocalPlayer) return false;
             if (!player.IsAlive) return false;
             return player.TeamId == localPlayer.TeamId;
@@ -193,7 +204,7 @@ namespace NightHunt.Gameplay.Spectator
         /// </summary>
         public bool HasLivingSpectateTargets()
         {
-            if (localPlayer == null || PlayerPublicRegistry.Instance == null) return false;
+            if (GetLocalPlayer() == null || PlayerPublicRegistry.Instance == null) return false;
             var all = PlayerPublicRegistry.Instance.GetAllPlayers();
             if (all == null) return false;
             foreach (var p in all)
@@ -201,6 +212,70 @@ namespace NightHunt.Gameplay.Spectator
                 if (CanSpectate(p)) return true;
             }
             return false;
+        }
+
+        private static bool IsLivePlayer(NetworkPlayer player) => player != null;
+
+        private static string DescribePlayer(NetworkPlayer player)
+        {
+            if (!IsLivePlayer(player))
+                return "null";
+
+            return $"{player.DisplayName} obj={player.ObjectId} team={player.TeamId} alive={player.IsAlive}";
+        }
+
+        private void RaiseCurrentPlayerChanged(NetworkPlayer player)
+        {
+            RaisePlayerEvent(OnCurrentPlayerChanged, player);
+        }
+
+        private void RaiseLocalPlayerSet(NetworkPlayer player)
+        {
+            RaisePlayerEvent(OnLocalPlayerSet, player);
+        }
+
+        private void RaisePlayerEvent(Action<NetworkPlayer> handlers, NetworkPlayer player)
+        {
+            if (handlers == null)
+                return;
+
+            foreach (Delegate handlerDelegate in handlers.GetInvocationList())
+            {
+                var handler = handlerDelegate as Action<NetworkPlayer>;
+                if (handler == null)
+                    continue;
+
+                try
+                {
+                    handler(player);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex, this);
+                }
+            }
+        }
+
+        private void Raise(Action handlers)
+        {
+            if (handlers == null)
+                return;
+
+            foreach (Delegate handlerDelegate in handlers.GetInvocationList())
+            {
+                var handler = handlerDelegate as Action;
+                if (handler == null)
+                    continue;
+
+                try
+                {
+                    handler();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex, this);
+                }
+            }
         }
         
         private void Log(string message)

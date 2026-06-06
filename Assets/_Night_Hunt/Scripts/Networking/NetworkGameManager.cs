@@ -406,6 +406,8 @@ namespace NightHunt.Networking
                     _returningHome = false;
                     _connected = true;
                     _retryCount = 0;
+                    CancelInvoke(nameof(RetryConnect));
+                    CancelInvoke(nameof(LoadHome));
                     Debug.Log("[NetworkGameManager] ✅ Client connected to match server.");
                     MatchLoadingOverlay.Instance?.MarkConnected();
                     HideReconnectModal();
@@ -532,6 +534,7 @@ namespace NightHunt.Networking
             Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
             OnRetryAttempt?.Invoke(_retryCount, _maxRetries);
             HandleReconnectUI(_retryCount, _maxRetries);
+            CancelInvoke(nameof(RetryConnect));
             Invoke(nameof(RetryConnect), _retryDelay);
         }
 
@@ -642,10 +645,10 @@ namespace NightHunt.Networking
 
         private void HideReconnectModal(bool showToast = true)
         {
-            if (!_reconnectModalOpen) return;
+            bool wasOpen = _reconnectModalOpen;
             GameModalWindow.Instance?.Close();
             _reconnectModalOpen = false;
-            if (showToast)
+            if (showToast && wasOpen)
                 PersistentUICanvas.Instance?.ToastService?.Show("Reconnected", "Game connection restored.");
         }
 

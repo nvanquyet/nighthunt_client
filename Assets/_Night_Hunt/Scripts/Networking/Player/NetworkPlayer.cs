@@ -333,7 +333,15 @@ namespace NightHunt.Networking.Player
             // SetVirtualCameraActive(false) → camera is turned OFF right after SetOwnerCamera(true)
             // turned it ON.  Calling SetLocalPlayer first ensures GetCurrentPlayer() returns this
             // player and the camera stays active.
-            SpectateManager.Instance?.SetLocalPlayer(this);
+            try
+            {
+                SpectateManager.Instance?.SetLocalPlayer(this);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogException(ex, this);
+            }
+
             SetupOwnerSide();
             TryNotifyClientRuntimeReady();
         }
@@ -459,7 +467,30 @@ namespace NightHunt.Networking.Player
             // LootContainerUI, etc.) that live OUTSIDE the player prefab and subscribe in OnEnable()
             // during scene load — they are guaranteed to be subscribed before any player spawns.
             Debug.Log($"[FLOW §11] NetworkPlayer.SetupOwnerSide: firing OnOwnerReady ObjectId={ObjectId} Name='{PlayerData.DisplayName}' TeamId={PlayerData.TeamId}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            OnOwnerReady?.Invoke(this);
+            RaiseOwnerReady();
+        }
+
+        private void RaiseOwnerReady()
+        {
+            var handlers = OnOwnerReady;
+            if (handlers == null)
+                return;
+
+            foreach (System.Delegate handlerDelegate in handlers.GetInvocationList())
+            {
+                var handler = handlerDelegate as System.Action<NetworkPlayer>;
+                if (handler == null)
+                    continue;
+
+                try
+                {
+                    handler(this);
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogException(ex, this);
+                }
+            }
         }
 
         /// <summary>
@@ -533,7 +564,7 @@ namespace NightHunt.Networking.Player
 
             // Bind AimSystem — single source of aim direction (VisionRange-clamped cursor).
             // AimSystem.Initialize wires it to this player's transform + stat system.
-            var aimSystem = UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.Aim.AimSystem>();
+            var aimSystem = UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.Aim.AimSystem>(FindObjectsInactive.Include);
             if (aimSystem != null)
             {
                 var statSystem = ComponentResolver.Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
