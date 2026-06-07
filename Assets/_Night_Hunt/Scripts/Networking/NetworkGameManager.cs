@@ -258,6 +258,23 @@ namespace NightHunt.Networking
                 yield return new WaitForSecondsRealtime(0.1f);
             }
 
+            var hostPorts = RoomState.Instance?.RelayHostPorts;
+            if (hostPorts == null || hostPorts.Length == 0)
+            {
+                Debug.LogError("[FLOW 5] Relay host upstream ports missing. Backend/relay must provide relayHostPorts before Custom_Relay can accept remote guests.");
+                yield break;
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                foreach (ushort hostPort in hostPorts)
+                {
+                    bool sent = TrySendRelayHostRegistration(relayIp, hostPort);
+                    Debug.Log($"[FLOW 5] Relay host upstream punch #{i + 1} sent={sent} relay={relayIp}:{hostPort}");
+                }
+                yield return new WaitForSecondsRealtime(0.1f);
+            }
+
             if (networkManager.IsClientStarted)
             {
                 Debug.Log("[FLOW 5] Relay host client already started; registration refresh complete.");

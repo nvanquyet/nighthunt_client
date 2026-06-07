@@ -493,6 +493,13 @@ namespace NightHunt.Services.Game
             return BackendConfig.WsPath;
         }
 
+        private static string FormatPorts(int[] ports)
+        {
+            if (ports == null || ports.Length == 0)
+                return "[]";
+            return "[" + string.Join(",", ports) + "]";
+        }
+
         private static void SetRoomStateIfRelevant(RoomResponse room, string source)
         {
             if (room == null)
@@ -698,9 +705,10 @@ namespace NightHunt.Services.Game
                                     sid,
                                     gameStarting.relayHost,
                                     (ushort)gameStarting.relayPort,
-                                    isRelayHost);
+                                    isRelayHost,
+                                    gameStarting.relayHostPorts);
                                 RoomState.Instance.SetRelayHostReady(false);
-                                Debug.Log($"[GameWebSocketService] game_starting: relay={gameStarting.relayHost}:{gameStarting.relayPort} isHost={isRelayHost}");
+                                Debug.Log($"[GameWebSocketService] game_starting: relay={gameStarting.relayHost}:{gameStarting.relayPort} hostPorts={FormatPorts(gameStarting.relayHostPorts)} isHost={isRelayHost}");
                             }
                             OnGameStarting?.Invoke(gameStarting);
                         }
@@ -723,9 +731,10 @@ namespace NightHunt.Services.Game
                                     sid,
                                     relayHostReady.relayHost,
                                     (ushort)relayHostReady.relayPort,
-                                    isRelayHost);
+                                    isRelayHost,
+                                    relayHostReady.relayHostPorts);
                                 RoomState.Instance.SetRelayHostReady(true);
-                                Debug.Log($"[GameWebSocketService] relay_host_ready: relay={relayHostReady.relayHost}:{relayHostReady.relayPort} isHost={isRelayHost}");
+                                Debug.Log($"[GameWebSocketService] relay_host_ready: relay={relayHostReady.relayHost}:{relayHostReady.relayPort} hostPorts={FormatPorts(relayHostReady.relayHostPorts)} isHost={isRelayHost}");
                             }
                             OnRelayHostReady?.Invoke(relayHostReady);
                         }
@@ -1505,6 +1514,7 @@ namespace NightHunt.Services.Game
             public string      relayToken; // relay auth token (future use)
             public string      relayHost;  // relay server host
             public int         relayPort;  // relay server port (0 if not relay)
+            public int[]       relayHostPorts; // host-facing upstream ports for remote guests
             public RoomResponse room;      // updated room state at game start
         }
 
@@ -1514,6 +1524,7 @@ namespace NightHunt.Services.Game
             public string       relayToken;
             public string       relayHost;
             public int          relayPort;
+            public int[]        relayHostPorts;
             public RoomResponse room;
         }
 

@@ -29,6 +29,7 @@ namespace NightHunt.State
         public string RelaySessionId { get; private set; }
         public string RelayIp { get; private set; }
         public ushort RelayPort { get; private set; }
+        public ushort[] RelayHostPorts { get; private set; } = Array.Empty<ushort>();
         public bool RelayHostReady { get; private set; }
 
         // Dedicated server info (Ranked_DS)
@@ -118,12 +119,13 @@ namespace NightHunt.State
         // ── Network session helpers ───────────────────────────────────────────
 
         /// <summary>Store relay session info when a Custom match is about to start.</summary>
-        public void SetRelaySession(string sessionId, string ip, ushort port, bool isHost)
+        public void SetRelaySession(string sessionId, string ip, ushort port, bool isHost, int[] hostPorts = null)
         {
             CurrentGameMode = GameMode.Custom_Relay;
             RelaySessionId = sessionId;
             RelayIp = ip;
             RelayPort = port;
+            RelayHostPorts = ConvertRelayHostPorts(hostPorts);
             IsHostPlayer = isHost;
         }
 
@@ -187,12 +189,27 @@ namespace NightHunt.State
             RelaySessionId = null;
             RelayIp = null;
             RelayPort = 0;
+            RelayHostPorts = Array.Empty<ushort>();
             RelayHostReady = false;
             DsIp = null;
             DsPort = 0;
             DsMapId = null;
             CurrentMatchId = null;
             MatchReadyPlayers = null;
+        }
+
+        private static ushort[] ConvertRelayHostPorts(int[] ports)
+        {
+            if (ports == null || ports.Length == 0)
+                return Array.Empty<ushort>();
+
+            var result = new System.Collections.Generic.List<ushort>(ports.Length);
+            foreach (int port in ports)
+            {
+                if (port > 0 && port <= ushort.MaxValue)
+                    result.Add((ushort)port);
+            }
+            return result.ToArray();
         }
     }
 }
