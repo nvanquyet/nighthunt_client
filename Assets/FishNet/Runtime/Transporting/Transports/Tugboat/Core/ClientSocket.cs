@@ -135,7 +135,7 @@ namespace FishNet.Transporting.Tugboat.Client
                 return false;
 
             if (info != null)
-                Transport.NetworkManager.Log($"Local client disconnect reason: {info.Value.Reason}.");
+                Transport.NetworkManager.Log($"Local client disconnect reason: {info.Value.Reason}; endpoint={NetManager?.FirstPeer?.ToString() ?? "null"} socket={info.Value.SocketErrorCode}.");
 
             SetConnectionState(LocalConnectionState.Stopping, false);
             StopSocket();

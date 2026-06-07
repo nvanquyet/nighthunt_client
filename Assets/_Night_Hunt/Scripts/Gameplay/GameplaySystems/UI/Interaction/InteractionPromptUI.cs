@@ -112,10 +112,12 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             IInteractable target = context.PromptTarget;
 
             // Clear stale references: underlying Unity Object destroyed (e.g. WorldItem despawned on reconnect)
-            if (_lastTarget is Component lastComp && (Object)lastComp == null)
+            if (IsDestroyedInteractable(_lastTarget))
                 _lastTarget = null;
-            if (_lastBlockedTarget is Component lastBlockedComp && (Object)lastBlockedComp == null)
+            if (IsDestroyedInteractable(_lastBlockedTarget))
                 _lastBlockedTarget = null;
+            if (IsDestroyedInteractable(target))
+                target = null;
 
             if (target == null)
             {
@@ -134,7 +136,7 @@ namespace NightHunt.GameplaySystems.UI.Interaction
                 return;
             }
 
-            if (interactor != null && !target.CanInteract(interactor))
+            if (interactor != null && !CanTargetInteract(target, interactor))
             {
                 if (target != _lastBlockedTarget)
                 {
@@ -220,7 +222,7 @@ namespace NightHunt.GameplaySystems.UI.Interaction
                 {
                     _progressPresenter?.Show(
                         ActionProgressKind.Interaction,
-                        target.InteractLabel ?? "Interact",
+                        SafeInteractLabel(target, "Interact"),
                         false);
                     _presentingHoldProgress = true;
                 }
@@ -313,7 +315,7 @@ namespace NightHunt.GameplaySystems.UI.Interaction
                 _keyText.text = isPickup ? "[F]" : isHold ? "[Hold E]" : "[E]";
 
             if (_actionText != null)
-                _actionText.text = StripLeadingKeyHint(target.InteractLabel ?? (isPickup ? "Pick up" : "Interact"));
+                _actionText.text = StripLeadingKeyHint(SafeInteractLabel(target, isPickup ? "Pick up" : "Interact"));
 
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Interaction,
@@ -396,7 +398,7 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         {
             return target is IPickupable
                 && interactor != null
-                && target.CanInteract(interactor);
+                && CanTargetInteract(target, interactor);
         }
 
         private static bool IsValidNonPickupInteractTarget(IInteractable target, GameObject interactor)
@@ -404,7 +406,7 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             return target != null
                 && target is not IPickupable
                 && interactor != null
-                && target.CanInteract(interactor);
+                && CanTargetInteract(target, interactor);
         }
 
         private void HideDesktopPrompt()
@@ -434,14 +436,67 @@ namespace NightHunt.GameplaySystems.UI.Interaction
 
             // Guard: the underlying Unity Object may have been destroyed (e.g. WorldItem
             // despawned by FishNet during reconnect) while a C# reference still exists.
+            if (IsDestroyedInteractable(target))
+                return $"{target.GetType().Name} [DESTROYED]";
+
             if (target is Component component)
             {
-                if ((Object)component == null)
+                try
+                {
+                    return $"{target.GetType().Name} go={component.name} layer={PhaseTestLog.DescribeLayer(component.gameObject)} label='{SafeInteractLabel(target, "null")}'";
+                }
+                catch (MissingReferenceException)
+                {
                     return $"{target.GetType().Name} [DESTROYED]";
-                return $"{target.GetType().Name} go={component.name} layer={PhaseTestLog.DescribeLayer(component.gameObject)} label='{target.InteractLabel ?? "null"}'";
+                }
             }
 
-            return $"{target.GetType().Name} label='{target.InteractLabel ?? "null"}'";
+            return $"{target.GetType().Name} label='{SafeInteractLabel(target, "null")}'";
+        }
+
+        private static bool CanTargetInteract(IInteractable target, GameObject interactor)
+        {
+            if (target == null || interactor == null || IsDestroyedInteractable(target))
+                return false;
+
+            try
+            {
+                return target.CanInteract(interactor);
+            }
+            catch (MissingReferenceException)
+            {
+                return false;
+            }
+        }
+
+        private static string SafeInteractLabel(IInteractable target, string fallback)
+        {
+            if (target == null || IsDestroyedInteractable(target))
+                return fallback;
+
+            try
+            {
+                return target.InteractLabel ?? fallback;
+            }
+            catch (MissingReferenceException)
+            {
+                return fallback;
+            }
+        }
+
+        private static bool IsDestroyedInteractable(IInteractable target)
+        {
+            if (target == null)
+                return false;
+
+            try
+            {
+                return target is Object unityObject && unityObject == null;
+            }
+            catch (MissingReferenceException)
+            {
+                return true;
+            }
         }
 
         private static string StripLeadingKeyHint(string label)

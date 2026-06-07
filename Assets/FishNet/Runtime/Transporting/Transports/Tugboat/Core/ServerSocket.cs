@@ -325,6 +325,8 @@ namespace FishNet.Transporting.Tugboat.Server
         /// </summary>
         private void Listener_PeerDisconnectedEvent(NetPeer peer, DisconnectInfo disconnectInfo)
         {
+            Transport.NetworkManager?.LogWarning(
+                $"[Tugboat.Server] Peer disconnected id={peer?.Id.ToString() ?? "null"} endpoint={peer?.ToString() ?? "null"} reason={disconnectInfo.Reason} socket={disconnectInfo.SocketErrorCode}");
             _remoteConnectionEvents.Enqueue(new(false, peer.Id));
         }
 

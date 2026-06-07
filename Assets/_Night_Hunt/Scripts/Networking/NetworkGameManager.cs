@@ -48,6 +48,10 @@ namespace NightHunt.Networking
         [Header("Auto-Connect Retry")]
         [Tooltip("Seconds to wait before re-attempting connection on failure.")]
         [SerializeField] private float _retryDelay = 3f;
+        [Tooltip("Minimum retry delay for relay mode. Must be longer than relay upstream cooldown.")]
+        [SerializeField] private float _relayRetryDelay = 7f;
+        [Tooltip("Seconds a connection must stay up before retry counter is reset.")]
+        [SerializeField] private float _stableConnectionSecondsToResetRetries = 15f;
         [SerializeField] private int   _maxRetries = 2;
 
         private int  _retryCount;
@@ -61,6 +65,9 @@ namespace NightHunt.Networking
         private bool _reconnectModalOpen;
         private bool _returningHome;
         private float _connectedSinceRealtime = -1f;
+        private RelayIdentityPacketLayer _activeRelayIdentityLayer;
+        private string _activeRelayIdentitySessionId;
+        private ulong _activeRelayIdentityPeerId;
         private static readonly byte[] RelayHostRegistrationPayload =
             { 78, 72, 95, 82, 69, 76, 65, 89, 95, 72, 79, 83, 84 };
 
@@ -389,6 +396,7 @@ namespace NightHunt.Networking
         {
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
+            CancelInvoke(nameof(MarkConnectionStable));
             MatchLoadingOverlay.ResetReadinessSignal();
             _retryCount = 0;
             _connectionStarted = false;
@@ -459,7 +467,6 @@ namespace NightHunt.Networking
             }
 
             Debug.Log($"[NetworkGameManager] ✅ Both conditions met (_gameSceneLoaded={_gameSceneLoaded}, _dsReady={_dsReady}) — auto-connecting.");
-            _retryCount        = 0;
             _connectionStarted = false;
             _connected         = false;
             Debug.Log($"[NetworkGameManager] Connect gates met: mode={room.CurrentGameMode}, sceneLoaded={_gameSceneLoaded}, dsReady={_dsReady}, relayHostReady={_relayHostReady || room.RelayHostReady}, isHost={room.IsHostPlayer}.");
@@ -475,9 +482,10 @@ namespace NightHunt.Networking
                     _returningHome = false;
                     _connected = true;
                     _connectedSinceRealtime = Time.realtimeSinceStartup;
-                    _retryCount = 0;
                     CancelInvoke(nameof(RetryConnect));
                     CancelInvoke(nameof(LoadHome));
+                    CancelInvoke(nameof(MarkConnectionStable));
+                    Invoke(nameof(MarkConnectionStable), Mathf.Max(1f, _stableConnectionSecondsToResetRetries));
                     Debug.Log("[NetworkGameManager] ✅ Client connected to match server.");
                     MatchLoadingOverlay.Instance?.MarkConnected();
                     HideReconnectModal();
@@ -504,6 +512,7 @@ namespace NightHunt.Networking
                         bool showReconnectUi = wasConnected && connectedFor >= 2f;
                         _connected = false;
                         _connectionStarted = false;
+                        CancelInvoke(nameof(MarkConnectionStable));
                         if (wasConnected)
                         {
                             Debug.LogWarning($"[NetworkGameManager] Match server connection dropped after {connectedFor:F2}s. Attempting reconnect.");
@@ -611,12 +620,36 @@ namespace NightHunt.Networking
                 return;
             }
             _retryCount++;
-            Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
+            float delay = GetRetryDelay();
+            Debug.Log($"[NetworkGameManager] Retrying connection in {delay}s (attempt {_retryCount}/{_maxRetries})…");
             OnRetryAttempt?.Invoke(_retryCount, _maxRetries);
             if (showUi)
                 HandleReconnectUI(_retryCount, _maxRetries);
             CancelInvoke(nameof(RetryConnect));
-            Invoke(nameof(RetryConnect), _retryDelay);
+            Invoke(nameof(RetryConnect), delay);
+        }
+
+        private float GetRetryDelay()
+        {
+            var room = RoomState.Instance;
+            if (room != null && room.CurrentGameMode == GameMode.Custom_Relay)
+                return Mathf.Max(_retryDelay, _relayRetryDelay);
+
+            return _retryDelay;
+        }
+
+        private void MarkConnectionStable()
+        {
+            if (!_connected || _connectedSinceRealtime < 0f)
+                return;
+
+            float connectedFor = Time.realtimeSinceStartup - _connectedSinceRealtime;
+            if (connectedFor + 0.1f < _stableConnectionSecondsToResetRetries)
+                return;
+
+            if (_retryCount != 0)
+                Debug.Log($"[NetworkGameManager] Connection stable for {connectedFor:F1}s; resetting retry counter.");
+            _retryCount = 0;
         }
 
         private void RetryConnect()
@@ -715,6 +748,7 @@ namespace NightHunt.Networking
         {
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
+            CancelInvoke(nameof(MarkConnectionStable));
             MatchLoadingOverlay.Instance?.ForceHide("reset-flags");
             _connectionStarted = false;
             _connected         = false;
@@ -792,6 +826,7 @@ namespace NightHunt.Networking
             _returningHome = true;
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
+            CancelInvoke(nameof(MarkConnectionStable));
             MatchLoadingOverlay.Instance?.ForceHide("return-home");
             _reconnectModalOpen = false;
             ReportOwnMatchPresenceBestEffort("DISCONNECTED", "CLIENT_RETURN_HOME");
@@ -927,15 +962,27 @@ namespace NightHunt.Networking
             }
 
             ulong peerId = ResolveRelayPeerId();
-            var layer = new RelayIdentityPacketLayer(sessionId, peerId);
-            transport.SetPacketLayer(layer);
-            Debug.Log($"[RelayIdentity] Enabled sessionHash={layer.SessionHash:x16} peerId={peerId} nonce={layer.Nonce:x16}");
+            if (_activeRelayIdentityLayer == null
+                || _activeRelayIdentitySessionId != sessionId
+                || _activeRelayIdentityPeerId != peerId)
+            {
+                _activeRelayIdentityLayer = new RelayIdentityPacketLayer(sessionId, peerId);
+                _activeRelayIdentitySessionId = sessionId;
+                _activeRelayIdentityPeerId = peerId;
+            }
+
+            transport.SetPacketLayer(_activeRelayIdentityLayer);
+            Debug.Log($"[RelayIdentity] Enabled sessionHash={_activeRelayIdentityLayer.SessionHash:x16} peerId={peerId} nonce={_activeRelayIdentityLayer.Nonce:x16}");
         }
 
         private void ClearRelayPacketLayer()
         {
             if (networkManager?.TransportManager?.Transport is Tugboat transport)
                 transport.SetPacketLayer(null);
+
+            _activeRelayIdentityLayer = null;
+            _activeRelayIdentitySessionId = null;
+            _activeRelayIdentityPeerId = 0UL;
         }
 
         private static ulong ResolveRelayPeerId()

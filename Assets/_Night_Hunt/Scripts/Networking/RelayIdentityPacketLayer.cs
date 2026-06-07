@@ -23,11 +23,18 @@ namespace NightHunt.Networking.Relay
         public readonly ulong PeerId;
         public readonly ulong Nonce;
 
-        public RelayIdentityPacketLayer(string sessionId, ulong peerId) : base(HeaderSize)
+        public RelayIdentityPacketLayer(string sessionId, ulong peerId) : this(
+            sessionId,
+            peerId,
+            ComputeHash64($"{Guid.NewGuid():N}:{DateTime.UtcNow.Ticks}"))
+        {
+        }
+
+        public RelayIdentityPacketLayer(string sessionId, ulong peerId, ulong nonce) : base(HeaderSize)
         {
             SessionHash = ComputeHash64(sessionId ?? string.Empty);
             PeerId = peerId;
-            Nonce = ComputeHash64($"{Guid.NewGuid():N}:{DateTime.UtcNow.Ticks}");
+            Nonce = nonce == 0UL ? 1UL : nonce;
         }
 
         public override void ProcessInboundPacket(ref IPEndPoint endPoint, ref byte[] data, ref int length)
