@@ -1,9 +1,11 @@
 using FishNet.Managing;
 using FishNet.Managing.Scened;
 using FishNet.Transporting;
+using FishNet.Transporting.Tugboat;
 using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
+using NightHunt.Networking.Relay;
 using NightHunt.State;
 using NightHunt.UI;
 using NightHunt.Services.Game;
@@ -176,6 +178,7 @@ namespace NightHunt.Networking
         public void StartServer()
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
+            ClearRelayPacketLayer();
             Debug.Log($"[NetworkGameManager] Starting Dedicated Server on port {port}...");
             if (!networkManager.ServerManager.StartConnection())
                 Debug.LogError("[NetworkGameManager] Failed to start server!");
@@ -191,6 +194,7 @@ namespace NightHunt.Networking
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
             string ip = string.IsNullOrEmpty(dsIp) ? defaultServerAddress : dsIp;
             ushort p  = dsPort > 0 ? dsPort : port;
+            ClearRelayPacketLayer();
             Debug.Log($"[NetworkGameManager] Connecting to DS {ip}:{p}...");
             SetTransportAddress(ip, p);
             if (!networkManager.ClientManager.StartConnection())
@@ -225,6 +229,7 @@ namespace NightHunt.Networking
             // A loopback-only bind rejects those packets, causing:
             //   • Client packets never reaching the host server → no FishNet server ack
             //   • Host's own client-side prediction never reconciled  → frozen movement
+            ConfigureRelayPacketLayer(sessionId);
             SetTransportServerBindAddress("0.0.0.0");
             // FIX: use relayPort (dynamic, from backend) — NOT the inspector `port` field (hardcoded 7777).
             // The relay server allocates a unique UDP port per session (e.g. 7779).
@@ -330,6 +335,7 @@ namespace NightHunt.Networking
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
             Debug.Log($"[NetworkGameManager] Connecting CLIENT via Relay {relayIp}:{relayPort} session={sessionId}");
+            ConfigureRelayPacketLayer(sessionId);
             SetTransportAddress(relayIp, relayPort);
             if (!networkManager.ClientManager.StartConnection())
                 Debug.LogError("[NetworkGameManager] Failed to start relay client connection!");
@@ -383,6 +389,7 @@ namespace NightHunt.Networking
         {
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
+            MatchLoadingOverlay.ResetReadinessSignal();
             _retryCount = 0;
             _connectionStarted = false;
             _connected = false;
@@ -626,6 +633,7 @@ namespace NightHunt.Networking
             _returningHome = true;
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
+            MatchLoadingOverlay.Instance?.ForceHide("load-home");
             ReportOwnMatchPresenceBestEffort("DISCONNECTED", "CLIENT_CONNECT_FAILED");
             Disconnect();
             _dsReady         = false;
@@ -659,6 +667,7 @@ namespace NightHunt.Networking
                 && roomState.CurrentGameMode == GameMode.Custom_Relay
                 && !string.IsNullOrEmpty(relaySessionId);
 
+            MatchLoadingOverlay.Instance?.ForceHide("disconnect-cleanup");
             Disconnect();
             roomState?.ClearNetworkSession();
 
@@ -690,6 +699,7 @@ namespace NightHunt.Networking
         {
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
+            MatchLoadingOverlay.Instance?.ForceHide("reset-flags");
             _connectionStarted = false;
             _connected         = false;
             _connectedSinceRealtime = -1f;
@@ -716,6 +726,7 @@ namespace NightHunt.Networking
         private void ShowReconnectModal()
         {
             if (_reconnectModalOpen) return;
+            MatchLoadingOverlay.Instance?.ForceHide("reconnect-modal");
             GameModalWindow.Instance?.ShowConfirm(
                 "Connection Lost",
                 "Reconnecting to game server...",
@@ -739,6 +750,7 @@ namespace NightHunt.Networking
         {
             if (current > max)
             {
+                MatchLoadingOverlay.Instance?.ForceHide("reconnect-failed");
                 _reconnectModalOpen = false;
                 GameModalWindow.Instance?.ShowNotice(
                     "Connection Failed",
@@ -764,6 +776,7 @@ namespace NightHunt.Networking
             _returningHome = true;
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
+            MatchLoadingOverlay.Instance?.ForceHide("return-home");
             _reconnectModalOpen = false;
             ReportOwnMatchPresenceBestEffort("DISCONNECTED", "CLIENT_RETURN_HOME");
             Disconnect();
@@ -887,6 +900,39 @@ namespace NightHunt.Networking
 
         public int GetPlayerCount()
             => networkManager?.ServerManager?.Clients?.Count ?? 0;
+
+        private void ConfigureRelayPacketLayer(string sessionId)
+        {
+            var transport = networkManager?.TransportManager?.Transport as Tugboat;
+            if (transport == null)
+            {
+                Debug.LogWarning("[NetworkGameManager] Custom relay identity header requires Tugboat transport.");
+                return;
+            }
+
+            ulong peerId = ResolveRelayPeerId();
+            var layer = new RelayIdentityPacketLayer(sessionId, peerId);
+            transport.SetPacketLayer(layer);
+            Debug.Log($"[RelayIdentity] Enabled sessionHash={layer.SessionHash:x16} peerId={peerId} nonce={layer.Nonce:x16}");
+        }
+
+        private void ClearRelayPacketLayer()
+        {
+            if (networkManager?.TransportManager?.Transport is Tugboat transport)
+                transport.SetPacketLayer(null);
+        }
+
+        private static ulong ResolveRelayPeerId()
+        {
+            long userId = SessionState.Instance?.UserId ?? 0L;
+            if (userId > 0L)
+                return (ulong)userId;
+
+            string fallback = SessionState.Instance?.Username;
+            if (string.IsNullOrEmpty(fallback))
+                fallback = SystemInfo.deviceUniqueIdentifier;
+            return RelayIdentityPacketLayer.ComputeHash64($"guest:{fallback}");
+        }
 
         private void SetTransportAddress(string address, ushort targetPort)
         {
