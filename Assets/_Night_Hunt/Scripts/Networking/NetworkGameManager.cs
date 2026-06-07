@@ -622,6 +622,22 @@ namespace NightHunt.Networking
         private void RetryConnect()
         {
             _connected = false;
+            _connectionStarted = false;
+
+            // Ensure the previous FishNet client is fully stopped before starting a new connection.
+            // If it is still in a Stopping/Started state (e.g. transport queued a deferred stop event),
+            // calling StartConnection again creates a double-connection race that causes an infinite loop:
+            //   old connection fires Stopped → TryRetry → new connection fires Stopped → TryRetry → ...
+            if (networkManager != null && networkManager.IsClientStarted)
+            {
+                Debug.Log("[NetworkGameManager] RetryConnect: previous client still active — stopping before retry.");
+                networkManager.ClientManager.StopConnection();
+                // Wait one frame then retry; the Stopped event will NOT trigger TryRetry again
+                // because _connectionStarted is now false.
+                Invoke(nameof(RetryConnect), 0.25f);
+                return;
+            }
+
             AutoConnectFromRoomState();
         }
 

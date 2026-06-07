@@ -111,6 +111,12 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             TargetContext context = ResolveTargetContext(interactor);
             IInteractable target = context.PromptTarget;
 
+            // Clear stale references: underlying Unity Object destroyed (e.g. WorldItem despawned on reconnect)
+            if (_lastTarget is Component lastComp && (Object)lastComp == null)
+                _lastTarget = null;
+            if (_lastBlockedTarget is Component lastBlockedComp && (Object)lastBlockedComp == null)
+                _lastBlockedTarget = null;
+
             if (target == null)
             {
                 if (_lastTarget != null)
@@ -426,8 +432,14 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             if (target == null)
                 return "null";
 
+            // Guard: the underlying Unity Object may have been destroyed (e.g. WorldItem
+            // despawned by FishNet during reconnect) while a C# reference still exists.
             if (target is Component component)
+            {
+                if ((Object)component == null)
+                    return $"{target.GetType().Name} [DESTROYED]";
                 return $"{target.GetType().Name} go={component.name} layer={PhaseTestLog.DescribeLayer(component.gameObject)} label='{target.InteractLabel ?? "null"}'";
+            }
 
             return $"{target.GetType().Name} label='{target.InteractLabel ?? "null"}'";
         }
