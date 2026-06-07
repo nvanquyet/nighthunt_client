@@ -29,6 +29,7 @@ namespace NightHunt.State
         public string RelaySessionId { get; private set; }
         public string RelayIp { get; private set; }
         public ushort RelayPort { get; private set; }
+        public bool RelayHostReady { get; private set; }
 
         // Dedicated server info (Ranked_DS)
         public string DsIp { get; private set; }
@@ -126,6 +127,11 @@ namespace NightHunt.State
             IsHostPlayer = isHost;
         }
 
+        public void SetRelayHostReady(bool ready)
+        {
+            RelayHostReady = ready;
+        }
+
         /// <summary>
         /// Called on match_ready: stores match/map info but NOT DS ip:port.
         /// For Ranked_DS: client must wait for ds_ready before connecting.
@@ -181,6 +187,7 @@ namespace NightHunt.State
             RelaySessionId = null;
             RelayIp = null;
             RelayPort = 0;
+            RelayHostReady = false;
             DsIp = null;
             DsPort = 0;
             DsMapId = null;

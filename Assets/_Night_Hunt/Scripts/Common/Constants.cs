@@ -32,6 +32,7 @@ namespace NightHunt.Common
         public const string API_ROOMS_KICK            = "/api/rooms/{0}/kick/{1}";
         public const string API_ROOMS_DISBAND         = "/api/rooms/{0}/disband";
         public const string API_ROOMS_START           = "/api/rooms/{0}/start";
+        public const string API_ROOMS_RELAY_HOST_READY = "/api/rooms/{0}/relay-host-ready";
         public const string API_ROOMS_GET             = "/api/rooms/{0}";
         public const string API_ROOMS_SWAP_REQUEST    = "/api/rooms/{0}/swap-request";
         public const string API_ROOMS_SWAP_ACCEPT     = "/api/rooms/{0}/swap-accept/{1}";

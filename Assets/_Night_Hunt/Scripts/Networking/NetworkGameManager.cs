@@ -1,7 +1,9 @@
 using FishNet.Managing;
 using FishNet.Managing.Scened;
 using FishNet.Transporting;
+using NightHunt.Common;
 using NightHunt.Core;
+using NightHunt.Data.DTOs;
 using NightHunt.State;
 using NightHunt.UI;
 using NightHunt.Services.Game;
@@ -51,9 +53,12 @@ namespace NightHunt.Networking
         private bool _connected;
         private bool _intentionalDisconnect;
         private bool _dsReady;          // true after ds_ready WS received
+        private bool _relayHostReady;   // true after relay_host_ready WS received
+        private bool _relayHostReadyReported;
         private bool _gameSceneLoaded;  // true after 02_Map_* scene finishes loading
         private bool _reconnectModalOpen;
         private bool _returningHome;
+        private float _connectedSinceRealtime = -1f;
         private static readonly byte[] RelayHostRegistrationPayload =
             { 78, 72, 95, 82, 69, 76, 65, 89, 95, 72, 79, 83, 84 };
 
@@ -86,7 +91,10 @@ namespace NightHunt.Networking
             networkManager.SceneManager.OnLoadEnd               += OnSceneLoadEnd;
             networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
             if (GameWebSocketService.Instance != null)
+            {
                 GameWebSocketService.Instance.OnDsReady += OnDsReadyReceived;
+                GameWebSocketService.Instance.OnRelayHostReady += OnRelayHostReadyReceived;
+            }
 
             // ── Fix A: scene-scoped singleton starts INSIDE the map scene ────
             // SceneLoader.LoadGame() uses Unity's SceneManager.LoadScene() which does NOT
@@ -134,7 +142,10 @@ namespace NightHunt.Networking
                 networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
             }
             if (GameWebSocketService.Instance != null)
+            {
                 GameWebSocketService.Instance.OnDsReady -= OnDsReadyReceived;
+                GameWebSocketService.Instance.OnRelayHostReady -= OnRelayHostReadyReceived;
+            }
             UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnUnitySceneLoaded;
             base.OnDestroy();
         }
@@ -342,6 +353,31 @@ namespace NightHunt.Networking
 
         private void OnDsReadyReceived(GameWebSocketService.DsReadyEvent _) => NotifyDsReady();
 
+        private void OnRelayHostReadyReceived(GameWebSocketService.RelayHostReadyEvent _)
+        {
+            _relayHostReady = true;
+            RoomState.Instance?.SetRelayHostReady(true);
+            Debug.Log("[NetworkGameManager] Relay host is ready - checking if scene loaded to connect.");
+            MatchLoadingOverlay.Instance?.MarkDsReady();
+            TryConnectIfReady();
+        }
+
+        public void PrepareForMatchLoad()
+        {
+            CancelInvoke(nameof(RetryConnect));
+            CancelInvoke(nameof(LoadHome));
+            _retryCount = 0;
+            _connectionStarted = false;
+            _connected = false;
+            _connectedSinceRealtime = -1f;
+            _gameSceneLoaded = false;
+            _dsReady = false;
+            _relayHostReady = false;
+            _relayHostReadyReported = false;
+            RoomState.Instance?.SetRelayHostReady(false);
+            HideReconnectModal(showToast: false);
+        }
+
         /// <summary>
         /// Initiates connection only when BOTH the game scene is loaded AND the DS signals ready.
         /// Relay games do not need ds_ready (no dedicated server), so they bypass the flag check.
@@ -358,12 +394,20 @@ namespace NightHunt.Networking
                 return;
             }
 
-            // Relay mode: connect as soon as the scene loads (no DS boot wait)
+            // Relay mode: the host starts after the map scene loads; non-host clients
+            // wait for relay_host_ready so they never race ahead of the host server.
             if (room.CurrentGameMode == GameMode.Custom_Relay)
             {
                 if (!_gameSceneLoaded)
                 {
                     Debug.Log("[NetworkGameManager] TryConnectIfReady: waiting for map scene to load (Relay mode).");
+                    return;
+                }
+
+                bool relayHostReady = room.IsHostPlayer || _relayHostReady || room.RelayHostReady;
+                if (!relayHostReady)
+                {
+                    Debug.Log("[NetworkGameManager] TryConnectIfReady: waiting for relay_host_ready before non-host client connects.");
                     return;
                 }
             }
@@ -394,6 +438,7 @@ namespace NightHunt.Networking
             _retryCount        = 0;
             _connectionStarted = false;
             _connected         = false;
+            Debug.Log($"[NetworkGameManager] Connect gates met: mode={room.CurrentGameMode}, sceneLoaded={_gameSceneLoaded}, dsReady={_dsReady}, relayHostReady={_relayHostReady || room.RelayHostReady}, isHost={room.IsHostPlayer}.");
             AutoConnectFromRoomState();
         }
 
@@ -405,12 +450,14 @@ namespace NightHunt.Networking
                     _intentionalDisconnect = false;
                     _returningHome = false;
                     _connected = true;
+                    _connectedSinceRealtime = Time.realtimeSinceStartup;
                     _retryCount = 0;
                     CancelInvoke(nameof(RetryConnect));
                     CancelInvoke(nameof(LoadHome));
                     Debug.Log("[NetworkGameManager] ✅ Client connected to match server.");
                     MatchLoadingOverlay.Instance?.MarkConnected();
                     HideReconnectModal();
+                    TryReportRelayHostReady();
                     break;
 
                 case LocalConnectionState.Stopped:
@@ -418,6 +465,7 @@ namespace NightHunt.Networking
                     {
                         _connectionStarted = false;
                         _connected = false;
+                        _connectedSinceRealtime = -1f;
                         _intentionalDisconnect = false;
                         HideReconnectModal(showToast: false);
                         break;
@@ -426,18 +474,23 @@ namespace NightHunt.Networking
                     if (_connectionStarted)
                     {
                         bool wasConnected = _connected;
+                        float connectedFor = _connectedSinceRealtime >= 0f
+                            ? Time.realtimeSinceStartup - _connectedSinceRealtime
+                            : 0f;
+                        bool showReconnectUi = wasConnected && connectedFor >= 2f;
                         _connected = false;
                         _connectionStarted = false;
                         if (wasConnected)
                         {
-                            Debug.LogWarning("[NetworkGameManager] Match server connection dropped. Attempting reconnect.");
-                            ShowReconnectModal();
+                            Debug.LogWarning($"[NetworkGameManager] Match server connection dropped after {connectedFor:F2}s. Attempting reconnect.");
+                            if (showReconnectUi)
+                                ShowReconnectModal();
                         }
                         else
                         {
                             Debug.LogWarning("[NetworkGameManager] Connection to match server failed.");
                         }
-                        TryRetry();
+                        TryRetry(showReconnectUi);
                     }
                     break;
             }
@@ -480,6 +533,7 @@ namespace NightHunt.Networking
             _returningHome = false;
             _connectionStarted = true;
             _connected         = false;
+            _connectedSinceRealtime = -1f;
 
             if (room.IsHostPlayer)
             {
@@ -515,25 +569,28 @@ namespace NightHunt.Networking
             _returningHome = false;
             _connectionStarted = true;
             _connected         = false;
+            _connectedSinceRealtime = -1f;
 
             Debug.Log($"[NetworkGameManager] Connecting to DS {room.DsIp}:{room.DsPort}");
             StartClientDS(room.DsIp, room.DsPort);
         }
 
-        private void TryRetry()
+        private void TryRetry(bool showUi = true)
         {
             if (_retryCount >= _maxRetries)
             {
                 Debug.LogError("[NetworkGameManager] Max retries reached — returning to home.");
                 OnRetryAttempt?.Invoke(_maxRetries + 1, _maxRetries);
-                HandleReconnectUI(_maxRetries + 1, _maxRetries);
+                if (showUi)
+                    HandleReconnectUI(_maxRetries + 1, _maxRetries);
                 Invoke(nameof(LoadHome), 1.5f);
                 return;
             }
             _retryCount++;
             Debug.Log($"[NetworkGameManager] Retrying connection in {_retryDelay}s (attempt {_retryCount}/{_maxRetries})…");
             OnRetryAttempt?.Invoke(_retryCount, _maxRetries);
-            HandleReconnectUI(_retryCount, _maxRetries);
+            if (showUi)
+                HandleReconnectUI(_retryCount, _maxRetries);
             CancelInvoke(nameof(RetryConnect));
             Invoke(nameof(RetryConnect), _retryDelay);
         }
@@ -552,6 +609,7 @@ namespace NightHunt.Networking
             _returningHome = true;
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
+            ReportOwnMatchPresenceBestEffort("DISCONNECTED", "CLIENT_CONNECT_FAILED");
             Disconnect();
             _dsReady         = false;
             _gameSceneLoaded = false;
@@ -566,6 +624,11 @@ namespace NightHunt.Networking
         }
 
         // ── Disconnect ────────────────────────────────────────────────────────
+
+        public void ReturnHomeAfterConnectionFailure()
+        {
+            ReturnHomeFromReconnect();
+        }
 
         /// <summary>
         /// Disconnect and optionally notify the relay/backend based on game mode.
@@ -612,7 +675,10 @@ namespace NightHunt.Networking
             CancelInvoke(nameof(LoadHome));
             _connectionStarted = false;
             _connected         = false;
+            _connectedSinceRealtime = -1f;
             _dsReady           = false;
+            _relayHostReady    = false;
+            _relayHostReadyReported = false;
             _gameSceneLoaded   = false;
             _retryCount        = 0;
             HideReconnectModal(showToast: false);
@@ -682,6 +748,7 @@ namespace NightHunt.Networking
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
             _reconnectModalOpen = false;
+            ReportOwnMatchPresenceBestEffort("DISCONNECTED", "CLIENT_RETURN_HOME");
             Disconnect();
             RoomState.Instance?.ClearRoom();
             RoomState.Instance?.ClearNetworkSession();
@@ -694,6 +761,112 @@ namespace NightHunt.Networking
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
+
+        private void TryReportRelayHostReady()
+        {
+            var room = RoomState.Instance;
+            if (room == null
+                || room.CurrentGameMode != GameMode.Custom_Relay
+                || !room.IsHostPlayer
+                || _relayHostReadyReported)
+                return;
+
+            if (networkManager == null || !networkManager.IsServerStarted)
+            {
+                Debug.Log("[NetworkGameManager] Relay host local client connected, but server is not started yet; delaying host-ready report.");
+                Invoke(nameof(TryReportRelayHostReady), 0.5f);
+                return;
+            }
+
+            long roomId = room.RoomId;
+            if (roomId <= 0)
+            {
+                Debug.LogWarning("[NetworkGameManager] Cannot report relay_host_ready: RoomState has no roomId.");
+                return;
+            }
+
+            _relayHostReadyReported = true;
+            _relayHostReady = true;
+            room.SetRelayHostReady(true);
+            MatchLoadingOverlay.Instance?.MarkDsReady();
+            _ = ReportRelayHostReadyAsync(roomId);
+        }
+
+        private async Task ReportRelayHostReadyAsync(long roomId)
+        {
+            try
+            {
+                var backend = GameManager.Instance?.BackendClient;
+                if (backend == null)
+                {
+                    Debug.LogWarning("[NetworkGameManager] Cannot report relay_host_ready: BackendClient is missing.");
+                    _relayHostReadyReported = false;
+                    Invoke(nameof(TryReportRelayHostReady), 1f);
+                    return;
+                }
+
+                string endpoint = string.Format(Constants.API_ROOMS_RELAY_HOST_READY, roomId);
+                var result = await backend.PostAsync<RoomResponse>(endpoint);
+                if (result == null || !result.Success)
+                {
+                    Debug.LogWarning($"[NetworkGameManager] relay_host_ready report failed: {result?.Message ?? "no response"}");
+                    _relayHostReadyReported = false;
+                    Invoke(nameof(TryReportRelayHostReady), 1f);
+                    return;
+                }
+
+                Debug.Log($"[NetworkGameManager] relay_host_ready reported to backend for roomId={roomId}.");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[NetworkGameManager] relay_host_ready report failed: {ex.Message}");
+                _relayHostReadyReported = false;
+                Invoke(nameof(TryReportRelayHostReady), 1f);
+            }
+        }
+
+        private void ReportOwnMatchPresenceBestEffort(string state, string reason)
+        {
+            var roomState = RoomState.Instance;
+            string matchId = roomState?.CurrentMatchId;
+            if (string.IsNullOrEmpty(matchId))
+                matchId = roomState?.CurrentRoom?.matchId;
+
+            long userId = SessionState.Instance?.UserId ?? 0L;
+            if (string.IsNullOrEmpty(matchId) || userId <= 0L)
+                return;
+
+            _ = ReportOwnMatchPresenceAsync(matchId, userId, state, reason);
+        }
+
+        private async Task ReportOwnMatchPresenceAsync(string matchId, long userId, string state, string reason)
+        {
+            try
+            {
+                var backend = GameManager.Instance?.BackendClient;
+                if (backend == null)
+                {
+                    Debug.LogWarning($"[NetworkGameManager] Cannot report match presence {state}: BackendClient is missing.");
+                    return;
+                }
+
+                var result = await backend.PostAsync<object>(Constants.API_MATCH_PRESENCE,
+                    new MatchPresenceRequest
+                    {
+                        matchId = matchId,
+                        userId = userId,
+                        state = state,
+                        reason = reason
+                    });
+
+                if (result == null || !result.Success)
+                    Debug.LogWarning($"[NetworkGameManager] Match presence {state}/{reason} failed: {result?.Message ?? "no response"}");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[NetworkGameManager] Match presence {state}/{reason} failed: {ex.Message}");
+            }
+        }
 
         public int GetPlayerCount()
             => networkManager?.ServerManager?.Clients?.Count ?? 0;

@@ -177,6 +177,7 @@ namespace NightHunt.UI
 
             // Update RoomState match info (preserves Custom_Relay mode if already set).
             RoomState.Instance?.SetMatchReady(e.matchId, e.mapId, e.gameMode);
+            NightHunt.Networking.NetworkGameManager.Instance?.PrepareForMatchLoad();
 
             // Phase 3: store players from match_ready so MatchLoadingOverlay can show cards.
             if (e.players != null && e.players.Length > 0)
@@ -205,11 +206,13 @@ namespace NightHunt.UI
 
             if (isRelay)
             {
-                // Relay: no dedicated server, no boot wait.
-                // Advance overlay past DsBooting stage immediately so it shows "Connecting..."
-                Debug.Log("[MFC] match_ready: relay mode — MarkDsReady immediately (no DS boot).");
-                MatchLoadingOverlay.Instance?.MarkDsReady();
-                // Signal NGM: relay is ready to connect as soon as scene loads.
+                // Relay: no DS boot, but non-host clients must wait until the
+                // host reports relay_host_ready after FishNet server startup.
+                Debug.Log("[MFC] match_ready: relay mode - waiting for relay_host_ready.");
+                MatchLoadingOverlay.Instance?.MarkWaitingRelayHost();
+                Debug.Log("[MFC] relay session info received; non-host connection is gated by relay_host_ready.");
+                // Signal NGM that relay session info exists; TryConnectIfReady still
+                // gates non-host clients on relay_host_ready.
                 NightHunt.Networking.NetworkGameManager.Instance?.NotifyRelayReady();
             }
 

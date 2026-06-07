@@ -73,6 +73,7 @@ namespace NightHunt.Services.Game
         public event Action<SwapRequestEvent> OnSwapRequest;
         public event Action<SwapRequestStatusEvent> OnSwapRequestStatus;
         public event Action<GameStartingEvent> OnGameStarting;
+        public event Action<RelayHostReadyEvent> OnRelayHostReady;
         /// <summary>Fired when the room ceases to exist (host disbanded or host disconnected).</summary>
         public event Action<RoomDisbandedEvent> OnRoomDisbanded;
         /// <summary>Fired only to the player who was kicked.</summary>
@@ -82,6 +83,8 @@ namespace NightHunt.Services.Game
         public event Action<ServerTerminatedEvent> OnServerTerminated;
         /// <summary>Fired when backend reports in-match reconnect/disconnect/abandon state.</summary>
         public event Action<MatchPresenceNoticeEvent> OnMatchPresenceNotice;
+        /// <summary>Fired when backend has released a player's in-match slot after an authoritative abandon.</summary>
+        public event Action<PlayerAbandonedEvent> OnPlayerAbandoned;
 
         // Matchmaking Events
         public event Action<MatchFoundEvent>     OnMatchFound;
@@ -688,15 +691,43 @@ namespace NightHunt.Services.Game
                             {
                                 long localUid = NightHunt.State.SessionState.Instance?.UserId ?? 0L;
                                 bool isRelayHost = gameStarting.room?.ownerId == localUid;
-                                string sid = gameStarting.room?.matchId ?? "";
+                                string sid = !string.IsNullOrEmpty(gameStarting.relayToken)
+                                    ? gameStarting.relayToken
+                                    : gameStarting.room?.matchId ?? "";
                                 RoomState.Instance.SetRelaySession(
                                     sid,
                                     gameStarting.relayHost,
                                     (ushort)gameStarting.relayPort,
                                     isRelayHost);
+                                RoomState.Instance.SetRelayHostReady(false);
                                 Debug.Log($"[GameWebSocketService] game_starting: relay={gameStarting.relayHost}:{gameStarting.relayPort} isHost={isRelayHost}");
                             }
                             OnGameStarting?.Invoke(gameStarting);
+                        }
+                        break;
+
+                    case "relay_host_ready":
+                        var relayHostReady = JsonUtility.FromJson<RelayHostReadyEvent>(messageData.data);
+                        if (relayHostReady != null)
+                        {
+                            SetRoomStateIfRelevant(relayHostReady.room, "relay_host_ready");
+                            if (!string.IsNullOrEmpty(relayHostReady.relayHost) && relayHostReady.relayPort > 0
+                                && RoomState.Instance != null)
+                            {
+                                long localUid = NightHunt.State.SessionState.Instance?.UserId ?? 0L;
+                                bool isRelayHost = relayHostReady.room?.ownerId == localUid;
+                                string sid = !string.IsNullOrEmpty(relayHostReady.relayToken)
+                                    ? relayHostReady.relayToken
+                                    : relayHostReady.room?.matchId ?? "";
+                                RoomState.Instance.SetRelaySession(
+                                    sid,
+                                    relayHostReady.relayHost,
+                                    (ushort)relayHostReady.relayPort,
+                                    isRelayHost);
+                                RoomState.Instance.SetRelayHostReady(true);
+                                Debug.Log($"[GameWebSocketService] relay_host_ready: relay={relayHostReady.relayHost}:{relayHostReady.relayPort} isHost={isRelayHost}");
+                            }
+                            OnRelayHostReady?.Invoke(relayHostReady);
                         }
                         break;
 
@@ -988,6 +1019,12 @@ namespace NightHunt.Services.Game
                         }
                         break;
 
+                    case "player_abandoned":
+                        var playerAbandoned = JsonUtility.FromJson<PlayerAbandonedEvent>(messageData.data);
+                        if (playerAbandoned != null)
+                            OnPlayerAbandoned?.Invoke(playerAbandoned);
+                        break;
+
                     case "match_ended":
                         var matchEnded = JsonUtility.FromJson<MatchEndedWsEvent>(messageData.data);
                         if (matchEnded != null)
@@ -1203,6 +1240,15 @@ namespace NightHunt.Services.Game
             public int graceSeconds;
             public string message;
             public RoomResponse room;
+        }
+
+        [Serializable]
+        public class PlayerAbandonedEvent
+        {
+            public string matchId;
+            public long userId;
+            public string displayName;
+            public string reason;
         }
 
         [Serializable]
@@ -1460,6 +1506,15 @@ namespace NightHunt.Services.Game
             public string      relayHost;  // relay server host
             public int         relayPort;  // relay server port (0 if not relay)
             public RoomResponse room;      // updated room state at game start
+        }
+
+        [Serializable]
+        public class RelayHostReadyEvent
+        {
+            public string       relayToken;
+            public string       relayHost;
+            public int          relayPort;
+            public RoomResponse room;
         }
 
         // ── Match End event (server → client after ELO/coin processing) ─────
