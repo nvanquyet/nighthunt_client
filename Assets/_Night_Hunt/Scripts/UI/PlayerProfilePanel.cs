@@ -42,7 +42,6 @@ namespace NightHunt.UI
         private IBackendClient _backendClient;
         private long           _currentUserId;
         private bool           _loading;
-        private const string RuntimeRootName = "Runtime Player Profile Panel";
 
         private void Awake()
         {
@@ -52,13 +51,11 @@ namespace NightHunt.UI
                 return;
             }
             Instance = this;
-            EnsureRuntimeWiring();
             WireButtons();
         }
 
         private void Start()
         {
-            EnsureRuntimeWiring();
             if (_backendClient == null && GameManager.Instance != null)
                 _backendClient = GameManager.Instance.BackendClient;
             SetRootActive(false);
@@ -74,7 +71,6 @@ namespace NightHunt.UI
             EnsureRuntimeWiring();
             _currentUserId = userId;
             SetRootActive(true);
-            ApplyPolishedRuntimeStyle();
             UpdateAccountActionVisibility();
             if (root != null) root.transform.SetAsLastSibling();
             else transform.SetAsLastSibling();
@@ -143,16 +139,7 @@ namespace NightHunt.UI
 
         public void EnsureRuntimeWiring()
         {
-            if (!HasRequiredReferences())
-                BuildRuntimeHierarchy();
-            EnsureAccountActionButton(ResolveContentTransform());
-            ApplyPolishedRuntimeStyle();
             WireButtons();
-        }
-
-        private bool HasRequiredReferences()
-        {
-            return root != null && backdrop != null && txt_Username != null && txt_ELO != null && txt_Tier != null && txt_WinLoss != null && txt_WinRate != null && btn_Close != null && img_Character != null;
         }
 
         private void WireButtons()
@@ -166,106 +153,6 @@ namespace NightHunt.UI
             if (backdrop != null) { backdrop.onClick.RemoveAllListeners(); backdrop.onClick.AddListener(Hide); }
         }
 
-        private void BuildRuntimeHierarchy()
-        {
-            var canvas = GetComponentInParent<Canvas>(true) ?? UnityEngine.Object.FindFirstObjectByType<Canvas>(FindObjectsInactive.Include);
-            Transform parent = canvas != null ? canvas.transform : transform;
-            var existing = parent.Find(RuntimeRootName);
-            GameObject overlay = existing != null ? existing.gameObject : CreateUIObject(RuntimeRootName, parent);
-            overlay.SetActive(false);
-            Stretch(overlay.GetComponent<RectTransform>());
-            root = overlay;
-            var backdropGo = overlay.transform.Find("Backdrop") ?? CreateUIObject("Backdrop", overlay.transform).transform;
-            Stretch(backdropGo.GetComponent<RectTransform>());
-            var backdropImage = backdropGo.GetComponent<Image>() ?? backdropGo.gameObject.AddComponent<Image>();
-            backdropImage.color = new Color(0f, 0f, 0f, 0.7f);
-            backdropImage.raycastTarget = true;
-            backdrop = backdropGo.GetComponent<Button>() ?? backdropGo.gameObject.AddComponent<Button>();
-            backdrop.transition = Selectable.Transition.None;
-            var panelGo = overlay.transform.Find("Panel") ?? CreateUIObject("Panel", overlay.transform).transform;
-            var panelRt = panelGo.GetComponent<RectTransform>();
-            panelRt.anchorMin = panelRt.anchorMax = new Vector2(0.5f, 0.5f);
-            panelRt.sizeDelta = new Vector2(520, 420);
-            panelRt.anchoredPosition = Vector2.zero;
-            var panelImage = panelGo.GetComponent<Image>() ?? panelGo.gameObject.AddComponent<Image>();
-            panelImage.color = new Color(0.1f, 0.12f, 0.15f, 1f);
-            EnsureHeader(panelGo);
-            EnsureContent(panelGo);
-            panelGo.SetAsLastSibling();
-        }
-
-        private void EnsureHeader(Transform panel)
-        {
-            var header = panel.Find("Header") ?? CreateUIObject("Header", panel).transform;
-            var rt = header.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0, 1); rt.anchorMax = Vector2.one; rt.pivot = new Vector2(0, 1); rt.sizeDelta = new Vector2(0, 50); rt.anchoredPosition = Vector2.zero;
-            if (header.GetComponent<Image>() == null) header.gameObject.AddComponent<Image>();
-            var close = header.Find("Close") ?? CreateUIObject("Close", header).transform;
-            var crt = close.GetComponent<RectTransform>();
-            crt.anchorMin = crt.anchorMax = new Vector2(1, 0.5f); crt.sizeDelta = new Vector2(40, 40); crt.anchoredPosition = new Vector2(-10, 0);
-            btn_Close = close.GetComponent<Button>() ?? close.gameObject.AddComponent<Button>();
-        }
-
-        private void EnsureContent(Transform panel)
-        {
-            var content = panel.Find("Content") ?? CreateUIObject("Content", panel).transform;
-            var rt = content.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.offsetMin = new Vector2(20, 20); rt.offsetMax = new Vector2(-20, -60);
-            var layout = content.GetComponent<VerticalLayoutGroup>() ?? content.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.childControlWidth = true; layout.childControlHeight = false; layout.childForceExpandWidth = true; layout.spacing = 10;
-            var charGo = content.Find("Char") ?? CreateUIObject("Char", content).transform;
-            if (charGo.GetComponent<LayoutElement>() == null) charGo.gameObject.AddComponent<LayoutElement>();
-            charGo.GetComponent<LayoutElement>().preferredHeight = 120;
-            img_Character = charGo.GetComponent<Image>() ?? charGo.gameObject.AddComponent<Image>();
-            img_Character.preserveAspect = true;
-            txt_Username = CreateLabel(content, "User", "Player", 24);
-            txt_ELO = CreateLabel(content, "ELO", "ELO: --", 18);
-            txt_Tier = CreateLabel(content, "Tier", "Unranked", 18);
-            txt_WinLoss = CreateLabel(content, "WL", "--W / --L", 18);
-            txt_WinRate = CreateLabel(content, "WR", "--%", 18);
-        }
-
-        private TMP_Text CreateLabel(Transform parent, string name, string text, float size)
-        {
-            var go = parent.Find(name) ?? CreateUIObject(name, parent).transform;
-            var tmp = go.GetComponent<TextMeshProUGUI>() ?? go.gameObject.AddComponent<TextMeshProUGUI>();
-            tmp.text = text; tmp.fontSize = size; tmp.alignment = TextAlignmentOptions.Left;
-            return tmp;
-        }
-
-        private void EnsureAccountActionButton(Transform content)
-        {
-            var actions = content.Find("Actions") ?? CreateUIObject("Actions", content).transform;
-            var actionLayout = actions.GetComponent<LayoutElement>() ?? actions.gameObject.AddComponent<LayoutElement>();
-            actionLayout.preferredHeight = 48f;
-            var actionGroup = actions.GetComponent<VerticalLayoutGroup>() ?? actions.gameObject.AddComponent<VerticalLayoutGroup>();
-            actionGroup.childControlWidth = true;
-            actionGroup.childControlHeight = true;
-            actionGroup.childForceExpandWidth = true;
-            actionGroup.childForceExpandHeight = false;
-            actionGroup.spacing = 0f;
-
-            var buttonGo = actions.Find("ChangePassword") ?? CreateUIObject("ChangePassword", actions).transform;
-            btn_ChangePassword = buttonGo.GetComponent<Button>() ?? buttonGo.gameObject.AddComponent<Button>();
-            var buttonLayout = buttonGo.GetComponent<LayoutElement>() ?? buttonGo.gameObject.AddComponent<LayoutElement>();
-            buttonLayout.preferredHeight = 42f;
-            buttonLayout.minHeight = 42f;
-
-            var buttonImage = buttonGo.GetComponent<Image>() ?? buttonGo.gameObject.AddComponent<Image>();
-            buttonImage.color = new Color(0.14f, 0.26f, 0.34f, 0.95f);
-            btn_ChangePassword.targetGraphic = buttonImage;
-
-            var label = buttonGo.GetComponentInChildren<TMP_Text>(true);
-            if (label == null)
-                label = CreateLabel(buttonGo, "Label", "Change Password", 18f);
-            label.text = "Change Password";
-            label.alignment = TextAlignmentOptions.Center;
-            label.color = Color.white;
-            Stretch(label.GetComponent<RectTransform>());
-
-            UpdateAccountActionVisibility();
-        }
-
         private void UpdateAccountActionVisibility()
         {
             if (btn_ChangePassword == null)
@@ -276,7 +163,7 @@ namespace NightHunt.UI
                 && SessionState.Instance.UserId == _currentUserId;
 
             var actionContainer = btn_ChangePassword.transform.parent;
-            if (actionContainer != null)
+            if (actionContainer != null && actionContainer != transform)
                 actionContainer.gameObject.SetActive(isOwnProfile);
             btn_ChangePassword.gameObject.SetActive(isOwnProfile);
         }
@@ -293,126 +180,16 @@ namespace NightHunt.UI
             }
 
             ChangePasswordPopup.Show(async (oldPassword, newPassword, confirmNewPassword) =>
-                await GameManager.Instance.AuthService.ChangePassword(oldPassword, newPassword, confirmNewPassword));
-        }
-
-        private void ApplyPolishedRuntimeStyle()
-        {
-            var panel = ResolvePanelTransform();
-            if (panel != null)
             {
-                var rt = panel.GetComponent<RectTransform>();
-                if (rt != null)
+                var result = await GameManager.Instance.AuthService.ChangePassword(oldPassword, newPassword, confirmNewPassword);
+                if (result != null && result.Success)
                 {
-                    rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-                    rt.pivot = new Vector2(0.5f, 0.5f);
-                    rt.sizeDelta = new Vector2(520f, 420f);
-                    rt.anchoredPosition = Vector2.zero;
+                    Hide();
                 }
-
-                var image = panel.GetComponent<Image>() ?? panel.gameObject.AddComponent<Image>();
-                image.color = new Color(0.035f, 0.055f, 0.075f, 0.98f);
-            }
-
-            StyleText(txt_Username, 30f, new Color(0.85f, 0.96f, 1f, 1f), FontStyles.Bold);
-            StyleText(txt_ELO, 19f, new Color(0.35f, 0.82f, 1f, 1f), FontStyles.Bold);
-            StyleText(txt_Tier, 18f, Color.white, FontStyles.Normal);
-            StyleText(txt_WinLoss, 18f, Color.white, FontStyles.Normal);
-            StyleText(txt_WinRate, 18f, Color.white, FontStyles.Normal);
-
-            if (img_Character != null)
-            {
-                img_Character.color = new Color(1f, 1f, 1f, img_Character.sprite != null ? 1f : 0.18f);
-                img_Character.preserveAspect = true;
-                var rt = img_Character.GetComponent<RectTransform>();
-                if (rt != null)
-                    rt.sizeDelta = new Vector2(140f, 140f);
-            }
-
-            if (btn_Close != null)
-            {
-                var closeImage = btn_Close.GetComponent<Image>() ?? btn_Close.gameObject.AddComponent<Image>();
-                closeImage.color = new Color(0.42f, 0.1f, 0.13f, 0.95f);
-                var closeText = btn_Close.GetComponentInChildren<TMP_Text>(true);
-                if (closeText == null)
-                    closeText = CreateLabel(btn_Close.transform, "Close Label", "X", 18f);
-                closeText.text = "X";
-                closeText.alignment = TextAlignmentOptions.Center;
-                closeText.color = Color.white;
-                Stretch(closeText.GetComponent<RectTransform>());
-            }
-
-            if (btn_ChangePassword != null)
-            {
-                var actionImage = btn_ChangePassword.GetComponent<Image>() ?? btn_ChangePassword.gameObject.AddComponent<Image>();
-                actionImage.color = new Color(0.14f, 0.26f, 0.34f, 0.95f);
-                var actionText = btn_ChangePassword.GetComponentInChildren<TMP_Text>(true);
-                if (actionText != null)
-                {
-                    actionText.alignment = TextAlignmentOptions.Center;
-                    actionText.color = Color.white;
-                    Stretch(actionText.GetComponent<RectTransform>());
-                }
-            }
+                return result;
+            });
         }
 
-        private Transform ResolvePanelTransform()
-        {
-            if (root != null)
-            {
-                var named = root.transform.Find("Panel");
-                if (named != null)
-                    return named;
-            }
-
-            Transform current = txt_Username != null ? txt_Username.transform : transform;
-            while (current != null)
-            {
-                if (current.GetComponent<Image>() != null)
-                    return current;
-                if (root != null && current == root.transform)
-                    break;
-                current = current.parent;
-            }
-
-            return root != null ? root.transform : transform;
-        }
-
-        private Transform ResolveContentTransform()
-        {
-            if (txt_Username != null && txt_Username.transform.parent != null)
-                return txt_Username.transform.parent;
-
-            if (root != null)
-            {
-                var panel = root.transform.Find("Panel");
-                if (panel != null)
-                {
-                    var content = panel.Find("Content");
-                    if (content != null)
-                        return content;
-                }
-
-                var directContent = root.transform.Find("Content");
-                if (directContent != null)
-                    return directContent;
-            }
-
-            return transform;
-        }
-
-        private static void StyleText(TMP_Text text, float size, Color color, FontStyles style)
-        {
-            if (text == null) return;
-            text.fontSize = size;
-            text.color = color;
-            text.fontStyle = style;
-            text.alignment = TextAlignmentOptions.Left;
-            text.textWrappingMode = TextWrappingModes.Normal;
-        }
-
-        private GameObject CreateUIObject(string name, Transform parent) { var go = new GameObject(name, typeof(RectTransform)); go.layer = 5; go.transform.SetParent(parent, false); return go; }
-        private void Stretch(RectTransform rect) { rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero; }
         private void SetLoading(bool on) { if (loadingIndicator != null) loadingIndicator.SetActive(on); }
     }
 }

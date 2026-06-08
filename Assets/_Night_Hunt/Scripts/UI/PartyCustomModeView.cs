@@ -116,6 +116,8 @@ namespace NightHunt.UI
         // ── Settings (left side — visible to all, editable by host only) ─────
         [Header("Settings Panel")]
         [SerializeField] private TextMeshProUGUI roomCodeText;
+
+
         [SerializeField] private Button btnCopyCode;
         [SerializeField] private CustomDropdown modeDropdown;
         [SerializeField] private CustomDropdown mapDropdown;
@@ -124,6 +126,7 @@ namespace NightHunt.UI
         [SerializeField] private TMP_InputField passwordInput;
 
         [SerializeField] private Button btnSave;
+        [SerializeField] private GameObject detailButtonRoot;
 
         // ── Team Slots (right side) ───────────────────────────────────────────
         [Header("Team Slots")]
@@ -413,6 +416,30 @@ namespace NightHunt.UI
             return;
         }
 
+        public void OnHide() => _ = OnHideAsync(new NavigationContext(PanelType.PartyCustomMode, PanelType.None, false));
+
+        public Task OnHideAsync(NavigationContext context)
+        {
+            GameModeConfig.OnConfigLoaded -= HandleConfigLoaded;
+            MapConfig.OnConfigLoaded -= HandleConfigLoaded;
+            HideSlotContextMenu();
+            UnsubscribeEvents();
+            // Safety net: fire-and-forget leave/disband when navigation bypasses CanLeave()
+            // (e.g. GoForce, force-logout, bypassCanLeave=true without prior leave).
+            // The normal confirm path (CanLeave → PromptLeaveBeforeNavigation) sets
+            // _hasAutoLeft=true before navigating, so AutoLeaveOrDisband returns early there.
+            // Settings is excluded — navigating to Settings preserves the room intentionally.
+            if (context.To != PanelType.Settings)
+                AutoLeaveOrDisband();
+            return Task.CompletedTask;
+        }
+
+        private void OnDestroy()
+        {
+            UIContextMenuRegistry.Unregister(this);
+            UnsubscribeEvents();
+        }
+
         private async Task RefreshRoomDataAndDisplayAsync()
         {
             if (_roomService == null || _roomState == null || !_roomState.IsInRoom) return;
@@ -517,45 +544,11 @@ namespace NightHunt.UI
                 _pendingMapId = payload.MapId;
         }
 
-        public void OnHide() => _ = OnHideAsync(new NavigationContext(PanelType.PartyCustomMode, PanelType.None, false));
-
-        public Task OnHideAsync(NavigationContext context)
-        {
-            GameModeConfig.OnConfigLoaded -= HandleConfigLoaded;
-            MapConfig.OnConfigLoaded -= HandleConfigLoaded;
-            HideSlotContextMenu();
-            UnsubscribeEvents();
-            // Safety net: fire-and-forget leave/disband when navigation bypasses CanLeave()
-            // (e.g. GoForce, force-logout, bypassCanLeave=true without prior leave).
-            // The normal confirm path (CanLeave → PromptLeaveBeforeNavigation) sets
-            // _hasAutoLeft=true before navigating, so AutoLeaveOrDisband returns early there.
-            // Settings is excluded — navigating to Settings preserves the room intentionally.
-            if (context.To != PanelType.Settings)
-                AutoLeaveOrDisband();
-            return Task.CompletedTask;
-        }
-
-        private void OnDestroy()
-        {
-            UIContextMenuRegistry.Unregister(this);
-            UnsubscribeEvents();
-        }
-
-        // ══════════════════════════════════════════════════════════════════════
-        // PANEL STATE
-        // ══════════════════════════════════════════════════════════════════════
-
         private enum UIState { JoinCreate, InRoom }
 
         private void ShowState(UIState state)
         {
             NLog($"ShowState({state})");
-            // NOTE: Do NOT call joinCreatePanel.SetActive() here.
-            // joinCreatePanel IS the UINavigator route rootObject for PartyCustomMode.
-            // UINavigator owns its active state (ApplyRouteRootState / ApplyActiveRouteVisualState).
-            // Calling SetActive(false) on it resets the Animator (m_KeepAnimatorStateOnDisable=0),
-            // causing a 1-frame invisible flash when UINavigator re-enables it after OnShowAsync.
-            // Instead, control only the child sub-panels and individual buttons below.
             inRoomPanel?.SetActive(state == UIState.InRoom);
 
             if (state == UIState.JoinCreate)
@@ -577,10 +570,17 @@ namespace NightHunt.UI
                 // Must be done BEFORE ClearRoomUI() repopulates them so Populate sees a live control.
                 if (modeDropdown != null) modeDropdown.Interactable(true);
                 if (mapDropdown != null) mapDropdown.Interactable(true);
-                ResetCodeInput();
+                 ResetCodeInput();
                 SetJoinCreateInteractable(!_joinCreateRequestInFlight);
                 SyncPrivacyControls(_roomState?.CurrentRoom);
                 SetStatus("");
+
+                var buttonRoot = detailButtonRoot != null 
+                    ? detailButtonRoot 
+                    : (btnSave != null && btnSave.transform.parent != null && btnSave.transform.parent != transform 
+                        ? btnSave.transform.parent.gameObject 
+                        : null);
+                if (buttonRoot != null) buttonRoot.SetActive(false);
             }
             else // InRoom
             {
@@ -602,6 +602,13 @@ namespace NightHunt.UI
                 if (mapDropdown != null) mapDropdown.Interactable(false);
                 if (btnSave != null) btnSave.interactable = false;
                 SyncPrivacyControls(_roomState?.CurrentRoom);
+
+                var buttonRoot = detailButtonRoot != null 
+                    ? detailButtonRoot 
+                    : (btnSave != null && btnSave.transform.parent != null && btnSave.transform.parent != transform 
+                        ? btnSave.transform.parent.gameObject 
+                        : null);
+                if (buttonRoot != null) buttonRoot.SetActive(false);
             }
         }
 
@@ -774,9 +781,14 @@ namespace NightHunt.UI
                     if (result.Data.rooms != null)
                         _publicLobbyItems.AddRange(result.Data.rooms);
                     RenderPublicLobbyList();
-                    SetLobbyListStatus(_publicLobbyItems.Count == 0
-                        ? "No public custom lobbies found."
-                        : $"{_publicLobbyItems.Count} public lobbies found.");
+                    if (_publicLobbyItems.Count == 0)
+                    {
+                        SetLobbyListStatus("No public custom lobbies found.");
+                    }
+                    else
+                    {
+                        SetLobbyListStatus("");
+                    }
                 }
                 else
                 {
@@ -1953,6 +1965,16 @@ namespace NightHunt.UI
             }
             SyncPrivacyControls(room);
 
+            var buttonRoot = detailButtonRoot != null 
+                ? detailButtonRoot 
+                : (btnSave != null && btnSave.transform.parent != null && btnSave.transform.parent != transform 
+                    ? btnSave.transform.parent.gameObject 
+                    : null);
+            if (buttonRoot != null)
+            {
+                buttonRoot.SetActive(isHost && waiting && activeModeVisible);
+            }
+
             if (btnSave != null) btnSave.interactable = isHost && waiting && _settingsDirty && activeModeVisible;
 
             _maxSlotsPerTeam = GetSlotsForMode(activeMode);
@@ -2502,7 +2524,11 @@ namespace NightHunt.UI
         private void SetLobbyListStatus(string msg)
         {
             ResolveReferences(createFallback: true);
-            if (lobbyListStatusText != null) lobbyListStatusText.text = msg ?? string.Empty;
+            if (lobbyListStatusText != null)
+            {
+                lobbyListStatusText.text = msg ?? string.Empty;
+                lobbyListStatusText.gameObject.SetActive(!string.IsNullOrEmpty(msg));
+            }
         }
 
         private static void SetButtonLabel(Button button, string text)
