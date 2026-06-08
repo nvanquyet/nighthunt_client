@@ -962,6 +962,22 @@ namespace NightHunt.GameplaySystems.ItemUse
             Debug.Log($"[NH_FLOW][44][Target.EndItemUseVisual] prevItem={prevItem?.InstanceID ?? "null"}");
         }
 
+        [TargetRpc]
+        private void TargetShowSelectedItemVisual(NetworkConnection conn, string definitionId)
+        {
+            var def = ItemDatabase.GetDefinition(definitionId);
+            if (def == null)
+            {
+                Debug.LogWarning($"[ItemUseSystem] TargetShowSelectedItemVisual failed: def={definitionId}");
+                return;
+            }
+
+            _isUsingItem = false;
+            _currentItem = null;
+            SpawnItemInHandGeneric(def);
+            Debug.Log($"[NH_FLOW][44][Target.ShowSelectedItemVisual] def={def.ItemID}");
+        }
+
         /// <summary>
         /// Instantiate the item's <see cref="PhysicalItemDefinition.VisualPrefab"/> on the
         /// right-hand bone (WeaponR) so the player visually holds the item while in
@@ -1153,20 +1169,35 @@ namespace NightHunt.GameplaySystems.ItemUse
 
         private void CompleteUse(ItemInstance item)
         {
+            bool keepSelectedItemVisual = HasRemainingInventoryQuantity(item);
+            string keptDefinitionId = keepSelectedItemVisual ? item?.DefinitionID : null;
+            WeaponSlotType? previousSlot = _previousWeaponSlot;
+
             _isUsingItem = false;
             _currentItem = null;
             _useCoroutine = null;
 
             OnItemUseCompleted?.Invoke(item);
             TargetEndItemUseVisual(Owner);
+            if (keepSelectedItemVisual && !string.IsNullOrEmpty(keptDefinitionId))
+                TargetShowSelectedItemVisual(Owner, keptDefinitionId);
             DestroyItemInHand();
-            RestoreWeapon();
-            Debug.Log($"[NH_FLOW][44][ItemUse.CompleteUse] item={item?.InstanceID ?? "null"} def={item?.DefinitionID ?? "null"} restoreSlot={_previousWeaponSlot?.ToString() ?? "none"}");
+            _previousWeaponSlot = null;
+            Debug.Log($"[NH_FLOW][44][ItemUse.CompleteUse] item={item?.InstanceID ?? "null"} def={item?.DefinitionID ?? "null"} previousSlot={previousSlot?.ToString() ?? "none"} keptItemVisual={keepSelectedItemVisual}");
             PhaseTestLog.Log(
                 PhaseTestLogCategory.ItemUse,
                 "CompleteUse",
-                $"item={item?.InstanceID ?? "null"} def={item?.DefinitionID ?? "null"} restoreSlot={_previousWeaponSlot?.ToString() ?? "none"}",
+                $"item={item?.InstanceID ?? "null"} def={item?.DefinitionID ?? "null"} previousSlot={previousSlot?.ToString() ?? "none"} keptItemVisual={keepSelectedItemVisual}",
                 this);
+        }
+
+        private bool HasRemainingInventoryQuantity(ItemInstance item)
+        {
+            if (item == null || _inventorySystem == null)
+                return false;
+
+            var updated = _inventorySystem.GetItemByInstanceID(item.InstanceID);
+            return updated != null && updated.Quantity > 0;
         }
 
         private static string BuildPath(Transform target)

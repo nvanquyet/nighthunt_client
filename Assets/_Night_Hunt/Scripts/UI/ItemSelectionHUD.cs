@@ -245,6 +245,31 @@ namespace NightHunt.UI
                     .Resolve()
                 : null;
 
+            if (aimSystem == null)
+            {
+#if UNITY_2023_1_OR_NEWER
+                var sceneAimSystem = FindFirstObjectByType<NightHunt.GameplaySystems.Aim.AimSystem>(FindObjectsInactive.Include);
+#else
+                var sceneAimSystem = FindObjectOfType<NightHunt.GameplaySystems.Aim.AimSystem>(true);
+#endif
+                if (sceneAimSystem != null)
+                {
+                    if (!sceneAimSystem.gameObject.activeSelf)
+                    {
+                        sceneAimSystem.gameObject.SetActive(true);
+                        Debug.LogWarning("[DEPLOY_FLOW] Scene AimSystem was inactive while binding item selection HUD; activating it.", sceneAimSystem);
+                    }
+
+                    if (!sceneAimSystem.enabled)
+                    {
+                        sceneAimSystem.enabled = true;
+                        Debug.LogWarning("[DEPLOY_FLOW] Scene AimSystem component was disabled while binding item selection HUD; enabling it.", sceneAimSystem);
+                    }
+
+                    aimSystem = sceneAimSystem;
+                }
+            }
+
             _aimController.Initialize(context?.Bridge?.Stat, selectionSys, playerTransform, aimSystem, itemUseSys, combatHandler, inventorySys);
             Debug.Log($"[DEPLOY_FLOW] ItemSelectionHUD bound ThrowableAimController='{_aimController.name}' player='{context?.Player?.name ?? "null"}' inventory={(inventorySys != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")}");
             Debug.Log($"[NH_FLOW][01][ItemSelectionHUD.BindAimController] aimController={_aimController.name} player={context?.Player?.name ?? "null"} aimSystem={(aimSystem != null ? "ok" : "null")} itemUse={(itemUseSys != null ? "ok" : "null")} combat={(combatHandler != null ? "ok" : "null")}");

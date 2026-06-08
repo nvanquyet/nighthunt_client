@@ -7,6 +7,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.GameplaySystems.World;
+using NightHunt.Networking;
 using NightHunt.Utilities;
 
 namespace NightHunt.GameplaySystems.Loot
@@ -70,6 +71,7 @@ namespace NightHunt.GameplaySystems.Loot
         private readonly List<WorldItemSpawnPoint> _spawnPoints = new();
         // Oldest-first queue of active WorldItems for limit enforcement.
         private readonly Queue<WorldItem> _activeWorldItems = new();
+        private bool _spawnLoopsStarted;
 
         // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -88,11 +90,52 @@ namespace NightHunt.GameplaySystems.Loot
         {
             base.OnStartServer();
 
+            var serverGameManager = ServerGameManager.Instance;
+            if (serverGameManager == null)
+            {
+                StartSpawnLoops("no ServerGameManager");
+                return;
+            }
+
+            serverGameManager.OnAllPlayersReady += HandleAllPlayersReady;
+            if (serverGameManager.IsMatchStarted)
+            {
+                StartSpawnLoops("match already started");
+                return;
+            }
+
+            Debug.Log("[WorldSpawnManager] Waiting for ServerGameManager.OnAllPlayersReady before spawning world loot.");
+        }
+
+        public override void OnStopServer()
+        {
+            base.OnStopServer();
+
+            if (ServerGameManager.Instance != null)
+                ServerGameManager.Instance.OnAllPlayersReady -= HandleAllPlayersReady;
+
+            StopAllCoroutines();
+            _spawnLoopsStarted = false;
+            _spawnPoints.Clear();
+            _activeWorldItems.Clear();
+        }
+
+        private void HandleAllPlayersReady()
+        {
+            StartSpawnLoops("all players ready");
+        }
+
+        private void StartSpawnLoops(string reason)
+        {
+            if (_spawnLoopsStarted)
+                return;
+
+            _spawnLoopsStarted = true;
             _spawnPoints.Clear();
             _spawnPoints.AddRange(FindObjectsByType<WorldItemSpawnPoint>(FindObjectsSortMode.None));
 
             Debug.Log(
-                $"[WorldSpawnManager] OnStartServer: found {_spawnPoints.Count} WorldItemSpawnPoint(s). Starting spawn loops.");
+                $"[WorldSpawnManager] Starting spawn loops ({reason}): found {_spawnPoints.Count} WorldItemSpawnPoint(s).");
 
             foreach (var point in _spawnPoints)
             {

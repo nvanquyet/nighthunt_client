@@ -1089,7 +1089,7 @@ MonoBehaviour:
   _networkObjectCache: {fileID: 2932638389700231956}
   _statConfig: {fileID: 11400000, guid: e362e068a90ca7745936d961e2c722cd, type: 2}
   _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
-  _showDebugUI: 1
+  _showDebugUI: 0
 --- !u!114 &2698279300146127577
 MonoBehaviour:
   m_ObjectHideFlags: 0

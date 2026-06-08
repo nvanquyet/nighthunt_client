@@ -83,8 +83,7 @@ namespace NightHunt.Gameplay.FogOfWar
             var svc = ServerFogVisibilityService.Instance;
             if (svc == null)
             {
-                notProcessed = true;
-                return currentlyAdded;
+                return true;
             }
 
             // 3. Locate the observer's NetworkPlayer object.
@@ -99,11 +98,10 @@ namespace NightHunt.Gameplay.FogOfWar
                 }
             }
 
-            // 4. No player object found (still connecting, spectator without body, etc.) → keep current.
+            // 4. No player object found yet (still connecting / spectator without body): fail open.
             if (observerNetObjId < 0 || NetworkObject == null)
             {
-                notProcessed = true;
-                return currentlyAdded;
+                return true;
             }
 
             // 5. Delegate to the server visibility map.

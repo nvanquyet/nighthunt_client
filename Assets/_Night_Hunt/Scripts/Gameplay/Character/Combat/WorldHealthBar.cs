@@ -52,6 +52,10 @@ namespace NightHunt.Gameplay.Character.Combat
         [Tooltip("Fallback for quick setup. Production prefabs should normally assign references explicitly.")]
         [SerializeField] private bool _buildViewIfMissing = true;
 
+        [Header("Debug")]
+        [Tooltip("Log healthbar source binding, health events, visibility policy, and show/hide state.")]
+        [SerializeField] private bool _logVisibilityDiagnostics = true;
+
         private IHealthSource _healthSource;
         private Transform _sourceTransform;
         private NetworkPlayer _networkPlayer;
@@ -112,16 +116,18 @@ namespace NightHunt.Gameplay.Character.Combat
             SetInitialValues();
             SetVisible(false);
             _mainCamera = UnityEngine.Camera.main;
+            LogHealthBar("AwakeReady");
         }
 
         private void OnEnable()
         {
             Subscribe();
-            Debug.Log($"[DAMAGE][HEALTHBAR] '{name}' subscribed to IHealthSource: {(_healthSource as Component)?.name ?? (_healthSource?.GetType().Name ?? "NULL")}");
+            LogHealthBar($"OnEnable subscribed={_subscribed}");
         }
 
         private void OnDisable()
         {
+            LogHealthBar("OnDisable");
             Unsubscribe();
             StopHideTimer();
         }
@@ -151,7 +157,12 @@ namespace NightHunt.Gameplay.Character.Combat
         {
             SetHealth(evt.CurrentHealth, evt.MaxHealth);
 
-            if (evt.IsDamage && ShouldShow(evt))
+            bool shouldShow = evt.IsDamage && ShouldShow(evt);
+            LogHealthBar(
+                $"HealthChanged current={evt.CurrentHealth:F1}/{evt.MaxHealth:F1} damage={evt.IsDamage} " +
+                $"force={evt.ForceReveal} instigator={evt.InstigatorNetworkObjectId} shouldShow={shouldShow}");
+
+            if (shouldShow)
                 ShowBar();
         }
 
@@ -176,39 +187,64 @@ namespace NightHunt.Gameplay.Character.Combat
         private bool ShouldShowForPlayer(int shooterNetObjId)
         {
             if (_networkPlayer != null && _networkPlayer.IsOwner)
+            {
+                LogHealthBar("ShouldShowForPlayer=false reason=owner-self");
                 return false;
+            }
 
             var spectate = SpectateManager.Instance;
             var localPlayer = ResolveLocalPlayer();
             if (localPlayer == null)
+            {
+                LogHealthBar("ShouldShowForPlayer=false reason=no-local-player");
                 return false;
+            }
 
             var currentObserved = spectate != null ? spectate.GetCurrentPlayer() : null;
             if (currentObserved != null && _networkPlayer == currentObserved)
+            {
+                LogHealthBar("ShouldShowForPlayer=true reason=spectated");
                 return true;
+            }
 
             if (shooterNetObjId <= 0)
-                return _networkPlayer != null && _networkPlayer.TeamId == localPlayer.TeamId;
+            {
+                bool sameTeamNoShooter = _networkPlayer != null && _networkPlayer.TeamId == localPlayer.TeamId;
+                LogHealthBar($"ShouldShowForPlayer={sameTeamNoShooter} reason=no-shooter-id localTeam={localPlayer.TeamId}");
+                return sameTeamNoShooter;
+            }
 
             if ((int)localPlayer.ObjectId == shooterNetObjId)
+            {
+                LogHealthBar("ShouldShowForPlayer=true reason=local-shooter");
                 return true;
+            }
 
             var registry = PlayerPublicRegistry.Instance;
             if (registry == null)
+            {
+                LogHealthBar("ShouldShowForPlayer=false reason=no-registry");
                 return false;
+            }
 
             var allPlayers = registry.GetAllPlayers();
             if (allPlayers == null)
+            {
+                LogHealthBar("ShouldShowForPlayer=false reason=no-registry-list");
                 return false;
+            }
 
             foreach (var player in allPlayers)
             {
                 if (player == null || (int)player.ObjectId != shooterNetObjId)
                     continue;
 
-                return player.TeamId == localPlayer.TeamId;
+                bool sameTeam = player.TeamId == localPlayer.TeamId;
+                LogHealthBar($"ShouldShowForPlayer={sameTeam} reason=registry-shooter shooterTeam={player.TeamId} localTeam={localPlayer.TeamId}");
+                return sameTeam;
             }
 
+            LogHealthBar($"ShouldShowForPlayer=false reason=shooter-not-found shooter={shooterNetObjId}");
             return false;
         }
 
@@ -399,6 +435,7 @@ namespace NightHunt.Gameplay.Character.Combat
 
         private void ShowBar()
         {
+            LogHealthBar("ShowBar");
             SetVisible(true);
 
             if (_hideCoroutine != null)
@@ -410,6 +447,7 @@ namespace NightHunt.Gameplay.Character.Combat
         private IEnumerator HideAfterDelay()
         {
             yield return new WaitForSeconds(_hideDelay);
+            LogHealthBar("HideAfterDelay");
             SetVisible(false);
             _hideCoroutine = null;
         }
@@ -426,7 +464,10 @@ namespace NightHunt.Gameplay.Character.Combat
         private void SetVisible(bool visible)
         {
             if (_barRoot != null && _barRoot.activeSelf != visible)
+            {
                 _barRoot.SetActive(visible);
+                LogHealthBar($"SetVisible({visible})");
+            }
         }
 
         private void SetHealth(float current, float max)
@@ -443,6 +484,35 @@ namespace NightHunt.Gameplay.Character.Combat
 
             if (_healthText != null)
                 _healthText.text = $"{Mathf.CeilToInt(_currentHealth)} / {Mathf.CeilToInt(_maxHealth)}";
+        }
+
+        private void LogHealthBar(string message)
+        {
+            if (!_logVisibilityDiagnostics)
+                return;
+
+            string sourceName = (_healthSource as Component)?.name ?? (_healthSource?.GetType().Name ?? "NULL");
+            string playerName = _networkPlayer != null ? $"{_networkPlayer.DisplayName}/team={_networkPlayer.TeamId}/owner={_networkPlayer.IsOwner}" : "none";
+            string rootState = _barRoot != null
+                ? $"{_barRoot.name} activeSelf={_barRoot.activeSelf} activeInHierarchy={_barRoot.activeInHierarchy}"
+                : "null";
+            string sliderState = _healthSlider != null
+                ? $"value={_healthSlider.value:F2}"
+                : "null";
+            string followState = GetFollowTransform() != null
+                ? $"{GetFollowTransform().name} pos={FormatVector(GetFollowTransform().position)}"
+                : "null";
+
+            Debug.Log(
+                $"[DAMAGE][HEALTHBAR] '{name}' {message} source={sourceName} player={playerName} " +
+                $"policy={_visibilityPolicy} health={_currentHealth:F1}/{_maxHealth:F1} root={rootState} " +
+                $"slider={sliderState} follow={followState}",
+                this);
+        }
+
+        private static string FormatVector(Vector3 value)
+        {
+            return $"({value.x:F2},{value.y:F2},{value.z:F2})";
         }
 
         private static void Stretch(RectTransform rect)

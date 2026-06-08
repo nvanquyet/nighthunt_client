@@ -52,6 +52,16 @@ namespace NightHunt.GameplaySystems.UI.Combat
         [Tooltip("Minimum joystick magnitude [0–1] for a drag-release to be treated as a confirm throw.")]
         [SerializeField] private float _dragThreshold = 0.25f;
 
+        [Header("Aim Rotation")]
+        [Tooltip("Maximum yaw rotation speed while aiming throwables/deployables.")]
+        [SerializeField] private float _aimRotationDegreesPerSecond = 540f;
+
+        [Tooltip("Ignore tiny aim vectors near the player to avoid rotation jitter around the cursor pivot.")]
+        [SerializeField] private float _aimRotationDeadZone = 0.15f;
+
+        [Tooltip("Do not apply sub-degree yaw changes every frame.")]
+        [SerializeField] private float _aimRotationMinDeltaDegrees = 1.5f;
+
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime refs
         // ─────────────────────────────────────────────────────────────────────
@@ -77,6 +87,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private bool   _deployPointerWasHeld;
         private bool   _suppressNextDeployRelease;
         private bool   _deployConfirmInProgress;
+        private Vector3 _lastStableAimDirection = Vector3.forward;
 
         // ─────────────────────────────────────────────────────────────────────
         //  Static output (read by ThrowableHandler)
@@ -589,10 +600,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 ? aimOffset.normalized
                 : Vector3.forward;
             MoveCursor(hit);
-
-            Vector3 flatDir = new Vector3(AimDirection.x, 0f, AimDirection.z);
-            if (flatDir.sqrMagnitude > 0.001f)
-                _playerTransform.rotation = Quaternion.LookRotation(flatDir.normalized, Vector3.up);
+            RotatePlayerTowards(AimDirection);
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -824,10 +832,29 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 return;
 
             Vector3 flatDir = new Vector3(worldDirection.x, 0f, worldDirection.z);
+            float deadZone = Mathf.Max(0.001f, _aimRotationDeadZone);
+            if (flatDir.sqrMagnitude <= deadZone * deadZone)
+            {
+                flatDir = _lastStableAimDirection;
+            }
+            else
+            {
+                flatDir.Normalize();
+                _lastStableAimDirection = flatDir;
+            }
+
             if (flatDir.sqrMagnitude <= 0.001f)
                 return;
 
-            _playerTransform.rotation = Quaternion.LookRotation(flatDir.normalized, Vector3.up);
+            Quaternion targetRotation = Quaternion.LookRotation(flatDir.normalized, Vector3.up);
+            float angle = Quaternion.Angle(_playerTransform.rotation, targetRotation);
+            if (angle <= Mathf.Max(0f, _aimRotationMinDeltaDegrees))
+                return;
+
+            float maxStep = _aimRotationDegreesPerSecond > 0f
+                ? _aimRotationDegreesPerSecond * Time.deltaTime
+                : angle;
+            _playerTransform.rotation = Quaternion.RotateTowards(_playerTransform.rotation, targetRotation, maxStep);
         }
 
         private void HideCursor()

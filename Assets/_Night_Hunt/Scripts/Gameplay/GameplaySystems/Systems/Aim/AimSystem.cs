@@ -73,6 +73,13 @@ namespace NightHunt.GameplaySystems.Aim
                  "Z  → mesh lying flat with Z pointing toward player")]
         [SerializeField] private CursorFacingAxis _cursorFacingAxis = CursorFacingAxis.Y;
 
+        [Header("Debug")]
+        [Tooltip("Log cursor binding, visibility, active hierarchy, renderer, and position diagnostics.")]
+        [SerializeField] private bool _logCursorDiagnostics = true;
+
+        [Tooltip("Minimum seconds between repeated cursor problem logs.")]
+        [SerializeField] private float _cursorDiagnosticsInterval = 1f;
+
         // ─────────────────────────────────────────────────────────────────────
         //  Runtime State
         // ─────────────────────────────────────────────────────────────────────
@@ -86,6 +93,7 @@ namespace NightHunt.GameplaySystems.Aim
         private bool    _isThrowableMode;
         private Vector2 _throwableJoystick;
         private bool    _cursorVisible;
+        private float   _nextCursorDiagnosticTime;
 
         // ─────────────────────────────────────────────────────────────────────
         //  IAimSystem Implementation
@@ -131,6 +139,8 @@ namespace NightHunt.GameplaySystems.Aim
                 _worldAimCursor.gameObject.SetActive(false);
                 _cursorVisible = false;
             }
+
+            LogCursorState("Awake");
         }
 
         /// <inheritdoc/>
@@ -155,6 +165,7 @@ namespace NightHunt.GameplaySystems.Aim
 
             ResolveWorldAimCursor();
             SetCursorVisible(true);
+            LogCursorState("Initialize");
         }
 
         /// <inheritdoc/>
@@ -175,6 +186,8 @@ namespace NightHunt.GameplaySystems.Aim
                     "AimCursorVisibility",
                     $"visible={visible} cursor={(_worldAimCursor != null ? _worldAimCursor.name : "null")} throwableMode={_isThrowableMode}",
                     this);
+
+                LogCursorState($"SetCursorVisible({visible})", warnIfNotRenderable: visible);
             }
         }
 
@@ -225,6 +238,108 @@ namespace NightHunt.GameplaySystems.Aim
                 Debug.LogWarning("[AimSystem] _worldAimCursor is not assigned and no scene cursor was found.");
         }
 
+        private void MaybeLogCursorProblem()
+        {
+            if (!_cursorVisible || !_logCursorDiagnostics || _worldAimCursor == null)
+                return;
+
+            if (Time.unscaledTime < _nextCursorDiagnosticTime)
+                return;
+
+            if (IsCursorRenderable())
+                return;
+
+            _nextCursorDiagnosticTime = Time.unscaledTime + Mathf.Max(0.25f, _cursorDiagnosticsInterval);
+            LogCursorState("CursorNotRenderable", warnIfNotRenderable: true);
+        }
+
+        private void LogCursorState(string reason, bool warnIfNotRenderable = false)
+        {
+            if (!_logCursorDiagnostics)
+                return;
+
+            bool renderable = IsCursorRenderable();
+            string message =
+                $"[AimSystem][Cursor] {reason} " +
+                $"ownerActive={gameObject.activeSelf}/{gameObject.activeInHierarchy} enabled={enabled} " +
+                $"root={DescribeTransform(_playerRoot)} camera={DescribeCamera(_camera)} " +
+                $"cursor={DescribeCursor()} visibleFlag={_cursorVisible} throwableMode={_isThrowableMode} " +
+                $"finalGround={FormatVector(FinalAimGroundPos)} renderable={renderable}";
+
+            if (warnIfNotRenderable && !renderable)
+                Debug.LogWarning(message, this);
+            else
+                Debug.Log(message, this);
+        }
+
+        private bool IsCursorRenderable()
+        {
+            if (_worldAimCursor == null)
+                return false;
+
+            if (!_worldAimCursor.gameObject.activeInHierarchy)
+                return false;
+
+            CountCursorRenderers(out int totalRenderers, out int activeEnabledRenderers);
+            return totalRenderers > 0 && activeEnabledRenderers > 0;
+        }
+
+        private void CountCursorRenderers(out int totalRenderers, out int activeEnabledRenderers)
+        {
+            totalRenderers = 0;
+            activeEnabledRenderers = 0;
+
+            if (_worldAimCursor == null)
+                return;
+
+            var renderers = _worldAimCursor.GetComponentsInChildren<Renderer>(includeInactive: true);
+            totalRenderers = renderers.Length;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy)
+                    activeEnabledRenderers++;
+            }
+        }
+
+        private string DescribeCursor()
+        {
+            if (_worldAimCursor == null)
+                return "null";
+
+            CountCursorRenderers(out int totalRenderers, out int activeEnabledRenderers);
+            var go = _worldAimCursor.gameObject;
+            string layerName = LayerMask.LayerToName(go.layer);
+            if (string.IsNullOrWhiteSpace(layerName))
+                layerName = go.layer.ToString();
+
+            string parentName = _worldAimCursor.parent != null ? _worldAimCursor.parent.name : "null";
+            return $"{_worldAimCursor.name} activeSelf={go.activeSelf} activeInHierarchy={go.activeInHierarchy} " +
+                   $"layer={layerName} renderers={activeEnabledRenderers}/{totalRenderers} " +
+                   $"pos={FormatVector(_worldAimCursor.position)} parent={parentName}";
+        }
+
+        private static string DescribeTransform(Transform target)
+        {
+            if (target == null)
+                return "null";
+
+            return $"{target.name} activeSelf={target.gameObject.activeSelf} activeInHierarchy={target.gameObject.activeInHierarchy} pos={FormatVector(target.position)}";
+        }
+
+        private static string DescribeCamera(UnityEngine.Camera cam)
+        {
+            if (cam == null)
+                return "null";
+
+            return $"{cam.name} activeSelf={cam.gameObject.activeSelf} activeInHierarchy={cam.gameObject.activeInHierarchy} enabled={cam.enabled}";
+        }
+
+        private static string FormatVector(Vector3 value)
+        {
+            return $"({value.x:F2},{value.y:F2},{value.z:F2})";
+        }
+
         /// <inheritdoc/>
         public float GetVisionRange()
         {
@@ -263,6 +378,8 @@ namespace NightHunt.GameplaySystems.Aim
         /// <inheritdoc/>
         public void SetThrowableAim(Vector2 joystickInput)
         {
+            bool wasThrowableMode = _isThrowableMode;
+
             if (joystickInput.sqrMagnitude < 0.001f)
             {
                 _isThrowableMode   = false;
@@ -278,6 +395,9 @@ namespace NightHunt.GameplaySystems.Aim
                 if (_worldAimCursor != null && !_cursorVisible)
                     SetCursorVisible(true);
             }
+
+            if (wasThrowableMode != _isThrowableMode)
+                LogCursorState($"SetThrowableAim mode={_isThrowableMode} joystick={joystickInput}");
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -382,6 +502,8 @@ namespace NightHunt.GameplaySystems.Aim
                     }
                     _worldAimCursor.rotation = Quaternion.Euler(e);
                 }
+
+                MaybeLogCursorProblem();
             }
         }
 

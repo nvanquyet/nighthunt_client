@@ -1845,7 +1845,7 @@ MonoBehaviour:
   _componentIndexCache: 0
   _addedNetworkObject: {fileID: 1312097940}
   _networkObjectCache: {fileID: 0}
-  _showOnScreenOverlay: 1
+  _showOnScreenOverlay: 0
 --- !u!1001 &189315487
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5203,7 +5203,7 @@ PrefabInstance:
     - target: {fileID: 4393252310969058995, guid: 0570b6f7f713dc44a90463654bbcd8d0,
         type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -9196,6 +9196,9 @@ MonoBehaviour:
     bossKillScore: 300
     killScoreStealPercent: 0.15
   _startDelay: 2
+  _drawGizmos: 1
+  _drawLabels: 1
+  _gizmoFillAlpha: 0.08
 --- !u!1001 &1100100606
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -14148,8 +14151,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Networking.ClientOnly.ClientOnlyGameObject
-  serverBehaviour: 0
-  _cachedRenderers: []
 --- !u!1001 &1695668700
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -17971,12 +17972,12 @@ PrefabInstance:
     - target: {fileID: 1550331213903274423, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 940.4766
+      value: 1198.0485
       objectReference: {fileID: 0}
     - target: {fileID: 1550331213903274423, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -623.011
+      value: -560
       objectReference: {fileID: 0}
     - target: {fileID: 1559511548020495963, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
@@ -18407,12 +18408,12 @@ PrefabInstance:
     - target: {fileID: 3403402742550494971, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 940.4766
+      value: 1198.0485
       objectReference: {fileID: 0}
     - target: {fileID: 3403402742550494971, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -521.00854
+      value: -472
       objectReference: {fileID: 0}
     - target: {fileID: 3537003443340536337, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}

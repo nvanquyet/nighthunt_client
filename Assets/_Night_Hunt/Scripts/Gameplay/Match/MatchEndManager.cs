@@ -415,22 +415,30 @@ namespace NightHunt.Gameplay.Match
             RegistryService registry = RegistryService.Instance;
             if (registry == null) return;
 
-            bool allDead   = registry.GetAliveCount(teamId) == 0;
-            bool noBeacons = GetActiveBeaconCount(teamId) == 0;
+            int aliveCount = registry.GetAliveCount(teamId);
+            int beaconCount = GetActiveBeaconCount(teamId);
+            bool allDead   = aliveCount == 0;
+            bool noBeacons = beaconCount == 0;
 
             bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
+            bool hasPendingRespawn = CanTeamRespawn(teamId);
 
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Death,
                 "TeamEliminationCheck",
-                $"team={teamId} finalZone={isInFinalZone} allDead={allDead} noBeacons={noBeacons}",
+                $"team={teamId} finalZone={isInFinalZone} alive={aliveCount} beacons={beaconCount} pendingRespawn={hasPendingRespawn} allDead={allDead} noBeacons={noBeacons}",
                 this);
+
+            if (allDead)
+            {
+                TriggerElimination(teamId);
+                return;
+            }
 
             if (isInFinalZone)
             {
                 // Final zone: respawn may still be possible → only eliminate when respawn queue empty too
-                bool canRespawn = CanTeamRespawn(teamId);
-                if (allDead && noBeacons && !canRespawn)
+                if (allDead && noBeacons && !hasPendingRespawn)
                     TriggerElimination(teamId);
             }
             else

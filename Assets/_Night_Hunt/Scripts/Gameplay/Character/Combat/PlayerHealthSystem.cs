@@ -250,9 +250,10 @@ namespace NightHunt.Gameplay.Character.Combat
         [Server]
         public void ApplyDamageServer(DamageInfo info)
         {
-            // Guard: dead players cannot receive further damage from any source.
-            // (RequestDamageServerRpc already rejects via ValidateHit; this covers the direct server path.)
-            if (_statSystem != null && _statSystem.GetStat(PlayerStatType.Health) <= 0f)
+            // Server-authoritative systems must still share the same gameplay policy as
+            // client RPC hits: no friendly fire unless enabled, no dead-target damage,
+            // and the same sanity checks where applicable.
+            if (!ValidateHit(info))
                 return;
 
             float finalDamage = ComputeFinalDamage(info);

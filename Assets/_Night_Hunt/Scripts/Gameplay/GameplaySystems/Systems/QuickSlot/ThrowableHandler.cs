@@ -59,6 +59,8 @@ namespace NightHunt.GameplaySystems.ItemUse
                 return;
             }
 
+            aimWorldTarget = ClampThrowTarget(def, spawnOrigin.position, aimWorldTarget);
+
             Vector3 basePos      = spawnOrigin.position + Vector3.up * 1.5f;
             Vector3 toAimFromRoot = aimWorldTarget - spawnOrigin.position;
             Vector3 aimForward   = new Vector3(toAimFromRoot.x, 0f, toAimFromRoot.z);
@@ -80,6 +82,12 @@ namespace NightHunt.GameplaySystems.ItemUse
                 // Target directly overhead / unreachable at this angle — arc forward at full force.
                 float angleRad = def.LaunchAngleDeg * Mathf.Deg2Rad;
                 velocity = (horizDir * Mathf.Cos(angleRad) + Vector3.up * Mathf.Sin(angleRad)) * def.ThrowForce;
+            }
+            else
+            {
+                float maxSpeed = Mathf.Max(1f, def.ThrowForce);
+                if (velocity.magnitude > maxSpeed)
+                    velocity = velocity.normalized * maxSpeed;
             }
 
             LogThrowable($"SpawnProjectile\n" +
@@ -172,6 +180,23 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             Vector3 horizDir = toTargetXZ.normalized;
             return horizDir * (vMag * cosA) + Vector3.up * (vMag * Mathf.Sin(angleRad));
+        }
+
+        private static Vector3 ClampThrowTarget(ThrowableDefinition def, Vector3 origin, Vector3 target)
+        {
+            if (def == null)
+                return target;
+
+            Vector3 offset = target - origin;
+            offset.y = 0f;
+
+            float maxRange = Mathf.Max(1f, def.GetMaxThrowDistance());
+            if (offset.sqrMagnitude <= maxRange * maxRange)
+                return target;
+
+            Vector3 clamped = origin + offset.normalized * maxRange;
+            clamped.y = target.y;
+            return clamped;
         }
 
         private static bool ThrowableDebugEnabled()
