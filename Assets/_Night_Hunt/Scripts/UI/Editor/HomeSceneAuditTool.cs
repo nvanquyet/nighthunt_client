@@ -237,8 +237,11 @@ namespace NightHunt.UI.Editor
 
             int changed = 0;
             var so = new SerializedObject(lobby);
+            var joinCreatePanel = so.FindProperty("joinCreatePanel")?.objectReferenceValue as GameObject;
             var roomCodeText = so.FindProperty("roomCodeText")?.objectReferenceValue as TextMeshProUGUI;
             var inRoomPanel = so.FindProperty("inRoomPanel")?.objectReferenceValue as GameObject;
+            var joinCreateParent = joinCreatePanel != null ? joinCreatePanel.transform : lobby.transform;
+            var settingsParent = joinCreateParent;
 
             var copyButton = so.FindProperty("btnCopyCode")?.objectReferenceValue as Button
                 ?? FindByNameOnly<Button>(lobby.gameObject, "copy");
@@ -256,8 +259,64 @@ namespace NightHunt.UI.Editor
                 changed++;
             }
 
+            var refreshButton = so.FindProperty("btnRefresh")?.objectReferenceValue as Button
+                ?? FindByNameOnly<Button>(lobby.gameObject, "refresh");
+            if (refreshButton == null)
+            {
+                refreshButton = CreateLobbyRefreshButton(joinCreateParent);
+                changed++;
+            }
+
+            var lobbyListStatusText = so.FindProperty("lobbyListStatusText")?.objectReferenceValue as TextMeshProUGUI
+                ?? FindByNameOnly<TextMeshProUGUI>(lobby.gameObject, "public lobby status")
+                ?? FindByNameOnly<TextMeshProUGUI>(lobby.gameObject, "lobby list status");
+            if (lobbyListStatusText == null)
+            {
+                lobbyListStatusText = CreatePublicLobbyStatusText(joinCreateParent);
+                changed++;
+            }
+
+            var lobbyListContainer = so.FindProperty("lobbyListContainer")?.objectReferenceValue as Transform
+                ?? FindByNameOnly<RectTransform>(lobby.gameObject, "public lobby list")
+                ?? FindByNameOnly<RectTransform>(lobby.gameObject, "lobby list");
+            if (lobbyListContainer == null)
+            {
+                lobbyListContainer = CreatePublicLobbyListContainer(joinCreateParent);
+                changed++;
+            }
+
+            var publicToggle = so.FindProperty("publicToggle")?.objectReferenceValue as Toggle
+                ?? FindByNameOnly<Toggle>(lobby.gameObject, "public");
+            if (publicToggle == null)
+            {
+                publicToggle = CreateLobbyToggle(settingsParent, "Public Lobby Toggle", "Public", true, new Vector2(-210f, 74f));
+                changed++;
+            }
+
+            var lockedToggle = so.FindProperty("lockedToggle")?.objectReferenceValue as Toggle
+                ?? FindByNameOnly<Toggle>(lobby.gameObject, "lock");
+            if (lockedToggle == null)
+            {
+                lockedToggle = CreateLobbyToggle(settingsParent, "Locked Lobby Toggle", "Locked", false, new Vector2(-70f, 74f));
+                changed++;
+            }
+
+            var passwordInput = so.FindProperty("passwordInput")?.objectReferenceValue as TMP_InputField
+                ?? FindByNameOnly<TMP_InputField>(lobby.gameObject, "password");
+            if (passwordInput == null)
+            {
+                passwordInput = CreateLobbyPasswordInput(settingsParent);
+                changed++;
+            }
+
             changed += SetObject(so.FindProperty("btnCopyCode"), copyButton) ? 1 : 0;
             changed += SetObject(so.FindProperty("statusText"), statusText) ? 1 : 0;
+            changed += SetObject(so.FindProperty("btnRefresh"), refreshButton) ? 1 : 0;
+            changed += SetObject(so.FindProperty("lobbyListStatusText"), lobbyListStatusText) ? 1 : 0;
+            changed += SetObject(so.FindProperty("lobbyListContainer"), lobbyListContainer) ? 1 : 0;
+            changed += SetObject(so.FindProperty("publicToggle"), publicToggle) ? 1 : 0;
+            changed += SetObject(so.FindProperty("lockedToggle"), lockedToggle) ? 1 : 0;
+            changed += SetObject(so.FindProperty("passwordInput"), passwordInput) ? 1 : 0;
             so.ApplyModifiedProperties();
 
             if (changed > 0)
@@ -304,6 +363,145 @@ namespace NightHunt.UI.Editor
             text.color = new Color(0.82f, 0.9f, 1f, 1f);
             text.raycastTarget = false;
             return text;
+        }
+
+        private static Button CreateLobbyRefreshButton(Transform parent)
+        {
+            var go = CreateUIObject("Refresh Public Lobbies", parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(150f, 38f);
+            rect.anchoredPosition = new Vector2(0f, -148f);
+
+            var image = go.AddComponent<Image>();
+            image.color = new Color(0.13f, 0.18f, 0.22f, 0.95f);
+            var button = go.AddComponent<Button>();
+            button.targetGraphic = image;
+
+            var label = CreateText("Label", go.transform, "Refresh", 14f, FontStyles.Normal);
+            StretchFull(label.GetComponent<RectTransform>());
+            label.raycastTarget = false;
+            return button;
+        }
+
+        private static TextMeshProUGUI CreatePublicLobbyStatusText(Transform parent)
+        {
+            var text = CreateText("Public Lobby Status", parent, string.Empty, 13f, FontStyles.Normal);
+            var rect = text.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(700f, 28f);
+            rect.anchoredPosition = new Vector2(0f, -190f);
+            text.color = new Color(0.78f, 0.86f, 0.94f, 1f);
+            text.raycastTarget = false;
+            return text;
+        }
+
+        private static Transform CreatePublicLobbyListContainer(Transform parent)
+        {
+            var go = CreateUIObject("Public Lobby List", parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.sizeDelta = new Vector2(720f, 190f);
+            rect.anchoredPosition = new Vector2(0f, -212f);
+
+            var layout = go.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 6f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = false;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            layout.padding = new RectOffset(4, 4, 4, 4);
+            return go.transform;
+        }
+
+        private static Toggle CreateLobbyToggle(Transform parent, string name, string labelText, bool isOn, Vector2 position)
+        {
+            var go = CreateUIObject(name, parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.sizeDelta = new Vector2(130f, 28f);
+            rect.anchoredPosition = position;
+
+            var toggle = go.AddComponent<Toggle>();
+            var boxGo = CreateUIObject("Box", go.transform);
+            var boxRect = boxGo.GetComponent<RectTransform>();
+            boxRect.anchorMin = new Vector2(0f, 0.5f);
+            boxRect.anchorMax = new Vector2(0f, 0.5f);
+            boxRect.pivot = new Vector2(0f, 0.5f);
+            boxRect.sizeDelta = new Vector2(22f, 22f);
+            boxRect.anchoredPosition = Vector2.zero;
+            var box = boxGo.AddComponent<Image>();
+            box.color = new Color(0.13f, 0.18f, 0.22f, 0.95f);
+
+            var checkGo = CreateUIObject("Checkmark", boxGo.transform);
+            var checkRect = checkGo.GetComponent<RectTransform>();
+            checkRect.anchorMin = new Vector2(0.5f, 0.5f);
+            checkRect.anchorMax = new Vector2(0.5f, 0.5f);
+            checkRect.pivot = new Vector2(0.5f, 0.5f);
+            checkRect.sizeDelta = new Vector2(14f, 14f);
+            var check = checkGo.AddComponent<Image>();
+            check.color = new Color(0.24f, 0.72f, 0.42f, 1f);
+
+            var label = CreateText("Label", go.transform, labelText, 13f, FontStyles.Normal);
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = new Vector2(30f, 0f);
+            labelRect.offsetMax = Vector2.zero;
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+            label.raycastTarget = false;
+
+            toggle.targetGraphic = box;
+            toggle.graphic = check;
+            toggle.isOn = isOn;
+            return toggle;
+        }
+
+        private static TMP_InputField CreateLobbyPasswordInput(Transform parent)
+        {
+            var go = CreateUIObject("Lobby Password Input", parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.sizeDelta = new Vector2(230f, 34f);
+            rect.anchoredPosition = new Vector2(80f, 74f);
+
+            var image = go.AddComponent<Image>();
+            image.color = new Color(0.08f, 0.11f, 0.14f, 0.95f);
+            var input = go.AddComponent<TMP_InputField>();
+
+            var text = CreateText("Text", go.transform, string.Empty, 14f, FontStyles.Normal);
+            StretchFull(text.GetComponent<RectTransform>());
+            text.GetComponent<RectTransform>().offsetMin = new Vector2(10f, 0f);
+            text.GetComponent<RectTransform>().offsetMax = new Vector2(-10f, 0f);
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+            text.raycastTarget = false;
+
+            var placeholder = CreateText("Placeholder", go.transform, "Password", 14f, FontStyles.Normal);
+            StretchFull(placeholder.GetComponent<RectTransform>());
+            placeholder.GetComponent<RectTransform>().offsetMin = new Vector2(10f, 0f);
+            placeholder.GetComponent<RectTransform>().offsetMax = new Vector2(-10f, 0f);
+            placeholder.alignment = TextAlignmentOptions.MidlineLeft;
+            placeholder.color = new Color(0.7f, 0.76f, 0.82f, 0.7f);
+            placeholder.raycastTarget = false;
+
+            input.targetGraphic = image;
+            input.textComponent = text;
+            input.placeholder = placeholder;
+            input.contentType = TMP_InputField.ContentType.Password;
+            input.inputType = TMP_InputField.InputType.Password;
+            input.characterLimit = 50;
+            go.SetActive(false);
+            return input;
         }
 
         private static int SetupSettingsLifecycle()

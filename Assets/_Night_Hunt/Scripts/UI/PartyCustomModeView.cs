@@ -2526,11 +2526,16 @@ namespace NightHunt.UI
                 btnRefresh = FindChildByName<Button>("refresh");
 
             if (lobbyListStatusText == null)
-                lobbyListStatusText = FindChildByName<TextMeshProUGUI>("lobby status");
+                lobbyListStatusText =
+                    FindChildByName<TextMeshProUGUI>("public lobby status") ??
+                    FindChildByName<TextMeshProUGUI>("lobby list status") ??
+                    FindChildByName<TextMeshProUGUI>("lobby status");
 
             if (lobbyListContainer == null)
             {
-                var listRect = FindChildByName<RectTransform>("lobby list");
+                var listRect =
+                    FindChildByName<RectTransform>("public lobby list") ??
+                    FindChildByName<RectTransform>("lobby list");
                 if (listRect != null) lobbyListContainer = listRect;
             }
 
@@ -2632,7 +2637,11 @@ namespace NightHunt.UI
 
         private Transform GetSettingsParent()
         {
-            return inRoomPanel != null ? inRoomPanel.transform : transform;
+            // Privacy controls are needed before creating a room and while editing one.
+            // The custom-mode route root stays active in both states; inRoomPanel does not.
+            return joinCreatePanel != null
+                ? joinCreatePanel.transform
+                : (inRoomPanel != null ? inRoomPanel.transform : transform);
         }
 
         private Button CreateRuntimeTextButton(string name, Transform parent, string labelText, Vector2 position, Vector2 size)
@@ -2657,7 +2666,7 @@ namespace NightHunt.UI
 
         private TextMeshProUGUI CreateRuntimeLobbyListStatus()
         {
-            var go = CreateRuntimeUIObject("Runtime Lobby List Status", GetJoinCreateParent());
+            var go = CreateRuntimeUIObject("Runtime Public Lobby Status", GetJoinCreateParent());
             var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);
@@ -2676,7 +2685,7 @@ namespace NightHunt.UI
 
         private Transform CreateRuntimeLobbyListContainer()
         {
-            var go = CreateRuntimeUIObject("Runtime Lobby List", GetJoinCreateParent());
+            var go = CreateRuntimeUIObject("Runtime Public Lobby List", GetJoinCreateParent());
             var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);

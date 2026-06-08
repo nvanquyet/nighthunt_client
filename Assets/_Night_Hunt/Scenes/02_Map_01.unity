@@ -7025,6 +7025,9 @@ MonoBehaviour:
   clientNetworkHandlerPrefab: {fileID: 5359618603319872427, guid: 23374191f5ee8534bb98f97a4336e8b9,
     type: 3}
   _clientRuntimeReadyTimeoutSeconds: 10
+  _relayStartScenesFallbackSeconds: 1
+  _clientDataTimeoutSeconds: 5
+  _relayReconnectHoldSeconds: 60
 --- !u!1 &843197766
 GameObject:
   m_ObjectHideFlags: 0
@@ -11798,6 +11801,9 @@ MonoBehaviour:
   port: 7777
   defaultServerAddress: localhost
   _retryDelay: 3
+  _relayRetryDelay: 7
+  _relayMaxRetries: 10
+  _stableConnectionSecondsToResetRetries: 15
   _maxRetries: 2
 --- !u!1 &1442306866
 GameObject:
@@ -16560,6 +16566,8 @@ MonoBehaviour:
   _worldAimCursor: {fileID: 1112216619}
   _cursorYOffset: 0.02
   _cursorFacingAxis: 2
+  _logCursorDiagnostics: 1
+  _cursorDiagnosticsInterval: 1
 --- !u!4 &1985384052
 Transform:
   m_ObjectHideFlags: 0
@@ -16592,6 +16600,9 @@ MonoBehaviour:
   _rangeIndicator: {fileID: 284766109}
   _aimCursor: {fileID: 1985384052}
   _dragThreshold: 0.2
+  _aimRotationDegreesPerSecond: 540
+  _aimRotationDeadZone: 0.15
+  _aimRotationMinDeltaDegrees: 1.5
 --- !u!21 &1995398430
 Material:
   serializedVersion: 8
@@ -17972,12 +17983,12 @@ PrefabInstance:
     - target: {fileID: 1550331213903274423, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 1198.0485
+      value: 960
       objectReference: {fileID: 0}
     - target: {fileID: 1550331213903274423, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -560
+      value: -610.4
       objectReference: {fileID: 0}
     - target: {fileID: 1559511548020495963, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
@@ -18408,12 +18419,12 @@ PrefabInstance:
     - target: {fileID: 3403402742550494971, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 1198.0485
+      value: 960
       objectReference: {fileID: 0}
     - target: {fileID: 3403402742550494971, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -472
+      value: -511.20004
       objectReference: {fileID: 0}
     - target: {fileID: 3537003443340536337, guid: 6c3072a36af082844a4ba80a963fe378,
         type: 3}
