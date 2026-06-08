@@ -111,6 +111,18 @@ namespace NightHunt.Gameplay.Team
                 TeamService.Instance?.OnPlayerRemovedFromTeam(fishnetClientId, team);
             }
         }
+
+        [Server]
+        public void RemapPlayerClientId(int previousFishNetId, int newFishNetId)
+        {
+            if (!_playerTeamMap.TryGetValue(previousFishNetId, out int team))
+                return;
+
+            _playerTeamMap.Remove(previousFishNetId);
+            _playerTeamMap[newFishNetId] = team;
+            TeamService.Instance?.OnPlayerRemappedClientId(previousFishNetId, newFishNetId, team);
+            Debug.Log($"[TeamAssignmentSystem] Remapped FishNet ID {previousFishNetId} -> {newFishNetId} on Team {team}");
+        }
         
         // ===== HELPERS =====
         

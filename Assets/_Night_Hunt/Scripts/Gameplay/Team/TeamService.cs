@@ -123,6 +123,22 @@ namespace NightHunt.Gameplay.Team
 
             _teamCounts[teamId] = _playersByTeam.TryGetValue(teamId, out var list) ? list.Count : 0;
         }
+
+        [Server]
+        public void OnPlayerRemappedClientId(int previousFishNetId, int newFishNetId, int teamId)
+        {
+            if (!_playersByTeam.TryGetValue(teamId, out var players))
+                return;
+
+            int index = players.IndexOf(previousFishNetId);
+            if (index >= 0)
+                players[index] = newFishNetId;
+            else if (!players.Contains(newFishNetId))
+                players.Add(newFishNetId);
+
+            Debug.Log($"[TeamService] Player remapped on Team {teamId}: {previousFishNetId} -> {newFishNetId}");
+            _teamCounts[teamId] = players.Count;
+        }
         
         // ===== UI QUERIES =====
         

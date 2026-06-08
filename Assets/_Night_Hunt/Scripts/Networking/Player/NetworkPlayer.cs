@@ -2,6 +2,7 @@ using FishNet.Object;
 using FishNet.Connection;
 using FishNet.Object.Synchronizing;
 using FishNet.Observing;
+using NightHunt.Gameplay.Core.Events;
 using NightHunt.GameplaySystems.Core.Bridge;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.Gameplay.Character;
@@ -15,6 +16,7 @@ using NightHunt.Networking.Player;
 using UnityEngine;
 using Unity.Cinemachine;
 using NightHunt.Utilities;
+using NightHunt.UI;
 
 namespace NightHunt.Networking.Player
 {
@@ -371,6 +373,14 @@ namespace NightHunt.Networking.Player
             ServerGameManager.Instance?.OnPlayerClientRuntimeReady(conn ?? Owner, this);
         }
 
+        [TargetRpc]
+        public void TargetMatchAllPlayersReady(NetworkConnection conn, string source)
+        {
+            Debug.Log($"[FLOW §13] NetworkPlayer.TargetMatchAllPlayersReady: source={source} ObjectId={ObjectId}");
+            MatchLoadingOverlay.SignalAllPlayersReady($"network-player-target:{source}");
+            GameplayEventBus.Instance?.Publish(new AllPlayersReadyEvent());
+        }
+
         public void RequestInteractAnimation(int interactIndex)
         {
             if (!IsOwner)
@@ -567,6 +577,18 @@ namespace NightHunt.Networking.Player
             var aimSystem = UnityEngine.Object.FindFirstObjectByType<NightHunt.GameplaySystems.Aim.AimSystem>(FindObjectsInactive.Include);
             if (aimSystem != null)
             {
+                if (!aimSystem.gameObject.activeSelf)
+                {
+                    aimSystem.gameObject.SetActive(true);
+                    Debug.LogWarning("[NetworkPlayer] AimSystem GameObject was inactive during owner setup; activating it so the world cursor can render.", aimSystem);
+                }
+
+                if (!aimSystem.enabled)
+                {
+                    aimSystem.enabled = true;
+                    Debug.LogWarning("[NetworkPlayer] AimSystem component was disabled during owner setup; enabling it for local player aim.", aimSystem);
+                }
+
                 var statSystem = ComponentResolver.Find<NightHunt.Gameplay.StatSystem.Core.Interfaces.IPlayerStatSystem>(this)
                     .OnSelf().InChildren().InParent()
                     .OrLogWarning("[NetworkPlayer] IPlayerStatSystem not found — AimSystem will use fallback VisionRange")

@@ -82,6 +82,12 @@ namespace NightHunt.Gameplay.Zone
             _syncNextCenter.OnChange       += OnNextCenterChanged;
         }
 
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+            StartCoroutine(ReplayCurrentHudStateNextFrames());
+        }
+
         public override void OnStopNetwork()
         {
             base.OnStopNetwork();
@@ -95,6 +101,14 @@ namespace NightHunt.Gameplay.Zone
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+        }
+
+        private IEnumerator ReplayCurrentHudStateNextFrames()
+        {
+            yield return null;
+            ReplayCurrentHudState();
+            yield return null;
+            ReplayCurrentHudState();
         }
 
         #endregion

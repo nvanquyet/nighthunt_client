@@ -3,8 +3,10 @@ using FishNet.Object;
 using FishNet.Connection;
 using System.Collections.Generic;
 using NightHunt.Gameplay.Team;
+using NightHunt.Common;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
+using NightHunt.State;
 using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Spawn
@@ -103,15 +105,17 @@ namespace NightHunt.Gameplay.Spawn
             Debug.Log(
                 $"[SpawnSystem] Processing spawn - Backend ID: {clientData.BackendPlayerId}, Name: {clientData.DisplayName}");
 
-            // STEP 1: Assign team (server authority)
-            int teamId = _teamAssignmentSystem.ResolveTeam(fishnetClientId, clientData.TeamId);
+            // STEP 1: Assign team (server authority). Room roster is authoritative for
+            // custom parties; the client-sent team is only a fallback hint.
+            int requestedTeamId = ResolveAuthoritativeGameplayTeamId(clientData, out string teamSource);
+            int teamId = _teamAssignmentSystem.ResolveTeam(fishnetClientId, requestedTeamId);
 
             // STEP 2: Update data với server values
             PlayerRegistryData serverData = clientData;
             serverData.TeamId = teamId;
             serverData.Status = PlayerConnectionStatus.InGame;
 
-            Debug.Log($"[SpawnSystem] Team assigned: {teamId}");
+            Debug.Log($"[SpawnSystem] Team assigned: {teamId} source={teamSource} clientRequested={clientData.TeamId}");
 
             // STEP 3: Position at spawn point
             SpawnPoint spawnPoint = GetSpawnPoint(teamId);
@@ -141,6 +145,35 @@ namespace NightHunt.Gameplay.Spawn
             return serverData;
         }
 
+        private static int ResolveAuthoritativeGameplayTeamId(PlayerRegistryData clientData, out string source)
+        {
+            source = "client";
+
+            if (!string.IsNullOrEmpty(clientData.BackendPlayerId)
+                && long.TryParse(clientData.BackendPlayerId, out long backendUserId)
+                && RoomState.Instance?.CurrentRoom?.players != null)
+            {
+                var roomPlayer = RoomState.Instance.CurrentRoom.players.Find(p => p.userId == backendUserId);
+                if (roomPlayer != null)
+                {
+                    source = $"room-roster:{roomPlayer.team}";
+                    return NormalizeRoomTeamToGameplayTeam(roomPlayer.team);
+                }
+            }
+
+            return clientData.TeamId;
+        }
+
+        private static int NormalizeRoomTeamToGameplayTeam(int roomTeam)
+        {
+            if (roomTeam == Constants.TEAM_1)
+                return 0;
+            if (roomTeam == Constants.TEAM_2)
+                return 1;
+
+            return roomTeam >= 0 ? roomTeam : -1;
+        }
+
         /// <summary>
         /// Server: Cleanup on disconnect
         /// </summary>
@@ -149,6 +182,13 @@ namespace NightHunt.Gameplay.Spawn
         {
             Debug.Log($"[SpawnSystem] Cleanup for FishNet ClientId: {fishnetClientId}");
             _teamAssignmentSystem.RemovePlayer(fishnetClientId);
+        }
+
+        [Server]
+        public void OnPlayerReconnected(int previousFishNetId, int newFishNetId)
+        {
+            Debug.Log($"[SpawnSystem] Reconnect remap FishNet ClientId: {previousFishNetId} -> {newFishNetId}");
+            _teamAssignmentSystem.RemapPlayerClientId(previousFishNetId, newFishNetId);
         }
 
         // ===== GROUND SNAP =====

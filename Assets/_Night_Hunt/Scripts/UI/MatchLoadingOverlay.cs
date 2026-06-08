@@ -34,6 +34,7 @@ namespace NightHunt.UI
         // ── Singleton ──────────────────────────────────────────────────────────
 
         private static MatchLoadingOverlay _instance;
+        private static bool _authoritativeAllPlayersReady;
         public static MatchLoadingOverlay Instance
         {
             get
@@ -153,6 +154,9 @@ namespace NightHunt.UI
             bus.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
             _eventsSubscribed = true;
             Debug.Log($"[MatchLoadingOverlay] Late-subscribed to GameplayEventBus (stage={_stage})  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+
+            if (_authoritativeAllPlayersReady)
+                MarkAllPlayersReady();
         }
 
         private ILoadingProgressView ResolveProgressView()
@@ -193,15 +197,47 @@ namespace NightHunt.UI
         public void Hide()
         {
             StopTimeout();
+            CancelInvoke(nameof(HideOnReady));
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeOut());
+        }
+
+        public void ForceHide(string reason = null)
+        {
+            StopTimeout();
+            CancelInvoke(nameof(HideOnReady));
+            if (_fadeCoroutine != null)
+            {
+                StopCoroutine(_fadeCoroutine);
+                _fadeCoroutine = null;
+            }
+
+            UnsubscribeEvents();
+            SetVisibleImmediate(false);
+            Debug.Log($"[MatchLoadingOverlay] Force hidden{(string.IsNullOrEmpty(reason) ? "" : $" ({reason})")}.");
         }
 
         public void MarkDsReady()    => SetStage(MatchLoadStage.Connecting);
         public void MarkWaitingRelayHost() => SetStage(MatchLoadStage.WaitingRelayHost);
         public void MarkConnected()  => SetStage(MatchLoadStage.ServerReady);
         public void MarkSpawning()   => SetStage(MatchLoadStage.Spawning);
-        public void MarkAllPlayersReady() => OnAllPlayersReady(new AllPlayersReadyEvent());
+        public void MarkAllPlayersReady() => SignalAllPlayersReady("instance");
+
+        public static void ResetReadinessSignal()
+        {
+            _authoritativeAllPlayersReady = false;
+        }
+
+        public static void SignalAllPlayersReady(string source = null)
+        {
+            _authoritativeAllPlayersReady = true;
+            var instance = Instance;
+            if (instance != null)
+                instance.OnAllPlayersReady(new AllPlayersReadyEvent());
+
+            if (!string.IsNullOrEmpty(source))
+                Debug.Log($"[MatchLoadingOverlay] AllPlayersReady signal source={source} instance={(instance != null ? "ok" : "null")}");
+        }
 
         public void SetTargetMap(NightHunt.Config.SceneId mapId) => targetMapId = mapId;
 
@@ -209,6 +245,8 @@ namespace NightHunt.UI
 
         private void ShowInternal()
         {
+            ResetReadinessSignal();
+            CancelInvoke(nameof(HideOnReady));
             _showTime        = Time.realtimeSinceStartup;
             _progressTarget  = 0f;
             _progressCurrent = 0f;
@@ -405,10 +443,20 @@ namespace NightHunt.UI
 
         private void OnAllPlayersReady(AllPlayersReadyEvent _)
         {
-            if (!_isVisible || _stage == MatchLoadStage.AllReady)
+            _authoritativeAllPlayersReady = true;
+
+            if (!_isVisible)
                 return;
 
             StopTimeout();
+
+            if (_stage == MatchLoadStage.AllReady)
+            {
+                if (!IsInvoking(nameof(HideOnReady)))
+                    Invoke(nameof(HideOnReady), delayAfterReady);
+                return;
+            }
+
             SetStage(MatchLoadStage.AllReady);
 
             float elapsed    = Time.realtimeSinceStartup - _showTime;
@@ -489,14 +537,16 @@ namespace NightHunt.UI
             yield return new WaitForSecondsRealtime(connectionTimeout);
             if (!_isVisible) yield break;
 
-            // If FishNet is already connected the match is running normally.
-            // AllPlayersReady was probably missed due to subscribe-timing on scene load.
-            // Just hide the overlay; do not interrupt the running match.
+            // FishNet transport being connected is not the same as the match being
+            // authoritative-ready. In Custom_Relay the host may have only spawned
+            // 1/3 players while remote identity handshakes are still pending. Do
+            // not synthesize AllPlayersReady here; wait for ServerGameManager RPCs.
             bool matchRunning = NightHunt.Networking.NetworkGameManager.Instance?.IsClient ?? false;
             if (matchRunning)
             {
-                Debug.LogWarning($"[MatchLoadingOverlay] Timeout ({connectionTimeout}s) but FishNet IsClient=true - waiting for authoritative AllPlayersReadyEvent.");
-                SetStatus("Waiting for server synchronization...");
+                Debug.LogWarning($"[MatchLoadingOverlay] Timeout ({connectionTimeout}s) but FishNet IsClient=true - still waiting for authoritative AllPlayersReady.");
+                SetStatus("Waiting for players...");
+                StartTimeout();
                 yield break;
             }
 
