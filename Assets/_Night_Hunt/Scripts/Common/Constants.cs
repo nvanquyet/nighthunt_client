@@ -25,6 +25,7 @@ namespace NightHunt.Common
         public const string API_ROOMS_CREATE          = "/api/rooms/create";
         public const string API_ROOMS_JOIN_BY_CODE    = "/api/rooms/join-by-code";
         public const string API_ROOMS_QUICK_PLAY      = "/api/rooms/quick-play";
+        public const string API_ROOMS_CUSTOM_PUBLIC   = "/api/rooms/custom/public";
         public const string API_ROOMS_RECONNECT       = "/api/rooms/reconnect";
         public const string API_ROOMS_READY           = "/api/rooms/{0}/ready";
         public const string API_ROOMS_CHANGE_TEAM     = "/api/rooms/{0}/change-team";

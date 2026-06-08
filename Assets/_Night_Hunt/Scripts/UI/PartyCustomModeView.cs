@@ -98,6 +98,12 @@ namespace NightHunt.UI
         [Tooltip("Label on btn_CodeAction. Default: 'Nhập code'. After revealing input: 'Tham gia'.")]
         [SerializeField] private TextMeshProUGUI codeActionLabel;
 
+        [Header("Public Lobby Browser")]
+        [SerializeField] private Button btnRefresh;
+        [SerializeField] private Transform lobbyListContainer;
+        [SerializeField] private GameObject lobbyListItemPrefab;
+        [SerializeField] private TextMeshProUGUI lobbyListStatusText;
+
         // ── Navigation (navigating away when in room → confirm leave/disband) ─
         [Header("Navigation")]
         [Tooltip("Mỗi entry: 1 Button + target panel. Nếu đang trong room thì phải xác nhận leave/disband trước khi UINavigator chuyển panel.")]
@@ -113,6 +119,9 @@ namespace NightHunt.UI
         [SerializeField] private Button btnCopyCode;
         [SerializeField] private CustomDropdown modeDropdown;
         [SerializeField] private CustomDropdown mapDropdown;
+        [SerializeField] private Toggle publicToggle;
+        [SerializeField] private Toggle lockedToggle;
+        [SerializeField] private TMP_InputField passwordInput;
 
         [SerializeField] private Button btnSave;
 
@@ -179,10 +188,12 @@ namespace NightHunt.UI
         private string _pendingMapId = "map_01";
         private bool _pendingIsPublic = true;
         private bool _pendingIsLocked = false;
-#pragma warning disable CS0414
         private bool _pendingPasswordChanged = false;
-#pragma warning restore CS0414
+        private string _pendingPassword = string.Empty;
         private bool _settingsDirty = false;
+        private bool _updatingPrivacyControls = false;
+        private bool _refreshListInFlight = false;
+        private readonly List<RoomListItemResponse> _publicLobbyItems = new();
 
         // Guard: set to true when we change dropdowns programmatically to suppress OnValueChanged callbacks
         private bool _updatingDropdown = false;
@@ -227,6 +238,7 @@ namespace NightHunt.UI
             if (btnCreateRoom != null) btnCreateRoom.onClick.AddListener(OnCreateRoomClicked);
             if (btnQuickJoin != null) btnQuickJoin.onClick.AddListener(OnQuickJoinClicked);
             if (btn_CodeAction != null) btn_CodeAction.onClick.AddListener(OnEnterCodeClicked);
+            if (btnRefresh != null) btnRefresh.onClick.AddListener(OnRefreshClicked);
 
             if (navigationButtons != null)
                 foreach (var entry in navigationButtons)
@@ -254,7 +266,11 @@ namespace NightHunt.UI
             }
             _updatingDropdown = false;
 
-            // Password/public switch UI removed — no listeners to register.
+            // Privacy controls are optional in the scene; fallback controls are created above when missing.
+
+            if (publicToggle != null) publicToggle.onValueChanged.AddListener(OnPublicToggleChanged);
+            if (lockedToggle != null) lockedToggle.onValueChanged.AddListener(OnLockedToggleChanged);
+            if (passwordInput != null) passwordInput.onValueChanged.AddListener(OnPasswordInputChanged);
 
             if (btnSave != null) btnSave.onClick.AddListener(OnSaveClicked);
 
@@ -389,6 +405,10 @@ namespace NightHunt.UI
                 // Refresh room data from server to ensure we have fresh member list/settings
                 _ = RefreshRoomDataAndDisplayAsync();
             }
+            else
+            {
+                _ = RefreshPublicLobbyListAsync();
+            }
 
             return;
         }
@@ -401,6 +421,7 @@ namespace NightHunt.UI
             if (result.Success)
             {
                 RefreshRoomDisplay();
+                SetStatus("Room updated.");
             }
             else
             {
@@ -544,6 +565,10 @@ namespace NightHunt.UI
                 btnCreateRoom?.gameObject.SetActive(true);
                 btnQuickJoin?.gameObject.SetActive(true);
                 btn_CodeAction?.gameObject.SetActive(true);
+                btnRefresh?.gameObject.SetActive(true);
+                if (lobbyListContainer != null) lobbyListContainer.gameObject.SetActive(true);
+                if (lobbyListStatusText != null) lobbyListStatusText.gameObject.SetActive(true);
+                SetButtonLabel(btnRefresh, "Refresh");
 
                 btnStart?.gameObject.SetActive(false);
                 btnReady?.gameObject.SetActive(false);
@@ -554,6 +579,7 @@ namespace NightHunt.UI
                 if (mapDropdown != null) mapDropdown.Interactable(true);
                 ResetCodeInput();
                 SetJoinCreateInteractable(!_joinCreateRequestInFlight);
+                SyncPrivacyControls(_roomState?.CurrentRoom);
                 SetStatus("");
             }
             else // InRoom
@@ -562,6 +588,10 @@ namespace NightHunt.UI
                 btnCreateRoom?.gameObject.SetActive(false);
                 btnQuickJoin?.gameObject.SetActive(false);
                 btn_CodeAction?.gameObject.SetActive(false);
+                btnRefresh?.gameObject.SetActive(true);
+                if (lobbyListContainer != null) lobbyListContainer.gameObject.SetActive(false);
+                if (lobbyListStatusText != null) lobbyListStatusText.gameObject.SetActive(false);
+                SetButtonLabel(btnRefresh, "Refresh Room");
                 codeInputContainer?.SetActive(false);
 
                 btnLeaveOrDisband?.gameObject.SetActive(true);
@@ -571,6 +601,7 @@ namespace NightHunt.UI
                 if (modeDropdown != null) modeDropdown.Interactable(false);
                 if (mapDropdown != null) mapDropdown.Interactable(false);
                 if (btnSave != null) btnSave.interactable = false;
+                SyncPrivacyControls(_roomState?.CurrentRoom);
             }
         }
 
@@ -585,6 +616,7 @@ namespace NightHunt.UI
             if (btnCreateRoom != null) btnCreateRoom.interactable = interactable;
             if (btnQuickJoin != null) btnQuickJoin.interactable = interactable;
             if (btn_CodeAction != null) btn_CodeAction.interactable = interactable;
+            if (btnRefresh != null) btnRefresh.interactable = interactable && !_refreshListInFlight;
         }
 
         private void RunJoinCreateAction(Func<Task> action)
@@ -626,9 +658,17 @@ namespace NightHunt.UI
             RunJoinCreateAction(async () =>
             {
                 NLog($"CreateRoom click mode={_pendingMode} map={_pendingMapId ?? "null"} localBefore={DescribeLocalRoom()}");
+                string createPassword = _pendingIsLocked ? _pendingPassword : null;
+                if (_pendingIsLocked && string.IsNullOrWhiteSpace(createPassword))
+                {
+                    SetStatus("");
+                    GameModalWindow.Instance?.ShowNotice("Password Required", "Set a password before creating a locked room.");
+                    return;
+                }
+
                 SetStatus("Creating room...");
                 var result = await _roomService.CreateRoom(
-                    _pendingMode, allowFill: false, isPublic: true, isLocked: false, password: null, mapId: _pendingMapId);
+                    _pendingMode, allowFill: false, isPublic: _pendingIsPublic, isLocked: _pendingIsLocked, password: createPassword, mapId: _pendingMapId);
                 NLog($"CreateRoom result success={result.Success} errorCode={result.ErrorCode ?? "null"} msg='{result.Message ?? "null"}' dataRoomId={result.Data?.roomId ?? 0} localAfterApi={DescribeLocalRoom()}");
 
                 if (result.Success && result.Data != null)
@@ -687,6 +727,176 @@ namespace NightHunt.UI
         /// First click → reveal code input.
         /// Second click → attempt join by code (party check first).
         /// </summary>
+        private void OnRefreshClicked()
+        {
+            if (_roomState == null)
+                _roomState = RoomState.Instance;
+
+            if (_roomState != null && _roomState.IsInRoom)
+            {
+                SetStatus("Refreshing room...");
+                _ = RefreshRoomDataAndDisplayAsync();
+                return;
+            }
+
+            _ = RefreshPublicLobbyListAsync();
+        }
+
+        private async Task RefreshPublicLobbyListAsync()
+        {
+            ResolveReferences(createFallback: true);
+            if (_roomService == null && GameManager.Instance != null)
+                _roomService = GameManager.Instance.RoomService;
+
+            if (_roomService == null)
+            {
+                SetLobbyListStatus("Room service is not ready.");
+                return;
+            }
+
+            if (_roomState == null)
+                _roomState = RoomState.Instance;
+            if (_roomState != null && _roomState.IsInRoom)
+                return;
+            if (_refreshListInFlight)
+                return;
+
+            _refreshListInFlight = true;
+            SetJoinCreateInteractable(false);
+            SetLobbyListStatus("Refreshing lobbies...");
+
+            try
+            {
+                var result = await _roomService.GetPublicCustomRooms(_pendingMode, _pendingMapId, 20);
+                if (result.Success && result.Data != null)
+                {
+                    _publicLobbyItems.Clear();
+                    if (result.Data.rooms != null)
+                        _publicLobbyItems.AddRange(result.Data.rooms);
+                    RenderPublicLobbyList();
+                    SetLobbyListStatus(_publicLobbyItems.Count == 0
+                        ? "No public custom lobbies found."
+                        : $"{_publicLobbyItems.Count} public lobbies found.");
+                }
+                else
+                {
+                    ClearLobbyListContainer();
+                    SetLobbyListStatus(result.Message ?? "Could not refresh lobby list.");
+                }
+            }
+            finally
+            {
+                _refreshListInFlight = false;
+                if (_roomState == null || !_roomState.IsInRoom)
+                    SetJoinCreateInteractable(!_joinCreateRequestInFlight);
+            }
+        }
+
+        private void RenderPublicLobbyList()
+        {
+            ClearLobbyListContainer();
+            if (lobbyListContainer == null)
+                return;
+
+            foreach (var room in _publicLobbyItems)
+            {
+                if (room == null)
+                    continue;
+
+                var go = lobbyListItemPrefab != null
+                    ? Instantiate(lobbyListItemPrefab, lobbyListContainer)
+                    : CreateRuntimeLobbyListItem(lobbyListContainer);
+
+                go.name = $"Lobby {room.roomCode}";
+                var label = go.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (label == null)
+                    label = CreateRuntimeText(go.transform, "Label", 14f, TextAlignmentOptions.Left);
+                label.text = FormatLobbyListItem(room);
+
+                var button = go.GetComponent<Button>() ?? go.GetComponentInChildren<Button>(true);
+                if (button == null)
+                {
+                    var image = go.GetComponent<Image>() ?? go.AddComponent<Image>();
+                    image.color = new Color(0.12f, 0.16f, 0.20f, 0.92f);
+                    button = go.AddComponent<Button>();
+                    button.targetGraphic = image;
+                }
+
+                var captured = room;
+                button.onClick.RemoveAllListeners();
+                button.onClick.AddListener(() => RunJoinCreateAction(() => JoinLobbyItemAsync(captured)));
+                button.interactable = !_joinCreateRequestInFlight;
+            }
+        }
+
+        private void ClearLobbyListContainer()
+        {
+            if (lobbyListContainer == null)
+                return;
+
+            for (int i = lobbyListContainer.childCount - 1; i >= 0; i--)
+            {
+                Transform child = lobbyListContainer.GetChild(i);
+                if (lobbyListStatusText != null && child == lobbyListStatusText.transform)
+                    continue;
+                Destroy(child.gameObject);
+            }
+        }
+
+        private static string FormatLobbyListItem(RoomListItemResponse room)
+        {
+            string lockText = room.isLocked ? "[LOCKED] " : "";
+            string map = string.IsNullOrEmpty(room.mapId) ? "map" : room.mapId;
+            string owner = string.IsNullOrEmpty(room.ownerUsername) ? "Host" : room.ownerUsername;
+            return $"{lockText}{room.roomCode}  {room.mode}  {map}  {room.currentPlayers}/{room.maxPlayers}  {owner}";
+        }
+
+        private async Task JoinLobbyItemAsync(RoomListItemResponse room, string password = null)
+        {
+            if (room == null || string.IsNullOrWhiteSpace(room.roomCode))
+                return;
+
+            if (room.isLocked && password == null)
+            {
+                SetStatus("");
+                GameModalWindow.Instance?.ShowInput(
+                    title: "Enter Password",
+                    desc: $"Room <b>{room.roomCode}</b> requires a password.",
+                    placeholder: "Password...",
+                    onConfirm: pass => _ = JoinLobbyItemAsync(room, pass)
+                );
+                return;
+            }
+
+            SetStatus($"Joining {room.roomCode}...");
+            var result = await _roomService.JoinByCode(room.roomCode, password);
+            if (result.Success && result.Data != null)
+            {
+                ResetCodeInput();
+                ShowState(UIState.InRoom);
+                RefreshRoomDisplay();
+                SetStatus("Joined room. Waiting for host to start...");
+                return;
+            }
+
+            if (RoomJoinNeedsPassword(result) && password == null)
+            {
+                SetStatus("");
+                GameModalWindow.Instance?.ShowInput(
+                    title: "Enter Password",
+                    desc: $"Room <b>{room.roomCode}</b> requires a password.",
+                    placeholder: "Password...",
+                    onConfirm: pass => _ = JoinLobbyItemAsync(room, pass)
+                );
+                return;
+            }
+
+            SetStatus("");
+            GameModalWindow.Instance?.ShowNotice(
+                RoomJoinNeedsPassword(result) ? "Wrong Password" : "Cannot Join",
+                result?.Message ?? "Room not found or is full.");
+        }
+
         private void OnEnterCodeClicked()
         {
             if (!_codeInputVisible)
@@ -784,6 +994,16 @@ namespace NightHunt.UI
 
             return result.Message != null &&
                    result.Message.IndexOf("already in an active room", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool RoomJoinNeedsPassword(ApiResult<RoomResponse> result)
+        {
+            if (result == null) return false;
+            return string.Equals(result.ErrorCode, ErrorCodes.ROOM_LOCKED, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(result.ErrorCode, ErrorCodes.ROOM_PASSWORD_INVALID, StringComparison.OrdinalIgnoreCase) ||
+                   (result.Message != null && (
+                       result.Message.IndexOf("password", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                       result.Message.IndexOf("locked", StringComparison.OrdinalIgnoreCase) >= 0));
         }
 
         private void OnNavigateAwayClicked(PanelType targetPanel)
@@ -1096,7 +1316,10 @@ namespace NightHunt.UI
             _pendingMapId = _mapIds.Length > 0 ? _mapIds[0] : string.Empty;
             _pendingIsPublic = true;
             _pendingIsLocked = false;
+            _pendingPassword = string.Empty;
+            _pendingPasswordChanged = false;
             SetSettingsDirty(false);
+            SyncPrivacyControls(null);
 
             _updatingDropdown = true;
             if (modeDropdown != null)
@@ -1127,7 +1350,8 @@ namespace NightHunt.UI
         private void OnModeDropdownChanged(int idx)
         {
             if (_updatingDropdown) return; // Programmatic update — ignore
-            if (!IsLocalPlayerHost())
+            bool inRoom = _roomState != null && _roomState.IsInRoom;
+            if (inRoom && !IsLocalPlayerHost())
             {
                 ShiftUIBridge.SetDropdownIndexSilently(modeDropdown, _currentModeIdx);
                 return;
@@ -1147,7 +1371,8 @@ namespace NightHunt.UI
         private void OnMapDropdownChanged(int idx)
         {
             if (_updatingDropdown) return; // Programmatic update — ignore
-            if (!IsLocalPlayerHost())
+            bool inRoom = _roomState != null && _roomState.IsInRoom;
+            if (inRoom && !IsLocalPlayerHost())
             {
                 ShiftUIBridge.SetDropdownIndexSilently(mapDropdown, _currentMapIdx);
                 return;
@@ -1157,7 +1382,51 @@ namespace NightHunt.UI
             SetSettingsDirty(true);
         }
 
-        // Password/public switch handlers removed.
+        private void OnPublicToggleChanged(bool value)
+        {
+            if (_updatingPrivacyControls) return;
+            bool inRoom = _roomState != null && _roomState.IsInRoom;
+            if (inRoom && !IsLocalPlayerHost())
+            {
+                SyncPrivacyControls(_roomState?.CurrentRoom);
+                return;
+            }
+
+            _pendingIsPublic = value;
+            SetSettingsDirty(true);
+        }
+
+        private void OnLockedToggleChanged(bool value)
+        {
+            if (_updatingPrivacyControls) return;
+            bool inRoom = _roomState != null && _roomState.IsInRoom;
+            if (inRoom && !IsLocalPlayerHost())
+            {
+                SyncPrivacyControls(_roomState?.CurrentRoom);
+                return;
+            }
+
+            _pendingIsLocked = value;
+            if (!value)
+            {
+                _pendingPassword = string.Empty;
+                _pendingPasswordChanged = true;
+            }
+            SyncPrivacyControls(_roomState?.CurrentRoom);
+            SetSettingsDirty(true);
+        }
+
+        private void OnPasswordInputChanged(string value)
+        {
+            if (_updatingPrivacyControls) return;
+            bool inRoom = _roomState != null && _roomState.IsInRoom;
+            if (inRoom && !IsLocalPlayerHost()) return;
+
+            _pendingPassword = value ?? string.Empty;
+            _pendingPasswordChanged = true;
+            if (_pendingIsLocked)
+                SetSettingsDirty(true);
+        }
 
         private void OnSaveClicked() => _ = SaveSettingsAsync();
 
@@ -1175,7 +1444,10 @@ namespace NightHunt.UI
             _pendingMapId = NormalizeMapId(_pendingMode, room.mapId);
             _pendingIsPublic = room.isPublic;
             _pendingIsLocked = room.isLocked;
+            _pendingPassword = string.Empty;
+            _pendingPasswordChanged = false;
             BuildMapList(_pendingMode, _pendingMapId);
+            SyncPrivacyControls(room);
             SetSettingsDirty(false);
         }
 
@@ -1202,7 +1474,33 @@ namespace NightHunt.UI
                 return;
             }
 
-            string passwordPayload = null; // password input removed
+            var room = _roomState?.CurrentRoom;
+            string passwordPayload = null;
+
+            if (_pendingIsLocked)
+            {
+                bool newlyLocking = room == null || !room.isLocked;
+                if (_pendingPasswordChanged)
+                {
+                    if (string.IsNullOrWhiteSpace(_pendingPassword))
+                    {
+                        SetStatus("");
+                        GameModalWindow.Instance?.ShowNotice("Password Required", "Set a password before locking this room.");
+                        return;
+                    }
+                    passwordPayload = _pendingPassword;
+                }
+                else if (newlyLocking)
+                {
+                    SetStatus("");
+                    GameModalWindow.Instance?.ShowNotice("Password Required", "Set a password before locking this room.");
+                    return;
+                }
+            }
+            else if (room != null && room.isLocked)
+            {
+                passwordPayload = string.Empty;
+            }
 
             bool success = await ApplySetting(new UpdateRoomSettingsRequest
             {
@@ -1216,9 +1514,40 @@ namespace NightHunt.UI
 
             if (success)
             {
+                _pendingPassword = string.Empty;
+                _pendingPasswordChanged = false;
                 SetSettingsDirty(false);
                 RefreshRoomDisplay();
             }
+        }
+
+        private void SyncPrivacyControls(RoomResponse room)
+        {
+            bool waiting = room == null || room.status == Constants.ROOM_STATUS_WAITING;
+            bool inRoom = _roomState != null && _roomState.IsInRoom;
+            bool editable = (!inRoom || IsLocalPlayerHost()) && waiting;
+
+            _updatingPrivacyControls = true;
+            if (publicToggle != null)
+            {
+                publicToggle.isOn = _pendingIsPublic;
+                publicToggle.interactable = editable;
+            }
+            if (lockedToggle != null)
+            {
+                lockedToggle.isOn = _pendingIsLocked;
+                lockedToggle.interactable = editable;
+            }
+            if (passwordInput != null)
+            {
+                passwordInput.gameObject.SetActive(_pendingIsLocked);
+                passwordInput.interactable = editable && _pendingIsLocked;
+                if (!_pendingPasswordChanged)
+                    passwordInput.text = string.Empty;
+                else if (passwordInput.text != _pendingPassword)
+                    passwordInput.text = _pendingPassword;
+            }
+            _updatingPrivacyControls = false;
         }
 
         // ── Mode List Helpers ─────────────────────────────────────────────────
@@ -1614,6 +1943,15 @@ namespace NightHunt.UI
             }
             SyncMapDropdown(isHost && waiting && activeModeVisible);
             _updatingDropdown = false;
+
+            if (!_settingsDirty)
+            {
+                _pendingIsPublic = room.isPublic;
+                _pendingIsLocked = room.isLocked;
+                _pendingPassword = string.Empty;
+                _pendingPasswordChanged = false;
+            }
+            SyncPrivacyControls(room);
 
             if (btnSave != null) btnSave.interactable = isHost && waiting && _settingsDirty && activeModeVisible;
 
@@ -2161,6 +2499,19 @@ namespace NightHunt.UI
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
+        private void SetLobbyListStatus(string msg)
+        {
+            ResolveReferences(createFallback: true);
+            if (lobbyListStatusText != null) lobbyListStatusText.text = msg ?? string.Empty;
+        }
+
+        private static void SetButtonLabel(Button button, string text)
+        {
+            if (button == null) return;
+            var label = button.GetComponentInChildren<TextMeshProUGUI>(true);
+            if (label != null) label.text = text;
+        }
+
         private void ResolveReferences(bool createFallback)
         {
             ResolveDropdownReferences();
@@ -2171,6 +2522,25 @@ namespace NightHunt.UI
             if (btnCopyCode == null)
                 btnCopyCode = FindChildByName<Button>("copy");
 
+            if (btnRefresh == null)
+                btnRefresh = FindChildByName<Button>("refresh");
+
+            if (lobbyListStatusText == null)
+                lobbyListStatusText = FindChildByName<TextMeshProUGUI>("lobby status");
+
+            if (lobbyListContainer == null)
+            {
+                var listRect = FindChildByName<RectTransform>("lobby list");
+                if (listRect != null) lobbyListContainer = listRect;
+            }
+
+            if (publicToggle == null)
+                publicToggle = FindChildByName<Toggle>("public");
+            if (lockedToggle == null)
+                lockedToggle = FindChildByName<Toggle>("lock");
+            if (passwordInput == null)
+                passwordInput = FindChildByName<TMP_InputField>("password");
+
             if (!createFallback)
                 return;
 
@@ -2179,6 +2549,22 @@ namespace NightHunt.UI
 
             if (btnCopyCode == null && roomCodeText != null)
                 btnCopyCode = CreateRuntimeCopyButton();
+
+            if (btnRefresh == null)
+                btnRefresh = CreateRuntimeTextButton("Runtime Refresh Lobbies", GetJoinCreateParent(), "Refresh", new Vector2(0f, -148f), new Vector2(140f, 36f));
+
+            if (lobbyListStatusText == null)
+                lobbyListStatusText = CreateRuntimeLobbyListStatus();
+
+            if (lobbyListContainer == null)
+                lobbyListContainer = CreateRuntimeLobbyListContainer();
+
+            if (publicToggle == null)
+                publicToggle = CreateRuntimeToggle("Runtime Public Toggle", "Public", true, new Vector2(-210f, 74f));
+            if (lockedToggle == null)
+                lockedToggle = CreateRuntimeToggle("Runtime Locked Toggle", "Locked", false, new Vector2(-70f, 74f));
+            if (passwordInput == null)
+                passwordInput = CreateRuntimePasswordInput();
         }
 
         private void ResolveDropdownReferences()
@@ -2237,6 +2623,190 @@ namespace NightHunt.UI
             }
 
             return null;
+        }
+
+        private Transform GetJoinCreateParent()
+        {
+            return joinCreatePanel != null ? joinCreatePanel.transform : transform;
+        }
+
+        private Transform GetSettingsParent()
+        {
+            return inRoomPanel != null ? inRoomPanel.transform : transform;
+        }
+
+        private Button CreateRuntimeTextButton(string name, Transform parent, string labelText, Vector2 position, Vector2 size)
+        {
+            var go = CreateRuntimeUIObject(name, parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = size;
+            rect.anchoredPosition = position;
+
+            var image = go.AddComponent<Image>();
+            image.color = new Color(0.13f, 0.18f, 0.22f, 0.95f);
+            var button = go.AddComponent<Button>();
+            button.targetGraphic = image;
+
+            var label = CreateRuntimeText(go.transform, "Label", 14f, TextAlignmentOptions.Center);
+            label.text = labelText;
+            return button;
+        }
+
+        private TextMeshProUGUI CreateRuntimeLobbyListStatus()
+        {
+            var go = CreateRuntimeUIObject("Runtime Lobby List Status", GetJoinCreateParent());
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(700f, 28f);
+            rect.anchoredPosition = new Vector2(0f, -190f);
+
+            var text = go.AddComponent<TextMeshProUGUI>();
+            text.alignment = TextAlignmentOptions.Center;
+            text.fontSize = 13f;
+            text.color = new Color(0.78f, 0.86f, 0.94f, 1f);
+            text.raycastTarget = false;
+            text.text = string.Empty;
+            return text;
+        }
+
+        private Transform CreateRuntimeLobbyListContainer()
+        {
+            var go = CreateRuntimeUIObject("Runtime Lobby List", GetJoinCreateParent());
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.sizeDelta = new Vector2(720f, 190f);
+            rect.anchoredPosition = new Vector2(0f, -212f);
+
+            var layout = go.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 6f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = false;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            layout.padding = new RectOffset(4, 4, 4, 4);
+            return go.transform;
+        }
+
+        private GameObject CreateRuntimeLobbyListItem(Transform parent)
+        {
+            var go = CreateRuntimeUIObject("Runtime Lobby List Item", parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(700f, 34f);
+            var layout = go.AddComponent<LayoutElement>();
+            layout.preferredHeight = 34f;
+            layout.minHeight = 34f;
+
+            var image = go.AddComponent<Image>();
+            image.color = new Color(0.10f, 0.14f, 0.18f, 0.92f);
+            var button = go.AddComponent<Button>();
+            button.targetGraphic = image;
+
+            var label = CreateRuntimeText(go.transform, "Label", 14f, TextAlignmentOptions.Left);
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.offsetMin = new Vector2(12f, 0f);
+            labelRect.offsetMax = new Vector2(-12f, 0f);
+            return go;
+        }
+
+        private TextMeshProUGUI CreateRuntimeText(Transform parent, string name, float fontSize, TextAlignmentOptions alignment)
+        {
+            var go = CreateRuntimeUIObject(name, parent);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            var text = go.AddComponent<TextMeshProUGUI>();
+            text.alignment = alignment;
+            text.fontSize = fontSize;
+            text.color = Color.white;
+            text.raycastTarget = false;
+            text.text = string.Empty;
+            return text;
+        }
+
+        private Toggle CreateRuntimeToggle(string name, string labelText, bool isOn, Vector2 position)
+        {
+            var go = CreateRuntimeUIObject(name, GetSettingsParent());
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.sizeDelta = new Vector2(130f, 28f);
+            rect.anchoredPosition = position;
+
+            var toggle = go.AddComponent<Toggle>();
+            var boxGo = CreateRuntimeUIObject("Box", go.transform);
+            var boxRect = boxGo.GetComponent<RectTransform>();
+            boxRect.anchorMin = new Vector2(0f, 0.5f);
+            boxRect.anchorMax = new Vector2(0f, 0.5f);
+            boxRect.pivot = new Vector2(0f, 0.5f);
+            boxRect.sizeDelta = new Vector2(22f, 22f);
+            boxRect.anchoredPosition = Vector2.zero;
+            var box = boxGo.AddComponent<Image>();
+            box.color = new Color(0.13f, 0.18f, 0.22f, 0.95f);
+
+            var checkGo = CreateRuntimeUIObject("Checkmark", boxGo.transform);
+            var checkRect = checkGo.GetComponent<RectTransform>();
+            checkRect.anchorMin = new Vector2(0.5f, 0.5f);
+            checkRect.anchorMax = new Vector2(0.5f, 0.5f);
+            checkRect.pivot = new Vector2(0.5f, 0.5f);
+            checkRect.sizeDelta = new Vector2(14f, 14f);
+            var check = checkGo.AddComponent<Image>();
+            check.color = new Color(0.24f, 0.72f, 0.42f, 1f);
+
+            var label = CreateRuntimeText(go.transform, "Label", 13f, TextAlignmentOptions.Left);
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.offsetMin = new Vector2(30f, 0f);
+            label.text = labelText;
+
+            toggle.targetGraphic = box;
+            toggle.graphic = check;
+            toggle.isOn = isOn;
+            return toggle;
+        }
+
+        private TMP_InputField CreateRuntimePasswordInput()
+        {
+            var go = CreateRuntimeUIObject("Runtime Lobby Password", GetSettingsParent());
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.sizeDelta = new Vector2(230f, 34f);
+            rect.anchoredPosition = new Vector2(80f, 74f);
+
+            var image = go.AddComponent<Image>();
+            image.color = new Color(0.08f, 0.11f, 0.14f, 0.95f);
+            var input = go.AddComponent<TMP_InputField>();
+
+            var text = CreateRuntimeText(go.transform, "Text", 14f, TextAlignmentOptions.Left);
+            var textRect = text.GetComponent<RectTransform>();
+            textRect.offsetMin = new Vector2(10f, 0f);
+            textRect.offsetMax = new Vector2(-10f, 0f);
+
+            var placeholder = CreateRuntimeText(go.transform, "Placeholder", 14f, TextAlignmentOptions.Left);
+            placeholder.color = new Color(0.7f, 0.76f, 0.82f, 0.7f);
+            placeholder.text = "Password";
+            var placeholderRect = placeholder.GetComponent<RectTransform>();
+            placeholderRect.offsetMin = new Vector2(10f, 0f);
+            placeholderRect.offsetMax = new Vector2(-10f, 0f);
+
+            input.targetGraphic = image;
+            input.textComponent = text;
+            input.placeholder = placeholder;
+            input.contentType = TMP_InputField.ContentType.Password;
+            input.inputType = TMP_InputField.InputType.Password;
+            input.characterLimit = 50;
+            return input;
         }
 
         private TextMeshProUGUI CreateRuntimeStatusText()

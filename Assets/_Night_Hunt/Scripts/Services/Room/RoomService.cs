@@ -318,6 +318,31 @@ namespace NightHunt.Services.Room
             return await QuickPlay(request);
         }
 
+        public async Task<ApiResult<RoomListResponse>> GetPublicCustomRooms(string mode = null, string mapId = null, int limit = 20)
+        {
+            if (backendClient == null)
+            {
+                RLog($"GetPublicCustomRooms blocked: backendClient is null. local={DescribeLocalRoom()}");
+                return ApiResult<RoomListResponse>.Error("Backend client is not ready");
+            }
+
+            var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(mode))
+                query.Add($"mode={Uri.EscapeDataString(mode.Trim())}");
+            if (!string.IsNullOrWhiteSpace(mapId))
+                query.Add($"mapId={Uri.EscapeDataString(mapId.Trim())}");
+            query.Add($"limit={Mathf.Clamp(limit, 1, 20)}");
+
+            string endpoint = Constants.API_ROOMS_CUSTOM_PUBLIC + "?" + string.Join("&", query);
+            RLog($"GetPublicCustomRooms request endpoint={endpoint} local={DescribeLocalRoom()}");
+            var result = await backendClient.GetAsync<RoomListResponse>(endpoint);
+            RLog(
+                $"GetPublicCustomRooms response success={result?.Success} errorCode={result?.ErrorCode ?? "null"} " +
+                $"message='{result?.Message ?? "null"}' count={result?.Data?.rooms?.Count ?? -1}");
+
+            return result ?? ApiResult<RoomListResponse>.Error("Lobby list returned no response");
+        }
+
         // Overload with DTO
         public async Task<ApiResult<RoomResponse>> SetReady(long roomId, ReadyRequest request)
         {

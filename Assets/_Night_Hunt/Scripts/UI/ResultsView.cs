@@ -73,6 +73,7 @@ namespace NightHunt.UI
         // Last match end result (cached for post-match backend call)
         private MatchEndedEvent? _lastMatchResult;
         private float            _matchStartTime;
+        private bool             _navigatingPostMatch;
 
         // ──────────────────────────────────────────────────────────────────────
 
@@ -291,24 +292,52 @@ namespace NightHunt.UI
             NavigatePostMatch();
         }
 
-        private void NavigatePostMatch()
+        private async void NavigatePostMatch()
         {
+            if (_navigatingPostMatch)
+                return;
+            _navigatingPostMatch = true;
+
+            var roomState = RoomState.Instance;
             var mode = RoomState.Instance?.CurrentGameMode ?? NightHunt.Networking.GameMode.None;
+            bool isCustomRelay = mode == NightHunt.Networking.GameMode.Custom_Relay;
+            long customRoomId = isCustomRelay ? (roomState?.RoomId ?? 0L) : 0L;
 
             // Report match result to backend before clearing session.
-            // Fire-and-forget: don't block navigation on network latency.
-            _ = PostMatchResultAsync();
+            var postMatchTask = PostMatchResultAsync();
+            try
+            {
+                if (isCustomRelay && roomState != null && roomState.IsHostPlayer)
+                    await postMatchTask;
+                else
+                    _ = postMatchTask;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[ResultsView] Post-match backend sync failed before navigation: {ex.Message}");
+            }
+
+            if (isCustomRelay && customRoomId > 0L)
+                HomeView.MarkPendingCustomPostMatch(customRoomId);
 
             var network = NetworkGameManager.Instance;
             if (network != null)
             {
-                if (mode == NightHunt.Networking.GameMode.Custom_Relay)
-                    _ = network.DisconnectWithCleanup();
+                if (isCustomRelay)
+                    await network.DisconnectWithCleanup();
                 else
                     network.Disconnect();
             }
 
-            RoomState.Instance?.ClearRoom();
+            if (isCustomRelay)
+            {
+                RoomState.Instance?.ClearNetworkSession();
+                NetworkGameManager.ResetConnectionFlags();
+            }
+            else
+            {
+                RoomState.Instance?.ClearRoom();
+            }
 
             // Đang ở gameplay scene → luôn dùng SceneLoader.LoadHome() để về 01_Home.
             // UINavigator trong 01_Home sẽ tự điều hướng đến đúng panel.

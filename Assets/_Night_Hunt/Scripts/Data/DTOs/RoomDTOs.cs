@@ -81,6 +81,28 @@ namespace NightHunt.Data.DTOs
     }
 
     [Serializable]
+    public class RoomListItemResponse
+    {
+        public long roomId;
+        public string roomCode;
+        public string mode;
+        public string mapId;
+        public string status;
+        public bool isPublic;
+        public bool isLocked;
+        public long ownerId;
+        public string ownerUsername;
+        public int currentPlayers;
+        public int maxPlayers;
+    }
+
+    [Serializable]
+    public class RoomListResponse
+    {
+        public List<RoomListItemResponse> rooms;
+    }
+
+    [Serializable]
     public class SwapRequestRequest
     {
         public long targetUserId;

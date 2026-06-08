@@ -126,6 +126,7 @@ namespace NightHunt.UI
         // Set by ResultsView.NavigatePostMatch() so the new HomeView instance spawned in
         // the next scene knows profile data was just refreshed — skips the second profile fetch.
         private static bool s_profileJustRefreshed;
+        private static long s_pendingCustomPostMatchRoomId;
 
         /// <summary>
         /// Called by ResultsView.NavigatePostMatch() after it has already awaited FetchProfile().
@@ -133,6 +134,11 @@ namespace NightHunt.UI
         /// skip the redundant RefreshProfileFromServer() call on the first OnShow() after a match.
         /// </summary>
         public static void MarkProfileJustRefreshed() => s_profileJustRefreshed = true;
+
+        public static void MarkPendingCustomPostMatch(long roomId)
+        {
+            s_pendingCustomPostMatchRoomId = roomId > 0L ? roomId : 0L;
+        }
 
         /// <summary>
         /// Core home-data fetch: profile from server + friends + party.
@@ -373,6 +379,12 @@ namespace NightHunt.UI
 
         private async Task CheckAndShowReconnectPopup()
         {
+            if (s_pendingCustomPostMatchRoomId > 0L)
+            {
+                await CheckAndShowCustomPostMatchPopup();
+                return;
+            }
+
             if (_roomState == null || !_roomState.IsInRoom || _roomService == null) return;
             var result = await _roomService.Reconnect(_roomState.RoomId);
             if (result.Success && result.Data != null)
@@ -394,6 +406,44 @@ namespace NightHunt.UI
         // ══════════════════════════════════════════════════════════════════════
         // WS — SESSION EVENTS + FRIEND FORWARDING
         // ══════════════════════════════════════════════════════════════════════
+
+        private async Task CheckAndShowCustomPostMatchPopup()
+        {
+            long roomId = s_pendingCustomPostMatchRoomId;
+            s_pendingCustomPostMatchRoomId = 0L;
+
+            if (roomId <= 0L || _roomService == null)
+                return;
+
+            ApiResult<RoomResponse> result = null;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                result = await _roomService.GetRoom(roomId);
+                if (result != null && result.Success && result.Data != null
+                    && result.Data.status != Constants.ROOM_STATUS_IN_GAME)
+                {
+                    break;
+                }
+
+                if (attempt < 2)
+                    await Task.Delay(500);
+            }
+
+            if (result != null && result.Success && result.Data != null)
+            {
+                GameModalWindow.Instance?.ShowConfirm(
+                    title:       "Custom Lobby",
+                    desc:        $"Continue in room <b>{result.Data.roomCode}</b>?",
+                    onConfirm:   () => UINavigator.Instance?.GoPartyCustomMode(),
+                    onCancel:    () => _ = LeaveRecoveredRoomAsync(result.Data),
+                    confirmText: "Continue",
+                    cancelText:  "Leave Room");
+            }
+            else
+            {
+                _roomState?.ClearRoom();
+            }
+        }
 
         private async Task LeaveRecoveredRoomAsync(RoomResponse room)
         {
