@@ -68,9 +68,13 @@ namespace NightHunt.UI
             string title = ResolveTitle(state, isLocalUser);
             string name = !string.IsNullOrEmpty(evt.displayName) ? evt.displayName : $"Player {evt.userId}";
             string message = !string.IsNullOrEmpty(evt.message) ? evt.message : $"{name}: {state}";
+            Debug.Log(
+                $"[NH_PRESENCE][NOTICE] state={state} userId={evt.userId} localUserId={localUserId} " +
+                $"isLocal={isLocalUser} roomId={evt.room?.roomId ?? 0} message='{message}'");
 
             if (isLocalUser && string.Equals(state, "ABANDONED", System.StringComparison.OrdinalIgnoreCase))
             {
+                Debug.LogWarning($"[NH_PRESENCE][LOAD_HOME] Local player abandoned userId={evt.userId}; loading Home.");
                 GameModalWindow.Instance?.Close();
                 RoomState.Instance?.ClearRoom();
                 RoomState.Instance?.ClearNetworkSession();

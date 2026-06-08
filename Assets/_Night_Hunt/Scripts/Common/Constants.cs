@@ -112,7 +112,7 @@ namespace NightHunt.Common
         public const string PREFS_SESSION_ID             = "NH_SESSION_ID";
         public const string PREFS_USER_ID                = "NH_USER_ID";
         public const string PREFS_USERNAME               = "NH_USERNAME";
-        public const string PREFS_SELECTED_CHARACTER_ID  = "SelectedCharacterId"; // Read by ClientNetworkHandler
+        public const string PREFS_SELECTED_CHARACTER_ID  = "SelectedCharacterId"; // Read by PlayerIdentityFactory
     }
 }
 

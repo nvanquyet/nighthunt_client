@@ -49,9 +49,9 @@ namespace NightHunt.Networking
         [SerializeField] private float _clientRuntimeReadyTimeoutSeconds = 10f;
 
         [Header("Relay Scene Gate")]
-        [Tooltip("Custom_Relay clients load the map with Unity SceneManager before connecting. If FishNet does not emit OnLoadedStartScenes, spawn the per-client identity handler after this delay when the host is already in a map scene.")]
+        [Tooltip("Custom_Relay clients load the map with Unity SceneManager before connecting. If FishNet does not emit OnLoadedStartScenes, mark the connection ready for identity broadcast after this delay when the host is already in a map scene.")]
         [SerializeField] private float _relayStartScenesFallbackSeconds = 1.0f;
-        [Tooltip("Seconds to wait after spawning ClientNetworkHandler before logging that the identity ServerRpc never arrived.")]
+        [Tooltip("Seconds to wait after a connection is ready before logging that player identity never arrived.")]
         [SerializeField] private float _clientDataTimeoutSeconds = 5.0f;
         [Tooltip("Seconds to preserve a Custom_Relay player object after transport disconnect so the same backend user can reconnect without a despawn/spawn loop.")]
         [SerializeField] private float _relayReconnectHoldSeconds = 60.0f;
@@ -63,10 +63,11 @@ namespace NightHunt.Networking
         private Coroutine _runtimeReadyTimeoutCoroutine;
         private readonly HashSet<int> _runtimeReadyClients = new();
         private readonly HashSet<long> _abandonedBackendUserIds = new();
-        private readonly HashSet<int> _clientHandlerSpawnedConnections = new();
+        private readonly HashSet<int> _identityHandshakeConnections = new();
         private readonly Dictionary<int, Coroutine> _relaySceneFallbackCoroutines = new();
         private readonly Dictionary<int, Coroutine> _clientDataTimeoutCoroutines = new();
         private readonly Dictionary<int, Coroutine> _relayDisconnectHoldCoroutines = new();
+        private bool _serverPlayerDataBroadcastRegistered;
 
         // Tracking
         private Dictionary<int, GameObject> _spawnedPlayers = new(); // FishNet ClientId â†’ GameObject
@@ -126,6 +127,7 @@ namespace NightHunt.Networking
 
             // Subscribe to connection events
             _networkManager.ServerManager.OnRemoteConnectionState += OnServerConnectionState;
+            RegisterPlayerDataBroadcastHandler();
             if (GameWebSocketService.Instance != null)
                 GameWebSocketService.Instance.OnPlayerAbandoned += HandlePlayerAbandoned;
 
@@ -194,6 +196,7 @@ namespace NightHunt.Networking
             if (_networkManager != null && _networkManager.ServerManager != null)
             {
                 _networkManager.ServerManager.OnRemoteConnectionState -= OnServerConnectionState;
+                UnregisterPlayerDataBroadcastHandler();
             }
 
             if (GameWebSocketService.Instance != null)
@@ -207,7 +210,7 @@ namespace NightHunt.Networking
 
             _runtimeReadyClients.Clear();
             _abandonedBackendUserIds.Clear();
-            _clientHandlerSpawnedConnections.Clear();
+            _identityHandshakeConnections.Clear();
             foreach (var fallback in _relaySceneFallbackCoroutines.Values)
             {
                 if (fallback != null)
@@ -223,6 +226,27 @@ namespace NightHunt.Networking
             _matchStartTriggered = false;
             _spawnedPlayers.Clear();
             _spawnedPlayerCount = 0;
+        }
+
+        [Server]
+        private void RegisterPlayerDataBroadcastHandler()
+        {
+            if (_serverPlayerDataBroadcastRegistered || _networkManager?.ServerManager == null)
+                return;
+
+            _networkManager.ServerManager.RegisterBroadcast<SubmitPlayerDataBroadcast>(OnClientSubmittedPlayerDataBroadcast, requireAuthentication: false);
+            _serverPlayerDataBroadcastRegistered = true;
+            Debug.Log("[NH_HANDSHAKE][HOST_BROADCAST][REGISTER] SubmitPlayerDataBroadcast registered requireAuth=False.");
+        }
+
+        [Server]
+        private void UnregisterPlayerDataBroadcastHandler()
+        {
+            if (!_serverPlayerDataBroadcastRegistered || _networkManager?.ServerManager == null)
+                return;
+
+            _networkManager.ServerManager.UnregisterBroadcast<SubmitPlayerDataBroadcast>(OnClientSubmittedPlayerDataBroadcast);
+            _serverPlayerDataBroadcastRegistered = false;
         }
 
         // ===== CONNECTION EVENTS =====
@@ -248,7 +272,10 @@ namespace NightHunt.Networking
                     CancelRelaySceneFallback(conn);
                     CancelClientDataTimeout(conn);
                     if (conn != null)
-                        _clientHandlerSpawnedConnections.Remove(conn.ClientId);
+                    {
+                        _identityHandshakeConnections.Remove(conn.ClientId);
+                        CancelDataRequestRetry(conn.ClientId);
+                    }
                     OnPlayerDisconnected(conn);
                     break;
             }
@@ -324,6 +351,11 @@ namespace NightHunt.Networking
             return ShouldUseRelayLocalSceneFallback();
         }
 
+        private static bool ShouldUseConnectionBroadcastIdentity()
+        {
+            return RoomState.Instance?.CurrentGameMode == GameMode.Custom_Relay;
+        }
+
         [Server]
         private void OnPlayerConnected(NetworkConnection conn, string source)
         {
@@ -331,7 +363,13 @@ namespace NightHunt.Networking
                 return;
 
             int fishnetClientId = conn.ClientId;
-            if (!_clientHandlerSpawnedConnections.Add(fishnetClientId))
+            if (_spawnedPlayers.ContainsKey(fishnetClientId))
+            {
+                Debug.Log($"[NH_HANDSHAKE][HOST_CONNECT_DUPLICATE] Player connected ignored already-spawned clientId={fishnetClientId} source={source}");
+                return;
+            }
+
+            if (!_identityHandshakeConnections.Add(fishnetClientId))
             {
                 Debug.Log($"[NH_HANDSHAKE][HOST_CONNECT_DUPLICATE] Player connected ignored duplicate clientId={fishnetClientId} source={source}");
                 return;
@@ -344,24 +382,40 @@ namespace NightHunt.Networking
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log($"[ServerGameManager] Player connected - FishNet ClientId: {fishnetClientId}");
 
-            //Spawn ClientNetworkHandler cho client nÃ y
+            if (ShouldUseConnectionBroadcastIdentity())
+            {
+                Debug.Log($"[NH_HANDSHAKE][HOST_IDENTITY_READY] clientId={fishnetClientId} source={source} path=connection-broadcast");
+                StartClientDataTimeout(conn, source);
+                StartDataRequestRetry(conn, source);
+                StartCoroutine(RequestClientDataAfterDelay(conn));
+                return;
+            }
+
+            Debug.Log($"[NH_HANDSHAKE][HOST_IDENTITY_READY] clientId={fishnetClientId} source={source} path=owner-rpc-handler");
+            if (clientNetworkHandlerPrefab == null)
+            {
+                Debug.LogError($"[NH_HANDSHAKE][NH_DROP][HOST_IDENTITY_PREFAB_MISSING] ClientNetworkHandler prefab missing clientId={fishnetClientId}");
+                conn.Disconnect(true);
+                return;
+            }
+
             ClientNetworkHandler cnh = Instantiate(clientNetworkHandlerPrefab);
             _networkManager.ServerManager.Spawn(cnh.gameObject, conn);
             StartClientDataTimeout(conn, source);
-
-            StartDataRequestRetry(conn, source);
-            StartCoroutine(RequestClientDataAfterDelay(conn));
         }
+
         private IEnumerator RequestClientDataAfterDelay(NetworkConnection conn)
         {
-            // Đợi relay ổn định
             yield return new WaitForSeconds(2f);
     
             if (conn == null || !conn.IsActive)
                 yield break;
+
+            if (!ShouldUseConnectionBroadcastIdentity() || _spawnedPlayers.ContainsKey(conn.ClientId))
+                yield break;
         
-            Debug.Log($"[NH_HANDSHAKE][HOST_DATA_REQUEST] Broadcasting data request to clientId={conn.ClientId}");
-            ServerManager.Broadcast(conn, new RequestPlayerDataBroadcast());
+            Debug.Log($"[NH_HANDSHAKE][HOST_IDENTITY_REQUEST] Broadcasting identity request to clientId={conn.ClientId}");
+            ServerManager.Broadcast(conn, new RequestPlayerDataBroadcast(), requireAuthenticated: false);
         }
         
         [Server]
@@ -411,10 +465,15 @@ namespace NightHunt.Networking
                     yield break;
                 }
         
-                Debug.Log($"[NH_HANDSHAKE][HOST_DATA_REQUEST] Broadcasting data request to clientId={clientId} source={source}");
+                if (!ShouldUseConnectionBroadcastIdentity())
+                {
+                    _dataRequestRetryCoroutines.Remove(clientId);
+                    yield break;
+                }
+
+                Debug.Log($"[NH_HANDSHAKE][HOST_IDENTITY_REQUEST] Broadcasting identity request to clientId={clientId} source={source}");
         
-                // Broadcast không cần ownership
-                ServerManager.Broadcast(conn, new RequestPlayerDataBroadcast(), true);
+                ServerManager.Broadcast(conn, new RequestPlayerDataBroadcast(), requireAuthenticated: false);
             }
     
             _dataRequestRetryCoroutines.Remove(clientId);
@@ -451,9 +510,9 @@ namespace NightHunt.Networking
                 yield break;
 
             Debug.LogError(
-                $"[NH_HANDSHAKE][NH_DROP][HOST_DATA_TIMEOUT] Client data timeout clientId={clientId} after {waitSeconds:F1}s source={source}. " +
-                "Server spawned ClientNetworkHandler but did not receive RpcSendPlayerData. " +
-                "If this appears after relay-local-scene-fallback, inspect host->client relay packets and client ClientNetworkHandler.OnStartClient logs for the same session.");
+                $"[NH_HANDSHAKE][NH_DROP][HOST_DATA_TIMEOUT] Player identity timeout clientId={clientId} after {waitSeconds:F1}s source={source} " +
+                $"path={(ShouldUseConnectionBroadcastIdentity() ? "connection-broadcast" : "owner-rpc-handler")}. " +
+                "Host did not receive SubmitPlayerDataBroadcast/RpcSendPlayerData; inspect NH_RELAY FORWARD/DROP and client NH_HANDSHAKE CLIENT_BROADCAST logs for the same session.");
         }
 
         [Server]
@@ -485,20 +544,51 @@ namespace NightHunt.Networking
         }
 
         /// <summary>
-        /// Server: Nháº­n data tá»« client (called by ClientNetworkHandler)
+        /// Server: receive player identity through a connection-level broadcast.
+        /// This is the canonical Custom_Relay identity path; it runs before player
+        /// objects are spawned and does not depend on scene observers or ownership.
+        /// </summary>
+        [Server]
+        private void OnClientSubmittedPlayerDataBroadcast(NetworkConnection conn, SubmitPlayerDataBroadcast broadcast, Channel channel)
+        {
+            if (conn == null || !conn.IsActive)
+            {
+                Debug.LogWarning("[NH_HANDSHAKE][NH_DROP][HOST_BROADCAST_RECEIVED] Ignored player data broadcast from inactive connection.");
+                return;
+            }
+
+            PlayerRegistryData clientData = broadcast.Data;
+            if (!ShouldUseRelayLocalSceneFallback() && !conn.LoadedStartScenes(true))
+            {
+                Debug.Log(
+                    $"[NH_HANDSHAKE][HOST_BROADCAST_DEFER] clientId={conn.ClientId} backendId={clientData.BackendPlayerId} " +
+                    "ignored until FishNet start scenes are loaded.");
+                return;
+            }
+
+            AddRelayConnectionToActiveScene(conn, "client-broadcast-submit");
+            Debug.Log(
+                $"[NH_HANDSHAKE][HOST_BROADCAST_RECEIVED] clientId={conn.ClientId} backendId={clientData.BackendPlayerId} " +
+                $"name={clientData.DisplayName} team={clientData.TeamId} channel={channel}.");
+            OnClientDataReceived(conn, clientData);
+        }
+
+        /// <summary>
+        /// Server: receive identity from the active connection handshake path.
         /// </summary>
         [Server]
         public void OnClientDataReceived(NetworkConnection conn, PlayerRegistryData clientData)
         {
             int fishnetClientId = conn.ClientId;
             CancelClientDataTimeout(conn);
+            CancelDataRequestRetry(fishnetClientId);
             Debug.Log($"[NH_HANDSHAKE][HOST_DATA_RECEIVED] Client data received clientId={fishnetClientId} backendId={clientData.BackendPlayerId} name={clientData.DisplayName} team={clientData.TeamId}");
 
             if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)
                 Debug.Log(
                 $"[ServerGameManager] Received client data - FishNet ID: {fishnetClientId}, Backend ID: {clientData.BackendPlayerId}, Name: {clientData.DisplayName}");
 
-            // Data validation is the client's responsibility via RpcSendPlayerData / JWT.
+            // Data validation is the client's responsibility via connection broadcast / JWT.
             // Server-side anti-cheat can be layered here in a future pass.
             if (_spawnedPlayers.ContainsKey(fishnetClientId))
             {
@@ -560,8 +650,8 @@ namespace NightHunt.Networking
             _spawnedPlayers.Remove(previousClientId);
             _spawnedPlayers[conn.ClientId] = playerObj;
             _spawnSystem?.OnPlayerReconnected(previousClientId, conn.ClientId);
-            _clientHandlerSpawnedConnections.Remove(previousClientId);
-            _clientHandlerSpawnedConnections.Add(conn.ClientId);
+            _identityHandshakeConnections.Remove(previousClientId);
+            _identityHandshakeConnections.Add(conn.ClientId);
             _runtimeReadyClients.Remove(previousClientId);
 
             clientData.Status = PlayerConnectionStatus.InGame;
@@ -1018,7 +1108,7 @@ namespace NightHunt.Networking
         private void HoldRelayDisconnectedPlayer(int fishnetClientId, NetworkPlayer networkPlayer, string backendId)
         {
             _registryService.MarkPlayerReconnecting(fishnetClientId);
-            _clientHandlerSpawnedConnections.Remove(fishnetClientId);
+            _identityHandshakeConnections.Remove(fishnetClientId);
             _runtimeReadyClients.Remove(fishnetClientId);
             CancelRelayDisconnectHold(fishnetClientId);
 
@@ -1070,7 +1160,7 @@ namespace NightHunt.Networking
             _networkManager.ServerManager.Despawn(playerObj);
             _spawnedPlayers.Remove(fishnetClientId);
             _runtimeReadyClients.Remove(fishnetClientId);
-            _clientHandlerSpawnedConnections.Remove(fishnetClientId);
+            _identityHandshakeConnections.Remove(fishnetClientId);
             _spawnedPlayerCount = _spawnedPlayers.Count;
 
             if (networkPlayer != null && NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableNetworkDebugLogs)

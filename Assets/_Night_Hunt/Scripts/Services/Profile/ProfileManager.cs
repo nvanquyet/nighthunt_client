@@ -16,7 +16,7 @@ namespace NightHunt.Services.Profile
     ///   1. UI calls <see cref="SetCharacter"/> with the CharacterDefinition.CharacterId string.
     ///   2. Backend persists it and confirms with an updated ProfileResponse.
     ///   3. SessionState.SelectedCharacterId is updated + synced to PlayerPrefs.
-    ///   4. Next time ClientNetworkHandler.GetLocalPlayerData() runs it reads the new value.
+    ///   4. Next time PlayerIdentityFactory.BuildLocalPlayerData() runs it reads the new value.
     /// </summary>
     public class ProfileManager : MonoBehaviour
     {

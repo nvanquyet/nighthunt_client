@@ -5,6 +5,7 @@ using FishNet.Transporting.Tugboat;
 using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
+using NightHunt.Networking.Player;
 using NightHunt.Networking.Relay;
 using NightHunt.State;
 using NightHunt.UI;
@@ -71,6 +72,9 @@ namespace NightHunt.Networking
         private RelayIdentityPacketLayer _activeRelayIdentityLayer;
         private string _activeRelayIdentitySessionId;
         private ulong _activeRelayIdentityPeerId;
+        private bool _clientHandshakeBroadcastRegistered;
+        private float _lastPlayerDataBroadcastRealtime = -1f;
+        private const float PlayerDataBroadcastThrottleSeconds = 0.25f;
         private static readonly byte[] RelayHostRegistrationPayload =
             { 78, 72, 95, 82, 69, 76, 65, 89, 95, 72, 79, 83, 84 };
 
@@ -102,6 +106,7 @@ namespace NightHunt.Networking
 
             networkManager.SceneManager.OnLoadEnd               += OnSceneLoadEnd;
             networkManager.ClientManager.OnClientConnectionState += OnClientConnectionState;
+            RegisterClientHandshakeBroadcast();
             if (GameWebSocketService.Instance != null)
             {
                 GameWebSocketService.Instance.OnDsReady += OnDsReadyReceived;
@@ -153,6 +158,7 @@ namespace NightHunt.Networking
                 networkManager.SceneManager.OnLoadEnd               -= OnSceneLoadEnd;
                 networkManager.ClientManager.OnClientConnectionState -= OnClientConnectionState;
             }
+            UnregisterClientHandshakeBroadcast();
             if (GameWebSocketService.Instance != null)
             {
                 GameWebSocketService.Instance.OnDsReady -= OnDsReadyReceived;
@@ -490,6 +496,8 @@ namespace NightHunt.Networking
                     CancelInvoke(nameof(MarkConnectionStable));
                     Invoke(nameof(MarkConnectionStable), Mathf.Max(1f, _stableConnectionSecondsToResetRetries));
                     Debug.Log($"[NH_CONN][STARTED] Client connected to match server retry={_retryCount}/{_maxRetries} t={System.DateTime.UtcNow:HH:mm:ss.fff}.");
+                    RegisterClientHandshakeBroadcast();
+                    SendPlayerDataBroadcastToServer("ClientConnectionStarted", force: true);
                     MatchLoadingOverlay.Instance?.MarkConnected();
                     HideReconnectModal();
                     TryReportRelayHostReady();
@@ -502,6 +510,7 @@ namespace NightHunt.Networking
                         _connected = false;
                         _connectedSinceRealtime = -1f;
                         _intentionalDisconnect = false;
+                        _lastPlayerDataBroadcastRealtime = -1f;
                         HideReconnectModal(showToast: false);
                         break;
                     }
@@ -515,6 +524,7 @@ namespace NightHunt.Networking
                         bool showReconnectUi = wasConnected && connectedFor >= 2f;
                         _connected = false;
                         _connectionStarted = false;
+                        _lastPlayerDataBroadcastRealtime = -1f;
                         CancelInvoke(nameof(MarkConnectionStable));
                         if (wasConnected)
                         {
@@ -530,6 +540,60 @@ namespace NightHunt.Networking
                     }
                     break;
             }
+        }
+
+        private void RegisterClientHandshakeBroadcast()
+        {
+            if (_clientHandshakeBroadcastRegistered || networkManager?.ClientManager == null)
+                return;
+
+            networkManager.ClientManager.RegisterBroadcast<RequestPlayerDataBroadcast>(OnServerRequestedPlayerDataBroadcast);
+            _clientHandshakeBroadcastRegistered = true;
+            Debug.Log("[NH_HANDSHAKE][CLIENT_BROADCAST][REGISTER] RequestPlayerDataBroadcast registered on NetworkGameManager.");
+        }
+
+        private void UnregisterClientHandshakeBroadcast()
+        {
+            if (!_clientHandshakeBroadcastRegistered || networkManager?.ClientManager == null)
+                return;
+
+            networkManager.ClientManager.UnregisterBroadcast<RequestPlayerDataBroadcast>(OnServerRequestedPlayerDataBroadcast);
+            _clientHandshakeBroadcastRegistered = false;
+        }
+
+        private void OnServerRequestedPlayerDataBroadcast(RequestPlayerDataBroadcast broadcast, Channel channel)
+        {
+            Debug.Log($"[NH_HANDSHAKE][CLIENT_BROADCAST][REQUEST] Host requested player data via broadcast channel={channel}.");
+            SendPlayerDataBroadcastToServer("ServerBroadcastRequest", force: true);
+        }
+
+        private void SendPlayerDataBroadcastToServer(string source, bool force = false)
+        {
+            if (networkManager?.ClientManager == null)
+                return;
+
+            if (RoomState.Instance == null || RoomState.Instance.CurrentGameMode != GameMode.Custom_Relay)
+                return;
+
+            if (!networkManager.IsClientStarted)
+            {
+                Debug.Log($"[NH_HANDSHAKE][CLIENT_BROADCAST][WAIT] source={source} client not started.");
+                return;
+            }
+
+            float now = Time.realtimeSinceStartup;
+            if (!force && _lastPlayerDataBroadcastRealtime >= 0f &&
+                (now - _lastPlayerDataBroadcastRealtime) < PlayerDataBroadcastThrottleSeconds)
+            {
+                return;
+            }
+
+            PlayerRegistryData data = PlayerIdentityFactory.BuildLocalPlayerData();
+            networkManager.ClientManager.Broadcast(new SubmitPlayerDataBroadcast { Data = data }, Channel.Reliable);
+            _lastPlayerDataBroadcastRealtime = now;
+            Debug.Log(
+                $"[NH_HANDSHAKE][CLIENT_BROADCAST][SEND] source={source} backendId={data.BackendPlayerId} " +
+                $"name={data.DisplayName} teamId={data.TeamId} charModelIdx={data.CharacterModelIndex}.");
         }
 
         private void AutoConnectFromRoomState()

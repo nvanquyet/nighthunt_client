@@ -19,7 +19,7 @@ namespace NightHunt.State
         /// <summary>
         /// String ID of the player's selected character model (e.g. "character_01").
         /// Matches CharacterDefinition.CharacterId in CharacterDatabase.
-        /// Persisted to PlayerPrefs["SelectedCharacterId"] so ClientNetworkHandler can read it.
+        /// Persisted to PlayerPrefs["SelectedCharacterId"] so PlayerIdentityFactory can read it.
         /// </summary>
         public string SelectedCharacterId { get; private set; }
 
@@ -76,7 +76,7 @@ namespace NightHunt.State
             SelectedCharacterId  = selectedCharacterId;
             SaveSession();
 
-            // Sync selectedCharacterId to the PlayerPrefs key that ClientNetworkHandler reads
+            // Sync selectedCharacterId to the PlayerPrefs key that PlayerIdentityFactory reads.
             SyncCharacterIdToPrefs(selectedCharacterId);
 
             // Trigger events
@@ -230,7 +230,7 @@ namespace NightHunt.State
 
         /// <summary>
         /// Writes selectedCharacterId to the flat PlayerPrefs key that
-        /// ClientNetworkHandler.GetLocalPlayerData() reads at connect time.
+        /// PlayerIdentityFactory reads this at connect time.
         /// Uses the non-instanced key name intentionally (both clone instances
         /// should use the same character unless you want per-instance overrides).
         /// </summary>
