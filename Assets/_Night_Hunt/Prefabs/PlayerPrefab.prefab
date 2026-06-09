@@ -1128,6 +1128,8 @@ MonoBehaviour:
   allowCameraLockToggle: 1
   startWithCameraLock: 0
   interpolationSpeed: 15
+  useFishNetGraphicalSmoothingForObservers: 1
+  logObserverSmoothingStats: 0
   staminaRecoveryDelay: 1.5
   slowMovementThreshold: 1
   enableDebugLogs: 0

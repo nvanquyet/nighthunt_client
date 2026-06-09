@@ -128,6 +128,8 @@ ParrelSync/
 
 # Custom
 *.log
+build_log.txt
+.utmp/
 *.tmp
 *.bak
 *~
@@ -138,6 +140,8 @@ docker/dedicated-server/build/
 # TestResults (Unity test runner output)
 [Aa]ssets/[Tt]est[Rr]esults/
 [Tt]est[Rr]esults/
+[Aa]ssets/[Rr]esources/[Pp]erformance[Tt]est[Rr]un*.json
+[Aa]ssets/[Rr]esources/[Pp]erformance[Tt]est[Rr]un*.json.meta
 
 # deploy.ps1 named params accidentally created as files
 -GhcrOwner

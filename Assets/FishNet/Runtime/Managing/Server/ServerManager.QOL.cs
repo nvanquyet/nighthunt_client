@@ -183,6 +183,12 @@ namespace FishNet.Managing.Server
             if (!conn.IsValid)
                 return;
 
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "FISHNET_SERVER_KICK_CONN",
+                $"clientId={conn.ClientId} reason={kickReason} active={conn.IsActive} authenticated={conn.IsAuthenticated} log={log}",
+                warning: true,
+                includeStack: true);
+
             OnClientKick?.Invoke(conn, conn.ClientId, kickReason);
             if (conn.IsActive)
                 conn.Disconnect(true);
@@ -200,6 +206,12 @@ namespace FishNet.Managing.Server
         /// <param name = "log">Optional message to be debug logged.</param>
         public void Kick(int clientId, KickReason kickReason, LoggingType loggingType = LoggingType.Common, string log = "")
         {
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "FISHNET_SERVER_KICK_ID",
+                $"clientId={clientId} reason={kickReason} log={log}",
+                warning: true,
+                includeStack: true);
+
             OnClientKick?.Invoke(null, clientId, kickReason);
             NetworkManager.TransportManager.Transport.StopConnection(clientId, true);
             if (!string.IsNullOrEmpty(log))

@@ -44,6 +44,12 @@ namespace NightHunt.Gameplay.Character
         [Header("Network Interpolation")] [SerializeField]
         protected float interpolationSpeed = 15f;
 
+        [Tooltip("When enabled, non-owner roots follow authoritative reconcile snapshots and FishNet smooths the assigned NetworkObject GraphicalObject.")]
+        [SerializeField] protected bool useFishNetGraphicalSmoothingForObservers = true;
+
+        [Tooltip("Logs remote snapshot cadence and correction distance. Keep off unless diagnosing relay smoothness.")]
+        [SerializeField] protected bool logObserverSmoothingStats = false;
+
         [Header("Stamina Recovery (Advanced)")] [SerializeField]
         protected float staminaRecoveryDelay = 1.5f;
 
@@ -143,6 +149,11 @@ namespace NightHunt.Gameplay.Character
         // ===== NON OWNER INTERPOLATION =====
         protected Vector3 _targetPosition;
         protected Quaternion _targetRotation;
+        private float _observerSnapshotWindowStart = -1f;
+        private float _observerLastSnapshotRealtime = -1f;
+        private float _observerMaxSnapshotGap;
+        private float _observerMaxCorrectionDistance;
+        private int _observerSnapshotCount;
 
 
         #region ABSTRACT METHODS - MUST IMPLEMENT
@@ -864,6 +875,7 @@ namespace NightHunt.Gameplay.Character
             }
             else if (!IsServerStarted)
             {
+                float correctionDistance = Vector3.Distance(transform.position, data.Position);
                 _targetPosition = data.Position;
                 _targetRotation = data.Rotation;
                 _velocity = data.Velocity;
@@ -874,6 +886,11 @@ namespace NightHunt.Gameplay.Character
                 _rollTimer = data.RollTimer;
                 _rollDir = data.RollDir;
                 _groundedGraceTimer = data.IsGrounded ? groundedHysteresisTime : 0f;
+
+                RecordObserverSmoothingStats(correctionDistance);
+
+                if (ShouldUseFishNetGraphicalSmoothingForObservers())
+                    ApplyObserverAuthoritativeTransform(data.Position, data.Rotation);
 
                 uint triggerTick = data.GetTick();
                 if (data.JumpTriggered && triggerTick != _lastRemoteJumpTriggerTick)
@@ -890,13 +907,61 @@ namespace NightHunt.Gameplay.Character
             }
         }
 
+        protected virtual void ApplyObserverAuthoritativeTransform(Vector3 position, Quaternion rotation)
+        {
+            transform.SetPositionAndRotation(position, rotation);
+        }
+
+        protected bool ShouldUseFishNetGraphicalSmoothingForObservers()
+        {
+            return useFishNetGraphicalSmoothingForObservers
+                   && NetworkObject != null
+                   && NetworkObject.EnableStateForwarding
+                   && NetworkObject.GetGraphicalObject() != null;
+        }
+
+        private void RecordObserverSmoothingStats(float correctionDistance)
+        {
+            if (!logObserverSmoothingStats && !enableDebugLogs)
+                return;
+
+            float now = Time.realtimeSinceStartup;
+            if (_observerSnapshotWindowStart < 0f)
+            {
+                _observerSnapshotWindowStart = now;
+                _observerLastSnapshotRealtime = now;
+            }
+
+            if (_observerLastSnapshotRealtime >= 0f)
+                _observerMaxSnapshotGap = Mathf.Max(_observerMaxSnapshotGap, now - _observerLastSnapshotRealtime);
+
+            _observerLastSnapshotRealtime = now;
+            _observerMaxCorrectionDistance = Mathf.Max(_observerMaxCorrectionDistance, correctionDistance);
+            _observerSnapshotCount++;
+
+            float window = now - _observerSnapshotWindowStart;
+            if (window < 1f)
+                return;
+
+            float hz = _observerSnapshotCount / Mathf.Max(window, 0.001f);
+            string mode = ShouldUseFishNetGraphicalSmoothingForObservers() ? "fishnet-graphical" : "manual-root-lerp";
+            Debug.Log(
+                $"[NH_NET_SMOOTH] mode={mode} samples={_observerSnapshotCount} hz={hz:F1} maxGapMs={_observerMaxSnapshotGap * 1000f:F1} maxCorrection={_observerMaxCorrectionDistance:F3}",
+                this);
+
+            _observerSnapshotWindowStart = now;
+            _observerMaxSnapshotGap = 0f;
+            _observerMaxCorrectionDistance = 0f;
+            _observerSnapshotCount = 0;
+        }
+
         #endregion
 
         #region NON OWNER INTERPOLATION
 
         protected virtual void Update()
         {
-            if (!IsOwner && !IsServerStarted)
+            if (!IsOwner && !IsServerStarted && !ShouldUseFishNetGraphicalSmoothingForObservers())
             {
                 transform.position = Vector3.Lerp(
                     transform.position,

@@ -589,15 +589,15 @@ namespace NightHunt.Gameplay.Character
         // runs for the non-Rigidbody fallback (server / non-spawned).
         protected override void Update()
         {
-            if (_isNonOwnerKinematic) return; // FixedUpdate handles this path
+            if (_isNonOwnerKinematic) return;
             base.Update();
         }
 
         private void FixedUpdate()
         {
-            if (!_isNonOwnerKinematic || _rigidbody == null) return;
+            if (!_isNonOwnerKinematic || _rigidbody == null || ShouldUseFishNetGraphicalSmoothingForObservers()) return;
 
-            // Smooth kinematic follow towards server-authoritative target.
+            // Fallback smooth kinematic follow towards server-authoritative target.
             // _targetPosition / _targetRotation are set by Reconcile() in base class
             // each time a server snapshot arrives (50 Hz).
             Vector3 newPos = Vector3.Lerp(
@@ -610,6 +610,19 @@ namespace NightHunt.Gameplay.Character
 
             _rigidbody.MovePosition(newPos);
             _rigidbody.MoveRotation(newRot);
+        }
+
+        protected override void ApplyObserverAuthoritativeTransform(Vector3 position, Quaternion rotation)
+        {
+            if (_isNonOwnerKinematic && _rigidbody != null)
+            {
+                transform.SetPositionAndRotation(position, rotation);
+                _rigidbody.position = position;
+                _rigidbody.rotation = rotation;
+                return;
+            }
+
+            base.ApplyObserverAuthoritativeTransform(position, rotation);
         }
 
         #region DEBUG

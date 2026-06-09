@@ -36,7 +36,7 @@ namespace NightHunt.GameplaySystems.Core.Configs
         public bool EnableConnectionDropTraceLogs = true;
 
         [Tooltip("Include stack traces in connection/drop trace logs. Keep disabled unless a caller-origin trace is needed.")]
-        public bool EnableConnectionDropTraceStackTraces = false;
+        public bool EnableConnectionDropTraceStackTraces = true;
 
         [Tooltip("Enable debug logs for match phases and team assignment.")]
         public bool EnableMatchDebugLogs = false;

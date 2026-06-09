@@ -89,7 +89,14 @@ namespace FishNet.Managing.Server
             if (_broadcastHandlers.TryGetValueIL2CPP(key, out BroadcastHandlerBase bhs))
             {
                 if (bhs.RequireAuthentication && !conn.IsAuthenticated)
+                {
+                    NightHunt.Networking.ConnectionDropTrace.Log(
+                        "FISHNET_SERVER_BROADCAST_AUTH_REJECT",
+                        $"clientId={conn.ClientId} key={key} channel={channel} length={dataLength}",
+                        warning: true,
+                        includeStack: true);
                     conn.Kick(KickReason.ExploitAttempt, LoggingType.Common, $"ConnectionId {conn.ClientId} sent a broadcast which requires authentication, but client was not authenticated. Client has been disconnected.");
+                }
                 else
                     bhs.InvokeHandlers(conn, reader, channel);
             }

@@ -672,6 +672,9 @@ namespace NightHunt.Networking
         private static float _attemptStartedRealtime = -1f;
         private static string _lastClientState = "none";
 
+        public static bool IsCustomRelayContext =>
+            string.Equals(_mode, "Custom_Relay", StringComparison.OrdinalIgnoreCase);
+
         public static void Configure(bool enabled, bool includeStackTraces)
         {
             bool changed = _enabled != enabled || _includeStackTraces != includeStackTraces;
@@ -761,16 +764,13 @@ namespace NightHunt.Networking
                 return;
 
             string line =
-                $"[NH_DROP_TRACE][{marker}] {message} {BuildContext()} " +
+                $"[NH_DROP_TRACE][{marker}] level={(warning ? "warning" : "info")} {message} {BuildContext()} " +
                 $"utc={DateTime.UtcNow:HH:mm:ss.fff} rt={Time.realtimeSinceStartup:F3}";
 
             if (includeStack && _includeStackTraces)
                 line += "\n" + StackTraceUtility.ExtractStackTrace();
 
-            if (warning)
-                Debug.LogWarning(line);
-            else
-                Debug.Log(line);
+            Debug.Log(line);
         }
 
         private static void ApplyRelayIdentity(object relayLayer)

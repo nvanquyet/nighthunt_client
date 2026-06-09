@@ -743,6 +743,11 @@ namespace FishNet.Managing.Server
             //If over MTU kick client immediately.
             if (segment.Count > channelMtu)
             {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "FISHNET_SERVER_MTU_EXCEEDED",
+                    $"connectionId={args.ConnectionId} channel={args.Channel} transport={args.TransportIndex} length={segment.Count} mtu={channelMtu}",
+                    warning: true,
+                    includeStack: true);
                 ExceededMTUKick();
                 return;
             }
@@ -808,6 +813,11 @@ namespace FishNet.Managing.Server
                  * Force an immediate disconnect. */
                 if (!Clients.TryGetValueIL2CPP(args.ConnectionId, out conn))
                 {
+                    NightHunt.Networking.ConnectionDropTrace.Log(
+                        "FISHNET_SERVER_UNKNOWN_CONNECTION",
+                        $"connectionId={args.ConnectionId} channel={args.Channel} transport={args.TransportIndex} length={segment.Count} packetId={(ushort)packetId}",
+                        warning: true,
+                        includeStack: true);
                     Kick(args.ConnectionId, KickReason.UnexpectedProblem, LoggingType.Error, $"ConnectionId {args.ConnectionId} not found within Clients. Connection will be kicked immediately.");
                     return;
                 }
@@ -819,6 +829,11 @@ namespace FishNet.Managing.Server
                  * does not allow to be called while not authenticated. */
                 if (!conn.IsAuthenticated && packetId != PacketId.Version && packetId != PacketId.Broadcast)
                 {
+                    NightHunt.Networking.ConnectionDropTrace.Log(
+                        "FISHNET_SERVER_UNAUTHENTICATED_PACKET",
+                        $"connectionId={args.ConnectionId} clientId={conn.ClientId} packetId={packetId} channel={args.Channel} transport={args.TransportIndex} length={segment.Count} remaining={reader.Remaining}",
+                        warning: true,
+                        includeStack: true);
                     conn.Kick(KickReason.ExploitAttempt, LoggingType.Common, $"ConnectionId {conn.ClientId} sent packetId {packetId} without being authenticated. Connection will be kicked immediately.");
                     return;
                 }
@@ -835,6 +850,11 @@ namespace FishNet.Managing.Server
                 {
                     if (!GetAllowPredictedSpawning())
                     {
+                        NightHunt.Networking.ConnectionDropTrace.Log(
+                            "FISHNET_SERVER_PREDICTED_SPAWN_REJECT",
+                            $"connectionId={args.ConnectionId} clientId={conn.ClientId} packetId={packetId} channel={args.Channel} transport={args.TransportIndex} length={segment.Count}",
+                            warning: true,
+                            includeStack: true);
                         conn.Kick(KickReason.ExploitAttempt, LoggingType.Common, $"ConnectionId {conn.ClientId} sent a predicted spawn while predicted spawning is not enabled. Connection will be kicked immediately.");
                         return;
                     }
@@ -844,6 +864,11 @@ namespace FishNet.Managing.Server
                 {
                     if (!GetAllowPredictedSpawning())
                     {
+                        NightHunt.Networking.ConnectionDropTrace.Log(
+                            "FISHNET_SERVER_PREDICTED_DESPAWN_REJECT",
+                            $"connectionId={args.ConnectionId} clientId={conn.ClientId} packetId={packetId} channel={args.Channel} transport={args.TransportIndex} length={segment.Count}",
+                            warning: true,
+                            includeStack: true);
                         conn.Kick(KickReason.ExploitAttempt, LoggingType.Common, $"ConnectionId {conn.ClientId} sent a predicted spawn while predicted spawning is not enabled. Connection will be kicked immediately.");
                         return;
                     }
@@ -863,10 +888,23 @@ namespace FishNet.Managing.Server
                 }
                 else
                 {
+                    NightHunt.Networking.ConnectionDropTrace.Log(
+                        "FISHNET_SERVER_UNHANDLED_PACKET",
+                        $"connectionId={args.ConnectionId} clientId={(conn != null ? conn.ClientId : -1)} packetId={(ushort)packetId}/{packetId} channel={args.Channel} transport={args.TransportIndex} length={segment.Count} remaining={reader.Remaining} customRelay={IsNightHuntCustomRelayMode()}",
+                        warning: true,
+                        includeStack: true);
 #if DEVELOPMENT
                     NetworkManager.LogError($"Server received an unhandled PacketId of {(ushort)packetId} on channel {args.Channel} from connectionId {args.ConnectionId}. Remaining data has been purged.");
                     NetworkManager.LogError(NetworkManager.PacketIdHistory.GetReceivedPacketIds(packetsFromServer: false));
 #else
+                    if (IsNightHuntCustomRelayMode())
+                    {
+                        NetworkManager.LogWarning(
+                            $"Server ignored an unhandled PacketId of {(ushort)packetId} on channel {args.Channel} from connectionId {args.ConnectionId} in Custom_Relay. " +
+                            "This matches Editor behavior and prevents release builds from disconnecting on relay/echo/stale packets.");
+                        return;
+                    }
+
                     NetworkManager.LogError($"Server received an unhandled PacketId of {(ushort)packetId} on channel {args.Channel} from connectionId {args.ConnectionId}. Connection will be kicked immediately.");
                     NetworkManager.TransportManager.Transport.StopConnection(args.ConnectionId, true);
 #endif
@@ -877,6 +915,31 @@ namespace FishNet.Managing.Server
             }
             catch (Exception e)
             {
+                bool dropRecoverableRelayReplicate =
+                    IsNightHuntCustomRelayMode() &&
+                    packetId == PacketId.Replicate &&
+                    e is NullReferenceException;
+
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "FISHNET_SERVER_PARSE_EXCEPTION",
+                    $"connectionId={args.ConnectionId} packetId={(ushort)packetId}/{packetId} channel={args.Channel} transport={args.TransportIndex} length={segment.Count} recoverableRelayReplicate={dropRecoverableRelayReplicate} exception={e}",
+                    warning: true,
+                    includeStack: true);
+
+                /* Replicate is unreliable and a NullReferenceException is an
+                 * internal server fault, not proof of malformed client data.
+                 * Dropping this bundle keeps relay players connected while the
+                 * full exception above identifies any remaining prediction bug. */
+                if (dropRecoverableRelayReplicate)
+                {
+                    NightHunt.Networking.ConnectionDropTrace.Log(
+                        "FISHNET_SERVER_REPLICATE_PARSE_DROPPED",
+                        $"connectionId={args.ConnectionId} packetId={(ushort)packetId}/{packetId} channel={args.Channel} transport={args.TransportIndex} length={segment.Count} action=drop_bundle_keep_connection",
+                        warning: true,
+                        includeStack: false);
+                    return;
+                }
+
                 Kick(args.ConnectionId, KickReason.MalformedData, LoggingType.Error, $"Server encountered an error while parsing data for packetId {packetId} from connectionId {args.ConnectionId}. Connection will be kicked immediately. Message: {e.Message}.");
             }
             finally
@@ -892,6 +955,11 @@ namespace FishNet.Managing.Server
             {
                 Kick(args.ConnectionId, KickReason.ExploitExcessiveData, LoggingType.Common, $"ConnectionId {args.ConnectionId} sent a message larger than allowed amount. Connection will be kicked immediately.");
             }
+        }
+
+        private static bool IsNightHuntCustomRelayMode()
+        {
+            return NightHunt.Networking.ConnectionDropTrace.IsCustomRelayContext;
         }
 
         /// <summary>

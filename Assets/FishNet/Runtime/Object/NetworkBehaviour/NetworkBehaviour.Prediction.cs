@@ -301,13 +301,19 @@ namespace FishNet.Object
                 _networkObjectCache.NetworkManager.LogWarning($"Replicate not found for hash {hash.Value} on {gameObject.name}, behaviour {GetType().Name}. Remainder of packet may become corrupt.");
 
 #if !UNITY_SERVER
-            _networkTrafficStatistics.AddInboundPacketIdData(
-                PacketId.Replicate,
-                GetRpcName(PacketId.Replicate, hash.Value),
-                reader.Position - readerPositionAfterDebug + Managing.Transporting.TransportManager.PACKETID_LENGTH,
-                gameObject,
-                asServer: sendingClient != null && sendingClient.IsValid  // ← FIX!
-            );
+            /* Statistics are disabled by default in release builds. Every other
+             * traffic-statistics call is null guarded; replicate RPCs must be as
+             * well or a release host throws and treats valid input as malformed. */
+            if (_networkTrafficStatistics != null)
+            {
+                _networkTrafficStatistics.AddInboundPacketIdData(
+                    PacketId.Replicate,
+                    GetRpcName(PacketId.Replicate, hash.Value),
+                    reader.Position - readerPositionAfterDebug + Managing.Transporting.TransportManager.PACKETID_LENGTH,
+                    gameObject,
+                    asServer: sendingClient != null && sendingClient.IsValid
+                );
+            }
 #endif
 // #if !UNITY_SERVER
             //             if (_networkTrafficStatistics != null)

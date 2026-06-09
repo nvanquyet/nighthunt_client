@@ -19,7 +19,7 @@ MonoBehaviour:
   EnableCoreDebugLogs: 0
   EnableNetworkDebugLogs: 0
   EnableConnectionDropTraceLogs: 1
-  EnableConnectionDropTraceStackTraces: 0
+  EnableConnectionDropTraceStackTraces: 1
   EnableMatchDebugLogs: 0
   ShowDebugGizmos: 0
   EnableConsumableDebugLogs: 0
