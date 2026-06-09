@@ -658,6 +658,7 @@ namespace NightHunt.Networking
             _registryService.RemapPlayerConnection(activePlayer, previousClientId, conn, clientData);
             netObj.GiveOwnership(conn);
             _networkManager.ServerManager.Objects.RebuildObservers(conn);
+            RebuildTrackedPlayerObservers("relay-reconnect-resume");
 
             ReportMatchPresence(clientData.BackendPlayerId, "CONNECTED", "FISHNET_RECONNECTED");
 
@@ -789,6 +790,7 @@ namespace NightHunt.Networking
             _spawnedPlayers[fishnetClientId] = playerObj;
             networkPlayer.SetAlive(true);
             _spawnedPlayerCount++;
+            RebuildTrackedPlayerObservers($"spawn-client-{fishnetClientId}");
 
             // Notify all clients to enter "Spawning" stage on first spawn
             if (_spawnedPlayerCount == 1)
@@ -917,6 +919,7 @@ namespace NightHunt.Networking
             OnAllPlayersReady?.Invoke();
 
             // Notify all clients: hide loading screen, show game HUD
+            RebuildTrackedPlayerObservers("all-ready-runtime-ready");
             TargetAllSpawnedPlayersReady("runtime-ready");
             RpcOnAllPlayersReady();
         }
@@ -937,8 +940,51 @@ namespace NightHunt.Networking
             _matchStartTriggered = true;
             BeginServerMatchState("runtime-ready-timeout");
             OnAllPlayersReady?.Invoke();
+            RebuildTrackedPlayerObservers("all-ready-runtime-timeout");
             TargetAllSpawnedPlayersReady("runtime-ready-timeout");
             RpcOnAllPlayersReady();
+        }
+
+        [Server]
+        private void RebuildTrackedPlayerObservers(string source)
+        {
+            if (_networkManager == null || _networkManager.ServerManager == null || _spawnedPlayers.Count == 0)
+                return;
+
+            var playerObjects = new List<NetworkObject>(_spawnedPlayers.Count);
+            foreach (var kvp in _spawnedPlayers)
+            {
+                NetworkObject netObj = ComponentResolver.Find<NetworkObject>(kvp.Value)
+                    .OnSelf()
+                    .InChildren()
+                    .OrDefault(null)
+                    .Resolve();
+
+                if (netObj != null && netObj.IsSpawned)
+                    playerObjects.Add(netObj);
+            }
+
+            if (playerObjects.Count == 0)
+                return;
+
+            _networkManager.ServerManager.Objects.RebuildObservers(playerObjects);
+
+            foreach (NetworkObject netObj in playerObjects)
+            {
+                NetworkPlayer player = ComponentResolver.Find<NetworkPlayer>(netObj.gameObject)
+                    .OnSelf()
+                    .InChildren()
+                    .OrDefault(null)
+                    .Resolve();
+
+                string owner = netObj.Owner != null ? netObj.Owner.ClientId.ToString() : "none";
+                string name = player != null ? player.DisplayName : "unknown";
+                int team = player != null ? player.TeamId : -1;
+                Debug.Log(
+                    $"[NH_OBSERVERS][PLAYER] source={source} objectId={netObj.ObjectId} owner={owner} " +
+                    $"observers={netObj.Observers.Count} spawnedPlayers={_spawnedPlayers.Count}/{_expectedPlayerCount} " +
+                    $"name={name} team={team}");
+            }
         }
 
         [Server]
