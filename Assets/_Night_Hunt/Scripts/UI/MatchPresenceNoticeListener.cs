@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
 using NightHunt.Core;
 using NightHunt.Services.Game;
 using NightHunt.State;
@@ -9,7 +10,10 @@ namespace NightHunt.UI
     [DisallowMultipleComponent]
     public sealed class MatchPresenceNoticeListener : MonoBehaviour
     {
+        private const float DuplicateConnectedNoticeWindowSeconds = 5f;
+
         private bool _subscribed;
+        private readonly Dictionary<string, float> _recentConnectedNoticeTimes = new();
 
         private IEnumerator Start()
         {
@@ -65,9 +69,17 @@ namespace NightHunt.UI
             long localUserId = SessionState.Instance?.UserId ?? 0L;
             bool isLocalUser = localUserId > 0L && evt.userId == localUserId;
             string state = evt.state ?? "";
-            string title = ResolveTitle(state, isLocalUser);
+            string title = ResolveTitle(state, evt.reason, isLocalUser);
             string name = !string.IsNullOrEmpty(evt.displayName) ? evt.displayName : $"Player {evt.userId}";
             string message = !string.IsNullOrEmpty(evt.message) ? evt.message : $"{name}: {state}";
+            if (ShouldSuppressDuplicateConnectedNotice(evt, state, out string dedupeKey))
+            {
+                Debug.Log(
+                    $"[NH_PRESENCE][NOTICE_DEDUP] state={state} userId={evt.userId} key={dedupeKey} " +
+                    $"window={DuplicateConnectedNoticeWindowSeconds:F1}s message='{message}'");
+                return;
+            }
+
             Debug.Log(
                 $"[NH_PRESENCE][NOTICE] state={state} userId={evt.userId} localUserId={localUserId} " +
                 $"isLocal={isLocalUser} roomId={evt.room?.roomId ?? 0} message='{message}'");
@@ -86,13 +98,57 @@ namespace NightHunt.UI
             PersistentUICanvas.Instance?.ToastService?.Show(title, $"{name}: {message}");
         }
 
-        private static string ResolveTitle(string state, bool isLocalUser)
+        private bool ShouldSuppressDuplicateConnectedNotice(
+            GameWebSocketService.MatchPresenceNoticeEvent evt,
+            string state,
+            out string key)
+        {
+            long roomId = evt.room?.roomId ?? 0L;
+            string connectedKind = string.Equals(state, "CONNECTED", System.StringComparison.OrdinalIgnoreCase)
+                ? ConnectedNoticeKind(evt.reason)
+                : "";
+            key = $"{evt.matchId ?? ""}|{roomId}|{evt.userId}|{state ?? ""}|{connectedKind}";
+
+            if (!string.Equals(state, "CONNECTED", System.StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            float now = Time.unscaledTime;
+            if (_recentConnectedNoticeTimes.TryGetValue(key, out float lastAt)
+                && (now - lastAt) < DuplicateConnectedNoticeWindowSeconds)
+            {
+                _recentConnectedNoticeTimes[key] = now;
+                return true;
+            }
+
+            _recentConnectedNoticeTimes[key] = now;
+            return false;
+        }
+
+        private static string ResolveTitle(string state, string reason, bool isLocalUser)
         {
             if (string.Equals(state, "CONNECTED", System.StringComparison.OrdinalIgnoreCase))
-                return isLocalUser ? "Reconnected" : "Player Reconnected";
+            {
+                bool reconnected = IsReconnectReason(reason);
+                if (reconnected)
+                    return isLocalUser ? "Reconnected" : "Player Reconnected";
+
+                return isLocalUser ? "Connected" : "Player Connected";
+            }
+
             if (string.Equals(state, "ABANDONED", System.StringComparison.OrdinalIgnoreCase))
                 return isLocalUser ? "Removed From Match" : "Player Removed";
             return isLocalUser ? "Connection Lost" : "Player Disconnected";
+        }
+
+        private static string ConnectedNoticeKind(string reason)
+        {
+            return IsReconnectReason(reason) ? "reconnected" : "connected";
+        }
+
+        private static bool IsReconnectReason(string reason)
+        {
+            return !string.IsNullOrEmpty(reason)
+                && reason.IndexOf("RECONNECTED", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
 #if UNITY_EDITOR
