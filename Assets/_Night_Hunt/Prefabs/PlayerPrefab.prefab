@@ -47,7 +47,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0da04b92ed19424aacecdade27d99665, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 10
+  _componentIndexCache: 15
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _weaponSystemComponent: {fileID: 2421400275454736108}
@@ -93,7 +93,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8d05c1e580e9d3948a0ed67701485e27, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 11
+  _componentIndexCache: 16
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _inventorySystemComponent: {fileID: 9196575011444076670}
@@ -638,7 +638,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 92844d221d9eb31459042b845ff931cf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 6
+  _componentIndexCache: 10
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
@@ -750,7 +750,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f5672efd0aa6644b9a5e15a5af1d5e0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 13
+  _componentIndexCache: 11
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _range: 1.8
@@ -935,7 +935,7 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 0
+  <PrefabId>k__BackingField: 1
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 461856501702233449
   <SceneId>k__BackingField: 0
@@ -955,18 +955,19 @@ MonoBehaviour:
   - {fileID: 2125858533983064380}
   - {fileID: 2698279300146127577}
   - {fileID: 5002469889206839817}
+  - {fileID: 3472814331583980281}
   - {fileID: 5379918314552202696}
+  - {fileID: 8491396184485047296}
+  - {fileID: 7302019368834571142}
+  - {fileID: 4760216488133052642}
   - {fileID: 9001051205302328292}
   - {fileID: 2421400275454736108}
+  - {fileID: 6713559003114389687}
   - {fileID: 9196575011444076670}
   - {fileID: 4760286300081198091}
   - {fileID: 4470525218012556025}
   - {fileID: 664824046625769896}
   - {fileID: 6893537453317171255}
-  - {fileID: 7302019368834571142}
-  - {fileID: 6713559003114389687}
-  - {fileID: 3472814331583980281}
-  - {fileID: 8491396184485047296}
   InitializedParentNetworkBehaviour: {fileID: 0}
   InitializedNestedNetworkObjects: []
   RuntimeParentNetworkBehaviour: {fileID: 0}
@@ -1161,7 +1162,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a63171f2a8e282844bc503669ffc4bba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 14
+  _componentIndexCache: 4
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
 --- !u!114 &5379918314552202696
@@ -1176,7 +1177,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d824930acfe38c54a9b4447c2209bf55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 4
+  _componentIndexCache: 5
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _statSystemSource: {fileID: 2125858533983064380}
@@ -1235,7 +1236,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a2ce4ba593df3b4e952c74006a8cf19, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 15
+  _componentIndexCache: 6
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   DebugLogs: 0
@@ -1251,7 +1252,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3330a4d55d738d54695e37272cd7e44a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 12
+  _componentIndexCache: 7
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _cameraTransform: {fileID: 0}
@@ -1290,10 +1291,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c71fd7f855ec523429999fc4e14a1928, type: 3}
   m_Name: 
   m_EditorClassIdentifier: FishNet.Runtime::FishNet.Observing.NetworkObserver
-  _overrideType: 3
+  _overrideType: 1
   _updateHostVisibility: 1
-  _observerConditions:
-  - {fileID: 11400000, guid: 033fc71dc3443e740bd147f581cbf121, type: 2}
+  _observerConditions: []
 --- !u!114 &4760216488133052642
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1306,12 +1306,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1c60f4c9147e5fe44a5dbe23966412e6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Gameplay.Character.Combat.HitboxRollbackRegistrar
-  _componentIndexCache: 255
+  _componentIndexCache: 8
   _addedNetworkObject: {fileID: 2932638389700231956}
-  _networkObjectCache: {fileID: 0}
-  _hitboxRoots:
-  - {fileID: 6927907726633053832}
-  _autoAddColliderRollback: 1
+  _networkObjectCache: {fileID: 2932638389700231956}
 --- !u!1 &6529247948932358281
 GameObject:
   m_ObjectHideFlags: 0
@@ -1358,7 +1355,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 650f626e92e042f1b9b39135fd9979a9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 7
+  _componentIndexCache: 12
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _gameplayConfig: {fileID: 11400000, guid: dd6bc8a485bbc1246b1807a1923dfa81, type: 2}
@@ -1379,7 +1376,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8ff5803b4fb386144ac4b2cb73a6e23f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 8
+  _componentIndexCache: 13
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _inventoryConfig: {fileID: 11400000, guid: de28b1080bf296e41a83d65fe1b0d128, type: 2}
@@ -1397,7 +1394,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c19eba99168c57e4c8ca0e97a8cae5f3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 9
+  _componentIndexCache: 14
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _inventorySystemOverride: {fileID: 9196575011444076670}
@@ -1464,6 +1461,7 @@ MonoBehaviour:
   _swapHolsterDelayScale: 0.5
   _minWeaponTransitionSeconds: 0.05
   _maxWeaponTransitionSeconds: 1.5
+  _reloadEndUpperBodyBlendSeconds: 0.05
 --- !u!114 &9001051205302328292
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1476,7 +1474,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6446c7b19f8d6e34e882b9f1d89f5177, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _componentIndexCache: 5
+  _componentIndexCache: 9
   _addedNetworkObject: {fileID: 2932638389700231956}
   _networkObjectCache: {fileID: 2932638389700231956}
   _characterDatabase: {fileID: 11400000, guid: bb0e2b542f3b06248a3ae4ac7e051bf4, type: 2}

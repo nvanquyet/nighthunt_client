@@ -32,6 +32,12 @@ namespace NightHunt.GameplaySystems.Core.Configs
         [Tooltip("Enable debug logs for networking, server manager, and WebSocket service.")]
         public bool EnableNetworkDebugLogs = false;
 
+        [Tooltip("Enable focused connection/drop trace logs for relay, FishNet, Tugboat, and LiteNetLib disconnect debugging.")]
+        public bool EnableConnectionDropTraceLogs = true;
+
+        [Tooltip("Include stack traces in connection/drop trace logs. Keep disabled unless a caller-origin trace is needed.")]
+        public bool EnableConnectionDropTraceStackTraces = false;
+
         [Tooltip("Enable debug logs for match phases and team assignment.")]
         public bool EnableMatchDebugLogs = false;
 

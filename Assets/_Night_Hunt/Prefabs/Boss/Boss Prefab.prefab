@@ -65,6 +65,7 @@ GameObject:
   - component: {fileID: 923972667975317831}
   - component: {fileID: 2492941880337181947}
   - component: {fileID: 8514895050397967715}
+  - component: {fileID: 3817201769704991543}
   m_Layer: 10
   m_Name: Boss Prefab
   m_TagString: Untagged
@@ -100,6 +101,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 26b716c41e9b56b4baafaf13a523ba2e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  NetworkObserver: {fileID: 0}
+  _enablePrediction: 0
+  _predictionType: 0
+  _graphicalObject: {fileID: 0}
+  _detachGraphicalObject: 0
+  _enableStateForwarding: 1
+  _networkTransform: {fileID: 0}
+  _ownerInterpolation: 1
+  _ownerSmoothedProperties: 255
+  _adaptiveInterpolation: 3
+  _spectatorSmoothedProperties: 255
+  _spectatorInterpolation: 2
+  _enableTeleport: 0
+  _teleportThreshold: 1
+  <PrefabId>k__BackingField: 10
+  <SpawnableCollectionId>k__BackingField: 0
+  <AssetPathHash>k__BackingField: 5885729237339313455
+  <SceneId>k__BackingField: 0
+  SerializedTransformProperties:
+    Position: {x: 0, y: 0, z: 0}
+    Rotation: {x: -0, y: -0, z: -0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
   <IsNested>k__BackingField: 0
   WasActiveDuringEdit: 0
   WasActiveDuringEdit_Set1: 1
@@ -119,29 +143,6 @@ MonoBehaviour:
   _initializeOrder: 0
   _preventDespawnOnDisconnect: 0
   _defaultDespawnType: 0
-  NetworkObserver: {fileID: 0}
-  _enablePrediction: 0
-  _predictionType: 0
-  _graphicalObject: {fileID: 0}
-  _detachGraphicalObject: 0
-  _enableStateForwarding: 1
-  _networkTransform: {fileID: 0}
-  _ownerInterpolation: 1
-  _ownerSmoothedProperties: 255
-  _adaptiveInterpolation: 3
-  _spectatorSmoothedProperties: 255
-  _spectatorInterpolation: 2
-  _enableTeleport: 0
-  _teleportThreshold: 1
-  <PrefabId>k__BackingField: 7
-  <SpawnableCollectionId>k__BackingField: 0
-  <AssetPathHash>k__BackingField: 5885729237339313455
-  <SceneId>k__BackingField: 0
-  SerializedTransformProperties:
-    Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: -0, y: -0, z: -0, w: 1}
-    Scale: {x: 1, y: 1, z: 1}
-    IsValid: 1
 --- !u!114 &8514895050397967715
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -171,10 +172,25 @@ MonoBehaviour:
   - {fileID: 8574440910411904091}
   _bossRewardConfig: {fileID: 11400000, guid: 0a7c37bea041f1943a3b909e24c6a880, type: 2}
   _bossKillScore: 500
+  _delayHitscanDamageByProjectileSpeed: 1
+  _maxHitscanDamageDelay: 5
   _fogTeamId: 999
   _fogAlwaysVisible: 0
   _showDebug: 0
   _despawnDelay: 3
+--- !u!114 &3817201769704991543
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1931368015291331868}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fa461ce007c34894a91e810c9d9171dd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Gameplay.FogOfWar.FogTeamVisibilityBinder
+  _logDecisions: 0
 --- !u!1 &1966791383097519826
 GameObject:
   m_ObjectHideFlags: 0
@@ -268,6 +284,8 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -289,9 +307,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!135 &4568470313929799284
 SphereCollider:
@@ -324,6 +344,7 @@ GameObject:
   m_Component:
   - component: {fileID: 8398315980794913661}
   - component: {fileID: 8574440910411904091}
+  - component: {fileID: 2340378547331534384}
   m_Layer: 10
   m_Name: Turrret
   m_TagString: Untagged
@@ -384,6 +405,26 @@ MonoBehaviour:
   _preferHighArc: 0
   _fogTeamId: 999
   _fogAlwaysVisible: 0
+  _onShootVisual:
+    m_PersistentCalls:
+      m_Calls: []
+  _onDestroyedVisual:
+    m_PersistentCalls:
+      m_Calls: []
+  _visualChannels: []
+--- !u!114 &2340378547331534384
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3919618703336418083}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fa461ce007c34894a91e810c9d9171dd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Gameplay.FogOfWar.FogTeamVisibilityBinder
+  _logDecisions: 0
 --- !u!1 &6372644584650361279
 GameObject:
   m_ObjectHideFlags: 0
@@ -447,6 +488,8 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -468,9 +511,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!65 &7518210870112449919
 BoxCollider:
@@ -555,6 +600,8 @@ MeshRenderer:
   m_RayTracingAccelStructBuildFlagsOverride: 0
   m_RayTracingAccelStructBuildFlags: 1
   m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -576,9 +623,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!65 &2002324469717527876
 BoxCollider:

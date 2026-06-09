@@ -250,7 +250,13 @@ namespace FishNet.Transporting.Tugboat.Server
         {
             //Force a stop just in case the socket did not clean up.
             if (base.GetConnectionState() != LocalConnectionState.Stopped)
+            {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "SERVER_SOCKET_START_FORCE_STOP",
+                    $"state={base.GetConnectionState()} port={port} maxClients={maximumClients}",
+                    warning: true);
                 StopSocket();
+            }
             //Enqueue starting.
             LocalConnectionStates.Enqueue(LocalConnectionState.Starting);
             //Iterate to cause state changes to invoke.
@@ -263,6 +269,10 @@ namespace FishNet.Transporting.Tugboat.Server
             _ipv6BindAddress = ipv6BindAddress;
             ResetQueues();
 
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "SERVER_SOCKET_START",
+                $"port={_port} maxClients={_maximumClients} ipv4={_ipv4BindAddress} ipv6={_ipv6BindAddress} timeout={_timeout}s packetLayer={_packetLayer != null}",
+                warning: false);
             Task.Run(ThreadedSocket);
 
             return true;
@@ -276,6 +286,11 @@ namespace FishNet.Transporting.Tugboat.Server
             if (NetManager == null || base.GetConnectionState() == LocalConnectionState.Stopped || base.GetConnectionState() == LocalConnectionState.Stopping)
                 return false;
 
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "SERVER_SOCKET_STOP_REQUEST",
+                $"state={base.GetConnectionState()} localPort={(GetPort().HasValue ? GetPort().Value.ToString() : "null")}",
+                warning: false,
+                includeStack: true);
             LocalConnectionStates.Enqueue(LocalConnectionState.Stopping);
             StopSocket();
             return true;
@@ -293,10 +308,21 @@ namespace FishNet.Transporting.Tugboat.Server
 
             NetPeer peer = GetNetPeer(connectionId, false);
             if (peer == null)
+            {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "SERVER_SOCKET_STOP_REMOTE_MISSING",
+                    $"connectionId={connectionId}",
+                    warning: true);
                 return false;
+            }
 
             try
             {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "SERVER_SOCKET_STOP_REMOTE_REQUEST",
+                    $"connectionId={connectionId} peerId={peer.Id} endpoint={peer} state={peer.ConnectionState}",
+                    warning: true,
+                    includeStack: true);
                 peer.Disconnect();
                 //Let LiteNetLib get the disconnect event which will enqueue a remote connection state.
                 //base.Transport.HandleRemoteConnectionState(new RemoteConnectionStateArgs(RemoteConnectionState.Stopped, connectionId, base.Transport.Index));
@@ -325,8 +351,13 @@ namespace FishNet.Transporting.Tugboat.Server
         /// </summary>
         private void Listener_PeerDisconnectedEvent(NetPeer peer, DisconnectInfo disconnectInfo)
         {
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "LITENET_SERVER_PEER_DISCONNECTED",
+                $"peerId={peer?.Id.ToString() ?? "null"} endpoint={peer?.ToString() ?? "null"} reason={disconnectInfo.Reason} socket={disconnectInfo.SocketErrorCode} state={base.GetConnectionState()}",
+                warning: true);
             Transport.NetworkManager?.LogWarning(
-                $"[Tugboat.Server] Peer disconnected id={peer?.Id.ToString() ?? "null"} endpoint={peer?.ToString() ?? "null"} reason={disconnectInfo.Reason} socket={disconnectInfo.SocketErrorCode}");
+                $"[NH_CONN][LITENET_SERVER_DISCONNECT] peerId={peer?.Id.ToString() ?? "null"} " +
+                $"endpoint={peer?.ToString() ?? "null"} reason={disconnectInfo.Reason} socket={disconnectInfo.SocketErrorCode}");
             _remoteConnectionEvents.Enqueue(new(false, peer.Id));
         }
 
@@ -335,6 +366,10 @@ namespace FishNet.Transporting.Tugboat.Server
         /// </summary>
         private void Listener_PeerConnectedEvent(NetPeer peer)
         {
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "LITENET_SERVER_PEER_CONNECTED",
+                $"peerId={peer?.Id.ToString() ?? "null"} endpoint={peer?.ToString() ?? "null"} connectedPeers={NetManager?.ConnectedPeersCount.ToString() ?? "null"}",
+                warning: false);
             _remoteConnectionEvents.Enqueue(new(true, peer.Id));
         }
 
@@ -346,6 +381,11 @@ namespace FishNet.Transporting.Tugboat.Server
             //If over the MTU.
             if (reader.AvailableBytes > _mtu)
             {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "SERVER_SOCKET_MTU_DISCONNECT",
+                    $"peerId={fromPeer?.Id.ToString() ?? "null"} endpoint={fromPeer?.ToString() ?? "null"} bytes={reader.AvailableBytes} mtu={_mtu} channel={channel} delivery={deliveryMethod}",
+                    warning: true,
+                    includeStack: true);
                 _remoteConnectionEvents.Enqueue(new(false, fromPeer.Id));
                 fromPeer.Disconnect();
             }
@@ -366,10 +406,18 @@ namespace FishNet.Transporting.Tugboat.Server
             //At maximum peers.
             if (NetManager.ConnectedPeersCount >= _maximumClients)
             {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "SERVER_CONNECTION_REJECT_MAX_CLIENTS",
+                    $"remote={request.RemoteEndPoint} connectedPeers={NetManager.ConnectedPeersCount} maxClients={_maximumClients}",
+                    warning: true);
                 request.Reject();
                 return;
             }
 
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "SERVER_CONNECTION_ACCEPT",
+                $"remote={request.RemoteEndPoint} connectedPeers={NetManager.ConnectedPeersCount} maxClients={_maximumClients}",
+                warning: false);
             request.AcceptIfKey(key: string.Empty);
         }
 

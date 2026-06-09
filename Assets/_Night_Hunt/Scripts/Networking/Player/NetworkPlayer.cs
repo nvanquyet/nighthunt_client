@@ -52,6 +52,7 @@ namespace NightHunt.Networking.Player
 
         public string DisplayName => PlayerData.DisplayName;
         public int TeamId => PlayerData.TeamId;
+        public PlayerConnectionStatus ConnectionStatus => PlayerData.Status;
         public bool IsLocalPlayer => IsOwner;
 
         public int CharacterModelIndex => PlayerData.CharacterModelIndex;
@@ -194,9 +195,9 @@ namespace NightHunt.Networking.Player
             if (svc != null)
                 svc.RegisterPlayer(ObjectId, transform, TeamId, ResolveServerVisionRange());
 
-            // NOTE: FogOfWarObserverCondition must be added to the player prefab via the Inspector:
-            // → NetworkObserver component → Observer Conditions → drag FogOfWarObserverCondition asset.
-            // (NetworkObserver.ObserverConditionsInternal is internal and not accessible at runtime.)
+            // Do not add FogOfWarObserverCondition to the player prefab. Player
+            // NetworkObjects must stay scene-observed so movement, SyncVars, and
+            // RPCs continue flowing; FoW should hide visuals/gameplay affordances.
         }
 
         public override void OnStopServer()
@@ -277,7 +278,7 @@ namespace NightHunt.Networking.Player
             base.OnStopClient();
             _playerData.OnChange -= OnPlayerDataChanged;
             _isAlive.OnChange -= OnAliveStateChanged;
-            PlayerPublicRegistry.Instance?.Unregister((int)this.ObjectId);
+            PlayerPublicRegistry.Instance?.UnregisterNetworkPlayer((int)this.ObjectId);
             _modelReady = false;
             _clientRuntimeReadySent = false;
         }

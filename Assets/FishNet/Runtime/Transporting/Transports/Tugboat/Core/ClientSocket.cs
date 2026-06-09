@@ -110,7 +110,13 @@ namespace FishNet.Transporting.Tugboat.Client
         {
             // Force a stop just in case the socket did not clean up.
             if (GetConnectionState() != LocalConnectionState.Stopped)
+            {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "CLIENT_SOCKET_START_FORCE_STOP",
+                    $"state={GetConnectionState()} address={address}:{port}",
+                    warning: true);
                 StopSocket();
+            }
             // Enqueue starting.
             LocalConnectionStates.Enqueue(LocalConnectionState.Starting);
             // Iterate to cause state changes to invoke.
@@ -121,6 +127,10 @@ namespace FishNet.Transporting.Tugboat.Client
             _address = address;
 
             ResetQueues();
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "CLIENT_SOCKET_START",
+                $"address={_address}:{_port} timeout={_timeout}s packetLayer={_packetLayer != null}",
+                warning: false);
             Task.Run(ThreadedSocket);
 
             return true;
@@ -131,11 +141,33 @@ namespace FishNet.Transporting.Tugboat.Client
         /// </summary>
         internal bool StopConnection(DisconnectInfo? info = null)
         {
+            LocalConnectionState state = GetConnectionState();
+            string endpoint = NetManager?.FirstPeer?.ToString() ?? "null";
+            ushort? localPort = GetPort();
+            string reason = info.HasValue ? info.Value.Reason.ToString() : "LocalStop";
+            string socket = info.HasValue ? info.Value.SocketErrorCode.ToString() : "none";
+
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "CLIENT_SOCKET_STOP_REQUEST",
+                $"state={state} reason={reason} socket={socket} endpoint={endpoint} configured={_address}:{_port} localPort={(localPort.HasValue ? localPort.Value.ToString() : "null")} timeout={_timeout}s",
+                warning: info.HasValue || state == LocalConnectionState.Started,
+                includeStack: !info.HasValue);
+
             if (GetConnectionState() == LocalConnectionState.Stopped || GetConnectionState() == LocalConnectionState.Stopping)
+            {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "CLIENT_SOCKET_STOP_IGNORED",
+                    $"state={state} reason={reason} endpoint={endpoint}",
+                    warning: false);
                 return false;
+            }
 
             if (info != null)
-                Transport.NetworkManager.Log($"Local client disconnect reason: {info.Value.Reason}; endpoint={NetManager?.FirstPeer?.ToString() ?? "null"} socket={info.Value.SocketErrorCode}.");
+            {
+                Transport.NetworkManager.LogWarning(
+                    $"[NH_CONN][LITENET_CLIENT_DISCONNECT] reason={info.Value.Reason} " +
+                    $"endpoint={NetManager?.FirstPeer?.ToString() ?? "null"} socket={info.Value.SocketErrorCode}.");
+            }
 
             SetConnectionState(LocalConnectionState.Stopping, false);
             StopSocket();
@@ -157,6 +189,10 @@ namespace FishNet.Transporting.Tugboat.Client
         /// </summary>
         private void Listener_PeerDisconnectedEvent(NetPeer peer, DisconnectInfo disconnectInfo)
         {
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "LITENET_CLIENT_PEER_DISCONNECTED",
+                $"peerId={peer?.Id.ToString() ?? "null"} endpoint={peer?.ToString() ?? "null"} reason={disconnectInfo.Reason} socket={disconnectInfo.SocketErrorCode} state={GetConnectionState()}",
+                warning: true);
             StopConnection(disconnectInfo);
         }
 
@@ -165,6 +201,10 @@ namespace FishNet.Transporting.Tugboat.Client
         /// </summary>
         private void Listener_PeerConnectedEvent(NetPeer peer)
         {
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "LITENET_CLIENT_PEER_CONNECTED",
+                $"peerId={peer?.Id.ToString() ?? "null"} endpoint={peer?.ToString() ?? "null"} state={GetConnectionState()} configured={_address}:{_port}",
+                warning: false);
             LocalConnectionStates.Enqueue(LocalConnectionState.Started);
         }
 

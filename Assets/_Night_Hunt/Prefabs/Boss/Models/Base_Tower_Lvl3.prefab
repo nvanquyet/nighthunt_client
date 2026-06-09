@@ -127,15 +127,15 @@ MonoBehaviour:
   _spectatorInterpolation: 2
   _enableTeleport: 0
   _teleportThreshold: 1
-  <PrefabId>k__BackingField: 65535
+  <PrefabId>k__BackingField: 9
   <SpawnableCollectionId>k__BackingField: 0
   <AssetPathHash>k__BackingField: 5805131815201132394
   <SceneId>k__BackingField: 0
   SerializedTransformProperties:
-    Position: {x: 0, y: 0, z: 0}
-    Rotation: {x: 0, y: 0, z: 0, w: 0}
-    Scale: {x: 0, y: 0, z: 0}
-    IsValid: 0
+    Position: {x: 0, y: 0, z: -10}
+    Rotation: {x: 0, y: 0, z: 0, w: 1}
+    Scale: {x: 1, y: 1, z: 1}
+    IsValid: 1
   <IsNested>k__BackingField: 0
   WasActiveDuringEdit: 0
   WasActiveDuringEdit_Set1: 1
@@ -204,7 +204,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::NightHunt.Gameplay.Boss.TurretGun
   _componentIndexCache: 0
   _addedNetworkObject: {fileID: 8990000000000000005}
-  _networkObjectCache: {fileID: 0}
+  _networkObjectCache: {fileID: 8990000000000000005}
   _turretHead: {fileID: 2771167531527728774}
   _firePoint: {fileID: 3866616225439550862}
   _firePoints:

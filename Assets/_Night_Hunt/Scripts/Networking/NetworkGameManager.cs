@@ -5,6 +5,7 @@ using FishNet.Transporting.Tugboat;
 using NightHunt.Common;
 using NightHunt.Core;
 using NightHunt.Data.DTOs;
+using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.Networking.Player;
 using NightHunt.Networking.Relay;
 using NightHunt.State;
@@ -76,9 +77,11 @@ namespace NightHunt.Networking
         private ulong _activeRelayIdentityPeerId;
         private bool _relayHostUpstreamPunchComplete;
         private float _relayHostReadyEarliestRealtime = -1f;
+        private Coroutine _markGameSceneLoadedCoroutine;
         private bool _clientHandshakeBroadcastRegistered;
         private float _lastPlayerDataBroadcastRealtime = -1f;
         private const float PlayerDataBroadcastThrottleSeconds = 0.25f;
+        private const int UnitySceneActivationSettleFrames = 2;
         private static readonly byte[] RelayHostRegistrationPayload =
             { 78, 72, 95, 82, 69, 76, 65, 89, 95, 72, 79, 83, 84 };
 
@@ -102,6 +105,7 @@ namespace NightHunt.Networking
             return;
 #endif
             if (networkManager == null) return;
+            ConfigureConnectionDropTrace();
             if (networkManager.SceneManager == null || networkManager.ClientManager == null)
             {
                 Debug.LogError("[NetworkGameManager] NetworkManager did not finish initializing. Check earlier FishNet errors, especially DefaultPrefabObjects spawnable prefab registry errors.");
@@ -169,6 +173,7 @@ namespace NightHunt.Networking
                 GameWebSocketService.Instance.OnRelayHostReady -= OnRelayHostReadyReceived;
             }
             UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnUnitySceneLoaded;
+            CancelGameSceneLoadedDelay();
             base.OnDestroy();
         }
 
@@ -183,10 +188,35 @@ namespace NightHunt.Networking
         {
             if (scene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase))
             {
-                Debug.Log($"[NetworkGameManager] Unity scene loaded: '{scene.name}' — setting _gameSceneLoaded = true.");
-                _gameSceneLoaded = true;
-                TryConnectIfReady();
+                Debug.Log($"[NetworkGameManager] Unity scene loaded: '{scene.name}' — delaying match connect until next frame.");
+                if (_markGameSceneLoadedCoroutine != null)
+                    StopCoroutine(_markGameSceneLoadedCoroutine);
+                _markGameSceneLoadedCoroutine = StartCoroutine(MarkGameSceneLoadedAfterUnityActivation(scene.name));
             }
+        }
+
+        private IEnumerator MarkGameSceneLoadedAfterUnityActivation(string sceneName)
+        {
+            // Unity's sceneLoaded fires as the scene activates. FishNet scene-object
+            // lookup is safer after a couple frames, once scene NetworkObjects have
+            // completed their activation pass in both Editor and player builds.
+            for (int i = 0; i < UnitySceneActivationSettleFrames; i++)
+                yield return null;
+
+            _markGameSceneLoadedCoroutine = null;
+            var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (!activeScene.IsValid() || !activeScene.isLoaded
+                || !activeScene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.LogWarning(
+                    $"[NH_CONN][GATE] Delayed scene-ready skipped: loadedScene={sceneName} " +
+                    $"activeScene={activeScene.name} valid={activeScene.IsValid()} loaded={activeScene.isLoaded}.");
+                yield break;
+            }
+
+            Debug.Log($"[NH_CONN][GATE] Unity map scene ready after activation frame: '{activeScene.name}'.");
+            _gameSceneLoaded = true;
+            TryConnectIfReady();
         }
 
         // ── Dedicated Server (Ranked mode) ────────────────────────────────────
@@ -198,6 +228,7 @@ namespace NightHunt.Networking
         public void StartServer()
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
+            ConfigureConnectionDropTrace();
             ClearRelayPacketLayer();
             Debug.Log($"[NetworkGameManager] Starting Dedicated Server on port {port}...");
             if (!networkManager.ServerManager.StartConnection())
@@ -212,9 +243,18 @@ namespace NightHunt.Networking
         public void StartClientDS(string dsIp = null, ushort dsPort = 0)
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
+            ConfigureConnectionDropTrace();
             string ip = string.IsNullOrEmpty(dsIp) ? defaultServerAddress : dsIp;
             ushort p  = dsPort > 0 ? dsPort : port;
             ClearRelayPacketLayer();
+            ConnectionDropTrace.BeginClientAttempt(
+                "StartClientDS",
+                "ds-client",
+                $"{ip}:{p}",
+                RoomState.Instance?.CurrentGameMode.ToString() ?? "unknown",
+                null,
+                _retryCount,
+                _maxRetries);
             Debug.Log($"[NetworkGameManager] Connecting to DS {ip}:{p}...");
             SetTransportAddress(ip, p);
             if (!networkManager.ClientManager.StartConnection())
@@ -242,6 +282,7 @@ namespace NightHunt.Networking
         public void StartHostWithRelay(string relayIp, ushort relayPort, string sessionId)
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
+            ConfigureConnectionDropTrace();
             Debug.Log($"[NH_CONN][NH_RELAY][NH_HANDSHAKE][HOST_START] StartHostWithRelay relay={relayIp}:{relayPort} session={sessionId} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             _relayHostUpstreamPunchComplete = false;
             _relayHostReadyEarliestRealtime = -1f;
@@ -321,6 +362,14 @@ namespace NightHunt.Networking
             // The server still advertises/registers with the relay for remote players.
             const string hostLoopbackAddress = "127.0.0.1";
             SetTransportAddress(hostLoopbackAddress, relayPort);
+            ConnectionDropTrace.BeginClientAttempt(
+                "StartRelayHostClientAfterRegistration",
+                "relay-host-local-client",
+                $"{hostLoopbackAddress}:{relayPort}",
+                RoomState.Instance?.CurrentGameMode.ToString() ?? "unknown",
+                _activeRelayIdentityLayer,
+                _retryCount,
+                _maxRetries);
             if (!networkManager.ClientManager.StartConnection())
                 Debug.LogError("[NH_CONN][NH_RELAY][NH_DROP][HOST_LOCAL_CLIENT_FAIL] Failed to start relay host local client.");
             else
@@ -355,9 +404,18 @@ namespace NightHunt.Networking
         public void StartClientWithRelay(string relayIp, ushort relayPort, string sessionId)
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
+            ConfigureConnectionDropTrace();
             Debug.Log($"[NH_CONN][NH_RELAY][NH_HANDSHAKE][CLIENT_START] StartClientWithRelay relay={relayIp}:{relayPort} session={sessionId} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             ConfigureRelayPacketLayer(sessionId, forceNewLayer: true);
             SetTransportAddress(relayIp, relayPort);
+            ConnectionDropTrace.BeginClientAttempt(
+                "StartClientWithRelay",
+                "relay-client",
+                $"{relayIp}:{relayPort}",
+                RoomState.Instance?.CurrentGameMode.ToString() ?? "unknown",
+                _activeRelayIdentityLayer,
+                _retryCount,
+                _maxRetries);
             if (!networkManager.ClientManager.StartConnection())
                 Debug.LogError("[NH_CONN][NH_RELAY][NH_DROP][CLIENT_START_FAIL] Failed to start relay client connection.");
         }
@@ -411,6 +469,7 @@ namespace NightHunt.Networking
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
             CancelInvoke(nameof(MarkConnectionStable));
+            CancelGameSceneLoadedDelay();
             MatchLoadingOverlay.ResetReadinessSignal();
             _retryCount = 0;
             _connectionStarted = false;
@@ -490,6 +549,20 @@ namespace NightHunt.Networking
 
         private void OnClientConnectionState(ClientConnectionStateArgs args)
         {
+            ConfigureConnectionDropTrace();
+            float currentConnectedFor = _connectedSinceRealtime >= 0f
+                ? Time.realtimeSinceStartup - _connectedSinceRealtime
+                : 0f;
+            ConnectionDropTrace.MarkClientState(
+                "NetworkGameManager.OnClientConnectionState",
+                args.ConnectionState.ToString(),
+                _connectionStarted,
+                _connected,
+                _intentionalDisconnect,
+                _retryCount,
+                _maxRetries,
+                currentConnectedFor);
+
             switch (args.ConnectionState)
             {
                 case LocalConnectionState.Started:
@@ -697,6 +770,10 @@ namespace NightHunt.Networking
             }
             _retryCount++;
             float delay = GetRetryDelay();
+            ConnectionDropTrace.Log(
+                "RETRY_SCHEDULE",
+                $"delay={delay:F1}s nextAttempt={_retryCount}/{_maxRetries} showUi={showUi}",
+                warning: true);
             Debug.Log($"[NH_CONN][RETRY] Retrying connection delay={delay:F1}s attempt={_retryCount}/{_maxRetries}.");
             OnRetryAttempt?.Invoke(_retryCount, _maxRetries);
             if (showUi)
@@ -747,6 +824,10 @@ namespace NightHunt.Networking
 
         private void RetryConnect()
         {
+            ConnectionDropTrace.Log(
+                "RETRY_EXECUTE",
+                $"isClientStarted={networkManager != null && networkManager.IsClientStarted} retry={_retryCount}/{_maxRetries}",
+                warning: false);
             _connected = false;
             _connectionStarted = false;
 
@@ -756,6 +837,7 @@ namespace NightHunt.Networking
             //   old connection fires Stopped → TryRetry → new connection fires Stopped → TryRetry → ...
             if (networkManager != null && networkManager.IsClientStarted)
             {
+                ConnectionDropTrace.MarkLocalStopRequest("NetworkGameManager.RetryConnect.StopPreviousClient", intentional: false);
                 Debug.Log("[NH_CONN][RETRY] Previous client still active; stopping before retry.");
                 networkManager.ClientManager.StopConnection();
                 // Wait one frame then retry; the Stopped event will NOT trigger TryRetry again
@@ -843,6 +925,7 @@ namespace NightHunt.Networking
             CancelInvoke(nameof(RetryConnect));
             CancelInvoke(nameof(LoadHome));
             CancelInvoke(nameof(MarkConnectionStable));
+            CancelGameSceneLoadedDelay();
             MatchLoadingOverlay.Instance?.ForceHide("reset-flags");
             _connectionStarted = false;
             _connected         = false;
@@ -864,8 +947,18 @@ namespace NightHunt.Networking
             if (networkManager == null) return;
             Debug.Log("[NH_CONN][DISCONNECT] Disconnecting FishNet server/client.");
             _intentionalDisconnect = true;
+            ConnectionDropTrace.MarkLocalStopRequest("NetworkGameManager.Disconnect", intentional: true);
             if (IsServer) networkManager.ServerManager.StopConnection(true);
             if (IsClient) networkManager.ClientManager.StopConnection();
+        }
+
+        private void CancelGameSceneLoadedDelay()
+        {
+            if (_markGameSceneLoadedCoroutine == null)
+                return;
+
+            StopCoroutine(_markGameSceneLoadedCoroutine);
+            _markGameSceneLoadedCoroutine = null;
         }
 
         // ── Reconnect UI ──────────────────────────────────────────────────────
@@ -1067,6 +1160,7 @@ namespace NightHunt.Networking
 
         private void ConfigureRelayPacketLayer(string sessionId, bool forceNewLayer = false)
         {
+            ConfigureConnectionDropTrace();
             var transport = networkManager?.TransportManager?.Transport as Tugboat;
             if (transport == null)
             {
@@ -1086,17 +1180,28 @@ namespace NightHunt.Networking
             }
 
             transport.SetPacketLayer(_activeRelayIdentityLayer);
+            ConnectionDropTrace.SetRelayIdentity(sessionId, _activeRelayIdentityLayer, forceNewLayer);
             Debug.Log($"[NH_CONN][NH_RELAY][IDENTITY] Relay identity enabled sessionHash={_activeRelayIdentityLayer.SessionHash:x16} peerId={peerId} nonce={_activeRelayIdentityLayer.Nonce:x16} forceNew={forceNewLayer}");
         }
 
         private void ClearRelayPacketLayer()
         {
+            ConfigureConnectionDropTrace();
             if (networkManager?.TransportManager?.Transport is Tugboat transport)
                 transport.SetPacketLayer(null);
 
+            ConnectionDropTrace.ClearRelayIdentity("NetworkGameManager.ClearRelayPacketLayer");
             _activeRelayIdentityLayer = null;
             _activeRelayIdentitySessionId = null;
             _activeRelayIdentityPeerId = 0UL;
+        }
+
+        private static void ConfigureConnectionDropTrace()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            ConnectionDropTrace.Configure(
+                cfg != null && cfg.EnableConnectionDropTraceLogs,
+                cfg != null && cfg.EnableConnectionDropTraceStackTraces);
         }
 
         private void EnsureRelayOwnedObjectPreserver()
@@ -1186,4 +1291,5 @@ namespace NightHunt.Networking
             }
         }
     }
+
 }

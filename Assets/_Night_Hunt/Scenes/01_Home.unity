@@ -39573,7 +39573,7 @@ PrefabInstance:
     - target: {fileID: 224633099051342902, guid: 60163bc4b1f0ef54e9bcc329aa406bce,
         type: 3}
       propertyPath: m_SizeDelta.x
-      value: 190.15
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 224633099051342902, guid: 60163bc4b1f0ef54e9bcc329aa406bce,
         type: 3}
@@ -80619,6 +80619,7 @@ MonoBehaviour:
   _relayRetryDelay: 7
   _relayMaxRetries: 10
   _stableConnectionSecondsToResetRetries: 15
+  _relayHostReadySettleSeconds: 1
   _maxRetries: 2
 --- !u!4 &1896908647
 Transform:

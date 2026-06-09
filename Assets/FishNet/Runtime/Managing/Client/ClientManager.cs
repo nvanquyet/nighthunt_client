@@ -268,6 +268,11 @@ namespace FishNet.Managing.Client
         /// </summary>
         public bool StopConnection()
         {
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "FISHNET_CLIENT_MANAGER_STOP",
+                $"started={Started} localConnectionValid={Connection != null && Connection.IsValid}",
+                warning: true,
+                includeStack: true);
             return NetworkManager.TransportManager.Transport.StopConnection(false);
         }
 
@@ -523,6 +528,11 @@ namespace FishNet.Managing.Client
                     }
                     else if (packetId == PacketId.Disconnect)
                     {
+                        NightHunt.Networking.ConnectionDropTrace.Log(
+                            "FISHNET_CLIENT_DISCONNECT_PACKET",
+                            $"channel={channel} readerRemaining={reader.Remaining}",
+                            warning: true,
+                            includeStack: true);
                         reader.Clear();
                         StopConnection();
                     }
@@ -693,6 +703,11 @@ namespace FishNet.Managing.Client
             if (Time.unscaledTime - _lastPacketTime > _remoteServerTimeoutDuration)
             {
                 OnClientTimeOut?.Invoke();
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "FISHNET_CLIENT_SERVER_TIMEOUT",
+                    $"lastPacketAge={(Time.unscaledTime - _lastPacketTime):F2}s timeout={_remoteServerTimeoutDuration}s timeoutType={_remoteServerTimeout}",
+                    warning: true,
+                    includeStack: true);
                 NetworkManager.Log($"Server has timed out. You can modify this feature on the ClientManager component.");
                 StopConnection();
             }

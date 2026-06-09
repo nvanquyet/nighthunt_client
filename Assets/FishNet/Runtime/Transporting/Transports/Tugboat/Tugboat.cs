@@ -497,6 +497,12 @@ namespace FishNet.Transporting.Tugboat
         /// <param name = "server">True to stop server.</param>
         public override bool StopConnection(bool server)
         {
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "TUGBOAT_STOP_LOCAL_REQUEST",
+                $"asServer={server} clientState={GetConnectionState(false)} serverState={GetConnectionState(true)}",
+                warning: !server,
+                includeStack: true);
+
             if (server)
                 return StopServer();
             else
@@ -513,6 +519,11 @@ namespace FishNet.Transporting.Tugboat
         /// </param>
         public override bool StopConnection(int connectionId, bool immediately)
         {
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "TUGBOAT_STOP_REMOTE_REQUEST",
+                $"connectionId={connectionId} immediately={immediately} remoteState={GetConnectionState(connectionId)}",
+                warning: true,
+                includeStack: true);
             return ServerSocket.StopConnection(connectionId);
         }
 
@@ -629,5 +640,202 @@ namespace FishNet.Transporting.Tugboat
         }
 #endif
         #endregion
+    }
+}
+
+namespace NightHunt.Networking
+{
+    /// <summary>
+    /// Focused trace for connection drops across NightHunt and FishNet.Runtime.
+    /// Configure this from game code before starting client/server connections.
+    /// </summary>
+    public static class ConnectionDropTrace
+    {
+        private static readonly System.Reflection.BindingFlags RelayMemberFlags =
+            System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public
+            | System.Reflection.BindingFlags.NonPublic;
+
+        private static bool _enabled;
+        private static bool _includeStackTraces;
+        private static int _clientAttemptSeq;
+        private static string _role = "none";
+        private static string _endpoint = "none";
+        private static string _mode = "unknown";
+        private static string _sessionHash = "none";
+        private static string _peerId = "none";
+        private static string _nonce = "none";
+        private static string _lastStopSource = "none";
+        private static bool _lastStopIntentional;
+        private static int _retry;
+        private static int _maxRetries;
+        private static float _attemptStartedRealtime = -1f;
+        private static string _lastClientState = "none";
+
+        public static void Configure(bool enabled, bool includeStackTraces)
+        {
+            bool changed = _enabled != enabled || _includeStackTraces != includeStackTraces;
+            _enabled = enabled;
+            _includeStackTraces = includeStackTraces;
+
+            if (changed)
+                Log("TRACE_CONFIG", $"enabled={enabled} stackTraces={includeStackTraces}", warning: false);
+        }
+
+        public static void BeginClientAttempt(
+            string source,
+            string role,
+            string endpoint,
+            string mode,
+            object relayLayer,
+            int retry,
+            int maxRetries)
+        {
+            _clientAttemptSeq++;
+            _role = string.IsNullOrEmpty(role) ? "unknown" : role;
+            _endpoint = string.IsNullOrEmpty(endpoint) ? "none" : endpoint;
+            _mode = string.IsNullOrEmpty(mode) ? "unknown" : mode;
+            _retry = retry;
+            _maxRetries = maxRetries;
+            _attemptStartedRealtime = Time.realtimeSinceStartup;
+            _lastClientState = "attempting";
+            ApplyRelayIdentity(relayLayer);
+            _lastStopSource = "none";
+            _lastStopIntentional = false;
+
+            Log("CLIENT_ATTEMPT_BEGIN", $"source={source}", warning: false);
+        }
+
+        public static void SetRelayIdentity(string sessionId, object relayLayer, bool forceNew)
+        {
+            ApplyRelayIdentity(relayLayer);
+            Log(
+                "RELAY_IDENTITY",
+                $"sessionSet={!string.IsNullOrEmpty(sessionId)} forceNew={forceNew}",
+                warning: false);
+        }
+
+        public static void ClearRelayIdentity(string source)
+        {
+            _sessionHash = "none";
+            _peerId = "none";
+            _nonce = "none";
+            Log("RELAY_IDENTITY_CLEAR", $"source={source}", warning: false);
+        }
+
+        public static void MarkClientState(
+            string source,
+            string state,
+            bool connectionStarted,
+            bool connected,
+            bool intentionalDisconnect,
+            int retry,
+            int maxRetries,
+            float connectedFor)
+        {
+            _lastClientState = string.IsNullOrEmpty(state) ? "unknown" : state;
+            _retry = retry;
+            _maxRetries = maxRetries;
+            bool warning = string.Equals(state, "Stopped", System.StringComparison.OrdinalIgnoreCase)
+                && !intentionalDisconnect;
+            Log(
+                "CLIENT_STATE",
+                $"source={source} state={state} connectionStarted={connectionStarted} connected={connected} intentional={intentionalDisconnect} connectedFor={connectedFor:F2}s",
+                warning);
+        }
+
+        public static void MarkLocalStopRequest(string source, bool intentional)
+        {
+            _lastStopSource = string.IsNullOrEmpty(source) ? "unknown" : source;
+            _lastStopIntentional = intentional;
+            Log(
+                "LOCAL_STOP_REQUEST",
+                $"source={_lastStopSource} intentional={intentional}",
+                warning: !intentional,
+                includeStack: true);
+        }
+
+        public static void Log(string marker, string message, bool warning = false, bool includeStack = false)
+        {
+            if (!_enabled)
+                return;
+
+            string line =
+                $"[NH_DROP_TRACE][{marker}] {message} {BuildContext()} " +
+                $"utc={DateTime.UtcNow:HH:mm:ss.fff} rt={Time.realtimeSinceStartup:F3}";
+
+            if (includeStack && _includeStackTraces)
+                line += "\n" + StackTraceUtility.ExtractStackTrace();
+
+            if (warning)
+                Debug.LogWarning(line);
+            else
+                Debug.Log(line);
+        }
+
+        private static void ApplyRelayIdentity(object relayLayer)
+        {
+            if (relayLayer == null)
+                return;
+
+            _sessionHash = ReadRelayUInt64(relayLayer, "SessionHash", hex: true);
+            _peerId = ReadRelayUInt64(relayLayer, "PeerId", hex: false);
+            _nonce = ReadRelayUInt64(relayLayer, "Nonce", hex: true);
+        }
+
+        private static string ReadRelayUInt64(object source, string memberName, bool hex)
+        {
+            if (source == null)
+                return "null-source";
+            try
+            {
+                return ReadRelayUInt64Internal(source, memberName, hex);
+            }
+            catch (Exception ex)
+            {
+                return $"read-error:{ex.GetType().Name}";
+            }
+        }
+
+        private static string ReadRelayUInt64Internal(object source, string memberName, bool hex)
+        {
+            Type type = source.GetType();
+            var field = type.GetField(memberName, RelayMemberFlags);
+            if (field != null)
+            {
+                object value = field.GetValue(source);
+                if (value != null)
+                {
+                    ulong numeric = Convert.ToUInt64(value);
+                    return hex ? numeric.ToString("x16") : numeric.ToString();
+                }
+            }
+
+            var prop = type.GetProperty(memberName, RelayMemberFlags);
+            if (prop != null)
+            {
+                object value = prop.GetValue(source, null);
+                if (value != null)
+                {
+                    ulong numeric = Convert.ToUInt64(value);
+                    return hex ? numeric.ToString("x16") : numeric.ToString();
+                }
+            }
+
+            return "missing";
+        }
+
+        private static string BuildContext()
+        {
+            float attemptAge = _attemptStartedRealtime >= 0f
+                ? Time.realtimeSinceStartup - _attemptStartedRealtime
+                : 0f;
+
+            return
+                $"ctxAttempt={_clientAttemptSeq} ctxRole={_role} ctxMode={_mode} ctxEndpoint={_endpoint} " +
+                $"ctxRetry={_retry}/{_maxRetries} ctxAge={attemptAge:F2}s ctxState={_lastClientState} " +
+                $"ctxSession={_sessionHash} ctxPeer={_peerId} ctxNonce={_nonce} " +
+                $"ctxLastStop={_lastStopSource} ctxLastStopIntentional={_lastStopIntentional}";
+        }
     }
 }

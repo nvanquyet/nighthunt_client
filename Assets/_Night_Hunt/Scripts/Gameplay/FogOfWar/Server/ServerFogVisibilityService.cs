@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NightHunt.Core;
+using NightHunt.GameplaySystems.Core.Configs;
 using UnityEngine;
 
 namespace NightHunt.Gameplay.FogOfWar
@@ -79,6 +80,7 @@ namespace NightHunt.Gameplay.FogOfWar
 
         // (observerNetObjId, targetNetObjId) → can observer see target?
         private readonly Dictionary<(int, int), bool> _visibility = new();
+        private readonly Dictionary<(int, int), bool> _lastLoggedVisibility = new();
 
         // Reused list to avoid GC in PurgeEntriesFor
         private readonly List<(int, int)> _purgeBuffer = new();
@@ -119,12 +121,14 @@ namespace NightHunt.Gameplay.FogOfWar
         /// <param name="visionRange">Player VisionRange stat (world units).</param>
         public void RegisterPlayer(int netObjId, Transform t, int teamId, float visionRange)
         {
+            float resolvedVision = visionRange > 0.1f ? visionRange : _defaultVisionRange;
             _players[netObjId] = new PlayerEntry
             {
                 Transform   = t,
                 TeamId      = teamId,
-                VisionRange = visionRange > 0.1f ? visionRange : _defaultVisionRange
+                VisionRange = resolvedVision
             };
+            LogNetwork($"[NH_FOW][REGISTER] player={netObjId} team={teamId} vision={resolvedVision:F1} pos={FormatTransform(t)}");
             // Immediate rebuild so the condition has valid data on the first observer check.
             RebuildVisibilityMap();
         }
@@ -132,7 +136,8 @@ namespace NightHunt.Gameplay.FogOfWar
         /// <summary>Unregister a player. Called from NetworkPlayer.OnStopServer.</summary>
         public void UnregisterPlayer(int netObjId)
         {
-            _players.Remove(netObjId);
+            if (_players.Remove(netObjId))
+                LogNetwork($"[NH_FOW][UNREGISTER] player={netObjId}");
             PurgeEntriesFor(netObjId);
         }
 
@@ -142,13 +147,21 @@ namespace NightHunt.Gameplay.FogOfWar
         /// </summary>
         public void UpdatePlayerData(int netObjId, int teamId, float visionRange)
         {
-            if (!_players.TryGetValue(netObjId, out var e)) return;
+            if (!_players.TryGetValue(netObjId, out var e))
+            {
+                LogNetwork($"[NH_FOW][DATA_MISS] UpdatePlayerData before RegisterPlayer player={netObjId} team={teamId} vision={visionRange:F1}");
+                return;
+            }
+
+            float resolvedVision = visionRange > 0.1f ? visionRange : _defaultVisionRange;
             _players[netObjId] = new PlayerEntry
             {
                 Transform   = e.Transform,
                 TeamId      = teamId,
-                VisionRange = visionRange > 0.1f ? visionRange : _defaultVisionRange
+                VisionRange = resolvedVision
             };
+            LogNetwork($"[NH_FOW][DATA] player={netObjId} team={teamId} vision={resolvedVision:F1} pos={FormatTransform(e.Transform)}");
+            RebuildVisibilityMap();
         }
 
         /// <summary>
@@ -163,12 +176,14 @@ namespace NightHunt.Gameplay.FogOfWar
                 TeamId        = teamId,
                 AlwaysVisible = alwaysVisible
             };
+            LogNetwork($"[NH_FOW][REGISTER] tracked={netObjId} team={teamId} always={alwaysVisible} pos={FormatTransform(t)}");
         }
 
         /// <summary>Unregister a tracked non-player object.</summary>
         public void UnregisterTracked(int netObjId)
         {
-            _tracked.Remove(netObjId);
+            if (_tracked.Remove(netObjId))
+                LogNetwork($"[NH_FOW][UNREGISTER] tracked={netObjId}");
             PurgeEntriesFor(netObjId);
         }
 
@@ -203,15 +218,26 @@ namespace NightHunt.Gameplay.FogOfWar
                 {
                     if (tid == oid)
                     {
-                        _visibility[(oid, tid)] = true;
+                        SetVisibility(oid, tid, true, "self", 0f, false);
                         continue;
                     }
 
                     if (target.Transform == null) continue;
 
-                    _visibility[(oid, tid)] = observer.TeamId == target.TeamId
-                        || HasLoS(observer.Transform.position, observer.VisionRange,
-                                  target.Transform.position);
+                    if (observer.TeamId == target.TeamId)
+                    {
+                        SetVisibility(oid, tid, true, "same-team", 0f, false);
+                        continue;
+                    }
+
+                    bool visible = HasLoS(
+                        observer.Transform.position,
+                        observer.VisionRange,
+                        target.Transform.position,
+                        out float distance,
+                        out bool blocked,
+                        out string blockedBy);
+                    SetVisibility(oid, tid, visible, visible ? "los" : (blocked ? "blocked" : "out-of-range"), distance, blocked, blockedBy);
                 }
 
                 // ── Player ↔ Tracked non-player objects ──────────────────────
@@ -219,10 +245,26 @@ namespace NightHunt.Gameplay.FogOfWar
                 {
                     if (obj.Transform == null) continue;
 
-                    _visibility[(oid, tid)] = obj.AlwaysVisible
-                        || observer.TeamId == obj.TeamId
-                        || HasLoS(observer.Transform.position, observer.VisionRange,
-                                  obj.Transform.position);
+                    if (obj.AlwaysVisible)
+                    {
+                        SetVisibility(oid, tid, true, "always", 0f, false);
+                        continue;
+                    }
+
+                    if (observer.TeamId == obj.TeamId)
+                    {
+                        SetVisibility(oid, tid, true, "same-team", 0f, false);
+                        continue;
+                    }
+
+                    bool visible = HasLoS(
+                        observer.Transform.position,
+                        observer.VisionRange,
+                        obj.Transform.position,
+                        out float distance,
+                        out bool blocked,
+                        out string blockedBy);
+                    SetVisibility(oid, tid, visible, visible ? "los" : (blocked ? "blocked" : "out-of-range"), distance, blocked, blockedBy);
                 }
             }
         }
@@ -233,19 +275,58 @@ namespace NightHunt.Gameplay.FogOfWar
         /// Uses <see cref="NightHuntLayers.MaskFOWObstacles"/> (Wall + MapStatic + MapObstacle).
         /// +1 m eye offset avoids ground-level misses on uneven terrain.
         /// </summary>
-        private bool HasLoS(Vector3 observerPos, float visionRange, Vector3 targetPos)
+        private bool HasLoS(
+            Vector3 observerPos,
+            float visionRange,
+            Vector3 targetPos,
+            out float distance,
+            out bool blocked,
+            out string blockedBy)
         {
             const float eyeHeight = 1f;
             Vector3 from = observerPos + Vector3.up * eyeHeight;
             Vector3 to   = targetPos   + Vector3.up * eyeHeight;
 
-            if (Vector3.Distance(from, to) > visionRange)
+            distance = Vector3.Distance(from, to);
+            blocked = false;
+            blockedBy = "";
+            if (distance > visionRange)
                 return false;
 
-            return !Physics.Linecast(from, to, _losMask);
+            blocked = Physics.Linecast(from, to, out RaycastHit hit, _losMask, QueryTriggerInteraction.Ignore);
+            if (blocked && hit.collider != null)
+            {
+                GameObject hitObject = hit.collider.gameObject;
+                blockedBy = $"{hitObject.name}@{LayerMask.LayerToName(hitObject.layer)}";
+            }
+            return !blocked;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
+
+        private void SetVisibility(
+            int observerId,
+            int targetId,
+            bool visible,
+            string reason,
+            float distance,
+            bool blocked,
+            string blockedBy = "")
+        {
+            var key = (observerId, targetId);
+            _visibility[key] = visible;
+
+            if (!IsNetworkDebugEnabled())
+                return;
+
+            if (_lastLoggedVisibility.TryGetValue(key, out bool previous) && previous == visible)
+                return;
+
+            _lastLoggedVisibility[key] = visible;
+            Debug.Log(
+                $"[NH_FOW][VIS] observer={observerId} target={targetId} visible={visible} reason={reason} " +
+                $"dist={distance:F1} blocked={blocked} blockedBy={blockedBy}");
+        }
 
         private void PurgeEntriesFor(int id)
         {
@@ -254,7 +335,31 @@ namespace NightHunt.Gameplay.FogOfWar
                 if (k.Item1 == id || k.Item2 == id)
                     _purgeBuffer.Add(k);
             foreach (var k in _purgeBuffer)
+            {
                 _visibility.Remove(k);
+                _lastLoggedVisibility.Remove(k);
+            }
+        }
+
+        private static bool IsNetworkDebugEnabled()
+        {
+            var cfg = NightHuntDebugConfig.Instance;
+            return cfg != null && cfg.EnableNetworkDebugLogs;
+        }
+
+        private static void LogNetwork(string message)
+        {
+            if (IsNetworkDebugEnabled())
+                Debug.Log(message);
+        }
+
+        private static string FormatTransform(Transform t)
+        {
+            if (t == null)
+                return "null";
+
+            Vector3 p = t.position;
+            return $"({p.x:F1},{p.y:F1},{p.z:F1})";
         }
     }
 }

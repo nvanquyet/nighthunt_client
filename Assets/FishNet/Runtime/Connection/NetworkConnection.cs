@@ -313,6 +313,11 @@ namespace FishNet.Connection
                 return;
             }
 
+            NightHunt.Networking.ConnectionDropTrace.Log(
+                "FISHNET_NETWORK_CONNECTION_DISCONNECT",
+                $"clientId={ClientId} immediately={immediately} authenticated={IsAuthenticated} disconnecting={Disconnecting}",
+                warning: true,
+                includeStack: true);
             SetDisconnecting(true);
             // If immediately then force disconnect through transport.
             if (immediately)

@@ -427,6 +427,14 @@ namespace FishNet.Managing.Server
                 uint difference = localTick - clientLocalTick;
                 //Client has timed out.
                 if (difference >= requiredTicks)
+                {
+                    NightHunt.Networking.ConnectionDropTrace.Log(
+                        "FISHNET_SERVER_CLIENT_TIMEOUT",
+                        $"clientId={item.ClientId} localTick={localTick} clientLocalTick={clientLocalTick} diff={difference} required={requiredTicks} timeout={_remoteClientTimeoutDuration}s timeoutType={_remoteClientTimeout}",
+                        warning: true,
+                        includeStack: true);
+                }
+                if (difference >= requiredTicks)
                     item.Kick(KickReason.UnexpectedProblem, LoggingType.Common, $"{item.ToString()} has timed out. You can modify this feature on the ServerManager component.");
 
                 _nextClientTimeoutCheckIndex++;
@@ -506,7 +514,14 @@ namespace FishNet.Managing.Server
         private void _authenticator_OnAuthenticationResult(NetworkConnection conn, bool authenticated)
         {
             if (!authenticated)
+            {
+                NightHunt.Networking.ConnectionDropTrace.Log(
+                    "FISHNET_SERVER_AUTH_REJECT",
+                    $"clientId={conn?.ClientId.ToString() ?? "null"}",
+                    warning: true,
+                    includeStack: true);
                 conn.Disconnect(false);
+            }
             else
                 ClientAuthenticated(conn);
         }

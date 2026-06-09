@@ -219,7 +219,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _updateHostVisibility: 1
   _maximumTimedObserversDuration: 10
-  _defaultConditions: []
+  _defaultConditions:
+  - {fileID: 11400000, guid: 2033f54fd2794464bae08fa5a55c8996, type: 2}
 --- !u!114 &8802402584567813616
 MonoBehaviour:
   m_ObjectHideFlags: 0

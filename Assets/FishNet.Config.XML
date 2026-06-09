@@ -4,7 +4,7 @@
   <PrefabGenerator>
     <Enabled>true</Enabled>
     <LogToConsole>true</LogToConsole>
-    <FullRebuild>false</FullRebuild>
+    <FullRebuild>true</FullRebuild>
     <SpawnableOnly>true</SpawnableOnly>
     <SaveChanges>true</SaveChanges>
     <DefaultPrefabObjectsPath>Assets\DefaultPrefabObjects.asset</DefaultPrefabObjectsPath>
@@ -17,7 +17,7 @@
     <IsDevelopment>false</IsDevelopment>
     <IsHeadless>false</IsHeadless>
     <StripReleaseBuilds>false</StripReleaseBuilds>
-    <StrippingType>0</StrippingType>
+    <StrippingType>1</StrippingType>
   </CodeStripping>
   <CreateNewNetworkBehaviour>
     <templateDirectoryPath>Assets</templateDirectoryPath>

@@ -18,6 +18,8 @@ MonoBehaviour:
   EnableWeaponDebugLogs: 0
   EnableCoreDebugLogs: 0
   EnableNetworkDebugLogs: 0
+  EnableConnectionDropTraceLogs: 1
+  EnableConnectionDropTraceStackTraces: 0
   EnableMatchDebugLogs: 0
   ShowDebugGizmos: 0
   EnableConsumableDebugLogs: 0

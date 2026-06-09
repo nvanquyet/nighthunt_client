@@ -26,6 +26,7 @@ public static class BuildScript
     {
         "Assets/_Night_Hunt/Scenes/00_DS_Boot.unity",  // index 0 — DS boot only
         "Assets/_Night_Hunt/Scenes/02_Map_01.unity",   // index 1 — Map 01
+        "Assets/_Night_Hunt/Scenes/02_Map_02.unity",   // index 2 — Map 02
         // Thêm map mới: thêm dòng ở đây + entry trong ServerBootstrap.LoadGameScene()
     };
 
@@ -37,10 +38,9 @@ public static class BuildScript
     // 2. Các map gameplay để FishNet SceneManager có thể load khi DS notify
     private static readonly string[] CLIENT_SCENES =
     {
-        "Assets/_Night_Hunt/Scenes/01_FirstLoading.unity", // index 0 — boot
-        "Assets/_Night_Hunt/Scenes/02_Login.unity",         // index 1
-        "Assets/_Night_Hunt/Scenes/01_Home.unity",          // index 2 — lobby
-        "Assets/_Night_Hunt/Scenes/02_Map_01.unity",        // index 3 — Map 01 (FishNet load khi join match)
+        "Assets/_Night_Hunt/Scenes/01_Home.unity",          // index 0 — boot, login, lobby
+        "Assets/_Night_Hunt/Scenes/02_Map_01.unity",        // index 1 — Map 01 (FishNet load khi join match)
+        "Assets/_Night_Hunt/Scenes/02_Map_02.unity",        // index 2 — Map 02
         // Thêm map mới: thêm ở cả SERVER_SCENES lẫn CLIENT_SCENES
     };
 
