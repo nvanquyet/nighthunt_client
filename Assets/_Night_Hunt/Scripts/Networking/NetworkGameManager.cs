@@ -55,6 +55,8 @@ namespace NightHunt.Networking
         [SerializeField] private int _relayMaxRetries = 10;
         [Tooltip("Seconds a connection must stay up before retry counter is reset.")]
         [SerializeField] private float _stableConnectionSecondsToResetRetries = 15f;
+        [Tooltip("Extra settle time after host upstream punch before clients receive relay_host_ready.")]
+        [SerializeField] private float _relayHostReadySettleSeconds = 1.0f;
         [SerializeField] private int   _maxRetries = 2;
         private int _defaultMaxRetries = -1;
 
@@ -72,6 +74,8 @@ namespace NightHunt.Networking
         private RelayIdentityPacketLayer _activeRelayIdentityLayer;
         private string _activeRelayIdentitySessionId;
         private ulong _activeRelayIdentityPeerId;
+        private bool _relayHostUpstreamPunchComplete;
+        private float _relayHostReadyEarliestRealtime = -1f;
         private bool _clientHandshakeBroadcastRegistered;
         private float _lastPlayerDataBroadcastRealtime = -1f;
         private const float PlayerDataBroadcastThrottleSeconds = 0.25f;
@@ -239,6 +243,8 @@ namespace NightHunt.Networking
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
             Debug.Log($"[NH_CONN][NH_RELAY][NH_HANDSHAKE][HOST_START] StartHostWithRelay relay={relayIp}:{relayPort} session={sessionId} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            _relayHostUpstreamPunchComplete = false;
+            _relayHostReadyEarliestRealtime = -1f;
 
             // ⚠️  MUST bind 0.0.0.0, NOT 127.0.0.1.
             // The relay server forwards packets originating from its own public IP.
@@ -297,9 +303,14 @@ namespace NightHunt.Networking
                 yield return new WaitForSecondsRealtime(0.1f);
             }
 
+            _relayHostUpstreamPunchComplete = true;
+            _relayHostReadyEarliestRealtime = Time.realtimeSinceStartup + Mathf.Max(0f, _relayHostReadySettleSeconds);
+            Debug.Log($"[NH_CONN][NH_RELAY][HOST_UPSTREAM_READY] Host upstream punches complete ports={hostPorts.Length} settle={Mathf.Max(0f, _relayHostReadySettleSeconds):F1}s.");
+
             if (networkManager.IsClientStarted)
             {
                 Debug.Log("[NH_CONN][NH_RELAY][HOST_CLIENT_ALREADY_STARTED] Relay host client already started; registration refresh complete.");
+                TryReportRelayHostReady();
                 yield break;
             }
 
@@ -318,23 +329,16 @@ namespace NightHunt.Networking
 
         private bool TrySendRelayHostRegistration(string relayIp, ushort relayPort)
         {
-            var transport = networkManager?.TransportManager?.Transport;
+            var transport = networkManager?.TransportManager?.Transport as Tugboat;
             if (transport == null)
-                return false;
-
-            var method = transport.GetType().GetMethod(
-                "SendServerUnconnectedMessage",
-                new[] { typeof(byte[]), typeof(string), typeof(ushort) });
-
-            if (method == null)
             {
-                Debug.LogWarning($"[NH_CONN][NH_RELAY][NH_DROP][HOST_REGISTER_UNSUPPORTED] Transport {transport.GetType().Name} cannot send relay host registration.");
+                Debug.LogWarning("[NH_CONN][NH_RELAY][NH_DROP][HOST_REGISTER_UNSUPPORTED] Relay host registration requires Tugboat transport.");
                 return false;
             }
 
             try
             {
-                return method.Invoke(transport, new object[] { RelayHostRegistrationPayload, relayIp, relayPort }) is bool ok && ok;
+                return transport.SendServerUnconnectedMessage(RelayHostRegistrationPayload, relayIp, relayPort);
             }
             catch (System.Exception e)
             {
@@ -416,6 +420,8 @@ namespace NightHunt.Networking
             _dsReady = false;
             _relayHostReady = false;
             _relayHostReadyReported = false;
+            _relayHostUpstreamPunchComplete = false;
+            _relayHostReadyEarliestRealtime = -1f;
             RoomState.Instance?.SetRelayHostReady(false);
             HideReconnectModal(showToast: false);
         }
@@ -593,7 +599,8 @@ namespace NightHunt.Networking
             _lastPlayerDataBroadcastRealtime = now;
             Debug.Log(
                 $"[NH_HANDSHAKE][CLIENT_BROADCAST][SEND] source={source} backendId={data.BackendPlayerId} " +
-                $"name={data.DisplayName} teamId={data.TeamId} charModelIdx={data.CharacterModelIndex}.");
+                $"name={data.DisplayName} teamId={data.TeamId} charModelIdx={data.CharacterModelIndex} " +
+                $"instance={NightHunt.Config.InstanceConfig.GetInstanceId()}.");
         }
 
         private void AutoConnectFromRoomState()
@@ -638,7 +645,7 @@ namespace NightHunt.Networking
 
             if (room.IsHostPlayer)
             {
-                Debug.Log($"[NH_CONN][NH_RELAY][AUTO_CONNECT] role=host endpoint={room.RelayIp}:{room.RelayPort} session={room.RelaySessionId} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+                Debug.Log($"[NH_CONN][NH_RELAY][AUTO_CONNECT] role=host endpoint={room.RelayIp}:{room.RelayPort} session={room.RelaySessionId} instance={NightHunt.Config.InstanceConfig.GetInstanceId()} userId={SessionState.Instance?.UserId ?? 0L} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                 StartHostWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
 
                 int expected = room.PlayerCount > 0 ? room.PlayerCount : 2;
@@ -654,7 +661,7 @@ namespace NightHunt.Networking
             }
             else
             {
-                Debug.Log($"[NH_CONN][NH_RELAY][AUTO_CONNECT] role=client endpoint={room.RelayIp}:{room.RelayPort} session={room.RelaySessionId} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+                Debug.Log($"[NH_CONN][NH_RELAY][AUTO_CONNECT] role=client endpoint={room.RelayIp}:{room.RelayPort} session={room.RelaySessionId} instance={NightHunt.Config.InstanceConfig.GetInstanceId()} userId={SessionState.Instance?.UserId ?? 0L} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
                 StartClientWithRelay(room.RelayIp, room.RelayPort, room.RelaySessionId);
             }
         }
@@ -843,6 +850,8 @@ namespace NightHunt.Networking
             _dsReady           = false;
             _relayHostReady    = false;
             _relayHostReadyReported = false;
+            _relayHostUpstreamPunchComplete = false;
+            _relayHostReadyEarliestRealtime = -1f;
             _gameSceneLoaded   = false;
             _retryCount        = 0;
             RestoreDefaultRetryBudget();
@@ -945,6 +954,21 @@ namespace NightHunt.Networking
             {
                 Debug.Log("[NetworkGameManager] Relay host local client connected, but server is not started yet; delaying host-ready report.");
                 Invoke(nameof(TryReportRelayHostReady), 0.5f);
+                return;
+            }
+
+            if (!_relayHostUpstreamPunchComplete)
+            {
+                Debug.Log("[NH_CONN][NH_RELAY][HOST_READY_WAIT] Relay host local client connected, but upstream punches are not complete yet.");
+                Invoke(nameof(TryReportRelayHostReady), 0.25f);
+                return;
+            }
+
+            if (_relayHostReadyEarliestRealtime > 0f && Time.realtimeSinceStartup < _relayHostReadyEarliestRealtime)
+            {
+                float remaining = Mathf.Max(0.1f, _relayHostReadyEarliestRealtime - Time.realtimeSinceStartup);
+                Debug.Log($"[NH_CONN][NH_RELAY][HOST_READY_WAIT] Waiting {remaining:F2}s for relay upstream settle before broadcasting relay_host_ready.");
+                Invoke(nameof(TryReportRelayHostReady), remaining);
                 return;
             }
 

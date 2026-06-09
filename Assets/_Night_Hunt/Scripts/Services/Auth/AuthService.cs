@@ -85,9 +85,6 @@ namespace NightHunt.Services.Auth
                 Debug.Log(
                     $"[FLOW][AUTH_API] Login ApplyAuthResponse done userId={sessionState?.UserId ?? 0} " +
                     $"sessionIdSet={!string.IsNullOrEmpty(sessionState?.SessionId)} tokenSet={!string.IsNullOrEmpty(sessionState?.AccessToken)}");
-                
-                // SEC-FIX: Store refresh token in encrypted storage
-                SecureStorage.SetString(LoadingManager.KEY_REFRESH_TOKEN, result.Data.refreshToken ?? "");
             }
             else
             {
@@ -104,15 +101,22 @@ namespace NightHunt.Services.Auth
         /// for a new access token via POST /auth/refresh-token.
         ///
         /// Flow:
-        ///   1. Read refreshToken from PlayerPrefs[KEY_REFRESH_TOKEN].
+        ///   1. Read refreshToken from instance-scoped secure storage.
         ///   2. Call POST /auth/refresh-token.
         ///   3. On success  → ApplyAuthResponse (stores new access + refresh tokens + profile).
         ///   4. On failure  → clear tokens, caller shows Login screen.
         /// </summary>
         public async Task<ApiResult<AuthResponse>> AutoLogin()
         {
+            bool rememberMe = PlayerPrefs.GetInt(LoadingManager.RememberMeStorageKey, 0) == 1;
+            if (!rememberMe)
+            {
+                SecureStorage.DeleteKey(LoadingManager.RefreshTokenStorageKey);
+                return ApiResult<AuthResponse>.Error("Remember Me is disabled");
+            }
+
             // SEC-FIX: Read refresh token from encrypted storage
-            string refreshToken = SecureStorage.GetString(LoadingManager.KEY_REFRESH_TOKEN, "");
+            string refreshToken = SecureStorage.GetString(LoadingManager.RefreshTokenStorageKey, "");
             if (string.IsNullOrEmpty(refreshToken))
             {
                 return ApiResult<AuthResponse>.Error("No refresh token found");
@@ -125,8 +129,8 @@ namespace NightHunt.Services.Auth
             if (result.Success && result.Data != null)
             {
                 ApplyAuthResponse(result.Data);
-                // SEC-FIX: Persist the rotated refresh token in encrypted storage
-                SecureStorage.SetString(LoadingManager.KEY_REFRESH_TOKEN, result.Data.refreshToken ?? "");
+                // Persist the rotated refresh token only for explicit Remember Me sessions.
+                SecureStorage.SetString(LoadingManager.RefreshTokenStorageKey, result.Data.refreshToken ?? "");
             }
             else
             {
@@ -139,8 +143,8 @@ namespace NightHunt.Services.Auth
                     Debug.LogWarning($"[AuthService] AutoLogin failed: {result.ErrorCode} — {result.Message}");
 
                 // Token invalid / expired / revoked → clear everything
-                SecureStorage.DeleteKey(LoadingManager.KEY_REFRESH_TOKEN);
-                PlayerPrefs.DeleteKey(LoadingManager.KEY_REMEMBER_ME);
+                SecureStorage.DeleteKey(LoadingManager.RefreshTokenStorageKey);
+                PlayerPrefs.DeleteKey(LoadingManager.RememberMeStorageKey);
                 PlayerPrefs.Save();
                 sessionState.ClearSession();
 

@@ -19,7 +19,7 @@ namespace NightHunt.State
         /// <summary>
         /// String ID of the player's selected character model (e.g. "character_01").
         /// Matches CharacterDefinition.CharacterId in CharacterDatabase.
-        /// Persisted to PlayerPrefs["SelectedCharacterId"] so PlayerIdentityFactory can read it.
+        /// Persisted to an instance-scoped PlayerPrefs key so PlayerIdentityFactory can read it.
         /// </summary>
         public string SelectedCharacterId { get; private set; }
 
@@ -184,7 +184,7 @@ namespace NightHunt.State
             UserId = userId;
             Username = PlayerPrefs.GetString(usernameKey, "");
             // Restore last-known character so UI can show avatar immediately (before profile API returns)
-            SelectedCharacterId = PlayerPrefs.GetString(Common.Constants.PREFS_SELECTED_CHARACTER_ID, "");
+            SelectedCharacterId = PlayerPrefs.GetString(GetInstanceKey(Common.Constants.PREFS_SELECTED_CHARACTER_ID), "");
             
             bool isMultiInstance = InstanceConfig.IsMultiInstanceEnabled();
             if (isMultiInstance)
@@ -218,7 +218,7 @@ namespace NightHunt.State
             PlayerPrefs.DeleteKey(userIdKey);
             PlayerPrefs.DeleteKey(usernameKey);
             // Also clear the character selection so next session starts fresh
-            PlayerPrefs.DeleteKey(Common.Constants.PREFS_SELECTED_CHARACTER_ID);
+            PlayerPrefs.DeleteKey(GetInstanceKey(Common.Constants.PREFS_SELECTED_CHARACTER_ID));
             PlayerPrefs.Save();
 
             bool isMultiInstance = InstanceConfig.IsMultiInstanceEnabled();
@@ -229,17 +229,16 @@ namespace NightHunt.State
         }
 
         /// <summary>
-        /// Writes selectedCharacterId to the flat PlayerPrefs key that
-        /// PlayerIdentityFactory reads this at connect time.
-        /// Uses the non-instanced key name intentionally (both clone instances
-        /// should use the same character unless you want per-instance overrides).
+        /// Writes selectedCharacterId to the same instance-scoped key that
+        /// PlayerIdentityFactory reads at connect time.
         /// </summary>
-        private static void SyncCharacterIdToPrefs(string characterId)
+        private void SyncCharacterIdToPrefs(string characterId)
         {
             if (!string.IsNullOrEmpty(characterId))
             {
-                PlayerPrefs.SetString(Common.Constants.PREFS_SELECTED_CHARACTER_ID, characterId);
-                Debug.Log($"[SessionState] SelectedCharacterId synced to PlayerPrefs: {characterId}");
+                string key = GetInstanceKey(Common.Constants.PREFS_SELECTED_CHARACTER_ID);
+                PlayerPrefs.SetString(key, characterId);
+                Debug.Log($"[SessionState] SelectedCharacterId synced to PlayerPrefs key={key}: {characterId}");
             }
             // If null/empty, leave existing value so the last-known character is still used.
             PlayerPrefs.Save();

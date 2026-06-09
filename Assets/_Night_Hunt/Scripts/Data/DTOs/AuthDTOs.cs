@@ -58,8 +58,8 @@ namespace NightHunt.Data.DTOs
     {
         public string accessToken;
         /// <summary>
-        /// Long-lived token. Persisted locally (PlayerPrefs) for auto-login on next app start.
-        /// Store in KEY_REFRESH_TOKEN. Delete on explicit logout.
+        /// Long-lived token. Persist only when Remember Me is enabled.
+        /// Store in LoadingManager.RefreshTokenStorageKey. Delete on explicit logout.
         /// </summary>
         public string refreshToken;
         public string sessionId;

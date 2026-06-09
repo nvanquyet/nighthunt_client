@@ -2266,15 +2266,6 @@ namespace NightHunt.UI
                 ApplyRoomUpdate(evt.room, "match_presence_notice");
                 RefreshRoomDisplay();
             }
-
-            string title = string.Equals(evt.state, "CONNECTED", StringComparison.OrdinalIgnoreCase)
-                ? "Player Reconnected"
-                : string.Equals(evt.state, "ABANDONED", StringComparison.OrdinalIgnoreCase)
-                    ? "Player Removed"
-                    : "Player Disconnected";
-            string name = !string.IsNullOrEmpty(evt.displayName) ? evt.displayName : $"Player {evt.userId}";
-            string message = !string.IsNullOrEmpty(evt.message) ? evt.message : $"{name}: {evt.state}";
-            PersistentUICanvas.Instance?.ToastService?.Show(title, $"{name}: {message}");
         }
 
         private bool ApplyRoomUpdate(RoomResponse room, string source)

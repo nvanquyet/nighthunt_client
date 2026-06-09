@@ -160,7 +160,7 @@ namespace NightHunt.UI
         private void RestoreRememberMeToggle()
         {
             if (rememberMeSwitch == null) return;
-            bool remembered = PlayerPrefs.GetInt(LoadingManager.KEY_REMEMBER_ME, 0) == 1;
+            bool remembered = PlayerPrefs.GetInt(LoadingManager.RememberMeStorageKey, 0) == 1;
             ShiftUIBridge.SetSwitchSilently(rememberMeSwitch, remembered);
         }
 
@@ -172,16 +172,16 @@ namespace NightHunt.UI
         {
             bool remember = rememberMeSwitch != null && rememberMeSwitch.isOn;
 
-            PlayerPrefs.SetInt(LoadingManager.KEY_REMEMBER_ME, remember ? 1 : 0);
+            PlayerPrefs.SetInt(LoadingManager.RememberMeStorageKey, remember ? 1 : 0);
 
             if (remember && !string.IsNullOrEmpty(refreshToken))
             {
-                SecureStorage.SetString(LoadingManager.KEY_REFRESH_TOKEN, refreshToken);
+                SecureStorage.SetString(LoadingManager.RefreshTokenStorageKey, refreshToken);
                 Debug.Log("[LoginView] RefreshToken saved (Remember Me ON)");
             }
             else
             {
-                SecureStorage.DeleteKey(LoadingManager.KEY_REFRESH_TOKEN);
+                SecureStorage.DeleteKey(LoadingManager.RefreshTokenStorageKey);
                 Debug.Log("[LoginView] RefreshToken cleared (Remember Me OFF)");
             }
 
@@ -300,7 +300,7 @@ namespace NightHunt.UI
 
                     // Critical error in preload -> Clear token to avoid AUTH_SESSION_CONFLICT on next try
                     // as the previous login was successful but the state is now broken.
-                    SecureStorage.DeleteKey(LoadingManager.KEY_REFRESH_TOKEN);
+                    SecureStorage.DeleteKey(LoadingManager.RefreshTokenStorageKey);
                     if (GameManager.Instance != null && GameManager.Instance.SessionState != null)
                         GameManager.Instance.SessionState.ClearSession();
 
@@ -317,7 +317,7 @@ namespace NightHunt.UI
                 else if (result.ErrorCode == ErrorCodes.AUTH_SESSION_CONFLICT)
                 {
                 // Clear token as it's definitely stale/conflicting
-                SecureStorage.DeleteKey(LoadingManager.KEY_REFRESH_TOKEN);
+                SecureStorage.DeleteKey(LoadingManager.RefreshTokenStorageKey);
 
                 // Old session was terminated — user just needs to try again once.
                 Debug.Log("[FLOW][AUTH] AUTH_SESSION_CONFLICT: previous session terminated, prompting retry");
@@ -455,8 +455,8 @@ namespace NightHunt.UI
         public static void Logout()
         {
             // Xoá refresh token & remember-me flag
-            SecureStorage.DeleteKey(LoadingManager.KEY_REFRESH_TOKEN);
-            PlayerPrefs.DeleteKey(LoadingManager.KEY_REMEMBER_ME);
+            SecureStorage.DeleteKey(LoadingManager.RefreshTokenStorageKey);
+            PlayerPrefs.DeleteKey(LoadingManager.RememberMeStorageKey);
             PlayerPrefs.Save();
 
             // Clear session state

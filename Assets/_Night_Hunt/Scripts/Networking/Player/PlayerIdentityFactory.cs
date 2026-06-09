@@ -42,7 +42,9 @@ namespace NightHunt.Networking.Player
 
         private static int ResolveCharacterModelIndex()
         {
-            string savedCharacterId = PlayerPrefs.GetString(Constants.PREFS_SELECTED_CHARACTER_ID, "");
+            string savedCharacterId = SessionState.Instance?.SelectedCharacterId;
+            if (string.IsNullOrEmpty(savedCharacterId))
+                savedCharacterId = PlayerPrefs.GetString(NightHunt.Config.InstanceConfig.GetInstanceKey(Constants.PREFS_SELECTED_CHARACTER_ID), "");
             if (string.IsNullOrEmpty(savedCharacterId) || CharacterDatabase.Instance == null)
                 return 0;
 

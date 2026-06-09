@@ -35,6 +35,8 @@ namespace NightHunt.UI
         private readonly List<TeamMemberRow> _memberRows = new();
         private bool _teamsPopulated;
         private NetworkPlayer _observedPlayer;
+        private PlayerPublicRegistry _registry;
+        private Coroutine _populateTeammatesRoutine;
 
         public void Initialize(NetworkPlayer owner, UIPlayerContext context)
         {
@@ -51,8 +53,12 @@ namespace NightHunt.UI
 
             GameplayEventBus.Instance?.Subscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
 
-            if (PlayerPublicRegistry.Instance != null)
-                StartCoroutine(PopulateTeammatesNextFrame());
+            _registry = PlayerPublicRegistry.Instance;
+            if (_registry != null)
+            {
+                _registry.OnRegistryChanged += HandleRegistryChanged;
+                RequestPopulateTeammates(0.3f);
+            }
         }
 
         public void SetObservedPlayer(NetworkPlayer observedPlayer)
@@ -66,6 +72,17 @@ namespace NightHunt.UI
         private void Cleanup()
         {
             GameplayEventBus.Instance?.Unsubscribe<AllPlayersReadyEvent>(OnAllPlayersReady);
+            if (_registry != null)
+            {
+                _registry.OnRegistryChanged -= HandleRegistryChanged;
+                _registry = null;
+            }
+
+            if (_populateTeammatesRoutine != null)
+            {
+                StopCoroutine(_populateTeammatesRoutine);
+                _populateTeammatesRoutine = null;
+            }
 
             _ownerRow?.Unbind();
             ClearMemberRows();
@@ -81,12 +98,30 @@ namespace NightHunt.UI
         {
             if (_teamsPopulated) return;
             _teamsPopulated = true;
-            StartCoroutine(PopulateTeammatesNextFrame());
+            RequestPopulateTeammates(0.1f);
         }
 
-        private IEnumerator PopulateTeammatesNextFrame()
+        private void HandleRegistryChanged()
         {
-            yield return new WaitForSeconds(0.3f);
+            if (_owner == null || !isActiveAndEnabled) return;
+            RequestPopulateTeammates(0.1f);
+        }
+
+        private void RequestPopulateTeammates(float delaySeconds)
+        {
+            if (!isActiveAndEnabled) return;
+            if (_populateTeammatesRoutine != null)
+                StopCoroutine(_populateTeammatesRoutine);
+            _populateTeammatesRoutine = StartCoroutine(PopulateTeammatesAfterDelay(delaySeconds));
+        }
+
+        private IEnumerator PopulateTeammatesAfterDelay(float delaySeconds)
+        {
+            if (delaySeconds > 0f)
+                yield return new WaitForSeconds(delaySeconds);
+            else
+                yield return null;
+            _populateTeammatesRoutine = null;
 
             var registry = PlayerPublicRegistry.Instance;
             if (registry == null)

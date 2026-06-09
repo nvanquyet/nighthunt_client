@@ -277,7 +277,7 @@ namespace NightHunt.Networking.Player
             base.OnStopClient();
             _playerData.OnChange -= OnPlayerDataChanged;
             _isAlive.OnChange -= OnAliveStateChanged;
-            PlayerPublicRegistry.Instance.Unregister((int)this.ObjectId);
+            PlayerPublicRegistry.Instance?.Unregister((int)this.ObjectId);
             _modelReady = false;
             _clientRuntimeReadySent = false;
         }
@@ -298,7 +298,16 @@ namespace NightHunt.Networking.Player
             // Always keep the cached PlayerPublicData in the registry in sync.
             // • Non-owners: networkPlayers entry was created in OnStartClient; this updates the players dict.
             // • Owner:      FinishOwnerSetup() will call Register() for both dicts; this pre-populates players dict only.
-            PlayerPublicRegistry.Instance?.UpdatePublicData((int)this.ObjectId, next);
+            // If OnChange arrives before registration, register this object now.
+            var registry = PlayerPublicRegistry.Instance;
+            if (registry != null)
+            {
+                int objectId = (int)this.ObjectId;
+                if (!registry.HasNetworkPlayer(objectId))
+                    registry.Register(objectId, next, this);
+                else
+                    registry.UpdatePublicData(objectId, next);
+            }
 
             OnPublicDataChanged?.Invoke(prev, next);
 

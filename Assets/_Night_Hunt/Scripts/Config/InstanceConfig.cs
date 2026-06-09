@@ -5,20 +5,18 @@ namespace NightHunt.Config
 {
     // ══════════════════════════════════════════════════════════════════════════
     // InstanceConfig — static class. No .asset file, no ScriptableObject.
-    // Multi-instance (ParrelSync) support is auto-detected: enabled in Editor,
-    // disabled in Build. No manual flags needed.
+    // Multi-instance support is auto-detected in both Editor and builds.
+    // Builds can pass -cloneIndex/--cloneIndex or run from *_CloneN folders.
     // ══════════════════════════════════════════════════════════════════════════
 
     public static class InstanceConfig
     {
-        // Auto: enabled in Editor (ParrelSync), disabled in production Build
-        public static bool   IsMultiInstanceEnabled()       => Application.isEditor;
+        public static bool   IsMultiInstanceEnabled()       => Application.isEditor || InstanceHelper.GetInstanceId() != 0;
 
-        public static int    GetInstanceId()                => Application.isEditor ? InstanceHelper.GetInstanceId() : 0;
-        public static string GetInstanceKey(string baseKey) => Application.isEditor ? InstanceHelper.GetInstanceKey(baseKey) : baseKey;
+        public static int    GetInstanceId()                => InstanceHelper.GetInstanceId();
+        public static string GetInstanceKey(string baseKey) => InstanceHelper.GetInstanceKey(baseKey);
 
-        // Run in background only in Editor (multi-instance testing)
-        public static bool   ShouldRunInBackground()        => Application.isEditor;
+        public static bool   ShouldRunInBackground()        => Application.isEditor || IsMultiInstanceEnabled();
 
         // Always refresh data when regaining focus
         public static bool   ShouldRefreshOnFocusReturn()   => true;

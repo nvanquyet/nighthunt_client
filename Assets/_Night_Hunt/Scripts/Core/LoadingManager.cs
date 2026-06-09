@@ -36,6 +36,9 @@ namespace NightHunt.Core
         public const string KEY_REFRESH_TOKEN = "auth_refresh_token";
         public const string KEY_REMEMBER_ME   = "auth_remember_me";
 
+        public static string RefreshTokenStorageKey => InstanceConfig.GetInstanceKey(KEY_REFRESH_TOKEN);
+        public static string RememberMeStorageKey   => InstanceConfig.GetInstanceKey(KEY_REMEMBER_ME);
+
         // ─── Singleton ──────────────────────────────────────────────────────
         private static LoadingManager _instance;
         public static LoadingManager Instance
@@ -446,8 +449,17 @@ namespace NightHunt.Core
                 yield break;
             }
 
+            bool rememberMe = PlayerPrefs.GetInt(RememberMeStorageKey, 0) == 1;
+            if (!rememberMe)
+            {
+                SecureStorage.DeleteKey(RefreshTokenStorageKey);
+                UpdateLoadingUI("Please log in...", 0.85f);
+                _targetPanel = PanelType.Login;
+                yield break;
+            }
+
             // ── Read token local ──────────────────────────────────────────────
-            string refreshToken = SecureStorage.GetString(KEY_REFRESH_TOKEN, "");
+            string refreshToken = SecureStorage.GetString(RefreshTokenStorageKey, "");
 
             if (string.IsNullOrEmpty(refreshToken))
             {
@@ -476,7 +488,7 @@ namespace NightHunt.Core
             {
                 // AuthService not available → redirect to Login
                 Debug.LogWarning("[LoadingManager] AuthService null — skipping AutoLogin");
-                SecureStorage.DeleteKey(KEY_REFRESH_TOKEN);
+                SecureStorage.DeleteKey(RefreshTokenStorageKey);
                 _targetPanel = PanelType.Login;
                 yield break;
             }
@@ -510,7 +522,7 @@ namespace NightHunt.Core
             {
                 // Token expired or API error → clear token, redirect to Login
                 Debug.Log("[LoadingManager] AutoLogin failed — clearing token");
-                SecureStorage.DeleteKey(KEY_REFRESH_TOKEN);
+                SecureStorage.DeleteKey(RefreshTokenStorageKey);
 
                 UpdateLoadingUI("Session expired...", 0.88f);  // already English
                 yield return new WaitForSeconds(0.1f);
