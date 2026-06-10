@@ -301,6 +301,11 @@ namespace NightHunt.UI.Editor
                 changed++;
             }
 
+            var publicSwitch = so.FindProperty("publicSwitch")?.objectReferenceValue as SwitchManager
+                ?? FindSwitchUnderNamedRoot(lobby.gameObject, "Public Room");
+            var lockedSwitch = so.FindProperty("lockedSwitch")?.objectReferenceValue as SwitchManager
+                ?? FindSwitchUnderNamedRoot(lobby.gameObject, "Locked Room");
+
             var passwordInput = so.FindProperty("passwordInput")?.objectReferenceValue as TMP_InputField
                 ?? FindByNameOnly<TMP_InputField>(lobby.gameObject, "password");
             if (passwordInput == null)
@@ -316,6 +321,8 @@ namespace NightHunt.UI.Editor
             changed += SetObject(so.FindProperty("lobbyListContainer"), lobbyListContainer) ? 1 : 0;
             changed += SetObject(so.FindProperty("publicToggle"), publicToggle) ? 1 : 0;
             changed += SetObject(so.FindProperty("lockedToggle"), lockedToggle) ? 1 : 0;
+            changed += SetObject(so.FindProperty("publicSwitch"), publicSwitch) ? 1 : 0;
+            changed += SetObject(so.FindProperty("lockedSwitch"), lockedSwitch) ? 1 : 0;
             changed += SetObject(so.FindProperty("passwordInput"), passwordInput) ? 1 : 0;
             so.ApplyModifiedProperties();
 
@@ -1842,6 +1849,28 @@ namespace NightHunt.UI.Editor
 
             return root.GetComponentsInChildren<T>(true)
                 .FirstOrDefault(c => c.name.IndexOf(nameToken, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static SwitchManager FindSwitchUnderNamedRoot(GameObject root, string rootName)
+        {
+            if (root == null)
+                return null;
+
+            foreach (var switchManager in root.GetComponentsInChildren<SwitchManager>(true))
+            {
+                if (switchManager == null)
+                    continue;
+
+                Transform current = switchManager.transform;
+                while (current != null && current != root.transform)
+                {
+                    if (string.Equals(current.name, rootName, StringComparison.OrdinalIgnoreCase))
+                        return switchManager;
+                    current = current.parent;
+                }
+            }
+
+            return null;
         }
 
         private static IEnumerable<GameObject> GetSelfAndChildren(GameObject root)

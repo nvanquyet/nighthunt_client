@@ -17,6 +17,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using Michsky.MUIP;
+using ShiftSwitchManager = Michsky.UI.Shift.SwitchManager;
 
 namespace NightHunt.UI
 {
@@ -123,6 +124,8 @@ namespace NightHunt.UI
         [SerializeField] private CustomDropdown mapDropdown;
         [SerializeField] private Toggle publicToggle;
         [SerializeField] private Toggle lockedToggle;
+        [SerializeField] private ShiftSwitchManager publicSwitch;
+        [SerializeField] private ShiftSwitchManager lockedSwitch;
         [SerializeField] private TMP_InputField passwordInput;
 
         [SerializeField] private Button btnSave;
@@ -273,6 +276,7 @@ namespace NightHunt.UI
 
             if (publicToggle != null) publicToggle.onValueChanged.AddListener(OnPublicToggleChanged);
             if (lockedToggle != null) lockedToggle.onValueChanged.AddListener(OnLockedToggleChanged);
+            BindPrivacySwitchEvents();
             if (passwordInput != null) passwordInput.onValueChanged.AddListener(OnPasswordInputChanged);
 
             if (btnSave != null) btnSave.onClick.AddListener(OnSaveClicked);
@@ -437,6 +441,7 @@ namespace NightHunt.UI
         private void OnDestroy()
         {
             UIContextMenuRegistry.Unregister(this);
+            UnbindPrivacySwitchEvents();
             UnsubscribeEvents();
         }
 
@@ -549,7 +554,9 @@ namespace NightHunt.UI
         private void ShowState(UIState state)
         {
             NLog($"ShowState({state})");
-            inRoomPanel?.SetActive(state == UIState.InRoom);
+            // Settings are also used to configure public/locked/password before room creation.
+            inRoomPanel?.SetActive(true);
+            SetTeamPanelsVisible(state == UIState.InRoom);
 
             if (state == UIState.JoinCreate)
             {
@@ -566,6 +573,12 @@ namespace NightHunt.UI
                 btnStart?.gameObject.SetActive(false);
                 btnReady?.gameObject.SetActive(false);
                 btnLeaveOrDisband?.gameObject.SetActive(false);
+                btnCopyCode?.gameObject.SetActive(false);
+                if (roomCodeText != null)
+                {
+                    roomCodeText.text = string.Empty;
+                    roomCodeText.gameObject.SetActive(false);
+                }
                 // Re-enable mode/map dropdowns — they are disabled by ShowState(InRoom).
                 // Must be done BEFORE ClearRoomUI() repopulates them so Populate sees a live control.
                 if (modeDropdown != null) modeDropdown.Interactable(true);
@@ -597,6 +610,8 @@ namespace NightHunt.UI
                 btnLeaveOrDisband?.gameObject.SetActive(true);
                 btnStart?.gameObject.SetActive(false);
                 btnReady?.gameObject.SetActive(false);
+                btnCopyCode?.gameObject.SetActive(true);
+                roomCodeText?.gameObject.SetActive(true);
 
                 if (modeDropdown != null) modeDropdown.Interactable(false);
                 if (mapDropdown != null) mapDropdown.Interactable(false);
@@ -774,7 +789,8 @@ namespace NightHunt.UI
 
             try
             {
-                var result = await _roomService.GetPublicCustomRooms(_pendingMode, _pendingMapId, 20);
+                // The browser shows every public custom lobby. Quick Join remains mode/map-specific.
+                var result = await _roomService.GetPublicCustomRooms(null, null, 20);
                 if (result.Success && result.Data != null)
                 {
                     _publicLobbyItems.Clear();
@@ -1408,6 +1424,9 @@ namespace NightHunt.UI
             SetSettingsDirty(true);
         }
 
+        private void OnPublicSwitchEnabled() => OnPublicToggleChanged(true);
+        private void OnPublicSwitchDisabled() => OnPublicToggleChanged(false);
+
         private void OnLockedToggleChanged(bool value)
         {
             if (_updatingPrivacyControls) return;
@@ -1427,6 +1446,9 @@ namespace NightHunt.UI
             SyncPrivacyControls(_roomState?.CurrentRoom);
             SetSettingsDirty(true);
         }
+
+        private void OnLockedSwitchEnabled() => OnLockedToggleChanged(true);
+        private void OnLockedSwitchDisabled() => OnLockedToggleChanged(false);
 
         private void OnPasswordInputChanged(string value)
         {
@@ -1550,6 +1572,10 @@ namespace NightHunt.UI
                 lockedToggle.isOn = _pendingIsLocked;
                 lockedToggle.interactable = editable;
             }
+            ShiftUIBridge.SetSwitchSilently(publicSwitch, _pendingIsPublic);
+            ShiftUIBridge.SetSwitchSilently(lockedSwitch, _pendingIsLocked);
+            SetShiftSwitchInteractable(publicSwitch, editable);
+            SetShiftSwitchInteractable(lockedSwitch, editable);
             if (passwordInput != null)
             {
                 passwordInput.gameObject.SetActive(_pendingIsLocked);
@@ -2560,6 +2586,10 @@ namespace NightHunt.UI
                 publicToggle = FindChildByName<Toggle>("public");
             if (lockedToggle == null)
                 lockedToggle = FindChildByName<Toggle>("lock");
+            if (publicSwitch == null)
+                publicSwitch = FindShiftSwitchUnder("Public Room");
+            if (lockedSwitch == null)
+                lockedSwitch = FindShiftSwitchUnder("Locked Room");
             if (passwordInput == null)
                 passwordInput = FindChildByName<TMP_InputField>("password");
 
@@ -2645,6 +2675,89 @@ namespace NightHunt.UI
             }
 
             return null;
+        }
+
+        private ShiftSwitchManager FindShiftSwitchUnder(string rootName)
+        {
+            foreach (var switchManager in GetComponentsInChildren<ShiftSwitchManager>(true))
+            {
+                if (switchManager == null)
+                    continue;
+
+                Transform current = switchManager.transform;
+                while (current != null && current != transform)
+                {
+                    if (string.Equals(current.name, rootName, StringComparison.OrdinalIgnoreCase))
+                        return switchManager;
+                    current = current.parent;
+                }
+            }
+
+            return null;
+        }
+
+        private void BindPrivacySwitchEvents()
+        {
+            ConfigurePrivacySwitch(publicSwitch);
+            ConfigurePrivacySwitch(lockedSwitch);
+
+            publicSwitch?.OnEvents.AddListener(OnPublicSwitchEnabled);
+            publicSwitch?.OffEvents.AddListener(OnPublicSwitchDisabled);
+            lockedSwitch?.OnEvents.AddListener(OnLockedSwitchEnabled);
+            lockedSwitch?.OffEvents.AddListener(OnLockedSwitchDisabled);
+        }
+
+        private void UnbindPrivacySwitchEvents()
+        {
+            publicSwitch?.OnEvents.RemoveListener(OnPublicSwitchEnabled);
+            publicSwitch?.OffEvents.RemoveListener(OnPublicSwitchDisabled);
+            lockedSwitch?.OnEvents.RemoveListener(OnLockedSwitchEnabled);
+            lockedSwitch?.OffEvents.RemoveListener(OnLockedSwitchDisabled);
+        }
+
+        private static void ConfigurePrivacySwitch(ShiftSwitchManager switchManager)
+        {
+            if (switchManager == null)
+                return;
+
+            // Room state is authoritative; Shift's PlayerPrefs state must not override it.
+            switchManager.saveValue = false;
+            switchManager.invokeAtStart = false;
+        }
+
+        private static void SetShiftSwitchInteractable(ShiftSwitchManager switchManager, bool interactable)
+        {
+            if (switchManager == null)
+                return;
+
+            var switchButton = switchManager.GetComponent<Button>();
+            if (switchButton != null)
+                switchButton.interactable = interactable;
+
+            var rootButton = switchManager.transform.parent != null
+                ? switchManager.transform.parent.GetComponent<Button>()
+                : null;
+            if (rootButton != null)
+                rootButton.interactable = interactable;
+        }
+
+        private void SetTeamPanelsVisible(bool visible)
+        {
+            SetTopLevelInRoomChildVisible(team1Container, visible);
+            SetTopLevelInRoomChildVisible(team2Container, visible);
+        }
+
+        private void SetTopLevelInRoomChildVisible(Transform descendant, bool visible)
+        {
+            if (descendant == null || inRoomPanel == null)
+                return;
+
+            Transform current = descendant;
+            while (current.parent != null && current.parent != inRoomPanel.transform)
+                current = current.parent;
+
+            if (current.parent == inRoomPanel.transform)
+                current.gameObject.SetActive(visible);
         }
 
         private Transform GetJoinCreateParent()

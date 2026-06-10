@@ -5278,6 +5278,8 @@ MonoBehaviour:
   mapDropdown: {fileID: 1214629373}
   publicToggle: {fileID: 885591312}
   lockedToggle: {fileID: 285319063}
+  publicSwitch: {fileID: 1348697391}
+  lockedSwitch: {fileID: 1060371739}
   passwordInput: {fileID: 1433280319}
   btnSave: {fileID: 217872508}
   detailButtonRoot: {fileID: 22518975}
