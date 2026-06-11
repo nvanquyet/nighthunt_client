@@ -185,16 +185,13 @@ namespace NightHunt.UI
             else
                 Debug.LogWarning("[MFC] match_ready has no players[] — overlay will use RoomState.CurrentRoom.players fallback.");
 
-            // If match_ready already contains the DS address, pre-populate RoomState and signal NGM.
-            // This handles two cases:
-            //   1. Local testing: DS is already running, ds_ready WS may never arrive.
-            //   2. Production: server pre-allocates DS — ds_ready may arrive later and overwrite
-            //      with identical values (idempotent), or may not arrive at all.
-            // TryConnectIfReady() is safe here: it still waits for _gameSceneLoaded.
+            // If match_ready already contains the DS address, keep it as a hint only.
+            // Production clients must wait for ds_ready before connecting.
+            // ds_ready may arrive later and overwrite the same endpoint.
             if (!isRelay && !string.IsNullOrEmpty(e.dsIp) && e.dsPort > 0)
             {
-                Debug.Log($"[MFC] match_ready contains dsIp={e.dsIp}:{e.dsPort} — pre-populating RoomState. Waiting for real ds_ready before connecting.");
-                RoomState.Instance?.SetDedicatedServer(e.dsIp, (ushort)e.dsPort, e.matchId, e.mapId);
+                Debug.Log($"[MFC] match_ready contains dsIp={e.dsIp}:{e.dsPort} - storing DS endpoint hint. Waiting for real ds_ready before connecting.");
+                RoomState.Instance?.SetDedicatedServerHint(e.dsIp, (ushort)e.dsPort, e.matchId, e.mapId);
                 // Do NOT call NotifyDsReady() here — the DS container is still booting.
                 // SignalDsReady() will be called by HandleDsReady() when the backend
                 // broadcasts ds_ready (after DS calls /api/ds/game-ready).

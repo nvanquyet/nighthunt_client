@@ -993,19 +993,23 @@ namespace NightHunt.Editor.Tests
             var ipRT = ipGo.AddComponent<RectTransform>(); ipRT.anchorMin = new Vector2(0.5f,0f); ipRT.anchorMax = new Vector2(0.5f,0f); ipRT.pivot = new Vector2(0.5f,0f); ipRT.anchoredPosition = new Vector2(0f,90f); ipRT.sizeDelta = new Vector2(360f,108f);
             ipGo.AddComponent<Image>().color = new Color(0f,0f,0f,0.75f);
             var ipComp = ipGo.AddComponent<GameplaySystems.UI.Interaction.InteractionPromptUI>(); var ipSO = new SerializedObject(ipComp);
-            // Key badge (left, 68x full-height)
+            // Action label + key badge + description
+            var actionLabelGo = new GameObject("ActionLabelText"); actionLabelGo.transform.SetParent(ipGo.transform, false);
+            var actionLabelRT = actionLabelGo.AddComponent<RectTransform>(); actionLabelRT.anchorMin = new Vector2(0f,0.4f); actionLabelRT.anchorMax = new Vector2(0f,1f); actionLabelRT.pivot = new Vector2(0f,0.5f); actionLabelRT.offsetMin = new Vector2(10f,0f); actionLabelRT.offsetMax = new Vector2(74f,0f);
+            var actionLabelTMP = actionLabelGo.AddComponent<TextMeshProUGUI>(); actionLabelTMP.text = "Press"; actionLabelTMP.fontSize = 15f; actionLabelTMP.color = Color.white; actionLabelTMP.alignment = TextAlignmentOptions.MidlineLeft;
+            SetSOObj(ipSO, "_actionLabelText", actionLabelTMP);
+
             var keyBadge = new GameObject("KeyBadge"); keyBadge.transform.SetParent(ipGo.transform, false);
-            var keyBadgeRT = keyBadge.AddComponent<RectTransform>(); keyBadgeRT.anchorMin = new Vector2(0f,0f); keyBadgeRT.anchorMax = new Vector2(0f,1f); keyBadgeRT.pivot = new Vector2(0f,0.5f); keyBadgeRT.offsetMin = new Vector2(10f,8f); keyBadgeRT.offsetMax = new Vector2(78f,-8f);
+            var keyBadgeRT = keyBadge.AddComponent<RectTransform>(); keyBadgeRT.anchorMin = new Vector2(0f,0f); keyBadgeRT.anchorMax = new Vector2(0f,1f); keyBadgeRT.pivot = new Vector2(0f,0.5f); keyBadgeRT.offsetMin = new Vector2(78f,8f); keyBadgeRT.offsetMax = new Vector2(126f,-8f);
             keyBadge.AddComponent<Image>().color = new Color(0.25f,0.25f,0.25f,0.95f);
             var keyTxtGo = new GameObject("KeyText"); keyTxtGo.transform.SetParent(keyBadge.transform, false);
             var keyTxtRT = keyTxtGo.AddComponent<RectTransform>(); keyTxtRT.anchorMin = Vector2.zero; keyTxtRT.anchorMax = Vector2.one; keyTxtRT.offsetMin = keyTxtRT.offsetMax = Vector2.zero;
-            var keyTMP = keyTxtGo.AddComponent<TextMeshProUGUI>(); keyTMP.text = "[E]"; keyTMP.fontSize = 22f; keyTMP.fontStyle = FontStyles.Bold; keyTMP.color = Color.white; keyTMP.alignment = TextAlignmentOptions.Center;
+            var keyTMP = keyTxtGo.AddComponent<TextMeshProUGUI>(); keyTMP.text = "E"; keyTMP.fontSize = 22f; keyTMP.fontStyle = FontStyles.Bold; keyTMP.color = Color.white; keyTMP.alignment = TextAlignmentOptions.Center;
             SetSOObj(ipSO, "_keyText", keyTMP);
-            // ActionText (right of badge)
-            var actGo = new GameObject("ActionText"); actGo.transform.SetParent(ipGo.transform, false);
-            var actRT = actGo.AddComponent<RectTransform>(); actRT.anchorMin = new Vector2(0f,0.4f); actRT.anchorMax = new Vector2(1f,1f); actRT.offsetMin = new Vector2(92f,0f); actRT.offsetMax = new Vector2(-8f,0f);
-            var actTMP = actGo.AddComponent<TextMeshProUGUI>(); actTMP.text = "Interact"; actTMP.fontSize = 15f; actTMP.color = Color.white; actTMP.alignment = TextAlignmentOptions.MidlineLeft;
-            SetSOObj(ipSO, "_actionText", actTMP);
+            var descGo = new GameObject("DescriptionText"); descGo.transform.SetParent(ipGo.transform, false);
+            var descRT = descGo.AddComponent<RectTransform>(); descRT.anchorMin = new Vector2(0f,0.4f); descRT.anchorMax = new Vector2(1f,1f); descRT.offsetMin = new Vector2(138f,0f); descRT.offsetMax = new Vector2(-8f,0f);
+            var descTMP = descGo.AddComponent<TextMeshProUGUI>(); descTMP.text = "to interact"; descTMP.fontSize = 15f; descTMP.color = Color.white; descTMP.alignment = TextAlignmentOptions.MidlineLeft;
+            SetSOObj(ipSO, "_descriptionText", descTMP);
             // HoldProgressRoot (hidden, bottom strip)
             var holdRoot = new GameObject("HoldProgressRoot"); holdRoot.transform.SetParent(ipGo.transform, false); holdRoot.SetActive(false);
             var holdRT = holdRoot.AddComponent<RectTransform>(); holdRT.anchorMin = new Vector2(0f,0f); holdRT.anchorMax = new Vector2(1f,0.38f); holdRT.offsetMin = new Vector2(10f,4f); holdRT.offsetMax = new Vector2(-10f,0f);

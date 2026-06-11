@@ -21796,8 +21796,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _promptPanel: {fileID: 1588871285796708699}
+  _actionLabelText: {fileID: 0}
   _keyText: {fileID: 3057256349017063575}
-  _actionText: {fileID: 8654073266549577791}
+  _descriptionText: {fileID: 8654073266549577791}
   _mobileHUDPanel: {fileID: 0}
 --- !u!1 &5378718284040183915
 GameObject:

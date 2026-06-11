@@ -147,6 +147,9 @@ namespace NightHunt.UI.Mobile
         private Vector2 _lastLoggedMoveDir;
         private string _lastLoggedJoystickName;
         private float _nextMoveJoystickLogTime;
+        private Joystick _movementJoystickWithLifecycleHooks;
+        private bool _movementJoystickPressed;
+        private bool _movementJoystickPressTrackingReady;
 
         private float RollCooldownDuration =>
             (_movementSettings != null && _movementSettings.enableRoll)
@@ -185,6 +188,7 @@ namespace NightHunt.UI.Mobile
             if (PlatformInputDetector.Instance != null)
                 PlatformInputDetector.Instance.OnPlatformChanged -= HandlePlatformChanged;
             UnsubscribeRollCooldown();
+            ResetMobileMoveInput();
             HideInteractionActionButtons(forceLog: true);
         }
 
@@ -206,6 +210,7 @@ namespace NightHunt.UI.Mobile
             UnwireActionButtons();
             _pinchZoomBridge?.UnbindHandler();
             _cameraDragArea?.UnbindHandler();
+            ResetMobileMoveInput();
             UnbindWeaponSystem();
         }
 
@@ -291,7 +296,7 @@ namespace NightHunt.UI.Mobile
             _pinchZoomBridge?.UnbindHandler();
             _cameraDragArea?.UnbindHandler();
             _movementBridge?.UnbindHandler();
-            _boundInput?.MovementHandler?.SetMobileMove(Vector2.zero);
+            ResetMobileMoveInput();
             UnbindWeaponSystem();
             _boundInput = null;
             _boundPlayerTransform = null;
@@ -349,7 +354,10 @@ namespace NightHunt.UI.Mobile
                 _mobileRoot.SetActive(_mobileHudAllowed && IsMobile);
 
             if (!ShouldProcessMobileControls)
+            {
+                ResetMobileMoveInput();
                 HideInteractionActionButtons(forceLog: true);
+            }
         }
 
         private void ResolveMissingButtonReferences()
@@ -372,6 +380,7 @@ namespace NightHunt.UI.Mobile
             SetContextualButtonVisible(_interactButton, false);
             SetContextualButtonVisible(_pickupButton, false);
             SetContextualButtonVisible(_reloadButton, false);
+            EnsureMovementJoystickLifecycleWired();
 
             Debug.Log($"[MOBILE_INPUT] MobileHUD refs root={(_mobileRoot != null ? _mobileRoot.name : "null")} rootActive={(_mobileRoot != null && _mobileRoot.activeInHierarchy)} isMobile={IsMobile} reload={(_reloadButton != null ? _reloadButton.name : "null")} interact={(_interactButton != null ? _interactButton.name : "null")} pickup={(_pickupButton != null ? _pickupButton.name : "null")} cameraDrag={(_cameraDragArea != null ? _cameraDragArea.name : "null")} pinch={(_pinchZoomBridge != null ? _pinchZoomBridge.name : "null")}");
         }
@@ -458,11 +467,53 @@ namespace NightHunt.UI.Mobile
         {
             if (_joystick == null || IsFireAimJoystick(_joystick))
                 _joystick = FindMovementJoystick();
+            EnsureMovementJoystickLifecycleWired();
 
             var movement = ResolveMovementHandler();
-            Vector2 dir = _joystick != null ? _joystick.Direction : Vector2.zero;
+            bool canReadJoystick = _joystick != null &&
+                                   _joystick.isActiveAndEnabled &&
+                                   _joystick.gameObject.activeInHierarchy;
+            bool joystickHeld = !_movementJoystickPressTrackingReady || _movementJoystickPressed;
+            Vector2 dir = canReadJoystick && joystickHeld ? _joystick.Direction : Vector2.zero;
             movement?.SetMobileMove(dir);
             LogMoveJoystick(dir, movement);
+        }
+
+        private void ResetMobileMoveInput()
+        {
+            _movementJoystickPressed = false;
+            ResolveMovementHandler()?.SetMobileMove(Vector2.zero);
+        }
+
+        private void EnsureMovementJoystickLifecycleWired()
+        {
+            if (_joystick == null || ReferenceEquals(_movementJoystickWithLifecycleHooks, _joystick))
+                return;
+
+            _movementJoystickWithLifecycleHooks = _joystick;
+            _movementJoystickPressTrackingReady = true;
+            AddPointerTrigger(_joystick.gameObject, EventTriggerType.PointerDown, OnMovementJoystickPressed);
+            AddPointerTrigger(_joystick.gameObject, EventTriggerType.BeginDrag, OnMovementJoystickPressed);
+            AddPointerTrigger(_joystick.gameObject, EventTriggerType.PointerUp, OnMovementJoystickReleased);
+            AddPointerTrigger(_joystick.gameObject, EventTriggerType.EndDrag, OnMovementJoystickReleased);
+            AddPointerTrigger(_joystick.gameObject, EventTriggerType.Cancel, OnMovementJoystickReleased);
+        }
+
+        private void OnMovementJoystickPressed(BaseEventData _)
+        {
+            _movementJoystickPressed = true;
+        }
+
+        private void OnMovementJoystickReleased(BaseEventData eventData)
+        {
+            _movementJoystickPressed = false;
+            if (_joystick != null)
+            {
+                var pointer = eventData as PointerEventData;
+                if (pointer != null || EventSystem.current != null)
+                    _joystick.OnPointerUp(pointer ?? new PointerEventData(EventSystem.current));
+            }
+            ResetMobileMoveInput();
         }
 
         private bool IsFireAimJoystick(Joystick joystick)
@@ -899,7 +950,14 @@ namespace NightHunt.UI.Mobile
         {
             if (selectable == null) return;
 
-            var trigger = selectable.GetComponent<EventTrigger>() ?? selectable.gameObject.AddComponent<EventTrigger>();
+            AddPointerTrigger(selectable.gameObject, type, callback);
+        }
+
+        private void AddPointerTrigger(GameObject target, EventTriggerType type, UnityAction<BaseEventData> callback)
+        {
+            if (target == null) return;
+
+            var trigger = target.GetComponent<EventTrigger>() ?? target.AddComponent<EventTrigger>();
             var entry = new EventTrigger.Entry { eventID = type };
             entry.callback.AddListener(callback);
             trigger.triggers.Add(entry);

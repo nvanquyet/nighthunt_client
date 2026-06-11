@@ -1,236 +1,320 @@
-using UnityEngine;
-using FishNet.Object;
-using FishNet.Object.Synchronizing;
-using NightHunt.Gameplay.Match;
-using NightHunt.Gameplay.Zone;
-using NightHunt.Gameplay.Character;
-using NightHunt.Gameplay.Spawn;
-using NightHunt.Networking;
-using NightHunt.Networking.Player;
 using System.Collections.Generic;
+using FishNet.Connection;
+using FishNet.Object;
+using UnityEngine;
+using NightHunt.Diagnostics;
+using NightHunt.Gameplay.Character;
+using NightHunt.Gameplay.Core.Events;
+using NightHunt.Gameplay.Match;
+using NightHunt.Gameplay.Spawn;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
 using NightHunt.Gameplay.StatSystem.Core.Types;
+using NightHunt.Gameplay.Zone;
+using NightHunt.Networking;
+using NightHunt.Networking.Player;
 using NightHunt.Utilities;
-using NightHunt.Gameplay.Core.Events;
-using NightHunt.Diagnostics;
 
 namespace NightHunt.Gameplay.Respawn
 {
     /// <summary>
-    /// Respawn system with phase-based rules
+    /// Server-authoritative respawn system. Normal respawns require a beacon.
+    /// An optional one-time final-zone revival can revive players waiting without one.
     /// </summary>
     public class RespawnSystem : NetworkBehaviour, IRespawnProvider
     {
         [Header("Respawn Settings")]
-        [Tooltip("Config source for all respawn delays and beacon limits. If null, falls back to defaults.")]
         [SerializeField] private RespawnConfig _respawnConfig;
 
         [Header("Dependencies")]
-        [Tooltip("Reference to SpawnSystem for team-based fallback spawn points.")]
-        [SerializeField]
-        private SpawnSystem _spawnSystem;
-
+        [SerializeField] private SpawnSystem _spawnSystem;
         [SerializeField] private MatchEndManager _matchEndManager;
 
-        // Synchronized state
-        private readonly SyncVar<float> networkRespawnDelay = new SyncVar<float>();
+        private readonly Dictionary<NetworkPlayer, float> _respawnTimers = new();
+        private readonly HashSet<NetworkPlayer> _waitingForFinalZone = new();
+        private bool _finalZoneRevivalProcessed;
+        private bool _hasLocalDisposition;
+        private int _localDispositionPlayerObjectId;
+        private RespawnDisposition _localDisposition;
+        private float _localDispositionDelay;
+        private float _localDispositionReceivedAt;
+        private string _localDispositionReason;
 
-        private Dictionary<NetworkPlayer, float> respawnTimers = new Dictionary<NetworkPlayer, float>();
-
-        // ── IRespawnProvider ───────────────────────────────────────────────
-        /// <summary>True if any player on the given team is waiting for a respawn timer.</summary>
         public bool HasPendingRespawn(int teamId)
         {
-            foreach (var kvp in respawnTimers)
+            foreach (var player in _respawnTimers.Keys)
             {
-                if (kvp.Key != null && kvp.Key.TeamId == teamId && kvp.Value > 0f)
+                if (player != null && player.TeamId == teamId)
+                    return true;
+            }
+
+            foreach (var player in _waitingForFinalZone)
+            {
+                if (player != null && player.TeamId == teamId)
                     return true;
             }
 
             return false;
         }
 
-        private void Awake()
+        public bool TryGetLocalDisposition(
+            NetworkPlayer player,
+            out RespawnDisposition disposition,
+            out float remainingDelay,
+            out string reason)
         {
-            // SafeZoneManager resolves via Instance singleton at runtime
+            disposition = _localDisposition;
+            remainingDelay = 0f;
+            reason = _localDispositionReason;
+
+            if (!_hasLocalDisposition || player == null || _localDispositionPlayerObjectId != (int)player.ObjectId)
+                return false;
+
+            remainingDelay = Mathf.Max(0f, _localDispositionDelay - (Time.unscaledTime - _localDispositionReceivedAt));
+            return true;
         }
 
-        public override void OnStartNetwork()
+        public void ClearLocalDisposition()
         {
-            base.OnStartNetwork();
-            networkRespawnDelay.OnChange += OnRespawnDelayChanged;
+            _hasLocalDisposition = false;
+            _localDispositionReason = string.Empty;
         }
 
         public override void OnStartServer()
         {
             base.OnStartServer();
-            // Self-register as respawn provider with MatchEndManager
             if (_matchEndManager == null)
                 _matchEndManager = FindFirstObjectByType<MatchEndManager>();
             _matchEndManager?.RegisterRespawnProvider(this);
         }
 
-        public override void OnStopNetwork()
-        {
-            base.OnStopNetwork();
-            networkRespawnDelay.OnChange -= OnRespawnDelayChanged;
-        }
-
         private void Update()
         {
-            if (!IsServerInitialized) return;
+            if (!IsServerInitialized)
+                return;
+
+            bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
+            if (isInFinalZone && !_finalZoneRevivalProcessed)
+                ProcessFinalZoneRevival();
+
+            _waitingForFinalZone.RemoveWhere(player => player == null || !IsPlayerDead(player));
 
             var playersToRespawn = new List<NetworkPlayer>();
-            var playersFailed    = new List<NetworkPlayer>();
+            var playersToRemove = new List<NetworkPlayer>();
+            var teamsToRecheck = new HashSet<int>();
 
-            foreach (var kvp in new List<KeyValuePair<NetworkPlayer, float>>(respawnTimers))
+            foreach (var kvp in new List<KeyValuePair<NetworkPlayer, float>>(_respawnTimers))
             {
-                var player = kvp.Key;
-                float timer = kvp.Value;
-
+                NetworkPlayer player = kvp.Key;
                 if (player == null || !IsPlayerDead(player))
                 {
-                    // Player already respawned or disconnected
-                    playersFailed.Add(player);
+                    playersToRemove.Add(player);
                     continue;
                 }
 
-                // If beacon was destroyed while waiting → cancel timer
-                // Final zone: no beacon required (if config allows respawn)
-                bool isInFinalZone  = SafeZoneManager.Instance?.IsInFinalZone ?? false;
-                bool beaconRequired = !isInFinalZone;
-                if (beaconRequired && FindRespawnBeacon(player) == null)
+                // Final-zone revival timers do not consume or require a beacon.
+                if (!isInFinalZone && FindRespawnBeacon(player) == null)
                 {
-                    Debug.Log($"[RespawnSystem] {player.DisplayName}: beacon destroyed during wait — respawn cancelled.");
-                    PhaseTestLog.Warning(
-                        PhaseTestLogCategory.Death,
-                        "RespawnCancelled",
-                        $"reason=beacon_destroyed player={player.DisplayName} team={player.TeamId} zone={SafeZoneManager.Instance?.ZoneIndex ?? -1}",
-                        this);
-                    RpcNotifyRespawnFailed(player.Owner, "beacon_destroyed");
-                    playersFailed.Add(player);
+                    playersToRemove.Add(player);
+                    if (ShouldWaitForFinalZone())
+                    {
+                        WaitForFinalZone(player, "beacon_destroyed");
+                    }
+                    else
+                    {
+                        NotifyDisposition(player, RespawnDisposition.Eliminated, 0f, "beacon_destroyed");
+                        teamsToRecheck.Add(player.TeamId);
+                    }
                     continue;
                 }
 
-                timer -= Time.deltaTime;
-                respawnTimers[player] = timer;
-
+                float timer = kvp.Value - Time.deltaTime;
+                _respawnTimers[player] = timer;
                 if (timer <= 0f)
                     playersToRespawn.Add(player);
             }
 
-            foreach (var p in playersFailed)  respawnTimers.Remove(p);
+            foreach (var player in playersToRemove)
+                _respawnTimers.Remove(player);
+
             foreach (var player in playersToRespawn)
             {
-                respawnTimers.Remove(player);
+                _respawnTimers.Remove(player);
                 if (player != null && IsPlayerDead(player))
                     RespawnPlayer(player);
             }
+
+            foreach (int teamId in teamsToRecheck)
+                _matchEndManager?.RecheckEliminationForTeam(teamId);
         }
 
-        /// <summary>
-        /// Server: Initiate respawn directly from server-side code (Boss kills, AoE damage, etc).
-        /// BUG 8 FIX: Use this instead of RequestRespawn when the caller is the server itself
-        /// (not the owning client), to avoid the "not owner of object" ServerRpc ownership error.
-        /// </summary>
         [Server]
         public void ServerInitiateRespawn(NetworkPlayer player)
         {
-            if (player == null) return;
-            if (!IsPlayerDead(player)) return;
+            if (player == null || !IsPlayerDead(player))
+                return;
 
-            if (!CanRespawn(player))
+            if (_respawnTimers.TryGetValue(player, out float remaining))
             {
-                string reason = GetCannotRespawnReason(player);
-                Debug.Log($"[RespawnSystem] Cannot respawn ({player.DisplayName}): {reason}");
-                PhaseTestLog.Warning(
-                    PhaseTestLogCategory.Death,
-                    "RespawnRejected",
-                    $"source=server-initiate reason={reason} player={player.DisplayName} team={player.TeamId}",
-                    this);
-                if (player.Owner != null)
-                    RpcNotifyRespawnFailed(player.Owner, reason);
+                NotifyDisposition(player, RespawnDisposition.Queued, remaining, "already_queued");
                 return;
             }
 
-            float delay = GetRespawnDelay();
-            respawnTimers[player] = delay;
-            networkRespawnDelay.Value = delay;
-            PhaseTestLog.Log(
-                PhaseTestLogCategory.Death,
-                "RespawnQueued",
-                $"source=server-initiate player={player.DisplayName} team={player.TeamId} delay={delay:F2} pending={respawnTimers.Count}",
-                this);
+            if (_waitingForFinalZone.Contains(player))
+            {
+                NotifyDisposition(player, RespawnDisposition.WaitingForFinalZone, 0f, "waiting_final_zone");
+                return;
+            }
+
+            bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
+            if (isInFinalZone)
+            {
+                if (!_finalZoneRevivalProcessed && IsFinalZoneRevivalEnabled())
+                    WaitForFinalZone(player, "waiting_final_zone");
+                else
+                    EliminatePlayer(player, "respawn_disabled");
+                return;
+            }
+
+            if (FindRespawnBeacon(player) != null)
+            {
+                QueueRespawn(player, GetRespawnDelay(), "beacon");
+                return;
+            }
+
+            if (ShouldWaitForFinalZone())
+                WaitForFinalZone(player, "no_beacon");
+            else
+                EliminatePlayer(player, "no_beacon");
         }
 
-        /// <summary>
-        /// Server: Request respawn for player
-        /// </summary>
         [ServerRpc(RequireOwnership = false)]
-        public void RequestRespawn(NetworkPlayer player, FishNet.Connection.NetworkConnection conn = null)
+        public void RequestRespawn(NetworkPlayer player, NetworkConnection conn = null)
         {
-            if (player == null) return;
-            if (!IsPlayerDead(player)) return;
+            if (player == null || !IsPlayerDead(player))
+                return;
 
-            // Resolve connection — FishNet injects conn automatically for RequireOwnership RPCs.
-            if (conn == null) conn = player.Owner;
+            if (conn == null)
+                conn = player.Owner;
+
             if (conn != null && player.Owner != conn)
             {
                 Debug.LogWarning($"[RespawnSystem] Reject respawn request: caller does not own {player.DisplayName}.");
-                PhaseTestLog.Warning(
-                    PhaseTestLogCategory.Death,
-                    "RespawnRejected",
-                    $"source=client-request reason=owner-mismatch player={player.DisplayName} owner={player.Owner?.ClientId ?? -1} caller={conn?.ClientId ?? -1}",
-                    this);
                 return;
             }
 
-            // Check phase-based respawn rules — notify client when rejected
-            if (!CanRespawn(player))
+            ServerInitiateRespawn(player);
+        }
+
+        [Server]
+        private void ProcessFinalZoneRevival()
+        {
+            _finalZoneRevivalProcessed = true;
+
+            if (!IsFinalZoneRevivalEnabled())
             {
-                string reason = GetCannotRespawnReason(player);
-                Debug.Log($"[RespawnSystem] Cannot respawn ({player.DisplayName}): {reason}");
-                PhaseTestLog.Warning(
-                    PhaseTestLogCategory.Death,
-                    "RespawnRejected",
-                    $"source=client-request reason={reason} player={player.DisplayName} team={player.TeamId}",
-                    this);
-                RpcNotifyRespawnFailed(conn, reason);
+                var teamsToRecheck = new HashSet<int>();
+                foreach (var player in _respawnTimers.Keys)
+                {
+                    if (player == null)
+                        continue;
+                    NotifyDisposition(player, RespawnDisposition.Eliminated, 0f, "final_zone_respawn_disabled");
+                    teamsToRecheck.Add(player.TeamId);
+                }
+
+                foreach (var player in _waitingForFinalZone)
+                {
+                    if (player == null)
+                        continue;
+                    NotifyDisposition(player, RespawnDisposition.Eliminated, 0f, "final_zone_respawn_disabled");
+                    teamsToRecheck.Add(player.TeamId);
+                }
+
+                _respawnTimers.Clear();
+                _waitingForFinalZone.Clear();
+                foreach (int teamId in teamsToRecheck)
+                    _matchEndManager?.RecheckEliminationForTeam(teamId);
                 return;
             }
 
-            // Calculate respawn delay based on phase
-            float delay = GetRespawnDelay();
-            respawnTimers[player] = delay;
-            networkRespawnDelay.Value = delay;
+            _waitingForFinalZone.Clear();
+            _respawnTimers.Clear();
+
+            float delay = _respawnConfig != null
+                ? Mathf.Max(0f, _respawnConfig.FinalZoneReviveDelaySeconds)
+                : 3f;
+
+            NetworkPlayer[] players = RegistryService.Instance?.GetAllPlayers();
+            if (players == null)
+                return;
+
+            foreach (NetworkPlayer player in players)
+            {
+                if (player != null && IsPlayerDead(player))
+                    QueueRespawn(player, delay, "final_zone_revive");
+            }
+
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Death,
-                "RespawnQueued",
-                $"source=client-request player={player.DisplayName} team={player.TeamId} delay={delay:F2} pending={respawnTimers.Count}",
+                "FinalZoneRevivalQueued",
+                $"deadPlayers={_respawnTimers.Count} delay={delay:F2}",
                 this);
         }
 
-        /// <summary>
-        /// Server: Respawn player
-        /// </summary>
+        [Server]
+        private void QueueRespawn(NetworkPlayer player, float delay, string reason)
+        {
+            _waitingForFinalZone.Remove(player);
+            _respawnTimers[player] = Mathf.Max(0f, delay);
+            NotifyDisposition(player, RespawnDisposition.Queued, delay, reason);
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnQueued",
+                $"player={player.DisplayName} team={player.TeamId} delay={delay:F2} reason={reason}",
+                this);
+        }
+
+        [Server]
+        private void WaitForFinalZone(NetworkPlayer player, string reason)
+        {
+            _respawnTimers.Remove(player);
+            _waitingForFinalZone.Add(player);
+            NotifyDisposition(player, RespawnDisposition.WaitingForFinalZone, 0f, reason);
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnWaitingFinalZone",
+                $"player={player.DisplayName} team={player.TeamId} reason={reason}",
+                this);
+        }
+
+        [Server]
+        private void EliminatePlayer(NetworkPlayer player, string reason)
+        {
+            _respawnTimers.Remove(player);
+            _waitingForFinalZone.Remove(player);
+            NotifyDisposition(player, RespawnDisposition.Eliminated, 0f, reason);
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnUnavailable",
+                $"player={player.DisplayName} team={player.TeamId} reason={reason}",
+                this);
+        }
+
         [Server]
         private void RespawnPlayer(NetworkPlayer player)
         {
-            if (player == null) return;
+            if (player == null)
+                return;
 
+            bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
             Vector3 respawnPosition = GetRespawnPosition(player);
             Quaternion respawnRotation = player.transform.rotation;
-            PhaseTestLog.Log(
-                PhaseTestLogCategory.Death,
-                "RespawnApplyStart",
-                $"player={player.DisplayName} team={player.TeamId} pos={respawnPosition:F2} zoneIndex={SafeZoneManager.Instance?.ZoneIndex.ToString() ?? "null"}",
-                this);
 
-            // Issue #5: Destroy the beacon used to respawn (single-use per respawn)
-            var usedBeacon = FindRespawnBeacon(player);
-            usedBeacon?.TakeDamage(int.MaxValue);
+            if (!isInFinalZone)
+                FindRespawnBeacon(player)?.TakeDamage(int.MaxValue);
 
-            // Teleport via IMovementController to properly reset prediction pipeline
             var movement = ComponentResolver.Find<IMovementController>(player)
                 .OnSelf().InChildren()
                 .OrLogWarning("[Auto] IMovementController not found").Resolve();
@@ -239,7 +323,6 @@ namespace NightHunt.Gameplay.Respawn
             else
                 player.transform.position = respawnPosition;
 
-            // Restore health via PlayerStatSystem
             var statSystem = ComponentResolver.Find<IPlayerStatSystem>(player)
                 .OnSelf().InChildren()
                 .OrLogWarning("[Auto] IPlayerStatSystem not found").Resolve();
@@ -249,65 +332,51 @@ namespace NightHunt.Gameplay.Respawn
                 concrete.SetCurrentStat(PlayerStatType.Health, maxHealth);
             }
 
-            OnPlayerRespawned(player);
+            _waitingForFinalZone.Remove(player);
+            player.SetAlive(true);
+            _matchEndManager?.RecheckEliminationForTeam(player.TeamId);
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnApplyComplete",
+                $"player={player.DisplayName} team={player.TeamId} pos={player.transform.position:F2}",
+                this);
         }
 
-        /// <summary>
-        /// Get respawn position based on phase
-        /// </summary>
         private Vector3 GetRespawnPosition(NetworkPlayer player)
         {
-            bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
-
-            if (isInFinalZone)
+            if (SafeZoneManager.Instance?.IsInFinalZone ?? false)
                 return GetSafeZonePosition();
 
-            // Outside final zone: Beacon → Default spawn point
-            var beacon = FindRespawnBeacon(player);
-            if (beacon != null)
-                return beacon.transform.position;
-
-            return GetDefaultSpawnPosition(player);
+            RespawnBeacon beacon = FindRespawnBeacon(player);
+            return beacon != null ? beacon.transform.position : GetDefaultSpawnPosition(player);
         }
 
-        /// <summary>
-        /// Find respawn beacon for player.
-        /// Bug #28 fix: uses RespawnBeacon.All static registry instead of
-        /// FindObjectsByType (O(scene)) called every frame per pending player.
-        /// </summary>
         private RespawnBeacon FindRespawnBeacon(NetworkPlayer player)
         {
-            foreach (var beacon in RespawnBeacon.All)
+            foreach (RespawnBeacon beacon in RespawnBeacon.All)
             {
                 if (beacon != null && beacon.IsActive && player != null && beacon.CanRespawnHere(player.TeamId))
-                {
                     return beacon;
-                }
             }
 
             return null;
         }
 
-        /// Get respawn position for safe zone (final zone) — uses SafeZoneManager center/radius
         private Vector3 GetSafeZonePosition()
         {
-            var mgr = SafeZoneManager.Instance;
-            if (mgr != null)
+            SafeZoneManager manager = SafeZoneManager.Instance;
+            if (manager != null)
             {
                 float configuredRadius = _respawnConfig != null ? _respawnConfig.SafeZoneRespawnRadius : 20f;
-                float radius = Mathf.Max(0f, Mathf.Min(configuredRadius, mgr.CurrentRadius * 0.75f));
+                float radius = Mathf.Max(0f, Mathf.Min(configuredRadius, manager.CurrentRadius * 0.75f));
                 Vector2 offset = Random.insideUnitCircle * radius;
-                return mgr.CurrentCenter + new Vector3(offset.x, 0f, offset.y);
+                return manager.CurrentCenter + new Vector3(offset.x, 0f, offset.y);
             }
 
-            // Fallback: Use neutral team spawn point
-            return GetDefaultSpawnPosition(null);
+            return GetDefaultSpawnPosition();
         }
 
-        /// <summary>
-        /// Get default spawn position — delegates to SpawnSystem if available.
-        /// Ưu tiên spawn point của đúng team player, fallback sang neutral (-1).
-        /// </summary>
         private Vector3 GetDefaultSpawnPosition(NetworkPlayer player = null)
         {
             if (_spawnSystem == null)
@@ -315,118 +384,75 @@ namespace NightHunt.Gameplay.Respawn
 
             if (_spawnSystem != null)
             {
-                // Thử team của player trước (vd. Team 0 → team-0 spawn zone)
                 int teamId = player != null ? player.TeamId : -1;
-                SpawnPoint sp = _spawnSystem.GetRandomSpawnPointForTeam(teamId);
-
-                // Fallback sang neutral nếu team not available spawn point riêng
-                if (sp == null && teamId != -1)
-                    sp = _spawnSystem.GetRandomSpawnPointForTeam(-1);
-
-                if (sp != null)
-                    return sp.GetSpawnPosition();
+                SpawnPoint spawnPoint = _spawnSystem.GetRandomSpawnPointForTeam(teamId);
+                if (spawnPoint == null && teamId != -1)
+                    spawnPoint = _spawnSystem.GetRandomSpawnPointForTeam(-1);
+                if (spawnPoint != null)
+                    return spawnPoint.GetSpawnPosition();
             }
 
-            Debug.LogWarning("[RespawnSystem] No SpawnSystem or spawn points found — using Vector3.zero!");
+            Debug.LogWarning("[RespawnSystem] No SpawnSystem or spawn points found; using Vector3.zero.");
             return Vector3.zero;
         }
 
-        /// <summary>
-        /// Check if player can respawn based on phase rules
-        /// </summary>
-        private bool CanRespawn(NetworkPlayer player)
+        private bool ShouldWaitForFinalZone()
         {
             bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
-            if (isInFinalZone) return true; // Auto-spawn inside safe zone during final zone
-
-            // Outside final zone: require beacon
-            return FindRespawnBeacon(player) != null;
+            return !isInFinalZone && IsFinalZoneRevivalEnabled() && !_finalZoneRevivalProcessed;
         }
 
-        private string GetCannotRespawnReason(NetworkPlayer player)
+        private bool IsFinalZoneRevivalEnabled()
         {
-            bool isInFinalZone = SafeZoneManager.Instance?.IsInFinalZone ?? false;
-            if (!isInFinalZone && FindRespawnBeacon(player) == null)
-                return "no_beacon";
-            return "unknown";
+            return _respawnConfig != null && _respawnConfig.ReviveAllDeadPlayersOnFinalZoneStart;
         }
 
-        /// <summary>
-        /// Get respawn delay based on phase (reads from RespawnConfig; falls back to hardcoded defaults)
-        /// </summary>
         private float GetRespawnDelay()
         {
-            return 5f; // RespawnConfig no longer stores per-phase delay; fixed 5s default
+            return _respawnConfig != null ? Mathf.Max(0f, _respawnConfig.RespawnDelaySeconds) : 5f;
         }
 
-        /// <summary>
-        /// Check if player is dead based on stat system (Health <= 0)
-        /// </summary>
         private bool IsPlayerDead(NetworkPlayer player)
         {
             if (player == null)
                 return false;
 
             var statSystem = ComponentResolver.Find<IPlayerStatSystem>(player)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] IPlayerStatSystem not found")
-                .Resolve();
-            if (statSystem == null)
-                return false;
-
-            float health = statSystem.GetStat(PlayerStatType.Health);
-            return health <= 0f;
+                .OnSelf().InChildren().Resolve();
+            return statSystem != null && statSystem.GetStat(PlayerStatType.Health) <= 0f;
         }
 
-        /// <summary>
-        /// Handle player respawned
-        /// </summary>
-        private void OnPlayerRespawned(NetworkPlayer player)
+        [Server]
+        private void NotifyDisposition(NetworkPlayer player, RespawnDisposition disposition, float delay, string reason)
         {
-            Debug.Log($"[RespawnSystem] Player respawned: {player.DisplayName}");
-            PhaseTestLog.Log(
-                PhaseTestLogCategory.Death,
-                "RespawnApplyComplete",
-                $"player={player.DisplayName} team={player.TeamId} pos={player.transform.position:F2}",
-                this);
-
-            // Mark alive via NetworkPlayer so RegistryService.GetAliveCount is accurate
-            player.SetAlive(true);
-
-            // Ask MatchEndManager to re-evaluate the player's team (Phase 3 guard)
-            _matchEndManager?.RecheckEliminationForTeam(player.TeamId);
+            if (player?.Owner != null)
+                RpcNotifyRespawnDisposition(
+                    player.Owner,
+                    (int)player.ObjectId,
+                    (int)disposition,
+                    Mathf.Max(0f, delay),
+                    reason);
         }
 
-        private void OnRespawnDelayChanged(float oldDelay, float newDelay, bool asServer)
-        {
-            // Clients: Forward to HUD so countdown timer can be shown
-            if (!asServer)
-            {
-                PhaseTestLog.Log(
-                    PhaseTestLogCategory.Death,
-                    "RespawnDelaySynced",
-                    $"old={oldDelay:F2} new={newDelay:F2}",
-                    this);
-                GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.RespawnTimerEvent
-                {
-                    DelaySeconds = newDelay
-                });
-            }
-        }
-
-        /// <summary>Notify the owning client their respawn was cancelled (beacon destroyed).</summary>
         [TargetRpc]
-        private void RpcNotifyRespawnFailed(FishNet.Connection.NetworkConnection conn, string reason)
+        private void RpcNotifyRespawnDisposition(
+            NetworkConnection conn,
+            int playerObjectId,
+            int disposition,
+            float delay,
+            string reason)
         {
-            Debug.Log($"[RespawnSystem] Respawn cancelled: {reason}");
-            PhaseTestLog.Warning(
-                PhaseTestLogCategory.Death,
-                "RespawnCancelledClient",
-                $"reason={reason}",
-                this);
-            GameplayEventBus.Instance?.Publish(new NightHunt.Gameplay.Core.Events.RespawnCancelledEvent
+            _hasLocalDisposition = true;
+            _localDispositionPlayerObjectId = playerObjectId;
+            _localDisposition = (RespawnDisposition)disposition;
+            _localDispositionDelay = delay;
+            _localDispositionReceivedAt = Time.unscaledTime;
+            _localDispositionReason = reason;
+
+            GameplayEventBus.Instance?.Publish(new RespawnDispositionEvent
             {
+                Disposition = _localDisposition,
+                DelaySeconds = delay,
                 Reason = reason
             });
         }

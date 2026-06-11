@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using NightHunt.Gameplay.FogOfWar;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using NightHunt.Gameplay.StatSystem.Core.Interfaces;
@@ -66,6 +67,7 @@ namespace NightHunt.GameplaySystems.UI
 
         private NetworkPlayer       _networkPlayer;
         private IPlayerStatSystem   _statSystem;
+        private FogTeamVisibilityBinder _fogVisibilityBinder;
         private Camera              _mainCamera;
 
         // Cached max health so we can compute bar fill without a second GetStat call.
@@ -86,6 +88,12 @@ namespace NightHunt.GameplaySystems.UI
                 .InChildren()
                 .InParent()
                 .OrLogWarning("[PlayerNameplateUI] IPlayerStatSystem not found")
+                .Resolve();
+
+            _fogVisibilityBinder = ComponentResolver.Find<FogTeamVisibilityBinder>(this)
+                .OnSelf()
+                .InParent()
+                .InChildren()
                 .Resolve();
 
             _mainCamera = Camera.main;
@@ -145,7 +153,8 @@ namespace NightHunt.GameplaySystems.UI
                                              transform.position + _offset) <= _visibleDistance;
 
             // Respect alive state — don't show namplate over a dead body.
-            bool shouldShow = inRange && (_networkPlayer == null || _networkPlayer.IsAlive);
+            bool visibleByFog = _fogVisibilityBinder == null || _fogVisibilityBinder.IsVisibleToLocal;
+            bool shouldShow = inRange && visibleByFog && (_networkPlayer == null || _networkPlayer.IsAlive);
             _nameplateRoot.SetActive(shouldShow);
 
             if (!shouldShow) return;

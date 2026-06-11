@@ -5,6 +5,7 @@ using NightHunt.GameplaySystems.UI.Combat;
 using NightHunt.GameplaySystems.UI.Interaction;
 using NightHunt.Networking.Player;
 using NightHunt.Gameplay.Character.Combat;
+using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.State;
 using NightHunt.Gameplay.Feedback;
 using NightHunt.Gameplay.Deployables;
@@ -189,6 +190,7 @@ namespace NightHunt.UI
             // Primary init trigger: fires when the local player is ready.
             NetworkPlayer.OnOwnerReady += Initialize;
             GameActionBus.OnInventoryToggleRequested += HandleInventoryToggle;
+            GameplayEventBus.Instance?.Subscribe<MatchEndedEvent>(OnMatchEnded);
 
             TrySubscribeInputHandlers();
             if (_initializedForPlayer)
@@ -207,6 +209,7 @@ namespace NightHunt.UI
         {
             NetworkPlayer.OnOwnerReady -= Initialize;
             GameActionBus.OnInventoryToggleRequested -= HandleInventoryToggle;
+            GameplayEventBus.Instance?.Unsubscribe<MatchEndedEvent>(OnMatchEnded);
 
             CloseSettingsOverlay(true);
             UnsubscribeInputHandlers();
@@ -223,6 +226,7 @@ namespace NightHunt.UI
 
         private void Start()
         {
+            GameplayEventBus.Instance?.Subscribe<MatchEndedEvent>(OnMatchEnded);
             TrySubscribeInputHandlers();
 
             // Edge case: SpectateManager was null during OnEnable (script execution order).
@@ -315,7 +319,8 @@ namespace NightHunt.UI
                 SpectateManager.Instance.OnSpectateStopped += OnSpectateStopped;
             }
 
-            SetState(UIState.Combat);
+            if (_currentState != UIState.PostMatch)
+                SetState(UIState.Combat);
 
             Debug.Log($"[GameHUDController] Initialized for player '{localPlayer.name}' (netId={_localNetObjId})");
         }
@@ -325,6 +330,7 @@ namespace NightHunt.UI
         private void HandlePlayerChanged(NetworkPlayer newPlayer)
         {
             if (newPlayer == null) return;
+            if (_currentState == UIState.PostMatch) return;
 
             // Reset drag-drop state when the observed player switches.
             DragDropController.Instance?.ResetAll();
@@ -440,19 +446,36 @@ namespace NightHunt.UI
 
         private void OnLocalPlayerDied()
         {
+            if (_currentState == UIState.PostMatch)
+                return;
+
             CloseSettingsOverlay(false);
             SetState(UIState.Dead);
         }
 
         private void OnLocalPlayerRespawned()
         {
+            if (_currentState == UIState.PostMatch)
+                return;
+
             CloseSettingsOverlay(false);
             _deathScreen?.Hide();
             SetState(UIState.Combat);
         }
 
+        private void OnMatchEnded(MatchEndedEvent evt)
+        {
+            CloseSettingsOverlay(false);
+            _deathScreen?.Hide();
+            SetState(UIState.PostMatch);
+            SpectateManager.Instance?.StopSpectating();
+        }
+
         private void OnSpectateStarted()
         {
+            if (_currentState == UIState.PostMatch)
+                return;
+
             CloseSettingsOverlay(false);
             // Hide any loot panel that the local player had open before dying.
             _lootContainerUI?.Hide();
@@ -461,6 +484,9 @@ namespace NightHunt.UI
 
         private void OnSpectateStopped()
         {
+            if (_currentState == UIState.PostMatch)
+                return;
+
             CloseSettingsOverlay(false);
             // HideSpectateView is a no-op if the panel is not in spectate mode,
             // so this is safe to call unconditionally.

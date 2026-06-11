@@ -26,7 +26,7 @@ namespace NightHunt.Gameplay.Input.Core
     ///   • All input sources (keyboard, mobile button, gamepad) call RequestXxx() methods.
     ///   • All game systems subscribe to OnXxx events — NOT to device-specific paths.
     ///   • This class has NO Unity lifecycle; it is purely static.
-    ///   • Call Clear() on scene unload (via InputManager.OnDestroy or SceneManager).
+    ///   • Clear() is only for explicit full teardown when every subscriber is gone.
     /// </summary>
     public static class GameActionBus
     {
@@ -99,7 +99,7 @@ namespace NightHunt.Gameplay.Input.Core
 
         /// <summary>
         /// Clear all event subscriptions. Call on scene unload to prevent stale references.
-        /// Typically invoked from <see cref="NightHunt.Gameplay.Input.Core.InputManager.OnDestroy"/>.
+        /// Do not call this from InputManager/InputLayerManager lifecycle while HUD panels may still be alive.
         /// </summary>
         public static void Clear()
         {

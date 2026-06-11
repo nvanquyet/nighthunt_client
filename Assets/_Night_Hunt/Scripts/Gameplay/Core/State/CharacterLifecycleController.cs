@@ -61,6 +61,7 @@ namespace NightHunt.Gameplay.Core.State
 
         private IPlayerStatSystem _statSystem;
         private bool _statsSubscribed;
+        private bool _aliveStateSubscribed;
 
         #region Unity Lifecycle
 
@@ -99,6 +100,8 @@ namespace NightHunt.Gameplay.Core.State
             base.OnStartNetwork();
             ResolveStatSystem();
             SubscribeToStats();
+            SubscribeToAliveState();
+            ReconcileAliveState();
 
             // Bug #22 fix: push local lifecycle to GameCameraController so it doesn't
             // use FindFirstObjectByType (which finds the wrong player in multiplayer).
@@ -111,18 +114,22 @@ namespace NightHunt.Gameplay.Core.State
 
         public override void OnStopNetwork()
         {
-            base.OnStopNetwork();
             UnsubscribeFromStats();
+            UnsubscribeFromAliveState();
+            base.OnStopNetwork();
         }
 
         private void OnEnable()
         {
             SubscribeToStats();
+            SubscribeToAliveState();
+            ReconcileAliveState();
         }
 
         private void OnDisable()
         {
             UnsubscribeFromStats();
+            UnsubscribeFromAliveState();
         }
 
         #endregion
@@ -188,6 +195,43 @@ namespace NightHunt.Gameplay.Core.State
             _statsSubscribed = false;
         }
 
+        private void SubscribeToAliveState()
+        {
+            if (_aliveStateSubscribed || _networkPlayer == null)
+                return;
+
+            _networkPlayer.OnAliveChanged += HandleAliveStateChanged;
+            _aliveStateSubscribed = true;
+        }
+
+        private void UnsubscribeFromAliveState()
+        {
+            if (!_aliveStateSubscribed || _networkPlayer == null)
+                return;
+
+            _networkPlayer.OnAliveChanged -= HandleAliveStateChanged;
+            _aliveStateSubscribed = false;
+        }
+
+        private void HandleAliveStateChanged(bool isAlive)
+        {
+            if (isAlive)
+            {
+                if (IsDead)
+                    HandleRespawnedFromHealth();
+            }
+            else if (!IsDead)
+            {
+                HandleDeath();
+            }
+        }
+
+        private void ReconcileAliveState()
+        {
+            if (_networkPlayer != null)
+                HandleAliveStateChanged(_networkPlayer.IsAlive);
+        }
+
         private void HandleStatChanged(PlayerStatType type, float oldValue, float newValue)
         {
             if (type != PlayerStatType.Health)
@@ -223,27 +267,24 @@ namespace NightHunt.Gameplay.Core.State
                 _stateMachine.TransitionTo(CharacterLifecycleState.Dead);
             }
 
+            if (IsServerInitialized)
+            {
+                // Establish the authoritative death/respawn disposition before match-end
+                // subscribers evaluate whether the team has been eliminated.
+                _networkPlayer?.SetAlive(false);
+
+                if (_autoRequestRespawnOnDeath &&
+                    _respawnSystem != null &&
+                    _networkPlayer != null)
+                {
+                    _respawnSystem.ServerInitiateRespawn(_networkPlayer);
+                }
+            }
+
             OnDied?.Invoke();
 
             // Reset killer name after firing so it doesn't linger
             LastKillerName = string.Empty;
-
-            if (!IsServerInitialized)
-                return;
-
-            // Update _isAlive SyncVar — broadcasts dead state to all clients including late-joiners.
-            _networkPlayer?.SetAlive(false);
-
-            if (_autoRequestRespawnOnDeath &&
-                _respawnSystem != null &&
-                _networkPlayer != null)
-            {
-                // BUG 8 FIX: Use ServerInitiateRespawn ([Server]) instead of RequestRespawn
-                // ([ServerRpc RequireOwnership=true]).  When death is triggered by a Boss/AOE
-                // (server-side code), calling a ServerRpc with RequireOwnership fails because
-                // the server is not the owner of the player object.
-                _respawnSystem.ServerInitiateRespawn(_networkPlayer);
-            }
         }
 
         private void HandleRespawnedFromHealth()

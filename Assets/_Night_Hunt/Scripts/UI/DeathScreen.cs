@@ -1,143 +1,99 @@
-using System;
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
+using NightHunt.Diagnostics;
+using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Gameplay.Core.State;
-using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Gameplay.Respawn;
 using NightHunt.Gameplay.Spectator;
-using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using NightHunt.Utilities;
-using NightHunt.Diagnostics;
 
 namespace NightHunt.UI
 {
     /// <summary>
-    /// Death screen overlay shown when the local player dies.
-    ///
-    /// Features:
-    ///   • "YOU DIED" header + killer name label.
-    ///   • Respawn countdown timer (counts down to 0 then enables Respawn button).
-    ///   • Spectate button → cycles through living teammates via SpectateManager.
-    ///   • Auto-hides when the player respawns (OnRespawned event).
-    ///
-    /// Setup:
-    ///   1. Place in GameHUD canvas at high sort order so it draws over HUD.
-    ///   2. Assign all [SerializeField] refs in the Inspector.
-    ///   3. Call <see cref="RegisterPlayer"/> once the local NetworkPlayer is ready.
+    /// Shows only the respawn actions confirmed by the server for the local player.
     /// </summary>
     public class DeathScreen : MonoBehaviour
     {
-        // ── Inspector ─────────────────────────────────────────────────────────
+        [Header("Panel")]
+        [SerializeField] private GameObject _deathPanel;
 
-        [Header("Panel")] [SerializeField] private GameObject _deathPanel;
+        [Header("Labels")]
+        [SerializeField] private TextMeshProUGUI _killedByText;
+        [SerializeField] private TextMeshProUGUI _respawnTimerText;
 
-        [Header("Labels")] [SerializeField] private TextMeshProUGUI _killedByText; // "Killed by: PlayerX"
-        [SerializeField] private TextMeshProUGUI _respawnTimerText; // "Respawn in: 5"
-
-        [Header("Buttons")] [SerializeField] private Button _spectateButton;
+        [Header("Buttons")]
+        [SerializeField] private Button _spectateButton;
         [SerializeField] private Button _respawnButton;
-
-        [Header("Settings")]
-        [Tooltip("Seconds before the Respawn button becomes active. " +
-                 "Set 0 to make it available instantly.")]
-        [SerializeField]
-        private float _respawnDelay = 5f;
-
-        // ── Runtime ───────────────────────────────────────────────────────────
 
         private CharacterLifecycleController _lifecycle;
         private PlayerHealthSystem _healthSystem;
         private Coroutine _countdownRoutine;
+        private Coroutine _statusTimeoutRoutine;
         private NetworkPlayer _localPlayer;
         private RespawnSystem _respawnSystem;
+        private bool _hasRespawnDisposition;
 
-        // ── Public API ────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Register the local NetworkPlayer so this screen can subscribe to
-        /// death / respawn events.  Call once the player GameObject is ready.
-        /// </summary>
         public void RegisterPlayer(NetworkPlayer player)
         {
-            if (player == null) return;
+            if (player == null)
+                return;
 
-            // Unsubscribe from previous player (spectate scenario)
             UnregisterCurrent();
-
             _localPlayer = player;
-            _respawnSystem = UnityEngine.Object.FindFirstObjectByType<RespawnSystem>();
+            _respawnSystem = FindFirstObjectByType<RespawnSystem>();
 
             _lifecycle = ComponentResolver.Find<CharacterLifecycleController>(player)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] CharacterLifecycleController not found")
-                .Resolve();
+                .OnSelf().InChildren()
+                .OrLogWarning("[Auto] CharacterLifecycleController not found").Resolve();
             _healthSystem = ComponentResolver.Find<PlayerHealthSystem>(player)
-                .OnSelf()
-                .InChildren()
-                .OrLogWarning("[Auto] PlayerHealthSystem not found")
-                .Resolve();
+                .OnSelf().InChildren()
+                .OrLogWarning("[Auto] PlayerHealthSystem not found").Resolve();
 
-            // Lifecycle: used only to hide screen on respawn.
             if (_lifecycle != null)
                 _lifecycle.OnRespawned += HandleRespawned;
-
-            // HealthSystem: primary trigger for SHOW — carries the confirmed killer name from server.
             if (_healthSystem != null)
                 _healthSystem.OnPlayerDied += HandlePlayerHealthDied;
-
-            PhaseTestLog.Log(
-                PhaseTestLogCategory.Death,
-                "DeathScreenRegistered",
-                $"player={player.DisplayName} obj={player.ObjectId} lifecycle={(_lifecycle != null ? "ok" : "null")} health={(_healthSystem != null ? "ok" : "null")} respawnSystem={(_respawnSystem != null ? "ok" : "null")}",
-                this);
         }
 
         public void Show(string killerName = "")
         {
-            if (_deathPanel != null) _deathPanel.SetActive(true);
+            if (_deathPanel != null)
+                _deathPanel.SetActive(true);
 
             if (_killedByText != null)
+            {
                 _killedByText.text = string.IsNullOrEmpty(killerName)
                     ? "You were eliminated"
                     : $"You were eliminated by {killerName}";
-
-            // Show respawn button (hidden/greyed by default); countdown enables it.
-            if (_respawnButton != null)
-            {
-                _respawnButton.gameObject.SetActive(true);
-                _respawnButton.interactable = false;
             }
 
-            if (_countdownRoutine != null) StopCoroutine(_countdownRoutine);
-            _countdownRoutine = StartCoroutine(RespawnCountdown());
+            StopCountdown();
+            StopStatusTimeout();
+            _hasRespawnDisposition = false;
+            SetButtonVisible(_respawnButton, false);
+            SetButtonVisible(_spectateButton, false);
+            SetStatus("Checking respawn status...");
+            if (!ApplyCachedDisposition())
+                _statusTimeoutRoutine = StartCoroutine(RespawnStatusTimeout());
+
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Death,
                 "DeathScreenShow",
-                $"player={_localPlayer?.DisplayName ?? "null"} killer={killerName ?? string.Empty} fallbackDelay={_respawnDelay:F2}",
+                $"player={_localPlayer?.DisplayName ?? "null"} killer={killerName ?? string.Empty}",
                 this);
         }
 
         public void Hide()
         {
-            if (_deathPanel != null) _deathPanel.SetActive(false);
-            if (_countdownRoutine != null)
-            {
-                StopCoroutine(_countdownRoutine);
-                _countdownRoutine = null;
-            }
-            PhaseTestLog.Log(
-                PhaseTestLogCategory.Death,
-                "DeathScreenHide",
-                $"player={_localPlayer?.DisplayName ?? "null"}",
-                this);
+            if (_deathPanel != null)
+                _deathPanel.SetActive(false);
+            StopCountdown();
+            StopStatusTimeout();
         }
-
-        // ── Unity lifecycle ───────────────────────────────────────────────────
 
         private void Awake()
         {
@@ -147,25 +103,27 @@ namespace NightHunt.UI
 
         private void OnEnable()
         {
-            GameplayEventBus.Instance?.Subscribe<RespawnTimerEvent>(OnRespawnTimerReceived);
+            GameplayEventBus.Instance?.Subscribe<RespawnDispositionEvent>(OnRespawnDisposition);
             GameplayEventBus.Instance?.Subscribe<RespawnCancelledEvent>(OnRespawnCancelled);
+            ApplyCachedDisposition();
         }
 
         private void OnDisable()
         {
-            GameplayEventBus.Instance?.Unsubscribe<RespawnTimerEvent>(OnRespawnTimerReceived);
+            GameplayEventBus.Instance?.Unsubscribe<RespawnDispositionEvent>(OnRespawnDisposition);
             GameplayEventBus.Instance?.Unsubscribe<RespawnCancelledEvent>(OnRespawnCancelled);
+            StopStatusTimeout();
         }
 
-        private void OnDestroy() => UnregisterCurrent();
-
-        // ── Helpers ───────────────────────────────────────────────────────────
+        private void OnDestroy()
+        {
+            UnregisterCurrent();
+        }
 
         private void SetupButtons()
         {
             if (_spectateButton != null)
                 _spectateButton.onClick.AddListener(OnSpectateClicked);
-
             if (_respawnButton != null)
                 _respawnButton.onClick.AddListener(OnRespawnClicked);
         }
@@ -173,151 +131,191 @@ namespace NightHunt.UI
         private void UnregisterCurrent()
         {
             if (_lifecycle != null)
-            {
                 _lifecycle.OnRespawned -= HandleRespawned;
-                _lifecycle = null;
-            }
-
             if (_healthSystem != null)
-            {
                 _healthSystem.OnPlayerDied -= HandlePlayerHealthDied;
-                _healthSystem = null;
-            }
 
+            _lifecycle = null;
+            _healthSystem = null;
             _localPlayer = null;
             _respawnSystem = null;
         }
 
-        // ── Event handlers ────────────────────────────────────────────────────
-
-        // Killer name comes from the server-authoritative kill RPC — always populated correctly.
         private void HandlePlayerHealthDied(string killerName)
         {
+            // Wait for the server disposition before exposing respawn or spectate actions.
             Show(killerName);
-
-            // Auto-start spectating the first alive teammate so the player
-            // immediately sees action instead of staring at a corpse.
-            // SwitchSpectatedPlayer() is a no-op when no valid targets exist.
-            var sm = SpectateManager.Instance;
-            if (sm != null && sm.HasLivingSpectateTargets())
-            {
-                PhaseTestLog.Log(
-                    PhaseTestLogCategory.Spectate,
-                    "DeathAutoSpectate",
-                    $"player={_localPlayer?.DisplayName ?? "null"}",
-                    this);
-                sm.SwitchSpectatedPlayer(next: true);
-            }
         }
 
         private void HandleRespawned()
         {
-            // Stop spectating so CameraStateManager on spectated player's prefab
-            // fires OnCurrentPlayerChanged back to localPlayer — restoring local cam.
             SpectateManager.Instance?.StopSpectating();
+            _respawnSystem?.ClearLocalDisposition();
             Hide();
         }
 
-        // RespawnSystem syncs the actual server delay via SyncVar → GameplayEventBus on clients.
-        // Restart our countdown with the authoritative value instead of the local fallback.
-        private void OnRespawnTimerReceived(RespawnTimerEvent evt)
+        private void OnRespawnDisposition(RespawnDispositionEvent evt)
         {
-            if (_deathPanel == null || !_deathPanel.activeSelf) return;
+            if (_deathPanel == null || !_deathPanel.activeSelf)
+                return;
 
-            if (_countdownRoutine != null) StopCoroutine(_countdownRoutine);
-            _countdownRoutine = StartCoroutine(RespawnCountdown(evt.DelaySeconds));
-            PhaseTestLog.Log(
-                PhaseTestLogCategory.Death,
-                "DeathScreenRespawnTimer",
-                $"player={_localPlayer?.DisplayName ?? "null"} delay={evt.DelaySeconds:F2}",
-                this);
+            ApplyDisposition(evt.Disposition, evt.DelaySeconds, evt.Reason);
         }
 
         private void OnRespawnCancelled(RespawnCancelledEvent evt)
         {
-            if (_countdownRoutine != null)
+            ApplyDisposition(RespawnDisposition.Eliminated, 0f, evt.Reason);
+        }
+
+        private bool ApplyCachedDisposition()
+        {
+            if (_deathPanel == null || !_deathPanel.activeSelf || _respawnSystem == null)
+                return false;
+
+            if (_respawnSystem.TryGetLocalDisposition(
+                    _localPlayer,
+                    out RespawnDisposition disposition,
+                    out float remainingDelay,
+                    out string reason))
             {
-                StopCoroutine(_countdownRoutine);
-                _countdownRoutine = null;
+                ApplyDisposition(disposition, remainingDelay, reason);
+                return true;
             }
 
-            string msg = evt.Reason switch
+            return false;
+        }
+
+        private void ApplyDisposition(RespawnDisposition disposition, float delay, string reason)
+        {
+            _hasRespawnDisposition = true;
+            StopStatusTimeout();
+            StopCountdown();
+            SetButtonVisible(_respawnButton, false);
+            SetButtonVisible(_spectateButton, false);
+
+            switch (disposition)
             {
-                "no_beacon"        => "A Beacon is required to respawn!",
-                "respawn_disabled" => "Respawn is locked during this phase",
-                "beacon_destroyed" => "Beacon was destroyed!",
-                _                  => "Cannot respawn"
-            };
+                case RespawnDisposition.Queued:
+                    SetButtonVisible(_respawnButton, true, false);
+                    SetButtonVisible(_spectateButton, HasSpectateTargets(), true);
+                    _countdownRoutine = StartCoroutine(RespawnCountdown(delay));
+                    break;
 
-            if (_respawnTimerText != null)
-                _respawnTimerText.text = msg;
+                case RespawnDisposition.WaitingForFinalZone:
+                    SetStatus("Waiting for final zone revival");
+                    TryAutoSpectate();
+                    break;
 
-            // Hide the respawn button entirely — only Spectate is available.
-            if (_respawnButton != null)
-                _respawnButton.gameObject.SetActive(false);
+                default:
+                    SetStatus(GetEliminatedStatus(reason));
+                    TryAutoSpectate();
+                    break;
+            }
 
-            PhaseTestLog.Warning(
+            PhaseTestLog.Log(
                 PhaseTestLogCategory.Death,
-                "DeathScreenRespawnCancelled",
-                $"player={_localPlayer?.DisplayName ?? "null"} reason={evt.Reason}",
+                "DeathScreenDisposition",
+                $"player={_localPlayer?.DisplayName ?? "null"} disposition={disposition} delay={delay:F2} reason={reason}",
                 this);
         }
 
-        // ── Coroutine ─────────────────────────────────────────────────────────
-
-        private IEnumerator RespawnCountdown(float delay = -1f)
+        private void TryAutoSpectate()
         {
-            // Use server-provided delay if available, otherwise fall back to inspector value.
-            float remaining = delay > 0f ? delay : _respawnDelay;
+            SpectateManager spectateManager = SpectateManager.Instance;
+            if (spectateManager != null && spectateManager.HasLivingSpectateTargets())
+            {
+                spectateManager.SwitchSpectatedPlayer(next: true);
+                return;
+            }
 
+            // No living teammate: remain on the eliminated screen with no actions.
+            SetButtonVisible(_spectateButton, false);
+            SetButtonVisible(_respawnButton, false);
+        }
+
+        private bool HasSpectateTargets()
+        {
+            return SpectateManager.Instance != null && SpectateManager.Instance.HasLivingSpectateTargets();
+        }
+
+        private IEnumerator RespawnCountdown(float delay)
+        {
+            float remaining = Mathf.Max(0f, delay);
             while (remaining > 0f)
             {
-                if (_respawnTimerText != null)
-                    _respawnTimerText.text = $"Respawning in {Mathf.CeilToInt(remaining)}s...";
+                SetStatus($"Respawning in {Mathf.CeilToInt(remaining)}s...");
                 remaining -= Time.deltaTime;
                 yield return null;
             }
 
-            if (_respawnTimerText != null)
-                _respawnTimerText.text = "Respawn now!";
-
-            // Re-show and enable respawn button once countdown finishes.
-            if (_respawnButton != null)
-            {
-                _respawnButton.gameObject.SetActive(true);
-                _respawnButton.interactable = true;
-            }
+            SetStatus("Respawning...");
+            _countdownRoutine = null;
         }
 
-        // ── Button callbacks ──────────────────────────────────────────────────
+        private IEnumerator RespawnStatusTimeout()
+        {
+            yield return new WaitForSeconds(1.25f);
+            _statusTimeoutRoutine = null;
+
+            if (_hasRespawnDisposition || _deathPanel == null || !_deathPanel.activeSelf)
+                yield break;
+
+            ApplyDisposition(RespawnDisposition.Eliminated, 0f, "status_timeout");
+        }
+
+        private string GetEliminatedStatus(string reason)
+        {
+            return reason switch
+            {
+                "beacon_destroyed" => "Beacon was destroyed",
+                "respawn_disabled" => "No respawn available",
+                "final_zone_respawn_disabled" => "No final zone revival",
+                _ => "No respawn available"
+            };
+        }
+
+        private void StopCountdown()
+        {
+            if (_countdownRoutine == null)
+                return;
+
+            StopCoroutine(_countdownRoutine);
+            _countdownRoutine = null;
+        }
+
+        private void StopStatusTimeout()
+        {
+            if (_statusTimeoutRoutine == null)
+                return;
+
+            StopCoroutine(_statusTimeoutRoutine);
+            _statusTimeoutRoutine = null;
+        }
+
+        private void SetStatus(string message)
+        {
+            if (_respawnTimerText != null)
+                _respawnTimerText.text = message;
+        }
+
+        private static void SetButtonVisible(Button button, bool visible, bool interactable = false)
+        {
+            if (button == null)
+                return;
+
+            button.gameObject.SetActive(visible);
+            button.interactable = visible && interactable;
+        }
 
         private void OnSpectateClicked()
         {
-            var sm = SpectateManager.Instance;
-            if (sm == null) return;
-
-            // Cycle to next living player
-            PhaseTestLog.Log(
-                PhaseTestLogCategory.Spectate,
-                "DeathScreenSpectateClicked",
-                $"player={_localPlayer?.DisplayName ?? "null"} current={sm.GetCurrentPlayer()?.DisplayName ?? "null"}",
-                this);
-            sm.SwitchSpectatedPlayer(next: true);
+            SpectateManager.Instance?.SwitchSpectatedPlayer(next: true);
         }
 
         private void OnRespawnClicked()
         {
             if (_localPlayer != null && _respawnSystem != null)
-            {
-                PhaseTestLog.Log(
-                    PhaseTestLogCategory.Death,
-                    "DeathScreenRespawnClicked",
-                    $"player={_localPlayer.DisplayName}",
-                    this);
                 _respawnSystem.RequestRespawn(_localPlayer);
-            }
-            else
-                Debug.Log("[DeathScreen] Manual respawn requested — RespawnSystem or localPlayer not resolved.");
         }
     }
 }

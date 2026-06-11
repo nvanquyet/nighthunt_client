@@ -58,7 +58,18 @@ namespace NightHunt.Gameplay.FogOfWar
         private bool _subscribedToLocalPlayerSet;
 
         public bool IsEnemyToLocal { get; private set; }
+        public bool IsVisibleToLocal { get; private set; } = true;
         public event System.Action<bool> OnEnemyStateChanged;
+        public event System.Action<bool> OnVisibleToLocalChanged;
+
+        /// <summary>
+        /// Rebuilds the renderer list controlled by the active FOW hider.
+        /// Call after runtime visuals are spawned or destroyed under this object.
+        /// </summary>
+        public void RefreshHiddenRenderers()
+        {
+            RefreshHiderRenderers();
+        }
 
         // ─────────────────────────────────────────────────────────────────────
         //  Unity Lifecycle
@@ -164,6 +175,8 @@ namespace NightHunt.Gameplay.FogOfWar
 
         private void OnDestroy()
         {
+            UnsubscribeHiderVisibility();
+
             if (_networkPlayer != null)
                 _networkPlayer.OnPublicDataChanged -= OnNetworkPlayerDataChanged;
 
@@ -317,6 +330,20 @@ namespace NightHunt.Gameplay.FogOfWar
             }
         }
 
+        private void SetVisibleToLocal(bool isVisible)
+        {
+            if (IsVisibleToLocal == isVisible)
+                return;
+
+            IsVisibleToLocal = isVisible;
+            OnVisibleToLocalChanged?.Invoke(IsVisibleToLocal);
+        }
+
+        private void HandleHiderActiveChanged(bool isActive)
+        {
+            SetVisibleToLocal(isActive);
+        }
+
         private bool TryGetLocalTeamId(out int teamId)
         {
             teamId = -1;
@@ -333,16 +360,29 @@ namespace NightHunt.Gameplay.FogOfWar
             if (_hider != null && _hider.transform != host)
                 RemoveHiderIfExists();
 
-            if (_hider != null) return;
+            if (_hider != null)
+            {
+                SubscribeHiderVisibility();
+                SetVisibleToLocal(_hider.NumObservers > 0);
+                return;
+            }
 
             _hider = host.gameObject.AddComponent<FogOfWarHider>();
             _hiderBehavior = host.gameObject.AddComponent<HiderDisableRenderers>();
+            SubscribeHiderVisibility();
+            SetVisibleToLocal(_hider.NumObservers > 0);
             RefreshHiderRenderers();
         }
 
         private void RemoveHiderIfExists()
         {
-            if (_hider == null) return;
+            if (_hider == null)
+            {
+                SetVisibleToLocal(true);
+                return;
+            }
+
+            UnsubscribeHiderVisibility();
 
             // Disable first so FogOfWarHider.OnDisable() fires synchronously and restores renderers.
             _hider.enabled = false;
@@ -355,6 +395,24 @@ namespace NightHunt.Gameplay.FogOfWar
 
             Destroy(_hider);
             _hider = null;
+            SetVisibleToLocal(true);
+        }
+
+        private void SubscribeHiderVisibility()
+        {
+            if (_hider == null)
+                return;
+
+            _hider.OnActiveChanged -= HandleHiderActiveChanged;
+            _hider.OnActiveChanged += HandleHiderActiveChanged;
+        }
+
+        private void UnsubscribeHiderVisibility()
+        {
+            if (_hider == null)
+                return;
+
+            _hider.OnActiveChanged -= HandleHiderActiveChanged;
         }
 
         private void OnModelReadyForFog(GameObject _) => RefreshHiderRenderers();

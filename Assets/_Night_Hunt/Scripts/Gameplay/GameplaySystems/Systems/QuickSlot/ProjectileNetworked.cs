@@ -625,8 +625,8 @@ namespace NightHunt.GameplaySystems.ItemUse
                         WeaponId               = _def?.ItemID ?? string.Empty,
                     };
 
-                    hs.ApplyDamageServer(damageInfo);
-                    SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Player);
+                    if (hs.TryApplyDamageServer(damageInfo))
+                        SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Player);
                 }
                 // Path B: Generic IHittable (boss, destructibles)
                 else if (hit.GetComponentInParent<IHittable>() is { } hittable)
@@ -645,7 +645,14 @@ namespace NightHunt.GameplaySystems.ItemUse
                     };
 
                     var targetKind = CombatHitFeedbackTargetKind.GenericHittable;
-                    if (hittable is NightHunt.Gameplay.Deployables.BaseDeployable deployable)
+                    if (hittable is PlayerHealthSystem playerHealth)
+                    {
+                        if (!playerHealth.TryApplyDamageServer(damageInfo))
+                            continue;
+
+                        targetKind = CombatHitFeedbackTargetKind.Player;
+                    }
+                    else if (hittable is NightHunt.Gameplay.Deployables.BaseDeployable deployable)
                     {
                         deployable.TakeDamage(damageInfo);
                         targetKind = CombatHitFeedbackTargetKind.Deployable;
@@ -695,8 +702,8 @@ namespace NightHunt.GameplaySystems.ItemUse
                     WeaponId               = _def?.ItemID ?? string.Empty,
                 };
 
-                hs.ApplyDamageServer(damageInfo);
-                SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Player);
+                if (hs.TryApplyDamageServer(damageInfo))
+                    SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Player);
             }
         }
 

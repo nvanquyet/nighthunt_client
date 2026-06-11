@@ -7,6 +7,7 @@ using NightHunt.GameplaySystems.Core.Data;
 using NightHunt.GameplaySystems.Inventory;
 using NightHunt.Gameplay.Character;
 using NightHunt.Gameplay.Character.Combat.Weapons;
+using NightHunt.Gameplay.FogOfWar;
 using NightHunt.Diagnostics;
 
 namespace NightHunt.GameplaySystems.Weapon
@@ -49,6 +50,7 @@ namespace NightHunt.GameplaySystems.Weapon
         private Transform         _pendingLeftHandIKTarget;
         private Coroutine         _spawnRetryCoroutine;
         private Coroutine         _visualFallbackCoroutine;
+        private FogTeamVisibilityBinder _fogVisibilityBinder;
         private bool              _holsterPending;
 
         // ── Local offsets cached from WeaponBase ───────────────────────────────
@@ -93,6 +95,8 @@ namespace NightHunt.GameplaySystems.Weapon
 
             if (_modelLoader != null)
                 _modelLoader.OnModelReady += OnModelReady;
+
+            _fogVisibilityBinder = ResolveFogVisibilityBinder();
         }
 
         private void OnDestroy()
@@ -240,6 +244,7 @@ namespace NightHunt.GameplaySystems.Weapon
                 _pendingWeaponBase = wb;
                 _pendingLeftHandIKTarget = wb?.LeftHandIKTarget;
                 _pendingModel.SetActive(false);
+                RefreshFogHiddenRenderers();
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.IK,
                     "WeaponModelPending",
@@ -267,6 +272,7 @@ namespace NightHunt.GameplaySystems.Weapon
             OnLeftHandIKTargetChanged?.Invoke(LeftHandIKTarget);
 
             ApplyWeaponRotation(spawnedModel);
+            RefreshFogHiddenRenderers();
 
             Debug.Log($"[WeaponModelController] Spawned '{def.DisplayName}' | parent={parent.name} | IK={LeftHandIKTarget != null}");
             PhaseTestLog.Log(
@@ -360,6 +366,7 @@ namespace NightHunt.GameplaySystems.Weapon
 
             OnWeaponModelChanged?.Invoke(_currentWeaponBase);
             OnLeftHandIKTargetChanged?.Invoke(LeftHandIKTarget);
+            RefreshFogHiddenRenderers();
 
             Debug.Log($"[WeaponModelController] Showing weapon model from {reason} | IK={LeftHandIKTarget != null}");
             PhaseTestLog.Log(
@@ -396,6 +403,8 @@ namespace NightHunt.GameplaySystems.Weapon
                 OnWeaponModelChanged?.Invoke(null);
                 OnLeftHandIKTargetChanged?.Invoke(null);
             }
+
+            RefreshFogHiddenRenderers();
         }
 
         private void DestroyPendingModel()
@@ -408,6 +417,22 @@ namespace NightHunt.GameplaySystems.Weapon
 
             _pendingWeaponBase = null;
             _pendingLeftHandIKTarget = null;
+            RefreshFogHiddenRenderers();
+        }
+
+        private FogTeamVisibilityBinder ResolveFogVisibilityBinder()
+        {
+            return ComponentResolver.Find<FogTeamVisibilityBinder>(this)
+                .OnSelf().InParent().InRootChildren()
+                .Resolve();
+        }
+
+        private void RefreshFogHiddenRenderers()
+        {
+            if (_fogVisibilityBinder == null)
+                _fogVisibilityBinder = ResolveFogVisibilityBinder();
+
+            _fogVisibilityBinder?.RefreshHiddenRenderers();
         }
 
         private void ApplyWeaponRotation()

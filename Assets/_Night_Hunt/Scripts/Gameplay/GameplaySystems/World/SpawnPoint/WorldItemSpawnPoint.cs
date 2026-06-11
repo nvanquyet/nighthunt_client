@@ -93,14 +93,14 @@ namespace NightHunt.GameplaySystems.World
             Gizmos.color = gizmoColor;
 
             // Center sphere
-            Gizmos.DrawSphere(transform.position, 0.2f);
+            //Gizmos.DrawSphere(transform.position, 0.2f);
 
             // Scatter radius (Item mode only).
-            if (spawnConfig != null && spawnConfig.SpawnType == WorldSpawnType.Item && spawnConfig.ScatterRadius > 0f)
-            {
-                Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 0.25f);
-                Gizmos.DrawWireSphere(transform.position, spawnConfig.ScatterRadius);
-            }
+            // if (spawnConfig != null && spawnConfig.SpawnType == WorldSpawnType.Item && spawnConfig.ScatterRadius > 0f)
+            // {
+            //     Gizmos.color = new Color(gizmoColor.r, gizmoColor.g, gizmoColor.b, 0.25f);
+            //     Gizmos.DrawWireSphere(transform.position, spawnConfig.ScatterRadius);
+            // }
 
             if (showLabel && spawnConfig != null)
             {

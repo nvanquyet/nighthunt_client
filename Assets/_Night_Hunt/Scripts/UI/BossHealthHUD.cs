@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using NightHunt.Gameplay.Boss;
 using NightHunt.Gameplay.Core.Events;
+using NightHunt.Gameplay.FogOfWar;
 
 namespace NightHunt.UI
 {
@@ -17,6 +18,7 @@ namespace NightHunt.UI
         [SerializeField] private float _hideAfterFullHpSeconds = 1.5f;
 
         private BossController _boss;
+        private FogTeamVisibilityBinder _bossFogBinder;
         private bool _hudAllowed = true;
         private float _nextScanTime;
         private float _lastDamagedTime = -999f;
@@ -96,6 +98,7 @@ namespace NightHunt.UI
 
             if (_boss != null)
             {
+                _bossFogBinder = _boss.GetComponent<FogTeamVisibilityBinder>();
                 _boss.OnHealthChanged += OnBossHealthChanged;
                 Refresh(_boss.CurrentHp, _boss.MaxHp);
             }
@@ -106,6 +109,7 @@ namespace NightHunt.UI
             if (_boss != null)
                 _boss.OnHealthChanged -= OnBossHealthChanged;
             _boss = null;
+            _bossFogBinder = null;
         }
 
         private void OnBossHealthChanged(float current, float max)
@@ -117,6 +121,15 @@ namespace NightHunt.UI
         private void Refresh(float current, float max)
         {
             if (_boss == null || _boss.IsDead || max <= 0f)
+            {
+                SetVisible(false);
+                return;
+            }
+
+            if (_bossFogBinder == null)
+                _bossFogBinder = _boss.GetComponent<FogTeamVisibilityBinder>();
+
+            if (_bossFogBinder != null && !_bossFogBinder.IsVisibleToLocal)
             {
                 SetVisible(false);
                 return;

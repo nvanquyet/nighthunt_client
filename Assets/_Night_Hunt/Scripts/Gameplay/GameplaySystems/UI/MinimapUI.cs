@@ -10,15 +10,17 @@ using NightHunt.Gameplay.Input.Core;
 namespace NightHunt.GameplaySystems.UI
 {
     /// <summary>
-    /// Minimap display — assigns the RenderTexture produced by MinimapCameraController
-    /// to the HUD RawImage. All world-space marker and camera logic has been moved to:
-    ///   • MinimapMarkerController  — per-player dot on "Minimap" layer
-    ///   • MinimapCameraController  — top-down follow camera on local player prefab
+    /// Minimap display and full-map overlay controller.
+    /// MinimapCameraController owns the follow camera; this component owns UI texture
+    /// assignment, full-map visibility, and map input context lifetime.
     /// </summary>
-    public class MinimapUI : MonoBehaviour, IPointerClickHandler
+    public class MinimapUI : MonoBehaviour
     {
-        [SerializeField] private RawImage      _minimapRawImage;
+        [SerializeField] private RawImage _minimapRawImage;
         [SerializeField] private RenderTexture _renderTexture;
+
+        [Tooltip("Button used to open/toggle the large tactical map from the minimap HUD.")]
+        [SerializeField] private Button _openMapButton;
 
         [Header("Full Map")]
         [Tooltip("Root panel for the large tactical map. Hidden by default.")]
@@ -33,34 +35,40 @@ namespace NightHunt.GameplaySystems.UI
         [Tooltip("Optional close button on the full-map overlay panel.")]
         [SerializeField] private Button _closeMapButton;
 
+        [Tooltip("Optional backdrop button on the full-map overlay. Clicking outside the map closes it.")]
+        [SerializeField] private Button _backdropCloseButton;
+
+        [Tooltip("Optional full-map camera. If unset, MinimapUI finds a camera named FullMapCamera.")]
+        [SerializeField] private Camera _fullMapCamera;
+
         private NetworkPlayer _localPlayer;
         private bool _fullMapVisible;
         private bool _pushedInputContext;
         private NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler _uiInput;
+        private Camera _resolvedFullMapCamera;
 
         public NetworkPlayer LocalPlayer => _localPlayer;
 
         private void Awake()
         {
+            EnsureButtonReferences();
             ApplyTextures();
+            SetFullMapCameraEnabled(false);
             SetFullMapVisible(false);
         }
 
         private void Start()
         {
+            EnsureButtonReferences();
             ApplyTextures();
-            // Subscribe to UI input
+            BindButtons();
+
             _uiInput = FindFirstObjectByType<NightHunt.Gameplay.Input.Handlers.UI.UIInputHandler>(FindObjectsInactive.Include);
             if (_uiInput != null)
             {
                 _uiInput.OnToggleMapPressed += ToggleFullMap;
-                _uiInput.OnCancelPressed    += HandleCancelPressed;
+                _uiInput.OnCancelPressed += HandleCancelPressed;
             }
-            // Wire close button if assigned in Inspector, or auto-discover one.
-            if (_closeMapButton != null)
-                _closeMapButton.onClick.AddListener(() => SetFullMapVisible(false));
-            else
-                EnsureCloseButton();
         }
 
         /// <summary>
@@ -69,47 +77,81 @@ namespace NightHunt.GameplaySystems.UI
         /// </summary>
         public void CloseFullMap() => SetFullMapVisible(false);
 
-        /// <summary>
-        /// Attempt to wire a close handler once <see cref="_fullMapRoot"/> is available.
-        /// Priority order:
-        ///   1. <see cref="_closeMapButton"/> already set — skip.
-        ///   2. Find a Button whose name contains "close", "exit", or "back" inside <see cref="_fullMapRoot"/>.
-        ///   3. Fall back: add a Button (Transition.None) to <see cref="_fullMapRoot"/> itself so
-        ///      tapping anywhere on the background closes the map.
-        /// </summary>
-        private void EnsureCloseButton()
+        private void EnsureButtonReferences()
         {
-            if (_closeMapButton != null) return;
-            if (_fullMapRoot == null) return;
+            if (_openMapButton == null)
+                _openMapButton = GetComponent<Button>();
 
-            // 1. Look for a named close button inside the overlay.
+            if (_fullMapRoot == null)
+                return;
+
             foreach (var btn in _fullMapRoot.GetComponentsInChildren<Button>(includeInactive: true))
             {
-                var n = btn.name.ToLowerInvariant();
-                if (n.Contains("close") || n.Contains("exit") || n.Contains("back"))
+                string n = btn.name.ToLowerInvariant();
+
+                if (_closeMapButton == null && (n.Contains("close") || n.Contains("exit")))
                 {
                     _closeMapButton = btn;
-                    _closeMapButton.onClick.AddListener(() => SetFullMapVisible(false));
                     Debug.Log($"[Minimap] Auto-wired close button: '{btn.name}'");
-                    return;
+                }
+
+                if (_backdropCloseButton == null && (n.Contains("background") || n.Contains("backdrop")))
+                {
+                    _backdropCloseButton = btn;
+                    Debug.Log($"[Minimap] Auto-wired backdrop close button: '{btn.name}'");
                 }
             }
 
-            // 2. No named button found — add a transparent background button so a tap
-            //    anywhere on the overlay (not covered by a child element) closes the map.
-            if (!_fullMapRoot.TryGetComponent<Button>(out var bg))
-                bg = _fullMapRoot.AddComponent<Button>();
+            if (_closeMapButton != null || _backdropCloseButton != null)
+                return;
 
-            bg.transition = Selectable.Transition.None;
-            bg.onClick.AddListener(() => SetFullMapVisible(false));
-            _closeMapButton = bg;
-            Debug.Log("[Minimap] Auto-added background close button to full-map root.");
+            if (!_fullMapRoot.TryGetComponent<Button>(out var backdrop))
+                backdrop = _fullMapRoot.AddComponent<Button>();
+
+            backdrop.transition = Selectable.Transition.None;
+            _backdropCloseButton = backdrop;
+            Debug.Log("[Minimap] Auto-added fallback backdrop close button to full-map root.");
+        }
+
+        private void BindButtons()
+        {
+            if (_openMapButton != null)
+            {
+                _openMapButton.onClick.RemoveListener(ToggleFullMap);
+                _openMapButton.onClick.AddListener(ToggleFullMap);
+            }
+
+            if (_closeMapButton != null)
+            {
+                _closeMapButton.onClick.RemoveListener(CloseFullMap);
+                _closeMapButton.onClick.AddListener(CloseFullMap);
+            }
+
+            if (_backdropCloseButton != null && _backdropCloseButton != _closeMapButton)
+            {
+                _backdropCloseButton.onClick.RemoveListener(CloseFullMap);
+                _backdropCloseButton.onClick.AddListener(CloseFullMap);
+            }
+        }
+
+        private void UnbindButtons()
+        {
+            if (_openMapButton != null)
+                _openMapButton.onClick.RemoveListener(ToggleFullMap);
+
+            if (_closeMapButton != null)
+                _closeMapButton.onClick.RemoveListener(CloseFullMap);
+
+            if (_backdropCloseButton != null && _backdropCloseButton != _closeMapButton)
+                _backdropCloseButton.onClick.RemoveListener(CloseFullMap);
         }
 
         private void OnDestroy()
         {
             if (_fullMapVisible || _pushedInputContext)
                 SetFullMapVisible(false);
+
+            UnbindButtons();
 
             if (_uiInput != null)
             {
@@ -147,11 +189,6 @@ namespace NightHunt.GameplaySystems.UI
             }
         }
 
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            ToggleFullMap();
-        }
-
         /// <summary>
         /// Store the local player for future marker/vision filtering. Target tracking is
         /// still handled by MinimapCameraController via SpectateManager.
@@ -174,6 +211,7 @@ namespace NightHunt.GameplaySystems.UI
             {
                 if (_fullMapRoot != null)
                     _fullMapRoot.SetActive(visible);
+                SetFullMapCameraEnabled(visible);
                 return;
             }
 
@@ -185,8 +223,11 @@ namespace NightHunt.GameplaySystems.UI
             if (visible)
             {
                 EnsureFullMapOverlay();
+                EnsureButtonReferences();
+                BindButtons();
                 ApplyTextures();
-                EnsureCloseButton();
+                SetFullMapCameraEnabled(true);
+
                 if (inputLayers != null)
                 {
                     if (!_pushedInputContext && inputLayers.CurrentState != InputState.MapOpen)
@@ -208,6 +249,7 @@ namespace NightHunt.GameplaySystems.UI
             else
             {
                 ReleaseMapInputContext(inputLayers, beforeState, beforeLayers, "close");
+                SetFullMapCameraEnabled(false);
             }
 
             if (_fullMapRoot != null)
@@ -257,8 +299,6 @@ namespace NightHunt.GameplaySystems.UI
 
             _pushedInputContext = false;
 
-            // Clear EventSystem selection so WASD keyboard input is not consumed by
-            // UI Navigation on the previously-focused minimap toggle / close button.
             if (EventSystem.current != null)
                 EventSystem.current.SetSelectedGameObject(null);
 
@@ -268,10 +308,17 @@ namespace NightHunt.GameplaySystems.UI
         private void ApplyTextures()
         {
             if (_minimapRawImage != null && _renderTexture != null)
+            {
                 _minimapRawImage.texture = _renderTexture;
+                _minimapRawImage.color = Color.white;
+            }
 
             if (_fullMapRawImage != null)
+            {
                 _fullMapRawImage.texture = ResolveFullMapTexture();
+                _fullMapRawImage.color = Color.white;
+                _fullMapRawImage.raycastTarget = true;
+            }
         }
 
         private Texture ResolveFullMapTexture()
@@ -279,18 +326,46 @@ namespace NightHunt.GameplaySystems.UI
             if (_fullMapRenderTexture != null)
                 return _fullMapRenderTexture;
 
-            var cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            for (int i = 0; i < cameras.Length; i++)
+            var fullMapCamera = ResolveFullMapCamera();
+            if (fullMapCamera != null && fullMapCamera.targetTexture != null)
             {
-                var camera = cameras[i];
-                if (camera == null || camera.name != "FullMapCamera" || camera.targetTexture == null)
-                    continue;
-
-                _fullMapRenderTexture = camera.targetTexture;
+                _fullMapRenderTexture = fullMapCamera.targetTexture;
                 return _fullMapRenderTexture;
             }
 
             return _renderTexture;
+        }
+
+        private Camera ResolveFullMapCamera()
+        {
+            if (_resolvedFullMapCamera != null)
+                return _resolvedFullMapCamera;
+
+            if (_fullMapCamera != null)
+            {
+                _resolvedFullMapCamera = _fullMapCamera;
+                return _resolvedFullMapCamera;
+            }
+
+            var cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < cameras.Length; i++)
+            {
+                var camera = cameras[i];
+                if (camera == null || camera.name != "FullMapCamera")
+                    continue;
+
+                _resolvedFullMapCamera = camera;
+                return _resolvedFullMapCamera;
+            }
+
+            return null;
+        }
+
+        private void SetFullMapCameraEnabled(bool enabled)
+        {
+            var fullMapCamera = ResolveFullMapCamera();
+            if (fullMapCamera != null)
+                fullMapCamera.enabled = enabled;
         }
 
         private void EnsureFullMapOverlay()
@@ -330,9 +405,8 @@ namespace NightHunt.GameplaySystems.UI
 
                 _fullMapRawImage = rawImageObject.GetComponent<RawImage>();
                 _fullMapRawImage.color = Color.white;
-                _fullMapRawImage.raycastTarget = false;
+                _fullMapRawImage.raycastTarget = true;
             }
         }
     }
 }
-

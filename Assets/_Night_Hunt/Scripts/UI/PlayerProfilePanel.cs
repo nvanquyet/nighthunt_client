@@ -42,6 +42,7 @@ namespace NightHunt.UI
         private IBackendClient _backendClient;
         private long           _currentUserId;
         private bool           _loading;
+        private int            _loadVersion;
 
         private void Awake()
         {
@@ -70,23 +71,26 @@ namespace NightHunt.UI
         {
             EnsureRuntimeWiring();
             _currentUserId = userId;
+            _loadVersion++;
             SetRootActive(true);
             UpdateAccountActionVisibility();
             if (root != null) root.transform.SetAsLastSibling();
             else transform.SetAsLastSibling();
             SetPlaceholder(fallbackUsername ?? $"Player {userId}");
-            _ = LoadProfileAsync(userId);
+            _ = LoadProfileAsync(userId, _loadVersion);
         }
 
         public void Hide()
         {
+            _loadVersion++;
+            _loading = false;
+            SetLoading(false);
             SetRootActive(false);
             _currentUserId = 0;
         }
 
-        private async Task LoadProfileAsync(long userId)
+        private async Task LoadProfileAsync(long userId, int requestVersion)
         {
-            if (_loading) return;
             _loading = true;
             SetLoading(true);
             try
@@ -95,11 +99,19 @@ namespace NightHunt.UI
                 if (_backendClient == null) return;
                 string endpoint = string.Format(Constants.API_PROFILE_PUBLIC, userId);
                 var result = await _backendClient.GetAsync<ProfileResponse>(endpoint);
-                if (_currentUserId != userId) return;
+                if (requestVersion != _loadVersion || _currentUserId != userId) return;
                 if (result.Success && result.Data != null) PopulateProfile(result.Data);
+                else Debug.LogWarning($"[PlayerProfilePanel] Failed to load public profile userId={userId} endpoint={endpoint} success={result.Success} message={result.Message ?? "null"}");
             }
             catch (Exception ex) { Debug.LogException(ex); }
-            finally { _loading = false; SetLoading(false); }
+            finally
+            {
+                if (requestVersion == _loadVersion)
+                {
+                    _loading = false;
+                    SetLoading(false);
+                }
+            }
         }
 
         private void SetPlaceholder(string username)

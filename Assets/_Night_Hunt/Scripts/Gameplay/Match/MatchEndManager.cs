@@ -429,16 +429,15 @@ namespace NightHunt.Gameplay.Match
                 $"team={teamId} finalZone={isInFinalZone} alive={aliveCount} beacons={beaconCount} pendingRespawn={hasPendingRespawn} allDead={allDead} noBeacons={noBeacons}",
                 this);
 
-            if (allDead)
+            if (!allDead || hasPendingRespawn)
             {
-                TriggerElimination(teamId);
                 return;
             }
 
             if (isInFinalZone)
             {
-                // Final zone: respawn may still be possible → only eliminate when respawn queue empty too
-                if (allDead && noBeacons && !hasPendingRespawn)
+                // Final zone: only the one-time queued revival prevents elimination.
+                if (allDead)
                     TriggerElimination(teamId);
             }
             else

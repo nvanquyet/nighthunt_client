@@ -33,6 +33,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
         [Tooltip("Scales the pinch delta. Increase for faster zoom; negative to invert.")]
         [SerializeField] private float _zoomSpeedMultiplier = 0.05f;
 
+        [Tooltip("Enable two-finger pinch zoom. Leave off when zoom should only come from the mobile slider.")]
+        [SerializeField] private bool _enablePinchZoom = false;
+
         private CameraInputHandler _handler;
         private float _previousPinchDistance;
 
@@ -42,7 +45,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Camera
 
         private void Update()
         {
-            if (_handler == null) return;
+            if (_handler == null || !_enablePinchZoom) return;
             if (UnityEngine.Input.touchCount != 2) { _previousPinchDistance = 0f; return; }
 
             Touch t0 = UnityEngine.Input.GetTouch(0);

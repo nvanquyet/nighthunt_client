@@ -144,13 +144,12 @@ namespace NightHunt.Networking
             // GameWebSocketService broadcasts ds_ready once. If the previous scene's
             // NetworkGameManager was destroyed before receiving it (or it arrived during
             // scene transition), _dsReady stays false even though DS is up.
-            // Fallback: if RoomState already has DsIp set (from match_ready or ds_ready
-            // handled by GameWebSocketService directly), treat DS as ready.
+            // Recover only if RoomState was marked ready by the real ds_ready path.
             if (!_dsReady
                 && RoomState.Instance?.CurrentGameMode == GameMode.Ranked_DS
-                && !string.IsNullOrEmpty(RoomState.Instance?.DsIp))
+                && RoomState.Instance.DedicatedServerReady)
             {
-                Debug.Log("[NetworkGameManager] RoomState has DsIp set — assuming ds_ready already received, setting _dsReady = true.");
+                Debug.Log($"[NH_CONN][GATE] Start: recovered ds_ready from RoomState; DS={RoomState.Instance.DsIp}:{RoomState.Instance.DsPort}.");
                 _dsReady = true;
             }
 
@@ -525,10 +524,15 @@ namespace NightHunt.Networking
                     Debug.Log("[NH_CONN][GATE] TryConnectIfReady waiting for map scene to load mode=Ranked_DS.");
                     return;
                 }
+                if (!_dsReady && room.DedicatedServerReady)
+                {
+                    _dsReady = true;
+                    Debug.Log($"[NH_CONN][GATE] TryConnectIfReady: recovered ds_ready from RoomState; DS={room.DsIp}:{room.DsPort}.");
+                }
                 if (!_dsReady)
                 {
                     Debug.Log($"[NH_CONN][GATE] TryConnectIfReady waiting for ds_ready WS event " +
-                              $"(DsIp={room.DsIp} DsPort={room.DsPort}). " +
+                              $"(DsIp={room.DsIp} DsPort={room.DsPort} roomReady={room.DedicatedServerReady}). " +
                               "DS may still be booting — this is expected if DS was just allocated.");
                     return;
                 }
@@ -741,6 +745,12 @@ namespace NightHunt.Networking
 
         private void AutoConnectDS(RoomState room)
         {
+            if (!_dsReady && !room.DedicatedServerReady)
+            {
+                Debug.LogError("[NetworkGameManager] Ranked_DS connect blocked: ds_ready has not been received yet.");
+                return;
+            }
+
             if (string.IsNullOrEmpty(room.DsIp) || room.DsPort == 0)
             {
                 Debug.LogError("[NetworkGameManager] Ranked_DS mode but DsIp/DsPort not set in RoomState!");

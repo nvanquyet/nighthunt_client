@@ -16,6 +16,7 @@ using NightHunt.GameplaySystems.Weapon;
 using NightHunt.Core;
 using NightHunt.Utilities;
 using NightHunt.Gameplay.Beacon;
+using NightHunt.Gameplay.FogOfWar;
 using NightHunt.Networking;
 using NightHunt.Networking.Player;
 using NightHunt.Diagnostics;
@@ -63,6 +64,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         private WeaponSlotType? _previousWeaponSlot;
         private Coroutine _useCoroutine;
         private GameObject _itemInHandModel;   // throwable model instantiated on WeaponR bone
+        private FogTeamVisibilityBinder _fogVisibilityBinder;
         // Last confirmed throw target set in ExecuteThrow so DetachItemFromHand
         // can toss the hand model in the right direction without touching any client-only statics.
         private Vector3 _pendingThrowTarget;
@@ -155,6 +157,12 @@ namespace NightHunt.GameplaySystems.ItemUse
             _deployableHandler = ComponentResolver.Find<IDeployableHandler>(this)
                 .OnSelf()
                 .InChildren()
+                .InParent()
+                .InRootChildren()
+                .Resolve();
+
+            _fogVisibilityBinder = ComponentResolver.Find<FogTeamVisibilityBinder>(this)
+                .OnSelf()
                 .InParent()
                 .InRootChildren()
                 .Resolve();
@@ -1004,6 +1012,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             PrepareHeldItemModel(_itemInHandModel);
             _itemInHandModel.transform.localPosition = Vector3.zero;
             _itemInHandModel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            RefreshFogHiddenRenderers();
             PhaseTestLog.Log(
                 PhaseTestLogCategory.IK,
                 "HeldItemSpawned",
@@ -1091,6 +1100,7 @@ namespace NightHunt.GameplaySystems.ItemUse
             {
                 Destroy(_itemInHandModel);
                 _itemInHandModel = null;
+                RefreshFogHiddenRenderers();
             }
         }
 
@@ -1124,6 +1134,21 @@ namespace NightHunt.GameplaySystems.ItemUse
 
             Destroy(_itemInHandModel, 1.5f);
             _itemInHandModel = null;
+            RefreshFogHiddenRenderers();
+        }
+
+        private void RefreshFogHiddenRenderers()
+        {
+            if (_fogVisibilityBinder == null)
+            {
+                _fogVisibilityBinder = ComponentResolver.Find<FogTeamVisibilityBinder>(this)
+                    .OnSelf()
+                    .InParent()
+                    .InRootChildren()
+                    .Resolve();
+            }
+
+            _fogVisibilityBinder?.RefreshHiddenRenderers();
         }
 
         #endregion

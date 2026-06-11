@@ -195,6 +195,7 @@ namespace NightHunt.UI
         private bool _pendingIsPublic = true;
         private bool _pendingIsLocked = false;
         private bool _pendingPasswordChanged = false;
+        private bool _hasLocalPasswordValue = false;
         private string _pendingPassword = string.Empty;
         private bool _settingsDirty = false;
         private bool _updatingPrivacyControls = false;
@@ -554,8 +555,7 @@ namespace NightHunt.UI
         private void ShowState(UIState state)
         {
             NLog($"ShowState({state})");
-            // Settings are also used to configure public/locked/password before room creation.
-            inRoomPanel?.SetActive(true);
+            inRoomPanel?.SetActive(state == UIState.InRoom);
             SetTeamPanelsVisible(state == UIState.InRoom);
 
             if (state == UIState.JoinCreate)
@@ -1346,6 +1346,7 @@ namespace NightHunt.UI
             _pendingIsLocked = false;
             _pendingPassword = string.Empty;
             _pendingPasswordChanged = false;
+            _hasLocalPasswordValue = false;
             SetSettingsDirty(false);
             SyncPrivacyControls(null);
 
@@ -1442,6 +1443,7 @@ namespace NightHunt.UI
             {
                 _pendingPassword = string.Empty;
                 _pendingPasswordChanged = true;
+                _hasLocalPasswordValue = false;
             }
             SyncPrivacyControls(_roomState?.CurrentRoom);
             SetSettingsDirty(true);
@@ -1458,6 +1460,7 @@ namespace NightHunt.UI
 
             _pendingPassword = value ?? string.Empty;
             _pendingPasswordChanged = true;
+            _hasLocalPasswordValue = !string.IsNullOrEmpty(_pendingPassword);
             if (_pendingIsLocked)
                 SetSettingsDirty(true);
         }
@@ -1480,6 +1483,7 @@ namespace NightHunt.UI
             _pendingIsLocked = room.isLocked;
             _pendingPassword = string.Empty;
             _pendingPasswordChanged = false;
+            _hasLocalPasswordValue = false;
             BuildMapList(_pendingMode, _pendingMapId);
             SyncPrivacyControls(room);
             SetSettingsDirty(false);
@@ -1548,7 +1552,16 @@ namespace NightHunt.UI
 
             if (success)
             {
-                _pendingPassword = string.Empty;
+                if (!_pendingIsLocked || passwordPayload == string.Empty)
+                {
+                    _pendingPassword = string.Empty;
+                    _hasLocalPasswordValue = false;
+                }
+                else if (!string.IsNullOrEmpty(passwordPayload))
+                {
+                    _hasLocalPasswordValue = true;
+                }
+
                 _pendingPasswordChanged = false;
                 SetSettingsDirty(false);
                 RefreshRoomDisplay();
@@ -1580,7 +1593,7 @@ namespace NightHunt.UI
             {
                 passwordInput.gameObject.SetActive(_pendingIsLocked);
                 passwordInput.interactable = editable && _pendingIsLocked;
-                if (!_pendingPasswordChanged)
+                if (!_pendingPasswordChanged && !_hasLocalPasswordValue)
                     passwordInput.text = string.Empty;
                 else if (passwordInput.text != _pendingPassword)
                     passwordInput.text = _pendingPassword;
@@ -1986,7 +1999,11 @@ namespace NightHunt.UI
             {
                 _pendingIsPublic = room.isPublic;
                 _pendingIsLocked = room.isLocked;
-                _pendingPassword = string.Empty;
+                if (!_pendingIsLocked || !_hasLocalPasswordValue)
+                {
+                    _pendingPassword = string.Empty;
+                    _hasLocalPasswordValue = false;
+                }
                 _pendingPasswordChanged = false;
             }
             SyncPrivacyControls(room);
@@ -2767,8 +2784,7 @@ namespace NightHunt.UI
 
         private Transform GetSettingsParent()
         {
-            // Privacy controls are needed before creating a room and while editing one.
-            // The custom-mode route root stays active in both states; inRoomPanel does not.
+            // Runtime fallback controls must stay reachable even when the scene detail panel is hidden.
             return joinCreatePanel != null
                 ? joinCreatePanel.transform
                 : (inRoomPanel != null ? inRoomPanel.transform : transform);

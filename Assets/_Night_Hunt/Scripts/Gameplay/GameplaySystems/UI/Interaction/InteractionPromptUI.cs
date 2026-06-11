@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using TMPro;
 using NightHunt.GameplaySystems.Core.Interfaces;
 using NightHunt.GameplaySystems.Interaction;
@@ -22,8 +23,10 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         [SerializeField] private GameObject _promptPanel;
 
         [Header("Text")]
+        [SerializeField] private TextMeshProUGUI _actionLabelText;
         [SerializeField] private TextMeshProUGUI _keyText;
-        [SerializeField] private TextMeshProUGUI _actionText;
+        [FormerlySerializedAs("_actionText")]
+        [SerializeField] private TextMeshProUGUI _descriptionText;
 
         [Header("Mobile")]
         [SerializeField] private MobileHUDPanel _mobileHUDPanel;
@@ -68,6 +71,7 @@ namespace NightHunt.GameplaySystems.UI.Interaction
         private void Awake()
         {
             ResolveMobileHUDPanel();
+            ResolvePromptTextReferences();
             Hide();
         }
 
@@ -305,22 +309,30 @@ namespace NightHunt.GameplaySystems.UI.Interaction
 
         private void ShowForTarget(IInteractable target)
         {
+            ResolvePromptTextReferences();
+
             if (_promptPanel != null)
                 _promptPanel.SetActive(true);
 
             bool isHold = target is IHoldInteractable h && h.HoldDuration > 0f;
             bool isPickup = target is IPickupable;
+            PromptParts prompt = BuildPromptParts(target, isHold, isPickup);
+
+            bool hasActionLabel = _actionLabelText != null;
+
+            if (_actionLabelText != null)
+                _actionLabelText.text = prompt.ActionLabel;
 
             if (_keyText != null)
-                _keyText.text = isPickup ? "[F]" : isHold ? "[Hold E]" : "[E]";
+                _keyText.text = prompt.Key;
 
-            if (_actionText != null)
-                _actionText.text = StripLeadingKeyHint(SafeInteractLabel(target, isPickup ? "Pick up" : "Interact"));
+            if (_descriptionText != null)
+                _descriptionText.text = hasActionLabel ? prompt.Description : prompt.DescriptionWithInlineAction;
 
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Interaction,
                 "PromptShow",
-                $"target={DescribeTarget(target)} key={(_keyText != null ? _keyText.text : "null")} label={(_actionText != null ? _actionText.text : "null")} hold={isHold} pickup={isPickup}",
+                $"target={DescribeTarget(target)} action={(_actionLabelText != null ? _actionLabelText.text : "null")} key={(_keyText != null ? _keyText.text : "null")} description={(_descriptionText != null ? _descriptionText.text : "null")} hold={isHold} pickup={isPickup}",
                 this);
         }
 
@@ -373,6 +385,67 @@ namespace NightHunt.GameplaySystems.UI.Interaction
 
             if (_mobileHUDPanel == null)
                 _mobileHUDPanel = FindFirstObjectByType<MobileHUDPanel>(FindObjectsInactive.Include);
+        }
+
+        private void ResolvePromptTextReferences()
+        {
+            if (_promptPanel == null)
+                return;
+
+            var texts = _promptPanel.GetComponentsInChildren<TextMeshProUGUI>(true);
+
+            if (_actionLabelText == null)
+                _actionLabelText = FindPromptText(texts, _keyText, _descriptionText, "Label_Press", "Lbl_Press", "ActionLabel", "Action_Label", "ActionType", "Action_Type");
+
+            if (_actionLabelText == null)
+                _actionLabelText = FindPromptTextByValue(texts, _keyText, _descriptionText, "Press", "Hold", "Click");
+
+            if (_descriptionText == null)
+                _descriptionText = FindPromptText(texts, _keyText, _actionLabelText, "Label_Action", "Lbl_Action", "ActionText", "Description", "Label_Description", "Lbl_Description");
+        }
+
+        private static TextMeshProUGUI FindPromptText(TextMeshProUGUI[] texts, TextMeshProUGUI excludeA, TextMeshProUGUI excludeB, params string[] names)
+        {
+            if (texts == null)
+                return null;
+
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TextMeshProUGUI text = texts[i];
+                if (text == null || text == excludeA || text == excludeB)
+                    continue;
+
+                string objectName = text.gameObject.name;
+                for (int j = 0; j < names.Length; j++)
+                {
+                    if (string.Equals(objectName, names[j], System.StringComparison.OrdinalIgnoreCase))
+                        return text;
+                }
+            }
+
+            return null;
+        }
+
+        private static TextMeshProUGUI FindPromptTextByValue(TextMeshProUGUI[] texts, TextMeshProUGUI excludeA, TextMeshProUGUI excludeB, params string[] values)
+        {
+            if (texts == null)
+                return null;
+
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TextMeshProUGUI text = texts[i];
+                if (text == null || text == excludeA || text == excludeB)
+                    continue;
+
+                string current = text.text?.Trim();
+                for (int j = 0; j < values.Length; j++)
+                {
+                    if (string.Equals(current, values[j], System.StringComparison.OrdinalIgnoreCase))
+                        return text;
+                }
+            }
+
+            return null;
         }
 
         private void HandlePlatformChanged(PlatformInputDetector.InputPlatform _)
@@ -512,6 +585,131 @@ namespace NightHunt.GameplaySystems.UI.Interaction
             return end >= 0 && end + 1 < trimmed.Length
                 ? trimmed.Substring(end + 1).TrimStart()
                 : label;
+        }
+
+        private static PromptParts BuildPromptParts(IInteractable target, bool isHold, bool isPickup)
+        {
+            string fallbackDescription = isPickup ? "Pick up" : "Interact";
+            string label = SafeInteractLabel(target, fallbackDescription);
+            string description = StripLeadingKeyHint(label);
+            string actionLabel = isHold ? "Hold" : "Press";
+            string key = isPickup ? "F" : "E";
+
+            if (TryReadLeadingKeyHint(label, out string hint))
+                ApplyKeyHint(hint, ref actionLabel, ref key);
+
+            if (isHold)
+                actionLabel = "Hold";
+
+            if (isPickup)
+                key = "F";
+
+            if (string.IsNullOrWhiteSpace(description))
+                description = fallbackDescription;
+
+            return new PromptParts(actionLabel, key, description.Trim());
+        }
+
+        private static bool TryReadLeadingKeyHint(string label, out string hint)
+        {
+            hint = null;
+            if (string.IsNullOrWhiteSpace(label))
+                return false;
+
+            string trimmed = label.TrimStart();
+            if (!trimmed.StartsWith("["))
+                return false;
+
+            int end = trimmed.IndexOf(']');
+            if (end <= 1)
+                return false;
+
+            hint = trimmed.Substring(1, end - 1).Trim();
+            return !string.IsNullOrWhiteSpace(hint);
+        }
+
+        private static void ApplyKeyHint(string hint, ref string actionLabel, ref string key)
+        {
+            if (string.IsNullOrWhiteSpace(hint))
+                return;
+
+            string trimmed = hint.Trim();
+            if (TryConsumeActionPrefix(trimmed, "Hold", out string holdKey))
+            {
+                actionLabel = "Hold";
+                string parsedKey = NormalizeKeyText(holdKey);
+                if (!string.IsNullOrWhiteSpace(parsedKey))
+                    key = parsedKey;
+                return;
+            }
+
+            if (TryConsumeActionPrefix(trimmed, "Press", out string pressKey))
+            {
+                actionLabel = "Press";
+                string parsedKey = NormalizeKeyText(pressKey);
+                if (!string.IsNullOrWhiteSpace(parsedKey))
+                    key = parsedKey;
+                return;
+            }
+
+            if (TryConsumeActionPrefix(trimmed, "Click", out string clickKey))
+            {
+                actionLabel = "Click";
+                string parsedKey = NormalizeKeyText(clickKey);
+                if (!string.IsNullOrWhiteSpace(parsedKey))
+                    key = parsedKey;
+                return;
+            }
+
+            key = NormalizeKeyText(trimmed);
+        }
+
+        private static bool TryConsumeActionPrefix(string value, string prefix, out string key)
+        {
+            key = null;
+            if (!value.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (value.Length == prefix.Length)
+            {
+                key = string.Empty;
+                return true;
+            }
+
+            if (!char.IsWhiteSpace(value[prefix.Length]))
+                return false;
+
+            key = value.Substring(prefix.Length).Trim();
+            return true;
+        }
+
+        private static string NormalizeKeyText(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return key;
+
+            string trimmed = key.Trim();
+            if (trimmed.Length >= 2 && trimmed[0] == '[' && trimmed[trimmed.Length - 1] == ']')
+                trimmed = trimmed.Substring(1, trimmed.Length - 2).Trim();
+
+            return trimmed;
+        }
+
+        private readonly struct PromptParts
+        {
+            public PromptParts(string actionLabel, string key, string description)
+            {
+                ActionLabel = actionLabel;
+                Key = key;
+                Description = description;
+            }
+
+            public string ActionLabel { get; }
+            public string Key { get; }
+            public string Description { get; }
+            public string DescriptionWithInlineAction => string.Equals(ActionLabel, "Press", System.StringComparison.OrdinalIgnoreCase)
+                ? Description
+                : $"{ActionLabel} {Description}".Trim();
         }
 
         private readonly struct TargetContext

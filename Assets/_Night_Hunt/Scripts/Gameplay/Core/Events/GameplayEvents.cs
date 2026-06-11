@@ -219,6 +219,22 @@ namespace NightHunt.Gameplay.Core.Events
         public string Reason;
     }
 
+    public enum RespawnDisposition
+    {
+        Queued,
+        WaitingForFinalZone,
+        Eliminated
+    }
+
+    /// <summary>Server-authoritative respawn state for the owning dead player.</summary>
+    public struct RespawnDispositionEvent : IGameplayEvent
+    {
+        public float Timestamp => Time.time;
+        public RespawnDisposition Disposition;
+        public float DelaySeconds;
+        public string Reason;
+    }
+
     /// <summary>
     /// Fired (server + all clients via eventual sync) when an objective is fully captured.
     /// KillFeedUI subscribes to show "[Team 0] captured Radar Station".

@@ -18,4 +18,7 @@ MonoBehaviour:
   BeaconPlacementTime: 3
   BeaconLifetime: 300
   MaxBeaconsPerTeam: 3
+  RespawnDelaySeconds: 5
+  FinalZoneReviveDelaySeconds: 3
+  ReviveAllDeadPlayersOnFinalZoneStart: 1
   SafeZoneRespawnRadius: 20

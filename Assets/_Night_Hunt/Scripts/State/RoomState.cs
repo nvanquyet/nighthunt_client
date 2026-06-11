@@ -36,6 +36,7 @@ namespace NightHunt.State
         public string DsIp { get; private set; }
         public ushort DsPort { get; private set; }
         public string DsMapId { get; private set; }
+        public bool DedicatedServerReady { get; private set; }
 
         // Match tracking
         public string CurrentMatchId { get; private set; }
@@ -169,6 +170,24 @@ namespace NightHunt.State
         }
 
         /// <summary>
+        /// Called on match_ready: stores the DS endpoint as a hint only.
+        /// The client must still wait for ds_ready before connecting.
+        /// </summary>
+        public void SetDedicatedServerHint(string ip, ushort port, string matchId, string mapId = null)
+        {
+            CurrentGameMode = GameMode.Ranked_DS;
+            CurrentMatchId  = matchId;
+            DsMapId         = mapId ?? DsMapId;
+            IsHostPlayer    = false;
+
+            if (!DedicatedServerReady)
+            {
+                DsIp   = ip;
+                DsPort = port;
+            }
+        }
+
+        /// <summary>
         /// Called on ds_ready: stores DS ip:port. Safe to connect after this.
         /// </summary>
         public void SetDedicatedServer(string ip, ushort port, string matchId, string mapId = null)
@@ -179,6 +198,7 @@ namespace NightHunt.State
             CurrentMatchId  = matchId;
             DsMapId         = mapId ?? DsMapId;
             IsHostPlayer    = false;
+            DedicatedServerReady = true;
         }
 
         /// <summary>Clear all network session data (called on match end / leave).</summary>
@@ -194,6 +214,7 @@ namespace NightHunt.State
             DsIp = null;
             DsPort = 0;
             DsMapId = null;
+            DedicatedServerReady = false;
             CurrentMatchId = null;
             MatchReadyPlayers = null;
         }

@@ -632,8 +632,9 @@ namespace NightHunt.GameplaySystems.Weapon
                 case PlayerHealthSystem healthSystem:
                     if (healthSystem.IsDead)
                         return CombatHitFeedbackTargetKind.None;
-                    healthSystem.ApplyDamageServer(info);
-                    return CombatHitFeedbackTargetKind.Player;
+                    return healthSystem.TryApplyDamageServer(info)
+                        ? CombatHitFeedbackTargetKind.Player
+                        : CombatHitFeedbackTargetKind.None;
                 case BaseDeployable deployable:
                     deployable.TakeDamage(info);
                     return CombatHitFeedbackTargetKind.Deployable;
@@ -803,8 +804,8 @@ namespace NightHunt.GameplaySystems.Weapon
                     WeaponId = config.WeaponId ?? string.Empty,
                 };
 
-                hitbox.HealthSystem.ApplyDamageServer(playerDamageInfo);
-                SendLocalHitFeedback(playerDamageInfo, CombatHitFeedbackTargetKind.Player);
+                if (hitbox.HealthSystem.TryApplyDamageServer(playerDamageInfo))
+                    SendLocalHitFeedback(playerDamageInfo, CombatHitFeedbackTargetKind.Player);
                 return;
             }
 
@@ -842,6 +843,13 @@ namespace NightHunt.GameplaySystems.Weapon
             var hittable = hit.collider.GetComponentInParent<IHittable>();
             if (hittable != null)
             {
+                if (hittable is PlayerHealthSystem healthSystem)
+                {
+                    if (healthSystem.TryApplyDamageServer(damageInfo))
+                        SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Player);
+                    return;
+                }
+
                 hittable.RequestDamage(damageInfo);
                 SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.GenericHittable);
             }

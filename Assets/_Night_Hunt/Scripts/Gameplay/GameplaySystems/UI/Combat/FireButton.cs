@@ -136,13 +136,17 @@ namespace NightHunt.GameplaySystems.UI.Combat
             StopHoldTimer();
 
             if (_joystickStarted && _joystick != null)
+                PushJoystickToCombat(eventData, "Release");
+
+            _joystickStarted = false;
+            _combatInputHandler?.SimulateFire(false);
+
+            if (_joystick != null)
             {
                 _joystick.OnPointerUp(eventData);
                 _joystick.gameObject.SetActive(false);
             }
 
-            _joystickStarted = false;
-            _combatInputHandler?.SimulateFire(false);
             _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
             _rangeIndicator?.Hide();
         }

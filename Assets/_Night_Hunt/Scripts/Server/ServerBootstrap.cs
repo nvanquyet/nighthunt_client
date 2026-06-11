@@ -439,6 +439,7 @@ namespace NightHunt.Server
                 Debug.LogError($"[DS-Boot] TIMEOUT: Scene load did not complete within {seconds}s. " +
                                "Calling NotifyGameReady anyway so clients are not blocked forever.");
                 _sceneLoadSetupStarted = true;
+                yield return FetchZoneConfig();
                 yield return NotifyGameReady();
             }
         }
@@ -488,10 +489,10 @@ namespace NightHunt.Server
             }
 #endif
 
-            yield return NotifyGameReady();
-
-            // Fetch zone config from backend and apply to SafeZoneManager
+            // Fetch zone config before ds_ready so clients cannot start on fallback/default timings.
             yield return FetchZoneConfig();
+
+            yield return NotifyGameReady();
         }
 
         /// <summary>
@@ -538,12 +539,14 @@ namespace NightHunt.Server
         {
             if (string.IsNullOrEmpty(_mapId))
             {
-                Debug.LogWarning("[DS-Boot] FetchZoneConfig: no mapId — using SafeZoneMatchConfig.Default().");
-                SafeZoneManager.Instance?.SetConfig(SafeZoneMatchConfig.ForMap(null));
+                var fallback = SafeZoneMatchConfig.ForMap(null);
+                ApplyZoneConfig(fallback, "fallback reason=no_map_id");
                 yield break;
             }
 
             string url = $"{_backendUrl}/api/maps/{_mapId}/zone-config";
+            Debug.Log($"[DS-Boot][ZONE_CONFIG] fetch mapId='{_mapId}' url='{url}'");
+
             using var req = UnityWebRequest.Get(url);
             req.SetRequestHeader("X-DS-Secret", _serverSecret);
             req.timeout = 10;
@@ -556,22 +559,61 @@ namespace NightHunt.Server
                     var config = JsonUtility.FromJson<SafeZoneMatchConfig>(req.downloadHandler.text);
                     if (config != null && config.phases != null && config.phases.Count > 0)
                     {
-                        SafeZoneManager.Instance?.SetConfig(config);
-                        Debug.Log($"[DS-Boot] Zone config fetched for map '{_mapId}' ({config.phases.Count} phases).");
+                        ApplyZoneConfig(config, $"backend mapId='{_mapId}'");
                         yield break;
                     }
+
+                    Debug.LogWarning($"[DS-Boot][ZONE_CONFIG] backend mapId='{_mapId}' returned empty/invalid phases; bodyBytes={GetTextByteLength(req.downloadHandler?.text)}");
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning($"[DS-Boot] FetchZoneConfig: parse error — {ex.Message}");
+                    Debug.LogWarning($"[DS-Boot][ZONE_CONFIG] parse error mapId='{_mapId}' err='{ex.Message}' bodyBytes={GetTextByteLength(req.downloadHandler?.text)}");
                 }
             }
             else
             {
-                Debug.LogWarning($"[DS-Boot] FetchZoneConfig HTTP {req.responseCode}: {req.error} — using default.");
+                Debug.LogWarning($"[DS-Boot][ZONE_CONFIG] HTTP={req.responseCode} err='{req.error}' mapId='{_mapId}'; using fallback.");
             }
 
-            SafeZoneManager.Instance?.SetConfig(SafeZoneMatchConfig.ForMap(_mapId));
+            var fallbackConfig = SafeZoneMatchConfig.ForMap(_mapId);
+            ApplyZoneConfig(fallbackConfig, $"fallback mapId='{_mapId}'");
+        }
+
+        private static bool ApplyZoneConfig(SafeZoneMatchConfig config, string source)
+        {
+            var manager = SafeZoneManager.Instance;
+            if (manager == null)
+            {
+                Debug.LogError($"[DS-Boot][ZONE_CONFIG] NOT applied source={source}; SafeZoneManager.Instance is null. {DescribeZoneConfig(config)}");
+                return false;
+            }
+
+            manager.SetConfig(config);
+            Debug.Log($"[DS-Boot][ZONE_CONFIG] applied source={source} {DescribeZoneConfig(config)}");
+            return true;
+        }
+
+        private static string DescribeZoneConfig(SafeZoneMatchConfig config)
+        {
+            if (config == null)
+                return "config=null";
+
+            int phaseCount = config.phases?.Count ?? 0;
+            string firstPhase = phaseCount > 0 ? DescribeZonePhase(config.phases[0]) : "firstPhase=none";
+            return $"initialRadius={config.initialRadius:F1} finalMin={config.finalZoneMinRadius:F1} centerMode={config.centerMode} phases={phaseCount} {firstPhase}";
+        }
+
+        private static string DescribeZonePhase(SafeZonePhaseConfig phase)
+        {
+            if (phase == null)
+                return "firstPhase=null";
+
+            return $"firstPhase=index:{phase.zoneIndex} radius:{phase.startRadius:F1}->{phase.endRadius:F1} wait:{phase.waitBeforeShrink:F1}s shrink:{phase.shrinkDuration:F1}s damage:{phase.damagePerSecond:F1}/s";
+        }
+
+        private static int GetTextByteLength(string text)
+        {
+            return string.IsNullOrEmpty(text) ? 0 : System.Text.Encoding.UTF8.GetByteCount(text);
         }
 
         /// <summary>

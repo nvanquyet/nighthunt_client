@@ -109,6 +109,8 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private Vector2 _mobileJoystick01;     // raw [0,1] with magnitude — used for cursor placement
         private bool    _mobileFirePressHadDrag;
         private float   _mobileFirePressReleaseMagnitude;
+        private bool    _pendingSelectedThrowableRelease;
+        private bool    _pendingSelectedDeployRelease;
 
         // ── Events ────────────────────────────────────────────────────────────────
         public event System.Action       OnFire;
@@ -290,6 +292,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             _isAiming    = false;
             _isReloading = false;
             _pendingSingleShotOnRelease = false;
+            ClearPendingSelectedItemRelease();
 
             Debug.Log("[CombatInputHandler] Input disabled");
         }
@@ -581,14 +584,26 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
             Debug.Log($"[ITEM_FLOW] [10][BeginFire.UseSelected] selected={selectedItem?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"}");
             Debug.Log($"[NH_FLOW][13][UseSelectedFromFire] selected={selectedItem?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"} {DescribeCombatFlowState()}");
-            _itemSelectionSystem.RequestUseSelectedItem();
+
+            bool isThrowable = def != null && def.Type == ItemType.Throwable;
+            bool isDeployable = def != null && def.Type == ItemType.Deployable;
+            bool routedThroughAimController = false;
+            if ((isThrowable || isDeployable) && selectedItem != null)
+                routedThroughAimController = ResolveThrowableAimController()?.TryBeginAim(selectedItem.InstanceID) == true;
+
+            if (!routedThroughAimController)
+                _itemSelectionSystem.RequestUseSelectedItem();
+
+            if (isThrowable || isDeployable)
+                BeginSelectedItemReleaseWindow(isThrowable, isDeployable);
+
             PhaseTestLog.Log(
                 PhaseTestLogCategory.Input,
                 "UseSelectedItemFromFire",
                 $"selected={selectedItem?.InstanceID ?? "null"} def={def?.ItemID ?? "null"} type={def?.Type.ToString() ?? "null"} activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"} aim={_aimDirection:F2} target={_lastGroundHitPoint:F2}",
                 this);
 
-            if (def != null && def.Type == ItemType.Throwable)
+            if (isThrowable)
             {
                 if (_rangeIndicator != null)
                     _rangeIndicator.ShowWithRange(_aimSystem?.GetVisionRange() ?? 15f);
@@ -598,21 +613,50 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             return true;
         }
 
+        private void BeginSelectedItemReleaseWindow(bool throwable, bool deployable)
+        {
+            _isFiring = true;
+            _pendingSingleShotOnRelease = false;
+            _pendingSelectedThrowableRelease = throwable;
+            _pendingSelectedDeployRelease = deployable;
+
+            if (throwable && _cameraStateManager != null)
+            {
+                _prevCameraStateBeforeFire = _cameraStateManager.CurrentState;
+                _cameraStateManager.ForceState(NightHunt.Gameplay.Camera.CameraState.Locked);
+            }
+
+            if (_movementInputHandler != null)
+            {
+                _prevCameraLockBeforeFire = _movementInputHandler.IsCameraLocked();
+                _movementInputHandler.SetCameraLockOverride(active: true, forcedValue: true);
+            }
+
+            PrepareImmediateFireAim(deployable ? "BeginSelectedDeploy" : "BeginSelectedThrowable");
+        }
+
         private void EndFire()
         {
             Debug.Log($"[NH_FLOW][19][EndFire.Enter] {DescribeCombatFlowState()}");
-            if (_itemUseSystem != null && _itemUseSystem.IsDeploying)
+            var aimController = ResolveThrowableAimController();
+            bool shouldConfirmDeploy =
+                (_itemUseSystem != null && _itemUseSystem.IsDeploying) ||
+                (_pendingSelectedDeployRelease && aimController != null && aimController.IsInDeployMode);
+            if (shouldConfirmDeploy)
             {
                 float joystickMagnitude = GetMobileFireReleaseJoystickMagnitude();
                 Debug.Log($"[NH_FLOW][20][EndFire.DeployConfirm] joystickMagnitude={joystickMagnitude:F2} current={_mobileJoystick01.magnitude:F2} captured={_mobileFirePressReleaseMagnitude:F2} hadDrag={_mobileFirePressHadDrag} {DescribeCombatFlowState()}");
-                ResolveThrowableAimController()?.ConfirmDeployFromFireButtonRelease(joystickMagnitude);
+                aimController?.ConfirmDeployFromFireButtonRelease(joystickMagnitude);
                 SetFireMobileJoystick(Vector2.zero, false);
+                _isFiring = false;
+                _pendingSingleShotOnRelease = false;
+                ClearPendingSelectedItemRelease();
                 ClearMobileFirePressReleaseState();
                 _rangeIndicator?.Hide();
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Input,
                     "EndDeployFireButton",
-                    $"joystickMagnitude={joystickMagnitude:F2} item={_itemUseSystem.CurrentItem?.InstanceID ?? "null"}",
+                    $"joystickMagnitude={joystickMagnitude:F2} item={_itemUseSystem?.CurrentItem?.InstanceID ?? "null"}",
                     this);
                 return;
             }
@@ -632,7 +676,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             // Confirm an armed throwable on release. This intentionally wins over a stale
             // active weapon slot while weapon holster replication is still catching up.
             bool hasActiveWeapon = _weaponSystem != null && _weaponSystem.GetActiveWeaponSlot() != null;
-            if (_isFiring && IsCurrentItemThrowable() && !ThrowableAimController.IsAimingPC)
+            if (_isFiring && (IsCurrentItemThrowable() || _pendingSelectedThrowableRelease) && !ThrowableAimController.IsAimingPC)
             {
                 Vector3 throwTarget = GetCurrentThrowAimTarget();
                 Debug.Log($"[NH_FLOW][21][EndFire.ThrowConfirm] target={throwTarget:F2} {DescribeCombatFlowState()}");
@@ -681,6 +725,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             _mobileAimActive    = false;
             _mobileAimDirection = Vector3.zero;
             _mobileJoystick01   = Vector2.zero;
+            ClearPendingSelectedItemRelease();
             ClearMobileFirePressReleaseState();
             _aimSystem?.SetThrowableAim(Vector2.zero);  // exit throwable mode if joystick activated it
 
@@ -722,6 +767,13 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         {
             _mobileFirePressHadDrag = false;
             _mobileFirePressReleaseMagnitude = 0f;
+            ClearPendingSelectedItemRelease();
+        }
+
+        private void ClearPendingSelectedItemRelease()
+        {
+            _pendingSelectedThrowableRelease = false;
+            _pendingSelectedDeployRelease = false;
         }
 
         // ── Other Input Callbacks ─────────────────────────────────────────────────
@@ -1016,7 +1068,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
             var currentItem = _itemUseSystem?.CurrentItem;
             var currentDef = currentItem != null ? ItemDatabase.GetDefinition(currentItem.DefinitionID) : null;
             return $"inputEnabled={_inputEnabled} inputState={layers?.CurrentState.ToString() ?? "null"} layers={(layers != null ? layers.ActiveLayers.ToString() : "null")} " +
-                   $"isFiring={_isFiring} pendingSingle={_pendingSingleShotOnRelease} mobileAim={_mobileAimActive} " +
+                   $"isFiring={_isFiring} pendingSingle={_pendingSingleShotOnRelease} pendingThrow={_pendingSelectedThrowableRelease} pendingDeploy={_pendingSelectedDeployRelease} mobileAim={_mobileAimActive} " +
                    $"activeWeapon={_weaponSystem?.GetActiveWeaponSlot()?.ToString() ?? "none"} " +
                    $"hasSelection={_itemSelectionSystem?.HasSelection.ToString() ?? "null"} selected={selectedItem?.InstanceID ?? "null"} selectedDef={selectedDef?.ItemID ?? "null"} selectedType={selectedDef?.Type.ToString() ?? "null"} " +
                    $"itemUsing={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} deploying={_itemUseSystem?.IsDeploying.ToString() ?? "null"} currentItem={currentItem?.InstanceID ?? "null"} currentDef={currentDef?.ItemID ?? "null"} currentType={currentDef?.Type.ToString() ?? "null"} " +

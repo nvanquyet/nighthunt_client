@@ -1190,7 +1190,7 @@ MonoBehaviour:
   _allowClientDamageRequests: 0
   _maxHitDistance: 500
   _maxClientRequestedDamage: 150
-  _allowFriendlyFire: 0
+  _allowFriendlyFire: 1
   _healthRegenTickInterval: 1
 --- !u!114 &8370610283817252759
 MonoBehaviour:

@@ -133,11 +133,11 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
         {
             if (!ctx.performed) return;
 
-            if (HasGameplayCancelTarget())
-                _suppressOpenMenuFrame = Time.frameCount;
-
             var ilm = InputLayerManager.Instance;
             InputState before = ilm != null ? ilm.CurrentState : InputState.None;
+            if (HasGameplayCancelTarget() || IsCancelOnlyState(before))
+                _suppressOpenMenuFrame = Time.frameCount;
+
             OnCancelPressed?.Invoke();
             // Cancel tự động PopContext (Escape đóng inventory/map/menu)
             if (ilm != null && ilm.CurrentState == before && before != InputState.PlayerAlive && before != InputState.None)
@@ -148,7 +148,13 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
         {
             if (!ctx.performed) return;
 
-            if (_suppressOpenMenuFrame == Time.frameCount || HasGameplayCancelTarget())
+            var ilm = InputLayerManager.Instance;
+            InputState current = ilm != null ? ilm.CurrentState : InputState.None;
+
+            if (_suppressOpenMenuFrame == Time.frameCount)
+                return;
+
+            if (HasGameplayCancelTarget() || IsCancelOnlyState(current))
             {
                 _suppressOpenMenuFrame = Time.frameCount;
                 OnCancelPressed?.Invoke();
@@ -174,6 +180,14 @@ namespace NightHunt.Gameplay.Input.Handlers.UI
         private static bool HasGameplayCancelTarget()
         {
             return ThrowableAimController.IsAimingPC || ThrowableAimController.IsDeployingPC;
+        }
+
+        private static bool IsCancelOnlyState(InputState state)
+        {
+            return state == InputState.MapOpen
+                || state == InputState.InventoryOpen
+                || state == InputState.Paused
+                || state == InputState.InDialogue;
         }
     }
 }

@@ -5853,8 +5853,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _promptPanel: {fileID: 9088442309985032695}
+  _actionLabelText: {fileID: 2847208822409970043}
   _keyText: {fileID: 3621826118046066452}
-  _actionText: {fileID: 5597202588740253207}
+  _descriptionText: {fileID: 5597202588740253207}
   _mobileHUDPanel: {fileID: 2473546432649401917}
 --- !u!114 &2473546432649401917
 MonoBehaviour:
@@ -9504,8 +9505,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 0}
-  m_RaycastTarget: 0
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -26429,7 +26430,7 @@ MonoBehaviour:
     m_SelectOnDown: {fileID: 0}
     m_SelectOnLeft: {fileID: 0}
     m_SelectOnRight: {fileID: 0}
-  m_Transition: 1
+  m_Transition: 0
   m_Colors:
     m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
     m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
@@ -26453,19 +26454,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 2551978882336899047}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 6197058719239292020}
-        m_TargetAssemblyTypeName: NightHunt.GameplaySystems.UI.MinimapUI, Assembly-CSharp
-        m_MethodName: CloseFullMap
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!1 &6001095271383103773
 GameObject:
   m_ObjectHideFlags: 0
@@ -43778,11 +43767,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _minimapRawImage: {fileID: 4419840151872176778}
   _renderTexture: {fileID: 8400000, guid: 6d1c615866b19264abd8340b2a92e70c, type: 2}
+  _openMapButton: {fileID: 4041702997533204559}
   _fullMapRoot: {fileID: 4349737887504158432}
   _fullMapRawImage: {fileID: 8178821424157846865}
   _fullMapRenderTexture: {fileID: 8400000, guid: 28b9701a4f9a7d9498e324b40da95838,
     type: 2}
   _closeMapButton: {fileID: 0}
+  _backdropCloseButton: {fileID: 2909320754045912037}
+  _fullMapCamera: {fileID: 0}
 --- !u!114 &4041702997533204559
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -43826,19 +43818,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 4419840151872176778}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 6197058719239292020}
-        m_TargetAssemblyTypeName: NightHunt.GameplaySystems.UI.MinimapUI, Assembly-CSharp
-        m_MethodName: ToggleFullMap
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!1001 &5038966397423392056
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -49,7 +49,9 @@ namespace NightHunt.Gameplay.Scoring
 
         private void OnScoreDataChanged(string oldData, string newData, bool asServer)
         {
-            if (!asServer && !string.IsNullOrEmpty(newData))
+            // Host callbacks arrive asServer=true, but the host still has a local client HUD.
+            // Dedicated servers have IsClientInitialized=false and must not publish UI events.
+            if ((!asServer || IsClientInitialized) && !string.IsNullOrEmpty(newData))
             {
                 GameplayEventBus.Instance?.Publish(new ScoreDataSyncedEvent { ScoreDataJson = newData });
             }

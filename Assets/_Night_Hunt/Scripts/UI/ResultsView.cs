@@ -107,8 +107,17 @@ namespace NightHunt.UI
 
         private void OnMatchEnded(MatchEndedEvent evt)
         {
+            DisplayResults(evt);
+        }
+
+        public void DisplayResults(MatchEndedEvent evt)
+        {
+            bool firstDisplay = !_lastMatchResult.HasValue || _panel == null || !_panel.activeSelf;
             _lastMatchResult = evt;
             ShowResults(evt);
+            if (!firstDisplay)
+                return;
+
             ShowMatchResultToast(evt);
             StartCoroutine(CountdownCoroutine());
         }

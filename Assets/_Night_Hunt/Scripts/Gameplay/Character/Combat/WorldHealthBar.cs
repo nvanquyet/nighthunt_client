@@ -2,6 +2,7 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NightHunt.Gameplay.FogOfWar;
 using NightHunt.Gameplay.Spectator;
 using NightHunt.Networking.Player;
 using NightHunt.Utilities;
@@ -59,6 +60,7 @@ namespace NightHunt.Gameplay.Character.Combat
         private IHealthSource _healthSource;
         private Transform _sourceTransform;
         private NetworkPlayer _networkPlayer;
+        private FogTeamVisibilityBinder _fogVisibilityBinder;
         private UnityEngine.Camera _mainCamera;
         private Coroutine _hideCoroutine;
         private bool _subscribed;
@@ -97,6 +99,7 @@ namespace NightHunt.Gameplay.Character.Combat
 #endif
             ResolveSource();
             ResolveNetworkPlayer();
+            ResolveFogVisibility();
 
             if (_healthSource == null)
             {
@@ -137,6 +140,12 @@ namespace NightHunt.Gameplay.Character.Combat
             if (_barRoot == null || !_barRoot.activeSelf)
                 return;
 
+            if (IsHiddenByFog())
+            {
+                SetVisible(false);
+                return;
+            }
+
             Transform follow = GetFollowTransform();
             if (follow != null)
                 _barRoot.transform.position = follow.position + _offset;
@@ -156,6 +165,21 @@ namespace NightHunt.Gameplay.Character.Combat
         private void HandleHealthChanged(HealthChangeEvent evt)
         {
             SetHealth(evt.CurrentHealth, evt.MaxHealth);
+
+            if (evt.CurrentHealth <= 0f)
+            {
+                StopHideTimer();
+                SetVisible(false);
+                LogHealthBar("HealthChanged hidden reason=dead");
+                return;
+            }
+
+            if (IsHiddenByFog())
+            {
+                SetVisible(false);
+                LogHealthBar("HealthChanged hidden reason=fog");
+                return;
+            }
 
             bool shouldShow = evt.IsDamage && ShouldShow(evt);
             LogHealthBar(
@@ -302,6 +326,24 @@ namespace NightHunt.Gameplay.Character.Combat
                 .InChildren()
                 .OrDefault(null)
                 .Resolve();
+        }
+
+        private void ResolveFogVisibility()
+        {
+            _fogVisibilityBinder = ComponentResolver.Find<FogTeamVisibilityBinder>(this)
+                .OnSelf()
+                .InParent()
+                .InChildren()
+                .OrDefault(null)
+                .Resolve();
+        }
+
+        private bool IsHiddenByFog()
+        {
+            if (_fogVisibilityBinder == null)
+                ResolveFogVisibility();
+
+            return _fogVisibilityBinder != null && !_fogVisibilityBinder.IsVisibleToLocal;
         }
 
         private bool EnsureView()

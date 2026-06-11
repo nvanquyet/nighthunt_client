@@ -175,8 +175,10 @@ namespace NightHunt.Gameplay.Input.Core
         protected override void OnDestroy()
         {
             base.OnDestroy();
-            // Clear canonical event bus to prevent stale references across scene reloads.
-            GameActionBus.Clear();
+            // Do not clear GameActionBus here. HUD panels own their subscriptions in
+            // OnEnable/OnDisable; clearing the static bus from an input-manager
+            // lifecycle can silently disconnect mobile UI buttons while the HUD is
+            // still alive.
         }
 
         #endregion

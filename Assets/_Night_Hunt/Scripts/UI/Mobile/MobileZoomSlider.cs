@@ -85,7 +85,7 @@ namespace NightHunt.UI.Mobile
                 _slider.onValueChanged.AddListener(OnSliderChanged);
             }
 
-            if (_toggleButton != null)
+            if (_toggleButton != null && _toggleButton.onClick.GetPersistentEventCount() == 0)
                 _toggleButton.onClick.AddListener(ToggleExpand);
         }
 

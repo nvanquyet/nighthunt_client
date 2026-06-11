@@ -60,7 +60,7 @@ namespace NightHunt.Gameplay.Character.Combat
         [SerializeField] private float _maxClientRequestedDamage = 150f;
 
         [Tooltip("When false, same-team player damage is rejected on the server.")]
-        [SerializeField] private bool _allowFriendlyFire = false;
+        [SerializeField] private bool _allowFriendlyFire = true;
 
         [Header("Passive Regeneration")]
         [Tooltip("How often HealthRegenRate is applied on the server.")]
@@ -249,15 +249,23 @@ namespace NightHunt.Gameplay.Character.Combat
         /// </summary>
         [Server]
         public void ApplyDamageServer(DamageInfo info)
+            => TryApplyDamageServer(info);
+
+        /// <summary>
+        /// Applies authoritative damage and reports whether health was actually changed.
+        /// Use this when server-side callers must only publish feedback for accepted hits.
+        /// </summary>
+        [Server]
+        public bool TryApplyDamageServer(DamageInfo info)
         {
             // Server-authoritative systems must still share the same gameplay policy as
             // client RPC hits: no friendly fire unless enabled, no dead-target damage,
             // and the same sanity checks where applicable.
             if (!ValidateHit(info))
-                return;
+                return false;
 
             float finalDamage = ComputeFinalDamage(info);
-            ApplyDamageServer(finalDamage, info);
+            return ApplyDamageServer(finalDamage, info);
         }
 
         // ── Private server logic ──────────────────────────────────────────────
@@ -379,11 +387,11 @@ namespace NightHunt.Gameplay.Character.Combat
         }
 
         [Server]
-        private void ApplyDamageServer(float damage, DamageInfo info)
+        private bool ApplyDamageServer(float damage, DamageInfo info)
         {
             float current = _statSystem.GetStat(PlayerStatType.Health);
-            if (current <= 0f)
-                return;
+            if (current <= 0f || damage <= 0f)
+                return false;
 
             float newHealth = Mathf.Max(0f, current - damage);
 
@@ -406,6 +414,7 @@ namespace NightHunt.Gameplay.Character.Combat
 
             // Broadcast hit VFX to all clients (blood, hit marker).
             NotifyHitObserversRpc(info);
+            return true;
         }
 
         [Server]
@@ -434,7 +443,15 @@ namespace NightHunt.Gameplay.Character.Combat
                 _matchEndManager?.AddKill(killerTeamId, killerBackendPlayerId);
 
             if (killerObjId != 0u)
-                _scoringSystem?.AwardKill(killerObjId, victimObjId);
+            {
+                if (_scoringSystem == null)
+                    _scoringSystem = FindFirstObjectByType<ScoringSystem>();
+
+                if (_scoringSystem != null)
+                    _scoringSystem.AwardKill(killerObjId, victimObjId);
+                else
+                    Debug.LogError($"[PlayerHealthSystem] Kill score was not awarded because ScoringSystem is missing. killer={killerObjId} victim={victimObjId}");
+            }
 
             // Broadcast death event with killer name to all clients (kill feed, death screen).
             NotifyKillObserversRpc(killerName, info.WeaponId, killerObjId, victimObjId, killerTeamId);
