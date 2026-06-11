@@ -35,9 +35,9 @@ namespace NightHunt.Gameplay.Character
         [Tooltip("Speed (units/s) at which left-hand IK weight fades in/out on weapon swap.")]
         [SerializeField] private float _ikBlendSpeed = 8f;
 
-        [Header("Death Visuals")]
-        [Tooltip("Time to let the Animator play Die before switching to ragdoll. 0 = ragdoll immediately.")]
-        [SerializeField, Min(0f)] private float _deathAnimationToRagdollDelay = 1.2f;
+        // [Header("Death Visuals")]
+        // [Tooltip("Time to let the Animator play Die before switching to ragdoll. 0 = ragdoll immediately.")]
+        // [SerializeField, Min(0f)] private float _deathAnimationToRagdollDelay = 1.2f;
 
         // ── Auto-resolved refs ─────────────────────────────────────────────────
         private CharacterLifecycleController _lifecycle;
@@ -46,6 +46,7 @@ namespace NightHunt.Gameplay.Character
         private PlayerModelLoader            _modelLoader;
         private WeaponModelController        _weaponModelController;
         private FogVisionBinder              _fogVisionBinder;
+        private CharacterAnimationController _animationController;
 
         // Model-side refs (bound in BindModel once mesh is ready).
         private PrCharacterRagdoll _ragdoll;
@@ -93,6 +94,11 @@ namespace NightHunt.Gameplay.Character
                 .OrLogWarning("[CharacterVisualController] FogVisionBinder not found — FOW will not be toggled on death")
                 .Resolve();
 
+            _animationController = ComponentResolver.Find<CharacterAnimationController>(this)
+                .OnSelf().InChildren().InParent().InRootChildren()
+                .OrDefault(null)
+                .Resolve();
+
             if (_modelLoader != null)
                 _modelLoader.OnModelReady += BindModel;
         }
@@ -116,6 +122,8 @@ namespace NightHunt.Gameplay.Character
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
             if (_weaponModelController != null)
                 _weaponModelController.OnLeftHandIKTargetChanged += HandleIKTargetChanged;
+            if (_animationController != null)
+                _animationController.OnDeathAnimationComplete += HandleDeathAnimationComplete;
         }
 
         private void OnDisable()
@@ -131,6 +139,8 @@ namespace NightHunt.Gameplay.Character
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
             if (_weaponModelController != null)
                 _weaponModelController.OnLeftHandIKTargetChanged -= HandleIKTargetChanged;
+            if (_animationController != null)
+                _animationController.OnDeathAnimationComplete -= HandleDeathAnimationComplete;
         }
 
         // ── IK weight update each frame ────────────────────────────────────────
@@ -223,13 +233,38 @@ namespace NightHunt.Gameplay.Character
             PhaseTestLog.Log(
                 PhaseTestLogCategory.IK,
                 "VisualDead",
-                $"player={_networkPlayer?.DisplayName ?? "null"} ikActive={(_charIK != null && _charIK.ikActive)} ragdollDelay={_deathAnimationToRagdollDelay:F2}",
+                $"player={_networkPlayer?.DisplayName ?? "null"} ikActive={(_charIK != null && _charIK.ikActive)}",
                 this);
 
-            if (_deathAnimationToRagdollDelay <= 0f || _actorUtils?.charAnimator == null)
+            if (_animationController == null || _actorUtils?.charAnimator == null)
+            {
                 ApplyDeadRagdollVisuals();
+            }
             else
-                _deathVisualCoroutine = StartCoroutine(ApplyDeadRagdollVisualsAfterDelay());
+            {
+                _deathVisualCoroutine = StartCoroutine(DeathSafetyFallbackCoroutine());
+            }
+        }
+
+        private IEnumerator DeathSafetyFallbackCoroutine()
+        {
+            yield return new WaitForSeconds(3.0f);
+            _deathVisualCoroutine = null;
+            ApplyDeadRagdollVisuals();
+        }
+
+        private void HandleDeathAnimationComplete()
+        {
+            if (_networkPlayer != null && _networkPlayer.IsAlive)
+                return;
+
+            if (_deathVisualCoroutine != null)
+            {
+                StopCoroutine(_deathVisualCoroutine);
+                _deathVisualCoroutine = null;
+            }
+
+            ApplyDeadRagdollVisuals();
         }
 
         private void SetAliveVisuals()
@@ -258,17 +293,6 @@ namespace NightHunt.Gameplay.Character
                 "VisualAlive",
                 $"player={_networkPlayer?.DisplayName ?? "null"} ikActive={(_charIK != null && _charIK.ikActive)} target={_weaponModelController?.LeftHandIKTarget?.name ?? "null"}",
                 this);
-        }
-
-        private IEnumerator ApplyDeadRagdollVisualsAfterDelay()
-        {
-            yield return new WaitForSeconds(_deathAnimationToRagdollDelay);
-            _deathVisualCoroutine = null;
-
-            if (_networkPlayer != null && _networkPlayer.IsAlive)
-                yield break;
-
-            ApplyDeadRagdollVisuals();
         }
 
         private void ApplyDeadRagdollVisuals()

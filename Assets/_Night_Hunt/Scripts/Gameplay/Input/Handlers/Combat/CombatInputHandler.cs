@@ -972,7 +972,7 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
             Debug.Log($"[CombatInputHandler] Weapon slot {slot}: cancelling item intent before switching. isUsing={isUsingItem} hasSelection={hasItemIntent}");
             Debug.Log($"[NH_FLOW][31][WeaponSlot.CancelItemIntent] slot={slot} isUsing={isUsingItem} hasSelection={hasItemIntent} {DescribeCombatFlowState()}");
-            _itemSelectionSystem?.RequestCancelSelection();
+            _itemSelectionSystem?.RequestCancelSelection(restorePreviousWeapon: false);
         }
 
         private bool IsWeaponSlotActive(int slot)

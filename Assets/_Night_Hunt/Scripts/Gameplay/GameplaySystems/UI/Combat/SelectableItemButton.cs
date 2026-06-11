@@ -233,6 +233,8 @@ namespace NightHunt.GameplaySystems.UI.Combat
         {
             if (_selectionSystem == null) return;
 
+
+
             bool hasTracked = !string.IsNullOrEmpty(_trackedInstanceId);
             Debug.Log($"[NH_FLOW][05][SelectableItem.HandlePress] button={name} double={isDouble} hasTracked={hasTracked} {DescribeItemButtonState()}");
 
@@ -591,6 +593,27 @@ namespace NightHunt.GameplaySystems.UI.Combat
             for (int i = 1; i < _filterTypes.Count; i++)
                 text += "+" + _filterTypes[i];
             return text;
+        }
+
+        private NightHunt.Gameplay.Character.CharacterAnimationController _cachedAnimController;
+        private NightHunt.Gameplay.Character.CharacterAnimationController ResolveAnimController()
+        {
+            if (_cachedAnimController != null) return _cachedAnimController;
+            if (_combatInputHandler != null)
+            {
+                _cachedAnimController = _combatInputHandler.GetComponent<NightHunt.Gameplay.Character.CharacterAnimationController>();
+                if (_cachedAnimController == null)
+                    _cachedAnimController = _combatInputHandler.GetComponentInChildren<NightHunt.Gameplay.Character.CharacterAnimationController>();
+            }
+            if (_cachedAnimController == null)
+            {
+#if UNITY_2023_1_OR_NEWER
+                _cachedAnimController = FindFirstObjectByType<NightHunt.Gameplay.Character.CharacterAnimationController>(FindObjectsInactive.Include);
+#else
+                _cachedAnimController = FindObjectOfType<NightHunt.Gameplay.Character.CharacterAnimationController>(true);
+#endif
+            }
+            return _cachedAnimController;
         }
     }
 }

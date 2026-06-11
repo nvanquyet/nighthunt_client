@@ -59,6 +59,19 @@ namespace NightHunt.Networking.Player
 
         public IGameplayBridge GamePlaySystemBridge { get; private set; }
 
+        public CharacterAnimationController AnimationController
+        {
+            get
+            {
+                if (_animationController == null)
+                {
+                    _animationController = ComponentResolver.Find<CharacterAnimationController>(this)
+                        .OnSelf().InChildren().InParent().OrDefault(null).Resolve();
+                }
+                return _animationController;
+            }
+        }
+
         // Cached owner-side refs — set in EnableInput(), used 
         // to cleanly disable / re-enable when IsAlive changes.
         private NightHunt.Gameplay.Input.Handlers.Combat.CombatInputHandler _cachedCombatHandler;
@@ -106,7 +119,14 @@ namespace NightHunt.Networking.Player
         /// <summary>Server: Mark player as dead or alive.</summary>
         public void SetAlive(bool alive)
         {
+            bool changed = _isAlive.Value != alive;
+            bool previous = _isAlive.Value;
             _isAlive.Value = alive;
+
+            // In host mode the server write can arrive through the SyncVar callback asServer=true,
+            // which intentionally skips owner input gating. Drive the local client path immediately.
+            if (changed && IsServerInitialized && IsClientInitialized)
+                OnAliveStateChanged(previous, alive, asServer: false);
         }
 
         #endregion

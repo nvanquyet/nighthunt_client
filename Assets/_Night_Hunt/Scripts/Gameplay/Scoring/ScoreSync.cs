@@ -1,6 +1,5 @@
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
-using System.Collections.Generic;
 using NightHunt.Gameplay.Core.Events;
 using NightHunt.Utilities;
 
@@ -14,6 +13,7 @@ namespace NightHunt.Gameplay.Scoring
         private readonly SyncVar<string> networkScoreData = new SyncVar<string>();
 
         private ScoringSystem scoringSystem;
+        private string _lastPublishedScoreData;
 
         private void Awake()
         {
@@ -41,20 +41,34 @@ namespace NightHunt.Gameplay.Scoring
         /// </summary>
         public void SyncScoreData(string scoreData)
         {
-            if (IsServerInitialized)
-            {
-                networkScoreData.Value = scoreData;
-            }
+            if (!IsServerInitialized || string.IsNullOrEmpty(scoreData))
+                return;
+
+            networkScoreData.Value = scoreData;
+            RpcScoreDataSynced(scoreData);
         }
 
         private void OnScoreDataChanged(string oldData, string newData, bool asServer)
         {
             // Host callbacks arrive asServer=true, but the host still has a local client HUD.
             // Dedicated servers have IsClientInitialized=false and must not publish UI events.
-            if ((!asServer || IsClientInitialized) && !string.IsNullOrEmpty(newData))
-            {
-                GameplayEventBus.Instance?.Publish(new ScoreDataSyncedEvent { ScoreDataJson = newData });
-            }
+            if (!asServer || IsClientInitialized)
+                PublishScoreData(newData);
+        }
+
+        [ObserversRpc]
+        private void RpcScoreDataSynced(string scoreData)
+        {
+            PublishScoreData(scoreData);
+        }
+
+        private void PublishScoreData(string scoreData)
+        {
+            if (string.IsNullOrEmpty(scoreData) || scoreData == _lastPublishedScoreData)
+                return;
+
+            _lastPublishedScoreData = scoreData;
+            GameplayEventBus.Instance?.Publish(new ScoreDataSyncedEvent { ScoreDataJson = scoreData });
         }
     }
 }

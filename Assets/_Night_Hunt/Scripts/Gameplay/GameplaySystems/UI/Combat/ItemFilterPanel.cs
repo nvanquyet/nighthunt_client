@@ -162,7 +162,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 && _itemUseSystem.CurrentItem?.InstanceID != instanceId)
             {
                 Debug.Log($"[ITEM_FLOW] [02][FilterPanel.SwitchWhileUsing] from='{_itemUseSystem.CurrentItem?.InstanceID ?? "null"}' to='{instanceId}' action=RequestCancelSelection");
-                _selectionSystem.RequestCancelSelection();
+                _selectionSystem.RequestCancelSelection(restorePreviousWeapon: false);
             }
 
             if (_pendingCollapseRoutine != null)

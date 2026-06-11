@@ -417,6 +417,9 @@ namespace NightHunt.Gameplay.Respawn
             if (player == null)
                 return false;
 
+            if (!player.IsAlive)
+                return true;
+
             var statSystem = ComponentResolver.Find<IPlayerStatSystem>(player)
                 .OnSelf().InChildren().Resolve();
             return statSystem != null && statSystem.GetStat(PlayerStatType.Health) <= 0f;

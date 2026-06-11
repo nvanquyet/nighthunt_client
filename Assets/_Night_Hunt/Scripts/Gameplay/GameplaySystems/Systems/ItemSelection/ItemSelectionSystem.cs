@@ -42,6 +42,9 @@ namespace NightHunt.GameplaySystems.ItemSelection
 
         private IInventorySystem _inventorySystem;
         private IItemUseSystem   _itemUseSystem;
+        private IWeaponSystem    _weaponSystem;
+        private WeaponSlotType?  _previousWeaponSlotForSelection;
+        private bool             _weaponHolsteredForSelection;
 
         #endregion
 
@@ -160,6 +163,8 @@ namespace NightHunt.GameplaySystems.ItemSelection
                 _itemUseSystem?.CancelUse();
             }
 
+            HolsterWeaponForSelection();
+
             Debug.Log($"[ItemSelectionSystem] SelectItem: selecting '{item.InstanceID}' ({def.DisplayName})");
             Debug.Log($"[NH_FLOW][25][ItemSelection.SelectedSet] instance='{item.InstanceID}' def={def.ItemID} type={def.Type} qty={item.Quantity}");
             _selectedInstanceId.Value = instanceID;
@@ -199,25 +204,23 @@ namespace NightHunt.GameplaySystems.ItemSelection
             _itemUseSystem?.UseItem(item);
         }
 
-        public void DeselectItem()
+        public void DeselectItem(bool restorePreviousWeapon = true)
         {
             if (!IsServerInitialized || string.IsNullOrEmpty(_selectedInstanceId.Value)) return;
 
             Debug.Log($"[ItemSelectionSystem] DeselectItem: clearing '{_selectedInstanceId.Value}'");
-            Debug.Log($"[NH_FLOW][27][ItemSelection.Deselect] selected='{_selectedInstanceId.Value}' owner={Owner?.ClientId}");
-            _selectedInstanceId.Value = string.Empty;
-            // OnSelectedInstanceIdChanged fires automatically.
+            Debug.Log($"[NH_FLOW][27][ItemSelection.Deselect] selected='{_selectedInstanceId.Value}' owner={Owner?.ClientId} restoreWeapon={restorePreviousWeapon}");
+            ClearSelection(restorePreviousWeapon, "deselect");
         }
 
-        public void CancelSelection()
+        public void CancelSelection(bool restorePreviousWeapon = true)
         {
             if (!IsServerInitialized) return;
 
             Debug.Log($"[ItemSelectionSystem] CancelSelection: cancelling use + clearing '{_selectedInstanceId.Value}'");
-            Debug.Log($"[NH_FLOW][27][ItemSelection.Cancel] selected='{_selectedInstanceId.Value}' currentUse='{_itemUseSystem?.CurrentItem?.InstanceID ?? "null"}' using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} owner={Owner?.ClientId}");
+            Debug.Log($"[NH_FLOW][27][ItemSelection.Cancel] selected='{_selectedInstanceId.Value}' currentUse='{_itemUseSystem?.CurrentItem?.InstanceID ?? "null"}' using={_itemUseSystem?.IsUsingItem.ToString() ?? "null"} owner={Owner?.ClientId} restoreWeapon={restorePreviousWeapon}");
             _itemUseSystem?.CancelUse();
-            _selectedInstanceId.Value = string.Empty;
-            // OnSelectedInstanceIdChanged fires automatically.
+            ClearSelection(restorePreviousWeapon, "cancel");
         }
 
         // ─── ServerRpc Wrappers ───────────────────────────────────────────────────
@@ -255,11 +258,11 @@ namespace NightHunt.GameplaySystems.ItemSelection
 
         /// <summary>ServerRpc: cancel active use and deselect.</summary>
         [ServerRpc(RequireOwnership = true)]
-        public void RequestCancelSelection()
+        public void RequestCancelSelection(bool restorePreviousWeapon = true)
         {
-            Debug.Log($"[NH_FLOW][23][Rpc.CancelSelection] selected='{_selectedInstanceId.Value}' owner={Owner?.ClientId} asServer={IsServerInitialized} asOwner={IsOwner}");
+            Debug.Log($"[NH_FLOW][23][Rpc.CancelSelection] selected='{_selectedInstanceId.Value}' owner={Owner?.ClientId} asServer={IsServerInitialized} asOwner={IsOwner} restoreWeapon={restorePreviousWeapon}");
             Debug.Log($"[ItemSelectionSystem] RequestCancelSelection received on server");
-            CancelSelection();
+            CancelSelection(restorePreviousWeapon);
         }
 
         #endregion
@@ -309,7 +312,7 @@ namespace NightHunt.GameplaySystems.ItemSelection
                 Debug.Log($"[ItemSelectionSystem] HandleItemUseCompleted: '{completedItem.InstanceID}' depleted → clearing selection");
                 // Item fully depleted — clear selection (UI will auto-switch).
                 // OnSelectedInstanceIdChanged callback fires automatically.
-                _selectedInstanceId.Value = string.Empty;
+                ClearSelection(restorePreviousWeapon: true, "depleted");
             }
             // else: quantity remains — keep selection, player fires again to reuse.
         }
@@ -343,6 +346,81 @@ namespace NightHunt.GameplaySystems.ItemSelection
 
             if (_itemUseSystem is ItemUseSystem useConcrete)
                 _itemUseSystemComponent = useConcrete;
+
+            _weaponSystem = ComponentResolver.Find<IWeaponSystem>(this)
+                .OnSelf()
+                .InChildren()
+                .InParent()
+                .InRootChildren()
+                .Resolve();
+        }
+
+        private void HolsterWeaponForSelection()
+        {
+            if (_weaponSystem == null)
+                return;
+
+            WeaponSlotType? activeSlot = _weaponSystem.GetActiveWeaponSlot();
+            if (!activeSlot.HasValue)
+                return;
+
+            if (!_weaponHolsteredForSelection)
+                _previousWeaponSlotForSelection = activeSlot;
+
+            _weaponHolsteredForSelection = true;
+            Debug.Log($"[NH_FLOW][25][ItemSelection.HolsterWeaponForSelection] active={activeSlot.Value} previous={_previousWeaponSlotForSelection?.ToString() ?? "none"} owner={Owner?.ClientId}");
+            _weaponSystem.HolsterWeapon();
+        }
+
+        private void ClearSelection(bool restorePreviousWeapon, string reason)
+        {
+            if (!string.IsNullOrEmpty(_selectedInstanceId.Value))
+                _selectedInstanceId.Value = string.Empty;
+
+            if (restorePreviousWeapon)
+                RestoreWeaponAfterSelection(reason);
+            else
+                ForgetSelectionWeaponRestore(reason);
+        }
+
+        private void RestoreWeaponAfterSelection(string reason)
+        {
+            if (!_weaponHolsteredForSelection)
+                return;
+
+            WeaponSlotType? previousSlot = _previousWeaponSlotForSelection;
+            _weaponHolsteredForSelection = false;
+            _previousWeaponSlotForSelection = null;
+
+            if (_weaponSystem == null || !previousSlot.HasValue)
+                return;
+
+            WeaponSlotType slot = previousSlot.Value;
+            WeaponSlotType? activeSlot = _weaponSystem.GetActiveWeaponSlot();
+            if (activeSlot.HasValue)
+            {
+                Debug.Log($"[NH_FLOW][27][ItemSelection.RestoreWeaponSkipped] reason={reason} previous={slot} active={activeSlot.Value} owner={Owner?.ClientId}");
+                return;
+            }
+
+            if (!_weaponSystem.IsSlotOccupied(slot))
+            {
+                Debug.Log($"[NH_FLOW][27][ItemSelection.RestoreWeaponSkipped] reason={reason} previous={slot} slotEmpty=True owner={Owner?.ClientId}");
+                return;
+            }
+
+            Debug.Log($"[NH_FLOW][27][ItemSelection.RestoreWeapon] reason={reason} slot={slot} owner={Owner?.ClientId}");
+            _weaponSystem.SelectWeapon(slot);
+        }
+
+        private void ForgetSelectionWeaponRestore(string reason)
+        {
+            if (!_weaponHolsteredForSelection && !_previousWeaponSlotForSelection.HasValue)
+                return;
+
+            Debug.Log($"[NH_FLOW][27][ItemSelection.ForgetWeaponRestore] reason={reason} previous={_previousWeaponSlotForSelection?.ToString() ?? "none"} owner={Owner?.ClientId}");
+            _weaponHolsteredForSelection = false;
+            _previousWeaponSlotForSelection = null;
         }
 
         #endregion

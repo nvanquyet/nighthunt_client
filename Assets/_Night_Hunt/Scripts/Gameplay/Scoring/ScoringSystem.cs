@@ -299,10 +299,14 @@ namespace NightHunt.Gameplay.Scoring
         }
 
         /// <summary>
-        /// Get player by network object ID — uses PlayerPublicRegistry (O(n) but no FindObjects).
+        /// Get player by network object ID.
         /// </summary>
         private NetworkPlayer GetPlayerById(uint playerId)
         {
+            NetworkPlayer spawnedPlayer = ResolveSpawnedPlayer(playerId);
+            if (spawnedPlayer != null)
+                return spawnedPlayer;
+
             var players = PlayerPublicRegistry.Instance?.GetAllPlayers();
             if (players == null) return null;
             foreach (var player in players)
@@ -311,6 +315,23 @@ namespace NightHunt.Gameplay.Scoring
                     return player;
             }
             return null;
+        }
+
+        private static NetworkPlayer ResolveSpawnedPlayer(uint playerId)
+        {
+            if (playerId > int.MaxValue)
+                return null;
+
+            var serverManager = FishNet.InstanceFinder.ServerManager;
+            if (serverManager == null)
+                return null;
+
+            if (!serverManager.Objects.Spawned.TryGetValue((int)playerId, out var nob) || nob == null)
+                return null;
+
+            return nob.GetComponent<NetworkPlayer>()
+                   ?? nob.GetComponentInChildren<NetworkPlayer>(true)
+                   ?? nob.GetComponentInParent<NetworkPlayer>(true);
         }
 
         /// <summary>
@@ -332,6 +353,10 @@ namespace NightHunt.Gameplay.Scoring
             };
             string json = JsonUtility.ToJson(snapshot);
             // ScoreSync.SyncScoreData() sets its own networkScoreData SyncVar → clients receive ScoreDataSyncedEvent.
+            if (_scoreSync == null)
+                _scoreSync = ComponentResolver.Find<ScoreSync>(this).OnSelf().InChildren().Resolve()
+                             ?? FindFirstObjectByType<ScoreSync>();
+
             _scoreSync?.SyncScoreData(json);
         }
 

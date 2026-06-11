@@ -437,13 +437,15 @@ namespace NightHunt.Gameplay.Character.Combat
             uint killerObjId = hasKiller ? (uint)info.ShooterNetworkObjectId : uint.MaxValue;
             uint victimObjId = _networkPlayer != null ? (uint)_networkPlayer.ObjectId : uint.MaxValue;
             int  killerTeamId = ResolveKillerTeamId(info.ShooterNetworkObjectId);
+            int  victimTeamId = _networkPlayer != null ? _networkPlayer.TeamId : -1;
             string killerBackendPlayerId = ResolveBackendPlayerId(info.ShooterNetworkObjectId);
+            bool shouldScoreKill = IsScoredPlayerKill(hasKiller, killerObjId, victimObjId, killerTeamId, victimTeamId);
 
             // Track kill for match-end win condition
-            if (killerTeamId >= 0)
+            if (shouldScoreKill)
                 _matchEndManager?.AddKill(killerTeamId, killerBackendPlayerId);
 
-            if (hasKiller)
+            if (shouldScoreKill)
             {
                 if (_scoringSystem == null)
                     _scoringSystem = FindFirstObjectByType<ScoringSystem>();
@@ -453,6 +455,20 @@ namespace NightHunt.Gameplay.Character.Combat
                 else
                     Debug.LogError($"[PlayerHealthSystem] Kill score was not awarded because ScoringSystem is missing. killer={killerObjId} victim={victimObjId}");
             }
+            else
+            {
+                PhaseTestLog.Log(
+                    PhaseTestLogCategory.Score,
+                    "KillScoreSkipped",
+                    $"killer={killerObjId} victim={victimObjId} killerTeam={killerTeamId} victimTeam={victimTeamId} hasKiller={hasKiller}",
+                    this);
+            }
+
+            // Replicate dead state immediately after scoring. The health stat change below will
+            // still drive lifecycle on dedicated clients, while host mode gets local input/visual
+            // gating without waiting for a SyncVar callback path that may arrive asServer=true.
+            if (_networkPlayer != null && _networkPlayer.IsAlive)
+                _networkPlayer.SetAlive(false);
 
             // Broadcast death event with killer name to all clients (kill feed, death screen).
             NotifyKillObserversRpc(killerName, info.WeaponId, killerObjId, victimObjId, killerTeamId);
@@ -529,6 +545,20 @@ namespace NightHunt.Gameplay.Character.Combat
             }
 
             return string.Empty;
+        }
+
+        private static bool IsScoredPlayerKill(bool hasKiller, uint killerObjId, uint victimObjId, int killerTeamId, int victimTeamId)
+        {
+            if (!hasKiller || killerObjId == uint.MaxValue || victimObjId == uint.MaxValue)
+                return false;
+
+            if (killerObjId == victimObjId)
+                return false;
+
+            if (killerTeamId < 0 || victimTeamId < 0)
+                return false;
+
+            return killerTeamId != victimTeamId;
         }
 
         private static NetworkPlayer ResolvePlayerByNetworkObjectId(int shooterNetObjId)

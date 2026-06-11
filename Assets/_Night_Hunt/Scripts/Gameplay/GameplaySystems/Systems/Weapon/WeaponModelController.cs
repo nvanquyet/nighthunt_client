@@ -108,13 +108,21 @@ namespace NightHunt.GameplaySystems.Weapon
         private void OnEnable()
         {
             if (_weaponSystem != null)
+            {
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
+                _weaponSystem.OnWeaponEquipped      += HandleWeaponEquipped;
+                _weaponSystem.OnWeaponUnequipped    += HandleWeaponUnequipped;
+            }
         }
 
         private void OnDisable()
         {
             if (_weaponSystem != null)
+            {
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
+                _weaponSystem.OnWeaponEquipped      -= HandleWeaponEquipped;
+                _weaponSystem.OnWeaponUnequipped    -= HandleWeaponUnequipped;
+            }
 
             StopSpawnRetry();
             StopVisualFallback();
@@ -125,12 +133,36 @@ namespace NightHunt.GameplaySystems.Weapon
         public void Initialize(IWeaponSystem weaponSystem)
         {
             if (_weaponSystem != null)
+            {
                 _weaponSystem.OnActiveWeaponChanged -= HandleActiveWeaponChanged;
+                _weaponSystem.OnWeaponEquipped      -= HandleWeaponEquipped;
+                _weaponSystem.OnWeaponUnequipped    -= HandleWeaponUnequipped;
+            }
 
             _weaponSystem = weaponSystem;
 
             if (_weaponSystem != null)
+            {
                 _weaponSystem.OnActiveWeaponChanged += HandleActiveWeaponChanged;
+                _weaponSystem.OnWeaponEquipped      += HandleWeaponEquipped;
+                _weaponSystem.OnWeaponUnequipped    += HandleWeaponUnequipped;
+            }
+        }
+
+        private void HandleWeaponEquipped(WeaponSlotType slot, ItemInstance inst)
+        {
+            if (_weaponSystem != null && _weaponSystem.GetActiveWeaponSlot() == slot)
+            {
+                HandleActiveWeaponChanged(slot, slot);
+            }
+        }
+
+        private void HandleWeaponUnequipped(WeaponSlotType slot, ItemInstance inst)
+        {
+            if (_weaponSystem != null && _weaponSystem.GetActiveWeaponSlot() == slot)
+            {
+                HandleActiveWeaponChanged(slot, null);
+            }
         }
 
         private void OnModelReady(GameObject modelRoot)

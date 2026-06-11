@@ -12,6 +12,7 @@ using UnityEngine.UI;
 using NightHunt.Utilities;
 using NightHunt.GameplaySystems.Core.Configs;
 using NightHunt.UI;
+using NightHunt.Gameplay.Character;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -175,6 +176,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 return;
             }
 
+
+
             if (sourceView.State == null || sourceView.State.Item == null)
             {
                 Log($"{DragLogPrefix} BeginDrag ignored - empty source={sourceView.SlotId}");
@@ -309,6 +312,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
         {
             if (_sourceView == null || _activeGhost == null)
                 return;
+
+
 
             var sourceState = _sourceStateSnapshot;
             var targetId = targetView.SlotId;

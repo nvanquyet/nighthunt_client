@@ -494,7 +494,7 @@ namespace NightHunt.Gameplay.Beacon
             if (_aimSystem == null)
                 return transform.position;
 
-            if (_aimSystem.IsThrowableMode && ThrowableAimController.AimWorldTarget.sqrMagnitude > 0.0001f)
+            if (ThrowableAimController.IsAnyAimingActive && ThrowableAimController.AimWorldTarget.sqrMagnitude > 0.0001f)
                 return ThrowableAimController.AimWorldTarget;
 
             return _aimSystem.FinalAimGroundPos;
@@ -507,7 +507,7 @@ namespace NightHunt.Gameplay.Beacon
             if (_aimSystem != null)
                 forward = Vector3.ProjectOnPlane(_aimSystem.FinalAimDir, Vector3.up);
 
-            if (_aimSystem != null && _aimSystem.IsThrowableMode && _networkPlayer != null)
+            if (_aimSystem != null && ThrowableAimController.IsAnyAimingActive && _networkPlayer != null)
                 forward = Vector3.ProjectOnPlane(placementPoint - _networkPlayer.transform.position, Vector3.up);
 
             if (forward.sqrMagnitude <= 0.0001f && _networkPlayer != null)

@@ -11,6 +11,7 @@ using NightHunt.Utilities;
 using NightHunt.UI;
 using NightHunt.GameplaySystems.UI.Combat;
 using System.Linq;
+using NightHunt.Gameplay.Character;
 
 namespace NightHunt.GameplaySystems.UI.Inventory
 {
@@ -548,6 +549,8 @@ namespace NightHunt.GameplaySystems.UI.Inventory
                 Debug.Log("[ITEM_SELECT_FLOW] Inventory double-click ignored: inventory is not owner-interactable.");
                 return;
             }
+
+
 
             var item = slot?.State?.Item;
             if (item == null || _domainBridge?.Bridge == null)

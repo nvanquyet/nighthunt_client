@@ -35,10 +35,10 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         void SelectItem(string instanceID);
 
         /// <summary>Deselect the current item without cancelling an in-progress use.</summary>
-        void DeselectItem();
+        void DeselectItem(bool restorePreviousWeapon = true);
 
         /// <summary>Cancel the active item-use and deselect.</summary>
-        void CancelSelection();
+        void CancelSelection(bool restorePreviousWeapon = true);
 
         /// <summary>
         /// Begin using the currently selected item without changing the selection.
@@ -60,7 +60,7 @@ namespace NightHunt.GameplaySystems.Core.Interfaces
         void RequestUseSelectedItem();
 
         /// <summary>ServerRpc: cancel active use and deselect. Safe to call from client UI.</summary>
-        void RequestCancelSelection();
+        void RequestCancelSelection(bool restorePreviousWeapon = true);
 
         // ─── Events ──────────────────────────────────────────────────────────
 

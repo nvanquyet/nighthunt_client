@@ -80,6 +80,7 @@ namespace NightHunt.GameplaySystems.ItemUse
         // Owner identified by PlayerHealthSystem reference — survives rig refactors.
         private PlayerHealthSystem _ownerHealthSystem;
         private int _ownerNetworkObjectId = -1;
+        private const float MinExplosionDamageFraction = 0.25f;
 
         private bool _initialized;
         private bool _exploded;
@@ -606,8 +607,9 @@ namespace NightHunt.GameplaySystems.ItemUse
                 var hit = s_aoeBuffer[i];
                 if (hit.transform.IsChildOf(transform) || hit.transform == transform) continue;
 
-                float dist    = Vector3.Distance(origin, hit.transform.position);
-                float falloff = Mathf.Clamp01(1f - dist / radius);
+                float falloff = CalculateExplosionFalloff(origin, hit.transform.position, radius);
+                if (falloff <= 0f)
+                    continue;
 
                 // Path A: Player hitbox
                 if (TryResolvePlayerHealth(hit, out var hs))
@@ -679,7 +681,6 @@ namespace NightHunt.GameplaySystems.ItemUse
         private void DealAoeDamageToRegisteredPlayers(Vector3 origin, float radius, HashSet<PlayerHealthSystem> hitSystems)
         {
             var allHealthSystems = UnityEngine.Object.FindObjectsByType<PlayerHealthSystem>(FindObjectsSortMode.None);
-            float safeRadius = Mathf.Max(radius, 0.01f);
 
             foreach (var hs in allHealthSystems)
             {
@@ -687,11 +688,10 @@ namespace NightHunt.GameplaySystems.ItemUse
                     continue;
 
                 Vector3 targetPos = hs.transform.position;
-                float dist = Vector3.Distance(origin, targetPos);
-                if (dist > radius || !hitSystems.Add(hs))
+                float falloff = CalculateExplosionFalloff(origin, targetPos, radius);
+                if (falloff <= 0f || !hitSystems.Add(hs))
                     continue;
 
-                float falloff = Mathf.Clamp01(1f - dist / safeRadius);
                 var damageInfo = new DamageInfo
                 {
                     Damage                 = _def.Damage * falloff,
@@ -705,6 +705,20 @@ namespace NightHunt.GameplaySystems.ItemUse
                 if (hs.TryApplyDamageServer(damageInfo))
                     SendLocalHitFeedback(damageInfo, CombatHitFeedbackTargetKind.Player);
             }
+        }
+
+        private static float CalculateExplosionFalloff(Vector3 origin, Vector3 targetPosition, float radius)
+        {
+            if (radius <= 0f)
+                return 0f;
+
+            float distance = Vector3.Distance(origin, targetPosition);
+            if (distance > radius)
+                return 0f;
+
+            float safeRadius = Mathf.Max(radius, 0.01f);
+            float falloff = Mathf.Clamp01(1f - distance / safeRadius);
+            return Mathf.Max(MinExplosionDamageFraction, falloff);
         }
 
         private bool ShouldAffectPlayer(PlayerHealthSystem healthSystem)

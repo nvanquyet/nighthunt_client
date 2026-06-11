@@ -142,6 +142,21 @@ namespace NightHunt.Gameplay.Character
         private MeleeDamageController             _meleeDamageController;
         private WeaponModelController             _weaponModelController;
 
+        public event System.Action OnDeathAnimationComplete;
+
+        public bool IsSwitching => _isSwitching;
+        public bool IsReloading => _isReloading;
+
+        public bool IsUpperBodyReady
+        {
+            get
+            {
+                var anim = _actorUtils?.charAnimator;
+                if (anim == null || !anim.enabled) return false;
+                return IsUpperBodyReadyForWeaponTriggers(anim, out _);
+            }
+        }
+
         // ── Animator layer indices (resolved after model binds) ────────────────
         private int _pistolLayer   = -1;
         private int _pistolActionsLayer = -1;
@@ -607,18 +622,27 @@ namespace NightHunt.Gameplay.Character
         private IEnumerator WeaponEquipCoroutine(int newType)
         {
             _isSwitching      = true;
-            _activeWeaponType = newType;
 
             var anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+
+            // Gate by IsUpperBodyReady state-machine flags
+            string readyReason;
+            while (!IsUpperBodyReadyForWeaponTriggers(anim, _activeWeaponType, out readyReason))
+            {
+                yield return null;
+                anim = _actorUtils?.charAnimator;
+                if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+            }
+
+            _activeWeaponType = newType;
 
             ClearWeaponTriggers(anim);
             SafeSetInt(anim, WeaponTypeHash, newType);
 
             bool setChanged = SafeSetTrigger(anim, WpnChangedHash);
-            bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
             bool setChangedDeath = SafeSetTrigger(anim, WpnChangedDeathHash);
-            LogAnimEvent("WeaponEquipChangeTriggers", anim, $"weaponType={newType} triggers=WeaponChanged,WeaponChangedUB,WeaponChangedDeath setChanged={setChanged} setChangedUB={setChangedUb} setChangedDeath={setChangedDeath}");
+            LogAnimEvent("WeaponEquipChangeTriggers", anim, $"weaponType={newType} triggers=WeaponChanged,WeaponChangedDeath setChanged={setChanged} setChangedDeath={setChangedDeath}");
 
             PrimeWeaponActionParams(anim);
             bool setDraw = SafeSetTrigger(anim, DrawHash);
@@ -649,10 +673,20 @@ namespace NightHunt.Gameplay.Character
             var anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
+            // Gate by IsUpperBodyReady state-machine flags
+            string readyReason;
+            while (!IsUpperBodyReadyForWeaponTriggers(anim, _activeWeaponType, out readyReason))
+            {
+                yield return null;
+                anim = _actorUtils?.charAnimator;
+                if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+            }
+
             // Short holster for the current weapon.
             ClearWeaponTriggers(anim);
+            bool setChangedUbStart = SafeSetTrigger(anim, WpnChangedUBHash);
             bool setHolster = SafeSetTrigger(anim, HolsterHash);
-            LogAnimEvent("WeaponSwapHolsterTrigger", anim, $"fromType={_activeWeaponType} toType={newType} trigger=Holster setHolster={setHolster}");
+            LogAnimEvent("WeaponSwapHolsterTrigger", anim, $"fromType={_activeWeaponType} toType={newType} trigger=Holster setHolster={setHolster} setChangedUB={setChangedUbStart}");
 
             float holsterDelay = ResolveWeaponTransitionSeconds(previousWeapon, _swapHolsterDelayScale);
             LogAnimEvent("WeaponSwapHolsterDelay", anim, $"delay={holsterDelay:F2} sourceDraw={DescribeWeaponDrawTiming(previousWeapon)} scale={_swapHolsterDelayScale:F2}");
@@ -665,9 +699,8 @@ namespace NightHunt.Gameplay.Character
             SafeSetInt(anim, WeaponTypeHash, newType);
 
             bool setChanged = SafeSetTrigger(anim, WpnChangedHash);
-            bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
             bool setChangedDeath = SafeSetTrigger(anim, WpnChangedDeathHash);
-            LogAnimEvent("WeaponSwapChangeTriggers", anim, $"weaponType={newType} triggers=WeaponChanged,WeaponChangedUB,WeaponChangedDeath setChanged={setChanged} setChangedUB={setChangedUb} setChangedDeath={setChangedDeath}");
+            LogAnimEvent("WeaponSwapChangeTriggers", anim, $"weaponType={newType} triggers=WeaponChanged,WeaponChangedDeath setChanged={setChanged} setChangedDeath={setChangedDeath}");
 
             PrimeWeaponActionParams(anim);
             bool setDraw = SafeSetTrigger(anim, DrawHash);
@@ -696,12 +729,22 @@ namespace NightHunt.Gameplay.Character
             var anim = _actorUtils?.charAnimator;
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
+            // Gate by IsUpperBodyReady state-machine flags
+            string readyReason;
+            while (!IsUpperBodyReadyForWeaponTriggers(anim, _activeWeaponType, out readyReason))
+            {
+                yield return null;
+                anim = _actorUtils?.charAnimator;
+                if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
+            }
+
             ClearWeaponTriggers(anim);
 
             if (_activeWeaponType != 0)
             {
+                bool setChangedUbStart = SafeSetTrigger(anim, WpnChangedUBHash);
                 bool setHolster = SafeSetTrigger(anim, HolsterHash);
-                LogAnimEvent("WeaponHolsterTrigger", anim, $"activeType={_activeWeaponType} trigger=Holster setHolster={setHolster}");
+                LogAnimEvent("WeaponHolsterTrigger", anim, $"activeType={_activeWeaponType} trigger=Holster setHolster={setHolster} setChangedUB={setChangedUbStart}");
             }
 
             float holsterDelay = ResolveWeaponTransitionSeconds(previousWeapon, 1f);
@@ -720,9 +763,8 @@ namespace NightHunt.Gameplay.Character
             if (anim == null || !anim.enabled) { _isSwitching = false; yield break; }
 
             bool setChanged = SafeSetTrigger(anim, WpnChangedHash);
-            bool setChangedUb = SafeSetTrigger(anim, WpnChangedUBHash);
             bool setChangedDeath = SafeSetTrigger(anim, WpnChangedDeathHash);
-            LogAnimEvent("WeaponHolsterDoneTriggers", anim, $"weaponType=0 triggers=WeaponChanged,WeaponChangedUB,WeaponChangedDeath setChanged={setChanged} setChangedUB={setChangedUb} setChangedDeath={setChangedDeath}");
+            LogAnimEvent("WeaponHolsterDoneTriggers", anim, $"weaponType=0 triggers=WeaponChanged,WeaponChangedDeath setChanged={setChanged} setChangedDeath={setChangedDeath}");
             // Unarmed — no Draw trigger.
 
             _isSwitching = false;
@@ -1654,6 +1696,54 @@ namespace NightHunt.Gameplay.Character
             LogAnimEvent("AnimEventMeleeHit", _actorUtils?.charAnimator, "event=OnAnimEventMeleeHit");
         }
 
+        /// <summary>Death animation fully complete — switch to ragdoll/death state.</summary>
+        public void OnAnimEventDeathComplete()
+        {
+            var anim = _actorUtils?.charAnimator;
+            if (anim != null && anim.enabled && _deathLayerIndex >= 0 && _deathLayerIndex < anim.layerCount)
+            {
+                var stateInfo = anim.GetCurrentAnimatorStateInfo(_deathLayerIndex);
+                if (stateInfo.shortNameHash != 0 && !stateInfo.IsName("Death_Empty"))
+                {
+                    float normalizedTime = stateInfo.normalizedTime;
+                    if (normalizedTime < 0.9f)
+                    {
+                        StartCoroutine(WaitForDeathAnimFinishCoroutine(stateInfo.fullPathHash));
+                        return;
+                    }
+                }
+            }
+
+            InvokeDeathComplete();
+        }
+
+        private IEnumerator WaitForDeathAnimFinishCoroutine(int stateHash)
+        {
+            var anim = _actorUtils?.charAnimator;
+            while (anim != null && anim.enabled)
+            {
+                var stateInfo = anim.GetCurrentAnimatorStateInfo(_deathLayerIndex);
+                if (stateInfo.fullPathHash != stateHash)
+                {
+                    // State changed (e.g. interrupted or finished)
+                    break;
+                }
+                if (stateInfo.normalizedTime >= 0.9f)
+                {
+                    break;
+                }
+                yield return null;
+                anim = _actorUtils?.charAnimator;
+            }
+            InvokeDeathComplete();
+        }
+
+        private void InvokeDeathComplete()
+        {
+            LogAnimEvent("AnimEventDeathComplete", _actorUtils?.charAnimator, "event=OnAnimEventDeathComplete");
+            OnDeathAnimationComplete?.Invoke();
+        }
+
         private IEnumerator MeleeHitFallbackCoroutine()
         {
             if (_meleeHitFallbackDelay > 0f)
@@ -1722,5 +1812,6 @@ namespace NightHunt.Gameplay.Character
         public void OnAnimEventReloadIn() => controller?.OnAnimEventReloadIn();
         public void OnAnimEventReloadComplete() => controller?.OnAnimEventReloadComplete();
         public void OnAnimEventMeleeHit() => controller?.OnAnimEventMeleeHit();
+        public void OnAnimEventDeathComplete() => controller?.OnAnimEventDeathComplete();
     }
 }
