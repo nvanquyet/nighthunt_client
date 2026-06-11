@@ -93,6 +93,12 @@ namespace NightHunt.UI.Mobile
 
         public void OnPointerDown(PointerEventData eventData)
         {
+            if (NightHunt.GameplaySystems.UI.Combat.ThrowableAimController.IsAnyAimingActive)
+            {
+                _dragging = false;
+                return;
+            }
+
             _dragging = true;
             EnsureVirtualMouse();
 
@@ -120,6 +126,12 @@ namespace NightHunt.UI.Mobile
 
         public void OnDrag(PointerEventData eventData)
         {
+            if (NightHunt.GameplaySystems.UI.Combat.ThrowableAimController.IsAnyAimingActive)
+            {
+                _dragging = false;
+                return;
+            }
+
             if (!_dragging)
                 return;
 

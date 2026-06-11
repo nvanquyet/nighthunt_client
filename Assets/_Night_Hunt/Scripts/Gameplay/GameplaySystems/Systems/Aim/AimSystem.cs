@@ -143,6 +143,11 @@ namespace NightHunt.GameplaySystems.Aim
             LogCursorState("Awake");
         }
 
+        private bool IsMobile =>
+            PlatformInputDetector.Instance != null
+                ? PlatformInputDetector.Instance.IsMobile
+                : Application.isMobilePlatform;
+
         /// <inheritdoc/>
         public void Initialize(Transform playerRoot, IPlayerStatSystem statSystem)
         {
@@ -171,6 +176,13 @@ namespace NightHunt.GameplaySystems.Aim
         /// <inheritdoc/>
         public void SetCursorVisible(bool visible)
         {
+            if (IsMobile)
+            {
+                bool activelyAimingWeapon = _isThrowableMode;
+                bool aimingThrowable = ThrowableAimController.IsAnyAimingActive;
+                visible = visible && (activelyAimingWeapon || aimingThrowable);
+            }
+
             bool changed = _cursorVisible != visible ||
                            (_worldAimCursor != null && _worldAimCursor.gameObject.activeSelf != visible);
 
@@ -365,6 +377,19 @@ namespace NightHunt.GameplaySystems.Aim
                 }
                 return;
             }
+
+            if (IsMobile)
+            {
+                bool activelyAimingWeapon = _isThrowableMode;
+                bool aimingThrowable = ThrowableAimController.IsAnyAimingActive;
+                bool shouldBeVisible = _cursorVisible && (activelyAimingWeapon || aimingThrowable);
+
+                if (_worldAimCursor != null && _worldAimCursor.gameObject.activeSelf != shouldBeVisible)
+                {
+                    _worldAimCursor.gameObject.SetActive(shouldBeVisible);
+                }
+            }
+
             if (_isThrowableMode)
                 ResolveThrowableAim();
             else

@@ -65,6 +65,11 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
         private System.Action<int> _weaponSlotSelectionHandler;
 
         // ── State ─────────────────────────────────────────────────────────────────
+        private bool IsMobile =>
+            PlatformInputDetector.Instance != null
+                ? PlatformInputDetector.Instance.IsMobile
+                : Application.isMobilePlatform;
+
         private bool    _isFiring;
         private bool    _isAiming;
         private bool    _isReloading;
@@ -379,6 +384,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnFirePerformed(InputAction.CallbackContext ctx)
         {
+            if (IsMobile)
+                return;
+
             bool overUI = IsPointerOverAnyUIByRaycast();
             bool uiConsumed = _uiConsumedThisPress;
             Debug.Log($"[NH_FLOW][10][Fire.Performed] overUI={overUI} uiConsumed={uiConsumed} {DescribeCombatFlowState()} raycast={DescribePointerRaycastTargets()}");
@@ -423,6 +431,9 @@ namespace NightHunt.Gameplay.Input.Handlers.Combat
 
         private void OnFireCanceled(InputAction.CallbackContext ctx)
         {
+            if (IsMobile)
+                return;
+
             Debug.Log($"[NH_FLOW][18][Fire.Canceled] suppress={_suppressNextFireCanceled} {DescribeCombatFlowState()}");
             if (_suppressNextFireCanceled)
             {

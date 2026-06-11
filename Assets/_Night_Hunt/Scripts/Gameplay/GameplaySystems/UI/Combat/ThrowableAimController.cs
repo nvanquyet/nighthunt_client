@@ -90,6 +90,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private Vector3 _lastStableAimDirection = Vector3.forward;
 
         // ─────────────────────────────────────────────────────────────────────
+        //  Static Instance & Gating (read by MobileCameraDragArea and AimSystem)
+        // ─────────────────────────────────────────────────────────────────────
+
+        public static ThrowableAimController Instance { get; private set; }
+        public static bool IsAnyAimingActive => Instance != null && (Instance._inAimMode || Instance._inDeployMode);
+
+        // ─────────────────────────────────────────────────────────────────────
         //  Static output (read by ThrowableHandler)
         // ─────────────────────────────────────────────────────────────────────
 
@@ -104,7 +111,6 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         /// <summary>True while waiting for the player to confirm a deployable placement.</summary>
         public static bool IsDeployingPC { get; private set; }
-
         /// <summary>
         /// Called by <see cref="CombatInputHandler"/> during the fire-hold throwable path.
         /// Keeps the visual aim cursor in sync with the already-clamped ground hit point.
@@ -148,6 +154,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             enabled = false;
             return;
         #endif
+            Instance = this;
             _cam = Camera.main;
             HideCursor();
         }
@@ -165,6 +172,9 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         private void OnDestroy()
         {
+            if (Instance == this)
+                Instance = null;
+
         #if !UNITY_SERVER
             if (_itemUseSystem != null)
             {
@@ -308,7 +318,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
                 bool pointerWasHeld = _deployPointerWasHeld;
                 // Preserve the current aim position so a queued release targets the right spot.
                 Vector3 savedAimTarget = AimWorldTarget;
-                if (_inDeployMode) ResetDeployState();
+                if (_inDeployMode && _activeItemInstanceId != item.InstanceID) ResetDeployState();
                 if (_inAimMode)    ResetAimState();
 
                 _activeItemInstanceId = item.InstanceID;
@@ -343,7 +353,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             }
             else if (def.Type == ItemType.Throwable)
             {
-                if (_inAimMode)    ResetAimState();
+                if (_inAimMode && _activeItemInstanceId != item.InstanceID)    ResetAimState();
                 if (_inDeployMode) ResetDeployState();
 
                 _activeItemInstanceId = item.InstanceID;
