@@ -712,6 +712,10 @@ namespace NightHunt.GameplaySystems.ItemUse
             if (healthSystem == null || healthSystem.IsDead)
                 return false;
 
+            var targetPlayer = healthSystem.GetComponentInParent<NetworkPlayer>();
+            if (targetPlayer != null && (int)targetPlayer.ObjectId == _ownerNetworkObjectId)
+                return true;
+
             if (_def == null || _def.AllowFriendlyFire)
                 return true;
 

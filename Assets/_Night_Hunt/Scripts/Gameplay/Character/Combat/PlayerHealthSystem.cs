@@ -296,7 +296,7 @@ namespace NightHunt.Gameplay.Character.Combat
                     return false;
                 }
 
-                if (info.ShooterNetworkObjectId <= 0)
+                if (info.ShooterNetworkObjectId < 0)
                 {
                     Debug.LogWarning($"[PlayerHealthSystem] Client damage RPC rejected: missing shooter object id. sender={sender.ClientId}");
                     return false;
@@ -343,7 +343,7 @@ namespace NightHunt.Gameplay.Character.Combat
             }
 
             // Distance plausibility check: reject shots from impossibly far away.
-            if (_maxHitDistance > 0f && info.ShooterNetworkObjectId > 0)
+            if (_maxHitDistance > 0f && info.ShooterNetworkObjectId >= 0)
             {
                 if (FishNet.InstanceFinder.ServerManager.Objects.Spawned
                         .TryGetValue(info.ShooterNetworkObjectId, out var shooterNob))
@@ -433,8 +433,9 @@ namespace NightHunt.Gameplay.Character.Combat
             // Tell CharacterLifecycleController who the killer is BEFORE health event fires.
             _lifecycle?.SetKillerInfo(killerName);
 
-            uint killerObjId = info.ShooterNetworkObjectId > 0 ? (uint)info.ShooterNetworkObjectId : 0u;
-            uint victimObjId = _networkPlayer != null ? (uint)_networkPlayer.ObjectId : 0u;
+            bool hasKiller = info.ShooterNetworkObjectId >= 0;
+            uint killerObjId = hasKiller ? (uint)info.ShooterNetworkObjectId : uint.MaxValue;
+            uint victimObjId = _networkPlayer != null ? (uint)_networkPlayer.ObjectId : uint.MaxValue;
             int  killerTeamId = ResolveKillerTeamId(info.ShooterNetworkObjectId);
             string killerBackendPlayerId = ResolveBackendPlayerId(info.ShooterNetworkObjectId);
 
@@ -442,7 +443,7 @@ namespace NightHunt.Gameplay.Character.Combat
             if (killerTeamId >= 0)
                 _matchEndManager?.AddKill(killerTeamId, killerBackendPlayerId);
 
-            if (killerObjId != 0u)
+            if (hasKiller)
             {
                 if (_scoringSystem == null)
                     _scoringSystem = FindFirstObjectByType<ScoringSystem>();
@@ -532,7 +533,7 @@ namespace NightHunt.Gameplay.Character.Combat
 
         private static NetworkPlayer ResolvePlayerByNetworkObjectId(int shooterNetObjId)
         {
-            if (shooterNetObjId <= 0)
+            if (shooterNetObjId < 0)
                 return null;
 
             if (FishNet.InstanceFinder.ServerManager.Objects.Spawned.TryGetValue(shooterNetObjId, out var nob))

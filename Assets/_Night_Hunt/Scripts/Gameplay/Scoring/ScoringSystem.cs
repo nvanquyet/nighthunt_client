@@ -133,7 +133,7 @@ namespace NightHunt.Gameplay.Scoring
             if (playerScores.ContainsKey(killerId))
                 playerScores[killerId].Kills++;
 
-            if (victimId != 0u)
+            if (victimId != uint.MaxValue)
             {
                 EnsurePlayerScore(victimId);
                 playerScores[victimId].Deaths++;

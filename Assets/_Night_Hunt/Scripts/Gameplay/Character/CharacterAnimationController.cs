@@ -344,6 +344,9 @@ namespace NightHunt.Gameplay.Character
             _launcherLayer = GetLayerIndex(anim, "LauncherActions"); // optional; -1 if absent
             _upperBodyLayer = GetLayerIndex(anim, "UpperBody");
             _partialActionsLayer = GetLayerIndex(anim, "PartialActions");
+            int resolvedDeathLayer = GetLayerIndex(anim, "Death");
+            if (resolvedDeathLayer != -1)
+                _deathLayerIndex = resolvedDeathLayer;
             _prevAnimatorStateHashes = new int[anim.layerCount];
             ApplyWeaponLayerWeights(anim, immediately: true);
 
