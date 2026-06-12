@@ -370,6 +370,7 @@ namespace NightHunt.UI
         {
             var currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
             bool isGameScene = currentScene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase);
+            bool isOverlayActive = MatchLoadingOverlay.Instance != null && MatchLoadingOverlay.Instance.IsShowing;
             var currentRoomState = RoomState.Instance;
             long currentRoomId = currentRoomState?.RoomId ?? 0L;
 
@@ -379,9 +380,9 @@ namespace NightHunt.UI
                 return;
             }
 
-            if (!isGameScene)
+            if (!isGameScene && !isOverlayActive)
             {
-                Debug.Log($"[MFC] room_disbanded roomId={evt.roomId} reason={evt.reason} received outside game scene; PartyCustomModeView owns lobby cleanup.");
+                Debug.Log($"[MFC] room_disbanded roomId={evt.roomId} reason={evt.reason} received outside game scene/loading; PartyCustomModeView owns lobby cleanup.");
                 return;
             }
 

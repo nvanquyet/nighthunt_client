@@ -609,6 +609,7 @@ namespace NightHunt.Networking
                         _connectionStarted = false;
                         _lastPlayerDataBroadcastRealtime = -1f;
                         CancelInvoke(nameof(MarkConnectionStable));
+
                         if (wasConnected)
                         {
                             Debug.LogWarning($"[NH_CONN][NH_DROP][STOPPED] Match server connection dropped connectedFor={connectedFor:F2}s retry={_retryCount}/{_maxRetries}; attempting reconnect.");
@@ -617,10 +618,31 @@ namespace NightHunt.Networking
                         }
                         else
                         {
+                            // Never connected — initial connection failed (e.g. relay ConnectionFailed).
+                            // Previously: overlay was silently stuck for ALL retries (~120s) with no feedback.
+                            // Now: update overlay text and show reconnect modal after first retry so user
+                            // knows the system is retrying and can choose to return home.
                             Debug.LogWarning($"[NH_CONN][NH_DROP][FAILED] Connection to match server failed before stable start retry={_retryCount}/{_maxRetries}.");
+
+                            bool isRelayMode = RoomState.Instance?.CurrentGameMode == GameMode.Custom_Relay;
+                            if (isRelayMode && _retryCount >= 1)
+                            {
+                                // Show reconnect modal after first failed retry so user isn't stuck on
+                                // the frozen loading screen for the full relay retry budget (~120s).
+                                showReconnectUi = true;
+                                ShowReconnectModal();
+                            }
+                            else
+                            {
+                                // First attempt failed — quietly update overlay with status text.
+                                MatchLoadingOverlay.Instance?.SetStatus(
+                                    $"Connecting to game server... (attempt {_retryCount + 1}/{_maxRetries})");
+                            }
                         }
+
                         TryRetry(showReconnectUi);
                     }
+
                     break;
             }
         }
