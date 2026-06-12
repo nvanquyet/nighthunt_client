@@ -28,6 +28,7 @@ namespace NightHunt.UI.Mobile
         private CameraStateManager _cameraStateManager;
         private bool _addedVirtualMouse;
         private bool _dragging;
+        private int  _activeDragPointerId = -1;  // Fix2: track which pointer owns the drag
         private bool _missingHandlerLogged;
         private float _nextDragLogTime;
         private float _effectiveDegreesPerPixel;
@@ -56,6 +57,7 @@ namespace NightHunt.UI.Mobile
         {
             GameSettings.OnSettingsChanged -= ApplySettingsFromConfig;
             _dragging = false;
+            _activeDragPointerId = -1;
         }
 
         private void OnDestroy()
@@ -88,6 +90,7 @@ namespace NightHunt.UI.Mobile
             _handler = null;
             _cameraStateManager = null;
             _dragging = false;
+            _activeDragPointerId = -1;
             _missingHandlerLogged = false;
         }
 
@@ -96,9 +99,16 @@ namespace NightHunt.UI.Mobile
             if (NightHunt.GameplaySystems.UI.Combat.ThrowableAimController.IsAnyAimingActive)
             {
                 _dragging = false;
+                _activeDragPointerId = -1;
                 return;
             }
 
+            // Fix2: only claim drag for the first pointer; ignore subsequent fingers
+            // (e.g. the movement joystick finger) so they cannot hijack or stop camera rotation.
+            if (_activeDragPointerId != -1)
+                return;
+
+            _activeDragPointerId = eventData.pointerId;
             _dragging = true;
             EnsureVirtualMouse();
 
@@ -111,7 +121,12 @@ namespace NightHunt.UI.Mobile
 
         public void OnPointerUp(PointerEventData eventData)
         {
+            // Fix2: only the owning pointer may stop the drag.
+            if (eventData.pointerId != _activeDragPointerId)
+                return;
+
             _dragging = false;
+            _activeDragPointerId = -1;
 
             // FIX: Move the virtual cursor off-screen so no UI element stays in a hovered
             // (blue-highlighted) state after the finger is lifted.  Without this, the last
@@ -126,9 +141,14 @@ namespace NightHunt.UI.Mobile
 
         public void OnDrag(PointerEventData eventData)
         {
+            // Fix2: ignore drag events from pointers that don't own the camera drag.
+            if (eventData.pointerId != _activeDragPointerId)
+                return;
+
             if (NightHunt.GameplaySystems.UI.Combat.ThrowableAimController.IsAnyAimingActive)
             {
                 _dragging = false;
+                _activeDragPointerId = -1;
                 return;
             }
 
@@ -137,10 +157,6 @@ namespace NightHunt.UI.Mobile
 
             EnsureVirtualMouse();
             if (_mouse == null)
-                return;
-
-            // Pinch zoom owns two-finger gestures.
-            if (UnityEngine.Input.touchCount > 1)
                 return;
 
             if (_handler == null && !_missingHandlerLogged)

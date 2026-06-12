@@ -39,6 +39,12 @@ namespace NightHunt.Gameplay.Match
         [Header("Settings")] [Tooltip("Team IDs present in the match (usually {0, 1}).")] [SerializeField]
         private int[] _teamIds = { 0, 1 };
 
+        [Tooltip("If a team is fully cleared before final zone and cannot respawn, wait this many seconds then force final zone.")]
+        [SerializeField, Min(0f)] private float _earlyClearFinalZoneDelaySeconds = 10f;
+
+        [Tooltip("Delay applied to the forced final-zone respawn after the early-clear countdown completes.")]
+        [SerializeField, Min(0f)] private float _earlyClearForcedRespawnDelaySeconds = 0f;
+
         // ── Public events (server-only) ────────────────────────────────────────
         /// <summary>Raised on the server when the match resolves. winnerTeamId == -1 → Draw.</summary>
         public event Action<int, MatchEndReason> OnMatchEnded;
@@ -59,6 +65,8 @@ namespace NightHunt.Gameplay.Match
         private readonly Dictionary<string, int> _playerDeathCount = new();
         private readonly Dictionary<CharacterLifecycleController, Action> _deathSubscriptions = new();
         private SafeZoneManager _subscribedSafeZoneManager;
+        private Coroutine _earlyClearFinalZoneCoroutine;
+        private bool _forcingFinalZoneAfterClear;
 
         // ── Dependency injection ───────────────────────────────────────────────
         // BeaconManager will self-register; we keep a weak reference here.
@@ -125,6 +133,13 @@ namespace NightHunt.Gameplay.Match
                 _subscribedSafeZoneManager.OnFinalZoneExpired -= OnFinalZoneExpired;
                 _subscribedSafeZoneManager = null;
             }
+
+            if (_earlyClearFinalZoneCoroutine != null)
+            {
+                StopCoroutine(_earlyClearFinalZoneCoroutine);
+                _earlyClearFinalZoneCoroutine = null;
+            }
+            _forcingFinalZoneAfterClear = false;
         }
 
         private void TrySubscribeSafeZoneManager()
@@ -457,6 +472,11 @@ namespace NightHunt.Gameplay.Match
                 return;
             }
 
+            if (_forcingFinalZoneAfterClear)
+            {
+                return;
+            }
+
             if (isInFinalZone)
             {
                 // Final zone: only the one-time queued revival prevents elimination.
@@ -465,10 +485,63 @@ namespace NightHunt.Gameplay.Match
             }
             else
             {
-                // All earlier zones: elimination is immediate (no final-zone respawn leniency)
                 if (allDead && noBeacons)
-                    TriggerElimination(teamId);
+                    StartEarlyClearFinalZoneFlow(teamId);
             }
+        }
+
+        private void StartEarlyClearFinalZoneFlow(int eliminatedTeamId)
+        {
+            if (_forcingFinalZoneAfterClear || _matchEnded)
+                return;
+
+            _forcingFinalZoneAfterClear = true;
+            _earlyClearFinalZoneCoroutine = StartCoroutine(EarlyClearFinalZoneFlow(eliminatedTeamId));
+        }
+
+        private IEnumerator EarlyClearFinalZoneFlow(int eliminatedTeamId)
+        {
+            float delay = Mathf.Max(0f, _earlyClearFinalZoneDelaySeconds);
+            SafeZoneManager safeZone = SafeZoneManager.Instance ?? FindFirstObjectByType<SafeZoneManager>();
+            bool forceStarted = safeZone != null && safeZone.ForceFinalZoneAfterDelay(delay);
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "EarlyClearForceFinalZone",
+                $"team={eliminatedTeamId} delay={delay:F2} safeZone={(safeZone != null ? "ok" : "null")} forceStarted={forceStarted}",
+                this);
+
+            if (!forceStarted && safeZone != null && safeZone.IsInFinalZone)
+            {
+                _respawnProvider?.ForceFinalZoneRespawn(_earlyClearForcedRespawnDelaySeconds, "early_team_clear_already_final");
+                _forcingFinalZoneAfterClear = false;
+                _earlyClearFinalZoneCoroutine = null;
+                yield break;
+            }
+
+            if (forceStarted)
+            {
+                yield return new WaitForSeconds(delay);
+
+                float deadline = Time.time + 1f;
+                while (!_matchEnded && safeZone != null && !safeZone.IsInFinalZone && Time.time < deadline)
+                    yield return null;
+
+                if (!_matchEnded && safeZone != null && safeZone.IsInFinalZone)
+                {
+                    _respawnProvider?.ForceFinalZoneRespawn(
+                        _earlyClearForcedRespawnDelaySeconds,
+                        "early_team_clear_final_zone");
+                }
+            }
+            else if (!_matchEnded)
+            {
+                Debug.LogWarning($"[MatchEndManager] Early clear flow could not force final zone. Falling back to elimination for team {eliminatedTeamId}.");
+                TriggerElimination(eliminatedTeamId);
+            }
+
+            _forcingFinalZoneAfterClear = false;
+            _earlyClearFinalZoneCoroutine = null;
         }
 
         private void TriggerElimination(int eliminatedTeamId)
@@ -627,6 +700,7 @@ namespace NightHunt.Gameplay.Match
                         DisplayName = data?.DisplayName ?? "Unknown",
                         TeamId = teamId,
                         Kills = _playerKillCount.TryGetValue(pid, out int k) ? k : 0,
+                        Assists = _scoringSystem != null ? _scoringSystem.GetPlayerAssists((uint)np.ObjectId) : 0,
                         Deaths = _playerDeathCount.TryGetValue(pid, out int d) ? d : 0, // Bug #13 fix
                         Score = _scoringSystem != null ? _scoringSystem.GetPlayerScore((uint)np.ObjectId) : 0,
                         EloChange = 0 // calculated server-side post-match
@@ -669,5 +743,6 @@ namespace NightHunt.Gameplay.Match
     public interface IRespawnProvider
     {
         bool HasPendingRespawn(int teamId);
+        void ForceFinalZoneRespawn(float delaySeconds, string reason);
     }
 }

@@ -156,6 +156,43 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _pulseRing?.Play();
         }
 
+        private void OnDisable()
+        {
+            // Guard: nếu HUD bị disable giữa lúc đang giữ nút (respawn/death),
+            // reset toàn bộ press state để lần enable lại không bị kẹt.
+            ResetPressState();
+        }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            ResetPressState();
+        }
+
+        /// <summary>
+        /// Reset all press/hold state. Called on Disable and Destroy to guard against
+        /// state being stuck when the HUD is toggled mid-press (e.g. respawn/death).
+        /// </summary>
+        private void ResetPressState()
+        {
+            StopAllCoroutines();
+            _holdTimer = null;
+
+            if (!_pressActive)
+                return;
+
+            _pressActive = false;
+            _joystickStarted = false;
+
+            _combatInputHandler?.SimulateFire(false);
+            _combatInputHandler?.SetFireMobileJoystick(Vector2.zero, false);
+
+            if (_joystick != null)
+                _joystick.gameObject.SetActive(false);
+
+            _rangeIndicator?.Hide();
+        }
+
         public void Bind(CombatInputHandler handler)
         {
             if (_combatInputHandler != null)
@@ -242,6 +279,13 @@ namespace NightHunt.GameplaySystems.UI.Combat
             Vector2 raw = ResolveJoystickDirectionForFirstFrame(eventData);
             Vector2 joystickDir = CamRelativeXZ(raw);
             Debug.Log($"[NH_FLOW][16][FireButton.{source}] button={name} raw={raw:F2} camRelative={joystickDir:F2}");
+
+            if (ThrowableAimController.IsAnyAimingActive && ThrowableAimController.Instance != null)
+            {
+                ThrowableAimController.Instance.OnMobileDrag(raw);
+                return;
+            }
+
             _combatInputHandler?.SetFireMobileJoystick(joystickDir, active: true);
         }
 

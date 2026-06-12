@@ -380,6 +380,14 @@ namespace NightHunt.UI.Mobile
             SetContextualButtonVisible(_interactButton, false);
             SetContextualButtonVisible(_pickupButton, false);
             SetContextualButtonVisible(_reloadButton, false);
+
+            // Fix4: warn if inventory button still null after all auto-resolve attempts
+            if (_inventoryButton == null)
+            {
+                Debug.LogWarning("[MobileHUDPanel] _inventoryButton chưa được wire trong Inspector " +
+                                 "và không tìm thấy button tên 'inventory'/'bag'/'backpack' trong children.");
+            }
+
             EnsureMovementJoystickLifecycleWired();
 
             Debug.Log($"[MOBILE_INPUT] MobileHUD refs root={(_mobileRoot != null ? _mobileRoot.name : "null")} rootActive={(_mobileRoot != null && _mobileRoot.activeInHierarchy)} isMobile={IsMobile} reload={(_reloadButton != null ? _reloadButton.name : "null")} interact={(_interactButton != null ? _interactButton.name : "null")} pickup={(_pickupButton != null ? _pickupButton.name : "null")} cameraDrag={(_cameraDragArea != null ? _cameraDragArea.name : "null")} pinch={(_pinchZoomBridge != null ? _pinchZoomBridge.name : "null")}");

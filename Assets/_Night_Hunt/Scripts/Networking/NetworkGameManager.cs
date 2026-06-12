@@ -582,6 +582,9 @@ namespace NightHunt.Networking
                     CancelInvoke(nameof(MarkConnectionStable));
                     Invoke(nameof(MarkConnectionStable), Mathf.Max(1f, _stableConnectionSecondsToResetRetries));
                     Debug.Log($"[NH_CONN][STARTED] Client connected to match server retry={_retryCount}/{_maxRetries} t={System.DateTime.UtcNow:HH:mm:ss.fff}.");
+                    // Keep the app simulating while backgrounded so a brief alt-tab / screen-off on
+                    // mobile does not let the UDP relay/DS connection time out → mid-game kick to Home.
+                    NightHunt.Core.GameManager.Instance?.EnableBackgroundRunForMatch();
                     RegisterClientHandshakeBroadcast();
                     SendPlayerDataBroadcastToServer("ClientConnectionStarted", force: true);
                     MatchLoadingOverlay.Instance?.MarkConnected();
@@ -898,6 +901,8 @@ namespace NightHunt.Networking
             _dsReady         = false;
             _gameSceneLoaded = false;
             RestoreDefaultRetryBudget();
+            // Match is over / abandoned — stop forcing background simulation.
+            NightHunt.Core.GameManager.Instance?.RestoreBackgroundRunDefault();
             RoomState.Instance?.ClearRoom();
             HideReconnectModal(showToast: false);
             if (SceneLoader.IsInHomeScene)

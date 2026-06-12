@@ -457,6 +457,14 @@ namespace NightHunt.Gameplay.Character.Combat
             }
             else
             {
+                // Always-visible diagnostic: kill feed fired but NO score was awarded.
+                // Most common cause in team-based mode: killer & victim share a TeamId, or a
+                // TeamId is unassigned (-1). If you see a kill in the feed but the score bar does
+                // not move, check these values against the expected 2-team setup (team 0 vs team 1).
+                Debug.LogWarning(
+                    $"[PlayerHealthSystem] KILL NOT SCORED — killerObj={killerObjId} (team={killerTeamId}) " +
+                    $"victimObj={victimObjId} (team={victimTeamId}) hasKiller={hasKiller}. " +
+                    "Reason: same team / unassigned team (-1) / self-kill. Kill feed still shows.");
                 PhaseTestLog.Log(
                     PhaseTestLogCategory.Score,
                     "KillScoreSkipped",

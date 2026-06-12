@@ -556,14 +556,26 @@ namespace NightHunt.Server
             {
                 try
                 {
-                    var config = JsonUtility.FromJson<SafeZoneMatchConfig>(req.downloadHandler.text);
+                    string rawBody = req.downloadHandler?.text ?? string.Empty;
+                    var config = JsonUtility.FromJson<SafeZoneMatchConfig>(rawBody);
+                    int parsedPhaseCount = config?.phases?.Count ?? 0;
+
+                    // Diagnostic: log raw byte length + parsed phase count + first-phase timings so we can
+                    // tell at a glance whether the backend JSON actually deserialised (vs silently falling
+                    // back to a hardcoded preset). If parsedPhaseCount==0 here but the body has bytes, the
+                    // JSON field names don't match SafeZoneMatchConfig (check camelCase / enum-as-int).
+                    string firstPhaseInfo = parsedPhaseCount > 0
+                        ? $"phase0(wait={config.phases[0].waitBeforeShrink:F0}s shrink={config.phases[0].shrinkDuration:F0}s dmg/s={config.phases[0].damagePerSecond:F0})"
+                        : "phase0=none";
+                    Debug.Log($"[DS-Boot][ZONE_CONFIG] parsed mapId='{_mapId}' bodyBytes={GetTextByteLength(rawBody)} phases={parsedPhaseCount} {firstPhaseInfo}");
+
                     if (config != null && config.phases != null && config.phases.Count > 0)
                     {
                         ApplyZoneConfig(config, $"backend mapId='{_mapId}'");
                         yield break;
                     }
 
-                    Debug.LogWarning($"[DS-Boot][ZONE_CONFIG] backend mapId='{_mapId}' returned empty/invalid phases; bodyBytes={GetTextByteLength(req.downloadHandler?.text)}");
+                    Debug.LogWarning($"[DS-Boot][ZONE_CONFIG] backend mapId='{_mapId}' returned empty/invalid phases; bodyBytes={GetTextByteLength(rawBody)} rawHead='{Head(rawBody, 200)}'");
                 }
                 catch (Exception ex)
                 {
@@ -575,6 +587,7 @@ namespace NightHunt.Server
                 Debug.LogWarning($"[DS-Boot][ZONE_CONFIG] HTTP={req.responseCode} err='{req.error}' mapId='{_mapId}'; using fallback.");
             }
 
+            Debug.LogWarning($"[DS-Boot][ZONE_CONFIG] FALLBACK to preset for mapId='{_mapId}' — backend values (e.g. your 20s timers) will NOT be used this match.");
             var fallbackConfig = SafeZoneMatchConfig.ForMap(_mapId);
             ApplyZoneConfig(fallbackConfig, $"fallback mapId='{_mapId}'");
         }
@@ -614,6 +627,13 @@ namespace NightHunt.Server
         private static int GetTextByteLength(string text)
         {
             return string.IsNullOrEmpty(text) ? 0 : System.Text.Encoding.UTF8.GetByteCount(text);
+        }
+
+        /// <summary>Returns the first <paramref name="max"/> chars of <paramref name="text"/> for safe logging.</summary>
+        private static string Head(string text, int max)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            return text.Length <= max ? text : text.Substring(0, max) + "…";
         }
 
         /// <summary>

@@ -96,6 +96,8 @@ namespace NightHunt.Gameplay.Core.Events
         public string DisplayName;
         public int TeamId;
         public int Kills;
+        /// <summary>Number of assists this player contributed during the match.</summary>
+        public int Assists;
         public int Deaths;
         public int Score;
         /// <summary>Change in ELO (positive = gain, negative = loss). 0 for Custom mode.</summary>
@@ -277,7 +279,7 @@ namespace NightHunt.Gameplay.Core.Events
     /// <summary>
     /// Fired on the server each time a score action is resolved (Kill, Assist, BossKill, etc.).
     /// Optional hook for analytics, sound cues, or future per-player feed.
-    /// Note: MatchUI receives full snapshots via <see cref="ScoreDataSyncedEvent"/> from ScoreSync — 
+    /// Note: MatchUI receives full snapshots via <see cref="ScoreDataSyncedEvent"/> from ScoreSync —
     /// this event is NOT for the score display. Consumers MUST be subscribed before AwardScore() runs.
     /// </summary>
     public struct ScoreAwardedEvent : IGameplayEvent

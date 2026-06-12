@@ -164,6 +164,18 @@ namespace NightHunt.Core
 #if UNITY_ANDROID || UNITY_IOS
             if (pauseStatus)
             {
+                // While in an active FishNet match (relay/DS), the connection is UDP and dies
+                // the moment Unity stops ticking in the background. Disconnecting the WS here
+                // and letting the app freeze causes a mid-game kick back to Home. Keep
+                // everything alive and rely on runInBackground (set on match start).
+                if (IsInActiveMatch())
+                {
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
+                        Debug.Log("[GameManager] App paused DURING MATCH → keep WS + relay alive (no disconnect)");
+                    OnAppPaused?.Invoke();
+                    return;
+                }
+
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] App paused → disconnect WS (keep room)");
                 DisconnectWebSocket();
@@ -196,6 +208,15 @@ namespace NightHunt.Core
 #if UNITY_ANDROID || UNITY_IOS
             if (!hasFocus)
             {
+                // See OnApplicationPause: never tear down the connection mid-match.
+                if (IsInActiveMatch())
+                {
+                    if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
+                        Debug.Log("[GameManager] App lost focus DURING MATCH → keep WS + relay alive (no disconnect)");
+                    OnAppFocusLost?.Invoke();
+                    return;
+                }
+
                 if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
                     Debug.Log("[GameManager] App lost focus → disconnect WS (keep room)");
                 DisconnectWebSocket();
@@ -390,6 +411,47 @@ namespace NightHunt.Core
             // backoff reconnect. HandleApplicationResumed() will reconnect on focus-return.
             try { gameWebSocketService.Disconnect(disableReconnect: true); }
             catch (Exception ex) { Debug.LogWarning($"[GameManager] WS disconnect: {ex.Message}"); }
+        }
+
+        /// <summary>
+        /// True when a FishNet gameplay client is currently connected (relay or dedicated server).
+        /// Used to avoid tearing down the connection when the app loses focus / is backgrounded
+        /// on mobile — doing so kicks the player out of an in-progress match.
+        /// </summary>
+        private bool IsInActiveMatch()
+        {
+            var ngm = Networking.NetworkGameManager.Instance;
+            return ngm != null && (ngm.IsClient || ngm.IsServer);
+        }
+
+        /// <summary>
+        /// Ensure the app keeps simulating while backgrounded for the duration of a match.
+        /// On mobile, runInBackground defaults to false → the UDP relay transport stops sending
+        /// keepalives when the app loses focus and the server times the client out. Call this when
+        /// a match starts so a brief alt-tab / screen-off does not drop the player.
+        /// </summary>
+        public void EnableBackgroundRunForMatch()
+        {
+            if (!Application.runInBackground)
+            {
+                Application.runInBackground = true;
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
+                    Debug.Log("[GameManager] runInBackground = true (match started — keep relay alive while backgrounded)");
+            }
+        }
+
+        /// <summary>
+        /// Restore the default background policy after a match ends / player returns to Home.
+        /// </summary>
+        public void RestoreBackgroundRunDefault()
+        {
+            bool runInBg = InstanceConfig.ShouldRunInBackground();
+            if (Application.runInBackground != runInBg)
+            {
+                Application.runInBackground = runInBg;
+                if (NightHuntDebugConfig.Instance != null && NightHuntDebugConfig.Instance.EnableCoreDebugLogs)
+                    Debug.Log($"[GameManager] runInBackground = {runInBg} (match ended — restored default)");
+            }
         }
     }
 }

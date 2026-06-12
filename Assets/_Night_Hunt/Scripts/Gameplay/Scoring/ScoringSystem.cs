@@ -159,6 +159,9 @@ namespace NightHunt.Gameplay.Scoring
         {
             var assistConfig = GetScoreConfig("Assist");
             AwardScore(assistId, "Assist", assistConfig.BaseScore, assistConfig.PhaseMultiplier);
+            // Track Assists stat
+            EnsurePlayerScore(assistId);
+            playerScores[assistId].Assists++;
         }
 
         /// <summary>
@@ -370,6 +373,14 @@ namespace NightHunt.Gameplay.Scoring
                 return playerScores[playerId].TotalScore;
             }
             return 0;
+        }
+
+        /// <summary>
+        /// Get the number of assists recorded for a player.
+        /// </summary>
+        public int GetPlayerAssists(uint playerId)
+        {
+            return playerScores.TryGetValue(playerId, out var ps) ? ps.Assists : 0;
         }
 
         /// <summary>

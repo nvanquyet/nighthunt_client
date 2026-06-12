@@ -5763,10 +5763,10 @@ RectTransform:
   - {fileID: 1245513809368474103}
   - {fileID: 6630821005499682763}
   - {fileID: 5199128758318621551}
-  - {fileID: 1911520800824382841}
   - {fileID: 2332217364327916607}
   - {fileID: 3438385115144457914}
   - {fileID: 3585684770118838874}
+  - {fileID: 1911520800824382841}
   - {fileID: 1264520023060150625}
   - {fileID: 3984163360443423578}
   - {fileID: 2849014945813491153}
@@ -10455,7 +10455,6 @@ MonoBehaviour:
   _respawnTimerText: {fileID: 4942897710917372128}
   _spectateButton: {fileID: 2884500248663054491}
   _respawnButton: {fileID: 513321014388941610}
-  _respawnDelay: 5
 --- !u!225 &3210972218262091275
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -11042,7 +11041,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 960, y: -511.20004}
+  m_AnchoredPosition: {x: 1112.2361, y: -472}
   m_SizeDelta: {x: 720, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &4371144094006185870
@@ -13840,7 +13839,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 5061243271086754928}
   m_HandleRect: {fileID: 2470244052354804293}
   m_Direction: 2
-  m_Value: 0
+  m_Value: 1
   m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
@@ -14275,7 +14274,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 328943480016045499}
   m_HandleRect: {fileID: 2197909245477720562}
   m_Direction: 2
-  m_Value: 0
+  m_Value: 1
   m_Size: 1
   m_NumberOfSteps: 0
   m_OnValueChanged:
@@ -22371,7 +22370,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 960, y: -610.4}
+  m_AnchoredPosition: {x: 1112.2361, y: -560}
   m_SizeDelta: {x: 720, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &4589129474605959502
@@ -45536,12 +45535,6 @@ PrefabInstance:
       addedObject: {fileID: 5722582265238854499}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 1e244bf2d86bb474a917b3787dcdf084, type: 3}
---- !u!225 &1704640982692427756 stripped
-CanvasGroup:
-  m_CorrespondingSourceObject: {fileID: 8339827228882085940, guid: 1e244bf2d86bb474a917b3787dcdf084,
-    type: 3}
-  m_PrefabInstance: {fileID: 7211702661883748312}
-  m_PrefabAsset: {fileID: 0}
 --- !u!224 &3984163360443423578 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 6007672346180748418, guid: 1e244bf2d86bb474a917b3787dcdf084,

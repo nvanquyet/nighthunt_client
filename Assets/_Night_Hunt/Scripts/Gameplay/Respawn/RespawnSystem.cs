@@ -56,6 +56,35 @@ namespace NightHunt.Gameplay.Respawn
             return false;
         }
 
+        [Server]
+        public void ForceFinalZoneRespawn(float delaySeconds, string reason)
+        {
+            _finalZoneRevivalProcessed = true;
+            _waitingForFinalZone.Clear();
+            _respawnTimers.Clear();
+
+            NetworkPlayer[] players = RegistryService.Instance?.GetAllPlayers();
+            if (players == null)
+                return;
+
+            float delay = Mathf.Max(0f, delaySeconds);
+            int queued = 0;
+            foreach (NetworkPlayer player in players)
+            {
+                if (player == null || !IsPlayerDead(player))
+                    continue;
+
+                QueueRespawn(player, delay, string.IsNullOrEmpty(reason) ? "forced_final_zone" : reason);
+                queued++;
+            }
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "ForcedFinalZoneRespawnQueued",
+                $"deadPlayers={queued} delay={delay:F2} reason={reason}",
+                this);
+        }
+
         public bool TryGetLocalDisposition(
             NetworkPlayer player,
             out RespawnDisposition disposition,
@@ -349,7 +378,53 @@ namespace NightHunt.Gameplay.Respawn
                 return GetSafeZonePosition();
 
             RespawnBeacon beacon = FindRespawnBeacon(player);
-            return beacon != null ? beacon.transform.position : GetDefaultSpawnPosition(player);
+            Vector3 basePosition = beacon != null ? beacon.transform.position : GetDefaultSpawnPosition(player);
+
+            // Loop-death guard: a beacon/spawn point may now sit OUTSIDE the shrunk safe
+            // zone. Respawning there means the next zone damage tick kills the player again
+            // immediately — looking like the player is "immortal but bleeding out". Pull the
+            // respawn point back inside the current safe zone so the player gets a fair start.
+            return ClampInsideSafeZone(basePosition);
+        }
+
+        /// <summary>
+        /// If <paramref name="worldPos"/> lies outside the current safe-zone circle, returns the
+        /// closest point a safe margin inside the zone edge. Otherwise returns it unchanged.
+        /// Server-only; no-op when no SafeZoneManager / zone radius is active.
+        /// </summary>
+        private Vector3 ClampInsideSafeZone(Vector3 worldPos)
+        {
+            SafeZoneManager manager = SafeZoneManager.Instance;
+            if (manager == null || manager.CurrentRadius <= 0f)
+                return worldPos;
+
+            if (manager.IsInsideSafeZone(worldPos))
+                return worldPos;
+
+            // Keep a margin inside the edge so the player isn't clipped by the ring instantly.
+            float safeRadius = Mathf.Max(0f, manager.CurrentRadius * 0.85f);
+            Vector3 center = manager.CurrentCenter;
+            Vector3 flatDelta = worldPos - center;
+            flatDelta.y = 0f;
+
+            // Degenerate case (respawn point == center): jitter so we don't stack everyone on one spot.
+            if (flatDelta.sqrMagnitude < 0.01f)
+            {
+                Vector2 jitter = Random.insideUnitCircle * safeRadius;
+                flatDelta = new Vector3(jitter.x, 0f, jitter.y);
+            }
+
+            Vector3 clampedFlat = Vector3.ClampMagnitude(flatDelta, safeRadius);
+            Vector3 result = center + clampedFlat;
+            result.y = worldPos.y; // preserve original ground height
+
+            PhaseTestLog.Log(
+                PhaseTestLogCategory.Death,
+                "RespawnClampedToZone",
+                $"from={worldPos:F1} to={result:F1} zoneCenter={center:F1} zoneRadius={manager.CurrentRadius:F1}",
+                this);
+
+            return result;
         }
 
         private RespawnBeacon FindRespawnBeacon(NetworkPlayer player)

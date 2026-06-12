@@ -88,6 +88,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
         private bool   _deployPointerWasHeld;
         private bool   _suppressNextDeployRelease;
         private bool   _deployConfirmInProgress;
+        private int    _deployTouchId = -1;   // Fix3: track which finger owns deploy/throw aim
         private Vector3 _lastStableAimDirection = Vector3.forward;
 
         // ─────────────────────────────────────────────────────────────────────
@@ -673,6 +674,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _inAimMode  = false;
             IsAimingPC  = false;
             _activeItemInstanceId = null;
+            _deployTouchId = -1;   // Fix3
 
             if (_rangeIndicator != null) _rangeIndicator.Hide();
             HideCursor();
@@ -775,6 +777,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
             _deployPointerWasHeld = false;
             _suppressNextDeployRelease = false;
             _deployConfirmInProgress = false;
+            _deployTouchId = -1;   // Fix3
 
             HideCursor();
             _aimSystem?.SetCursorVisible(true);
@@ -907,14 +910,20 @@ namespace NightHunt.GameplaySystems.UI.Combat
             return false;
         }
 
-        private static bool PrimaryPointerReleasedThisFrame()
+        private bool PrimaryPointerReleasedThisFrame()
         {
             if (UnityEngine.Input.GetMouseButtonUp(0))
                 return true;
 
             for (int i = 0; i < UnityEngine.Input.touchCount; i++)
             {
-                TouchPhase phase = UnityEngine.Input.GetTouch(i).phase;
+                var touch = UnityEngine.Input.GetTouch(i);
+                // Fix3: only count a release as "primary" when it belongs to the tracked
+                // deploy/aim finger. Other fingers (joystick) lifting must not trigger.
+                if (_deployTouchId != -1 && touch.fingerId != _deployTouchId)
+                    continue;
+
+                TouchPhase phase = touch.phase;
                 if (phase == TouchPhase.Ended || phase == TouchPhase.Canceled)
                     return true;
             }
@@ -1032,48 +1041,67 @@ namespace NightHunt.GameplaySystems.UI.Combat
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// On mobile in deploy mode, project any active non-UI touch to the ground
-        /// plane and update <see cref="AimWorldTarget"/> so the cursor / placement
-        /// preview follows the finger even without going through the drag-on-button path.
+        /// On mobile in deploy mode, project the tracked finger to the ground plane and
+        /// update <see cref="AimWorldTarget"/> so the cursor / placement preview follows it.
+        ///
+        /// Fix3: only track _deployTouchId (the finger that activated deploy mode).
+        /// If that finger is not active, claim the first valid non-UI touch.
         /// </summary>
         private void UpdateMobileDeployAim()
         {
             if (_cam == null || _playerTransform == null) return;
 
+            // Find the tracked finger (or claim a new one if none tracked yet).
+            int bestIndex = -1;
             for (int i = 0; i < UnityEngine.Input.touchCount; i++)
             {
                 var touch = UnityEngine.Input.GetTouch(i);
                 if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
                     continue;
 
-                // Skip only blocking controls; camera drag/fullscreen world-input
-                // surfaces must still update the deploy target.
-                if (IsPointerOverBlockingUI(touch.position))
-                    continue;
+                if (_deployTouchId != -1 && touch.fingerId == _deployTouchId)
+                {
+                    bestIndex = i;
+                    break; // found our tracked finger
+                }
 
-                Ray   ray   = _cam.ScreenPointToRay(touch.position);
-                Plane plane = new Plane(Vector3.up, _playerTransform.position);
-                if (!plane.Raycast(ray, out float dist))
-                    continue;
-
-                Vector3 hit    = ray.GetPoint(dist);
-                float   range  = GetThrowRange();
-                Vector3 offset = hit - _playerTransform.position;
-                offset.y = 0f;
-                if (offset.sqrMagnitude > range * range)
-                    hit = _playerTransform.position + offset.normalized * range;
-
-                AimWorldTarget = FlattenTargetForPlayer(hit);
-                Vector3 aimOffset = hit - _playerTransform.position;
-                aimOffset.y = 0f;
-                AimDirection = aimOffset.sqrMagnitude > 0.001f ? aimOffset.normalized : Vector3.forward;
-                MoveCursor(AimWorldTarget);
-                RotatePlayerTowards(AimDirection);
-
-                // Feed AimSystem so _worldAimCursor is positioned via ResolveThrowableAim.
-                _aimSystem?.SetThrowableAim(new Vector2(AimDirection.x, AimDirection.z));
-                break; // process the first valid world touch only
+                if (_deployTouchId == -1 && !IsPointerOverBlockingUI(touch.position) && bestIndex == -1)
+                    bestIndex = i; // first valid candidate
             }
+
+            if (bestIndex == -1)
+                return;
+
+            var bestTouch = UnityEngine.Input.GetTouch(bestIndex);
+
+            // Claim the touch if not yet tracked.
+            if (_deployTouchId == -1)
+                _deployTouchId = bestTouch.fingerId;
+
+            if (IsPointerOverBlockingUI(bestTouch.position))
+                return;
+
+            Ray   ray   = _cam.ScreenPointToRay(bestTouch.position);
+            Plane plane = new Plane(Vector3.up, _playerTransform.position);
+            if (!plane.Raycast(ray, out float dist))
+                return;
+
+            Vector3 hit    = ray.GetPoint(dist);
+            float   range  = GetThrowRange();
+            Vector3 offset = hit - _playerTransform.position;
+            offset.y = 0f;
+            if (offset.sqrMagnitude > range * range)
+                hit = _playerTransform.position + offset.normalized * range;
+
+            AimWorldTarget = FlattenTargetForPlayer(hit);
+            Vector3 aimOffset = hit - _playerTransform.position;
+            aimOffset.y = 0f;
+            AimDirection = aimOffset.sqrMagnitude > 0.001f ? aimOffset.normalized : Vector3.forward;
+            MoveCursor(AimWorldTarget);
+            RotatePlayerTowards(AimDirection);
+
+            // Feed AimSystem so _worldAimCursor is positioned via ResolveThrowableAim.
+            _aimSystem?.SetThrowableAim(new Vector2(AimDirection.x, AimDirection.z));
         }
     }
 }

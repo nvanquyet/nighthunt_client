@@ -63,6 +63,7 @@ namespace NightHunt.Gameplay.Zone
         public SafeZoneMatchConfig Config => _config;
         private Coroutine           _zoneCoroutine;
         private Coroutine           _damageCoroutine;
+        private Coroutine           _forceFinalZoneCoroutine;
         private bool                _matchStarted;
 
         #region Unity / FishNet lifecycle
@@ -157,6 +158,12 @@ namespace NightHunt.Gameplay.Zone
                 _zoneCoroutine = null;
             }
 
+            if (_forceFinalZoneCoroutine != null)
+            {
+                StopCoroutine(_forceFinalZoneCoroutine);
+                _forceFinalZoneCoroutine = null;
+            }
+
             if (_damageCoroutine != null)
             {
                 StopCoroutine(_damageCoroutine);
@@ -168,6 +175,29 @@ namespace NightHunt.Gameplay.Zone
         public void SetInitialCenter(Vector3 center)
         {
             _syncCenter.Value = center;
+        }
+
+        [Server]
+        public bool ForceFinalZoneAfterDelay(float delaySeconds)
+        {
+            if (!_syncMatchActive.Value || !_matchStarted)
+                return false;
+
+            EnsureValidConfig();
+            if (IsInFinalZone)
+                return false;
+
+            if (_zoneCoroutine != null)
+            {
+                StopCoroutine(_zoneCoroutine);
+                _zoneCoroutine = null;
+            }
+
+            if (_forceFinalZoneCoroutine != null)
+                StopCoroutine(_forceFinalZoneCoroutine);
+
+            _forceFinalZoneCoroutine = StartCoroutine(ForceFinalZoneAfterDelayRoutine(Mathf.Max(0f, delaySeconds)));
+            return true;
         }
 
         public void ReplayCurrentHudState()
@@ -197,11 +227,7 @@ namespace NightHunt.Gameplay.Zone
         [Server]
         private IEnumerator ZoneAdvanceLoop()
         {
-            if (_config.phases == null || _config.phases.Count == 0)
-            {
-                UnityEngine.Debug.LogError("[SafeZoneManager] No phases configured! Using Standard.");
-                _config = SafeZoneMatchConfig.Standard();
-            }
+            EnsureValidConfig();
 
             for (int i = 0; i < _config.phases.Count; i++)
             {
@@ -312,6 +338,56 @@ namespace NightHunt.Gameplay.Zone
             }
         }
 
+        [Server]
+        private IEnumerator ForceFinalZoneAfterDelayRoutine(float delaySeconds)
+        {
+            _syncIsShrinking.Value = false;
+            _syncShrinkProgress.Value = 0f;
+
+            float remaining = delaySeconds;
+            while (remaining > 0f && _syncMatchActive.Value && _matchStarted)
+            {
+                _syncCountdownSeconds.Value = remaining;
+                remaining -= Time.deltaTime;
+                yield return null;
+            }
+
+            _forceFinalZoneCoroutine = null;
+
+            if (!_syncMatchActive.Value || !_matchStarted)
+                yield break;
+
+            EnterFinalZoneNow();
+        }
+
+        [Server]
+        private void EnterFinalZoneNow()
+        {
+            EnsureValidConfig();
+            if (_config.phases == null || _config.phases.Count == 0)
+                return;
+
+            int finalIndex = _config.phases.Count - 1;
+            SafeZonePhaseConfig finalPhase = _config.phases[finalIndex];
+            float finalRadius = ResolvePhaseEndRadius(finalPhase);
+            Vector3 finalCenter = ResolveForcedFinalCenter();
+
+            _syncZoneIndex.Value = finalIndex;
+            _syncCenter.Value = finalCenter;
+            _syncNextCenter.Value = finalCenter;
+            _syncRadius.Value = finalRadius;
+            _syncTargetRadius.Value = finalRadius;
+            _syncIsShrinking.Value = false;
+            _syncShrinkProgress.Value = 1f;
+            _syncCountdownSeconds.Value = -1f;
+            _syncMatchActive.Value = true;
+            _matchStarted = true;
+
+            OnZonePhaseStarted?.Invoke(finalIndex);
+            ReplayCurrentHudState();
+            UnityEngine.Debug.Log($"[SafeZoneManager] Forced final zone entered. index={finalIndex} center={finalCenter:F2} radius={finalRadius:F1}");
+        }
+
         #endregion
 
         #region Zone center randomisation
@@ -343,6 +419,39 @@ namespace NightHunt.Gameplay.Zone
                 candidate = Vector3.Lerp(candidate, Vector3.zero, 0.3f);
 
             return candidate;
+        }
+
+        private void EnsureValidConfig()
+        {
+            if (_config != null && _config.phases != null && _config.phases.Count > 0)
+                return;
+
+            UnityEngine.Debug.LogError("[SafeZoneManager] No phases configured! Using Standard.");
+            _config = SafeZoneMatchConfig.Standard();
+        }
+
+        private float ResolvePhaseEndRadius(SafeZonePhaseConfig phase)
+        {
+            if (phase == null)
+                return Mathf.Max(1f, _config != null ? _config.finalZoneMinRadius : 10f);
+
+            float minRadius = _config != null ? _config.finalZoneMinRadius : 10f;
+            if (phase.minRadiusOverride > 0f)
+                minRadius = phase.minRadiusOverride;
+
+            return Mathf.Max(phase.endRadius, minRadius);
+        }
+
+        private Vector3 ResolveForcedFinalCenter()
+        {
+            if (_config != null && _config.centerMode == ZoneCenterMode.Fixed)
+                return _syncCenter.Value;
+
+            Vector3 next = _syncNextCenter.Value;
+            if (next.sqrMagnitude > 0.001f)
+                return next;
+
+            return ComputeNextCenter(_syncCenter.Value, Mathf.Max(_syncRadius.Value, _config != null ? _config.initialRadius : 1f));
         }
 
         #endregion

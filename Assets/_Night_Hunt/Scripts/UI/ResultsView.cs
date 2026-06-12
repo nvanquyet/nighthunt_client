@@ -453,9 +453,9 @@ namespace NightHunt.UI
             hlg.childControlWidth = true; hlg.childControlHeight = true; hlg.spacing = 4f;
             hlg.padding = new RectOffset(6, 6, 2, 2);
 
-            string[] colNames   = { "NameText", "TeamText", "KillsText", "DeathsText", "ScoreText", "EloText" };
-            string[] colSamples = { "PlayerX",  "Team A",   "5",          "2",           "1200",      "+25" };
-            float[]  colWidths  = { 160f, 70f, 50f, 50f, 70f, 60f };
+            string[] colNames   = { "NameText", "TeamText", "KillsText", "AssistsText", "DeathsText", "ScoreText", "EloText", "CoinText" };
+            string[] colSamples = { "PlayerX",  "Team A",   "5",         "2",            "2",           "1200",      "+25",     "+100" };
+            float[]  colWidths  = { 150f, 60f, 45f, 45f, 45f, 65f, 55f, 60f };
 
             for (int i = 0; i < colNames.Length; i++)
             {
@@ -474,7 +474,7 @@ namespace NightHunt.UI
                 UnityEditor.EditorUtility.SetDirty(this);
             }
             Debug.Log($"[ResultsView] Created ResultRow_Template at {path}. " +
-                      "Add ResultRowView component and wire nameText/teamText/killsText/deathsText/scoreText/eloText.");
+                      "Add ResultRowView component and wire nameText/teamText/killsText/assistsText/deathsText/scoreText/eloText/coinText.");
         }
 #endif
     }
@@ -487,21 +487,30 @@ namespace NightHunt.UI
         [SerializeField] private TextMeshProUGUI nameText;
         [SerializeField] private TextMeshProUGUI teamText;
         [SerializeField] private TextMeshProUGUI killsText;
+        /// <summary>Wire to the Assists TMP label in the prefab (Inspector).</summary>
+        [SerializeField] private TextMeshProUGUI assistsText;
         [SerializeField] private TextMeshProUGUI deathsText;
         [SerializeField] private TextMeshProUGUI scoreText;
         [SerializeField] private TextMeshProUGUI eloText;
+        /// <summary>Wire to the Coins TMP label in the prefab (Inspector).</summary>
+        [SerializeField] private TextMeshProUGUI coinText;
 
         public void SetData(MatchResult r)
         {
             if (nameText != null) nameText.text = r.DisplayName;
             if (teamText != null) teamText.text = $"Team {(char)('A' + r.TeamId)}";
             if (killsText != null) killsText.text = r.Kills.ToString();
+            if (assistsText != null) assistsText.text = r.Assists.ToString();
             if (deathsText != null) deathsText.text = r.Deaths.ToString();
             if (scoreText != null) scoreText.text = r.Score.ToString();
             if (eloText != null)
             {
                 if (r.EloChange == 0) eloText.text = "-";
                 else eloText.text = r.EloChange > 0 ? $"+{r.EloChange}" : r.EloChange.ToString();
+            }
+            if (coinText != null)
+            {
+                coinText.text = r.CoinChange >= 0 ? $"+{r.CoinChange}" : r.CoinChange.ToString();
             }
         }
     }
