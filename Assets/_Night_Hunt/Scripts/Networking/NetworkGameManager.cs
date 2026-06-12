@@ -243,6 +243,7 @@ namespace NightHunt.Networking
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
             ConfigureConnectionDropTrace();
+            ConfigureTransportTimeout();
             string ip = string.IsNullOrEmpty(dsIp) ? defaultServerAddress : dsIp;
             ushort p  = dsPort > 0 ? dsPort : port;
             ClearRelayPacketLayer();
@@ -282,6 +283,7 @@ namespace NightHunt.Networking
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
             ConfigureConnectionDropTrace();
+            ConfigureTransportTimeout();
             Debug.Log($"[NH_CONN][NH_RELAY][NH_HANDSHAKE][HOST_START] StartHostWithRelay relay={relayIp}:{relayPort} session={sessionId} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             _relayHostUpstreamPunchComplete = false;
             _relayHostReadyEarliestRealtime = -1f;
@@ -404,6 +406,7 @@ namespace NightHunt.Networking
         {
             if (networkManager == null) { Debug.LogError("[NetworkGameManager] NetworkManager is null!"); return; }
             ConfigureConnectionDropTrace();
+            ConfigureTransportTimeout();
             Debug.Log($"[NH_CONN][NH_RELAY][NH_HANDSHAKE][CLIENT_START] StartClientWithRelay relay={relayIp}:{relayPort} session={sessionId} t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             ConfigureRelayPacketLayer(sessionId, forceNewLayer: true);
             SetTransportAddress(relayIp, relayPort);
@@ -1214,6 +1217,18 @@ namespace NightHunt.Networking
             transport.SetPacketLayer(_activeRelayIdentityLayer);
             ConnectionDropTrace.SetRelayIdentity(sessionId, _activeRelayIdentityLayer, forceNewLayer);
             Debug.Log($"[NH_CONN][NH_RELAY][IDENTITY] Relay identity enabled sessionHash={_activeRelayIdentityLayer.SessionHash:x16} peerId={peerId} nonce={_activeRelayIdentityLayer.Nonce:x16} forceNew={forceNewLayer}");
+        }
+
+        private void ConfigureTransportTimeout()
+        {
+            var transport = networkManager?.TransportManager?.Transport as Tugboat;
+            if (transport != null)
+            {
+                // Set disconnect/handshake timeout to 30 seconds to survive heavy scene load/initialization freezes on mobile
+                transport.SetTimeout(30f, asServer: true);
+                transport.SetTimeout(30f, asServer: false);
+                Debug.Log("[NetworkGameManager] Configured Tugboat timeout to 30 seconds for both client and server.");
+            }
         }
 
         private void ClearRelayPacketLayer()
