@@ -384,28 +384,50 @@ namespace NightHunt.UI
                 Debug.Log($"[MFC] room_disbanded roomId={evt.roomId} reason={evt.reason} received outside game scene; PartyCustomModeView owns lobby cleanup.");
                 return;
             }
-            Debug.Log($"[MFC] room_disbanded ▶ roomId={evt.roomId} reason={evt.reason} — clearing RoomState.  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
-            RoomState.Instance?.ClearRoom();
+
+            string reason = !string.IsNullOrEmpty(evt.reason) ? evt.reason : "unknown";
+            Debug.Log($"[MFC] room_disbanded ▶ roomId={evt.roomId} reason={reason} — clearing RoomState and returning Home.  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
             // Reset so the next match_ready is not incorrectly treated as a duplicate.
             _lastHandledMatchId = null;
 
-            // If the player is in the game map scene but FishNet never connected (DS boot failed /
-            // connection error), navigate back to Home so they are not permanently stranded.
-            var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-            bool inGameScene = activeScene.name.StartsWith("02_Map_", System.StringComparison.OrdinalIgnoreCase);
-            bool fishNetConnected = NightHunt.Networking.NetworkGameManager.Instance != null
-                                 && NightHunt.Networking.NetworkGameManager.Instance.IsClient;
+            // The room no longer exists on the backend — retrying the FishNet connection is pointless.
+            // Cancel any pending retry/reconnect loop and disconnect immediately, regardless of
+            // whether FishNet has already fired its Stopped event (race condition: room_disbanded
+            // can arrive BEFORE FishNet.OnClientConnectionState.Stopped, leaving fishNetConnected=true
+            // while the server is already dead → client was kẹt waiting for retry budget to exhaust).
+            MatchLoadingOverlay.Instance?.ForceHide("room_disbanded");
 
-            if (inGameScene && !fishNetConnected)
+            if (NightHunt.Networking.NetworkGameManager.Instance != null)
             {
-                string reason = !string.IsNullOrEmpty(evt.reason) ? evt.reason : "unknown";
-                Debug.LogWarning($"[MFC] room_disbanded in game scene while not connected (reason={reason}) — returning to Home.");
-                var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
-                toast?.Show("Match", $"Room was disbanded ({reason}). Returning to Home...");
-                NightHunt.Core.SceneLoader.LoadHome();
+                NightHunt.Networking.NetworkGameManager.Instance.CancelInvoke(); // cancel RetryConnect / LoadHome
+                NightHunt.Networking.NetworkGameManager.Instance.Disconnect();
             }
+
+            RoomState.Instance?.ClearRoom();
+
+            var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
+
+            // Detect host-left vs admin-disbanded for better UX messaging
+            bool isHostLeft = reason.IndexOf("host", System.StringComparison.OrdinalIgnoreCase) >= 0
+                           || reason.IndexOf("left", System.StringComparison.OrdinalIgnoreCase) >= 0
+                           || reason.IndexOf("disconnected", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            string toastMsg = isHostLeft
+                ? "The host has disconnected. Returning to Home..."
+                : $"Room was disbanded ({reason}). Returning to Home...";
+
+            toast?.Show("Room Ended", toastMsg);
+
+            // Small delay so toast is visible before scene transition
+            StartCoroutine(LoadHomeAfterDelay(1.5f));
         }
+
+        private System.Collections.IEnumerator LoadHomeAfterDelay(float delay)
+        {
+            yield return new UnityEngine.WaitForSecondsRealtime(delay);
+            NightHunt.Core.SceneLoader.LoadHome();
+        }
+
 
         // ── server_terminated (admin force-kills DS) ─────────────────────────
 
