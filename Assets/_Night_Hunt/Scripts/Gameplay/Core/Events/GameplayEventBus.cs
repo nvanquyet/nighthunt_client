@@ -9,7 +9,7 @@ namespace NightHunt.Gameplay.Core.Events
     /// Centralized event bus for gameplay events
     /// Singleton pattern với proper cleanup
     /// </summary>
-    public class GameplayEventBus : Singleton<GameplayEventBus>
+    public class GameplayEventBus : SingletonPersistent<GameplayEventBus>
     {
         private Dictionary<Type, List<Delegate>> subscribers = new Dictionary<Type, List<Delegate>>();
 

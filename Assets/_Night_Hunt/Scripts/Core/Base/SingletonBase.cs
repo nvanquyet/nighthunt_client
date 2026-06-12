@@ -54,7 +54,15 @@ namespace NightHunt.Core
             get
             {
                 if (_instance == null)
+                {
                     _instance = FindFirstObjectByType<T>(FindObjectsInactive.Include);
+                    if (_instance == null && typeof(T).Name == "GameplayEventBus")
+                    {
+                        GameObject go = new GameObject("GameplayEventBus (Auto-Created)");
+                        _instance = go.AddComponent<T>();
+                        Debug.Log($"[SingletonBase] Auto-created missing singleton instance for {typeof(T).Name}");
+                    }
+                }
                 return _instance;
             }
         }

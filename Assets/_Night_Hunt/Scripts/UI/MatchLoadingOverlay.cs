@@ -549,7 +549,7 @@ namespace NightHunt.UI
                 mapNameText.text = "";
         }
 
-        private void SetStatus(string msg)
+        public void SetStatus(string msg)
         {
             if (statusText != null) statusText.text = msg;
             ResolveProgressView()?.SetMessage(msg);
