@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using NightHunt.GameplaySystems.UI;
 using NightHunt.GameplaySystems.UI.Inventory;
 using NightHunt.GameplaySystems.UI.Combat;
@@ -80,6 +81,11 @@ namespace NightHunt.UI
 
         [Tooltip("InventoryScreen component inside _inventoryRoot.")]
         [SerializeField] private InventoryScreen _inventoryScreen;
+
+        [Tooltip("Optional Close/Back button inside the inventory panel. Click closes the inventory " +
+                 "(same as pressing Tab / the inventory toggle again). Useful on mobile where the full-screen " +
+                 "drop-area placeholder covers the original inventory button. Leave null to disable.")]
+        [SerializeField] private Button _inventoryCloseButton;
 
 
         // ── Match Layer ──────────────────────────────────────────────────────
@@ -203,6 +209,13 @@ namespace NightHunt.UI
             // Spectate: player switch rebuilds UIPlayerContext.
             if (SpectateManager.Instance != null)
                 SpectateManager.Instance.OnCurrentPlayerChanged += HandlePlayerChanged;
+
+            // Optional in-panel Close/Back button (mobile-friendly inventory dismiss).
+            if (_inventoryCloseButton != null)
+            {
+                _inventoryCloseButton.onClick.RemoveListener(CloseInventory);
+                _inventoryCloseButton.onClick.AddListener(CloseInventory);
+            }
         }
 
         private void OnDisable()
@@ -219,6 +232,9 @@ namespace NightHunt.UI
 
             if (SpectateManager.Instance != null)
                 SpectateManager.Instance.OnCurrentPlayerChanged -= HandlePlayerChanged;
+
+            if (_inventoryCloseButton != null)
+                _inventoryCloseButton.onClick.RemoveListener(CloseInventory);
 
             UnsubscribeCombatEvents();
             UnsubscribeLifecycle();
