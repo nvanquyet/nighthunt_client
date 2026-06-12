@@ -281,16 +281,31 @@ namespace NightHunt.UI
 
         private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent e)
         {
-            Debug.Log($"[MFC] match_cancelled \u25ba reason={e.reason}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            Debug.Log($"[MFC] match_cancelled ▶ reason={e.reason}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
             _lastHandledMatchId = null;
 
             MatchFoundOverlay.Instance?.Hide();
-            MatchLoadingOverlay.Instance?.Hide();
+
+            // Force-hide the loading overlay immediately — do not fade, as the overlay
+            // was showing "Starting game server..." and must not linger after a failure.
+            MatchLoadingOverlay.Instance?.ForceHide("match_cancelled");
+
             RoomState.Instance?.ClearNetworkSession();
 
+            // Detect DS-boot-specific failures by keyword so the toast title is actionable.
             string reason = !string.IsNullOrEmpty(e.reason) ? e.reason : "Match was cancelled.";
+            bool isDsFailure = reason.IndexOf("server", System.StringComparison.OrdinalIgnoreCase) >= 0
+                            || reason.IndexOf("dedicated", System.StringComparison.OrdinalIgnoreCase) >= 0
+                            || reason.IndexOf("port", System.StringComparison.OrdinalIgnoreCase) >= 0
+                            || reason.IndexOf("timeout", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+            string toastTitle   = isDsFailure ? "Server Start Failed" : "Matchmaking";
+            string toastMessage = isDsFailure
+                ? $"Could not start a game server. Please try again in a moment.\n({reason})"
+                : $"Match cancelled: {reason}";
+
             var toast = PersistentUICanvas.Instance?.ToastService ?? ToastService.Instance;
-            toast?.Show("Matchmaking", $"Match cancelled: {reason}");
+            toast?.Show(toastTitle, toastMessage);
 
             if (SceneLoader.HasPendingSceneLoad || SceneLoader.IsInGameplayScene)
                 SceneLoader.ReturnHomeFromGameplayFlow();

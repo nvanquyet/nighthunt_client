@@ -705,7 +705,10 @@ namespace NightHunt.UI
 
         private void HandleAnyPlayerDied(string victimName, string killerName, string weaponId)
         {
-            _killFeedUI?.AddKill(killerName, victimName, weaponId);
+            if (string.IsNullOrWhiteSpace(killerName))
+                _killFeedUI?.AddDeath(victimName);
+            else
+                _killFeedUI?.AddKill(killerName, victimName, weaponId);
         }
 
         private void SubscribeCombatEvents()

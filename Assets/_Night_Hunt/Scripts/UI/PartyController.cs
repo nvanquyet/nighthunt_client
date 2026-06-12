@@ -1061,9 +1061,10 @@ namespace NightHunt.UI
 
             _pendingLobbyToken = e.lobbyToken;
 
-            // Hiện overlay "DS đang khởi động" — informational only, không có nút xác nhận.
-            // Overlay này ẩn đi khi nhận match_ready (HandleMatchReady) hoặc match_cancelled.
-            MatchFoundOverlay.Instance?.Show(e.gameMode, e.playerIds, _sessionState?.UserId ?? 0L);
+            // Hiện MatchLoadingOverlay ngay với text "Tìm thấy trận!"
+            // Overlay này sẽ tiếp tục khi match_ready tới (player cards được cập nhật, scene load).
+            // MatchFoundOverlay đã được bỏ — MatchLoadingOverlay đảm nhiệm toàn bộ flow.
+            MatchLoadingOverlay.Instance?.ShowMatchFound(e.gameMode);
 
             // Auto-accept ngay lập tức — không cần user xác nhận.
             try
@@ -1075,7 +1076,7 @@ namespace NightHunt.UI
                 if (!result.Success && _pendingLobbyToken == e.lobbyToken)
                 {
                     _pendingLobbyToken = null;
-                    MatchFoundOverlay.Instance?.Hide();
+                    MatchLoadingOverlay.Instance?.ForceHide("accept_failed");
                     SetQueueState(RankedQueueState.Idle);
                     ShowToast("Matchmaking", result.Message ?? "Failed to join match.");
                 }
@@ -1086,7 +1087,7 @@ namespace NightHunt.UI
                 if (_pendingLobbyToken == e.lobbyToken)
                 {
                     _pendingLobbyToken = null;
-                    MatchFoundOverlay.Instance?.Hide();
+                    MatchLoadingOverlay.Instance?.ForceHide("accept_exception");
                     SetQueueState(RankedQueueState.Idle);
                 }
                 Debug.LogError($"[PartyController] Auto-accept failed lobby={e.lobbyToken}: {ex.Message}");
@@ -1095,7 +1096,9 @@ namespace NightHunt.UI
 
         private void HandleMatchReady(GameWebSocketService.MatchReadyEvent e)
         {
-            MatchFoundOverlay.Instance?.Hide();
+            // MatchFoundOverlay đã được bỏ — không cần hide.
+            // MatchLoadingOverlay vẫn đang mở từ ShowMatchFound; MatchFlowCoordinator
+            // sẽ gọi Show(sceneId) để update player cards và load scene.
             _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
             Debug.Log($"[PartyController] match_ready UI reset only. MatchFlowCoordinator owns scene loading. matchId={e.matchId}");
@@ -1103,9 +1106,8 @@ namespace NightHunt.UI
 
         private void HandleMatchCancelled(GameWebSocketService.MatchCancelledEvent e)
         {
-            // Ẩn overlay "tìm thấy trận" (nếu đang mở)
-            MatchFoundOverlay.Instance?.Hide();
-
+            // MatchFlowCoordinator.HandleMatchCancelled() đã gọi ForceHide trên MatchLoadingOverlay.
+            // PartyController chỉ reset queue state.
             _pendingLobbyToken = null;
             SetQueueState(RankedQueueState.Idle);
             Debug.Log($"[PartyController] MatchCancelled — reason={e.reason}");

@@ -7,6 +7,7 @@ using NightHunt.Data;
 using NightHunt.Gameplay.Character.Combat;
 using NightHunt.Networking.Player;
 using NightHunt.Core;
+using NightHunt.Utilities;
 
 namespace NightHunt.Gameplay.Zone
 {
@@ -137,6 +138,30 @@ namespace NightHunt.Gameplay.Zone
 
             _zoneCoroutine   = StartCoroutine(ZoneAdvanceLoop());
             _damageCoroutine = StartCoroutine(DamageTick());
+        }
+
+        [Server]
+        public void EndMatch()
+        {
+            if (!_syncMatchActive.Value && !_matchStarted)
+                return;
+
+            _syncMatchActive.Value = false;
+            _matchStarted = false;
+            _syncIsShrinking.Value = false;
+            _syncCountdownSeconds.Value = -1f;
+
+            if (_zoneCoroutine != null)
+            {
+                StopCoroutine(_zoneCoroutine);
+                _zoneCoroutine = null;
+            }
+
+            if (_damageCoroutine != null)
+            {
+                StopCoroutine(_damageCoroutine);
+                _damageCoroutine = null;
+            }
         }
 
         [Server]
@@ -276,7 +301,13 @@ namespace NightHunt.Gameplay.Zone
                         ShooterNetworkObjectId = -1,
                         WeaponId               = "zone",
                     };
-                    player.GetComponent<PlayerHealthSystem>()?.ApplyDamageServer(damageInfo);
+                    PlayerHealthSystem health = ComponentResolver.Find<PlayerHealthSystem>(player)
+                        .OnSelf()
+                        .InChildren()
+                        .OrLogWarning("[SafeZoneManager] PlayerHealthSystem not found for zone damage")
+                        .Resolve();
+
+                    health?.ApplyDamageServer(damageInfo);
                 }
             }
         }

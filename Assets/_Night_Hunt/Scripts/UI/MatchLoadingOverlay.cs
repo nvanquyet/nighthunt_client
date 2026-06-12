@@ -182,6 +182,42 @@ namespace NightHunt.UI
 
         // ── Public API ─────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Gọi ngay khi nhận WS "match_found" — hiện overlay trước khi có player data / scene.
+        /// Overlay sẽ tiếp tục được dùng xuyên suốt đến khi game bắt đầu;
+        /// <see cref="Show(NightHunt.Config.SceneId)"/> (gọi bởi match_ready) sẽ cập nhật
+        /// player cards và load scene mà KHÔNG reset hoặc fade lại.
+        /// </summary>
+        public void ShowMatchFound(string gameMode = null)
+        {
+            if (_isVisible)
+            {
+                // Overlay đã mở (trường hợp hiếm) — chỉ cập nhật status
+                SetStatus("Tìm thấy trận! Đang khởi động server...");
+                return;
+            }
+
+            ResetReadinessSignal();
+            CancelInvoke(nameof(HideOnReady));
+            _showTime        = Time.realtimeSinceStartup;
+            _progressTarget  = 0.08f;
+            _progressCurrent = 0f;
+            _spawnedCount    = 0;
+            _eventsSubscribed = false;
+
+            // Chưa có player data → không build cards, chỉ show status
+            SetStatus("Tìm thấy trận! Đang khởi động server...");
+            ShowRandomTip();
+            if (vsLabel != null) vsLabel.text = "VS";
+
+            StartTimeout();
+
+            if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
+            _fadeCoroutine = StartCoroutine(FadeInMatchFound());
+
+            Debug.Log($"[FLOW §0] MatchLoadingOverlay.ShowMatchFound: gameMode={gameMode}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+        }
+
         public void Show(NightHunt.Config.SceneId mapId)
         {
             targetMapId = mapId;
@@ -247,24 +283,34 @@ namespace NightHunt.UI
         {
             ResetReadinessSignal();
             CancelInvoke(nameof(HideOnReady));
-            _showTime        = Time.realtimeSinceStartup;
-            _progressTarget  = 0f;
-            _progressCurrent = 0f;
             _spawnedCount    = 0;
             _eventsSubscribed = false;   // reset so TryLateSubscribe() re-runs for new match
 
             SetStage(MatchLoadStage.DsBooting);
-            BuildPlayerCards();
+            BuildPlayerCards();   // lần này đã có player data từ match_ready
             RefreshMapLabel();
             ShowRandomTip();
-
             if (vsLabel != null) vsLabel.text = "VS";
 
-            Debug.Log($"[FLOW §2] MatchLoadingOverlay.ShowInternal: RoomState.CurrentRoom={RoomState.Instance?.CurrentRoom?.roomId} players={RoomState.Instance?.CurrentRoom?.players?.Count ?? 0}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
+            Debug.Log($"[FLOW §2] MatchLoadingOverlay.ShowInternal: alreadyVisible={_isVisible} RoomState.CurrentRoom={RoomState.Instance?.CurrentRoom?.roomId} players={RoomState.Instance?.CurrentRoom?.players?.Count ?? 0}  t={System.DateTime.UtcNow:HH:mm:ss.fff}");
 
             SubscribeEvents();
             StartTimeout();
 
+            if (_isVisible)
+            {
+                // Overlay đã mở sẵn từ ShowMatchFound — KHÔNG fade lại (tránh flash alpha).
+                // Chỉ cần activate scene mà SceneLoader.LoadGame() đã load ngầm.
+                // _showTime giữ nguyên từ lúc ShowMatchFound để minimumDisplayDuration tính đúng.
+                _progressTarget  = 0.15f;
+                NightHunt.Core.SceneLoader.ActivateLoadedScene();
+                return;
+            }
+
+            // Chưa visible (match_ready đến mà không có match_found trước) — flow cũ
+            _showTime        = Time.realtimeSinceStartup;
+            _progressTarget  = 0f;
+            _progressCurrent = 0f;
             if (_fadeCoroutine != null) StopCoroutine(_fadeCoroutine);
             _fadeCoroutine = StartCoroutine(FadeIn());
 
@@ -636,6 +682,25 @@ namespace NightHunt.UI
             // so this FadeIn animation could play without main-thread blocking.
             NightHunt.Core.SceneLoader.ActivateLoadedScene();
         }
+        /// <summary>FadeInMatchFound: fade in overlay but do NOT activate scene (no scene loaded yet at match_found time).</summary>
+        private System.Collections.IEnumerator FadeInMatchFound()
+        {
+            SetVisibleImmediate(true);
+            if (canvasGroup != null)
+            {
+                canvasGroup.alpha = 0f;
+                float t = 0f;
+                while (t < fadeDuration)
+                {
+                    t += Time.unscaledDeltaTime;
+                    canvasGroup.alpha = Mathf.Clamp01(t / fadeDuration);
+                    yield return null;
+                }
+                canvasGroup.alpha = 1f;
+            }
+            // Do NOT call ActivateLoadedScene() � no scene queued yet at match_found time.
+        }
+
 
         private IEnumerator FadeOut()
         {

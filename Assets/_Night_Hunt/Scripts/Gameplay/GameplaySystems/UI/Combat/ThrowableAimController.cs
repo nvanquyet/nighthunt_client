@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -95,6 +96,7 @@ namespace NightHunt.GameplaySystems.UI.Combat
 
         public static ThrowableAimController Instance { get; private set; }
         public static bool IsAnyAimingActive => Instance != null && (Instance._inAimMode || Instance._inDeployMode);
+        public static bool JustConfirmedThisFrame { get; private set; }
 
         // ─────────────────────────────────────────────────────────────────────
         //  Static output (read by ThrowableHandler)
@@ -156,6 +158,21 @@ namespace NightHunt.GameplaySystems.UI.Combat
         #endif
             Instance = this;
             _cam = Camera.main;
+
+            if (_aimCursor == null || _aimCursor == transform)
+            {
+                foreach (Transform child in GetComponentsInChildren<Transform>(true))
+                {
+                    if (child != transform && (child.name.IndexOf("AimTarget", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                               child.name.IndexOf("AimCursor", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                               child.name.IndexOf("Aim Cursor", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        _aimCursor = child;
+                        break;
+                    }
+                }
+            }
+
             HideCursor();
         }
 

@@ -58,6 +58,7 @@ namespace NightHunt.Gameplay.Match
         // Per-player death counter keyed by BackendPlayerId (Bug #13 fix)
         private readonly Dictionary<string, int> _playerDeathCount = new();
         private readonly Dictionary<CharacterLifecycleController, Action> _deathSubscriptions = new();
+        private SafeZoneManager _subscribedSafeZoneManager;
 
         // ── Dependency injection ───────────────────────────────────────────────
         // BeaconManager will self-register; we keep a weak reference here.
@@ -100,11 +101,10 @@ namespace NightHunt.Gameplay.Match
             // Listen for beacon destruction
             GameplayEventBus.Instance?.Subscribe<BeaconDestroyedEvent>(OnBeaconDestroyed);
 
-            // Listen for SafeZoneManager: final zone expired → score-based win resolution
-            if (SafeZoneManager.Instance != null)
-                SafeZoneManager.Instance.OnFinalZoneExpired += OnFinalZoneExpired;
-            else
-                Debug.LogWarning("[MatchEndManager] SafeZoneManager.Instance is null — OnFinalZoneExpired won't fire. Ensure SafeZoneManager is in the scene.");
+            // Listen for SafeZoneManager: final zone expired -> score-based win resolution.
+            TrySubscribeSafeZoneManager();
+            if (_subscribedSafeZoneManager == null)
+                StartCoroutine(SubscribeSafeZoneWhenReady());
         }
 
         public override void OnStopServer()
@@ -120,8 +120,36 @@ namespace NightHunt.Gameplay.Match
             UnsubscribeAllPlayerDeaths();
 
             GameplayEventBus.Instance?.Unsubscribe<BeaconDestroyedEvent>(OnBeaconDestroyed);
-            if (SafeZoneManager.Instance != null)
-                SafeZoneManager.Instance.OnFinalZoneExpired -= OnFinalZoneExpired;
+            if (_subscribedSafeZoneManager != null)
+            {
+                _subscribedSafeZoneManager.OnFinalZoneExpired -= OnFinalZoneExpired;
+                _subscribedSafeZoneManager = null;
+            }
+        }
+
+        private void TrySubscribeSafeZoneManager()
+        {
+            if (_subscribedSafeZoneManager != null)
+                return;
+
+            SafeZoneManager manager = SafeZoneManager.Instance ?? FindFirstObjectByType<SafeZoneManager>();
+            if (manager == null)
+                return;
+
+            _subscribedSafeZoneManager = manager;
+            _subscribedSafeZoneManager.OnFinalZoneExpired += OnFinalZoneExpired;
+        }
+
+        private IEnumerator SubscribeSafeZoneWhenReady()
+        {
+            while (!_matchEnded && _subscribedSafeZoneManager == null)
+            {
+                TrySubscribeSafeZoneManager();
+                if (_subscribedSafeZoneManager != null)
+                    yield break;
+
+                yield return null;
+            }
         }
 
         #endregion
@@ -338,33 +366,28 @@ namespace NightHunt.Gameplay.Match
 
         /// <summary>
         /// Called when SafeZoneManager fires OnFinalZoneExpired.
-        /// Starts a periodic alive-check loop and resolves by score if no elimination.
+        /// Final timer expiry is a hard match-end point: resolve elimination first, then score.
         /// </summary>
         private void OnFinalZoneExpired()
         {
             if (_matchEnded) return;
-            StartCoroutine(FinalZoneEliminationLoop());
-        }
 
-        /// <summary>Periodic loop in final zone: re-checks every second (respawn may still happen).</summary>
-        private IEnumerator FinalZoneEliminationLoop()
-        {
-            while (!_matchEnded && SafeZoneManager.Instance != null && SafeZoneManager.Instance.IsInFinalZone)
-            {
-                foreach (int teamId in _teamIds)
-                    EvaluateTeamElimination(teamId);
-                yield return new WaitForSeconds(1f);
-            }
+            foreach (int teamId in _teamIds)
+                EvaluateTeamElimination(teamId);
+
+            if (!_matchEnded)
+                OnFinalZoneTimerResolution();
         }
 
         /// <summary>
-        /// Score-based match resolution (called from FinalZoneEliminationLoop timeout or externally).
+        /// Score-based match resolution for final-zone timeout.
         /// Uses ScoringSystem.GetTeamScore() for accurate accumulated scores.
         /// </summary>
         private void OnFinalZoneTimerResolution()
         {
             if (_matchEnded) return;
             _matchEnded = true;
+            SafeZoneManager.Instance?.EndMatch();
 
             int winnerTeamId = -1;
             float bestScore  = -1f;
@@ -452,6 +475,7 @@ namespace NightHunt.Gameplay.Match
         {
             if (_matchEnded) return;
             _matchEnded = true;
+            SafeZoneManager.Instance?.EndMatch();
 
             int winnerTeamId = ResolveWinner(eliminatedTeamId);
             MatchEndReason reason = MatchEndReason.TeamEliminated;

@@ -68443,7 +68443,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NightHunt.GameplaySystems.UI.Combat.ThrowableAimController
   _rangeIndicator: {fileID: 284766109}
-  _aimCursor: {fileID: 1985384052}
+  _aimCursor: {fileID: 1112216619}
   _dragThreshold: 0.2
   _aimRotationDegreesPerSecond: 540
   _aimRotationDeadZone: 0.15
